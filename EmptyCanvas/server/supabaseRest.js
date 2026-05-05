@@ -20,7 +20,8 @@ function getConfig() {
   ).trim();
   const teamMembersTable = String(process.env.SUPABASE_TEAM_MEMBERS_TABLE || 'team_members').trim() || 'team_members';
   const ordersTable = String(process.env.SUPABASE_ORDERS_TABLE || 'orders').trim() || 'orders';
-  return { url, key, teamMembersTable, ordersTable };
+  const expensesTable = String(process.env.SUPABASE_EXPENSES_TABLE || 'expenses').trim() || 'expenses';
+  return { url, key, teamMembersTable, ordersTable, expensesTable };
 }
 
 function isConfigured() {

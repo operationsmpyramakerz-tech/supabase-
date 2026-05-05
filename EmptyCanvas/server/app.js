@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -168,6 +168,35 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
     const isOrdersTest = pathNow.includes("orders-test");
     const isRequestedOrdersTest = pathNow.includes("orders-requested-test");
     const isCurrentOrdersTest = pathNow.includes("orders-current-test");
+    const isExpensesTest = pathNow.includes("expenses-test");
+    const isCurrentExpensesTest = pathNow.includes("expenses-current-test");
+
+    if (isExpensesTest || isCurrentExpensesTest) {
+      const rows = isCurrentExpensesTest
+        ? (await _sbSelectExpensesForCurrentUser(req)).rows
+        : await _sbSelectExpensesRows();
+      const list = Array.isArray(rows) ? rows : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.expensesTable || "expenses",
+        endpoint: isCurrentExpensesTest ? "/api/expenses" : "/api/supabase/expenses-test",
+        rowsReturned: list.length,
+        sample: list.slice(0, 5).map((row) => {
+          const item = _sbSerializeExpenseRow(row);
+          return {
+            id: item.id,
+            date: item.date,
+            reason: item.reason,
+            fundsType: item.fundsType,
+            cashIn: item.cashIn,
+            cashOut: item.cashOut,
+            teamMemberName: item.teamMemberName,
+          };
+        }),
+      });
+    }
 
     if (isRequestedOrdersTest || isCurrentOrdersTest) {
       const orders = isRequestedOrdersTest
@@ -221,6 +250,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
       table,
       teamMembersTable: cfg.teamMembersTable,
       ordersTable: cfg.ordersTable || "orders",
+      expensesTable: cfg.expensesTable || "expenses",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -486,6 +516,7 @@ async function clearUserServerCaches(req, opts = {}) {
     tasks.push(cacheDel(`cache:api:team-member-public:${normalizedUserId}:v2`));
     tasks.push(cacheDel(`cache:api:expenses:user:${normalizedUserId}:v1`));
     tasks.push(cacheDel(`cache:api:expenses:user:${normalizedUserId}:v2`));
+    tasks.push(cacheDel(`cache:api:expenses:user:${normalizedUserId}:v3`));
   }
 
   if (userId) {
@@ -498,6 +529,7 @@ async function clearUserServerCaches(req, opts = {}) {
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v1`));
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v2`));
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v3`));
+    tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v4`));
     for (const tab of ["all", "not-started", "approved", "rejected"]) {
       tasks.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:v2`));
     }
@@ -506,9 +538,14 @@ async function clearUserServerCaches(req, opts = {}) {
   tasks.push(
     cacheDel("cache:api:orders:requested:v7"),
     cacheDel("cache:api:expenses:users:v1"),
+    cacheDel("cache:api:expenses:users:v2"),
     cacheDel("cache:api:expenses:types:v1"),
     cacheDel("cache:api:expenses:types:v2"),
+    cacheDel("cache:api:expenses:types:v3"),
     cacheDel("cache:api:expenses:cash-in-from:v1"),
+    cacheDel("cache:api:expenses:cash-in-from:v2"),
+    cacheDel("cache:api:expenses:orders-options:all:v3"),
+    cacheDel("cache:api:expenses:orders-options:all:v4"),
     cacheDel("cache:notion:teamMembersAll:v1"),
     cacheDel(USER_ACCESS_CACHE_KEY),
     cacheDel("cache:api:order-types:v1"),
@@ -579,14 +616,22 @@ async function clearExpensesRouteCaches(req, teamMemberPageId = "") {
       cacheDel(`cache:api:expenses:${usernameKey}:v1`),
       cacheDel(`cache:api:expenses:${usernameKey}:v2`),
       cacheDel(`cache:api:expenses:${usernameKey}:v3`),
+      cacheDel(`cache:api:expenses:${usernameKey}:v4`),
       cacheDel("cache:api:expenses:users:v1"),
+      cacheDel("cache:api:expenses:users:v2"),
       cacheDel("cache:api:expenses:types:v2"),
+      cacheDel("cache:api:expenses:types:v3"),
+      cacheDel("cache:api:expenses:cash-in-from:v1"),
+      cacheDel("cache:api:expenses:cash-in-from:v2"),
+      cacheDel("cache:api:expenses:orders-options:all:v3"),
+      cacheDel("cache:api:expenses:orders-options:all:v4"),
     ];
 
     const memberKey = normalizeNotionId(teamMemberPageId || "");
     if (memberKey) {
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v1`));
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v2`));
+      tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v3`));
     }
 
     await Promise.all(tasks);
@@ -1864,6 +1909,297 @@ async function _sbQueryAllTeamMembersForUserAccess() {
   }
   return { total: members.length, editableFields, departments: Array.from(map.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), source: "supabase" };
 }
+
+// -----------------------------------------------------------------------------
+// Supabase Expenses adapter
+// -----------------------------------------------------------------------------
+function _sbExpensesEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbExpensesTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return (cfg.expensesTable || process.env.SUPABASE_EXPENSES_TABLE || "expenses").trim() || "expenses";
+}
+
+function _sbExpenseNum(value, fallback = 0) {
+  if (value === null || typeof value === "undefined" || value === "") return fallback;
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return fallback;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function _sbExpenseText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbExpenseDate(value) {
+  const raw = _sbExpenseText(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toISOString().slice(0, 10);
+}
+
+function _sbExpenseDateTime(value) {
+  const raw = _sbExpenseText(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toISOString();
+}
+
+function _sbExpenseGet(row, aliases = []) {
+  return _sbGet(row, aliases);
+}
+
+function _sbExpenseMemberIdentityFromTeamRow(row = {}) {
+  const name = _sbExpenseText(_sbValueForLabel(row, "Name"));
+  const code = _sbExpenseText(_sbValueForLabel(row, "Employee Code"));
+  const id = _sbExpenseText(_sbGet(row, ["id", "ID"]));
+  const email = _sbExpenseText(_sbValueForLabel(row, "Email"));
+  return { id, name, code, email };
+}
+
+async function _sbCurrentExpenseMember(req) {
+  const username = String(req?.session?.username || "").trim();
+  if (!username) return null;
+  const row = await _sbFindTeamMemberByName(username).catch(() => null);
+  if (!row) return { name: username, code: "", id: "", email: "" };
+  return { row, ..._sbExpenseMemberIdentityFromTeamRow(row) };
+}
+
+function _sbExpenseMatchesMember(row = {}, member = {}) {
+  if (!row || !member) return false;
+  const rowName = norm(_sbExpenseGet(row, ["team_member_name", "Team Member", "team_member_raw", "team_member"]));
+  const rowUserId = norm(_sbExpenseGet(row, ["user_id", "employee_code", "Employee Code"]));
+  const rowEmail = norm(_sbExpenseGet(row, ["email", "Email"]));
+  const name = norm(member.name);
+  const code = norm(member.code || member.id);
+  const email = norm(member.email);
+  if (name && rowName && (rowName === name || rowName.includes(name) || name.includes(rowName))) return true;
+  if (code && rowUserId && rowUserId === code) return true;
+  if (email && rowEmail && rowEmail === email) return true;
+  return false;
+}
+
+function _sbParseScreenshotEntries(value) {
+  const raw = _sbExpenseText(value);
+  if (!raw) return [];
+  const out = [];
+  const add = (name, url) => {
+    const cleanUrl = String(url || "").trim();
+    if (!cleanUrl) return;
+    out.push({ name: String(name || "Receipt").trim() || "Receipt", url: cleanUrl });
+  };
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item, idx) => {
+        if (typeof item === "string") add(`Receipt ${idx + 1}`, item);
+        else add(item?.name || `Receipt ${idx + 1}`, item?.url || item?.href || item?.publicUrl);
+      });
+      return out;
+    }
+    if (parsed && typeof parsed === "object") {
+      add(parsed.name || "Receipt", parsed.url || parsed.href || parsed.publicUrl);
+      return out;
+    }
+  } catch {}
+  const urlMatches = raw.match(/https?:\/\/[^\s,"'<>]+/gi) || [];
+  if (urlMatches.length) {
+    urlMatches.forEach((url, idx) => add(`Receipt ${idx + 1}`, url));
+    return out;
+  }
+  // Imported Notion file paths are not public URLs, but keeping the name helps exports/views.
+  if (!/^null$/i.test(raw)) out.push({ name: raw.split(/[\\/]/).pop() || "Receipt", url: raw });
+  return out;
+}
+
+function _sbExpenseOrders(row = {}) {
+  const names = _sbSplitValues(_sbExpenseGet(row, ["orders_names", "Orders", "orders_raw"]));
+  const urls = _sbSplitValues(_sbExpenseGet(row, ["orders_urls", "orders_url"]));
+  return names.map((name, idx) => {
+    const label = String(name || "Order").trim() || "Order";
+    const url = String(urls[idx] || "").trim();
+    const idMatch = label.match(/ORD[-\s]?(\d+)/i) || label.match(/\b(\d{1,6})\b/);
+    const orderId = idMatch ? `ORD-${idMatch[1]}` : label;
+    return {
+      key: `${orderId}:${idx}`,
+      orderId,
+      orderType: "",
+      label,
+      trackingGroupId: orderId,
+      trackingUrl: url || "",
+      relationIds: [],
+      receiptEntries: [],
+      items: [],
+      receiptViewerUrl: url || "",
+    };
+  });
+}
+
+function _sbSerializeExpenseRow(row = {}) {
+  const screenshots = _sbParseScreenshotEntries(_sbExpenseGet(row, ["screenshot", "Screenshot", "files_media"]));
+  const createdTime =
+    _sbExpenseDateTime(_sbExpenseGet(row, ["notion_created_time", "created_at", "Created time"])) ||
+    new Date().toISOString();
+  return {
+    id: String(_sbExpenseGet(row, ["id", "ID"]) ?? ""),
+    createdTime,
+    date: _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date", "date"])) || null,
+    reason: _sbExpenseText(_sbExpenseGet(row, ["reason", "Reason"])) || "",
+    fundsType: _sbExpenseText(_sbExpenseGet(row, ["funds_type", "Funds Type"])) || "",
+    from: _sbExpenseText(_sbExpenseGet(row, ["from_location", "From", "cash_in_from"])) || "",
+    to: _sbExpenseText(_sbExpenseGet(row, ["to_location", "To"])) || "",
+    kilometer: _sbExpenseNum(_sbExpenseGet(row, ["kilometer", "Kilometer"]), 0),
+    cashIn: _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0),
+    cashOut: _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0),
+    cashInFrom: _sbExpenseText(_sbExpenseGet(row, ["cash_in_from", "from_location", "From"])) || "",
+    orders: _sbExpenseOrders(row),
+    screenshots,
+    screenshotUrl: screenshots[0]?.url || "",
+    screenshotName: screenshots[0]?.name || "",
+    teamMemberName: _sbExpenseText(_sbExpenseGet(row, ["team_member_name", "Team Member"])),
+    userId: _sbExpenseText(_sbExpenseGet(row, ["user_id", "employee_code"])),
+    source: "supabase",
+  };
+}
+
+async function _sbSelectExpensesRows({ limit = 5000 } = {}) {
+  const rows = await supabaseDb.selectAll(_sbExpensesTable(), {
+    limit,
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  return list.sort((a, b) => {
+    const ad = new Date(_sbExpenseGet(a, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+    const bd = new Date(_sbExpenseGet(b, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+    if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return bd - ad;
+    return Number(_sbExpenseGet(b, ["id"]) || 0) - Number(_sbExpenseGet(a, ["id"]) || 0);
+  });
+}
+
+async function _sbSelectExpensesForCurrentUser(req) {
+  const member = await _sbCurrentExpenseMember(req);
+  if (!member) return { member: null, rows: [] };
+  const rows = await _sbSelectExpensesRows();
+  return { member, rows: rows.filter((row) => _sbExpenseMatchesMember(row, member)) };
+}
+
+function _sbLastSettledInfo(rows = []) {
+  let lastSettledAt = null;
+  let lastSettledDate = null;
+  for (const row of rows || []) {
+    const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
+    if (ft !== "settled my account") continue;
+    const ct = _sbExpenseDateTime(_sbExpenseGet(row, ["notion_created_time", "created_at"]));
+    if (!ct) continue;
+    if (!lastSettledAt || new Date(ct).getTime() > new Date(lastSettledAt).getTime()) {
+      lastSettledAt = ct;
+      lastSettledDate = _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date"]));
+    }
+  }
+  return { lastSettledAt, lastSettledDate };
+}
+
+async function _sbBuildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix = "expense" } = {}) {
+  const files = [];
+  if (Array.isArray(screenshots) && screenshots.length) {
+    for (let i = 0; i < screenshots.length; i++) {
+      const s = screenshots[i] || {};
+      const dataUrl = s.dataUrl || s.screenshotDataUrl || "";
+      if (!dataUrl) continue;
+      const originalName = String(s.name || s.filename || "receipt.png").trim() || "receipt.png";
+      const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+      const filename = `${prefix}-${Date.now()}-${i}-${Math.random().toString(16).slice(2)}-${safeName}`;
+      const url = await uploadToBlobFromBase64(dataUrl, filename);
+      files.push({ name: originalName, url });
+    }
+  }
+  if (!files.length && screenshotDataUrl) {
+    const originalName = (screenshotName && String(screenshotName).trim()) || `${prefix}-${Date.now()}.png`;
+    const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+    const filename = `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    const url = await uploadToBlobFromBase64(screenshotDataUrl, filename);
+    files.push({ name: originalName, url });
+  }
+  return files.length ? JSON.stringify(files) : null;
+}
+
+async function _sbInsertExpense(row = {}) {
+  return await supabaseDb.insert(_sbExpensesTable(), row);
+}
+
+function _sbExpenseBaseRowForMember(member = {}, extra = {}) {
+  const nowIso = new Date().toISOString();
+  return {
+    notion_created_time: nowIso,
+    team_member_name: member.name || "",
+    user_id: member.code || member.id || "",
+    team_member_raw: member.name || "",
+    team_member_url: "",
+    ...extra,
+  };
+}
+
+async function _sbClearExpensesCaches(req, member = {}) {
+  await clearExpensesRouteCaches(req, member?.id || member?.code || member?.name || "");
+}
+
+async function _sbExpensesTypesOptions() {
+  const hiddenKeys = new Set(["settledmyaccount", "cashreceipt", "cashreciept"]);
+  const extraOptions = ["نقل", "توكتوك", "مشال", "مصروفات"];
+  const rows = await _sbSelectExpensesRows();
+  const options = [];
+  const seen = new Set();
+  const pushOption = (name) => {
+    const raw = String(name || "").trim();
+    if (!raw) return;
+    const key = raw.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
+    if (!key || hiddenKeys.has(key) || seen.has(key)) return;
+    seen.add(key);
+    options.push(raw);
+  };
+  rows.forEach((row) => pushOption(_sbExpenseGet(row, ["funds_type", "Funds Type"])));
+  extraOptions.forEach(pushOption);
+  return options.sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _sbExpensesUsersSummary() {
+  const rows = await _sbSelectExpensesRows();
+  const perUser = new Map();
+  for (const row of rows) {
+    const name = _sbExpenseText(_sbExpenseGet(row, ["team_member_name", "Team Member", "team_member_raw"])) || "Unknown User";
+    const userId = _sbExpenseText(_sbExpenseGet(row, ["user_id", "employee_code"])) || name;
+    const key = userId || name;
+    if (!perUser.has(key)) perUser.set(key, { id: key, userId: key, name, total: 0, count: 0, lastSettledDate: null });
+    const agg = perUser.get(key);
+    agg.total += _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0) - _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0);
+    agg.count += 1;
+    const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
+    if (ft === "settled my account" && !agg.lastSettledDate) {
+      agg.lastSettledDate = _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date"]));
+    }
+  }
+  return Array.from(perUser.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+}
+
+function _sbExpenseRowsForMemberId(rows = [], memberId = "") {
+  const raw = String(memberId || "").trim();
+  const key = norm(raw);
+  if (!key) return [];
+  return (rows || []).filter((row) => {
+    const name = norm(_sbExpenseGet(row, ["team_member_name", "Team Member", "team_member_raw"]));
+    const userId = norm(_sbExpenseGet(row, ["user_id", "employee_code"]));
+    const id = norm(_sbExpenseGet(row, ["id"]));
+    return key === userId || key === name || key === id;
+  });
+}
+
 
 // -----------------------------------------------------------------------------
 // Supabase Orders adapter
@@ -16811,8 +17147,13 @@ app.get("/api/logistics", requireAuth, requirePage("Logistics"), async (req, res
 // ================== EXPENSES API ==================
 
 // Get Funds Type Options
-app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expenses:types:v2"), async (req, res) => {
+app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expenses:types:v3"), async (req, res) => {
   try {
+    if (_sbExpensesEnabled()) {
+      const options = await _sbExpensesTypesOptions();
+      return res.json({ success: true, options, source: "supabase" });
+    }
+
     const response = await notion.databases.retrieve({
       database_id: process.env.Expenses_Database,
     });
@@ -16856,9 +17197,19 @@ app.get(
   "/api/expenses/cash-in-from/options",
   requireAuth,
   requirePage("Expenses"),
-  cachedJsonRoute(20 * 60, () => "cache:api:expenses:cash-in-from:v1"),
+  cachedJsonRoute(20 * 60, () => "cache:api:expenses:cash-in-from:v2"),
   async (req, res) => {
     try {
+      if (_sbExpensesEnabled() && _sbTeamMembersEnabled()) {
+        const rows = await _sbSelectTeamMembersRows();
+        const options = (rows || []).map((row) => {
+          const id = _sbExpenseText(_sbGet(row, ["id", "ID"])) || _sbExpenseText(_sbValueForLabel(row, "Employee Code")) || _sbExpenseText(_sbValueForLabel(row, "Name"));
+          const name = _sbExpenseText(_sbValueForLabel(row, "Name")) || "Unnamed";
+          return { id, name };
+        }).filter((x) => x.id && x.name);
+        return res.json({ success: true, options, source: "supabase" });
+      }
+
       const expProps = await getExpensesDBProps();
       const cashInFromKey =
         pickPropName(expProps, ["Cash in from", "Cash In From", "Cash In from"]) ||
@@ -16915,9 +17266,38 @@ app.get(
   "/api/expenses/orders/options",
   requireAuth,
   requirePage("Expenses"),
-  cachedJsonRoute(60, () => "cache:api:expenses:orders-options:all:v3"),
+  cachedJsonRoute(60, () => "cache:api:expenses:orders-options:all:v4"),
   async (req, res) => {
     try {
+      if (_sbOrdersEnabled()) {
+        const rows = await _sbSelectOrdersRows({ approvedOnly: true });
+        const groups = new Map();
+        for (const row of rows || []) {
+          const item = _sbSerializeOrderRow(row);
+          const num = item.orderIdNumber || item.orderId || item.id;
+          const key = num ? `ord:${num}` : `row:${item.id}`;
+          if (!groups.has(key)) {
+            groups.set(key, {
+              id: key,
+              key,
+              orderId: item.orderId || key,
+              orderType: item.orderType || "Request Products",
+              label: [item.orderId, item.orderType || "Request Products"].filter(Boolean).join(" - "),
+              relationIds: [],
+              receiptEntries: [],
+              trackingGroupId: key,
+              trackingUrl: `/orders/tracking?groupId=${encodeURIComponent(key)}`,
+            });
+          }
+          const group = groups.get(key);
+          if (item.id && !group.relationIds.includes(item.id)) group.relationIds.push(item.id);
+        }
+        const options = Array.from(groups.values())
+          .sort((a, b) => String(b.orderId || "").localeCompare(String(a.orderId || ""), undefined, { numeric: true }))
+          .slice(0, 300);
+        return res.json({ success: true, options, source: "supabase" });
+      }
+
       if (!ordersDatabaseId) {
         return res.json({ success: true, options: [] });
       }
@@ -17182,6 +17562,53 @@ app.post("/api/expenses/cash-out", async (req, res) => {
   } = req.body;
 
   try {
+    if (_sbExpensesEnabled()) {
+      const member = await _sbCurrentExpenseMember(req);
+      if (!member) {
+        return res.status(401).json({ success: false, error: "Login required" });
+      }
+      if (!fundsType || !date) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+      const normalizedFundsTypeKey = String(fundsType || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      const screenshotRequiredFundsTypes = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
+      const hasScreenshotPayload =
+        (Array.isArray(screenshots) && screenshots.some((shot) => String(shot?.dataUrl || shot?.screenshotDataUrl || "").trim())) ||
+        !!String(screenshotDataUrl || "").trim();
+      if (screenshotRequiredFundsTypes.has(normalizedFundsTypeKey) && !hasScreenshotPayload) {
+        return res.status(400).json({
+          success: false,
+          error: normalizedFundsTypeKey === "owncar" ? "A Google Maps screenshot is required for Own car" : "Screenshot is required for this funds type",
+        });
+      }
+      const amountNum = Number(amount);
+      if (normalizedFundsTypeKey !== "owncar" && (!Number.isFinite(amountNum) || amountNum <= 0)) {
+        return res.status(400).json({ success: false, error: "Cash out amount is required" });
+      }
+      const autoReason = String(reason || "").trim() || [
+        String(orderLabel || "").trim(),
+        String(orderDisplayId || "").trim() && !String(orderLabel || "").trim() ? String(orderDisplayId || "").trim() : "",
+        String(orderType || "").trim() && !String(orderLabel || "").trim() ? String(orderType || "").trim() : "",
+        String(fundsType || "").trim(),
+      ].filter(Boolean).join(" • ") || "Cash out";
+      const shotText = await _sbBuildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix: "receipt" });
+      await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
+        reason: autoReason,
+        expense_date: date,
+        funds_type: fundsType,
+        from_location: from || "",
+        to_location: to || "",
+        cash_out: normalizedFundsTypeKey === "owncar" ? 0 : amountNum,
+        cash_in: null,
+        kilometer: normalizedFundsTypeKey === "owncar" ? (Number(kilometer) || 0) : null,
+        screenshot: shotText,
+        orders_names: String(orderLabel || orderDisplayId || "").trim() || null,
+        orders_raw: Array.isArray(orderIds) ? orderIds.join(",") : (orderId || null),
+      }));
+      await _sbClearExpensesCaches(req, member);
+      return res.json({ success: true, message: "Cash out saved successfully", source: "supabase" });
+    }
+
     const teamMemberPageId = await getCurrentUserRelationPage(req);
 
     if (!fundsType || !date) {
@@ -17380,6 +17807,54 @@ app.post("/api/expenses/cash-in", async (req, res) => {
   } = req.body;
 
   try {
+    if (_sbExpensesEnabled()) {
+      const member = await _sbCurrentExpenseMember(req);
+      if (!member) return res.status(401).json({ success: false, error: "Login required" });
+      if (!date || amount === undefined || amount === null || amount === "") {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+      const amountNum = Number(amount);
+      if (!Number.isFinite(amountNum)) {
+        return res.status(400).json({ success: false, error: "Invalid amount" });
+      }
+      const payerName = String(paymentBy || cashInFrom || "").trim();
+      if (!payerName) {
+        return res.status(400).json({ success: false, error: "Payment by is required" });
+      }
+      const selectedFundsTypeRaw = String(fundsType || "").trim();
+      const selectedFundsTypeKey = normKey(selectedFundsTypeRaw);
+      const isOnlineTransfer = selectedFundsTypeKey === "onlinetransfer";
+      const isCashPayment = selectedFundsTypeKey === "cashpayment" || selectedFundsTypeKey === "cashreceipt" || selectedFundsTypeKey === "cashreciept";
+      if (!selectedFundsTypeKey || (!isOnlineTransfer && !isCashPayment)) {
+        return res.status(400).json({ success: false, error: "Invalid funds type" });
+      }
+      const receipt = String(receiptNumber || "").trim();
+      if (isCashPayment && !receipt) {
+        return res.status(400).json({ success: false, error: "Missing receipt number" });
+      }
+      const hasScreenshotPayload =
+        (Array.isArray(screenshots) && screenshots.some((shot) => String(shot?.dataUrl || shot?.screenshotDataUrl || "").trim())) ||
+        !!String(screenshotDataUrl || "").trim();
+      if (isOnlineTransfer && !hasScreenshotPayload) {
+        return res.status(400).json({ success: false, error: "Screenshot is required for online transfer" });
+      }
+      const cashInFundsTypeName = selectedFundsTypeRaw || (isOnlineTransfer ? "Online Transfer" : "Cash Payment");
+      const titleContent = receipt || cashInFundsTypeName || "Cash In";
+      const shotText = await _sbBuildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix: "cashin" });
+      await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
+        reason: titleContent,
+        expense_date: date,
+        funds_type: cashInFundsTypeName,
+        cash_in: amountNum,
+        cash_out: null,
+        from_location: payerName,
+        to_location: member.name || "",
+        screenshot: shotText,
+      }));
+      await _sbClearExpensesCaches(req, member);
+      return res.json({ success: true, message: "Cash in recorded", source: "supabase" });
+    }
+
     const teamMemberPageId = await getCurrentUserRelationPage(req);
     const currentUsername = String(req.session?.username || "").trim();
     const teamMemberName = currentUsername || (teamMemberPageId ? String(await pageTitleById(teamMemberPageId) || "").trim() : "");
@@ -17539,6 +18014,32 @@ app.post(
   requirePage("Expenses"),
   async (req, res) => {
     try {
+      if (_sbExpensesEnabled()) {
+        const receiptNumber = String(req.body?.receiptNumber || "").trim();
+        if (!receiptNumber) {
+          return res.status(400).json({ success: false, error: "Missing receipt number" });
+        }
+        const { member, rows } = await _sbSelectExpensesForCurrentUser(req);
+        if (!member) return res.status(400).json({ success: false, error: "User not found" });
+        const totalCashIn = rows.reduce((sum, row) => sum + _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0), 0);
+        const totalCashOut = rows.reduce((sum, row) => sum + _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0), 0);
+        const balance = Number(totalCashIn) - Number(totalCashOut);
+        const settleAmount = Math.abs(balance);
+        const today = new Date().toISOString().slice(0, 10);
+        const isPositive = balance > 0;
+        await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
+          reason: receiptNumber,
+          expense_date: today,
+          funds_type: "Settled my account",
+          from_location: "",
+          to_location: "",
+          cash_in: isPositive ? 0 : settleAmount,
+          cash_out: isPositive ? settleAmount : 0,
+        }));
+        await _sbClearExpensesCaches(req, member);
+        return res.json({ success: true, totalCashIn, totalCashOut, balance, settleAmount, direction: isPositive ? "cash_out" : "cash_in", source: "supabase" });
+      }
+
       const receiptNumber = String(req.body?.receiptNumber || "").trim();
       if (!receiptNumber) {
         return res.status(400).json({
@@ -17650,8 +18151,15 @@ app.post(
 );
 
 // Fetch All Expenses — FILTER BY CURRENT USER ONLY
-app.get("/api/expenses", cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:${cacheKeySafe(req.session?.username || "")}:v3`), async (req, res) => {
+app.get("/api/expenses", cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:${cacheKeySafe(req.session?.username || "")}:v4`), async (req, res) => {
   try {
+    if (_sbExpensesEnabled()) {
+      const { rows } = await _sbSelectExpensesForCurrentUser(req);
+      const info = _sbLastSettledInfo(rows);
+      const items = rows.map(_sbSerializeExpenseRow);
+      return res.json({ success: true, items, lastSettledAt: info.lastSettledAt, lastSettledDate: info.lastSettledDate, source: "supabase" });
+    }
+
     // Get current user's Team Member relation PAGE ID
     const teamMemberPageId = await getCurrentUserRelationPage(req);
 
@@ -17947,9 +18455,14 @@ app.get(
   "/api/expenses/users",
   requireAuth,
   requirePage("Expenses Users"),
-  cachedJsonRoute(2 * 60, () => "cache:api:expenses:users:v1"),
+  cachedJsonRoute(2 * 60, () => "cache:api:expenses:users:v2"),
   async (req, res) => {
     try {
+      if (_sbExpensesEnabled()) {
+        const users = await _sbExpensesUsersSummary();
+        return res.json({ success: true, users, source: "supabase" });
+      }
+
       if (!expensesDatabaseId) {
         return res.status(500).json({
           success: false,
@@ -18049,9 +18562,19 @@ app.get(
   "/api/expenses/user/:memberId",
   requireAuth,
   requirePage("Expenses Users"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:user:${normalizeNotionId(req.params?.memberId || "")}:v2`),
+  cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:user:${cacheKeySafe(req.params?.memberId || "")}:v3`),
   async (req, res) => {
     try {
+      if (_sbExpensesEnabled()) {
+        const memberId = String(req.params.memberId || "").trim();
+        if (!memberId) return res.status(400).json({ success: false, error: "Missing memberId" });
+        const allRows = await _sbSelectExpensesRows();
+        const rows = _sbExpenseRowsForMemberId(allRows, memberId);
+        const info = _sbLastSettledInfo(rows);
+        const items = rows.map(_sbSerializeExpenseRow);
+        return res.json({ success: true, items, lastSettledAt: info.lastSettledAt, lastSettledDate: info.lastSettledDate, source: "supabase" });
+      }
+
       if (!expensesDatabaseId) {
         return res.status(500).json({
           success: false,
