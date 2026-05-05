@@ -19,7 +19,8 @@ function getConfig() {
     ''
   ).trim();
   const teamMembersTable = String(process.env.SUPABASE_TEAM_MEMBERS_TABLE || 'team_members').trim() || 'team_members';
-  return { url, key, teamMembersTable };
+  const ordersTable = String(process.env.SUPABASE_ORDERS_TABLE || 'orders').trim() || 'orders';
+  return { url, key, teamMembersTable, ordersTable };
 }
 
 function isConfigured() {
@@ -76,9 +77,25 @@ async function request(path, options = {}) {
   return data;
 }
 
-async function selectAll(table, { limit = 1000 } = {}) {
+function buildQuery(params = {}) {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value === null || typeof value === 'undefined' || value === '') continue;
+    qs.set(key, String(value));
+  }
+  const out = qs.toString();
+  return out ? `?${out}` : '';
+}
+
+async function select(table, params = {}) {
+  return await request(`/${encodeTableName(table)}${buildQuery(params)}`);
+}
+
+async function selectAll(table, { limit = 1000, order = null, select: selectExpr = '*' } = {}) {
   const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 1000));
-  return await request(`/${encodeTableName(table)}?select=*&limit=${safeLimit}`);
+  const params = { select: selectExpr, limit: safeLimit };
+  if (order) params.order = order;
+  return await select(table, params);
 }
 
 async function selectById(table, id) {
@@ -104,4 +121,18 @@ async function updateById(table, id, row) {
   return Array.isArray(rows) ? rows[0] || null : rows;
 }
 
-module.exports = { getConfig, isConfigured, selectAll, selectById, insert, updateById };
+async function updateByIds(table, ids = [], row = {}) {
+  const clean = (Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!clean.length) return [];
+  const inList = clean.map((id) => `"${String(id).replace(/"/g, '\"')}"`).join(',');
+  const rows = await request(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: row,
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds };

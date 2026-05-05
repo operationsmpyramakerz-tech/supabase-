@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -164,20 +164,34 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test"], async (req,
       });
     }
 
-    const rows = await supabaseDb.selectAll(cfg.teamMembersTable, { limit: 5 });
+    const isOrdersTest = String(req.path || "").includes("orders-test");
+    const table = isOrdersTest ? (cfg.ordersTable || "orders") : cfg.teamMembersTable;
+    const rows = await supabaseDb.selectAll(table, {
+      limit: 5,
+      order: isOrdersTest ? "notion_created_time.desc,id.desc" : null,
+    });
     const first = Array.isArray(rows) ? rows[0] || {} : {};
-    const sample = (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
-      id: String(_sbGet(row, ["id", "ID"]) ?? ""),
-      name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
-      department: _sbString(_sbValueForLabel(row, "Department")) || "",
-      position: _sbString(_sbValueForLabel(row, "Position")) || "",
-    }));
+    const sample = isOrdersTest
+      ? (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
+          id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+          orderNumber: _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"])),
+          status: _sbOrderText(_sbOrderGet(row, ["status", "Status"])),
+          productName: _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name", "product", "Product"])),
+        }))
+      : (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
+          id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+          name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
+          department: _sbString(_sbValueForLabel(row, "Department")) || "",
+          position: _sbString(_sbValueForLabel(row, "Position")) || "",
+        }));
 
     return res.json({
       ok: true,
       configured: true,
       source: "supabase",
-      table: cfg.teamMembersTable,
+      table,
+      teamMembersTable: cfg.teamMembersTable,
+      ordersTable: cfg.ordersTable || "orders",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -1808,6 +1822,214 @@ async function _sbQueryAllTeamMembersForUserAccess() {
   }
   return { total: members.length, editableFields, departments: Array.from(map.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), source: "supabase" };
 }
+
+// -----------------------------------------------------------------------------
+// Supabase Orders adapter
+// -----------------------------------------------------------------------------
+function _sbOrdersEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbOrdersTable() {
+  return (supabaseDb.getConfig().ordersTable || process.env.SUPABASE_ORDERS_TABLE || "orders").trim() || "orders";
+}
+
+function _sbOrderNum(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return null;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function _sbOrderText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbOrderDate(value) {
+  const raw = _sbOrderText(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toISOString();
+}
+
+function _sbOrderGet(row, aliases = []) {
+  return _sbGet(row, aliases);
+}
+
+function _sbOrderSplitNames(value) {
+  return toUniqueStringArray(_sbOrderText(value), { splitComma: true });
+}
+
+function _sbOrderStatusColor(status) {
+  const s = norm(status);
+  if (/archive/.test(s)) return "purple";
+  if (/(arrived|delivered|received)/.test(s)) return "green";
+  if (/shipped/.test(s)) return "blue";
+  if (/rejected/.test(s)) return "red";
+  if (/progress/.test(s)) return "yellow";
+  if (/supervision/.test(s)) return "orange";
+  return "default";
+}
+
+function _sbOrderTypeColor(orderType) {
+  const s = norm(orderType);
+  if (/maintenance/.test(s)) return "purple";
+  if (/withdraw/.test(s)) return "red";
+  if (/request/.test(s)) return "green";
+  return "default";
+}
+
+function _sbSerializeOrderRow(row = {}) {
+  const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "");
+  const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
+  const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress"]));
+  const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested"]));
+  const qtyBase = qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0);
+  const qtyReceived = _sbOrderNum(_sbOrderGet(row, ["quantity_received_by_operations", "Quantity Received by operations", "Quantity Received by Operations"]));
+  const qtyRemainingStored = _sbOrderNum(_sbOrderGet(row, ["quantity_remaining", "Quantity Remaining"]));
+  const qtyRemaining = qtyRemainingStored !== null
+    ? qtyRemainingStored
+    : roundOrderQty((Number(qtyBase) || 0) - (qtyReceived === null ? 0 : Number(qtyReceived) || 0));
+  const status = _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "Pending";
+  const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
+  const createdByName =
+    _sbOrderText(_sbOrderGet(row, ["team_member_name", "Teams Members", "teams_members", "Supervisor", "supervisor"])) || "";
+  const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
+  const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
+  const maintenanceReceipt = _sbOrderText(_sbOrderGet(row, ["order_receipt", "Order Receipt", "maintenance_receipt", "Maintenance Receipt"]));
+  const productName =
+    _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name"])) ||
+    _sbOrderText(_sbOrderGet(row, ["product", "Product"])) ||
+    "Unknown Product";
+  const createdTime =
+    _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) ||
+    new Date().toISOString();
+
+  return {
+    id,
+    orderId: Number.isFinite(orderNum) ? `ORD-${orderNum}` : (id ? `ORD-${id}` : null),
+    orderIdPrefix: Number.isFinite(orderNum) ? "ORD" : null,
+    orderIdNumber: Number.isFinite(orderNum) ? orderNum : null,
+    reason: _sbOrderText(_sbOrderGet(row, ["reason", "Reason"])) || "No Reason",
+    productName,
+    productPageId: _sbOrderText(_sbOrderGet(row, ["product_url", "product", "Product"])) || null,
+    productUrl: _sbOrderText(_sbOrderGet(row, ["product_url", "Product URL"])) || null,
+    productImage: null,
+    unitPrice: _sbOrderNum(_sbOrderGet(row, ["unit_price", "Unit price", "Unity Price", "Price"])),
+    quantityRequested: qtyRequested !== null ? qtyRequested : qtyBase,
+    quantityProgress: qtyProgress,
+    quantityEditedBySupervisor: _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor"])),
+    quantityReceived: qtyReceived,
+    quantityRemaining: qtyRemaining,
+    quantityReceivedEdited: qtyReceived !== null ? (Math.abs(Number(qtyReceived) || 0) > 1e-9 || qtyRemainingStored !== null) : false,
+    quantity: qtyBase,
+    status,
+    statusColor: _sbOrderStatusColor(status),
+    orderType,
+    orderTypeColor: _sbOrderTypeColor(orderType),
+    issueDescription: _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"])) || null,
+    actualIssueDescription: _sbOrderText(_sbOrderGet(row, ["actual_issue_description", "Actual Issue Description"])) || null,
+    repairAction: _sbOrderText(_sbOrderGet(row, ["repair_action", "Repair Action"])) || null,
+    resolutionMethod: _sbOrderText(_sbOrderGet(row, ["resolution_method", "Resolution Method"])) || null,
+    resolutionMethodColor: null,
+    sparePartsReplacedIds: [],
+    sparePartsReplacedId: null,
+    sparePartsReplacedNames: spareParts,
+    sparePartsReplacedName: spareParts.join(", ") || null,
+    maintenanceReceiptNames: maintenanceReceipt ? [maintenanceReceipt] : [],
+    maintenanceReceiptUrls: _sbExtractUrl(maintenanceReceipt) ? [_sbExtractUrl(maintenanceReceipt)] : [],
+    maintenanceReceiptName: maintenanceReceipt || null,
+    maintenanceReceiptUrl: _sbExtractUrl(maintenanceReceipt) || null,
+    operationsByIds: [],
+    operationsByNames: operationsByName ? [operationsByName] : [],
+    operationsById: "",
+    operationsByName,
+    receiptNumber: _sbOrderText(_sbOrderGet(row, ["receipt_number", "Receipt Number", "Store Receipt Number"])) || null,
+    createdTime,
+    createdById: createdByName,
+    createdByName,
+    assignedToIds: [],
+    assignedToNames: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) ? [_sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"]))] : [],
+    assignedToId: "",
+    assignedToName: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) || "",
+    svApproval: _sbOrderText(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) || null,
+    source: "supabase",
+  };
+}
+
+async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
+  const rows = await supabaseDb.selectAll(_sbOrdersTable(), {
+    limit: 5000,
+    order: "notion_created_time.desc,id.desc",
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  if (!approvedOnly) return list;
+  return list.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
+}
+
+async function _sbRequestedOrdersList() {
+  const rows = await _sbSelectOrdersRows({ approvedOnly: true });
+  return rows.map(_sbSerializeOrderRow);
+}
+
+async function _sbCurrentOrdersList(req) {
+  const rows = await _sbSelectOrdersRows({ approvedOnly: false });
+  const username = norm(req?.session?.username || "");
+  const filtered = username
+    ? rows.filter((row) => {
+        const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
+        return !by || by.includes(username) || username.includes(by);
+      })
+    : rows;
+  return filtered.map(_sbSerializeOrderRow);
+}
+
+async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
+  const ids = (Array.isArray(orderIds) ? orderIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .filter((x) => /^\d+$/.test(x));
+  if (!ids.length) return [];
+  return await Promise.all(ids.map((id) => supabaseDb.updateById(_sbOrdersTable(), id, patch)));
+}
+
+
+async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {}, quantities = null) {
+  const ids = (Array.isArray(orderIds) ? orderIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .filter((x) => /^\d+$/.test(x));
+  if (!ids.length) return [];
+
+  const out = [];
+  for (const id of ids) {
+    const patch = { ...basePatch };
+    const explicit = quantities && Object.prototype.hasOwnProperty.call(quantities, id)
+      ? Number(quantities[id])
+      : null;
+    if (explicit !== null && Number.isFinite(explicit)) {
+      const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+      const base = row ? _sbSerializeOrderRow(row).quantity : 0;
+      const rounded = roundOrderQty(explicit);
+      patch.quantity_received_by_operations = rounded;
+      patch.quantity_remaining = roundOrderQty((Number(base) || 0) - rounded);
+    }
+    out.push(await supabaseDb.updateById(_sbOrdersTable(), id, patch));
+  }
+  return out;
+}
+
+async function _sbInvalidateOrdersCaches() {
+  await Promise.all([
+    cacheDel("cache:api:orders:requested:supabase:v1"),
+    cacheDel("cache:api:orders:current:supabase:v1"),
+  ]);
+}
+
 
 
 // توسيع الأسماء للواجهة حتى لا يحصل تضارب aliases
@@ -7562,10 +7784,10 @@ app.get(
   requireAuth,
   requirePage("Current Orders"),
   async (req, res) => {
-    if (!ordersDatabaseId || !teamMembersDatabaseId) {
+    if (!_sbOrdersEnabled() && (!ordersDatabaseId || !teamMembersDatabaseId)) {
       return res
         .status(500)
-        .json({ error: "Database IDs are not configured." });
+        .json({ error: "Orders database is not configured." });
     }
 
     res.set("Cache-Control", "no-store");
@@ -7581,6 +7803,32 @@ app.get(
     req.session.recentOrders = recent;
 
     try {
+      if (_sbOrdersEnabled()) {
+        const cacheKey = `cache:api:orders:current:supabase:v1:${normKey(req.session?.username || "all")}`;
+        const forceFresh =
+          String(req.query?._fresh || "") === "1" ||
+          !!req.query?._refresh ||
+          String(req.get("x-ops-hard-refresh") || "") === "1";
+        const load = async () => _sbCurrentOrdersList(req);
+        const allOrders = forceFresh
+          ? await (async () => {
+              await cacheDel(cacheKey);
+              const fresh = await load();
+              _memSet(cacheKey, fresh, 60);
+              await _redisSet(cacheKey, fresh, 60);
+              return fresh;
+            })()
+          : await cacheGetOrSet(cacheKey, 60, load);
+
+        const ids = new Set((allOrders || []).map((o) => String(o.id || "")));
+        const extras = recent.filter((r) => !ids.has(String(r.id || "")));
+        return res.json(
+          (allOrders || [])
+            .concat(extras)
+            .sort((a, b) => new Date(b.createdTime || 0) - new Date(a.createdTime || 0)),
+        );
+      }
+
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
 
@@ -7878,19 +8126,55 @@ app.get(
   requireAuth,
   requirePage("Current Orders"),
   async (req, res) => {
-    if (!ordersDatabaseId || !teamMembersDatabaseId) {
-      return res.status(500).json({ error: "Database IDs are not configured." });
+    if (!_sbOrdersEnabled() && (!ordersDatabaseId || !teamMembersDatabaseId)) {
+      return res.status(500).json({ error: "Orders database is not configured." });
     }
 
-    const groupIdRaw = req.query.groupId;
-    if (!groupIdRaw || !looksLikeNotionId(groupIdRaw)) {
+    const groupIdRaw = String(req.query.groupId || "").trim();
+    if (!groupIdRaw) {
       return res.status(400).json({ error: "Missing or invalid groupId." });
     }
-    const groupId = toHyphenatedUUID(groupIdRaw);
 
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbOrdersEnabled() && /^\d+$/.test(groupIdRaw)) {
+        const baseRow = await supabaseDb.selectById(_sbOrdersTable(), groupIdRaw);
+        if (!baseRow) return res.status(404).json({ error: "Order not found." });
+        const base = _sbSerializeOrderRow(baseRow);
+        const allRows = await _sbSelectOrdersRows({ approvedOnly: false });
+        const rows = allRows.filter((row) => {
+          const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+          return Number.isFinite(n) && Number.isFinite(base.orderIdNumber)
+            ? Number(n) === Number(base.orderIdNumber)
+            : String(_sbOrderGet(row, ["id", "ID"]) ?? "") === groupIdRaw;
+        });
+        const items = (rows.length ? rows : [baseRow]).map(_sbSerializeOrderRow);
+        const reason = base.reason || "No Reason";
+        const createdTime = base.createdTime;
+        const allArrived = items.length > 0 && items.every((i) => /(arrived|delivered|received)/i.test(String(i.status || "")));
+        const stage = allArrived ? 3 : 2;
+        const estimateTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+        const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+        return res.json({
+          groupId: groupIdRaw,
+          reason,
+          createdTime,
+          stage,
+          headerTitle: stage === 3 ? "Delivered" : "On the way",
+          headerSubtitle: stage === 3 ? "Your cargo has arrived." : "Your cargo is on delivery.",
+          eta: null,
+          totals: { itemsCount: items.length, totalQty, estimateTotal },
+          items,
+          source: "supabase",
+        });
+      }
+
+      if (!looksLikeNotionId(groupIdRaw)) {
+        return res.status(400).json({ error: "Missing or invalid groupId." });
+      }
+      const groupId = toHyphenatedUUID(groupIdRaw);
+
       // Find current user (cached in session if available)
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
@@ -8645,11 +8929,30 @@ app.get(
   requireAuth,
   requirePage(["Requested Orders", "Maintenance Orders"]),
   async (req, res) => {
-    if (!ordersDatabaseId)
+    if (!_sbOrdersEnabled() && !ordersDatabaseId)
       return res.status(500).json({ error: "Orders DB not configured" });
 
     res.set("Cache-Control", "no-store");
     try {
+      if (_sbOrdersEnabled()) {
+        const cacheKey = "cache:api:orders:requested:supabase:v1";
+        const forceFresh =
+          String(req.query?._fresh || "") === "1" ||
+          !!req.query?._refresh ||
+          String(req.get("x-ops-hard-refresh") || "") === "1";
+        const load = async () => _sbRequestedOrdersList();
+        const data = forceFresh
+          ? await (async () => {
+              await cacheDel(cacheKey);
+              const fresh = await load();
+              _memSet(cacheKey, fresh, 60);
+              await _redisSet(cacheKey, fresh, 60);
+              return fresh;
+            })()
+          : await cacheGetOrSet(cacheKey, 60, load);
+        return res.json(data);
+      }
+
       // Cache version is bumped when response logic/shape changes.
       const cacheKey = "cache:api:orders:requested:v7";
       const forceFresh =
@@ -9282,6 +9585,21 @@ app.post(
         return res.status(400).json({ error: "memberIds or memberId required" });
       if (!Array.isArray(memberIds) || memberIds.length === 0) memberIds = memberId ? [memberId] : [];
 
+      if (_sbOrdersEnabled() && orderIds.every((id) => /^\d+$/.test(String(id)))) {
+        let names = [];
+        if (_sbTeamMembersEnabled()) {
+          names = (await Promise.all((memberIds || []).map(async (mid) => {
+            const row = await _sbFindTeamMemberById(mid);
+            return row ? _sbString(_sbValueForLabel(row, "Name")) : String(mid || "");
+          }))).filter(Boolean);
+        } else {
+          names = (memberIds || []).map((x) => String(x || "").trim()).filter(Boolean);
+        }
+        await _sbUpdateOrdersByIds(orderIds, { supervisor: names.join(", ") || null });
+        await _sbInvalidateOrdersCaches();
+        return res.json({ success: true, source: "supabase" });
+      }
+
       // Detect property name "Assigned To"
       const sample = await notion.pages.retrieve({ page_id: orderIds[0] });
       const props = sample.properties || {};
@@ -9346,6 +9664,27 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rnText = Array.isArray(receiptNumber) ? receiptNumber.filter(Boolean).join(", ") : String(receiptNumber || "").trim();
+        const patch = {
+          status: "Shipped",
+          person_received_by_operations: req.session.username || null,
+        };
+        if (rnText) patch.receipt_number = rnText;
+        if (issueDescription) patch.issue_description = String(issueDescription || "").trim();
+        await _sbUpdateOrdersByIdsWithQuantities(ids, patch, quantities || null);
+        await _sbInvalidateOrdersCaches();
+        return res.json({
+          success: true,
+          status: "Shipped",
+          statusColor: "blue",
+          operationsByName: req.session.username || "",
+          issueDescription: issueDescription || null,
+          receiptNumber: rnText || null,
+          source: "supabase",
+        });
+      }
 
       const statusProp = await detectStatusPropName();
 
@@ -9748,6 +10087,12 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await _sbUpdateOrdersByIds(ids, { status: "Archive" });
+        await _sbInvalidateOrdersCaches();
+        return res.json({ success: true, status: "Archive", statusColor: "purple", source: "supabase" });
+      }
+
       const statusProp = await detectStatusPropName();
       const dbProps = await getOrdersDBProps();
       const dbPropMeta = dbProps?.[statusProp] || null;
@@ -9822,6 +10167,12 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await _sbUpdateOrdersByIds(ids, { status: "In progress" });
+        await _sbInvalidateOrdersCaches();
+        return res.json({ success: true, status: "In progress", statusColor: "yellow", source: "supabase" });
+      }
 
       const statusProp = await detectStatusPropName();
       const dbProps = await getOrdersDBProps();
@@ -10155,6 +10506,30 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rnList = Array.isArray(receiptNumbers) ? receiptNumbers : (receiptNumber ? [receiptNumber] : []);
+        const rnText = rnList.map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+        const receiptNames = []
+          .concat(Array.isArray(orderReceiptFilenames) ? orderReceiptFilenames : [])
+          .concat(orderReceiptFilename ? [orderReceiptFilename] : [])
+          .concat(Array.isArray(maintenanceReceiptFilenames) ? maintenanceReceiptFilenames : [])
+          .concat(maintenanceReceiptFilename ? [maintenanceReceiptFilename] : [])
+          .map((x) => String(x || "").trim())
+          .filter(Boolean);
+        const patch = { status: "Arrived" };
+        if (rnText) patch.receipt_number = rnText;
+        if (receiptNames.length) patch.order_receipt = receiptNames.join(", ");
+        await _sbUpdateOrdersByIds(ids, patch);
+        await _sbInvalidateOrdersCaches();
+        return res.json({
+          success: true,
+          status: "Arrived",
+          statusColor: "green",
+          receiptNumber: rnText || null,
+          source: "supabase",
+        });
+      }
 
       const statusProp = await detectStatusPropName();
 
@@ -10961,6 +11336,24 @@ app.post(
       };
 
       const vNumRounded = roundQty(vNumRaw);
+
+      if (_sbOrdersEnabled() && /^\d+$/.test(String(id))) {
+        const row = await supabaseDb.selectById(_sbOrdersTable(), id);
+        if (!row) return res.status(404).json({ error: "Order row not found" });
+        const base = _sbSerializeOrderRow(row).quantity || 0;
+        const remaining = roundQty((Number(base) || 0) - vNumRounded);
+        await supabaseDb.updateById(_sbOrdersTable(), id, {
+          quantity_received_by_operations: vNumRounded,
+          quantity_remaining: remaining,
+        });
+        await _sbInvalidateOrdersCaches();
+        return res.json({
+          success: true,
+          value: vNumRounded,
+          quantityRemaining: remaining,
+          source: "supabase",
+        });
+      }
 
       // Detect received quantity property name (Number)
       const receivedProp = (await (async () => {
