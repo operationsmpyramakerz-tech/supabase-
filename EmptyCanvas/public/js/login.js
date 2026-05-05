@@ -36,6 +36,8 @@ document.addEventListener('DOMContentLoaded', function () {
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
@@ -46,8 +48,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // Save username from login form for greetings
         try { localStorage.setItem('username', String(username || '')); } catch {}
 
-        // Success - redirect to dashboard
-        window.location.href = '/dashboard';
+        // Verify that the session cookie was actually stored, then redirect.
+        try {
+          await fetch('/api/account?_login_check=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' });
+        } catch {}
+        window.location.replace(result.redirect || '/home');
       } else {
         showError(response.status === 401 && result.error === 'incorrect password'
           ? 'incorrect password'
