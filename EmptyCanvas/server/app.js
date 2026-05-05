@@ -6,6 +6,7 @@ const PDFDocument = require("pdfkit"); // PDF
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
 const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
+const supabaseDb = require("./supabaseRest");
 
 // Web Push (Notifications)
 let webpush = null;
@@ -144,6 +145,54 @@ app.use(
 // --- Health FIRST (before session) so it works even if env is missing ---
 app.get("/health", (req, res) => {
   res.json({ ok: true, region: process.env.VERCEL_REGION || "unknown" });
+});
+
+
+// Supabase connectivity test. This route is intentionally unauthenticated and
+// returns only safe metadata plus a tiny sanitized sample so deployment issues
+// can be diagnosed before login.
+app.get(["/api/supabase/status", "/api/supabase/team-members-test"], async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const cfg = supabaseDb.getConfig();
+    if (!supabaseDb.isConfigured()) {
+      return res.status(500).json({
+        ok: false,
+        configured: false,
+        message: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in Vercel Environment Variables.",
+        table: cfg.teamMembersTable,
+      });
+    }
+
+    const rows = await supabaseDb.selectAll(cfg.teamMembersTable, { limit: 5 });
+    const first = Array.isArray(rows) ? rows[0] || {} : {};
+    const sample = (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
+      id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+      name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
+      department: _sbString(_sbValueForLabel(row, "Department")) || "",
+      position: _sbString(_sbValueForLabel(row, "Position")) || "",
+    }));
+
+    return res.json({
+      ok: true,
+      configured: true,
+      source: "supabase",
+      table: cfg.teamMembersTable,
+      rowsReturned: Array.isArray(rows) ? rows.length : 0,
+      columns: Object.keys(first),
+      sample,
+    });
+  } catch (error) {
+    console.error("GET /api/supabase/status error:", error?.details || error);
+    return res.status(error?.status || 500).json({
+      ok: false,
+      configured: supabaseDb.isConfigured(),
+      source: "supabase",
+      table: supabaseDb.getConfig().teamMembersTable,
+      error: error?.message || "Failed to connect to Supabase.",
+      details: error?.details || null,
+    });
+  }
 });
 
 // Sessions (Redis/Upstash) — added after /health
@@ -578,6 +627,16 @@ async function getAdminUserPageFromNotion() {
 async function verifyAdminPassword(inputPassword) {
   const pwd = String(inputPassword || "").trim();
   if (!pwd) return false;
+
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const ok = await _sbVerifyAdminPassword(pwd);
+      if (ok) return true;
+    } catch (error) {
+      console.warn("[supabase] admin password verification failed, falling back to Notion:", error?.message || error);
+    }
+  }
+
   try {
     const adminPage = await getAdminUserPageFromNotion();
     if (!adminPage) return false;
@@ -1460,6 +1519,296 @@ function normalizePages(names = []) {
 
   return out;
 }
+
+// -----------------------------------------------------------------------------
+// Supabase Team Members adapter
+// -----------------------------------------------------------------------------
+function _sbTeamMembersEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbTeamMembersTable() {
+  return supabaseDb.getConfig().teamMembersTable || "team_members";
+}
+
+function _sbCanon(value) {
+  return normKey(value);
+}
+
+function _sbLabelForColumn(key) {
+  const canon = _sbCanon(key);
+  const known = {
+    id: "ID",
+    createdat: "Created time",
+    updatedat: "Updated time",
+    department: "Department",
+    name: "Name",
+    phone: "Phone",
+    school: "School",
+    password: "Password",
+    allowedpages: "Allowed Pages",
+    svschools: "S.V Schools",
+    position: "Position",
+    profilepicture: "Profile picture",
+    filesmedia: "Files & media",
+    employeecode: "Employee Code",
+    email: "Email",
+  };
+  if (known[canon]) return known[canon];
+  return String(key || "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function _sbFindKey(objOrKeys, aliases = []) {
+  const keys = Array.isArray(objOrKeys) ? objOrKeys : Object.keys(objOrKeys || {});
+  for (const alias of aliases) {
+    const hit = keys.find((key) => _sbCanon(key) === _sbCanon(alias));
+    if (hit) return hit;
+  }
+  return "";
+}
+
+function _sbGet(row, aliases = []) {
+  const key = _sbFindKey(row, aliases);
+  return key ? row?.[key] : undefined;
+}
+
+function _sbString(value) {
+  if (value === null || typeof value === "undefined") return "";
+  if (Array.isArray(value)) return value.map((x) => _sbString(x)).filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    if (value.url) return String(value.url || "");
+    if (value.name) return String(value.name || "");
+    try { return JSON.stringify(value); } catch { return String(value); }
+  }
+  return String(value).trim();
+}
+
+function _sbSplitValues(value) {
+  if (Array.isArray(value)) return value.map(_sbString).map((x) => x.trim()).filter(Boolean);
+  if (value && typeof value === "object") {
+    if (Array.isArray(value.items)) return value.items.map(_sbString).map((x) => x.trim()).filter(Boolean);
+    if (Array.isArray(value.values)) return value.values.map(_sbString).map((x) => x.trim()).filter(Boolean);
+  }
+  const raw = _sbString(value);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(_sbString).map((x) => x.trim()).filter(Boolean);
+  } catch {}
+  return raw.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+function _sbExtractUrl(value) {
+  if (!value) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = _sbExtractUrl(item);
+      if (url) return url;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    return _sbExtractUrl(value.url || value.publicUrl || value.href || value.external?.url || value.file?.url || "");
+  }
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return "";
+  try {
+    const parsed = JSON.parse(raw);
+    const url = _sbExtractUrl(parsed);
+    if (url) return url;
+  } catch {}
+  const match = raw.match(/https?:\/\/[^\s,"'<>]+/i);
+  return match ? match[0] : "";
+}
+
+function _sbAllColumnKeys(rows = []) {
+  const set = new Set();
+  for (const row of rows || []) Object.keys(row || {}).forEach((key) => set.add(key));
+  return Array.from(set);
+}
+
+function _sbNonEditableColumn(key) {
+  const canon = _sbCanon(key);
+  return ["id", "createdat", "updatedat", "lasteditedtime", "createdtime"].includes(canon);
+}
+
+function _sbFieldTypeFromLabel(label) {
+  const canon = _sbCanon(label);
+  if (canon === "name") return "title";
+  if (canon === "email") return "email";
+  if (canon === "phone") return "phone_number";
+  if (canon === "allowedpages" || canon === "svschools") return "multi_select";
+  if (canon === "profilepicture" || canon === "filesmedia") return "files";
+  if (canon === "employeecode") return "text";
+  return "rich_text";
+}
+
+function _sbOrderedEditableFieldsFromRows(rows = []) {
+  const keys = _sbAllColumnKeys(rows).filter((key) => !_sbNonEditableColumn(key));
+  const ordered = [];
+  for (const preferred of USER_ACCESS_FIELD_ORDER) {
+    const actual = _sbFindKey(keys, [preferred]);
+    if (actual && !ordered.includes(actual)) ordered.push(actual);
+  }
+  for (const key of keys) {
+    if (!ordered.includes(key)) ordered.push(key);
+  }
+  return ordered.map((key) => {
+    const label = _sbLabelForColumn(key);
+    return { name: label, type: _sbFieldTypeFromLabel(label), required: _sbCanon(label) === "name", sourceColumn: key };
+  });
+}
+
+function _sbValueForLabel(row, label) {
+  const canon = _sbCanon(label);
+  const aliases = [label];
+  if (canon === "name") aliases.push("Name", "name", "full_name", "username");
+  if (canon === "department") aliases.push("Department", "department");
+  if (canon === "phone") aliases.push("Phone", "phone", "mobile");
+  if (canon === "school") aliases.push("School", "school");
+  if (canon === "password") aliases.push("Password", "password", "passcode", "pin");
+  if (canon === "allowedpages") aliases.push("Allowed Pages", "allowed_pages", "Pages", "pages", "access_pages");
+  if (canon === "svschools") aliases.push("S.V Schools", "sv_schools", "SV Schools", "schools");
+  if (canon === "position") aliases.push("Position", "position", "role");
+  if (canon === "profilepicture") aliases.push("Profile picture", "profile_picture", "photo", "photo_url", "avatar", "avatar_url");
+  if (canon === "filesmedia") aliases.push("Files & media", "files_media", "files", "media");
+  if (canon === "employeecode") aliases.push("Employee Code", "employee_code", "code");
+  if (canon === "email") aliases.push("Email", "email", "mail");
+  return _sbGet(row, aliases);
+}
+
+function _sbSerializeTeamMemberRow(row, editableFields = null) {
+  const fieldsSchema = editableFields || _sbOrderedEditableFieldsFromRows([row]);
+  const name = _sbString(_sbValueForLabel(row, "Name")) || "Unnamed";
+  const department = _sbString(_sbValueForLabel(row, "Department")) || "No Department";
+  const position = _sbString(_sbValueForLabel(row, "Position")) || "Team Member";
+  const phone = _sbString(_sbValueForLabel(row, "Phone"));
+  const email = _sbString(_sbValueForLabel(row, "Email"));
+  const employeeCode = _sbString(_sbValueForLabel(row, "Employee Code"));
+  const photoUrl = _sbExtractUrl(_sbValueForLabel(row, "Profile picture"));
+
+  const fields = fieldsSchema.map((field) => {
+    const valueRaw = _sbValueForLabel(row, field.name);
+    const value = _sbString(valueRaw);
+    const fileUrl = field.type === "files" ? _sbExtractUrl(valueRaw) : "";
+    return { label: field.name, type: field.type || "rich_text", value, files: fileUrl ? [{ name: field.name, url: fileUrl }] : [], relationIds: [], fileUrls: fileUrl ? [fileUrl] : [] };
+  });
+
+  return {
+    id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+    url: "",
+    name,
+    department,
+    departmentKey: _uaDepartmentKey(department),
+    position,
+    phone,
+    email,
+    employeeCode,
+    photoUrl,
+    createdTime: _uaSafeDate(_sbGet(row, ["created_at", "Created time", "created_time"])),
+    lastEditedTime: _uaSafeDate(_sbGet(row, ["updated_at", "Updated time", "last_edited_time"])),
+    fields,
+    source: "supabase",
+  };
+}
+
+async function _sbSelectTeamMembersRows() {
+  return await supabaseDb.selectAll(_sbTeamMembersTable(), { limit: 5000 });
+}
+
+async function _sbFindTeamMemberByName(name) {
+  const wanted = norm(String(name || ""));
+  if (!wanted) return null;
+  const rows = await _sbSelectTeamMembersRows();
+  return (rows || []).find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted) || null;
+}
+
+async function _sbFindTeamMemberById(id) {
+  if (!id) return null;
+  try { return await supabaseDb.selectById(_sbTeamMembersTable(), id); } catch {}
+  const rows = await _sbSelectTeamMembersRows();
+  return (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === String(id)) || null;
+}
+
+function _sbExtractAllowedPages(row) {
+  return normalizePages(_sbSplitValues(_sbValueForLabel(row, "Allowed Pages")));
+}
+
+function _sbAccountPayload(row, fallbackUsername = "") {
+  const allowedUI = expandAllowedForUI(_sbExtractAllowedPages(row));
+  return {
+    name: _sbString(_sbValueForLabel(row, "Name")) || fallbackUsername || "",
+    username: _sbString(_sbValueForLabel(row, "Name")) || fallbackUsername || "",
+    department: _sbString(_sbValueForLabel(row, "Department")) || "",
+    position: _sbString(_sbValueForLabel(row, "Position")) || "",
+    photoUrl: _sbExtractUrl(_sbValueForLabel(row, "Profile picture")) || "",
+    phone: _sbString(_sbValueForLabel(row, "Phone")) || "",
+    email: _sbString(_sbValueForLabel(row, "Email")) || "",
+    employeeCode: _sbString(_sbValueForLabel(row, "Employee Code")) || null,
+    filesMedia: [],
+    passwordSet: !!_sbString(_sbValueForLabel(row, "Password")),
+    allowedPages: allowedUI,
+    source: "supabase",
+  };
+}
+
+async function _sbGetAdminRow() {
+  const rows = await _sbSelectTeamMembersRows();
+  const list = Array.isArray(rows) ? rows : [];
+  return list.find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === "admin") ||
+    list.find((row) => norm(_sbString(_sbValueForLabel(row, "Position"))).includes("admin")) ||
+    list.find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))).includes("admin")) || null;
+}
+
+async function _sbVerifyAdminPassword(inputPassword) {
+  const pwd = String(inputPassword || "").trim();
+  if (!pwd) return false;
+  const row = await _sbGetAdminRow();
+  if (!row) return false;
+  const stored = _sbString(_sbValueForLabel(row, "Password"));
+  return !!stored && String(stored) === pwd;
+}
+
+function _sbColumnForIncomingField(keys, incomingName) {
+  return _sbFindKey(keys, [incomingName, _sbLabelForColumn(incomingName)]);
+}
+
+function _sbBuildWriteRowFromFields(fields = {}, rows = []) {
+  const keys = _sbAllColumnKeys(rows).filter((key) => !_sbNonEditableColumn(key));
+  const row = {};
+  for (const [incomingName, rawValue] of Object.entries(fields || {})) {
+    const actual = _sbColumnForIncomingField(keys, incomingName);
+    if (!actual) continue;
+    const value = String(rawValue ?? "").trim();
+    row[actual] = value || null;
+  }
+  return row;
+}
+
+async function _sbQueryAllTeamMembersForUserAccess() {
+  const rows = await _sbSelectTeamMembersRows();
+  const editableFields = _sbOrderedEditableFieldsFromRows(rows);
+  const members = (rows || []).map((row) => _sbSerializeTeamMemberRow(row, editableFields));
+  members.sort((a, b) => {
+    const da = String(a.department || "").localeCompare(String(b.department || ""));
+    if (da) return da;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+  const map = new Map();
+  for (const member of members) {
+    const key = member.departmentKey || _uaDepartmentKey(member.department);
+    if (!map.has(key)) map.set(key, { id: key, name: member.department || "No Department", count: 0, members: [] });
+    const dept = map.get(key);
+    dept.members.push(member);
+    dept.count += 1;
+  }
+  return { total: members.length, editableFields, departments: Array.from(map.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), source: "supabase" };
+}
+
 
 // توسيع الأسماء للواجهة حتى لا يحصل تضارب aliases
 function expandAllowedForUI(list = []) {
@@ -2565,10 +2914,42 @@ app.get("/damaged-assets-reviewed", requireAuth, requirePage("Damaged Assets"), 
 // Login
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
+  const providedUsername = String(username || "").trim();
+  const providedPassword = String(password || "").trim();
+
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const row = await _sbFindTeamMemberByName(providedUsername);
+      if (row) {
+        const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
+        if (storedPassword && String(storedPassword) === providedPassword) {
+          const accountPayload = _sbAccountPayload(row, providedUsername);
+          const allowedNormalized = _sbExtractAllowedPages(row);
+          const allowedUI = expandAllowedForUI(allowedNormalized);
+
+          req.session.authenticated = true;
+          req.session.username = accountPayload.username || providedUsername;
+          req.session.allowedPages = allowedNormalized;
+          req.session.userSupabaseId = String(_sbGet(row, ["id", "ID"]) ?? "");
+          req.session.accountCache = { ...accountPayload, allowedPages: allowedUI };
+          req.session.accountCacheTs = Date.now();
+
+          return req.session.save((err) => {
+            if (err) return res.status(500).json({ error: "Session could not be saved." });
+            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase" });
+          });
+        }
+        return res.status(401).json({ error: "incorrect password" });
+      }
+    } catch (error) {
+      console.error("Supabase login error:", error?.details || error);
+    }
+  }
+
   if (!teamMembersDatabaseId) {
     return res
       .status(500)
-      .json({ error: "Team_Members database ID is not configured." });
+      .json({ error: "Team_Members database ID is not configured, and Supabase login did not find this user." });
   }
   try {
     const response = await notion.databases.query({
@@ -2581,20 +2962,15 @@ app.post("/api/login", async (req, res) => {
     const user = response.results[0];
     const storedPassword = _extractPropText(user.properties?.Password);
 
-    const providedPassword = String(password || "").trim();
-
     if (storedPassword !== null && typeof storedPassword !== "undefined" && String(storedPassword) === providedPassword) {
       const allowedNormalized = extractAllowedPages(user.properties);
       req.session.authenticated = true;
       req.session.username = username;
       req.session.allowedPages = allowedNormalized;
-      // Cache user Notion page ID in session to avoid re-querying Team Members DB
       req.session.userNotionId = user.id;
 
       const allowedUI = expandAllowedForUI(allowedNormalized);
 
-      // Cache account payload in session (used by /api/account on every page load)
-      // TTL is enforced inside /api/account.
       try {
         const p = user.properties || {};
         req.session.accountCache = {
@@ -2614,13 +2990,8 @@ app.post("/api/login", async (req, res) => {
       } catch {}
 
       req.session.save((err) => {
-        if (err)
-          return res.status(500).json({ error: "Session could not be saved." });
-        res.json({
-          success: true,
-          message: "Login successful",
-          allowedPages: allowedUI,
-        });
+        if (err) return res.status(500).json({ error: "Session could not be saved." });
+        res.json({ success: true, message: "Login successful", allowedPages: allowedUI });
       });
     } else {
       res.status(401).json({ error: "incorrect password" });
@@ -2676,16 +3047,13 @@ app.post("/api/logout", (req, res) => {
 
 // Account info (returns fresh allowedPages)
 app.get("/api/account", requireAuth, async (req, res) => {
-  if (!teamMembersDatabaseId) {
-    return res
-      .status(500)
-      .json({ error: "Team_Members database ID is not configured." });
+  const hasSupabaseSession = !!req.session?.userSupabaseId && _sbTeamMembersEnabled();
+  if (!teamMembersDatabaseId && !hasSupabaseSession && !_sbTeamMembersEnabled()) {
+    return res.status(500).json({ error: "Team_Members database ID or Supabase Team Members table is not configured." });
   }
 
-  // This endpoint is called on every page load (common-ui.js).
-  // Use a short session cache to avoid hitting Notion repeatedly.
   res.set("Cache-Control", "no-store");
-  const ACCOUNT_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+  const ACCOUNT_CACHE_TTL_MS = 2 * 60 * 1000;
   try {
     const cached = req.session?.accountCache;
     const ts = Number(req.session?.accountCacheTs || 0);
@@ -2693,6 +3061,24 @@ app.get("/api/account", requireAuth, async (req, res) => {
       return res.json(cached);
     }
   } catch {}
+
+  if (_sbTeamMembersEnabled() && req.session?.userSupabaseId) {
+    try {
+      const row = await _sbFindTeamMemberById(req.session.userSupabaseId);
+      if (row) {
+        const data = _sbAccountPayload(row, req.session.username || "");
+        try {
+          req.session.username = data.username || req.session.username || "";
+          req.session.allowedPages = _sbExtractAllowedPages(row);
+          req.session.accountCache = data;
+          req.session.accountCacheTs = Date.now();
+        } catch {}
+        return res.json(data);
+      }
+    } catch (error) {
+      console.error("Error fetching account from Supabase:", error?.details || error);
+    }
+  }
 
   try {
     const userId = await getSessionUserNotionId(req);
@@ -2729,7 +3115,7 @@ app.get("/api/account", requireAuth, async (req, res) => {
 
     return res.json(data);
   } catch (error) {
-    console.error("Error fetching account from Notion:", error.body || error);
+    console.error("Error fetching account:", error.body || error);
     res.status(500).json({ error: "Failed to fetch account info." });
   }
 });
@@ -7892,6 +8278,25 @@ function _messagesSerializeTeamMember(page) {
 }
 
 async function _messagesQueryTeamMembers() {
+  if (_sbTeamMembersEnabled()) {
+    const rows = await _sbSelectTeamMembersRows();
+    const editableFields = _sbOrderedEditableFieldsFromRows(rows || []);
+    const out = (rows || []).map((row) => {
+      const m = _sbSerializeTeamMemberRow(row, editableFields);
+      return {
+        id: m.id,
+        name: m.name,
+        department: m.department,
+        position: m.position,
+        email: m.email,
+        phone: m.phone,
+        photoUrl: m.photoUrl,
+      };
+    });
+    out.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    return out;
+  }
+
   if (!teamMembersDatabaseId) return [];
   const out = [];
   let cursor = undefined;
@@ -8068,13 +8473,13 @@ app.post(
   },
 );
 
-// User Access & Data — Create Team Member in Notion
+// User Access & Data — Create Team Member
 app.post(
   "/api/user-access/team-members",
   requireAuth,
   async (req, res) => {
-    if (!teamMembersDatabaseId) {
-      return res.status(500).json({ ok: false, error: "Team_Members database ID is not configured." });
+    if (!_sbTeamMembersEnabled() && !teamMembersDatabaseId) {
+      return res.status(500).json({ ok: false, error: "Team Members data source is not configured." });
     }
     if (!_uaAdminVerified(req)) {
       return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
@@ -8083,34 +8488,45 @@ app.post(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbTeamMembersEnabled()) {
+        const rows = await _sbSelectTeamMembersRows();
+        const writeRow = _sbBuildWriteRowFromFields(req.body?.fields || {}, rows);
+        const name = _sbString(_sbValueForLabel(writeRow, "Name"));
+        if (!name) return res.status(400).json({ ok: false, error: "Name is required." });
+        if (!Object.keys(writeRow).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
+
+        const created = await supabaseDb.insert(_sbTeamMembersTable(), writeRow);
+        await cacheDel(USER_ACCESS_CACHE_KEY);
+        await cacheDel("cache:api:user-access:team-members:supabase:v1");
+        const editableFields = _sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]);
+        const member = _sbSerializeTeamMemberRow(created || writeRow, editableFields);
+        return res.json({ ok: true, member, source: "supabase" });
+      }
+
       const schemaProps = await _uaGetTeamMembersDbSchema();
       const { properties, errors } = _uaBuildTeamMemberProperties(schemaProps, req.body?.fields || {}, { requireTitle: true });
       if (errors.length) return res.status(400).json({ ok: false, error: errors.join(" ") });
       if (!Object.keys(properties).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
 
-      const created = await notion.pages.create({
-        parent: { database_id: teamMembersDatabaseId },
-        properties,
-      });
-
+      const created = await notion.pages.create({ parent: { database_id: teamMembersDatabaseId }, properties });
       await cacheDel(USER_ACCESS_CACHE_KEY);
       const page = await notion.pages.retrieve({ page_id: created.id }).catch(() => created);
       const member = await serializeTeamMemberForUserAccess(page);
       return res.json({ ok: true, member });
     } catch (error) {
-      console.error("POST /api/user-access/team-members error:", error?.body || error);
-      return res.status(500).json({ ok: false, error: "Failed to create team member." });
+      console.error("POST /api/user-access/team-members error:", error?.details || error?.body || error);
+      return res.status(500).json({ ok: false, error: error?.message || "Failed to create team member." });
     }
   },
 );
 
-// User Access & Data — Update Team Member in Notion
+// User Access & Data — Update Team Member
 app.patch(
   "/api/user-access/team-members/:id",
   requireAuth,
   async (req, res) => {
-    if (!teamMembersDatabaseId) {
-      return res.status(500).json({ ok: false, error: "Team_Members database ID is not configured." });
+    if (!_sbTeamMembersEnabled() && !teamMembersDatabaseId) {
+      return res.status(500).json({ ok: false, error: "Team Members data source is not configured." });
     }
     if (!_uaAdminVerified(req)) {
       return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password again." });
@@ -8121,8 +8537,20 @@ app.patch(
     try {
       const pageId = String(req.params?.id || "").trim();
       if (!pageId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
-      const safePageId = looksLikeNotionId(pageId) ? toHyphenatedUUID(pageId) : pageId;
 
+      if (_sbTeamMembersEnabled()) {
+        const rows = await _sbSelectTeamMembersRows();
+        const writeRow = _sbBuildWriteRowFromFields(req.body?.fields || {}, rows);
+        if (!Object.keys(writeRow).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
+        const updated = await supabaseDb.updateById(_sbTeamMembersTable(), pageId, writeRow);
+        await cacheDel(USER_ACCESS_CACHE_KEY);
+        await cacheDel("cache:api:user-access:team-members:supabase:v1");
+        const editableFields = _sbOrderedEditableFieldsFromRows(rows || []);
+        const member = _sbSerializeTeamMemberRow(updated || { ...writeRow, id: pageId }, editableFields);
+        return res.json({ ok: true, member, source: "supabase" });
+      }
+
+      const safePageId = looksLikeNotionId(pageId) ? toHyphenatedUUID(pageId) : pageId;
       const schemaProps = await _uaGetTeamMembersDbSchema();
       const { properties, errors } = _uaBuildTeamMemberProperties(schemaProps, req.body?.fields || {}, { requireTitle: true });
       if (errors.length) return res.status(400).json({ ok: false, error: errors.join(" ") });
@@ -8134,19 +8562,19 @@ app.patch(
       const member = await serializeTeamMemberForUserAccess(page);
       return res.json({ ok: true, member });
     } catch (error) {
-      console.error("PATCH /api/user-access/team-members/:id error:", error?.body || error);
-      return res.status(500).json({ ok: false, error: "Failed to update team member." });
+      console.error("PATCH /api/user-access/team-members/:id error:", error?.details || error?.body || error);
+      return res.status(500).json({ ok: false, error: error?.message || "Failed to update team member." });
     }
   },
 );
 
-// User Access & Data — Teams Members database grouped by Department
+// User Access & Data — Teams Members grouped by Department
 app.get(
   "/api/user-access/team-members",
   requireAuth,
   async (req, res) => {
-    if (!teamMembersDatabaseId) {
-      return res.status(500).json({ error: "Team_Members database ID is not configured." });
+    if (!_sbTeamMembersEnabled() && !teamMembersDatabaseId) {
+      return res.status(500).json({ error: "Team Members data source is not configured." });
     }
 
     res.set("Cache-Control", "no-store");
@@ -8156,18 +8584,23 @@ app.get(
         String(req.query?._fresh || "") === "1" ||
         String(req.get("X-Ops-Hard-Refresh") || "") === "1";
 
-      if (forceFresh) {
-        await cacheDel(USER_ACCESS_CACHE_KEY);
+      if (_sbTeamMembersEnabled()) {
+        const sbCacheKey = "cache:api:user-access:team-members:supabase:v1";
+        if (forceFresh) await cacheDel(sbCacheKey);
+        const payload = forceFresh
+          ? await _sbQueryAllTeamMembersForUserAccess()
+          : await cacheGetOrSet(sbCacheKey, 5 * 60, _sbQueryAllTeamMembersForUserAccess);
+        return res.json(payload);
       }
 
+      if (forceFresh) await cacheDel(USER_ACCESS_CACHE_KEY);
       const payload = forceFresh
         ? await queryAllTeamMembersForUserAccess()
         : await cacheGetOrSet(USER_ACCESS_CACHE_KEY, 5 * 60, queryAllTeamMembersForUserAccess);
-
       return res.json(payload);
     } catch (error) {
-      console.error("GET /api/user-access/team-members error:", error?.body || error);
-      return res.status(500).json({ error: "Failed to load User Access & Data." });
+      console.error("GET /api/user-access/team-members error:", error?.details || error?.body || error);
+      return res.status(500).json({ error: error?.message || "Failed to load User Access & Data." });
     }
   },
 );
@@ -8179,6 +8612,17 @@ app.get(
   requirePage("Requested Orders"),
   async (req, res) => {
     try {
+      if (_sbTeamMembersEnabled()) {
+        const rows = await _sbSelectTeamMembersRows();
+        const items = (rows || [])
+          .map((row) => ({
+            id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+            name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
+          }))
+          .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+        return res.json(items);
+      }
+
       const result = await notion.databases.query({
         database_id: teamMembersDatabaseId,
         sorts: [{ property: "Name", direction: "ascending" }],
