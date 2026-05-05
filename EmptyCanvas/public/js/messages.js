@@ -231,13 +231,13 @@
     renderChatsList();
     renderSelectedChatShell();
     const commentsEl = $('#msgComments');
-    if (commentsEl) commentsEl.innerHTML = `<div class="msg-comments-loading"><span></span> Loading comments...</div>`;
+    if (commentsEl) commentsEl.innerHTML = `<div class="msg-comments-loading"><span></span> Loading messages...</div>`;
     try {
       const data = await apiJson(`/api/messages/chats/${encodeURIComponent(chatId)}/comments`);
       state.comments = Array.isArray(data.comments) ? data.comments : [];
       renderComments();
     } catch (error) {
-      if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load comments.')}</div>`;
+      if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load messages.')}</div>`;
     }
   }
 
@@ -256,7 +256,7 @@
     const avEl = $('#msgConvAvatar');
     const notionLink = $('#msgOpenNotion');
     if (titleEl) titleEl.textContent = title;
-    if (subEl) subEl.textContent = `${Number(chat.commentsCount || 0)} comment${Number(chat.commentsCount || 0) === 1 ? '' : 's'} · Notion page comments`;
+    if (subEl) subEl.textContent = `${Number(chat.commentsCount || 0)} message${Number(chat.commentsCount || 0) === 1 ? '' : 's'} · Supabase chat`;
     if (avEl) avEl.textContent = initials(title);
     if (notionLink) {
       if (chat.url) {
@@ -273,7 +273,7 @@
     const el = $('#msgComments');
     if (!el) return;
     if (!state.comments.length) {
-      el.innerHTML = `<div class="msg-empty-list">No comments yet. Send the first message.</div>`;
+      el.innerHTML = `<div class="msg-empty-list">No messages yet. Send the first message.</div>`;
       return;
     }
     el.innerHTML = state.comments.map((c) => `
@@ -305,7 +305,7 @@
       if (input) input.value = '';
       if (data.comment) state.comments.push(data.comment);
       renderComments();
-      // Update local preview without waiting for a full Notion reload.
+      // Update local preview without waiting for a full reload.
       state.chats = state.chats.map((c) => {
         if (c.id !== state.selectedChatId) return c;
         return {
