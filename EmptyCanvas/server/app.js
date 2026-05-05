@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -164,7 +164,36 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
       });
     }
 
-    const isOrdersTest = String(req.path || "").includes("orders-test");
+    const pathNow = String(req.path || "");
+    const isOrdersTest = pathNow.includes("orders-test");
+    const isRequestedOrdersTest = pathNow.includes("orders-requested-test");
+    const isCurrentOrdersTest = pathNow.includes("orders-current-test");
+
+    if (isRequestedOrdersTest || isCurrentOrdersTest) {
+      const orders = isRequestedOrdersTest
+        ? await _sbRequestedOrdersList()
+        : await _sbCurrentOrdersList({ session: {} });
+      const list = Array.isArray(orders) ? orders : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.ordersTable || "orders",
+        endpoint: isRequestedOrdersTest ? "/api/orders/requested" : "/api/orders",
+        rowsReturned: list.length,
+        note: "This is a public diagnostic endpoint. The real /api/orders* endpoints require login and will return 401/redirect until a valid session exists.",
+        sample: list.slice(0, 5).map((row) => ({
+          id: row.id,
+          orderId: row.orderId,
+          status: row.status,
+          productName: row.productName,
+          svApproval: row.svApproval,
+          quantity: row.quantity,
+          createdByName: row.createdByName,
+        })),
+      });
+    }
+
     const table = isOrdersTest ? (cfg.ordersTable || "orders") : cfg.teamMembersTable;
     const rows = await supabaseDb.selectAll(table, {
       limit: 5,
@@ -2937,6 +2966,21 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
 // Authentication middleware
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) return next();
+
+  // API calls should not silently render the login page. Returning JSON makes
+  // debugging and frontend handling clearer, while normal page routes still
+  // redirect to /login.
+  if (String(req.path || "").startsWith("/api/")) {
+    res.set("Cache-Control", "no-store");
+    return res.status(401).json({
+      ok: false,
+      authenticated: false,
+      code: "AUTH_REQUIRED",
+      message: "Login is required before calling this endpoint.",
+      redirect: "/login",
+    });
+  }
+
   return res.redirect("/login");
 }
 
