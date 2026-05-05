@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test", "/api/supabase/b2b-schools-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -172,6 +172,31 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
     const isCurrentExpensesTest = pathNow.includes("expenses-current-test");
     const isProductsTest = pathNow.includes("products-test") || pathNow.includes("components-test");
     const isStocktakingTest = pathNow.includes("stocktaking-test");
+    const isB2BSchoolsTest = pathNow.includes("b2b-schools-test");
+
+    if (isB2BSchoolsTest) {
+      const rows = await _sbB2BSchoolsRows();
+      const list = Array.isArray(rows) ? rows : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.b2bSchoolsTable || "b2b_schools",
+        endpoint: "/api/b2b/schools",
+        rowsReturned: list.length,
+        columns: Object.keys(list[0] || {}),
+        sample: list.slice(0, 5).map((row) => {
+          const school = _sbSerializeB2BSchoolRow(row);
+          return {
+            id: school.id,
+            name: school.name,
+            governorate: school.governorate?.name || null,
+            educationSystem: school.educationSystem,
+            programType: school.programType,
+          };
+        }),
+      });
+    }
 
     if (isStocktakingTest) {
       const rows = await _sbStocktakingRows();
@@ -299,6 +324,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
       expensesTable: cfg.expensesTable || "expenses",
       productsTable: cfg.productsTable || "products",
       stocktakingTable: cfg.stocktakingTable || "stocktaking",
+      b2bSchoolsTable: cfg.b2bSchoolsTable || "b2b_schools",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -607,6 +633,11 @@ async function clearUserServerCaches(req, opts = {}) {
   if (b2bDatabaseId) {
     tasks.push(cacheDel(`cache:api:b2b:schools:list:${b2bDatabaseId}:v1`));
   }
+  try {
+    if (_sbB2BSchoolsEnabled()) {
+      tasks.push(cacheDel(`cache:api:b2b:schools:list:supabase:${_sbB2BSchoolsTable()}:v1`));
+    }
+  } catch {}
 
   await Promise.allSettled(tasks);
 
@@ -6027,6 +6058,203 @@ function _multiSelectNames(prop) {
   return [];
 }
 
+// -----------------------------------------------------------------------------
+// Supabase B2B Schools adapter
+// -----------------------------------------------------------------------------
+function _sbB2BSchoolsEnabled() {
+  return !!(
+    supabaseDb &&
+    supabaseDb.isConfigured &&
+    supabaseDb.isConfigured() &&
+    String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || '').trim()
+  );
+}
+
+function _sbB2BSchoolsTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return (cfg.b2bSchoolsTable || process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
+}
+
+function _sbBool(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw || raw === 'null') return false;
+  return ['true', 'yes', 'y', '1', 'checked', 'done'].includes(raw);
+}
+
+async function _sbB2BSchoolsRows() {
+  if (!_sbB2BSchoolsEnabled()) return [];
+  const rows = await supabaseDb.selectAll(_sbB2BSchoolsTable(), {
+    limit: 5000,
+    order: 'school_name.asc,id.asc',
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
+  const name =
+    _sbString(_sbGet(row, ['school_name', 'School name', 'name', 'Name', 'school', 'School'])) ||
+    'Untitled';
+  const governorateName = _sbString(_sbGet(row, ['governorate', 'Governorate', 'governorates']));
+  const educationSystem = _sbSplitValues(_sbGet(row, ['education_system', 'Education System', 'Education system', 'education']));
+  const programType = _sbString(_sbGet(row, ['program_type', 'Program type', 'Program Type', 'program']));
+  const location = _sbExtractUrl(_sbGet(row, ['location', 'Location', 'google_maps', 'Google Maps'])) || _sbString(_sbGet(row, ['location', 'Location']));
+  const grades = {};
+  for (let i = 1; i <= 12; i++) {
+    grades[i] = _sbBool(_sbGet(row, [`g${i}`, `G${i}`, `grade_${i}`, `Grade ${i}`]));
+  }
+
+  const out = {
+    id: String(_sbGet(row, ['id', 'ID']) ?? '').trim(),
+    name,
+    location,
+    governorate: governorateName ? { name: governorateName, color: 'default' } : null,
+    educationSystem,
+    programType,
+    grades,
+    schoolCode: _sbString(_sbGet(row, ['school_code', 'School Code', 'code', 'ID'])),
+    source: 'supabase',
+  };
+
+  if (detail) {
+    out.status = _sbString(_sbGet(row, ['status', 'Status']));
+    out.contractStatus = _sbString(_sbGet(row, ['contract_status', 'Contract Status']));
+    out.companyName = _sbString(_sbGet(row, ['company_name', 'Company name', 'Company Name']));
+  }
+
+  return out;
+}
+
+async function _sbFindB2BSchoolById(id) {
+  const clean = String(id || '').trim();
+  if (!clean || !_sbB2BSchoolsEnabled()) return null;
+  const rows = await supabaseDb.select(_sbB2BSchoolsTable(), {
+    select: '*',
+    id: `eq.${clean}`,
+    limit: 1,
+  });
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function _sbFindB2BSchoolByName(name) {
+  const wanted = normKey(name);
+  if (!wanted || !_sbB2BSchoolsEnabled()) return null;
+  const rows = await _sbB2BSchoolsRows();
+  return (rows || []).find((row) => normKey(_sbGet(row, ['school_name', 'name', 'School name'])) === wanted) || null;
+}
+
+function _sbB2BStockColumnCandidates(schoolName = '', kind = 'done', dateISO = '') {
+  const base = _sbStocktakingColumnKey(schoolName);
+  const kindKey = _sbStocktakingColumnKey(kind);
+  const dateKey = String(dateISO || '').trim().replace(/-/g, '_');
+  const out = [];
+  if (base) {
+    if (kindKey === 'done') out.push(`${base}_done`, base);
+    else if (dateKey) out.push(`${base}_${kindKey}_${dateKey}`, `${base}_${kindKey}_${String(dateISO || '').trim()}`);
+    else out.push(`${base}_${kindKey}`);
+  }
+  return out.filter(Boolean);
+}
+
+function _sbB2BFindColumnInRows(rows = [], schoolName = '', kind = 'done', dateISO = '') {
+  const keys = _sbAllColumnKeys(rows || []);
+  if (!keys.length) return null;
+  const directCandidates = _sbB2BStockColumnCandidates(schoolName, kind, dateISO);
+  for (const candidate of directCandidates) {
+    const hit = _sbFindKey(keys, [candidate]);
+    if (hit) return { name: hit, date: dateISO || null };
+  }
+
+  const base = _sbStocktakingColumnKey(schoolName);
+  const kindKey = _sbStocktakingColumnKey(kind);
+  if (!base || !kindKey) return null;
+  const matches = [];
+  for (const key of keys) {
+    const cleanKey = _sbStocktakingColumnKey(key);
+    if (!cleanKey.includes(base) || !cleanKey.includes(kindKey)) continue;
+    const m = cleanKey.match(/(20\d{2})[_-]?(\d{2})[_-]?(\d{2})/);
+    const parsedDate = m ? `${m[1]}-${m[2]}-${m[3]}` : '';
+    matches.push({ name: key, date: parsedDate || null });
+  }
+  matches.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return matches[0] || null;
+}
+
+async function _sbGetB2BSchoolStocktakingPayload(schoolId) {
+  const school = await _getB2BSchoolById(schoolId);
+  if (!school) return { meta: {}, items: [] };
+  const schoolName = String(school.name || '').trim();
+  const rows = await _sbStocktakingRows();
+  const doneCol = _sbB2BFindColumnInRows(rows, schoolName, 'done') || null;
+  const inventoryCol = _sbB2BFindColumnInRows(rows, schoolName, 'inventory') || null;
+  const defectedCol = _sbB2BFindColumnInRows(rows, schoolName, 'defected') || null;
+
+  const items = (rows || [])
+    .map((row) => {
+      const item = _sbSerializeStocktakingRow(row, doneCol?.name || schoolName);
+      item.doneQuantity = _sbStocktakingNum(doneCol?.name ? row?.[doneCol.name] : item.quantity);
+      item.done = Number(item.doneQuantity || 0) !== 0;
+      item.inventory = inventoryCol?.name ? _sbStocktakingNum(row?.[inventoryCol.name]) : null;
+      item.defected = defectedCol?.name ? _sbStocktakingNum(row?.[defectedCol.name]) : null;
+      return item;
+    })
+    .filter((item) => {
+      const doneValue = Number(item.doneQuantity || item.quantity || 0);
+      return doneValue !== 0 || item.inventory !== null || item.defected !== null;
+    });
+
+  return {
+    meta: {
+      schoolName,
+      donePropName: doneCol?.name || null,
+      inventoryPropName: inventoryCol?.name || null,
+      inventoryDate: inventoryCol?.date || null,
+      defectedPropName: defectedCol?.name || null,
+      defectedDate: defectedCol?.date || null,
+      source: 'supabase',
+    },
+    items,
+  };
+}
+
+async function _sbUpdateB2BStockValue({ schoolId, stockId, kind, value, requestedPropName = '', requestedDate = '' }) {
+  if (!_sbB2BSchoolsEnabled() || !_sbStocktakingEnabled()) {
+    const err = new Error('Supabase B2B/stocktaking tables are not configured.');
+    err.status = 500;
+    throw err;
+  }
+  const school = await _getB2BSchoolById(schoolId);
+  if (!school) {
+    const err = new Error('School not found.');
+    err.status = 404;
+    throw err;
+  }
+  const schoolName = String(school.name || '').trim();
+  const rows = await _sbStocktakingRows();
+  const target = (rows || []).find((row) => String(row?.id ?? '').trim() === String(stockId || '').trim());
+  if (!target) {
+    const err = new Error('Stock item not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  let column = null;
+  if (requestedPropName && Object.prototype.hasOwnProperty.call(target, requestedPropName)) {
+    column = { name: requestedPropName, date: _normalizeISODateInput(String(requestedPropName).match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1] || '') || null };
+  }
+  if (!column && requestedDate) column = _sbB2BFindColumnInRows([target], schoolName, kind, requestedDate);
+  if (!column) column = _sbB2BFindColumnInRows([target], schoolName, kind);
+  if (!column?.name) {
+    const err = new Error(`No Supabase column exists for ${kind}. Add the column to the stocktaking table first or re-import the latest stocktaking schema.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const updated = await supabaseDb.updateById(_sbStocktakingTable(), stockId, { [column.name]: value });
+  return { ok: true, [`${kind}PropName`]: column.name, [`${kind}Date`]: column.date || requestedDate || null, value, updated };
+}
+
 async function _queryAllPages(database_id, { filter, sorts } = {}) {
   const all = [];
   let hasMore = true;
@@ -6049,6 +6277,14 @@ async function _queryAllPages(database_id, { filter, sorts } = {}) {
 }
 
 async function _getB2BSchoolsList() {
+  if (_sbB2BSchoolsEnabled()) {
+    const cacheKey = `cache:api:b2b:schools:list:supabase:${_sbB2BSchoolsTable()}:v1`;
+    return await cacheGetOrSet(cacheKey, 60, async () => {
+      const rows = await _sbB2BSchoolsRows();
+      return (Array.isArray(rows) ? rows : []).map(_sbSerializeB2BSchoolRow);
+    });
+  }
+
   if (!b2bDatabaseId) return [];
   const cacheKey = `cache:api:b2b:schools:list:${b2bDatabaseId}:v1`;
   return await cacheGetOrSet(cacheKey, 60, async () => {
@@ -6074,8 +6310,15 @@ async function _getB2BSchoolsList() {
   });
 }
 
+
 async function _getB2BSchoolById(schoolId) {
   if (!schoolId) return null;
+
+  if (_sbB2BSchoolsEnabled()) {
+    const row = await _sbFindB2BSchoolById(schoolId);
+    if (row) return _sbSerializeB2BSchoolRow(row, { detail: true });
+    return null;
+  }
 
   // Try from cached list first
   try {
@@ -6103,6 +6346,7 @@ async function _getB2BSchoolById(schoolId) {
 }
 
 
+
 async function _getTeamMemberPageByUsername(username) {
   const cleanUsername = String(username || "").trim();
   if (!cleanUsername || !teamMembersDatabaseId) return null;
@@ -6124,23 +6368,39 @@ async function _resolveCurrentUserMaintenanceSchool(req) {
   const username = String(req?.session?.username || "").trim();
   if (!username) return { schoolId: "", schoolName: "" };
 
-  const userPage = await _getTeamMemberPageByUsername(username);
-  const props = userPage?.properties || {};
-  if (!userPage) return { schoolId: "", schoolName: "" };
+  let schoolId = "";
+  let schoolName = "";
 
-  const schoolPropName =
-    pickPropName(props, ["B2B Schools", "B2B School", "School", "Schools"]) ||
-    pickPropName(props, ["Assigned Schools", "Assigned School"]);
-
-  const schoolProp = schoolPropName ? props?.[schoolPropName] : null;
-  let schoolId = String(extractFirstRelationId(schoolProp) || "").trim();
-  let schoolName = String(_extractPropText(schoolProp) || "").trim();
-
-  if (schoolId) {
-    if (!schoolName) {
-      try { schoolName = String(await pageTitleById(schoolId) || "").trim(); } catch {}
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const row = req?.session?.userSupabaseId
+        ? await _sbFindTeamMemberById(req.session.userSupabaseId)
+        : await _sbFindTeamMemberByName(username);
+      schoolName = String(_sbString(_sbValueForLabel(row || {}, "School")) || "").trim();
+    } catch (e) {
+      console.error("Error resolving Supabase maintenance school:", e?.details || e);
     }
-    return { schoolId, schoolName };
+  }
+
+  if (!schoolName) {
+    const userPage = await _getTeamMemberPageByUsername(username);
+    const props = userPage?.properties || {};
+    if (!userPage) return { schoolId: "", schoolName: "" };
+
+    const schoolPropName =
+      pickPropName(props, ["B2B Schools", "B2B School", "School", "Schools"]) ||
+      pickPropName(props, ["Assigned Schools", "Assigned School"]);
+
+    const schoolProp = schoolPropName ? props?.[schoolPropName] : null;
+    schoolId = String(extractFirstRelationId(schoolProp) || "").trim();
+    schoolName = String(_extractPropText(schoolProp) || "").trim();
+
+    if (schoolId) {
+      if (!schoolName) {
+        try { schoolName = String(await pageTitleById(schoolId) || "").trim(); } catch {}
+      }
+      return { schoolId, schoolName };
+    }
   }
 
   if (!schoolName) return { schoolId: "", schoolName: "" };
@@ -6832,6 +7092,11 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
   const id = String(schoolId || "").trim();
   if (!id) return { meta: {}, items: [] };
 
+  if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+    const cacheKey = `cache:api:b2b:school-stock:supabase:${id}:v1`;
+    return await cacheGetOrSet(cacheKey, 60, async () => _sbGetB2BSchoolStocktakingPayload(id));
+  }
+
   const cacheKey = `cache:api:b2b:school-stock:${id}:v8`;
   return await cacheGetOrSet(cacheKey, 60, async () => {
     const school = await _getB2BSchoolById(id);
@@ -7017,8 +7282,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!b2bDatabaseId) {
-      return res.status(500).json({ error: "B2B database ID is not configured." });
+    if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
+      return res.status(500).json({ error: "B2B schools table/database is not configured." });
     }
     res.set("Cache-Control", "no-store");
     try {
@@ -7047,8 +7312,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!b2bDatabaseId) {
-      return res.status(500).json({ error: "B2B database ID is not configured." });
+    if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
+      return res.status(500).json({ error: "B2B schools table/database is not configured." });
     }
     res.set("Cache-Control", "no-store");
 
@@ -7056,6 +7321,12 @@ app.get(
     if (!id) return res.status(400).json({ error: "Missing school id." });
 
     try {
+      if (_sbB2BSchoolsEnabled()) {
+        const data = await _getB2BSchoolById(id);
+        if (!data) return res.status(404).json({ error: "School not found." });
+        return res.json(data);
+      }
+
       // v2: include Grades (G1..G12) checkbox flags
       const cacheKey = `cache:api:b2b:school:${id}:v2`;
       const data = await cacheGetOrSet(cacheKey, 5 * 60, async () => {
@@ -7127,8 +7398,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
     const id = String(req.params.id || "").trim();
     if (!id) return res.status(400).json({ error: "Missing school id." });
@@ -7197,8 +7468,8 @@ app.post(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const id = String(req.params.id || "").trim();
@@ -7220,6 +7491,24 @@ app.post(
         return res.status(400).json({
           error: "Inventory date is required.",
           details: "Please choose a valid inventory date before creating inventory columns.",
+        });
+      }
+
+      if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+        const rows = await _sbStocktakingRows();
+        const inventoryCol = _sbB2BFindColumnInRows(rows, schoolName, 'inventory', dateISO);
+        const defectedCol = _sbB2BFindColumnInRows(rows, schoolName, 'defected', dateISO);
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:${id}:v1`); } catch {}
+        return res.json({
+          ok: true,
+          source: 'supabase',
+          inventoryPropName: inventoryCol?.name || _sbB2BStockColumnCandidates(schoolName, 'inventory', dateISO)[0] || null,
+          inventoryDate: dateISO,
+          defectedPropName: defectedCol?.name || _sbB2BStockColumnCandidates(schoolName, 'defected', dateISO)[0] || null,
+          defectedDate: dateISO,
+          note: inventoryCol?.name && defectedCol?.name
+            ? 'Existing Supabase inventory columns found.'
+            : 'Supabase cannot create new database columns through REST automatically. If saving fails, add these inventory/defected columns to the stocktaking table and redeploy.',
         });
       }
 
@@ -7260,8 +7549,8 @@ app.patch(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const schoolId = String(req.params.id || "").trim();
@@ -7278,6 +7567,28 @@ app.patch(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+        const requestedInvProp = typeof req?.body?.inventoryPropName === "string" ? String(req.body.inventoryPropName).trim() : "";
+        const rawRequestedInvDate =
+          typeof req?.body?.inventoryDate === "string"
+            ? String(req.body.inventoryDate).trim()
+            : (typeof req?.body?.dateISO === "string" ? String(req.body.dateISO).trim() : "");
+        const requestedInvDate = _normalizeISODateInput(rawRequestedInvDate);
+        if (rawRequestedInvDate && !requestedInvDate) {
+          return res.status(400).json({ error: "Invalid inventory date." });
+        }
+        const out = await _sbUpdateB2BStockValue({
+          schoolId,
+          stockId,
+          kind: 'inventory',
+          value,
+          requestedPropName: requestedInvProp,
+          requestedDate: requestedInvDate,
+        });
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:${schoolId}:v1`); } catch {}
+        return res.json({ ok: true, inventoryPropName: out.inventoryPropName, inventoryDate: out.inventoryDate, value });
+      }
+
       const school = await _getB2BSchoolById(schoolId);
       if (!school) return res.status(404).json({ error: "School not found." });
       const schoolName = String(school.name || "").trim();
@@ -7359,8 +7670,8 @@ app.patch(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const schoolId = String(req.params.id || "").trim();
@@ -7377,6 +7688,28 @@ app.patch(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+        const requestedDefProp = typeof req?.body?.defectedPropName === "string" ? String(req.body.defectedPropName).trim() : "";
+        const rawRequestedDefDate =
+          typeof req?.body?.defectedDate === "string"
+            ? String(req.body.defectedDate).trim()
+            : (typeof req?.body?.inventoryDate === "string" ? String(req.body.inventoryDate).trim() : "");
+        const requestedDefDate = _normalizeISODateInput(rawRequestedDefDate);
+        if (rawRequestedDefDate && !requestedDefDate) {
+          return res.status(400).json({ error: "Invalid defected date." });
+        }
+        const out = await _sbUpdateB2BStockValue({
+          schoolId,
+          stockId,
+          kind: 'defected',
+          value,
+          requestedPropName: requestedDefProp,
+          requestedDate: requestedDefDate,
+        });
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:${schoolId}:v1`); } catch {}
+        return res.json({ ok: true, defectedPropName: out.defectedPropName, defectedDate: out.defectedDate, value });
+      }
+
       const school = await _getB2BSchoolById(schoolId);
       if (!school) return res.status(404).json({ error: "School not found." });
       const schoolName = String(school.name || "").trim();
@@ -8258,8 +8591,8 @@ app.get(
   requireAuth,
   requirePage("Create New Order"),
   async (req, res) => {
-    if (!b2bDatabaseId) {
-      return res.status(500).json({ error: "B2B database ID is not configured." });
+    if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
+      return res.status(500).json({ error: "B2B schools table/database is not configured." });
     }
     res.set("Cache-Control", "no-store");
 
