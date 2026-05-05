@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -170,6 +170,28 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
     const isCurrentOrdersTest = pathNow.includes("orders-current-test");
     const isExpensesTest = pathNow.includes("expenses-test");
     const isCurrentExpensesTest = pathNow.includes("expenses-current-test");
+    const isProductsTest = pathNow.includes("products-test") || pathNow.includes("components-test");
+
+    if (isProductsTest) {
+      const rows = await _sbProductsList();
+      const list = Array.isArray(rows) ? rows : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.productsTable || "products",
+        endpoint: "/api/components",
+        rowsReturned: list.length,
+        sample: list.slice(0, 5).map((row) => ({
+          id: row.id,
+          name: row.name,
+          displayId: row.displayId,
+          unitPrice: row.unitPrice,
+          tags: row.tags,
+          url: row.url,
+        })),
+      });
+    }
 
     if (isExpensesTest || isCurrentExpensesTest) {
       const rows = isCurrentExpensesTest
@@ -251,6 +273,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
       teamMembersTable: cfg.teamMembersTable,
       ordersTable: cfg.ordersTable || "orders",
       expensesTable: cfg.expensesTable || "expenses",
+      productsTable: cfg.productsTable || "products",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -2405,6 +2428,144 @@ async function _sbInvalidateOrdersCaches() {
   await Promise.all([
     cacheDel("cache:api:orders:requested:supabase:v1"),
     cacheDel("cache:api:orders:current:supabase:v1"),
+  ]);
+}
+
+
+// -----------------------------------------------------------------------------
+// Supabase Products adapter
+// -----------------------------------------------------------------------------
+function _sbProductsEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbProductsTable() {
+  return (supabaseDb.getConfig().productsTable || process.env.SUPABASE_PRODUCTS_TABLE || "products").trim() || "products";
+}
+
+function _sbProductNum(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return null;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function _sbProductText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbProductGet(row, aliases = []) {
+  return _sbGet(row, aliases);
+}
+
+function _sbProductTags(row = {}) {
+  const tags = [];
+  const push = (v) => {
+    const t = _sbProductText(v).trim();
+    if (t && !tags.some((x) => normKey(x) === normKey(t))) tags.push(t);
+  };
+  push(_sbProductGet(row, ["tags", "Tags", "tag", "Tag"]));
+  const categoryName = _sbProductText(_sbProductGet(row, ["category_name", "Category Name", "category", "Category"]));
+  const categoryCode = _sbProductText(_sbProductGet(row, ["category_code", "Category Code"]));
+  if (categoryName) push(categoryCode ? `${categoryCode}/ ${categoryName}` : categoryName);
+  return tags;
+}
+
+function _sbSerializeProductRow(row = {}) {
+  const id = String(_sbProductGet(row, ["id", "ID"]) ?? "").trim();
+  const name = _sbProductText(_sbProductGet(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product";
+  const displayId = _sbProductText(_sbProductGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
+  const unitPrice = _sbProductNum(_sbProductGet(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"]));
+  const quantity = _sbProductNum(_sbProductGet(row, ["quantity", "Quantity", "qty", "Qty"]));
+  const url = _sbExtractUrl(_sbProductGet(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"]));
+  const imageUrl = _sbExtractUrl(_sbProductGet(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"]));
+  return {
+    id,
+    name,
+    url: url || null,
+    unitPrice: unitPrice !== null ? unitPrice : null,
+    displayId,
+    imageUrl: imageUrl || null,
+    tags: _sbProductTags(row),
+    quantity: quantity !== null ? quantity : null,
+    categoryCode: _sbProductText(_sbProductGet(row, ["category_code", "Category Code"])) || null,
+    categoryName: _sbProductText(_sbProductGet(row, ["category_name", "Category Name", "category", "Category"])) || null,
+    source: "supabase",
+  };
+}
+
+async function _sbSelectProductsRows() {
+  const rows = await supabaseDb.selectAll(_sbProductsTable(), {
+    limit: 5000,
+    order: "name.asc,id.asc",
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbProductsList() {
+  const rows = await _sbSelectProductsRows();
+  return rows.map(_sbSerializeProductRow).filter((p) => p && p.id && p.name);
+}
+
+async function _sbProductsMapById() {
+  const products = await _sbProductsList();
+  return new Map(products.map((p) => [String(p.id), p]));
+}
+
+async function _sbNextOrderNumber() {
+  const rows = await supabaseDb.select(_sbOrdersTable(), {
+    select: "order_number",
+    order: "order_number.desc",
+    limit: 1,
+  });
+  const n = Array.isArray(rows) && rows[0] ? _sbOrderNum(rows[0].order_number) : null;
+  return Number.isFinite(n) ? n + 1 : 1;
+}
+
+async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") {
+  const productMap = await _sbProductsMapById();
+  const orderNumber = await _sbNextOrderNumber();
+  const now = new Date().toISOString();
+  const createdByName = String(req.session?.username || "").trim() || null;
+  const rows = [];
+  for (const product of cleanProducts || []) {
+    const info = productMap.get(String(product.id)) || {};
+    const qty = Number(product.quantity) || 0;
+    rows.push({
+      reason: String(product.reason || "").trim() || null,
+      order_number: orderNumber,
+      order_type: _canonicalOrderTypeLabel(orderType) || orderType || null,
+      notion_created_time: now,
+      product_name: info.name || String(product.name || product.id || "Unknown Product"),
+      product_url: info.url || null,
+      unit_price: Number.isFinite(Number(info.unitPrice)) ? Number(info.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "Order Placed",
+      sv_approval: null,
+      team_member_name: createdByName,
+      issue_description: String(product.issueDescription || "").trim() || null,
+      supervisor: null,
+      person_received_by_operations: null,
+    });
+  }
+  const created = [];
+  for (const row of rows) {
+    created.push(await supabaseDb.insert(_sbOrdersTable(), row));
+  }
+  await _sbInvalidateOrdersCaches();
+  return created.map(_sbSerializeOrderRow);
+}
+
+async function _sbInvalidateProductsCaches() {
+  await Promise.all([
+    cacheDel("cache:api:components:supabase:v1"),
+    cacheDel("cache:api:damaged-assets:options:supabase:v1"),
   ]);
 }
 
@@ -14382,6 +14543,16 @@ app.get(
   requirePage("Create New Order"),
   cachedJsonRoute(20 * 60, () => "cache:api:components:v1"),
   async (req, res) => {
+    if (_sbProductsEnabled()) {
+      try {
+        const list = await cacheGetOrSet("cache:api:components:supabase:v1", 20 * 60, async () => _sbProductsList());
+        return res.json(Array.isArray(list) ? list : []);
+      } catch (error) {
+        console.error("/api/components Supabase error:", error?.details || error);
+        return res.status(error?.status || 500).json({ error: "Failed to fetch products from Supabase." });
+      }
+    }
+
     if (!componentsDatabaseId) {
       return res
         .status(500)
@@ -14785,6 +14956,17 @@ app.get(
   requirePage('Damaged Assets'),
   async (req, res) => {
     try {
+      if (_sbProductsEnabled()) {
+        const q = String(req.query.q || '').trim().toLowerCase();
+        const list = await cacheGetOrSet("cache:api:damaged-assets:options:supabase:v1", 20 * 60, async () => _sbProductsList());
+        const options = (Array.isArray(list) ? list : [])
+          .map((p) => ({ id: String(p.id || ''), name: String(p.name || '').trim() }))
+          .filter((p) => p.id && p.name)
+          .filter((p) => !q || p.name.toLowerCase().includes(q));
+        res.set('Cache-Control', 'no-store');
+        return res.json({ options });
+      }
+
       // DB بتاع الـ relation "Products"
       const dbId = componentsDatabaseId || process.env.Products_Database || null;
       if (!dbId) {
@@ -14860,11 +15042,6 @@ app.post(
   requireAuth,
   requirePage("Create New Order"),
   async (req, res) => {
-    if (!ordersDatabaseId || !teamMembersDatabaseId) {
-      return res
-        .status(500)
-        .json({ success: false, message: "Database IDs are not configured." });
-    }
       // Password confirmation (requested): user must enter their password
       // again before submitting an order.
       const password = String(req.body?.password || "").trim();
@@ -14948,6 +15125,47 @@ if (_isRequestMaintenance) {
   if (cleanedProducts.some(p => !p.reason)) {
     return res.status(400).json({ success: false, message: "Each product must include a reason." });
   }
+}
+
+if (_sbOrdersEnabled() && _sbProductsEnabled() && !req.session.editingOrder) {
+  try {
+    const signedProducts = cleanedProducts.map((p) => ({
+      ...p,
+      quantity: Number(p.quantity) * _qtySign,
+    }));
+    const createdItems = await _sbCreateOrdersFromCart(req, signedProducts, orderType);
+    const recentOrders = (createdItems || []).map((item) => ({
+      id: item.id,
+      reason: item.reason,
+      productName: item.productName,
+      quantity: item.quantity,
+      status: item.status || "Order Placed",
+      createdTime: item.createdTime || new Date().toISOString(),
+      orderId: item.orderId || null,
+      orderIdPrefix: item.orderIdPrefix || "ORD",
+      orderIdNumber: item.orderIdNumber || null,
+      orderType: item.orderType || (_canonicalOrderTypeLabel(orderType) || orderType || null),
+      orderTypeColor: item.orderTypeColor || _defaultOrderTypeNotionColor(_canonicalOrderTypeLabel(orderType) || orderType),
+    }));
+    req.session.recentOrders = (req.session.recentOrders || []).concat(recentOrders);
+    if (req.session.recentOrders.length > 50) req.session.recentOrders = req.session.recentOrders.slice(-50);
+    _clearOrderDraftForType(req.session, orderType);
+    return res.json({
+      success: true,
+      message: "Order submitted and saved to Supabase successfully!",
+      source: "supabase",
+      orderItems: (createdItems || []).map((item) => ({ orderPageId: item.id, productId: item.productPageId || item.id })),
+    });
+  } catch (error) {
+    console.error("Error creating order in Supabase:", error?.details || error);
+    return res.status(error?.status || 500).json({ success: false, message: "Failed to save order to Supabase." });
+  }
+}
+
+if (!ordersDatabaseId || !teamMembersDatabaseId) {
+  return res
+    .status(500)
+    .json({ success: false, message: "Database IDs are not configured." });
 }
     
 
@@ -15689,6 +15907,28 @@ let _productsNameToUnityPriceCache = {
 
 async function _getProductsNameToIdCodeMap() {
   try {
+    if (_sbProductsEnabled()) {
+      const now = Date.now();
+      const db = `supabase:${_sbProductsTable()}`;
+      if (
+        _productsNameToIdCodeCache.map &&
+        _productsNameToIdCodeCache.map.size > 0 &&
+        _productsNameToIdCodeCache.db === db &&
+        now - _productsNameToIdCodeCache.ts < _PRODUCTS_IDCODE_CACHE_TTL_MS
+      ) {
+        return _productsNameToIdCodeCache.map;
+      }
+      const map = new Map();
+      const list = await _sbProductsList();
+      for (const product of list) {
+        if (!product?.name || !product?.displayId) continue;
+        const key = _normNameKey(product.name);
+        if (!map.has(key) || !map.get(key)) map.set(key, String(product.displayId));
+      }
+      _productsNameToIdCodeCache = { ts: now, db, map };
+      return map;
+    }
+
     if (!componentsDatabaseId) return new Map();
 
     const now = Date.now();
@@ -15752,6 +15992,30 @@ async function _getProductsNameToIdCodeMap() {
 // Used for Stocktaking Excel export only.
 async function _getProductsNameToUnityPriceMap() {
   try {
+    if (_sbProductsEnabled()) {
+      const now = Date.now();
+      const db = `supabase:${_sbProductsTable()}`;
+      if (
+        _productsNameToUnityPriceCache.map &&
+        _productsNameToUnityPriceCache.map.size > 0 &&
+        _productsNameToUnityPriceCache.db === db &&
+        now - _productsNameToUnityPriceCache.ts < _PRODUCTS_PRICE_CACHE_TTL_MS
+      ) {
+        return _productsNameToUnityPriceCache.map;
+      }
+      const map = new Map();
+      const list = await _sbProductsList();
+      for (const product of list) {
+        if (!product?.name) continue;
+        const price = Number(product.unitPrice);
+        if (!Number.isFinite(price)) continue;
+        const key = _normNameKey(product.name);
+        if (!map.has(key) || map.get(key) === null || typeof map.get(key) === "undefined") map.set(key, price);
+      }
+      _productsNameToUnityPriceCache = { ts: now, db, map };
+      return map;
+    }
+
     if (!componentsDatabaseId) return new Map();
 
     const now = Date.now();
