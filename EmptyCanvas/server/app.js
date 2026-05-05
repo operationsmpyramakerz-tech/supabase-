@@ -239,17 +239,30 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
 });
 
 // Sessions (Redis/Upstash) — added after /health
-const { sessionMiddleware, redisClient } = require("./session-redis");
+const { sessionMiddleware, redisClient, getSessionDiagnostics } = require("./session-redis");
 app.use(sessionMiddleware);
+
+// Public session diagnostics: exposes only configuration booleans, never secrets.
+app.get("/api/session-diagnostics", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({
+    ok: true,
+    ...getSessionDiagnostics(),
+    hasSessionId: !!req.sessionID,
+    authenticated: !!req.session?.authenticated,
+  });
+});
+
 // Small trace to debug redirect loop
 app.use((req, res, next) => {
-  if (["/login", "/dashboard", "/api/login", "/api/account"].includes(req.path)) {
+  if (["/login", "/dashboard", "/home", "/api/login", "/api/account"].includes(req.path)) {
     console.log(
       "[trace]",
       req.method,
       req.path,
       "sid=" + (req.sessionID || "-"),
-      "auth=" + (!!req.session?.authenticated)
+      "auth=" + (!!req.session?.authenticated),
+      "store=" + (getSessionDiagnostics().storeType || "-")
     );
   }
   next();
