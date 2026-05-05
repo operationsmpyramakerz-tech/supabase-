@@ -388,8 +388,8 @@
     if (els.formTitle) els.formTitle.textContent = mode === 'edit' ? 'Edit Team Member' : 'Add Team Member';
     if (els.formSubtitle) {
       els.formSubtitle.textContent = mode === 'edit'
-        ? `${member?.name || 'User'} • Update data in Notion Team Members database.`
-        : `${dept?.name || 'Department'} • Create a new Notion Team Members record.`;
+        ? `${member?.name || 'User'} • Update data in Team Members database.`
+        : `${dept?.name || 'Department'} • Create a new Team Members record.`;
     }
     if (els.formSaveLabel) els.formSaveLabel.textContent = mode === 'edit' ? 'Save Changes' : 'Create Member';
 
