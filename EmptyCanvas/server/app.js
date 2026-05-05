@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test", "/api/supabase/b2b-schools-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test", "/api/supabase/b2b-schools-test", "/api/supabase/messages-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -173,6 +173,29 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
     const isProductsTest = pathNow.includes("products-test") || pathNow.includes("components-test");
     const isStocktakingTest = pathNow.includes("stocktaking-test");
     const isB2BSchoolsTest = pathNow.includes("b2b-schools-test");
+    const isMessagesTest = pathNow.includes("messages-test");
+
+    if (isMessagesTest) {
+      const chats = await _sbMessagesChatsList({ limit: 20, includeCounts: true });
+      const messages = await supabaseDb.selectAll(cfg.messagesTable || "messages", { limit: 5, order: "created_at.desc,id.desc" }).catch(() => []);
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        chatsTable: cfg.messagesChatsTable || "messages_chats",
+        messagesTable: cfg.messagesTable || "messages",
+        endpoint: "/api/messages/chats",
+        chatsReturned: Array.isArray(chats) ? chats.length : 0,
+        messagesSampleReturned: Array.isArray(messages) ? messages.length : 0,
+        sampleChats: (Array.isArray(chats) ? chats : []).slice(0, 5).map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          preview: chat.preview,
+          commentsCount: chat.commentsCount,
+          lastMessageTime: chat.lastMessageTime,
+        })),
+      });
+    }
 
     if (isB2BSchoolsTest) {
       const rows = await _sbB2BSchoolsRows();
@@ -325,6 +348,8 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
       productsTable: cfg.productsTable || "products",
       stocktakingTable: cfg.stocktakingTable || "stocktaking",
       b2bSchoolsTable: cfg.b2bSchoolsTable || "b2b_schools",
+      messagesChatsTable: cfg.messagesChatsTable || "messages_chats",
+      messagesTable: cfg.messagesTable || "messages",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -9542,6 +9567,203 @@ function _messagesSerializeChatPage(page, comments = []) {
   };
 }
 
+
+function _sbMessagesEnabled() {
+  if (!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured())) return false;
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return !!(cfg.messagesChatsTable || process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats') &&
+    !!(cfg.messagesTable || process.env.SUPABASE_MESSAGES_TABLE || 'messages');
+}
+
+function _sbMessagesChatsTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return String(cfg.messagesChatsTable || process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
+}
+
+function _sbMessagesTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return String(cfg.messagesTable || process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
+}
+
+function _sbMessageChatId(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const n = Number(raw);
+  return Number.isFinite(n) && String(n) === raw ? n : raw;
+}
+
+function _sbMessageCurrentEmail(req) {
+  const cached = req?.session?.accountCache || {};
+  return String(cached.email || cached.Email || '').trim();
+}
+
+function _sbNormalizeMessageRow(row, req) {
+  const sender = _sbString(_sbGet(row, ['sender_name', 'sender', 'created_by_name', 'name'])) || 'User';
+  const body = _sbString(_sbGet(row, ['body', 'message', 'text', 'last_message'])) || '';
+  const createdTime = _uaSafeDate(_sbGet(row, ['created_at', 'createdTime', 'created_time'])) || new Date().toISOString();
+  const currentName = String(req?.session?.username || '').trim().toLowerCase();
+  const currentEmail = _sbMessageCurrentEmail(req).toLowerCase();
+  const senderKey = String(sender || '').trim().toLowerCase();
+  const senderEmail = _sbString(_sbGet(row, ['sender_email', 'email'])).toLowerCase();
+  return {
+    id: String(_sbGet(row, ['id', 'ID']) ?? ''),
+    discussionId: String(_sbGet(row, ['chat_id', 'chatId']) ?? ''),
+    sender,
+    senderEmail,
+    body,
+    rawText: body,
+    createdTime,
+    createdTimeText: _messagesSafeDate(createdTime),
+    isMine: (!!currentName && senderKey === currentName) || (!!currentEmail && senderEmail === currentEmail),
+    source: 'supabase',
+  };
+}
+
+function _sbSerializeMessageChatRow(row, messages = []) {
+  const id = String(_sbGet(row, ['id', 'ID']) ?? '');
+  const title = _sbString(_sbGet(row, ['title', 'name', 'Name'])) || 'New Chat';
+  const createdTime = _uaSafeDate(_sbGet(row, ['created_at', 'created_time', 'notion_created_time'])) || '';
+  const lastEditedTime = _uaSafeDate(_sbGet(row, ['updated_at', 'last_edited_time', 'notion_last_edited_time'])) || createdTime;
+  const last = Array.isArray(messages) && messages.length ? messages[messages.length - 1] : null;
+  const preview = _sbString(_sbGet(row, ['last_message', 'preview'])) || last?.body || last?.rawText || 'No messages yet';
+  const lastMessageTime = last?.createdTime || lastEditedTime || createdTime;
+  const countRaw = _sbGet(row, ['comments_count', 'messages_count', 'message_count']);
+  const commentsCount = Number.isFinite(Number(countRaw)) ? Number(countRaw) : (Array.isArray(messages) ? messages.length : 0);
+  return {
+    id,
+    title,
+    url: '',
+    createdTime,
+    createdTimeText: _messagesSafeDate(createdTime),
+    lastEditedTime,
+    lastEditedTimeText: _messagesSafeDate(lastEditedTime),
+    commentsCount,
+    preview,
+    lastMessageTime,
+    lastMessageTimeText: _messagesSafeDate(lastMessageTime),
+    participantNames: _sbString(_sbGet(row, ['participant_names', 'participants'])) || '',
+    source: 'supabase',
+  };
+}
+
+async function _sbMessagesForChat(chatId, req = null, { limit = 500 } = {}) {
+  const safeLimit = Math.max(1, Math.min(1000, Number(limit) || 500));
+  const id = _sbMessageChatId(chatId);
+  if (!id) return [];
+  const rows = await supabaseDb.select(_sbMessagesTable(), {
+    select: '*',
+    chat_id: `eq.${id}`,
+    order: 'created_at.asc,id.asc',
+    limit: safeLimit,
+  });
+  return (Array.isArray(rows) ? rows : []).map((row) => _sbNormalizeMessageRow(row, req));
+}
+
+async function _sbMessagesCountsAndLast(chatIds = []) {
+  const ids = (Array.isArray(chatIds) ? chatIds : []).map((id) => String(id || '').trim()).filter(Boolean);
+  if (!ids.length) return new Map();
+  const numericIds = ids.filter((id) => /^\d+$/.test(id));
+  if (!numericIds.length) return new Map();
+  const rows = await supabaseDb.select(_sbMessagesTable(), {
+    select: 'id,chat_id,body,created_at,sender_name,sender_email',
+    chat_id: `in.(${numericIds.join(',')})`,
+    order: 'created_at.asc,id.asc',
+    limit: 5000,
+  }).catch(() => []);
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = String(_sbGet(row, ['chat_id']) ?? '');
+    if (!key) continue;
+    const entry = map.get(key) || { count: 0, last: null };
+    entry.count += 1;
+    entry.last = row;
+    map.set(key, entry);
+  }
+  return map;
+}
+
+async function _sbMessagesChatsList({ limit = 60, includeCounts = true } = {}) {
+  const rows = await supabaseDb.selectAll(_sbMessagesChatsTable(), {
+    limit: Math.max(1, Math.min(100, Number(limit) || 60)),
+    order: 'updated_at.desc,id.desc',
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  let meta = new Map();
+  if (includeCounts && list.length) {
+    meta = await _sbMessagesCountsAndLast(list.map((row) => _sbGet(row, ['id', 'ID'])));
+  }
+  const chats = list.map((row) => {
+    const id = String(_sbGet(row, ['id', 'ID']) ?? '');
+    const info = meta.get(id) || null;
+    const normalizedLast = info?.last ? _sbNormalizeMessageRow(info.last, null) : null;
+    const chat = _sbSerializeMessageChatRow(row, normalizedLast ? [normalizedLast] : []);
+    if (info) chat.commentsCount = info.count;
+    return chat;
+  });
+  chats.sort((a, b) => new Date(b.lastMessageTime || b.lastEditedTime || 0) - new Date(a.lastMessageTime || a.lastEditedTime || 0));
+  return chats;
+}
+
+async function _sbCreateMessageChat(req, payload = {}) {
+  const currentName = String(req.session?.username || 'User').trim() || 'User';
+  const currentEmail = _sbMessageCurrentEmail(req);
+  const targetName = String(payload.targetName || '').trim();
+  let targetEmail = '';
+  if (payload.targetUserId && _sbTeamMembersEnabled()) {
+    try {
+      const targetRow = await _sbFindTeamMemberById(payload.targetUserId);
+      if (targetRow) targetEmail = _sbString(_sbValueForLabel(targetRow, 'Email')) || '';
+    } catch {}
+  }
+  const requestedTitle = String(payload.title || '').trim();
+  const title = requestedTitle || (targetName ? `${currentName} ↔ ${targetName}` : `${currentName} Chat`);
+  const participantNames = [currentName, targetName].filter(Boolean).join(', ');
+  const participantEmails = [currentEmail, targetEmail].filter(Boolean).join(', ');
+
+  let chat = await supabaseDb.insert(_sbMessagesChatsTable(), {
+    title: title.slice(0, 180),
+    participant_names: participantNames || null,
+    participant_emails: participantEmails || null,
+    created_by_name: currentName || null,
+    created_by_email: currentEmail || null,
+  });
+
+  const firstMessage = String(payload.message || '').trim();
+  let comments = [];
+  if (firstMessage && chat?.id) {
+    const comment = await _sbCreateChatMessage(req, chat.id, firstMessage);
+    comments = [comment];
+    try {
+      const refreshed = await supabaseDb.selectById(_sbMessagesChatsTable(), chat.id);
+      if (refreshed) chat = refreshed;
+    } catch {}
+  }
+
+  const serialized = _sbSerializeMessageChatRow(chat, comments);
+  return { chat: serialized, comments };
+}
+
+async function _sbCreateChatMessage(req, chatId, message) {
+  const body = String(message || '').trim();
+  if (!body) throw new Error('Message is required.');
+  const currentName = String(req.session?.username || 'User').trim() || 'User';
+  const currentEmail = _sbMessageCurrentEmail(req);
+  const row = await supabaseDb.insert(_sbMessagesTable(), {
+    chat_id: _sbMessageChatId(chatId),
+    sender_name: currentName || null,
+    sender_email: currentEmail || null,
+    body,
+    message_type: 'text',
+  });
+  try {
+    await supabaseDb.updateById(_sbMessagesChatsTable(), chatId, {
+      updated_at: new Date().toISOString(),
+      last_message: body,
+    });
+  } catch {}
+  return _sbNormalizeMessageRow(row, req);
+}
+
 app.get('/api/messages/team-members', requireAuth, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -9554,10 +9776,15 @@ app.get('/api/messages/team-members', requireAuth, async (req, res) => {
 });
 
 app.get('/api/messages/chats', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
     const limit = Math.max(1, Math.min(80, Number(req.query?.limit || 40)));
+    if (_sbMessagesEnabled()) {
+      const chats = await _sbMessagesChatsList({ limit, includeCounts: true });
+      return res.json({ ok: true, source: 'supabase', chats });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const resp = await notion.databases.query({
       database_id: messagesDatabaseId,
       page_size: limit,
@@ -9575,17 +9802,22 @@ app.get('/api/messages/chats', requireAuth, async (req, res) => {
 
     const chats = pages.map((page) => _messagesSerializeChatPage(page, commentMap.get(page.id) || []));
     chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
-    return res.json({ ok: true, chats });
+    return res.json({ ok: true, source: 'notion', chats });
   } catch (error) {
-    console.error('GET /api/messages/chats error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to load chats from Massage database.' });
+    console.error('GET /api/messages/chats error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _sbMessagesEnabled() ? 'Failed to load chats from Supabase.' : 'Failed to load chats from Massage database.' });
   }
 });
 
 app.post('/api/messages/chats', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
+    if (_sbMessagesEnabled()) {
+      const created = await _sbCreateMessageChat(req, req.body || {});
+      return res.json({ ok: true, source: 'supabase', chat: created.chat, comments: created.comments });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const db = await notion.databases.retrieve({ database_id: messagesDatabaseId });
     const titleProp = _messagesFirstTitlePropName(db?.properties || {});
     const currentName = String(req.session?.username || 'User').trim() || 'User';
@@ -9608,29 +9840,33 @@ app.post('/api/messages/chats', requireAuth, async (req, res) => {
     }
 
     const page = await notion.pages.retrieve({ page_id: created.id }).catch(() => created);
-    return res.json({ ok: true, chat: _messagesSerializeChatPage(page, comments), comments });
+    return res.json({ ok: true, source: 'notion', chat: _messagesSerializeChatPage(page, comments), comments });
   } catch (error) {
-    console.error('POST /api/messages/chats error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to create chat.' });
+    console.error('POST /api/messages/chats error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to create chat.' });
   }
 });
 
 app.get('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();
     if (!pageId) return res.status(400).json({ ok: false, error: 'Missing chat ID.' });
+    if (_sbMessagesEnabled()) {
+      const comments = await _sbMessagesForChat(pageId, req, { limit: 1000 });
+      return res.json({ ok: true, source: 'supabase', comments });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const comments = await _messagesRetrieveComments(pageId, req, { pageSize: 100 });
-    return res.json({ ok: true, comments });
+    return res.json({ ok: true, source: 'notion', comments });
   } catch (error) {
-    console.error('GET /api/messages/chats/:id/comments error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to load chat comments.' });
+    console.error('GET /api/messages/chats/:id/comments error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to load chat messages.' });
   }
 });
 
 app.post('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();
@@ -9638,12 +9874,18 @@ app.post('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
     if (!pageId) return res.status(400).json({ ok: false, error: 'Missing chat ID.' });
     if (!message) return res.status(400).json({ ok: false, error: 'Message is required.' });
 
+    if (_sbMessagesEnabled()) {
+      const comment = await _sbCreateChatMessage(req, pageId, message);
+      return res.json({ ok: true, source: 'supabase', comment });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const currentName = String(req.session?.username || 'User').trim() || 'User';
     const created = await _messagesCreateComment(pageId, currentName, message);
-    return res.json({ ok: true, comment: _messagesNormalizeComment(created, req) });
+    return res.json({ ok: true, source: 'notion', comment: _messagesNormalizeComment(created, req) });
   } catch (error) {
-    console.error('POST /api/messages/chats/:id/comments error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to send message.' });
+    console.error('POST /api/messages/chats/:id/comments error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to send message.' });
   }
 });
 
