@@ -3202,7 +3202,7 @@ app.post("/api/login", async (req, res) => {
 
           return req.session.save((err) => {
             if (err) return res.status(500).json({ error: "Session could not be saved." });
-            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase" });
+            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase", redirect: "/home" });
           });
         }
         return res.status(401).json({ error: "incorrect password" });
@@ -3257,7 +3257,7 @@ app.post("/api/login", async (req, res) => {
 
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Session could not be saved." });
-        res.json({ success: true, message: "Login successful", allowedPages: allowedUI });
+        res.json({ success: true, message: "Login successful", allowedPages: allowedUI, redirect: "/home" });
       });
     } else {
       res.status(401).json({ error: "incorrect password" });
