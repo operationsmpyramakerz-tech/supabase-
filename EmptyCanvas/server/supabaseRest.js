@@ -22,7 +22,8 @@ function getConfig() {
   const ordersTable = String(process.env.SUPABASE_ORDERS_TABLE || 'orders').trim() || 'orders';
   const expensesTable = String(process.env.SUPABASE_EXPENSES_TABLE || 'expenses').trim() || 'expenses';
   const productsTable = String(process.env.SUPABASE_PRODUCTS_TABLE || 'products').trim() || 'products';
-  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable };
+  const stocktakingTable = String(process.env.SUPABASE_STOCKTAKING_TABLE || 'stocktaking').trim() || 'stocktaking';
+  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable };
 }
 
 function isConfigured() {

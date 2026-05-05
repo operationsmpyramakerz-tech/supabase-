@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -171,6 +171,30 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
     const isExpensesTest = pathNow.includes("expenses-test");
     const isCurrentExpensesTest = pathNow.includes("expenses-current-test");
     const isProductsTest = pathNow.includes("products-test") || pathNow.includes("components-test");
+    const isStocktakingTest = pathNow.includes("stocktaking-test");
+
+    if (isStocktakingTest) {
+      const rows = await _sbStocktakingRows();
+      const list = Array.isArray(rows) ? rows : [];
+      const sampleStock = list.slice(0, 5).map((row) => _sbSerializeStocktakingRow(row, _sbDetectStocktakingQuantityColumn(row, "")));
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.stocktakingTable || "stocktaking",
+        endpoint: "/api/stock",
+        rowsReturned: list.length,
+        columns: Object.keys(list[0] || {}),
+        sample: sampleStock.map((row) => ({
+          id: row.id,
+          name: row.name,
+          quantity: row.quantity,
+          oneKitQuantity: row.oneKitQuantity,
+          tag: row.tag?.name || null,
+          idCode: row.idCode,
+        })),
+      });
+    }
 
     if (isProductsTest) {
       const rows = await _sbProductsList();
@@ -274,6 +298,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
       ordersTable: cfg.ordersTable || "orders",
       expensesTable: cfg.expensesTable || "expenses",
       productsTable: cfg.productsTable || "products",
+      stocktakingTable: cfg.stocktakingTable || "stocktaking",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -16075,18 +16100,249 @@ async function _getProductsNameToUnityPriceMap() {
   }
 }
 
+
+// -----------------------------------------------------------------------------
+// Supabase Stocktaking adapter
+// -----------------------------------------------------------------------------
+function _sbStocktakingEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbStocktakingTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return (cfg.stocktakingTable || process.env.SUPABASE_STOCKTAKING_TABLE || "stocktaking").trim() || "stocktaking";
+}
+
+function _sbStocktakingNum(value) {
+  if (value === null || typeof value === "undefined") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return 0;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function _sbStocktakingText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbStocktakingColumnKey(label = "") {
+  return String(label || "")
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/%/g, " percent ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+}
+
+function _sbDetectStocktakingQuantityColumn(row = {}, schoolName = "") {
+  const keys = Object.keys(row || {});
+  if (!keys.length) return "";
+  const exact = (wanted) => keys.find((key) => _sbCanon(key) === _sbCanon(wanted));
+  const base = _sbStocktakingColumnKey(schoolName);
+  const candidates = [];
+  if (base) candidates.push(base);
+  if (base && !base.endsWith("_done")) candidates.push(`${base}_done`);
+  if (base && base.endsWith("_done")) candidates.push(base.replace(/_done$/, ""));
+  if (base && !base.endsWith("_2nd_term")) candidates.push(`${base}_2nd_term`);
+  candidates.push(
+    "total_quantity",
+    "all_schools_stock",
+    "all_done",
+    "all_2nd_term",
+    "quantity",
+    "stock",
+  );
+  for (const c of candidates) {
+    const hit = exact(c);
+    if (hit) return hit;
+  }
+  return "";
+}
+
+async function _sbStocktakingCurrentSchoolName(req) {
+  let row = null;
+  if (req?.session?.userSupabaseId) row = await _sbFindTeamMemberById(req.session.userSupabaseId);
+  if (!row && req?.session?.username) row = await _sbFindTeamMemberByName(req.session.username);
+  const schoolName = _sbStocktakingText(_sbValueForLabel(row || {}, "School"));
+  return { row, schoolName };
+}
+
+async function _sbStocktakingRows() {
+  const rows = await supabaseDb.selectAll(_sbStocktakingTable(), {
+    limit: 5000,
+    order: "name.asc,id.asc",
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
+  const quantityColumn = Object.prototype.hasOwnProperty.call(row || {}, schoolNameOrColumn)
+    ? schoolNameOrColumn
+    : _sbDetectStocktakingQuantityColumn(row, schoolNameOrColumn);
+  const name = _sbStocktakingText(_sbGet(row, ["name", "Name", "component", "Component", "product_name", "Product Name"])) || "Untitled";
+  const productName = _sbStocktakingText(_sbGet(row, ["product_name", "Product Name", "product", "Product"])) || name;
+  const url =
+    _sbExtractUrl(_sbGet(row, ["url", "URL"])) ||
+    _sbExtractUrl(_sbGet(row, ["product_url", "Product URL"])) ||
+    _sbExtractUrl(_sbGet(row, ["item_url", "Item URL"])) ||
+    null;
+  const tagName = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
+  return {
+    id: String(_sbGet(row, ["id", "ID", "notion_id", "Notion ID"]) ?? ""),
+    name,
+    productName,
+    url,
+    quantity: _sbStocktakingNum(quantityColumn ? row?.[quantityColumn] : 0),
+    oneKitQuantity: _sbStocktakingNum(_sbGet(row, ["one_kit_quantity", "One Kit Quantity", "one kit quantity"])),
+    idCode: _sbStocktakingText(_sbGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
+    unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
+    tag: { name: tagName, color: "default" },
+    quantityColumn: quantityColumn || null,
+    source: "supabase",
+  };
+}
+
+async function _sbStocktakingForRequest(req) {
+  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
+  if (!schoolName) {
+    const err = new Error("Could not determine school name for the current user.");
+    err.status = 404;
+    throw err;
+  }
+  const rows = await _sbStocktakingRows();
+  const items = rows.map((row) => _sbSerializeStocktakingRow(row, schoolName));
+  return items.filter((item) => Number(item.quantity) > 0);
+}
+
+async function _sbRenderStocktakingPdf(req, res) {
+  const items = await _sbStocktakingForRequest(req);
+  await ensurePdfArabicSupport();
+  const createdAt = new Date();
+  const dateStr = createdAt.toISOString().slice(0, 10);
+  const fileName = `Stocktaking-${dateStr}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.set("Cache-Control", "no-store");
+
+  const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  enableArabicPdf(doc);
+  doc.pipe(res);
+  attachPageNumbers(doc);
+  drawStocktakingHeader(doc, {
+    title: "Stocktaking",
+    subtitle: `Generated ${formatDateTime(createdAt)}`,
+    logoPath: path.join(__dirname, "../public/images/logo.png"),
+  });
+
+  const groups = new Map();
+  for (const item of items) {
+    const tag = item?.tag?.name || "Untagged";
+    if (!groups.has(tag)) groups.set(tag, []);
+    groups.get(tag).push(item);
+  }
+  const tags = Array.from(groups.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  let y = Math.max(doc.y + 14, 120);
+  const rowH = 20;
+  const colIdW = 70;
+  const colQtyW = 55;
+  const colNameW = right - left - colIdW - colQtyW;
+
+  const ensureSpace = (h = rowH) => {
+    if (y + h > bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+  };
+
+  for (const tag of tags) {
+    const groupItems = (groups.get(tag) || []).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    ensureSpace(50);
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#111827").text(`${tag} (${groupItems.length})`, left, y);
+    y += 20;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#374151");
+    doc.text("ID Code", left, y, { width: colIdW });
+    doc.text("Component", left + colIdW, y, { width: colNameW });
+    doc.text("In Stock", right - colQtyW, y, { width: colQtyW, align: "right" });
+    y += 14;
+    doc.moveTo(left, y).lineTo(right, y).strokeColor("#E5E7EB").stroke();
+    y += 4;
+
+    doc.font("Helvetica").fontSize(8).fillColor("#111827");
+    for (const item of groupItems) {
+      ensureSpace(rowH + 4);
+      doc.text(String(item.idCode || "-"), left, y, { width: colIdW - 6 });
+      doc.text(String(item.name || "-"), left + colIdW, y, { width: colNameW - 8 });
+      doc.text(String(item.quantity ?? 0), right - colQtyW, y, { width: colQtyW, align: "right" });
+      y += rowH;
+    }
+    y += 8;
+  }
+
+  doc.end();
+}
+
+async function _sbRenderStocktakingExcel(req, res) {
+  const items = await _sbStocktakingForRequest(req);
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Operations Hub";
+  workbook.created = new Date();
+  const ws = workbook.addWorksheet("Stocktaking");
+  ws.columns = [
+    { header: "Tag", key: "tag", width: 24 },
+    { header: "ID Code", key: "idCode", width: 18 },
+    { header: "Component", key: "name", width: 52 },
+    { header: "In Stock", key: "quantity", width: 12 },
+    { header: "One Kit Quantity", key: "oneKitQuantity", width: 18 },
+    { header: "Unit Price", key: "unitPrice", width: 14 },
+    { header: "URL", key: "url", width: 50 },
+  ];
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  for (const item of items.sort((a, b) => String(a?.tag?.name || "").localeCompare(String(b?.tag?.name || "")) || String(a.name || "").localeCompare(String(b.name || "")))) {
+    ws.addRow({
+      tag: item?.tag?.name || "Untagged",
+      idCode: item.idCode || "",
+      name: item.name || "",
+      quantity: Number(item.quantity) || 0,
+      oneKitQuantity: Number(item.oneKitQuantity) || 0,
+      unitPrice: Number(item.unitPrice) || 0,
+      url: item.url || "",
+    });
+  }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="stocktaking_${dateStr}.xlsx"`);
+  res.set("Cache-Control", "no-store");
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
 app.get(
   "/api/stock",
   requireAuth,
   requirePage("Stocktaking"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v1`),
+  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v2`),
   async (req, res) => {
-    if (!teamMembersDatabaseId || !stocktakingDatabaseId) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res
         .status(500)
         .json({ error: "Database IDs are not configured." });
     }
     try {
+      if (_sbStocktakingEnabled()) {
+        return res.json(await _sbStocktakingForRequest(req));
+      }
       const userResponse = await notion.databases.query({
         database_id: teamMembersDatabaseId,
         filter: { property: "Name", title: { equals: req.session.username } },
@@ -16242,11 +16498,14 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!teamMembersDatabaseId || !stocktakingDatabaseId) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res.status(500).json({ error: "Database IDs are not configured." });
     }
 
     try {
+      if (_sbStocktakingEnabled()) {
+        return await _sbRenderStocktakingPdf(req, res);
+      }
       // Resolve the current user's school (same logic as /api/stock)
       const userResponse = await notion.databases.query({
         database_id: teamMembersDatabaseId,
@@ -16810,11 +17069,14 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!teamMembersDatabaseId || !stocktakingDatabaseId) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res.status(500).json({ error: "Database IDs are not configured." });
     }
 
     try {
+      if (_sbStocktakingEnabled()) {
+        return await _sbRenderStocktakingExcel(req, res);
+      }
       // Resolve the current user's school (same logic as /api/stock)
       const userResponse = await notion.databases.query({
         database_id: teamMembersDatabaseId,
