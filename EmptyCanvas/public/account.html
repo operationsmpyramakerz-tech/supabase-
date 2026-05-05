@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#FFFFFF" />
+
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<script src="/pwa-register.js" defer></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Account Info</title>
+<link href="/css/style.css" rel="stylesheet"/>
+<link href="/css/ui-redesign.css" rel="stylesheet"/>
+<style>
+  /* 🔒 Critical: prevent sidebar links flash before permissions load */
+  body.permissions-loading .sidebar li { display: none !important; }
+</style>
+
+<!-- Account page: match "Settled my account" mini-window styling + smaller edit button -->
+<style>
+  /* Smaller edit icon button (transparent background) */
+  .acc-action.acc-edit{
+    width: 26px !important;
+    height: 26px !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    border-radius: 10px !important;
+  }
+  .acc-action.acc-edit:hover{
+    background: transparent !important;
+    opacity: 0.85;
+  }
+  .acc-action.acc-edit svg{ width: 15px; height: 15px; }
+
+  /* ============================
+     Modal styling (same as Expenses "Settled my account")
+     ============================ */
+  .ex-modal{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+  }
+  .ex-modal-box{
+    background: white;
+    padding: 1.8rem;
+    width: 90%;
+    max-width: 420px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  }
+  .ex-modal-title{
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  .ex-input{
+    width: 100%;
+    padding: 0.8rem;
+    border-radius: 12px;
+    border: 1.5px solid #d1d5db;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    background: #fff;
+  }
+  .ex-modal-actions{
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+  .ex-btn{
+    padding: 0.7rem 1.4rem;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .ex-primary{ background: #3b82f6; color: white; }
+  .ex-danger{ background: #ef4444; color: white; }
+
+  /* Inline error message inside modal */
+  .ex-error{
+    display: none;
+    margin-top: -0.5rem;
+    margin-bottom: 0.8rem;
+    color: #B91C1C;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+
+  /* Label row with icon (like expenses modals) */
+  .field-label{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    color: #111;
+    margin-top: 0.6rem;
+    margin-bottom: 0.25rem;
+  }
+  .field-label svg{ width: 16px; height: 16px; }
+
+  /* ============================
+     Show/Hide password (match Login page)
+     ============================ */
+  /*
+    NOTE:
+    - On this page the input has margin-bottom, which makes absolute centering look off.
+      So we move the spacing to the wrapper, and remove margin from the input inside.
+    - Also hide browser built-in password/credential buttons so our eye icon is always visible.
+  */
+  .password-wrapper{
+    position: relative;
+    margin-bottom: 1rem;
+  }
+  .password-wrapper .ex-input{
+    margin-bottom: 0;
+  }
+
+  /* Add right padding only when toggle exists */
+  .password-wrapper.has-toggle .ex-input{ padding-right: 2.5rem; }
+
+  /* Hide toggle when wrapper doesn't opt-in */
+  .password-wrapper:not(.has-toggle) .toggle-password{ display:none; }
+
+  /* Hide built-in reveal/autofill buttons (Edge/IE + Chromium) */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear{ display:none; }
+  input::-webkit-credentials-auto-fill-button,
+  input::-webkit-contacts-auto-fill-button{
+    visibility: hidden;
+    display: none !important;
+    pointer-events: none;
+  }
+
+  .toggle-password{
+    position: absolute;
+    top: 50%;
+    right: .6rem;
+    transform: translateY(-50%);
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #6B7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    z-index: 3;
+    -webkit-appearance: none;
+    appearance: none;
+    line-height: 0;
+  }
+  .toggle-password svg{ display:block; }
+  .toggle-password:hover{ color: #374151; background: rgba(0,0,0,.04); }
+  .toggle-password:active{ transform: translateY(-50%) scale(.98); }
+
+</style>
+
+<style>
+  /* Account page modern profile layout */
+  .page-account .account-page-shell{
+    padding: clamp(1rem, 2.6vw, 2rem) !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .page-account .account-panel--profile.account-profile-modern{
+    width: min(100%, 760px);
+    margin: 0 auto;
+    padding: clamp(1.35rem, 4vw, 2.45rem);
+    border-radius: 32px;
+    border: 1px solid #E8EDF3;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%);
+    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .page-account .account-panel--profile.account-profile-modern::before{
+    content: "";
+    position: absolute;
+    top: -110px;
+    left: 50%;
+    width: 240px;
+    height: 240px;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgba(249, 115, 22, 0.14) 0%, rgba(249, 115, 22, 0) 72%);
+    pointer-events: none;
+  }
+
+  .page-account .profile-avatar-section{
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.95rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .page-account .profile-avatar-shell{
+    position: relative;
+    width: 156px;
+    height: 156px;
+  }
+
+  .page-account .profile-avatar-display{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 50%;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    background: #FFFFFF;
+    cursor: pointer;
+    position: relative;
+    box-shadow:
+      0 0 0 4px #FFFFFF,
+      0 0 0 7px rgba(249, 115, 22, 0.30),
+      0 20px 40px rgba(15, 23, 42, 0.14);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .page-account .profile-avatar-display:hover{
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 4px #FFFFFF,
+      0 0 0 7px rgba(249, 115, 22, 0.40),
+      0 24px 48px rgba(15, 23, 42, 0.16);
+  }
+
+  .page-account .profile-avatar-image{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    border-radius: 50%;
+  }
+
+  .page-account .profile-avatar-fallback{
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #FDBA74 0%, #EA580C 100%);
+    color: #FFFFFF;
+    font-size: 2.2rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+
+  .page-account .profile-avatar-edit{
+    position: absolute;
+    right: 8px;
+    bottom: 10px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.96);
+    border-radius: 12px;
+    background: #FFFFFF;
+    color: #C2410C;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.18);
+    transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    z-index: 2;
+  }
+
+  .page-account .profile-avatar-edit:hover{
+    transform: translateY(-1px);
+    background: #FFF7ED;
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.20);
+  }
+
+  .page-account .profile-avatar-edit.is-uploading{
+    cursor: wait;
+    opacity: 0.75;
+  }
+
+  .page-account .profile-avatar-edit svg{
+    width: 18px;
+    height: 18px;
+  }
+
+  .page-account .profile-fields-list{
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.1rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .page-account .profile-field-card{
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    width: 100%;
+  }
+
+  .page-account .profile-field-label{
+    font-size: 1rem;
+    line-height: 1.2;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: 0.01em;
+    padding-inline: 0.1rem;
+  }
+
+  .page-account .profile-field-box{
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.95rem 1rem 0.95rem 1.15rem;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%);
+    border: 1px solid #E6EBF2;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 10px 20px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+
+  .page-account .profile-field-card:hover .profile-field-box{
+    border-color: rgba(249, 115, 22, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 14px 26px rgba(15, 23, 42, 0.06);
+  }
+
+  .page-account .profile-field-box--password{
+    letter-spacing: 0.08em;
+  }
+
+  .page-account .profile-field-value{
+    flex: 1 1 auto;
+    min-width: 0;
+    color: #475569;
+    font-size: 1.02rem;
+    font-weight: 650;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .page-account .profile-field-edit{
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    border: 1px solid rgba(249, 115, 22, 0.18);
+    border-radius: 14px;
+    background: #FFF7ED;
+    color: #C2410C;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(249, 115, 22, 0.12);
+    transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+  }
+
+  .page-account .profile-field-edit:hover{
+    transform: translateY(-1px);
+    background: #FFEDD5;
+    box-shadow: 0 12px 24px rgba(249, 115, 22, 0.16);
+  }
+
+  .page-account .profile-field-edit svg{
+    width: 16px;
+    height: 16px;
+  }
+
+  .page-account .profile-files-media-section{
+    margin-top: 1.55rem;
+    padding: clamp(1rem, 2vw, 1.25rem);
+    border-radius: 24px;
+    border: 1px solid #E6EBF2;
+    background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.92), 0 14px 28px rgba(15, 23, 42, 0.05);
+    position: relative;
+    z-index: 1;
+  }
+
+  .page-account .profile-files-media-head{
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-bottom: 0.95rem;
+  }
+
+  .page-account .profile-files-media-badge,
+  .page-account .profile-media-empty-icon,
+  .page-account .profile-media-file-icon{
+    width: 42px;
+    height: 42px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .page-account .profile-files-media-badge{
+    color: #C2410C;
+    background: #FFF7ED;
+    border: 1px solid rgba(249, 115, 22, 0.18);
+    box-shadow: 0 8px 18px rgba(249, 115, 22, 0.10);
+  }
+
+  .page-account .profile-files-media-title{
+    font-size: 1rem;
+    font-weight: 900;
+    color: #0F172A;
+    line-height: 1.2;
+  }
+
+  .page-account .profile-files-media-sub{
+    margin-top: 0.2rem;
+    font-size: 0.86rem;
+    font-weight: 650;
+    color: #94A3B8;
+  }
+
+  .page-account .profile-media-files-grid{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+  }
+
+  .page-account .profile-media-file-card{
+    min-height: 76px;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.85rem;
+    border-radius: 20px;
+    border: 1px solid #E6EBF2;
+    background: #FFFFFF;
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.04);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .page-account .profile-media-file-card:not(.profile-media-file-card--disabled):hover{
+    transform: translateY(-2px);
+    border-color: rgba(249, 115, 22, 0.30);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+  }
+
+  .page-account .profile-media-file-card--disabled{
+    opacity: 0.78;
+  }
+
+  .page-account .profile-media-file-icon{
+    color: #166534;
+    background: #DCFCE7;
+    border: 1px solid #86EFAC;
+  }
+
+  .page-account .profile-media-file-body{
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+  }
+
+  .page-account .profile-media-file-name{
+    font-size: 0.95rem;
+    font-weight: 850;
+    color: #0F172A;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .page-account .profile-media-file-url{
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #94A3B8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .page-account .profile-media-file-open{
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: #C2410C;
+    background: #FFF7ED;
+  }
+
+  .page-account .profile-media-empty{
+    grid-column: 1 / -1;
+    min-height: 76px;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.95rem;
+    border: 1px dashed #CBD5E1;
+    border-radius: 20px;
+    color: #64748B;
+    font-weight: 750;
+    background: rgba(248, 250, 252, 0.78);
+  }
+
+  .page-account .profile-media-empty-icon{
+    color: #64748B;
+    background: #F1F5F9;
+    border: 1px solid #E2E8F0;
+  }
+
+  @media (max-width: 768px){
+    .page-account .account-page-shell{
+      padding: 0.85rem !important;
+    }
+
+    .page-account .account-panel--profile.account-profile-modern{
+      width: 100%;
+      padding: 1.2rem 1rem 1.4rem;
+      border-radius: 26px;
+    }
+
+    .page-account .profile-avatar-section{
+      margin-bottom: 1.4rem;
+    }
+
+    .page-account .profile-avatar-shell{
+      width: 124px;
+      height: 124px;
+    }
+
+    .page-account .profile-avatar-display{
+      box-shadow:
+        0 0 0 4px #FFFFFF,
+        0 0 0 6px rgba(249, 115, 22, 0.28),
+        0 16px 32px rgba(15, 23, 42, 0.14);
+    }
+
+    .page-account .profile-avatar-edit{
+      width: 34px;
+      height: 34px;
+      right: 4px;
+      bottom: 6px;
+      border-radius: 11px;
+    }
+
+    .page-account .profile-avatar-edit svg{
+      width: 16px;
+      height: 16px;
+    }
+
+    .page-account .profile-fields-list{
+      gap: 0.95rem;
+    }
+
+    .page-account .profile-field-label{
+      font-size: 0.96rem;
+    }
+
+    .page-account .profile-field-box{
+      min-height: 64px;
+      padding: 0.85rem 0.85rem 0.85rem 1rem;
+      border-radius: 18px;
+      gap: 0.75rem;
+    }
+
+    .page-account .profile-field-value{
+      font-size: 0.96rem;
+      line-height: 1.4;
+    }
+
+    .page-account .profile-field-edit{
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      border-radius: 12px;
+    }
+  }
+</style>
+<script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading page-account">
+<script>
+    (function() {
+      try {
+        if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+          document.body.classList.add('sidebar-mini');
+        }
+      } catch(e) {}
+    })();
+  </script>
+<div class="app-container">
+<aside class="sidebar">
+<div class="sidebar-header">
+<h2>Dashboard</h2>
+<button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+<i data-feather="chevrons-left"></i>
+</button>
+</div>
+<!-- Sidebar: flat links -->
+<nav class="sidebar-nav">
+<ul class="nav-list">
+<li>
+<a class="nav-link" href="/orders">
+<i data-feather="list"></i>
+<span class="nav-label">Current Orders</span>
+</a>
+</li>
+<li>
+<a class="nav-link" href="/orders/requested">
+<i data-feather="users"></i>
+<span class="nav-label">Operations Orders</span>
+</a>
+</li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+<li>
+<a class="nav-link" href="/orders/new">
+<i data-feather="shopping-cart"></i>
+<span class="nav-label">Create New Order</span>
+</a>
+</li>
+<li>
+<a class="nav-link" href="/stocktaking">
+<i data-feather="archive"></i>
+<span class="nav-label">Stocktaking</span>
+</a>
+</li>
+<li>
+  <a class="nav-link" href="/orders/sv-orders">
+    <i data-feather="award"></i>
+    <span class="nav-label">Orders Review</span>
+  </a>
+</li>
+        <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+        <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+</ul>
+</nav>
+<div class="sidebar-footer">
+<button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+</div>
+</aside>
+<div class="main-content">
+<header class="main-header">
+<div class="header-row1">
+<div class="left">
+<div aria-live="polite" class="greeting-pill">
+<span class="greeting-avatar">
+<img alt="Hi icon" src="/images/greeting-icon.png"/>
+</span>
+<div class="greet-text">
+<div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+<div class="greet-sub">Start your day with operations</div>
+</div>
+</div>
+</div>
+<div class="right topbar-right">
+<a aria-label="My account" class="account-mini" href="/account" title="My account">
+<span class="ico-circle"><img alt="Logo" src="/images/logo.png"/></span>
+<span class="label">My account</span>
+</a>
+</div>
+</div>
+<div class="header-row2">
+<h1 class="page-title">Account Info</h1>
+</div>
+</header>
+<main class="container-full-width">
+<section class="card account-page-shell">
+<div id="account-content">
+<p><i class="loading-icon" data-feather="loader"></i> Loading account...</p>
+</div>
+</section>
+</main>
+</div>
+</div>
+
+<!-- ACCOUNT EDIT MODAL (same style as Expenses "Settled my account") -->
+<div id="accountEditModal" class="ex-modal" aria-hidden="true">
+  <div class="ex-modal-box" role="dialog" aria-modal="true" aria-labelledby="accountEditTitle">
+    <h3 class="ex-modal-title" id="accountEditTitle">Edit</h3>
+
+    <label class="field-label" id="accountEditValueLabel"><i data-feather="edit-3"></i> Value</label>
+    <div class="password-wrapper" id="accountEditValueWrap">
+      <input id="accountEditValue" type="text" class="ex-input" />
+      <button type="button" id="toggleAccountEditValue" class="toggle-password" aria-label="Show password" aria-pressed="false" data-target="accountEditValue">
+        <svg class="icon-eye" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <svg class="icon-eye-off" style="display:none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/>
+          <path d="M1 1l22 22"/>
+          <path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/>
+        </svg>
+      </button>
+    </div>
+
+    <label class="field-label" id="accountEditPasswordLabel"><i data-feather="lock"></i> Current password</label>
+    <div class="password-wrapper has-toggle" id="accountEditPasswordWrap">
+      <input id="accountEditPassword" type="password" class="ex-input" autocomplete="current-password" />
+      <button type="button" id="toggleAccountEditPassword" class="toggle-password" aria-label="Show password" aria-pressed="false" data-target="accountEditPassword">
+        <svg class="icon-eye" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <svg class="icon-eye-off" style="display:none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/>
+          <path d="M1 1l22 22"/>
+          <path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/>
+        </svg>
+      </button>
+    </div>
+
+    <div id="accountEditError" class="ex-error" role="alert">invalid password</div>
+
+    <div class="ex-modal-actions">
+      <button id="accountEditSubmit" class="ex-btn ex-primary" type="button">Submit</button>
+      <button id="accountEditClose" class="ex-btn ex-danger" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACCOUNT SAVING OVERLAY -->
+<div id="accountSavingOverlay" class="ex-modal" aria-hidden="true" style="display:none;">
+  <div class="ex-modal-box" role="status" aria-live="polite" style="max-width: 320px; text-align:center;">
+    <h3 class="ex-modal-title" style="margin-bottom:0.75rem;">Saving...</h3>
+    <p style="margin:0; display:flex; align-items:center; justify-content:center; gap:10px;">
+      <i class="loading-icon" data-feather="loader"></i>
+      <span>Please wait</span>
+    </p>
+  </div>
+</div>
+
+    <script>if (window.feather) feather.replace();</script>
+<script src="/js/common-ui.js"></script>
+<script src="/js/script.js"></script>
+<script src="/js/account.js"></script>
+    <script>
+(() => {
+  const GROUP_KEY = 'ui.sidebar.nrr.open';
+  const group = document.querySelector('.nav-group[data-group="nrr"]');
+  if (!group) return;
+
+  const toggle = group.querySelector('.nav-group-toggle');
+  const sub    = group.querySelector('.nav-sub');
+
+  function setOpen(open) {
+    group.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    // animate height
+    if (sub) sub.style.maxHeight = open ? sub.scrollHeight + 'px' : '0px';
+    try { localStorage.setItem(GROUP_KEY, open ? '1' : '0'); } catch {}
+  }
+
+  // open if saved OR if current page is the NRR page
+  const saved = (() => { try { return localStorage.getItem(GROUP_KEY) === '1'; } catch { return false; }})();
+  const onNRR = location.pathname.endsWith('/new-report-request.html');
+  setOpen(saved || onNRR);
+
+  toggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    setOpen(!group.classList.contains('is-open'));
+  });
+
+  // highlight active sub item by ?view=
+  const params = new URLSearchParams(location.search);
+  const view = params.get('view') || 'request';
+  group.querySelectorAll('.nav-sublink').forEach(a => {
+    const isActive = a.getAttribute('href')?.endsWith('view=' + view);
+    a.classList.toggle('active', !!isActive);
+  });
+
+  // keep feather icons updated
+  if (window.feather) feather.replace();
+
+  // keep height correct if fonts load / window resizes
+  window.addEventListener('resize', () => {
+    if (group.classList.contains('is-open')) {
+      sub.style.maxHeight = sub.scrollHeight + 'px';
+    }
+  });
+})();
+</script>
+
+    </body>
+
+</html>

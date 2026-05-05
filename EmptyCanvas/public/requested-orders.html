@@ -1,0 +1,448 @@
+ <!DOCTYPE html>
+
+<html lang="en">
+<head>
+ <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#FFFFFF" />
+
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<script src="/pwa-register.js" defer></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Operations Orders</title>
+<!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
+<style>
+  body.permissions-loading .sidebar li { display: none !important; }
+</style>
+<link href="/css/style.css" rel="stylesheet"/>
+<link href="/css/ui-redesign.css" rel="stylesheet"/>
+<script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading order-modal-fit-screen">
+<script>
+        (function() {
+          try {
+            if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+              document.body.classList.add('sidebar-mini');
+            }
+          } catch(e) {}
+        })();
+      </script>
+<div class="app-container">
+<aside class="sidebar">
+<div class="sidebar-header">
+<h2>Dashboard</h2>
+<button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+<i data-feather="chevrons-left"></i>
+</button>
+</div>
+<!-- Sidebar: flat links -->
+<nav class="sidebar-nav">
+<ul class="nav-list">
+<li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+        <li><a class="nav-link active" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+        <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+        <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+        <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+        <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+</ul>
+</nav>
+<div class="sidebar-footer">
+<button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+</div>
+</aside>
+<div class="main-content">
+<header class="main-header">
+<div class="header-row1">
+<div class="left">
+<div aria-live="polite" class="greeting-pill">
+<span class="greeting-avatar">
+<img alt="Hi icon" src="/images/greeting-icon.png"/>
+</span>
+<div class="greet-text">
+<div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+<div class="greet-sub">Manage operations orders</div>
+</div>
+</div>
+<div class="searchbar" id="req-searchbar" role="search" style="margin-left:8px;">
+<i data-feather="search"></i>
+<input aria-label="Search requested orders" id="requestedSearch" placeholder="Search by reason or user..." type="search"/>
+</div>
+</div>
+<div class="right topbar-right">
+<a aria-label="My account" class="account-mini" href="/account" title="My account">
+<span class="ico-circle"><img alt="Logo" src="/images/logo.png"/></span>
+<span class="label">My account</span>
+</a>
+</div>
+</div>
+<div class="header-row2">
+<h1 class="page-title">Operations Orders</h1>
+</div>
+</header>
+<main class="page-body">
+  <div class="orders-toolbar" aria-label="Operations orders tools">
+    <div class="orders-toolbar__scroll">
+      <div id="reqTabs" class="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
+        <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="true"
+           href="/orders/requested?tab=not-started">
+          <span class="order-status-tab__icon"><i data-feather="pause-circle"></i></span>
+          <span class="order-status-tab__label">Not Started</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="remaining" role="tab" aria-selected="false"
+           href="/orders/requested?tab=remaining">
+          <span class="order-status-tab__icon"><i data-feather="clock"></i></span>
+          <span class="order-status-tab__label">Remaining</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="received" role="tab" aria-selected="false"
+           href="/orders/requested?tab=received">
+          <span class="order-status-tab__icon"><i data-feather="package"></i></span>
+          <span class="order-status-tab__label">Received</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="delivered" role="tab" aria-selected="false"
+           href="/orders/requested?tab=delivered">
+          <span class="order-status-tab__icon"><i data-feather="check-circle"></i></span>
+          <span class="order-status-tab__label">Delivered</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="archive" role="tab" aria-selected="false"
+           href="/orders/requested?tab=archive">
+          <span class="order-status-tab__icon"><i data-feather="archive"></i></span>
+          <span class="order-status-tab__label">Archive</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="orders-toolbar__divider" aria-hidden="true"></div>
+
+    <div class="orders-type-filter" id="reqTypeFilter">
+      <button type="button" class="orders-type-filter__button" id="reqTypeFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="reqTypeFilterPanel" aria-label="Filter operations orders by type">
+        <span class="orders-type-filter__button-icon"><i data-feather="filter"></i></span>
+        <span class="orders-type-filter__button-label">Filter</span>
+        <span class="orders-type-filter__button-dot" id="reqTypeFilterDot" hidden></span>
+      </button>
+      <div class="orders-type-filter__panel" id="reqTypeFilterPanel" role="menu" aria-label="Filter operations orders by type" hidden></div>
+    </div>
+  </div>
+
+  <!-- Orders list (Current Orders card style) -->
+  <section class="card">
+    <div class="co-cards" id="requested-list">
+      <div class="modern-loading" role="status" aria-live="polite">
+        <div class="modern-loading__spinner" aria-hidden="true"></div>
+        <div class="modern-loading__text">
+          Loading requested orders
+          <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===================== REQUESTED ORDER DETAILS MODAL ===================== -->
+<div id="reqOrderModal" class="co-modal-overlay" aria-hidden="true">
+  <div class="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqModalTitle">
+    <button type="button" class="co-modal-archive" id="reqModalArchive" aria-label="Archive order">
+      <i data-feather="archive"></i>
+      <span>Archive</span>
+    </button>
+    <button type="button" class="co-modal-close" id="reqModalClose" aria-label="Close order details">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-modal-header">
+      <div class="co-modal-head-left">
+        <div class="co-modal-status" id="reqModalTitle">—</div>
+        <div class="co-modal-status-sub" id="reqModalSub">—</div>
+      </div>
+    </div>
+
+    <!-- Tracking progress (same UI as Current Orders) -->
+    <div class="co-track-pill" id="reqTrackPill" role="img" aria-label="Order progress">
+      <div class="co-track-step" id="reqStep1" title="Order Placed"><i data-feather="package"></i></div>
+      <div class="co-track-conn" id="reqConn1"></div>
+      <div class="co-track-step" id="reqStep2" title="Under Supervision"><i data-feather="eye"></i></div>
+      <div class="co-track-conn" id="reqConn2"></div>
+      <div class="co-track-step" id="reqStep3" title="In progress"><i data-feather="activity"></i></div>
+      <div class="co-track-conn" id="reqConn3"></div>
+      <div class="co-track-step" id="reqStep4" title="Shipped"><i data-feather="truck"></i></div>
+      <div class="co-track-conn" id="reqConn4"></div>
+      <div class="co-track-step" id="reqStep5" title="Arrived"><i data-feather="home"></i></div>
+    </div>
+
+    <div class="co-modal-body">
+      <div class="co-modal-meta">
+        <div class="co-meta-row"><span>Reason</span><strong id="reqModalReason">—</strong></div>
+        <div class="co-meta-row"><span>Date</span><strong id="reqModalDate">—</strong></div>
+        <div class="co-meta-row"><span>Components</span><strong id="reqModalComponents">—</strong></div>
+        <div class="co-meta-row"><span>Estimated cost</span><strong id="reqModalTotalPrice">—</strong></div>
+
+        <!-- Extra fields shown for "Received" (and later) tabs only -->
+        <div class="co-meta-row" id="reqReceiptRow" hidden>
+          <span>Store Receipt Number</span>
+          <strong id="reqModalReceiptNumber">—</strong>
+        </div>
+        <div class="co-meta-row" id="reqReceivedByRow" hidden>
+          <span>Received by</span>
+          <strong id="reqModalOperationsBy">—</strong>
+        </div>
+      </div>
+
+      <div class="co-modal-actions ro-actions ro-actions--right" id="reqModalActions">
+        <!-- Download dropdown (single button like Current Orders) -->
+        <div class="download-menu" id="reqDownloadMenuWrap">
+          <button type="button" class="ro-action-btn ro-action-btn--light download-menu__btn" id="reqDownloadMenuBtn" aria-haspopup="menu" aria-expanded="false">
+            <i data-feather="download"></i>
+            <span>Download</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+
+          <div class="download-menu__panel" id="reqDownloadMenuPanel" role="menu" aria-label="Download options" hidden>
+            <button class="download-menu__item" id="reqDownloadPdfBtn" role="menuitem" type="button">
+              <span>Download PDF</span>
+              <i data-feather="file-text"></i>
+            </button>
+            <div class="download-menu__sep" role="separator"></div>
+            <button class="download-menu__item" id="reqDownloadExcelBtn" role="menuitem" type="button">
+              <span>Download Excel</span>
+              <i data-feather="grid"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceivedBtn">
+          <i data-feather="truck"></i>
+          Received by operations
+        </button>
+
+        <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceivedShippedBtn" style="display:none;">
+          <i data-feather="check-circle"></i>
+          Mark as Delivered
+        </button>
+
+        <button type="button" class="ro-action-btn ro-action-btn--light" id="reqLogMaintenanceBtn" style="display:none;">
+          <i data-feather="clipboard"></i>
+          Log Maintenance
+        </button>
+
+        <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqCreateWithdrawalBtn" style="display:none;">
+          <i data-feather="repeat"></i>
+          Create Withdrawal
+        </button>
+      </div>
+
+      <div class="co-modal-items" id="reqModalItems"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ORDER STATUS CONFIRMATION MODAL ===================== -->
+<div id="reqOrderStatusConfirmModal" class="co-confirm-overlay" aria-hidden="true" hidden>
+  <div class="co-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="reqOrderStatusConfirmTitle" aria-describedby="reqOrderStatusConfirmMessage">
+    <div class="co-confirm-icon" id="reqOrderStatusConfirmIcon" aria-hidden="true">
+      <i data-feather="archive"></i>
+    </div>
+    <div class="co-confirm-title" id="reqOrderStatusConfirmTitle">Archive order?</div>
+    <div class="co-confirm-message" id="reqOrderStatusConfirmMessage">This order will be moved to the Archive tab.</div>
+    <div class="co-confirm-actions">
+      <button type="button" class="co-confirm-btn co-confirm-btn--light" id="reqOrderStatusConfirmCancel">Cancel</button>
+      <button type="button" class="co-confirm-btn co-confirm-btn--dark" id="reqOrderStatusConfirmApply">Archive</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RECEIPT NUMBER (SUB-MODAL) ===================== -->
+<div id="reqReceiptModal" class="co-submodal-overlay" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqReceiptTitle" aria-describedby="reqReceiptSub">
+    <button type="button" class="co-submodal-close" id="reqReceiptClose" aria-label="Close">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header">
+      <div class="co-submodal-title" id="reqReceiptTitle">Store Receipt Number</div>
+      <div class="co-submodal-sub" id="reqReceiptSub">Enter the store receipt number to confirm "Received by operations".</div>
+    </div>
+
+    <div class="co-submodal-body">
+      <label class="co-submodal-label" for="reqReceiptInput">Store Receipt Number</label>
+      <div class="co-submodal-inputs" id="reqReceiptInputs">
+        <input
+          class="co-submodal-input req-receipt-input"
+          id="reqReceiptInput"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          autocomplete="off"
+          placeholder="e.g. 12345"
+          aria-label="Store Receipt Number"
+        />
+      </div>
+      <button type="button" class="ro-action-btn ro-action-btn--light co-submodal-add" id="reqAddReceiptBtn">Add Other Receipt</button>
+      <div class="co-submodal-error" id="reqReceiptError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="reqReceiptCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceiptConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== REQUEST TECHNICAL VISIT (SUB-MODAL) ===================== -->
+<div id="reqTechVisitModal" class="co-submodal-overlay" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqTechVisitTitle" aria-describedby="reqTechVisitSub">
+    <button type="button" class="co-submodal-close" id="reqTechVisitClose" aria-label="Close">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header">
+      <div class="co-submodal-title" id="reqTechVisitTitle">Request Technical Visit</div>
+      <div class="co-submodal-sub" id="reqTechVisitSub">Review and edit the issue description before sending the maintenance order.</div>
+    </div>
+
+    <div class="co-submodal-body">
+      <div class="co-submodal-fields">
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="reqTechVisitIssueInput">Issue Description</label>
+          <textarea
+            class="co-submodal-textarea"
+            id="reqTechVisitIssueInput"
+            rows="5"
+            placeholder="Describe the issue"
+          ></textarea>
+        </div>
+      </div>
+      <div class="co-submodal-error" id="reqTechVisitError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="reqTechVisitCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqTechVisitConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== LOG MAINTENANCE (SUB-MODAL) ===================== -->
+<div id="reqMaintenanceLogModal" class="co-submodal-overlay" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqMaintenanceLogTitle" aria-describedby="reqMaintenanceLogSub">
+    <button type="button" class="co-submodal-close" id="reqMaintenanceLogClose" aria-label="Close">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header">
+      <div class="co-submodal-title" id="reqMaintenanceLogTitle">Log Maintenance</div>
+      <div class="co-submodal-sub" id="reqMaintenanceLogSub">Save the maintenance work details for this order.</div>
+    </div>
+
+    <div class="co-submodal-body">
+      <div class="co-submodal-fields">
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="reqMaintenanceResolutionSelect">Resolution Method</label>
+          <select class="co-submodal-select" id="reqMaintenanceResolutionSelect" data-placeholder="Select resolution method">
+            <option value="">Select resolution method</option>
+          </select>
+        </div>
+
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="reqMaintenanceActualIssueInput">The Actual Issue Description</label>
+          <textarea
+            class="co-submodal-textarea"
+            id="reqMaintenanceActualIssueInput"
+            rows="5"
+            placeholder="Write the actual issue description"
+          ></textarea>
+        </div>
+
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="reqMaintenanceRepairActionInput">Repair Action</label>
+          <textarea
+            class="co-submodal-textarea"
+            id="reqMaintenanceRepairActionInput"
+            rows="5"
+            placeholder="Write the repair action"
+          ></textarea>
+        </div>
+
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="reqMaintenanceSparePartSelect">Spare parts replaced</label>
+          <select class="co-submodal-select" id="reqMaintenanceSparePartSelect" data-placeholder="No spare part selected" data-searchable="true" data-search-placeholder="Search spare parts" multiple>
+            <option value="">No spare part selected</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="co-submodal-error" id="reqMaintenanceLogError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="reqMaintenanceLogCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqMaintenanceLogConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MAINTENANCE RECEIPT (SUB-MODAL) ===================== -->
+<div id="reqMaintenanceReceiptModal" class="co-submodal-overlay" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqMaintenanceReceiptTitle" aria-describedby="reqMaintenanceReceiptSub">
+    <button type="button" class="co-submodal-close" id="reqMaintenanceReceiptClose" aria-label="Close">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header">
+      <div class="co-submodal-title" id="reqMaintenanceReceiptTitle">Upload Signed Report</div>
+      <div class="co-submodal-sub" id="reqMaintenanceReceiptSub">Upload at least one signed report image before marking this order as delivered.</div>
+    </div>
+
+    <div class="co-submodal-body">
+      <div class="co-submodal-field" id="reqMaintenanceReceiptNumbersField" hidden>
+        <label class="co-submodal-label" for="reqMaintenanceReceiptNumberInput">Store Receipt Number</label>
+        <div class="co-submodal-inputs" id="reqMaintenanceReceiptNumbers">
+          <input
+            class="co-submodal-input req-delivery-receipt-input"
+            id="reqMaintenanceReceiptNumberInput"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            autocomplete="off"
+            placeholder="e.g. 12345"
+            aria-label="Store Receipt Number"
+          />
+        </div>
+        <button type="button" class="ro-action-btn ro-action-btn--light co-submodal-add" id="reqMaintenanceAddReceiptBtn">Add Other Receipt</button>
+      </div>
+
+      <div class="co-submodal-field">
+        <label class="co-submodal-label" id="reqMaintenanceReceiptLabel" for="reqMaintenanceReceiptInput">Signed report images</label>
+        <input class="co-upload-field__input" id="reqMaintenanceReceiptInput" type="file" accept="image/*" multiple hidden />
+        <button type="button" class="co-upload-field" id="reqMaintenanceReceiptChooseBtn">
+          <span class="co-upload-field__icon"><i data-feather="upload-cloud"></i></span>
+          <span class="co-upload-field__content">
+            <span class="co-upload-field__title" id="reqMaintenanceReceiptName">Choose images</span>
+            <span class="co-upload-field__meta" id="reqMaintenanceReceiptMeta">PNG, JPG or WEBP</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="co-submodal-error" id="reqMaintenanceReceiptError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="reqMaintenanceReceiptCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqMaintenanceReceiptConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+<script>if (window.feather) feather.replace();</script>
+<script src="/js/common-ui.js"></script>
+<script src="/js/requested-orders.js"></script>
+</body>
+</html>

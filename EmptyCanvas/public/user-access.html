@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>User Access & Data</title>
+  <style>
+    body.permissions-loading .sidebar li { display: none !important; }
+  </style>
+  <link href="/css/style.css" rel="stylesheet" />
+  <link href="/css/ui-redesign.css" rel="stylesheet" />
+  <link href="/css/user-access.css" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading user-access-page">
+  <script>
+    (function() {
+      try {
+        if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+          document.body.classList.add('sidebar-mini');
+        }
+      } catch(e) {}
+    })();
+  </script>
+
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Dashboard</h2>
+        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+          <i data-feather="chevrons-left"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <ul class="nav-list">
+          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+          <li><a class="nav-link active" href="/user-access"><i data-feather="shield"></i><span class="nav-label">User Access & Data</span></a></li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header">
+        <div class="header-row1">
+          <div class="left">
+            <div aria-live="polite" class="greeting-pill">
+              <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
+              <div class="greet-text">
+                <div class="greet-title">Hi, <span data-username>...</span> 👋</div>
+                <div class="greet-sub">Manage team access and member records</div>
+              </div>
+            </div>
+          </div>
+          <div class="right topbar-right">
+            <a aria-label="My account" class="account-mini" href="/account" title="My account">
+              <span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span>
+              <span class="label">My account</span>
+            </a>
+          </div>
+        </div>
+        <div class="header-row2">
+          <h1 class="page-title">User Access & Data</h1>
+        </div>
+      </header>
+
+      <main class="page-body ua-page-body">
+        <section class="ua-hero" aria-labelledby="uaTitle">
+          <div class="ua-hero__copy">
+            <div class="ua-eyebrow"><i data-feather="shield"></i><span>Teams Members Database</span></div>
+            <h2 id="uaTitle">User Access & Data</h2>
+            <p>Browse users by department, review access permissions, and inspect each team member record from Notion.</p>
+          </div>
+          <div class="ua-hero__tools">
+            <label class="ua-search" for="uaSearchInput">
+              <i data-feather="search"></i>
+              <input id="uaSearchInput" type="search" autocomplete="off" placeholder="Search users, emails, phones..." />
+            </label>
+            <button type="button" class="ua-refresh" id="uaRefreshBtn">
+              <i data-feather="refresh-cw"></i>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="ua-folders-panel" id="uaFoldersPanel" aria-labelledby="uaFoldersTitle">
+          <div class="ua-section-head">
+            <div>
+              <h3 id="uaFoldersTitle">Department Folders</h3>
+              <p>Select a department folder to view its users.</p>
+            </div>
+            <div class="ua-count-pill" id="uaTotalCount">— users</div>
+          </div>
+          <div class="ua-folders" id="uaFolders" aria-live="polite">
+            <div class="ua-loading-inline"><span></span> Loading departments...</div>
+          </div>
+        </section>
+
+        <section class="ua-members-panel" id="uaMembersPanel" aria-labelledby="uaMembersTitle" hidden>
+          <div class="ua-section-head ua-section-head--members">
+            <div class="ua-member-heading-left">
+              <button type="button" class="ua-back-btn" id="uaBackToDepartments">
+                <i data-feather="arrow-left"></i>
+                <span>Departments</span>
+              </button>
+              <div>
+                <h3 id="uaMembersTitle">Team Members</h3>
+                <p id="uaMembersSubtitle">Select a department folder.</p>
+              </div>
+            </div>
+            <button type="button" class="ua-add-member-btn" id="uaAddMemberBtn">
+              <i data-feather="user-plus"></i>
+              <span>Add Member</span>
+            </button>
+          </div>
+          <div class="ua-members-grid" id="uaMembersGrid" aria-live="polite">
+            <div class="ua-loading-card">
+              <div class="ua-loading-card__spinner" aria-hidden="true"></div>
+              <div>Loading team members...</div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="ua-modal-overlay" id="uaAdminPasswordModal" aria-hidden="true" hidden>
+    <form class="ua-modal ua-modal--small" id="uaAdminPasswordForm" role="dialog" aria-modal="true" aria-labelledby="uaAdminPasswordTitle">
+      <button type="button" class="ua-modal__close" id="uaAdminPasswordClose" aria-label="Close Admin password window">
+        <i data-feather="x"></i>
+      </button>
+      <div class="ua-modal__header ua-modal__header--compact">
+        <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="lock"></i></div>
+        <div>
+          <h2 id="uaAdminPasswordTitle">Admin Verification</h2>
+          <p>Enter the Admin user password to open the edit page.</p>
+        </div>
+      </div>
+      <div class="ua-modal__body ua-modal__body--compact">
+        <label class="ua-form-field ua-form-field--wide">
+          <span>Admin Password</span>
+          <input id="uaAdminPasswordInput" type="password" autocomplete="current-password" placeholder="Enter Admin password" />
+        </label>
+        <div class="ua-form-error" id="uaAdminPasswordError" aria-live="polite"></div>
+      </div>
+      <div class="ua-modal__actions">
+        <button type="button" class="ua-btn ua-btn--light" id="uaAdminPasswordCancel">Cancel</button>
+        <button type="submit" class="ua-btn ua-btn--dark" id="uaAdminPasswordConfirm">
+          <i data-feather="unlock"></i>
+          <span>Continue</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="ua-modal-overlay" id="uaMemberFormModal" aria-hidden="true" hidden>
+    <form class="ua-modal ua-modal--form" id="uaMemberForm" role="dialog" aria-modal="true" aria-labelledby="uaMemberFormTitle">
+      <button type="button" class="ua-modal__close" id="uaMemberFormClose" aria-label="Close member form">
+        <i data-feather="x"></i>
+      </button>
+      <div class="ua-modal__header">
+        <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="user"></i></div>
+        <div>
+          <h2 id="uaMemberFormTitle">Team Member</h2>
+          <p id="uaMemberFormSubtitle">Add or edit user data.</p>
+        </div>
+      </div>
+      <div class="ua-modal__body" id="uaMemberFormBody"></div>
+      <div class="ua-modal__actions">
+        <button type="button" class="ua-btn ua-btn--light" id="uaMemberFormCancel">Cancel</button>
+        <button type="submit" class="ua-btn ua-btn--dark" id="uaMemberFormSave">
+          <i data-feather="save"></i>
+          <span id="uaMemberFormSaveLabel">Save</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>if (window.feather) feather.replace();</script>
+  <script src="/js/common-ui.js"></script>
+  <script src="/js/user-access.js"></script>
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#FFFFFF" />
+
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<script src="/pwa-register.js" defer></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Current Orders</title>
+<!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
+<style>
+  body.permissions-loading .sidebar li { display: none !important; }
+</style>
+<link href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" rel="stylesheet"/>
+<link href="/css/style.css" rel="stylesheet"/>
+<link href="/css/ui-redesign.css" rel="stylesheet"/>
+<script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading order-modal-fit-screen">
+<script>
+    (function() {
+      try {
+        if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+          document.body.classList.add('sidebar-mini');
+        }
+      } catch(e) {}
+    })();
+  </script>
+<div class="app-container">
+<aside class="sidebar">
+<div class="sidebar-header">
+<h2>Dashboard</h2>
+<button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+<i data-feather="chevrons-left"></i>
+</button>
+</div>
+<!-- Sidebar: flat links -->
+<nav class="sidebar-nav">
+<ul class="nav-list">
+<li>
+<a class="nav-link active" href="/orders">
+<i data-feather="list"></i>
+<span class="nav-label">Current Orders</span>
+</a>
+</li>
+<li>
+<a class="nav-link" href="/orders/requested">
+<i data-feather="users"></i>
+<span class="nav-label">Operations Orders</span>
+</a>
+</li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+<li>
+<a class="nav-link" href="/orders/new">
+<i data-feather="shopping-cart"></i>
+<span class="nav-label">Create New Order</span>
+</a>
+</li>
+<li>
+<a class="nav-link" href="/stocktaking">
+<i data-feather="archive"></i>
+<span class="nav-label">Stocktaking</span>
+</a>
+</li>
+<li>
+  <a class="nav-link" href="/orders/sv-orders">
+    <i data-feather="award"></i>
+    <span class="nav-label">Orders Review</span>
+  </a>
+</li>
+    <li>
+  <a class="nav-link" href="/expenses">
+    <i data-feather="dollar-sign"></i>
+    <span class="nav-label">Expenses</span>
+  </a>
+</li>
+    <li>
+  <a class="nav-link" href="/expenses/users">
+    <i data-feather="credit-card"></i>
+    <span class="nav-label">Expenses Users</span>
+  </a>
+</li>
+   <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+  <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+</ul>
+</nav>
+<div class="sidebar-footer">
+<button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+</div>
+</aside>
+<div class="main-content">
+<header class="main-header">
+<div class="header-row1">
+<div class="left">
+<div aria-live="polite" class="greeting-pill">
+<span class="greeting-avatar">
+<img alt="Hi icon" src="/images/greeting-icon.png"/>
+</span>
+<div class="greet-text">
+<div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+<div class="greet-sub">Start your day with operations</div>
+</div>
+</div>
+<div class="searchbar" id="orders-searchbar" role="search">
+<i data-feather="search"></i>
+<input aria-label="Search orders by reason" id="orderSearch" placeholder="Search orders by reason..." type="search" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"/>
+</div>
+</div>
+<div class="right topbar-right">
+<a aria-label="My account" class="account-mini" href="/account" title="My account">
+<span class="ico-circle"><img alt="Logo" src="/images/logo.png"/></span>
+<span class="label">My account</span>
+</a>
+</div>
+</div>
+<div class="header-row2">
+<h1 class="page-title">Current Orders</h1>
+</div>
+</header>
+<main class="container-full-width">
+<div class="orders-toolbar" aria-label="Current orders tools">
+  <div class="orders-toolbar__scroll">
+    <div id="coTabs" class="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Current Orders status">
+      <a class="tab-portfolio order-status-tab" data-tab="all" role="tab" aria-selected="true" href="/orders?tab=all">
+        <span class="order-status-tab__icon"><i data-feather="layers"></i></span>
+        <span class="order-status-tab__label">All</span>
+      </a>
+      <a class="tab-portfolio order-status-tab" data-tab="active" role="tab" aria-selected="false" href="/orders?tab=active">
+        <span class="order-status-tab__icon"><i data-feather="activity"></i></span>
+        <span class="order-status-tab__label">Active</span>
+      </a>
+      <a class="tab-portfolio order-status-tab" data-tab="shipped" role="tab" aria-selected="false" href="/orders?tab=shipped">
+        <span class="order-status-tab__icon"><i data-feather="truck"></i></span>
+        <span class="order-status-tab__label">Shipped</span>
+      </a>
+      <a class="tab-portfolio order-status-tab" data-tab="arrived" role="tab" aria-selected="false" href="/orders?tab=arrived">
+        <span class="order-status-tab__icon"><i data-feather="check-circle"></i></span>
+        <span class="order-status-tab__label">Arrived</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="orders-toolbar__divider" aria-hidden="true"></div>
+
+  <div class="orders-type-filter" id="coTypeFilter">
+    <button type="button" class="orders-type-filter__button" id="coTypeFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="coTypeFilterPanel" aria-label="Filter current orders by type">
+      <span class="orders-type-filter__button-icon"><i data-feather="filter"></i></span>
+      <span class="orders-type-filter__button-label">Filter</span>
+      <span class="orders-type-filter__button-dot" id="coTypeFilterDot" hidden></span>
+    </button>
+    <div class="orders-type-filter__panel" id="coTypeFilterPanel" role="menu" aria-label="Filter current orders by type" hidden></div>
+  </div>
+</div>
+<section class="card" id="current-orders">
+<div class="co-cards" id="orders-list">
+  <div class="modern-loading" role="status" aria-live="polite">
+    <div class="modern-loading__spinner" aria-hidden="true"></div>
+    <div class="modern-loading__text">
+      Loading orders
+      <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span>
+    </div>
+  </div>
+</div>
+</section>
+</main>
+</div>
+</div>
+
+<!-- ===================== ORDER DETAILS MODAL ===================== -->
+<div id="coOrderModal" class="co-modal-overlay" aria-hidden="true">
+  <div class="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="coModalReason">
+    <button type="button" class="co-modal-close" id="coModalClose" aria-label="Close order details">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-modal-header">
+      <div class="co-modal-head-left">
+        <div class="co-modal-status" id="coModalStatusTitle">—</div>
+        <div class="co-modal-status-sub" id="coModalStatusSub">—</div>
+      </div>
+    </div>
+
+    <div class="co-track-pill" id="coTrackPill" role="img" aria-label="Order progress">
+      <div class="co-track-step" id="coStep1" title="Order Placed"><i data-feather="package"></i></div>
+      <div class="co-track-conn" id="coConn1"></div>
+      <div class="co-track-step" id="coStep2" title="Under Supervision"><i data-feather="eye"></i></div>
+      <div class="co-track-conn" id="coConn2"></div>
+      <div class="co-track-step" id="coStep3" title="In progress"><i data-feather="activity"></i></div>
+      <div class="co-track-conn" id="coConn3"></div>
+      <div class="co-track-step" id="coStep4" title="Shipped"><i data-feather="truck"></i></div>
+      <div class="co-track-conn" id="coConn4"></div>
+      <div class="co-track-step" id="coStep5" title="Arrived"><i data-feather="home"></i></div>
+    </div>
+
+    <div class="co-modal-body">
+      <div class="co-modal-meta">
+        <div class="co-meta-row"><span>Reason</span><strong id="coModalReason">—</strong></div>
+        <div class="co-meta-row"><span>Date</span><strong id="coModalDate">—</strong></div>
+        <div class="co-meta-row"><span>Components</span><strong id="coModalComponents">—</strong></div>
+        <div class="co-meta-row"><span>Estimated cost</span><strong id="coModalTotalPrice">—</strong></div>
+      </div>
+
+      <!-- Actions (Download dropdown + Edit) -->
+      <div class="co-modal-actions ro-actions ro-actions--right" id="coModalActions">
+        <div class="download-menu" id="coDownloadMenuWrap">
+          <button type="button" class="ro-action-btn ro-action-btn--light download-menu__btn" id="coDownloadMenuBtn" aria-haspopup="menu" aria-expanded="false">
+            <i data-feather="download"></i>
+            <span>Download</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+
+          <div class="download-menu__panel" id="coDownloadMenuPanel" role="menu" aria-label="Download options" hidden>
+            <button class="download-menu__item" id="coDownloadPdfBtn" role="menuitem" type="button">
+              <span>Download PDF</span>
+              <i data-feather="file-text"></i>
+            </button>
+            <div class="download-menu__sep" role="separator"></div>
+            <button class="download-menu__item" id="coDownloadExcelBtn" role="menuitem" type="button">
+              <span>Download Excel</span>
+              <i data-feather="grid"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="button" class="ro-action-btn ro-action-btn--dark" id="coEditOrderBtn">
+          <i data-feather="edit-2"></i>
+          Edit
+        </button>
+      </div>
+
+      <div class="co-modal-items" id="coModalItems"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EDIT PASSWORD (SUB-MODAL) ===================== -->
+<div id="coEditPwdModal" class="co-submodal-overlay" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog" role="dialog" aria-modal="true" aria-labelledby="coEditPwdTitle" aria-describedby="coEditPwdSub">
+    <button type="button" class="co-submodal-close" id="coEditPwdClose" aria-label="Close">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header">
+      <div class="co-submodal-title" id="coEditPwdTitle">Edit order</div>
+      <div class="co-submodal-sub" id="coEditPwdSub">Enter admin password to continue.</div>
+    </div>
+
+    <div class="co-submodal-body">
+      <label class="co-submodal-label" for="coEditPwdInput">Admin password</label>
+      <input
+        class="co-submodal-input"
+        id="coEditPwdInput"
+        type="password"
+        inputmode="text"
+        autocomplete="current-password"
+        placeholder="••••••••"
+      />
+      <div class="co-submodal-error" id="coEditPwdError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="coEditPwdCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="coEditPwdConfirm">Continue</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script>if (window.feather) feather.replace();</script>
+<script src="/js/common-ui.js"></script>
+<script src="/js/script.js"></script>
+</body>
+</html>

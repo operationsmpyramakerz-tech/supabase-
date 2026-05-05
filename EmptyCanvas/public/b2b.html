@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#FFFFFF" />
+
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>B2B - Dashboard</title>
+  <!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
+  <style>
+    body.permissions-loading .sidebar li { display: none !important; }
+  </style>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link href="/css/ui-redesign.css" rel="stylesheet"/>
+  <script src="/js/vendor/feather-icons.min.js"></script>
+
+  <style>
+    .b2b-wrap{
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .b2b-card-shell{
+      background: linear-gradient(180deg, #fbfbfb 0%, #f5f5f4 100%) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+
+    .b2b-section-head{
+      padding: 24px 26px 0;
+    }
+
+    .b2b-section-head .card-header{
+      margin: 0;
+      padding: 0 0 20px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+    }
+
+    .b2b-section-head h2{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 8px;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .b2b-section-head h2 i,
+    .b2b-section-head h2 svg{
+      width: 18px;
+      height: 18px;
+      color: #6b7280;
+    }
+
+    .b2b-section-head .card-subtitle{
+      max-width: 620px;
+      line-height: 1.55;
+    }
+
+    .b2b-grid{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 26px 24px;
+      padding: 26px;
+      align-items: start;
+    }
+
+    .school-folder{
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 228px;
+      padding: 16px 14px 14px;
+      text-decoration: none;
+      background: #f1f1ef;
+      border: 1px solid rgba(15, 23, 42, 0.04);
+      border-radius: 18px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .school-folder:hover{
+      transform: translateY(-4px);
+      background: #ececea;
+      box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .school-folder:focus-visible{
+      outline: 3px solid rgba(249, 115, 22, 0.18);
+      outline-offset: 2px;
+    }
+
+    .school-folder__figure{
+      position: relative;
+      width: 176px;
+      height: 122px;
+      margin-bottom: 16px;
+      pointer-events: none;
+    }
+
+    .school-folder__paper{
+      position: absolute;
+      top: 6px;
+      width: 76px;
+      height: 46px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.1);
+      border: 1px solid rgba(17, 24, 39, 0.05);
+    }
+
+    .school-folder__paper::before{
+      content: '';
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: 12px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.22);
+      box-shadow:
+        0 14px 0 rgba(148, 163, 184, 0.14),
+        0 28px 0 rgba(148, 163, 184, 0.12);
+    }
+
+    .school-folder__paper--left{
+      left: 22px;
+      transform: rotate(-3deg);
+    }
+
+    .school-folder__paper--right{
+      right: 22px;
+      transform: rotate(4deg);
+    }
+
+    .school-folder__back{
+      position: absolute;
+      left: 30px;
+      top: 16px;
+      width: 126px;
+      height: 76px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #777777 0%, #5f5f5f 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    .school-folder__back::after{
+      content: '';
+      position: absolute;
+      right: 20px;
+      top: 0;
+      width: 38px;
+      height: 16px;
+      border-bottom-left-radius: 16px;
+      background: #f1f1ef;
+      opacity: 0.95;
+    }
+
+    .school-folder__front{
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      width: 156px;
+      height: 86px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #707070 0%, #626262 100%);
+      box-shadow:
+        0 16px 24px rgba(15, 23, 42, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .school-folder__front::before{
+      content: '';
+      position: absolute;
+      left: 0;
+      top: -18px;
+      width: 92px;
+      height: 36px;
+      border-radius: 18px 18px 12px 12px;
+      background: linear-gradient(180deg, #818181 0%, #6d6d6d 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .school-folder__front::after{
+      content: '';
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: 12px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .school-folder__chips{
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+
+    .school-folder__chip{
+      width: 24px;
+      height: 24px;
+      margin-left: -7px;
+      border-radius: 999px;
+      border: 2px solid #676767;
+      background: var(--chip-bg, #ffffff);
+      color: #111827;
+      font-size: 10px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 6px 10px rgba(15, 23, 42, 0.1);
+      overflow: hidden;
+    }
+
+    .school-folder__chip:first-child{
+      margin-left: 0;
+    }
+
+    .school-folder__chip--1{ --chip-bg: #f8fafc; }
+    .school-folder__chip--2{ --chip-bg: #e0f2fe; }
+    .school-folder__chip--3{ --chip-bg: #dcfce7; }
+
+    .school-folder__name{
+      width: 100%;
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.35;
+      color: #111827;
+      text-align: center;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 2.7em;
+    }
+
+    .school-folder__caption{
+      width: 100%;
+      margin-top: 8px;
+      color: #6b7280;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      text-align: center;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 2.6em;
+    }
+
+    .b2b-loading,
+    .b2b-empty,
+    .empty-block,
+    .error-block,
+    .modern-loading{
+      grid-column: 1 / -1;
+    }
+
+    .b2b-loading,
+    .b2b-empty{
+      padding: 30px 10px;
+      text-align: center;
+      color: #64748b;
+    }
+
+    @media (max-width: 768px){
+      .b2b-section-head{
+        padding: 20px 18px 0;
+      }
+
+      .b2b-grid{
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 20px 16px;
+        padding: 20px 18px 24px;
+      }
+
+      .school-folder{
+        min-height: 214px;
+        padding: 14px 10px 12px;
+      }
+
+      .school-folder__figure{
+        width: 154px;
+        height: 110px;
+      }
+
+      .school-folder__paper{
+        width: 68px;
+        height: 42px;
+      }
+
+      .school-folder__back{
+        left: 24px;
+        width: 112px;
+        height: 70px;
+      }
+
+      .school-folder__front{
+        left: 8px;
+        width: 138px;
+        height: 78px;
+      }
+
+      .school-folder__front::before{
+        width: 82px;
+        height: 32px;
+        top: -16px;
+      }
+    }
+  </style>
+</head>
+<body class="permissions-loading">
+<script>
+  (function() {
+    try {
+      if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+        document.body.classList.add('sidebar-mini');
+      }
+    } catch(e) {}
+  })();
+</script>
+
+<div class="app-container">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Dashboard</h2>
+      <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="true">
+        <i data-feather="chevrons-left"></i>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <ul class="nav-list">
+        <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+        <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+        <li><a class="nav-link active" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+        <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+        <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+        <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-row1">
+        <div class="left">
+          <div class="greeting-pill" aria-live="polite">
+            <span class="greeting-avatar"><img src="/images/greeting-icon.png" alt="Hi icon"/></span>
+            <div class="greet-text">
+              <div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+              <div class="greet-sub">Browse B2B schools</div>
+            </div>
+          </div>
+
+          <div class="searchbar" role="search" style="margin-left:8px;">
+            <i data-feather="search"></i>
+            <input id="b2bSearch" type="search" placeholder="Search schools..." aria-label="Search schools" />
+          </div>
+        </div>
+
+        <div class="right topbar-right">
+          <a class="account-mini" href="/account" aria-label="My account" title="My account">
+            <span class="ico-circle"><img src="/images/logo.png" alt="Logo"/></span>
+            <span class="label">My account</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="header-row2">
+        <h1 class="page-title">B2B</h1>
+      </div>
+    </header>
+
+    <main class="container-full-width">
+      <div class="b2b-wrap">
+        <section class="card b2b-card-shell">
+          <div class="b2b-section-head">
+            <div class="card-header">
+              <h2><i data-feather="folder"></i>School folders</h2>
+              <p class="card-subtitle">Browse each school in a folder-style card with the same dark folder look from your reference design.</p>
+            </div>
+          </div>
+
+          <div id="b2b-schools" class="b2b-grid" aria-live="polite">
+            <div class="b2b-loading">Loading schools…</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>if (window.feather) feather.replace();</script>
+<script src="/js/common-ui.js"></script>
+<script src="/js/b2b.js"></script>
+</body>
+</html>

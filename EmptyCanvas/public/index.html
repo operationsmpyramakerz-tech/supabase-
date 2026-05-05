@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#FFFFFF" />
+
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Go directly to the app landing page. If the user is not authenticated,
+       /home will redirect them to /login (server-side). -->
+  <meta http-equiv="refresh" content="0; url=/home" />
+  <title>Loading…</title>
+</head>
+<body>
+  <script>
+    // Extra safety for browsers that ignore meta refresh
+    window.location.replace('/home');
+  </script>
+</body>
+</html>
