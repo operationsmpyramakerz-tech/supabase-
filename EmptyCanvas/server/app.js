@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test", "/api/supabase/b2b-schools-test", "/api/supabase/messages-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test", "/api/supabase/b2b-schools-test", "/api/supabase/messages-test", "/api/supabase/storage-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -174,6 +174,18 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
     const isStocktakingTest = pathNow.includes("stocktaking-test");
     const isB2BSchoolsTest = pathNow.includes("b2b-schools-test");
     const isMessagesTest = pathNow.includes("messages-test");
+    const isStorageTest = pathNow.includes("storage-test");
+
+    if (isStorageTest) {
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        storageBucket: cfg.storageBucket || "",
+        publicBucketExpected: true,
+        samplePublicUrl: cfg.storageBucket ? supabaseDb.storagePublicUrl("diagnostics/sample.txt", cfg.storageBucket) : "",
+      });
+    }
 
     if (isMessagesTest) {
       const chats = await _sbMessagesChatsList({ limit: 20, includeCounts: true });
@@ -4542,10 +4554,6 @@ app.post("/api/hard-refresh", requireAuth, async (req, res) => {
 });
 
 app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
-  if (!teamMembersDatabaseId) {
-    return res.status(500).json({ error: "Team_Members database ID is not configured." });
-  }
-
   try {
     const { dataUrl, filename, currentPassword } = req.body || {};
     const providedPassword = String(currentPassword ?? "").trim();
@@ -4565,6 +4573,33 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
 
     if (buf.length > 10 * 1024 * 1024) {
       return res.status(413).json({ error: "Image is too large. Maximum size is 10MB." });
+    }
+
+    if (_sbTeamMembersEnabled()) {
+      const username = String(req.session?.username || "").trim();
+      const row = await _sbFindTeamMemberByName(username);
+      if (!row) return res.status(404).json({ error: "User not found." });
+
+      const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
+      if (!storedPassword) return res.status(400).json({ error: "No password set for this account." });
+      if (String(storedPassword) !== providedPassword) {
+        return res.status(401).json({ error: "invalid password" });
+      }
+
+      const safeOriginalName = String(filename || "profile-picture.png").trim() || "profile-picture.png";
+      const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
+      const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+      const objectName = `team-members/profile-pictures/${rowId || username || "user"}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const publicUrl = await uploadToBlobFromBase64(dataUrl, objectName);
+
+      const profileKey = Object.keys(row || {}).find((key) => _sbCanon(key) === "profilepicture") || "profile_picture";
+      await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [profileKey]: publicUrl });
+      await clearUserServerCaches(req, { userId: rowId });
+      return res.json({ success: true, photoUrl: publicUrl, source: "supabase" });
+    }
+
+    if (!teamMembersDatabaseId) {
+      return res.status(500).json({ error: "Team_Members database ID is not configured." });
     }
 
     const userId = await getSessionUserNotionId(req);
@@ -10435,7 +10470,7 @@ app.post(
   },
 );
 
-// User Access & Data — Upload profile/media files to Vercel Blob and return public URLs
+// User Access & Data — Upload profile/media files to Supabase Storage and return public URLs
 app.post(
   "/api/user-access/upload-file",
   requireAuth,
@@ -10462,8 +10497,8 @@ app.post(
       return res.json({ ok: true, url: publicUrl, name: safeOriginalName, mime });
     } catch (error) {
       console.error("POST /api/user-access/upload-file error:", error?.details || error?.body || error);
-      const message = String(error?.message || "") === "BLOB_TOKEN_MISSING"
-        ? "Vercel Blob is not configured. Add BLOB_READ_WRITE_TOKEN in Vercel."
+      const message = String(error?.message || "") === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+        ? "Supabase Storage is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as fallback."
         : (error?.message || "Failed to upload file.");
       return res.status(error?.status || 500).json({ ok: false, error: message });
     }
@@ -12472,8 +12507,8 @@ app.post(
           });
         } catch (uploadErr) {
           const uploadMessage =
-            String(uploadErr?.message || "").trim() === "BLOB_TOKEN_MISSING"
-              ? "Order receipt upload is not configured."
+            String(uploadErr?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+              ? "Supabase Storage upload is not configured."
               : "Failed to upload order receipt.";
           return res.status(500).json({ error: uploadMessage });
         }
@@ -20622,17 +20657,37 @@ app.get("/api/expenses/screenshot/:expenseId", async (req, res) => {
   }
 });
 
-// === Helper: upload base64 image to Vercel Blob (SDK v2) and return a public URL ===
+// === Helper: upload base64 file to Supabase Storage first, then fallback to Vercel Blob ===
+function _cleanStorageObjectPath(filenameHint = "upload.bin") {
+  const raw = String(filenameHint || "upload.bin").trim() || "upload.bin";
+  const parts = raw.split(/[\/]+/).filter(Boolean).map((part) => part.replace(/[^a-z0-9._-]/gi, "_").replace(/^_+|_+$/g, ""));
+  const clean = parts.filter(Boolean).join("/");
+  return clean || `upload-${Date.now()}.bin`;
+}
+
 async function uploadToBlobFromBase64(dataUrl, filenameHint = "receipt.jpg") {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) throw new Error("BLOB_TOKEN_MISSING");
   const m = String(dataUrl || "").match(/^data:(.+?);base64,(.+)$/);
   if (!m) throw new Error("INVALID_DATA_URL");
   const contentType = m[1];
   const b64 = m[2];
   const buffer = Buffer.from(b64, "base64");
+  const cleanPath = _cleanStorageObjectPath(filenameHint);
+
+  const cfg = supabaseDb?.getConfig ? supabaseDb.getConfig() : {};
+  if (supabaseDb?.isConfigured?.() && String(cfg?.storageBucket || "").trim()) {
+    const uploaded = await supabaseDb.uploadStorageObject(cleanPath, buffer, {
+      contentType,
+      bucketName: cfg.storageBucket,
+      upsert: true,
+    });
+    if (!uploaded?.publicUrl) throw new Error("SUPABASE_STORAGE_PUBLIC_URL_MISSING");
+    return uploaded.publicUrl;
+  }
+
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) throw new Error("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING");
   const { put } = await import("@vercel/blob");
-  const res = await put(filenameHint, buffer, {
+  const res = await put(cleanPath, buffer, {
     access: "public",
     token,
     contentType,
@@ -21571,7 +21626,7 @@ app.post("/api/damaged-assets", requireAuth, requirePage("Damaged Assets"), asyn
   }
 });
 
-// === Notion: رفع صورة DataURL -> Vercel Blob -> ربطها في Files & media ===
+// === Notion legacy: رفع صورة DataURL -> Supabase Storage/Vercel Blob -> ربطها في Files & media ===
 app.post('/api/notion/upload-file', requireAuth, async (req, res) => {
   try {
     const { pageId, dataUrl, filename, propName, mode } = req.body || {};
@@ -21587,7 +21642,7 @@ app.post('/api/notion/upload-file', requireAuth, async (req, res) => {
       return res.status(413).json({ ok:false, error:'File > 20MB' });
     }
 
-    // 3) ارفع الملف على Vercel Blob وخد رابط عام
+    // 3) ارفع الملف على Supabase Storage وخد رابط عام
     //    (الهيلبر uploadToBlobFromBase64 موجود عندك بالفعل)
     const publicUrl = await uploadToBlobFromBase64(`data:${mime};base64,${buf.toString('base64')}`, filename || 'upload.jpg');
 

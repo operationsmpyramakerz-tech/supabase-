@@ -26,7 +26,8 @@ function getConfig() {
   const b2bSchoolsTable = String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
   const messagesChatsTable = String(process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
   const messagesTable = String(process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
-  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, messagesChatsTable, messagesTable };
+  const storageBucket = String(process.env.SUPABASE_STORAGE_BUCKET || process.env.SUPABASE_BUCKET || 'operations-files').trim() || 'operations-files';
+  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, messagesChatsTable, messagesTable, storageBucket };
 }
 
 function isConfigured() {
@@ -141,4 +142,67 @@ async function updateByIds(table, ids = [], row = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
-module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds };
+function encodeStoragePath(objectPath) {
+  return String(objectPath || '')
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+}
+
+function storagePublicUrl(objectPath, bucketName = null) {
+  const { url, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const key = String(objectPath || '').replace(/^\/+/, '');
+  if (!/^https:\/\//i.test(url) || !bucket || !key) return '';
+  return `${url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodeStoragePath(key)}`;
+}
+
+async function uploadStorageObject(objectPath, buffer, { contentType = 'application/octet-stream', bucketName = null, upsert = true } = {}) {
+  const { url, key, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const cleanPath = String(objectPath || '').replace(/^\/+/, '');
+  if (!isConfigured() || !bucket) {
+    const err = new Error('Supabase Storage is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_STORAGE_BUCKET.');
+    err.code = 'SUPABASE_STORAGE_NOT_CONFIGURED';
+    throw err;
+  }
+  if (!cleanPath) {
+    const err = new Error('Storage object path is required.');
+    err.code = 'SUPABASE_STORAGE_PATH_REQUIRED';
+    throw err;
+  }
+
+  const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': contentType || 'application/octet-stream',
+      'x-upsert': upsert ? 'true' : 'false',
+    },
+    body: buffer,
+  });
+
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+  if (!res.ok) {
+    const message = data && typeof data === 'object'
+      ? (data.message || data.error || JSON.stringify(data))
+      : (text || `Supabase Storage upload failed with status ${res.status}`);
+    const err = new Error(message);
+    err.status = res.status;
+    err.details = data;
+    throw err;
+  }
+
+  return {
+    path: cleanPath,
+    bucket,
+    data,
+    publicUrl: storagePublicUrl(cleanPath, bucket),
+  };
+}
+
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, uploadStorageObject, storagePublicUrl };

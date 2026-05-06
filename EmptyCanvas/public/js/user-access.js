@@ -782,13 +782,57 @@
     status.classList.toggle('is-error', !!isError);
   }
 
-  function readFileAsDataUrl(file) {
+  function readRawFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
       reader.onerror = () => reject(new Error('Failed to read file.'));
       reader.readAsDataURL(file);
     });
+  }
+
+  function shouldCompressUploadImage(file) {
+    const type = String(file?.type || '').toLowerCase();
+    const name = String(file?.name || '').toLowerCase();
+    if (type === 'image/gif' || type === 'image/svg+xml' || /\.(gif|svg)$/i.test(name)) return false;
+    return type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name);
+  }
+
+  function loadUploadImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to load image for compression.'));
+      img.src = dataUrl;
+    });
+  }
+
+  async function compressUploadImageDataUrl(file, rawDataUrl) {
+    if (!shouldCompressUploadImage(file)) return rawDataUrl;
+    try {
+      const img = await loadUploadImage(rawDataUrl);
+      const maxW = 1400;
+      const maxH = 1400;
+      const ratio = Math.min(1, maxW / Math.max(1, img.naturalWidth || img.width), maxH / Math.max(1, img.naturalHeight || img.height));
+      const w = Math.max(1, Math.round((img.naturalWidth || img.width) * ratio));
+      const h = Math.max(1, Math.round((img.naturalHeight || img.height) * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { alpha: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      let compressed = canvas.toDataURL('image/webp', 0.74);
+      if (!/^data:image\/webp/i.test(compressed)) compressed = canvas.toDataURL('image/jpeg', 0.76);
+      return compressed && compressed.length < rawDataUrl.length ? compressed : rawDataUrl;
+    } catch (error) {
+      console.warn('Image compression skipped:', error);
+      return rawDataUrl;
+    }
+  }
+
+  async function readFileAsDataUrl(file) {
+    const raw = await readRawFileAsDataUrl(file);
+    return compressUploadImageDataUrl(file, raw);
   }
 
   async function uploadUserAccessFile(file, kind) {
