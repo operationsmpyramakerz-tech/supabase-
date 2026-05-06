@@ -151,7 +151,7 @@ app.get("/health", (req, res) => {
 // Supabase connectivity test. This route is intentionally unauthenticated and
 // returns only safe metadata plus a tiny sanitized sample so deployment issues
 // can be diagnosed before login.
-app.get(["/api/supabase/status", "/api/supabase/team-members-test"], async (req, res) => {
+app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supabase/orders-test", "/api/supabase/orders-requested-test", "/api/supabase/orders-current-test", "/api/supabase/expenses-test", "/api/supabase/expenses-current-test", "/api/supabase/products-test", "/api/supabase/components-test", "/api/supabase/stocktaking-test", "/api/supabase/b2b-schools-test", "/api/supabase/messages-test", "/api/supabase/storage-test"], async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const cfg = supabaseDb.getConfig();
@@ -164,20 +164,204 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test"], async (req,
       });
     }
 
-    const rows = await supabaseDb.selectAll(cfg.teamMembersTable, { limit: 5 });
+    const pathNow = String(req.path || "");
+    const isOrdersTest = pathNow.includes("orders-test");
+    const isRequestedOrdersTest = pathNow.includes("orders-requested-test");
+    const isCurrentOrdersTest = pathNow.includes("orders-current-test");
+    const isExpensesTest = pathNow.includes("expenses-test");
+    const isCurrentExpensesTest = pathNow.includes("expenses-current-test");
+    const isProductsTest = pathNow.includes("products-test") || pathNow.includes("components-test");
+    const isStocktakingTest = pathNow.includes("stocktaking-test");
+    const isB2BSchoolsTest = pathNow.includes("b2b-schools-test");
+    const isMessagesTest = pathNow.includes("messages-test");
+    const isStorageTest = pathNow.includes("storage-test");
+
+    if (isStorageTest) {
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        storageBucket: cfg.storageBucket || "",
+        publicBucketExpected: true,
+        samplePublicUrl: cfg.storageBucket ? supabaseDb.storagePublicUrl("diagnostics/sample.txt", cfg.storageBucket) : "",
+      });
+    }
+
+    if (isMessagesTest) {
+      const chats = await _sbMessagesChatsList({ limit: 20, includeCounts: true });
+      const messages = await supabaseDb.selectAll(cfg.messagesTable || "messages", { limit: 5, order: "created_at.desc,id.desc" }).catch(() => []);
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        chatsTable: cfg.messagesChatsTable || "messages_chats",
+        messagesTable: cfg.messagesTable || "messages",
+        endpoint: "/api/messages/chats",
+        chatsReturned: Array.isArray(chats) ? chats.length : 0,
+        messagesSampleReturned: Array.isArray(messages) ? messages.length : 0,
+        sampleChats: (Array.isArray(chats) ? chats : []).slice(0, 5).map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          preview: chat.preview,
+          commentsCount: chat.commentsCount,
+          lastMessageTime: chat.lastMessageTime,
+        })),
+      });
+    }
+
+    if (isB2BSchoolsTest) {
+      const rows = await _sbB2BSchoolsRows();
+      const list = Array.isArray(rows) ? rows : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.b2bSchoolsTable || "b2b_schools",
+        endpoint: "/api/b2b/schools",
+        rowsReturned: list.length,
+        columns: Object.keys(list[0] || {}),
+        sample: list.slice(0, 5).map((row) => {
+          const school = _sbSerializeB2BSchoolRow(row);
+          return {
+            id: school.id,
+            name: school.name,
+            governorate: school.governorate?.name || null,
+            educationSystem: school.educationSystem,
+            programType: school.programType,
+          };
+        }),
+      });
+    }
+
+    if (isStocktakingTest) {
+      const rows = await _sbStocktakingRows();
+      const list = Array.isArray(rows) ? rows : [];
+      const sampleStock = list.slice(0, 5).map((row) => _sbSerializeStocktakingRow(row, _sbDetectStocktakingQuantityColumn(row, "")));
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.stocktakingTable || "stocktaking",
+        endpoint: "/api/stock",
+        rowsReturned: list.length,
+        columns: Object.keys(list[0] || {}),
+        sample: sampleStock.map((row) => ({
+          id: row.id,
+          name: row.name,
+          quantity: row.quantity,
+          oneKitQuantity: row.oneKitQuantity,
+          tag: row.tag?.name || null,
+          idCode: row.idCode,
+        })),
+      });
+    }
+
+    if (isProductsTest) {
+      const rows = await _sbProductsList();
+      const list = Array.isArray(rows) ? rows : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.productsTable || "products",
+        endpoint: "/api/components",
+        rowsReturned: list.length,
+        sample: list.slice(0, 5).map((row) => ({
+          id: row.id,
+          name: row.name,
+          displayId: row.displayId,
+          unitPrice: row.unitPrice,
+          tags: row.tags,
+          url: row.url,
+        })),
+      });
+    }
+
+    if (isExpensesTest || isCurrentExpensesTest) {
+      const rows = isCurrentExpensesTest
+        ? (await _sbSelectExpensesForCurrentUser(req)).rows
+        : await _sbSelectExpensesRows();
+      const list = Array.isArray(rows) ? rows : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.expensesTable || "expenses",
+        endpoint: isCurrentExpensesTest ? "/api/expenses" : "/api/supabase/expenses-test",
+        rowsReturned: list.length,
+        sample: list.slice(0, 5).map((row) => {
+          const item = _sbSerializeExpenseRow(row);
+          return {
+            id: item.id,
+            date: item.date,
+            reason: item.reason,
+            fundsType: item.fundsType,
+            cashIn: item.cashIn,
+            cashOut: item.cashOut,
+            teamMemberName: item.teamMemberName,
+          };
+        }),
+      });
+    }
+
+    if (isRequestedOrdersTest || isCurrentOrdersTest) {
+      const orders = isRequestedOrdersTest
+        ? await _sbRequestedOrdersList()
+        : await _sbCurrentOrdersList({ session: {} });
+      const list = Array.isArray(orders) ? orders : [];
+      return res.json({
+        ok: true,
+        configured: true,
+        source: "supabase",
+        table: cfg.ordersTable || "orders",
+        endpoint: isRequestedOrdersTest ? "/api/orders/requested" : "/api/orders",
+        rowsReturned: list.length,
+        note: "This is a public diagnostic endpoint. The real /api/orders* endpoints require login and will return 401/redirect until a valid session exists.",
+        sample: list.slice(0, 5).map((row) => ({
+          id: row.id,
+          orderId: row.orderId,
+          status: row.status,
+          productName: row.productName,
+          svApproval: row.svApproval,
+          quantity: row.quantity,
+          createdByName: row.createdByName,
+        })),
+      });
+    }
+
+    const table = isOrdersTest ? (cfg.ordersTable || "orders") : cfg.teamMembersTable;
+    const rows = await supabaseDb.selectAll(table, {
+      limit: 5,
+      order: isOrdersTest ? "notion_created_time.desc,id.desc" : null,
+    });
     const first = Array.isArray(rows) ? rows[0] || {} : {};
-    const sample = (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
-      id: String(_sbGet(row, ["id", "ID"]) ?? ""),
-      name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
-      department: _sbString(_sbValueForLabel(row, "Department")) || "",
-      position: _sbString(_sbValueForLabel(row, "Position")) || "",
-    }));
+    const sample = isOrdersTest
+      ? (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
+          id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+          orderNumber: _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"])),
+          status: _sbOrderText(_sbOrderGet(row, ["status", "Status"])),
+          productName: _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name", "product", "Product"])),
+        }))
+      : (Array.isArray(rows) ? rows : []).slice(0, 3).map((row) => ({
+          id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+          name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
+          department: _sbString(_sbValueForLabel(row, "Department")) || "",
+          position: _sbString(_sbValueForLabel(row, "Position")) || "",
+        }));
 
     return res.json({
       ok: true,
       configured: true,
       source: "supabase",
-      table: cfg.teamMembersTable,
+      table,
+      teamMembersTable: cfg.teamMembersTable,
+      ordersTable: cfg.ordersTable || "orders",
+      expensesTable: cfg.expensesTable || "expenses",
+      productsTable: cfg.productsTable || "products",
+      stocktakingTable: cfg.stocktakingTable || "stocktaking",
+      b2bSchoolsTable: cfg.b2bSchoolsTable || "b2b_schools",
+      messagesChatsTable: cfg.messagesChatsTable || "messages_chats",
+      messagesTable: cfg.messagesTable || "messages",
       rowsReturned: Array.isArray(rows) ? rows.length : 0,
       columns: Object.keys(first),
       sample,
@@ -196,17 +380,30 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test"], async (req,
 });
 
 // Sessions (Redis/Upstash) — added after /health
-const { sessionMiddleware, redisClient } = require("./session-redis");
+const { sessionMiddleware, redisClient, getSessionDiagnostics } = require("./session-redis");
 app.use(sessionMiddleware);
+
+// Public session diagnostics: exposes only configuration booleans, never secrets.
+app.get("/api/session-diagnostics", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({
+    ok: true,
+    ...getSessionDiagnostics(),
+    hasSessionId: !!req.sessionID,
+    authenticated: !!req.session?.authenticated,
+  });
+});
+
 // Small trace to debug redirect loop
 app.use((req, res, next) => {
-  if (["/login", "/dashboard", "/api/login", "/api/account"].includes(req.path)) {
+  if (["/login", "/dashboard", "/home", "/api/login", "/api/account"].includes(req.path)) {
     console.log(
       "[trace]",
       req.method,
       req.path,
       "sid=" + (req.sessionID || "-"),
-      "auth=" + (!!req.session?.authenticated)
+      "auth=" + (!!req.session?.authenticated),
+      "store=" + (getSessionDiagnostics().storeType || "-")
     );
   }
   next();
@@ -430,6 +627,7 @@ async function clearUserServerCaches(req, opts = {}) {
     tasks.push(cacheDel(`cache:api:team-member-public:${normalizedUserId}:v2`));
     tasks.push(cacheDel(`cache:api:expenses:user:${normalizedUserId}:v1`));
     tasks.push(cacheDel(`cache:api:expenses:user:${normalizedUserId}:v2`));
+    tasks.push(cacheDel(`cache:api:expenses:user:${normalizedUserId}:v3`));
   }
 
   if (userId) {
@@ -442,6 +640,7 @@ async function clearUserServerCaches(req, opts = {}) {
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v1`));
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v2`));
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v3`));
+    tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v4`));
     for (const tab of ["all", "not-started", "approved", "rejected"]) {
       tasks.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:v2`));
     }
@@ -450,9 +649,14 @@ async function clearUserServerCaches(req, opts = {}) {
   tasks.push(
     cacheDel("cache:api:orders:requested:v7"),
     cacheDel("cache:api:expenses:users:v1"),
+    cacheDel("cache:api:expenses:users:v2"),
     cacheDel("cache:api:expenses:types:v1"),
     cacheDel("cache:api:expenses:types:v2"),
+    cacheDel("cache:api:expenses:types:v3"),
     cacheDel("cache:api:expenses:cash-in-from:v1"),
+    cacheDel("cache:api:expenses:cash-in-from:v2"),
+    cacheDel("cache:api:expenses:orders-options:all:v3"),
+    cacheDel("cache:api:expenses:orders-options:all:v4"),
     cacheDel("cache:notion:teamMembersAll:v1"),
     cacheDel(USER_ACCESS_CACHE_KEY),
     cacheDel("cache:api:order-types:v1"),
@@ -466,6 +670,11 @@ async function clearUserServerCaches(req, opts = {}) {
   if (b2bDatabaseId) {
     tasks.push(cacheDel(`cache:api:b2b:schools:list:${b2bDatabaseId}:v1`));
   }
+  try {
+    if (_sbB2BSchoolsEnabled()) {
+      tasks.push(cacheDel(`cache:api:b2b:schools:list:supabase:${_sbB2BSchoolsTable()}:v1`));
+    }
+  } catch {}
 
   await Promise.allSettled(tasks);
 
@@ -523,319 +732,28 @@ async function clearExpensesRouteCaches(req, teamMemberPageId = "") {
       cacheDel(`cache:api:expenses:${usernameKey}:v1`),
       cacheDel(`cache:api:expenses:${usernameKey}:v2`),
       cacheDel(`cache:api:expenses:${usernameKey}:v3`),
+      cacheDel(`cache:api:expenses:${usernameKey}:v4`),
       cacheDel("cache:api:expenses:users:v1"),
+      cacheDel("cache:api:expenses:users:v2"),
       cacheDel("cache:api:expenses:types:v2"),
+      cacheDel("cache:api:expenses:types:v3"),
+      cacheDel("cache:api:expenses:cash-in-from:v1"),
+      cacheDel("cache:api:expenses:cash-in-from:v2"),
+      cacheDel("cache:api:expenses:orders-options:all:v3"),
+      cacheDel("cache:api:expenses:orders-options:all:v4"),
     ];
 
     const memberKey = normalizeNotionId(teamMemberPageId || "");
     if (memberKey) {
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v1`));
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v2`));
+      tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v3`));
     }
 
     await Promise.all(tasks);
   } catch (e) {
     console.warn("clearExpensesRouteCaches failed:", e?.message || e);
   }
-}
-
-
-// -----------------------------------------------------------------------------
-// Supabase Expenses helpers
-// -----------------------------------------------------------------------------
-function _sbExpensesEnabled() {
-  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured() && String(process.env.SUPABASE_EXPENSES_TABLE || '').trim());
-}
-
-function _sbExpensesTable() {
-  return String(process.env.SUPABASE_EXPENSES_TABLE || 'expenses').trim() || 'expenses';
-}
-
-function _sbExpenseNumber(value) {
-  const n = Number(value || 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function _sbExpenseDate(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
-}
-
-function _extractUrlsFromText(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.flatMap(_extractUrlsFromText);
-  if (typeof value === 'object') {
-    if (value.url || value.publicUrl || value.href) return _extractUrlsFromText(value.url || value.publicUrl || value.href);
-    try { return _extractUrlsFromText(JSON.stringify(value)); } catch { return []; }
-  }
-  const raw = String(value || '').trim();
-  if (!raw || /^null$/i.test(raw)) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.flatMap(_extractUrlsFromText);
-    if (parsed && typeof parsed === 'object') return _extractUrlsFromText(parsed.url || parsed.publicUrl || parsed.href || parsed.path || '');
-  } catch {}
-  const matches = raw.match(/https?:\/\/[^\s,"'<>]+/gi) || [];
-  return Array.from(new Set(matches.map((u) => String(u || '').trim()).filter(Boolean)));
-}
-
-function _sbExpenseScreenshotsFromRow(row) {
-  const urls = _extractUrlsFromText(
-    row?.screenshot || row?.screenshots || row?.receipt || row?.receipt_url || row?.receipt_file_url || row?.receipt_file_path || ''
-  );
-  return urls.map((url, index) => ({ name: index === 0 ? 'Receipt' : `Receipt ${index + 1}`, url }));
-}
-
-function _sbSerializeExpenseRow(row, linkedOrders = []) {
-  const shots = _sbExpenseScreenshotsFromRow(row);
-  return {
-    id: String(row?.id ?? ''),
-    reason: _sbString(row?.reason || row?.Reason || ''),
-    date: _sbExpenseDate(row?.expense_date || row?.date || row?.Date || row?.notion_created_time || row?.created_at),
-    createdTime: _uaSafeDate(row?.notion_created_time || row?.created_at || row?.created_time),
-    created_time: _uaSafeDate(row?.notion_created_time || row?.created_at || row?.created_time),
-    cashIn: _sbExpenseNumber(row?.cash_in || row?.cashIn),
-    cashOut: _sbExpenseNumber(row?.cash_out || row?.cashOut),
-    fundsType: _sbString(row?.funds_type || row?.fundsType),
-    from: _sbString(row?.from_location || row?.from || row?.cash_in_from || ''),
-    to: _sbString(row?.to_location || row?.to || ''),
-    kilometer: _sbExpenseNumber(row?.kilometer || row?.km),
-    teamMemberName: _sbString(row?.team_member_name || row?.team_members || row?.team_member_raw),
-    userId: _sbString(row?.user_id || row?.team_member_id || ''),
-    screenshotUrl: shots?.[0]?.url || '',
-    screenshotName: shots?.[0]?.name || '',
-    screenshots: shots,
-    orders: linkedOrders,
-    raw: row,
-    source: 'supabase',
-  };
-}
-
-async function _sbExpensesRows() {
-  return await supabaseDb.selectAll(_sbExpensesTable(), { limit: 5000 });
-}
-
-async function _sbExpenseTeamMembersRows() {
-  if (!_sbTeamMembersEnabled()) return [];
-  try { return await _sbSelectTeamMembersRows(); } catch { return []; }
-}
-
-function _sbTeamMemberLookupByName(rows = []) {
-  const map = new Map();
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const name = _sbString(_sbValueForLabel(row, 'Name'));
-    if (!name) continue;
-    map.set(norm(name), row);
-  }
-  return map;
-}
-
-async function _sbExpenseUserKeyInfo(memberIdOrName) {
-  const raw = String(memberIdOrName || '').trim();
-  const members = await _sbExpenseTeamMembersRows();
-  const byName = _sbTeamMemberLookupByName(members);
-  let member = null;
-  if (raw) {
-    member = members.find((row) => String(_sbGet(row, ['id', 'ID']) ?? '') === raw) || byName.get(norm(raw)) || null;
-  }
-  const name = member ? _sbString(_sbValueForLabel(member, 'Name')) : raw;
-  const id = member ? String(_sbGet(member, ['id', 'ID']) ?? '') : raw;
-  return { id, name, member, members, byName };
-}
-
-async function _sbExpensesForMember(memberIdOrName) {
-  const info = await _sbExpenseUserKeyInfo(memberIdOrName);
-  const rows = await _sbExpensesRows();
-  const wantedName = norm(info.name || '');
-  const wantedId = String(info.id || '').trim();
-  const filtered = (Array.isArray(rows) ? rows : []).filter((row) => {
-    const rowName = norm(_sbString(row?.team_member_name || row?.team_members || row?.team_member_raw));
-    const rowUserId = String(row?.user_id || row?.team_member_id || '').trim();
-    return (!!wantedName && rowName === wantedName) || (!!wantedId && rowUserId === wantedId);
-  });
-  filtered.sort((a, b) => {
-    const ta = new Date(a?.notion_created_time || a?.expense_date || a?.created_at || 0).getTime();
-    const tb = new Date(b?.notion_created_time || b?.expense_date || b?.created_at || 0).getTime();
-    return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
-  });
-  return { ...info, rows: filtered };
-}
-
-function _sbLastSettledMetaFromRows(rows = []) {
-  let best = null;
-  let bestT = -Infinity;
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const fundsType = norm(_sbString(row?.funds_type || ''));
-    if (fundsType !== norm('Settled my account')) continue;
-    const t = new Date(row?.notion_created_time || row?.created_at || row?.expense_date || 0).getTime();
-    if (Number.isFinite(t) && t > bestT) { best = row; bestT = t; }
-  }
-  return {
-    lastSettledAt: best ? _uaSafeDate(best?.notion_created_time || best?.created_at || '') : null,
-    lastSettledDate: best ? _sbExpenseDate(best?.expense_date || '') : null,
-  };
-}
-
-async function _sbExpensesUsersPayload() {
-  const rows = await _sbExpensesRows();
-  const members = await _sbExpenseTeamMembersRows();
-  const byName = _sbTeamMemberLookupByName(members);
-  const perUser = new Map();
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const name = _sbString(row?.team_member_name || row?.team_members || row?.team_member_raw) || 'Unknown User';
-    const member = byName.get(norm(name));
-    const id = member ? String(_sbGet(member, ['id', 'ID']) ?? '') : (_sbString(row?.user_id || row?.team_member_id) || name);
-    if (!perUser.has(id)) perUser.set(id, { userId: id, name, total: 0, count: 0, rows: [] });
-    const agg = perUser.get(id);
-    agg.total += _sbExpenseNumber(row?.cash_in) - _sbExpenseNumber(row?.cash_out);
-    agg.count += 1;
-    agg.rows.push(row);
-  }
-  const users = Array.from(perUser.values()).map((agg) => ({
-    userId: agg.userId,
-    id: agg.userId,
-    name: agg.name,
-    total: agg.total,
-    count: agg.count,
-    lastSettledDate: _sbLastSettledMetaFromRows(agg.rows).lastSettledDate,
-  })).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  return { success: true, users, source: 'supabase' };
-}
-
-async function _sbExpensesUserPayload(memberId) {
-  const found = await _sbExpensesForMember(memberId);
-  const items = found.rows.map((row) => _sbSerializeExpenseRow(row));
-  const meta = _sbLastSettledMetaFromRows(found.rows);
-  return { success: true, items, lastSettledAt: meta.lastSettledAt, lastSettledDate: meta.lastSettledDate, source: 'supabase' };
-}
-
-function _sbExpenseWriteRowFromBody(body = {}) {
-  const row = {};
-  if ('reason' in body) row.reason = String(body.reason || '').trim() || null;
-  if ('date' in body) row.expense_date = _sbExpenseDate(body.date);
-  if ('fundsType' in body) row.funds_type = String(body.fundsType || '').trim() || null;
-  if ('from' in body) row.from_location = String(body.from || '').trim() || null;
-  if ('to' in body) row.to_location = String(body.to || '').trim() || null;
-  if ('cashIn' in body) row.cash_in = _sbExpenseNumber(body.cashIn);
-  if ('cashOut' in body) row.cash_out = _sbExpenseNumber(body.cashOut);
-  if ('kilometer' in body) row.kilometer = _sbExpenseNumber(body.kilometer);
-  return row;
-}
-
-function _safeFileName(name = 'receipt.webp') {
-  const raw = String(name || 'receipt.webp').trim() || 'receipt.webp';
-  return raw.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-120) || 'receipt.webp';
-}
-
-function _supabaseCleanBaseUrl() {
-  return String(process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1\/?$/i, '');
-}
-
-function _supabaseStorageBucket() {
-  return String(process.env.SUPABASE_STORAGE_BUCKET || '').trim();
-}
-
-async function _uploadExpenseDataUrlToStorage(dataUrl, filenameHint = 'receipt.webp') {
-  const bucket = _supabaseStorageBucket();
-  const baseUrl = _supabaseCleanBaseUrl();
-  const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-
-  if (bucket && baseUrl && key) {
-    const parsed = parseDataUrlToBuffer(dataUrl);
-    const filename = _safeFileName(filenameHint || 'receipt.webp');
-    const ext = filename.includes('.') ? filename.split('.').pop() : 'webp';
-    const objectPath = `expenses/receipts/${new Date().toISOString().slice(0, 10)}/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-    const uploadUrl = `${baseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split('/').map(encodeURIComponent).join('/')}`;
-    const res = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        'Content-Type': parsed.mime || 'application/octet-stream',
-        'x-upsert': 'true',
-      },
-      body: parsed.buf,
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(`SUPABASE_STORAGE_UPLOAD_FAILED: ${txt || res.status}`);
-    }
-    return `${baseUrl}/storage/v1/object/public/${bucket}/${objectPath}`;
-  }
-
-  return await uploadToBlobFromBase64(dataUrl, filenameHint);
-}
-
-function _supabaseStorageObjectPathFromUrl(url) {
-  const raw = String(url || '').trim();
-  if (!raw) return '';
-  const bucket = _supabaseStorageBucket();
-  if (!bucket) return '';
-  try {
-    const u = new URL(raw);
-    const marker = `/storage/v1/object/public/${bucket}/`;
-    const idx = u.pathname.indexOf(marker);
-    if (idx === -1) return '';
-    return decodeURIComponent(u.pathname.slice(idx + marker.length));
-  } catch { return ''; }
-}
-
-async function _deleteSupabaseStoragePublicUrl(url) {
-  const objectPath = _supabaseStorageObjectPathFromUrl(url);
-  const bucket = _supabaseStorageBucket();
-  const baseUrl = _supabaseCleanBaseUrl();
-  const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!objectPath || !bucket || !baseUrl || !key) return false;
-
-  const delUrl = `${baseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split('/').map(encodeURIComponent).join('/')}`;
-  try {
-    const res = await fetch(delUrl, {
-      method: 'DELETE',
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
-    return res.ok || res.status === 404;
-  } catch (e) {
-    console.warn('[storage] delete failed:', e?.message || e);
-    return false;
-  }
-}
-
-async function _deleteExpenseStorageForRows(rows = []) {
-  const urls = new Set();
-  for (const row of Array.isArray(rows) ? rows : []) {
-    for (const shot of _sbExpenseScreenshotsFromRow(row)) {
-      if (shot?.url) urls.add(shot.url);
-    }
-  }
-  await Promise.allSettled(Array.from(urls).map((url) => _deleteSupabaseStoragePublicUrl(url)));
-}
-
-async function _sbExpenseRowsByIds(ids = []) {
-  const wanted = new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean));
-  if (!wanted.size) return [];
-  const rows = await _sbExpensesRows();
-  return (Array.isArray(rows) ? rows : []).filter((row) => wanted.has(String(row?.id ?? '')));
-}
-
-async function _sbDeleteExpenseIds(ids = []) {
-  const cleanIds = (Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean);
-  const rows = await _sbExpenseRowsByIds(cleanIds);
-  await _deleteExpenseStorageForRows(rows);
-  if (cleanIds.length === 1) {
-    await supabaseDb.deleteById(_sbExpensesTable(), cleanIds[0]);
-  } else if (cleanIds.length > 1) {
-    await supabaseDb.deleteIn(_sbExpensesTable(), 'id', cleanIds);
-  }
-  return { deleted: cleanIds.length, deletedRows: rows.length };
-}
-
-async function _clearExpenseCachesAfterMutation(req, memberId = '') {
-  await clearExpensesRouteCaches(req, memberId || '');
-  clearLocalAppCaches();
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -1932,7 +1850,20 @@ function _sbAllColumnKeys(rows = []) {
 
 function _sbNonEditableColumn(key) {
   const canon = _sbCanon(key);
-  return ["id", "createdat", "updatedat", "lasteditedtime", "createdtime"].includes(canon);
+  return [
+    "id",
+    "createdat",
+    "updatedat",
+    "importedat",
+    "lasteditedtime",
+    "createdtime",
+    "isactive",
+    "svschoolsraw",
+    "svschoolsnotionurls",
+    "svschoolmemberids",
+    "svschoolmembernames",
+    "svschoolsunmatched",
+  ].includes(canon);
 }
 
 function _sbFieldTypeFromLabel(label) {
@@ -1940,8 +1871,11 @@ function _sbFieldTypeFromLabel(label) {
   if (canon === "name") return "title";
   if (canon === "email") return "email";
   if (canon === "phone") return "phone_number";
-  if (canon === "allowedpages" || canon === "svschools") return "multi_select";
-  if (canon === "profilepicture" || canon === "filesmedia") return "files";
+  if (canon === "school") return "school_select";
+  if (canon === "allowedpages") return "ua_multi_select";
+  if (canon === "svschools") return "ua_multi_select";
+  if (canon === "profilepicture") return "ua_profile_upload";
+  if (canon === "filesmedia") return "ua_file_links";
   if (canon === "employeecode") return "text";
   return "rich_text";
 }
@@ -1960,6 +1894,162 @@ function _sbOrderedEditableFieldsFromRows(rows = []) {
     const label = _sbLabelForColumn(key);
     return { name: label, type: _sbFieldTypeFromLabel(label), required: _sbCanon(label) === "name", sourceColumn: key };
   });
+}
+
+
+function _uaTitleCaseLabel(value = "") {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function _uaIsUsefulStocktakingSchoolColumn(key = "") {
+  const canon = _sbCanon(key);
+  if (!canon) return false;
+  const blocked = new Set([
+    "id", "createdat", "updatedat", "importedat", "createdtime", "lasteditedtime", "lasteditedby",
+    "name", "product", "products", "productname", "producturl", "itemurl", "url", "tag", "tags",
+    "idcode", "receiptNumber", "receiptnumber", "onekitquantity", "unityprice", "unitprice", "onepieceprice",
+    "totalprice", "totalcost", "totalquantity", "allprice", "manualquantitytopurchase", "quantitytopurchase",
+    "allschoolsneed", "allschoolsquantities", "allschoolsstock", "schoolkit", "schooltotalquantites", "schooltotalquantities"
+  ]);
+  if (blocked.has(canon)) return false;
+  if (/^(g|grade)\d/.test(canon)) return false;
+  if (/^(checkbox|button|a|b|c)$/.test(canon)) return false;
+  return true;
+}
+
+async function _uaStocktakingSchoolOptions() {
+  if (!_sbStocktakingEnabled()) return [];
+  try {
+    const rows = await supabaseDb.selectAll(_sbStocktakingTable(), { limit: 1 });
+    const row = Array.isArray(rows) ? rows[0] || {} : {};
+    return Object.keys(row || {})
+      .filter(_uaIsUsefulStocktakingSchoolColumn)
+      .map((key) => ({ value: _uaTitleCaseLabel(key), column: key }))
+      .sort((a, b) => String(a.value || "").localeCompare(String(b.value || "")));
+  } catch (error) {
+    console.warn("[user-access] failed to load stocktaking columns:", error?.message || error);
+    return [];
+  }
+}
+
+function _uaAllowedPageOptionsFromRows(rows = []) {
+  const set = new Set(ALL_PAGES || []);
+  for (const row of rows || []) {
+    for (const value of _sbSplitValues(_sbValueForLabel(row, "Allowed Pages"))) {
+      if (value) set.add(value);
+    }
+  }
+  return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function _uaSvSchoolNameOptionsFromRows(rows = []) {
+  const set = new Set();
+  for (const row of rows || []) {
+    const name = _sbString(_sbValueForLabel(row, "Name"));
+    if (name) set.add(name);
+  }
+  return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []) {
+  const schoolOptions = await _uaStocktakingSchoolOptions();
+  const allowedOptions = _uaAllowedPageOptionsFromRows(rows);
+  const svOptions = _uaSvSchoolNameOptionsFromRows(rows);
+  return (editableFields || []).map((field) => {
+    const canon = _sbCanon(field?.name || "");
+    if (canon === "school") {
+      return { ...field, type: "school_select", options: schoolOptions.map((x) => x.value), optionMeta: schoolOptions };
+    }
+    if (canon === "allowedpages") {
+      return { ...field, type: "ua_multi_select", options: allowedOptions, allowCustom: true };
+    }
+    if (canon === "svschools") {
+      return { ...field, type: "ua_multi_select", options: svOptions, allowCustom: false };
+    }
+    if (canon === "profilepicture") {
+      return { ...field, type: "ua_profile_upload" };
+    }
+    if (canon === "filesmedia") {
+      return { ...field, type: "ua_file_links" };
+    }
+    return field;
+  });
+}
+
+function _uaSafeSqlIdentifierFromLabel(label = "") {
+  return _sbStocktakingColumnKey(label);
+}
+
+async function _uaAddStocktakingSchoolColumn(displayName = "") {
+  const label = String(displayName || "").replace(/\s+/g, " ").trim();
+  if (!label) {
+    const err = new Error("School name is required.");
+    err.status = 400;
+    throw err;
+  }
+  const columnName = _uaSafeSqlIdentifierFromLabel(label);
+  if (!/^[a-z][a-z0-9_]{1,62}$/.test(columnName)) {
+    const err = new Error("Invalid school column name. Use letters/numbers and avoid special characters.");
+    err.status = 400;
+    throw err;
+  }
+  try {
+    await supabaseDb.request('/rpc/add_stocktaking_school_column', {
+      method: 'POST',
+      body: { column_name: columnName },
+    });
+  } catch (error) {
+    const msg = String(error?.message || "");
+    if (/function .*add_stocktaking_school_column|Could not find the function|PGRST202|schema cache/i.test(msg)) {
+      const err = new Error("Supabase helper function is not installed. Run supabase_user_access_helpers.sql once, then try again.");
+      err.status = 500;
+      throw err;
+    }
+    throw error;
+  }
+  return { label: _uaTitleCaseLabel(columnName), column: columnName };
+}
+
+function _uaResolveTeamMemberNamesToIds(value, rows = []) {
+  const values = _sbSplitValues(value);
+  const ids = [];
+  const names = [];
+  const unmatched = [];
+  for (const item of values) {
+    const wanted = norm(item);
+    if (!wanted) continue;
+    const hit = (rows || []).find((row) => {
+      const id = String(_sbGet(row, ["id", "ID"]) ?? "");
+      const name = _sbString(_sbValueForLabel(row, "Name"));
+      return norm(id) === wanted || norm(name) === wanted;
+    });
+    if (hit) {
+      const id = String(_sbGet(hit, ["id", "ID"]) ?? "").trim();
+      const name = _sbString(_sbValueForLabel(hit, "Name"));
+      if (id && !ids.includes(id)) ids.push(id);
+      if (name && !names.includes(name)) names.push(name);
+    } else {
+      unmatched.push(item);
+    }
+  }
+  return { ids, names, unmatched };
+}
+
+function _uaAttachSvSchoolLinkColumns(writeRow = {}, keys = [], fields = {}, rows = []) {
+  const svValue = fields?.["S.V Schools"] ?? fields?.["sv_schools"] ?? fields?.["SV Schools"] ?? fields?.["S.V schools"];
+  if (typeof svValue === "undefined") return writeRow;
+  const resolved = _uaResolveTeamMemberNamesToIds(svValue, rows);
+  const idKey = _sbFindKey(keys, ["sv_school_member_ids", "sv school member ids"]);
+  const nameKey = _sbFindKey(keys, ["sv_school_member_names", "sv school member names"]);
+  const unmatchedKey = _sbFindKey(keys, ["sv_schools_unmatched", "sv schools unmatched"]);
+  if (idKey) writeRow[idKey] = resolved.ids.join(", ") || null;
+  if (nameKey) writeRow[nameKey] = resolved.names.join(", ") || null;
+  if (unmatchedKey) writeRow[unmatchedKey] = resolved.unmatched.join(", ") || null;
+  return writeRow;
 }
 
 function _sbValueForLabel(row, label) {
@@ -2085,12 +2175,12 @@ function _sbBuildWriteRowFromFields(fields = {}, rows = []) {
     const value = String(rawValue ?? "").trim();
     row[actual] = value || null;
   }
-  return row;
+  return _uaAttachSvSchoolLinkColumns(row, keys, fields, rows);
 }
 
 async function _sbQueryAllTeamMembersForUserAccess() {
   const rows = await _sbSelectTeamMembersRows();
-  const editableFields = _sbOrderedEditableFieldsFromRows(rows);
+  const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows), rows);
   const members = (rows || []).map((row) => _sbSerializeTeamMemberRow(row, editableFields));
   members.sort((a, b) => {
     const da = String(a.department || "").localeCompare(String(b.department || ""));
@@ -2107,6 +2197,950 @@ async function _sbQueryAllTeamMembersForUserAccess() {
   }
   return { total: members.length, editableFields, departments: Array.from(map.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))), source: "supabase" };
 }
+
+// -----------------------------------------------------------------------------
+// Supabase Expenses adapter
+// -----------------------------------------------------------------------------
+function _sbExpensesEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbExpensesTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return (cfg.expensesTable || process.env.SUPABASE_EXPENSES_TABLE || "expenses").trim() || "expenses";
+}
+
+function _sbExpenseNum(value, fallback = 0) {
+  if (value === null || typeof value === "undefined" || value === "") return fallback;
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return fallback;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function _sbExpenseText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbExpenseDate(value) {
+  const raw = _sbExpenseText(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toISOString().slice(0, 10);
+}
+
+function _sbExpenseDateTime(value) {
+  const raw = _sbExpenseText(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toISOString();
+}
+
+function _sbExpenseGet(row, aliases = []) {
+  return _sbGet(row, aliases);
+}
+
+function _sbExpenseMemberIdentityFromTeamRow(row = {}) {
+  const name = _sbExpenseText(_sbValueForLabel(row, "Name"));
+  const code = _sbExpenseText(_sbValueForLabel(row, "Employee Code"));
+  const id = _sbExpenseText(_sbGet(row, ["id", "ID"]));
+  const email = _sbExpenseText(_sbValueForLabel(row, "Email"));
+  return { id, name, code, email };
+}
+
+async function _sbCurrentExpenseMember(req) {
+  const username = String(req?.session?.username || "").trim();
+  if (!username) return null;
+  const row = await _sbFindTeamMemberByName(username).catch(() => null);
+  if (!row) return { name: username, code: "", id: "", email: "" };
+  return { row, ..._sbExpenseMemberIdentityFromTeamRow(row) };
+}
+
+function _sbExpenseMatchesMember(row = {}, member = {}) {
+  if (!row || !member) return false;
+  const rowName = norm(_sbExpenseGet(row, ["team_member_name", "Team Member", "team_member_raw", "team_member"]));
+  const rowUserId = norm(_sbExpenseGet(row, ["user_id", "employee_code", "Employee Code"]));
+  const rowEmail = norm(_sbExpenseGet(row, ["email", "Email"]));
+  const name = norm(member.name);
+  const code = norm(member.code || member.id);
+  const email = norm(member.email);
+  if (name && rowName && (rowName === name || rowName.includes(name) || name.includes(rowName))) return true;
+  if (code && rowUserId && rowUserId === code) return true;
+  if (email && rowEmail && rowEmail === email) return true;
+  return false;
+}
+
+function _sbParseScreenshotEntries(value) {
+  const raw = _sbExpenseText(value);
+  if (!raw) return [];
+  const out = [];
+  const add = (name, url) => {
+    const cleanUrl = String(url || "").trim();
+    if (!cleanUrl) return;
+    out.push({ name: String(name || "Receipt").trim() || "Receipt", url: cleanUrl });
+  };
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item, idx) => {
+        if (typeof item === "string") add(`Receipt ${idx + 1}`, item);
+        else add(item?.name || `Receipt ${idx + 1}`, item?.url || item?.href || item?.publicUrl);
+      });
+      return out;
+    }
+    if (parsed && typeof parsed === "object") {
+      add(parsed.name || "Receipt", parsed.url || parsed.href || parsed.publicUrl);
+      return out;
+    }
+  } catch {}
+  const urlMatches = raw.match(/https?:\/\/[^\s,"'<>]+/gi) || [];
+  if (urlMatches.length) {
+    urlMatches.forEach((url, idx) => add(`Receipt ${idx + 1}`, url));
+    return out;
+  }
+  // Imported Notion file paths are not public URLs, but keeping the name helps exports/views.
+  if (!/^null$/i.test(raw)) out.push({ name: raw.split(/[\\/]/).pop() || "Receipt", url: raw });
+  return out;
+}
+
+function _sbExpenseOrders(row = {}) {
+  const names = _sbSplitValues(_sbExpenseGet(row, ["orders_names", "Orders", "orders_raw"]));
+  const urls = _sbSplitValues(_sbExpenseGet(row, ["orders_urls", "orders_url"]));
+  return names.map((name, idx) => {
+    const label = String(name || "Order").trim() || "Order";
+    const url = String(urls[idx] || "").trim();
+    const idMatch = label.match(/ORD[-\s]?(\d+)/i) || label.match(/\b(\d{1,6})\b/);
+    const orderId = idMatch ? `ORD-${idMatch[1]}` : label;
+    return {
+      key: `${orderId}:${idx}`,
+      orderId,
+      orderType: "",
+      label,
+      trackingGroupId: orderId,
+      trackingUrl: url || "",
+      relationIds: [],
+      receiptEntries: [],
+      items: [],
+      receiptViewerUrl: url || "",
+    };
+  });
+}
+
+function _sbSerializeExpenseRow(row = {}) {
+  const screenshots = _sbParseScreenshotEntries(_sbExpenseGet(row, ["screenshot", "Screenshot", "files_media"]));
+  const createdTime =
+    _sbExpenseDateTime(_sbExpenseGet(row, ["notion_created_time", "created_at", "Created time"])) ||
+    new Date().toISOString();
+  return {
+    id: String(_sbExpenseGet(row, ["id", "ID"]) ?? ""),
+    createdTime,
+    date: _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date", "date"])) || null,
+    reason: _sbExpenseText(_sbExpenseGet(row, ["reason", "Reason"])) || "",
+    fundsType: _sbExpenseText(_sbExpenseGet(row, ["funds_type", "Funds Type"])) || "",
+    from: _sbExpenseText(_sbExpenseGet(row, ["from_location", "From", "cash_in_from"])) || "",
+    to: _sbExpenseText(_sbExpenseGet(row, ["to_location", "To"])) || "",
+    kilometer: _sbExpenseNum(_sbExpenseGet(row, ["kilometer", "Kilometer"]), 0),
+    cashIn: _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0),
+    cashOut: _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0),
+    cashInFrom: _sbExpenseText(_sbExpenseGet(row, ["cash_in_from", "from_location", "From"])) || "",
+    orders: _sbExpenseOrders(row),
+    screenshots,
+    screenshotUrl: screenshots[0]?.url || "",
+    screenshotName: screenshots[0]?.name || "",
+    teamMemberName: _sbExpenseText(_sbExpenseGet(row, ["team_member_name", "Team Member"])),
+    userId: _sbExpenseText(_sbExpenseGet(row, ["user_id", "employee_code"])),
+    source: "supabase",
+  };
+}
+
+async function _sbSelectExpensesRows({ limit = 5000 } = {}) {
+  const rows = await supabaseDb.selectAll(_sbExpensesTable(), {
+    limit,
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  return list.sort((a, b) => {
+    const ad = new Date(_sbExpenseGet(a, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+    const bd = new Date(_sbExpenseGet(b, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+    if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return bd - ad;
+    return Number(_sbExpenseGet(b, ["id"]) || 0) - Number(_sbExpenseGet(a, ["id"]) || 0);
+  });
+}
+
+async function _sbSelectExpensesForCurrentUser(req) {
+  const member = await _sbCurrentExpenseMember(req);
+  if (!member) return { member: null, rows: [] };
+  const rows = await _sbSelectExpensesRows();
+  return { member, rows: rows.filter((row) => _sbExpenseMatchesMember(row, member)) };
+}
+
+function _sbLastSettledInfo(rows = []) {
+  let lastSettledAt = null;
+  let lastSettledDate = null;
+  for (const row of rows || []) {
+    const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
+    if (ft !== "settled my account") continue;
+    const ct = _sbExpenseDateTime(_sbExpenseGet(row, ["notion_created_time", "created_at"]));
+    if (!ct) continue;
+    if (!lastSettledAt || new Date(ct).getTime() > new Date(lastSettledAt).getTime()) {
+      lastSettledAt = ct;
+      lastSettledDate = _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date"]));
+    }
+  }
+  return { lastSettledAt, lastSettledDate };
+}
+
+async function _sbBuildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix = "expense" } = {}) {
+  const files = [];
+  if (Array.isArray(screenshots) && screenshots.length) {
+    for (let i = 0; i < screenshots.length; i++) {
+      const s = screenshots[i] || {};
+      const dataUrl = s.dataUrl || s.screenshotDataUrl || "";
+      if (!dataUrl) continue;
+      const originalName = String(s.name || s.filename || "receipt.png").trim() || "receipt.png";
+      const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+      const filename = `${prefix}-${Date.now()}-${i}-${Math.random().toString(16).slice(2)}-${safeName}`;
+      const url = await uploadToBlobFromBase64(dataUrl, filename);
+      files.push({ name: originalName, url });
+    }
+  }
+  if (!files.length && screenshotDataUrl) {
+    const originalName = (screenshotName && String(screenshotName).trim()) || `${prefix}-${Date.now()}.png`;
+    const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+    const filename = `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    const url = await uploadToBlobFromBase64(screenshotDataUrl, filename);
+    files.push({ name: originalName, url });
+  }
+  return files.length ? JSON.stringify(files) : null;
+}
+
+async function _sbInsertExpense(row = {}) {
+  return await supabaseDb.insert(_sbExpensesTable(), row);
+}
+
+function _sbExpenseBaseRowForMember(member = {}, extra = {}) {
+  const nowIso = new Date().toISOString();
+  return {
+    notion_created_time: nowIso,
+    team_member_name: member.name || "",
+    user_id: member.code || member.id || "",
+    team_member_raw: member.name || "",
+    team_member_url: "",
+    ...extra,
+  };
+}
+
+async function _sbClearExpensesCaches(req, member = {}) {
+  await clearExpensesRouteCaches(req, member?.id || member?.code || member?.name || "");
+}
+
+async function _sbExpensesTypesOptions() {
+  const hiddenKeys = new Set(["settledmyaccount", "cashreceipt", "cashreciept"]);
+  const extraOptions = ["نقل", "توكتوك", "مشال", "مصروفات"];
+  const rows = await _sbSelectExpensesRows();
+  const options = [];
+  const seen = new Set();
+  const pushOption = (name) => {
+    const raw = String(name || "").trim();
+    if (!raw) return;
+    const key = raw.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
+    if (!key || hiddenKeys.has(key) || seen.has(key)) return;
+    seen.add(key);
+    options.push(raw);
+  };
+  rows.forEach((row) => pushOption(_sbExpenseGet(row, ["funds_type", "Funds Type"])));
+  extraOptions.forEach(pushOption);
+  return options.sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _sbExpensesUsersSummary() {
+  const rows = await _sbSelectExpensesRows();
+  const perUser = new Map();
+  for (const row of rows) {
+    const name = _sbExpenseText(_sbExpenseGet(row, ["team_member_name", "Team Member", "team_member_raw"])) || "Unknown User";
+    const userId = _sbExpenseText(_sbExpenseGet(row, ["user_id", "employee_code"])) || name;
+    const key = userId || name;
+    if (!perUser.has(key)) perUser.set(key, { id: key, userId: key, name, total: 0, count: 0, lastSettledDate: null });
+    const agg = perUser.get(key);
+    agg.total += _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0) - _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0);
+    agg.count += 1;
+    const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
+    if (ft === "settled my account" && !agg.lastSettledDate) {
+      agg.lastSettledDate = _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date"]));
+    }
+  }
+  return Array.from(perUser.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+}
+
+function _sbExpenseRowsForMemberId(rows = [], memberId = "") {
+  const raw = String(memberId || "").trim();
+  const key = norm(raw);
+  if (!key) return [];
+  return (rows || []).filter((row) => {
+    const name = norm(_sbExpenseGet(row, ["team_member_name", "Team Member", "team_member_raw"]));
+    const userId = norm(_sbExpenseGet(row, ["user_id", "employee_code"]));
+    const id = norm(_sbExpenseGet(row, ["id"]));
+    return key === userId || key === name || key === id;
+  });
+}
+
+
+// -----------------------------------------------------------------------------
+// Supabase Orders adapter
+// -----------------------------------------------------------------------------
+function _sbOrdersEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbOrdersTable() {
+  return (supabaseDb.getConfig().ordersTable || process.env.SUPABASE_ORDERS_TABLE || "orders").trim() || "orders";
+}
+
+function _sbOrderNum(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return null;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function _sbOrderText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbOrderDate(value) {
+  const raw = _sbOrderText(value);
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toISOString();
+}
+
+function _sbOrderGet(row, aliases = []) {
+  return _sbGet(row, aliases);
+}
+
+function _sbOrderSplitNames(value) {
+  return toUniqueStringArray(_sbOrderText(value), { splitComma: true });
+}
+
+function _sbOrderStatusColor(status) {
+  const s = norm(status);
+  if (/archive/.test(s)) return "purple";
+  if (/(arrived|delivered|received)/.test(s)) return "green";
+  if (/shipped/.test(s)) return "blue";
+  if (/rejected/.test(s)) return "red";
+  if (/progress/.test(s)) return "yellow";
+  if (/supervision/.test(s)) return "orange";
+  return "default";
+}
+
+function _sbOrderTypeColor(orderType) {
+  const s = norm(orderType);
+  if (/maintenance/.test(s)) return "purple";
+  if (/withdraw/.test(s)) return "red";
+  if (/request/.test(s)) return "green";
+  return "default";
+}
+
+function _sbSerializeOrderRow(row = {}) {
+  const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "");
+  const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
+  const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress"]));
+  const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested"]));
+  const qtyBase = qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0);
+  const qtyReceived = _sbOrderNum(_sbOrderGet(row, ["quantity_received_by_operations", "Quantity Received by operations", "Quantity Received by Operations"]));
+  const qtyRemainingStored = _sbOrderNum(_sbOrderGet(row, ["quantity_remaining", "Quantity Remaining"]));
+  const qtyRemaining = qtyRemainingStored !== null
+    ? qtyRemainingStored
+    : roundOrderQty((Number(qtyBase) || 0) - (qtyReceived === null ? 0 : Number(qtyReceived) || 0));
+  const status = _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "Pending";
+  const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
+  const createdByName =
+    _sbOrderText(_sbOrderGet(row, ["team_member_name", "Teams Members", "teams_members", "Supervisor", "supervisor"])) || "";
+  const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
+  const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
+  const maintenanceReceipt = _sbOrderText(_sbOrderGet(row, ["order_receipt", "Order Receipt", "maintenance_receipt", "Maintenance Receipt"]));
+  const productName =
+    _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name"])) ||
+    _sbOrderText(_sbOrderGet(row, ["product", "Product"])) ||
+    "Unknown Product";
+  const createdTime =
+    _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) ||
+    new Date().toISOString();
+
+  return {
+    id,
+    orderId: Number.isFinite(orderNum) ? `ORD-${orderNum}` : (id ? `ORD-${id}` : null),
+    orderIdPrefix: Number.isFinite(orderNum) ? "ORD" : null,
+    orderIdNumber: Number.isFinite(orderNum) ? orderNum : null,
+    reason: _sbOrderText(_sbOrderGet(row, ["reason", "Reason"])) || "No Reason",
+    productName,
+    productPageId: _sbOrderText(_sbOrderGet(row, ["product_url", "product", "Product"])) || null,
+    productUrl: _sbOrderText(_sbOrderGet(row, ["product_url", "Product URL"])) || null,
+    productImage: null,
+    unitPrice: _sbOrderNum(_sbOrderGet(row, ["unit_price", "Unit price", "Unity Price", "Price"])),
+    quantityRequested: qtyRequested !== null ? qtyRequested : qtyBase,
+    quantityProgress: qtyProgress,
+    quantityEditedBySupervisor: _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor"])),
+    quantityReceived: qtyReceived,
+    quantityRemaining: qtyRemaining,
+    quantityReceivedEdited: qtyReceived !== null ? (Math.abs(Number(qtyReceived) || 0) > 1e-9 || qtyRemainingStored !== null) : false,
+    quantity: qtyBase,
+    status,
+    statusColor: _sbOrderStatusColor(status),
+    orderType,
+    orderTypeColor: _sbOrderTypeColor(orderType),
+    issueDescription: _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"])) || null,
+    actualIssueDescription: _sbOrderText(_sbOrderGet(row, ["actual_issue_description", "Actual Issue Description"])) || null,
+    repairAction: _sbOrderText(_sbOrderGet(row, ["repair_action", "Repair Action"])) || null,
+    resolutionMethod: _sbOrderText(_sbOrderGet(row, ["resolution_method", "Resolution Method"])) || null,
+    resolutionMethodColor: null,
+    sparePartsReplacedIds: [],
+    sparePartsReplacedId: null,
+    sparePartsReplacedNames: spareParts,
+    sparePartsReplacedName: spareParts.join(", ") || null,
+    maintenanceReceiptNames: maintenanceReceipt ? [maintenanceReceipt] : [],
+    maintenanceReceiptUrls: _sbExtractUrl(maintenanceReceipt) ? [_sbExtractUrl(maintenanceReceipt)] : [],
+    maintenanceReceiptName: maintenanceReceipt || null,
+    maintenanceReceiptUrl: _sbExtractUrl(maintenanceReceipt) || null,
+    operationsByIds: [],
+    operationsByNames: operationsByName ? [operationsByName] : [],
+    operationsById: "",
+    operationsByName,
+    receiptNumber: _sbOrderText(_sbOrderGet(row, ["receipt_number", "Receipt Number", "Store Receipt Number"])) || null,
+    createdTime,
+    createdById: createdByName,
+    createdByName,
+    assignedToIds: [],
+    assignedToNames: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) ? [_sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"]))] : [],
+    assignedToId: "",
+    assignedToName: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) || "",
+    svApproval: _sbOrderText(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) || null,
+    source: "supabase",
+  };
+}
+
+async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
+  const rows = await supabaseDb.selectAll(_sbOrdersTable(), {
+    limit: 5000,
+    order: "notion_created_time.desc,id.desc",
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  if (!approvedOnly) return list;
+  return list.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
+}
+
+async function _sbRequestedOrdersList() {
+  const rows = await _sbSelectOrdersRows({ approvedOnly: true });
+  return rows.map(_sbSerializeOrderRow);
+}
+
+async function _sbCurrentOrdersList(req) {
+  const rows = await _sbSelectOrdersRows({ approvedOnly: false });
+  const username = norm(req?.session?.username || "");
+  const filtered = username
+    ? rows.filter((row) => {
+        const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
+        return !by || by.includes(username) || username.includes(by);
+      })
+    : rows;
+  return filtered.map(_sbSerializeOrderRow);
+}
+
+async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
+  const ids = (Array.isArray(orderIds) ? orderIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .filter((x) => /^\d+$/.test(x));
+  if (!ids.length) return [];
+  return await Promise.all(ids.map((id) => supabaseDb.updateById(_sbOrdersTable(), id, patch)));
+}
+
+
+async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {}, quantities = null) {
+  const ids = (Array.isArray(orderIds) ? orderIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .filter((x) => /^\d+$/.test(x));
+  if (!ids.length) return [];
+
+  const out = [];
+  for (const id of ids) {
+    const patch = { ...basePatch };
+    const explicit = quantities && Object.prototype.hasOwnProperty.call(quantities, id)
+      ? Number(quantities[id])
+      : null;
+    if (explicit !== null && Number.isFinite(explicit)) {
+      const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+      const base = row ? _sbSerializeOrderRow(row).quantity : 0;
+      const rounded = roundOrderQty(explicit);
+      patch.quantity_received_by_operations = rounded;
+      patch.quantity_remaining = roundOrderQty((Number(base) || 0) - rounded);
+    }
+    out.push(await supabaseDb.updateById(_sbOrdersTable(), id, patch));
+  }
+  return out;
+}
+
+async function _sbInvalidateOrdersCaches() {
+  await Promise.all([
+    cacheDel("cache:api:orders:requested:supabase:v1"),
+    cacheDel("cache:api:orders:current:supabase:v1"),
+  ]);
+}
+
+
+function _sbOrderExportIds(ids = []) {
+  return (Array.isArray(ids) ? ids : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .filter((x) => /^\d+$/.test(x));
+}
+
+async function _sbOrderRowsByIds(ids = []) {
+  const cleanIds = _sbOrderExportIds(ids);
+  if (!cleanIds.length) return [];
+  const rows = await Promise.all(
+    cleanIds.map((id) => supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null)),
+  );
+  const byId = new Map(rows.filter(Boolean).map((row) => [String(row.id), row]));
+  return cleanIds.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+function _sbComputeOrderIdRangeFromItems(items = []) {
+  const nums = (items || [])
+    .map((item) => Number(item?.orderIdNumber))
+    .filter((n) => Number.isFinite(n));
+  if (nums.length) {
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    if (min === max) return `ORD-${min}`;
+    return `ORD-${min} : ORD-${max}`;
+  }
+  const ids = (items || []).map((item) => item?.orderId).filter(Boolean);
+  if (!ids.length) return "Order";
+  if (ids.length === 1) return ids[0];
+  return `${ids[0]} : ${ids[ids.length - 1]}`;
+}
+
+async function _sbProductsMapByName() {
+  if (!_sbProductsEnabled()) return new Map();
+  const products = await _sbProductsList().catch(() => []);
+  const map = new Map();
+  for (const p of products || []) {
+    const key = normKey(p?.name || "");
+    if (key && !map.has(key)) map.set(key, p);
+  }
+  return map;
+}
+
+async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
+  const rowsRaw = await _sbOrderRowsByIds(orderIds);
+  if (!rowsRaw.length) {
+    const err = new Error("Orders not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const items = rowsRaw.map(_sbSerializeOrderRow);
+  const productNameMap = await _sbProductsMapByName();
+  const createdTimes = items
+    .map((item) => new Date(item.createdTime || Date.now()))
+    .filter((d) => !Number.isNaN(d.getTime()));
+  const createdAt = createdTimes.length
+    ? new Date(Math.min(...createdTimes.map((d) => d.getTime())))
+    : new Date();
+
+  const orderIdRange = _sbComputeOrderIdRangeFromItems(items);
+  const first = items[0] || {};
+  const teamMember = first.createdByName || first.assignedToName || "";
+  const operationsBy = first.operationsByName || req?.session?.username || "";
+  const receiptView = _receiptPresentationForOrderType(first.orderType || "Request Products");
+
+  const rows = [];
+  let grandQty = 0;
+  let grandTotal = 0;
+  for (const item of items) {
+    const prod = productNameMap.get(normKey(item.productName || "")) || null;
+    const qtyCandidate = item.quantityReceived !== null && typeof item.quantityReceived !== "undefined"
+      ? item.quantityReceived
+      : (item.quantityProgress !== null && typeof item.quantityProgress !== "undefined" ? item.quantityProgress : item.quantity);
+    const qty = Number.isFinite(Number(qtyCandidate)) ? Number(qtyCandidate) : 0;
+    const unitCandidate = item.unitPrice !== null && typeof item.unitPrice !== "undefined" ? item.unitPrice : prod?.unitPrice;
+    const unit = Number.isFinite(Number(unitCandidate)) ? Number(unitCandidate) : 0;
+    const total = qty * unit;
+    grandQty += qty;
+    grandTotal += total;
+    rows.push({
+      idCode: prod?.displayId || "",
+      component: item.productName || prod?.name || "Unknown Product",
+      qty,
+      reason: item.reason || "No Reason",
+      link: item.productUrl || prod?.url || "",
+      unit,
+      total,
+    });
+  }
+
+  const reasonCounts = new Map();
+  for (const row of rows) {
+    const key = String(row?.reason || "").trim() || "No Reason";
+    reasonCounts.set(key, (reasonCounts.get(key) || 0) + 1);
+  }
+  const groupReason = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "No Reason";
+
+  return {
+    rawRows: rowsRaw,
+    items,
+    rows,
+    grandQty,
+    grandTotal,
+    createdAt,
+    orderIdRange,
+    teamMember,
+    operationsBy,
+    groupReason,
+    receiptView,
+    first,
+  };
+}
+
+function _sbSafeExportName(value = "order") {
+  return String(value || "order")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_")
+    .slice(0, 60);
+}
+
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "" } = {}) {
+  const tabKey = String(tab || "").trim().toLowerCase();
+  const hideCosts = tabKey === "received" || tabKey === "delivered";
+  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  const { pipeDeliveryReceiptPDF } = require("./deliveryReceiptPdf");
+  await pipeDeliveryReceiptPDF({
+    orderId: payload.orderIdRange,
+    createdAt: payload.createdAt,
+    teamMember: payload.teamMember,
+    preparedBy: payload.groupReason,
+    rows: payload.rows,
+    grandQty: payload.grandQty,
+    grandTotal: payload.grandTotal,
+    metaLayout: "teamReasonFirst",
+    showReasonTagBar: false,
+    groupByReason: false,
+    headerColorKey: payload.groupReason,
+    showCosts: !hideCosts,
+    documentTitle: payload.receiptView.documentTitle,
+    recipientLabelLeft: payload.receiptView.recipientLabelLeft,
+    thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
+  }, res);
+}
+
+async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
+  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const first = payload.first || {};
+  if (_normKeyOrderType(first.orderType || "") !== _normKeyOrderType("Request Maintenance")) {
+    return res.status(400).json({ error: "This export is only available for maintenance orders." });
+  }
+  const fileName = `maintenance_receipt_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  const { pipeMaintenanceReceiptPDF } = require("./maintenanceReceiptPdf");
+  await pipeMaintenanceReceiptPDF({
+    orderId: payload.orderIdRange,
+    createdAt: payload.createdAt,
+    requestedBy: payload.teamMember,
+    operationsBy: payload.operationsBy,
+    issueDescription: first.issueDescription || "—",
+    actualIssueDescription: first.actualIssueDescription || "—",
+    repairAction: first.repairAction || "—",
+    resolutionMethod: first.resolutionMethod || "—",
+    sparePartsReplacedList: first.sparePartsReplacedNames || [],
+    rows: payload.rows,
+    maintenanceReceiptName: first.maintenanceReceiptName || "",
+    maintenanceReceiptUrl: first.maintenanceReceiptUrl || "",
+  }, res);
+}
+
+async function _sbPipeOrderExcel(req, res, orderIds = []) {
+  const ExcelJS = require("exceljs");
+  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Operations Hub";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Order");
+
+  const formatDateTime = (date) => {
+    try {
+      const d = date instanceof Date ? date : new Date(date);
+      if (Number.isNaN(d.getTime())) return String(date || "-");
+      return d.toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return String(date || "-");
+    }
+  };
+
+  const borderThin = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "thin", color: { argb: "FF000000" } },
+  };
+  const borderLight = {
+    top: { style: "thin", color: { argb: "FFE5E7EB" } },
+    left: { style: "thin", color: { argb: "FFE5E7EB" } },
+    bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+    right: { style: "thin", color: { argb: "FFE5E7EB" } },
+  };
+
+  ws.addRow(["Order ID", payload.orderIdRange, "Date", formatDateTime(payload.createdAt)]);
+  ws.addRow(["Team member", payload.teamMember || "", "Prepared by (Operations)", String(req.session?.username || "—")]);
+  ws.addRow(["Total quantity", Number(payload.grandQty) || 0, "Estimate total", Number(payload.grandTotal) || 0]);
+  for (let r = 1; r <= 3; r += 1) {
+    const row = ws.getRow(r);
+    row.height = 20;
+    for (let c = 1; c <= 4; c += 1) {
+      const cell = row.getCell(c);
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+      if (c === 1 || c === 3) {
+        cell.font = { bold: true };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } };
+      } else {
+        cell.font = { bold: true };
+      }
+    }
+  }
+  ws.getRow(3).getCell(2).numFmt = "0";
+  ws.getRow(3).getCell(4).numFmt = '"£"#,##0.00';
+  ws.addRow([]);
+
+  const reasonMap = new Map();
+  for (const row of payload.rows || []) {
+    const reason = String(row.reason || "").trim() || "No Reason";
+    if (!reasonMap.has(reason)) reasonMap.set(reason, []);
+    reasonMap.get(reason).push(row);
+  }
+  const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+  const headerCols = ["ID Code", "Component", "Quantity", "Reason", "Component link", "Unit cost", "Total cost"];
+
+  for (const reason of reasons) {
+    const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
+    const titleNum = titleRow.number;
+    ws.mergeCells(`A${titleNum}:G${titleNum}`);
+    for (let c = 1; c <= 7; c += 1) {
+      const cell = ws.getRow(titleNum).getCell(c);
+      cell.border = borderThin;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
+      cell.font = { bold: true, color: { argb: "FF5B21B6" } };
+    }
+    const header = ws.addRow(headerCols);
+    header.font = { bold: true, color: { argb: "FF111827" } };
+    header.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", wrapText: true };
+    });
+    const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
+    for (const item of items) {
+      const r = ws.addRow([
+        item.idCode || "",
+        item.component || "",
+        Number(item.qty) || 0,
+        item.reason || "",
+        item.link || "",
+        Number(item.unit) || 0,
+        Number(item.total) || 0,
+      ]);
+      if (item.link) {
+        r.getCell(5).value = { text: item.link, hyperlink: item.link };
+        r.getCell(5).font = { color: { argb: "FF2563EB" }, underline: true };
+      }
+      r.getCell(3).numFmt = "0.######";
+      r.getCell(6).numFmt = '"£"#,##0.00';
+      r.getCell(7).numFmt = '"£"#,##0.00';
+      r.eachCell((cell) => {
+        cell.border = borderLight;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    }
+    ws.addRow([]);
+  }
+
+  ws.columns = [
+    { width: 14 },
+    { width: 36 },
+    { width: 12 },
+    { width: 24 },
+    { width: 54 },
+    { width: 14 },
+    { width: 14 },
+  ];
+  ws.views = [{ state: "frozen", ySplit: 4 }];
+  const fileName = `order_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
+  const buf = await wb.xlsx.writeBuffer();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  res.send(Buffer.from(buf));
+}
+
+
+// -----------------------------------------------------------------------------
+// Supabase Products adapter
+// -----------------------------------------------------------------------------
+function _sbProductsEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbProductsTable() {
+  return (supabaseDb.getConfig().productsTable || process.env.SUPABASE_PRODUCTS_TABLE || "products").trim() || "products";
+}
+
+function _sbProductNum(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return null;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function _sbProductText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbProductGet(row, aliases = []) {
+  return _sbGet(row, aliases);
+}
+
+function _sbProductTags(row = {}) {
+  const tags = [];
+  const push = (v) => {
+    const t = _sbProductText(v).trim();
+    if (t && !tags.some((x) => normKey(x) === normKey(t))) tags.push(t);
+  };
+  push(_sbProductGet(row, ["tags", "Tags", "tag", "Tag"]));
+  const categoryName = _sbProductText(_sbProductGet(row, ["category_name", "Category Name", "category", "Category"]));
+  const categoryCode = _sbProductText(_sbProductGet(row, ["category_code", "Category Code"]));
+  if (categoryName) push(categoryCode ? `${categoryCode}/ ${categoryName}` : categoryName);
+  return tags;
+}
+
+function _sbSerializeProductRow(row = {}) {
+  const id = String(_sbProductGet(row, ["id", "ID"]) ?? "").trim();
+  const name = _sbProductText(_sbProductGet(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product";
+  const displayId = _sbProductText(_sbProductGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
+  const unitPrice = _sbProductNum(_sbProductGet(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"]));
+  const quantity = _sbProductNum(_sbProductGet(row, ["quantity", "Quantity", "qty", "Qty"]));
+  const url = _sbExtractUrl(_sbProductGet(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"]));
+  const imageUrl = _sbExtractUrl(_sbProductGet(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"]));
+  return {
+    id,
+    name,
+    url: url || null,
+    unitPrice: unitPrice !== null ? unitPrice : null,
+    displayId,
+    imageUrl: imageUrl || null,
+    tags: _sbProductTags(row),
+    quantity: quantity !== null ? quantity : null,
+    categoryCode: _sbProductText(_sbProductGet(row, ["category_code", "Category Code"])) || null,
+    categoryName: _sbProductText(_sbProductGet(row, ["category_name", "Category Name", "category", "Category"])) || null,
+    source: "supabase",
+  };
+}
+
+async function _sbSelectProductsRows() {
+  const rows = await supabaseDb.selectAll(_sbProductsTable(), {
+    limit: 5000,
+    order: "name.asc,id.asc",
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbProductsList() {
+  const rows = await _sbSelectProductsRows();
+  return rows.map(_sbSerializeProductRow).filter((p) => p && p.id && p.name);
+}
+
+async function _sbProductsMapById() {
+  const products = await _sbProductsList();
+  return new Map(products.map((p) => [String(p.id), p]));
+}
+
+async function _sbNextOrderNumber() {
+  const rows = await supabaseDb.select(_sbOrdersTable(), {
+    select: "order_number",
+    order: "order_number.desc",
+    limit: 1,
+  });
+  const n = Array.isArray(rows) && rows[0] ? _sbOrderNum(rows[0].order_number) : null;
+  return Number.isFinite(n) ? n + 1 : 1;
+}
+
+async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") {
+  const productMap = await _sbProductsMapById();
+  const orderNumber = await _sbNextOrderNumber();
+  const now = new Date().toISOString();
+  const createdByName = String(req.session?.username || "").trim() || null;
+  const rows = [];
+  for (const product of cleanProducts || []) {
+    const info = productMap.get(String(product.id)) || {};
+    const qty = Number(product.quantity) || 0;
+    rows.push({
+      reason: String(product.reason || "").trim() || null,
+      order_number: orderNumber,
+      order_type: _canonicalOrderTypeLabel(orderType) || orderType || null,
+      notion_created_time: now,
+      product_name: info.name || String(product.name || product.id || "Unknown Product"),
+      product_url: info.url || null,
+      unit_price: Number.isFinite(Number(info.unitPrice)) ? Number(info.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "Order Placed",
+      sv_approval: null,
+      team_member_name: createdByName,
+      issue_description: String(product.issueDescription || "").trim() || null,
+      supervisor: null,
+      person_received_by_operations: null,
+    });
+  }
+  const created = [];
+  for (const row of rows) {
+    created.push(await supabaseDb.insert(_sbOrdersTable(), row));
+  }
+  await _sbInvalidateOrdersCaches();
+  return created.map(_sbSerializeOrderRow);
+}
+
+async function _sbInvalidateProductsCaches() {
+  await Promise.all([
+    cacheDel("cache:api:components:supabase:v1"),
+    cacheDel("cache:api:damaged-assets:options:supabase:v1"),
+  ]);
+}
+
 
 
 // توسيع الأسماء للواجهة حتى لا يحصل تضارب aliases
@@ -3014,6 +4048,21 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
 // Authentication middleware
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) return next();
+
+  // API calls should not silently render the login page. Returning JSON makes
+  // debugging and frontend handling clearer, while normal page routes still
+  // redirect to /login.
+  if (String(req.path || "").startsWith("/api/")) {
+    res.set("Cache-Control", "no-store");
+    return res.status(401).json({
+      ok: false,
+      authenticated: false,
+      code: "AUTH_REQUIRED",
+      message: "Login is required before calling this endpoint.",
+      redirect: "/login",
+    });
+  }
+
   return res.redirect("/login");
 }
 
@@ -3235,7 +4284,7 @@ app.post("/api/login", async (req, res) => {
 
           return req.session.save((err) => {
             if (err) return res.status(500).json({ error: "Session could not be saved." });
-            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase" });
+            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase", redirect: "/home" });
           });
         }
         return res.status(401).json({ error: "incorrect password" });
@@ -3290,7 +4339,7 @@ app.post("/api/login", async (req, res) => {
 
       req.session.save((err) => {
         if (err) return res.status(500).json({ error: "Session could not be saved." });
-        res.json({ success: true, message: "Login successful", allowedPages: allowedUI });
+        res.json({ success: true, message: "Login successful", allowedPages: allowedUI, redirect: "/home" });
       });
     } else {
       res.status(401).json({ error: "incorrect password" });
@@ -3505,10 +4554,6 @@ app.post("/api/hard-refresh", requireAuth, async (req, res) => {
 });
 
 app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
-  if (!teamMembersDatabaseId) {
-    return res.status(500).json({ error: "Team_Members database ID is not configured." });
-  }
-
   try {
     const { dataUrl, filename, currentPassword } = req.body || {};
     const providedPassword = String(currentPassword ?? "").trim();
@@ -3528,6 +4573,33 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
 
     if (buf.length > 10 * 1024 * 1024) {
       return res.status(413).json({ error: "Image is too large. Maximum size is 10MB." });
+    }
+
+    if (_sbTeamMembersEnabled()) {
+      const username = String(req.session?.username || "").trim();
+      const row = await _sbFindTeamMemberByName(username);
+      if (!row) return res.status(404).json({ error: "User not found." });
+
+      const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
+      if (!storedPassword) return res.status(400).json({ error: "No password set for this account." });
+      if (String(storedPassword) !== providedPassword) {
+        return res.status(401).json({ error: "invalid password" });
+      }
+
+      const safeOriginalName = String(filename || "profile-picture.png").trim() || "profile-picture.png";
+      const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
+      const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+      const objectName = `team-members/profile-pictures/${rowId || username || "user"}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const publicUrl = await uploadToBlobFromBase64(dataUrl, objectName);
+
+      const profileKey = Object.keys(row || {}).find((key) => _sbCanon(key) === "profilepicture") || "profile_picture";
+      await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [profileKey]: publicUrl });
+      await clearUserServerCaches(req, { userId: rowId });
+      return res.json({ success: true, photoUrl: publicUrl, source: "supabase" });
+    }
+
+    if (!teamMembersDatabaseId) {
+      return res.status(500).json({ error: "Team_Members database ID is not configured." });
     }
 
     const userId = await getSessionUserNotionId(req);
@@ -5525,6 +6597,203 @@ function _multiSelectNames(prop) {
   return [];
 }
 
+// -----------------------------------------------------------------------------
+// Supabase B2B Schools adapter
+// -----------------------------------------------------------------------------
+function _sbB2BSchoolsEnabled() {
+  return !!(
+    supabaseDb &&
+    supabaseDb.isConfigured &&
+    supabaseDb.isConfigured() &&
+    String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || '').trim()
+  );
+}
+
+function _sbB2BSchoolsTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return (cfg.b2bSchoolsTable || process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
+}
+
+function _sbBool(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw || raw === 'null') return false;
+  return ['true', 'yes', 'y', '1', 'checked', 'done'].includes(raw);
+}
+
+async function _sbB2BSchoolsRows() {
+  if (!_sbB2BSchoolsEnabled()) return [];
+  const rows = await supabaseDb.selectAll(_sbB2BSchoolsTable(), {
+    limit: 5000,
+    order: 'school_name.asc,id.asc',
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
+  const name =
+    _sbString(_sbGet(row, ['school_name', 'School name', 'name', 'Name', 'school', 'School'])) ||
+    'Untitled';
+  const governorateName = _sbString(_sbGet(row, ['governorate', 'Governorate', 'governorates']));
+  const educationSystem = _sbSplitValues(_sbGet(row, ['education_system', 'Education System', 'Education system', 'education']));
+  const programType = _sbString(_sbGet(row, ['program_type', 'Program type', 'Program Type', 'program']));
+  const location = _sbExtractUrl(_sbGet(row, ['location', 'Location', 'google_maps', 'Google Maps'])) || _sbString(_sbGet(row, ['location', 'Location']));
+  const grades = {};
+  for (let i = 1; i <= 12; i++) {
+    grades[i] = _sbBool(_sbGet(row, [`g${i}`, `G${i}`, `grade_${i}`, `Grade ${i}`]));
+  }
+
+  const out = {
+    id: String(_sbGet(row, ['id', 'ID']) ?? '').trim(),
+    name,
+    location,
+    governorate: governorateName ? { name: governorateName, color: 'default' } : null,
+    educationSystem,
+    programType,
+    grades,
+    schoolCode: _sbString(_sbGet(row, ['school_code', 'School Code', 'code', 'ID'])),
+    source: 'supabase',
+  };
+
+  if (detail) {
+    out.status = _sbString(_sbGet(row, ['status', 'Status']));
+    out.contractStatus = _sbString(_sbGet(row, ['contract_status', 'Contract Status']));
+    out.companyName = _sbString(_sbGet(row, ['company_name', 'Company name', 'Company Name']));
+  }
+
+  return out;
+}
+
+async function _sbFindB2BSchoolById(id) {
+  const clean = String(id || '').trim();
+  if (!clean || !_sbB2BSchoolsEnabled()) return null;
+  const rows = await supabaseDb.select(_sbB2BSchoolsTable(), {
+    select: '*',
+    id: `eq.${clean}`,
+    limit: 1,
+  });
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function _sbFindB2BSchoolByName(name) {
+  const wanted = normKey(name);
+  if (!wanted || !_sbB2BSchoolsEnabled()) return null;
+  const rows = await _sbB2BSchoolsRows();
+  return (rows || []).find((row) => normKey(_sbGet(row, ['school_name', 'name', 'School name'])) === wanted) || null;
+}
+
+function _sbB2BStockColumnCandidates(schoolName = '', kind = 'done', dateISO = '') {
+  const base = _sbStocktakingColumnKey(schoolName);
+  const kindKey = _sbStocktakingColumnKey(kind);
+  const dateKey = String(dateISO || '').trim().replace(/-/g, '_');
+  const out = [];
+  if (base) {
+    if (kindKey === 'done') out.push(`${base}_done`, base);
+    else if (dateKey) out.push(`${base}_${kindKey}_${dateKey}`, `${base}_${kindKey}_${String(dateISO || '').trim()}`);
+    else out.push(`${base}_${kindKey}`);
+  }
+  return out.filter(Boolean);
+}
+
+function _sbB2BFindColumnInRows(rows = [], schoolName = '', kind = 'done', dateISO = '') {
+  const keys = _sbAllColumnKeys(rows || []);
+  if (!keys.length) return null;
+  const directCandidates = _sbB2BStockColumnCandidates(schoolName, kind, dateISO);
+  for (const candidate of directCandidates) {
+    const hit = _sbFindKey(keys, [candidate]);
+    if (hit) return { name: hit, date: dateISO || null };
+  }
+
+  const base = _sbStocktakingColumnKey(schoolName);
+  const kindKey = _sbStocktakingColumnKey(kind);
+  if (!base || !kindKey) return null;
+  const matches = [];
+  for (const key of keys) {
+    const cleanKey = _sbStocktakingColumnKey(key);
+    if (!cleanKey.includes(base) || !cleanKey.includes(kindKey)) continue;
+    const m = cleanKey.match(/(20\d{2})[_-]?(\d{2})[_-]?(\d{2})/);
+    const parsedDate = m ? `${m[1]}-${m[2]}-${m[3]}` : '';
+    matches.push({ name: key, date: parsedDate || null });
+  }
+  matches.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return matches[0] || null;
+}
+
+async function _sbGetB2BSchoolStocktakingPayload(schoolId) {
+  const school = await _getB2BSchoolById(schoolId);
+  if (!school) return { meta: {}, items: [] };
+  const schoolName = String(school.name || '').trim();
+  const rows = await _sbStocktakingRows();
+  const doneCol = _sbB2BFindColumnInRows(rows, schoolName, 'done') || null;
+  const inventoryCol = _sbB2BFindColumnInRows(rows, schoolName, 'inventory') || null;
+  const defectedCol = _sbB2BFindColumnInRows(rows, schoolName, 'defected') || null;
+
+  const items = (rows || [])
+    .map((row) => {
+      const item = _sbSerializeStocktakingRow(row, doneCol?.name || schoolName);
+      item.doneQuantity = _sbStocktakingNum(doneCol?.name ? row?.[doneCol.name] : item.quantity);
+      item.done = Number(item.doneQuantity || 0) !== 0;
+      item.inventory = inventoryCol?.name ? _sbStocktakingNum(row?.[inventoryCol.name]) : null;
+      item.defected = defectedCol?.name ? _sbStocktakingNum(row?.[defectedCol.name]) : null;
+      return item;
+    })
+    .filter((item) => {
+      const doneValue = Number(item.doneQuantity || item.quantity || 0);
+      return doneValue !== 0 || item.inventory !== null || item.defected !== null;
+    });
+
+  return {
+    meta: {
+      schoolName,
+      donePropName: doneCol?.name || null,
+      inventoryPropName: inventoryCol?.name || null,
+      inventoryDate: inventoryCol?.date || null,
+      defectedPropName: defectedCol?.name || null,
+      defectedDate: defectedCol?.date || null,
+      source: 'supabase',
+    },
+    items,
+  };
+}
+
+async function _sbUpdateB2BStockValue({ schoolId, stockId, kind, value, requestedPropName = '', requestedDate = '' }) {
+  if (!_sbB2BSchoolsEnabled() || !_sbStocktakingEnabled()) {
+    const err = new Error('Supabase B2B/stocktaking tables are not configured.');
+    err.status = 500;
+    throw err;
+  }
+  const school = await _getB2BSchoolById(schoolId);
+  if (!school) {
+    const err = new Error('School not found.');
+    err.status = 404;
+    throw err;
+  }
+  const schoolName = String(school.name || '').trim();
+  const rows = await _sbStocktakingRows();
+  const target = (rows || []).find((row) => String(row?.id ?? '').trim() === String(stockId || '').trim());
+  if (!target) {
+    const err = new Error('Stock item not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  let column = null;
+  if (requestedPropName && Object.prototype.hasOwnProperty.call(target, requestedPropName)) {
+    column = { name: requestedPropName, date: _normalizeISODateInput(String(requestedPropName).match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1] || '') || null };
+  }
+  if (!column && requestedDate) column = _sbB2BFindColumnInRows([target], schoolName, kind, requestedDate);
+  if (!column) column = _sbB2BFindColumnInRows([target], schoolName, kind);
+  if (!column?.name) {
+    const err = new Error(`No Supabase column exists for ${kind}. Add the column to the stocktaking table first or re-import the latest stocktaking schema.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const updated = await supabaseDb.updateById(_sbStocktakingTable(), stockId, { [column.name]: value });
+  return { ok: true, [`${kind}PropName`]: column.name, [`${kind}Date`]: column.date || requestedDate || null, value, updated };
+}
+
 async function _queryAllPages(database_id, { filter, sorts } = {}) {
   const all = [];
   let hasMore = true;
@@ -5547,6 +6816,14 @@ async function _queryAllPages(database_id, { filter, sorts } = {}) {
 }
 
 async function _getB2BSchoolsList() {
+  if (_sbB2BSchoolsEnabled()) {
+    const cacheKey = `cache:api:b2b:schools:list:supabase:${_sbB2BSchoolsTable()}:v1`;
+    return await cacheGetOrSet(cacheKey, 60, async () => {
+      const rows = await _sbB2BSchoolsRows();
+      return (Array.isArray(rows) ? rows : []).map(_sbSerializeB2BSchoolRow);
+    });
+  }
+
   if (!b2bDatabaseId) return [];
   const cacheKey = `cache:api:b2b:schools:list:${b2bDatabaseId}:v1`;
   return await cacheGetOrSet(cacheKey, 60, async () => {
@@ -5572,8 +6849,15 @@ async function _getB2BSchoolsList() {
   });
 }
 
+
 async function _getB2BSchoolById(schoolId) {
   if (!schoolId) return null;
+
+  if (_sbB2BSchoolsEnabled()) {
+    const row = await _sbFindB2BSchoolById(schoolId);
+    if (row) return _sbSerializeB2BSchoolRow(row, { detail: true });
+    return null;
+  }
 
   // Try from cached list first
   try {
@@ -5601,6 +6885,7 @@ async function _getB2BSchoolById(schoolId) {
 }
 
 
+
 async function _getTeamMemberPageByUsername(username) {
   const cleanUsername = String(username || "").trim();
   if (!cleanUsername || !teamMembersDatabaseId) return null;
@@ -5622,23 +6907,39 @@ async function _resolveCurrentUserMaintenanceSchool(req) {
   const username = String(req?.session?.username || "").trim();
   if (!username) return { schoolId: "", schoolName: "" };
 
-  const userPage = await _getTeamMemberPageByUsername(username);
-  const props = userPage?.properties || {};
-  if (!userPage) return { schoolId: "", schoolName: "" };
+  let schoolId = "";
+  let schoolName = "";
 
-  const schoolPropName =
-    pickPropName(props, ["B2B Schools", "B2B School", "School", "Schools"]) ||
-    pickPropName(props, ["Assigned Schools", "Assigned School"]);
-
-  const schoolProp = schoolPropName ? props?.[schoolPropName] : null;
-  let schoolId = String(extractFirstRelationId(schoolProp) || "").trim();
-  let schoolName = String(_extractPropText(schoolProp) || "").trim();
-
-  if (schoolId) {
-    if (!schoolName) {
-      try { schoolName = String(await pageTitleById(schoolId) || "").trim(); } catch {}
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const row = req?.session?.userSupabaseId
+        ? await _sbFindTeamMemberById(req.session.userSupabaseId)
+        : await _sbFindTeamMemberByName(username);
+      schoolName = String(_sbString(_sbValueForLabel(row || {}, "School")) || "").trim();
+    } catch (e) {
+      console.error("Error resolving Supabase maintenance school:", e?.details || e);
     }
-    return { schoolId, schoolName };
+  }
+
+  if (!schoolName) {
+    const userPage = await _getTeamMemberPageByUsername(username);
+    const props = userPage?.properties || {};
+    if (!userPage) return { schoolId: "", schoolName: "" };
+
+    const schoolPropName =
+      pickPropName(props, ["B2B Schools", "B2B School", "School", "Schools"]) ||
+      pickPropName(props, ["Assigned Schools", "Assigned School"]);
+
+    const schoolProp = schoolPropName ? props?.[schoolPropName] : null;
+    schoolId = String(extractFirstRelationId(schoolProp) || "").trim();
+    schoolName = String(_extractPropText(schoolProp) || "").trim();
+
+    if (schoolId) {
+      if (!schoolName) {
+        try { schoolName = String(await pageTitleById(schoolId) || "").trim(); } catch {}
+      }
+      return { schoolId, schoolName };
+    }
   }
 
   if (!schoolName) return { schoolId: "", schoolName: "" };
@@ -6330,6 +7631,11 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
   const id = String(schoolId || "").trim();
   if (!id) return { meta: {}, items: [] };
 
+  if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+    const cacheKey = `cache:api:b2b:school-stock:supabase:${id}:v1`;
+    return await cacheGetOrSet(cacheKey, 60, async () => _sbGetB2BSchoolStocktakingPayload(id));
+  }
+
   const cacheKey = `cache:api:b2b:school-stock:${id}:v8`;
   return await cacheGetOrSet(cacheKey, 60, async () => {
     const school = await _getB2BSchoolById(id);
@@ -6515,8 +7821,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!b2bDatabaseId) {
-      return res.status(500).json({ error: "B2B database ID is not configured." });
+    if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
+      return res.status(500).json({ error: "B2B schools table/database is not configured." });
     }
     res.set("Cache-Control", "no-store");
     try {
@@ -6545,8 +7851,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!b2bDatabaseId) {
-      return res.status(500).json({ error: "B2B database ID is not configured." });
+    if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
+      return res.status(500).json({ error: "B2B schools table/database is not configured." });
     }
     res.set("Cache-Control", "no-store");
 
@@ -6554,6 +7860,12 @@ app.get(
     if (!id) return res.status(400).json({ error: "Missing school id." });
 
     try {
+      if (_sbB2BSchoolsEnabled()) {
+        const data = await _getB2BSchoolById(id);
+        if (!data) return res.status(404).json({ error: "School not found." });
+        return res.json(data);
+      }
+
       // v2: include Grades (G1..G12) checkbox flags
       const cacheKey = `cache:api:b2b:school:${id}:v2`;
       const data = await cacheGetOrSet(cacheKey, 5 * 60, async () => {
@@ -6625,8 +7937,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
     const id = String(req.params.id || "").trim();
     if (!id) return res.status(400).json({ error: "Missing school id." });
@@ -6695,8 +8007,8 @@ app.post(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const id = String(req.params.id || "").trim();
@@ -6718,6 +8030,24 @@ app.post(
         return res.status(400).json({
           error: "Inventory date is required.",
           details: "Please choose a valid inventory date before creating inventory columns.",
+        });
+      }
+
+      if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+        const rows = await _sbStocktakingRows();
+        const inventoryCol = _sbB2BFindColumnInRows(rows, schoolName, 'inventory', dateISO);
+        const defectedCol = _sbB2BFindColumnInRows(rows, schoolName, 'defected', dateISO);
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:${id}:v1`); } catch {}
+        return res.json({
+          ok: true,
+          source: 'supabase',
+          inventoryPropName: inventoryCol?.name || _sbB2BStockColumnCandidates(schoolName, 'inventory', dateISO)[0] || null,
+          inventoryDate: dateISO,
+          defectedPropName: defectedCol?.name || _sbB2BStockColumnCandidates(schoolName, 'defected', dateISO)[0] || null,
+          defectedDate: dateISO,
+          note: inventoryCol?.name && defectedCol?.name
+            ? 'Existing Supabase inventory columns found.'
+            : 'Supabase cannot create new database columns through REST automatically. If saving fails, add these inventory/defected columns to the stocktaking table and redeploy.',
         });
       }
 
@@ -6758,8 +8088,8 @@ app.patch(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const schoolId = String(req.params.id || "").trim();
@@ -6776,6 +8106,28 @@ app.patch(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+        const requestedInvProp = typeof req?.body?.inventoryPropName === "string" ? String(req.body.inventoryPropName).trim() : "";
+        const rawRequestedInvDate =
+          typeof req?.body?.inventoryDate === "string"
+            ? String(req.body.inventoryDate).trim()
+            : (typeof req?.body?.dateISO === "string" ? String(req.body.dateISO).trim() : "");
+        const requestedInvDate = _normalizeISODateInput(rawRequestedInvDate);
+        if (rawRequestedInvDate && !requestedInvDate) {
+          return res.status(400).json({ error: "Invalid inventory date." });
+        }
+        const out = await _sbUpdateB2BStockValue({
+          schoolId,
+          stockId,
+          kind: 'inventory',
+          value,
+          requestedPropName: requestedInvProp,
+          requestedDate: requestedInvDate,
+        });
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:${schoolId}:v1`); } catch {}
+        return res.json({ ok: true, inventoryPropName: out.inventoryPropName, inventoryDate: out.inventoryDate, value });
+      }
+
       const school = await _getB2BSchoolById(schoolId);
       if (!school) return res.status(404).json({ error: "School not found." });
       const schoolName = String(school.name || "").trim();
@@ -6857,8 +8209,8 @@ app.patch(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const schoolId = String(req.params.id || "").trim();
@@ -6875,6 +8227,28 @@ app.patch(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbB2BSchoolsEnabled() && _sbStocktakingEnabled()) {
+        const requestedDefProp = typeof req?.body?.defectedPropName === "string" ? String(req.body.defectedPropName).trim() : "";
+        const rawRequestedDefDate =
+          typeof req?.body?.defectedDate === "string"
+            ? String(req.body.defectedDate).trim()
+            : (typeof req?.body?.inventoryDate === "string" ? String(req.body.inventoryDate).trim() : "");
+        const requestedDefDate = _normalizeISODateInput(rawRequestedDefDate);
+        if (rawRequestedDefDate && !requestedDefDate) {
+          return res.status(400).json({ error: "Invalid defected date." });
+        }
+        const out = await _sbUpdateB2BStockValue({
+          schoolId,
+          stockId,
+          kind: 'defected',
+          value,
+          requestedPropName: requestedDefProp,
+          requestedDate: requestedDefDate,
+        });
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:${schoolId}:v1`); } catch {}
+        return res.json({ ok: true, defectedPropName: out.defectedPropName, defectedDate: out.defectedDate, value });
+      }
+
       const school = await _getB2BSchoolById(schoolId);
       if (!school) return res.status(404).json({ error: "School not found." });
       const schoolName = String(school.name || "").trim();
@@ -7756,8 +9130,8 @@ app.get(
   requireAuth,
   requirePage("Create New Order"),
   async (req, res) => {
-    if (!b2bDatabaseId) {
-      return res.status(500).json({ error: "B2B database ID is not configured." });
+    if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
+      return res.status(500).json({ error: "B2B schools table/database is not configured." });
     }
     res.set("Cache-Control", "no-store");
 
@@ -7861,10 +9235,10 @@ app.get(
   requireAuth,
   requirePage("Current Orders"),
   async (req, res) => {
-    if (!ordersDatabaseId || !teamMembersDatabaseId) {
+    if (!_sbOrdersEnabled() && (!ordersDatabaseId || !teamMembersDatabaseId)) {
       return res
         .status(500)
-        .json({ error: "Database IDs are not configured." });
+        .json({ error: "Orders database is not configured." });
     }
 
     res.set("Cache-Control", "no-store");
@@ -7880,6 +9254,32 @@ app.get(
     req.session.recentOrders = recent;
 
     try {
+      if (_sbOrdersEnabled()) {
+        const cacheKey = `cache:api:orders:current:supabase:v1:${normKey(req.session?.username || "all")}`;
+        const forceFresh =
+          String(req.query?._fresh || "") === "1" ||
+          !!req.query?._refresh ||
+          String(req.get("x-ops-hard-refresh") || "") === "1";
+        const load = async () => _sbCurrentOrdersList(req);
+        const allOrders = forceFresh
+          ? await (async () => {
+              await cacheDel(cacheKey);
+              const fresh = await load();
+              _memSet(cacheKey, fresh, 60);
+              await _redisSet(cacheKey, fresh, 60);
+              return fresh;
+            })()
+          : await cacheGetOrSet(cacheKey, 60, load);
+
+        const ids = new Set((allOrders || []).map((o) => String(o.id || "")));
+        const extras = recent.filter((r) => !ids.has(String(r.id || "")));
+        return res.json(
+          (allOrders || [])
+            .concat(extras)
+            .sort((a, b) => new Date(b.createdTime || 0) - new Date(a.createdTime || 0)),
+        );
+      }
+
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
 
@@ -8177,19 +9577,55 @@ app.get(
   requireAuth,
   requirePage("Current Orders"),
   async (req, res) => {
-    if (!ordersDatabaseId || !teamMembersDatabaseId) {
-      return res.status(500).json({ error: "Database IDs are not configured." });
+    if (!_sbOrdersEnabled() && (!ordersDatabaseId || !teamMembersDatabaseId)) {
+      return res.status(500).json({ error: "Orders database is not configured." });
     }
 
-    const groupIdRaw = req.query.groupId;
-    if (!groupIdRaw || !looksLikeNotionId(groupIdRaw)) {
+    const groupIdRaw = String(req.query.groupId || "").trim();
+    if (!groupIdRaw) {
       return res.status(400).json({ error: "Missing or invalid groupId." });
     }
-    const groupId = toHyphenatedUUID(groupIdRaw);
 
     res.set("Cache-Control", "no-store");
 
     try {
+      if (_sbOrdersEnabled() && /^\d+$/.test(groupIdRaw)) {
+        const baseRow = await supabaseDb.selectById(_sbOrdersTable(), groupIdRaw);
+        if (!baseRow) return res.status(404).json({ error: "Order not found." });
+        const base = _sbSerializeOrderRow(baseRow);
+        const allRows = await _sbSelectOrdersRows({ approvedOnly: false });
+        const rows = allRows.filter((row) => {
+          const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+          return Number.isFinite(n) && Number.isFinite(base.orderIdNumber)
+            ? Number(n) === Number(base.orderIdNumber)
+            : String(_sbOrderGet(row, ["id", "ID"]) ?? "") === groupIdRaw;
+        });
+        const items = (rows.length ? rows : [baseRow]).map(_sbSerializeOrderRow);
+        const reason = base.reason || "No Reason";
+        const createdTime = base.createdTime;
+        const allArrived = items.length > 0 && items.every((i) => /(arrived|delivered|received)/i.test(String(i.status || "")));
+        const stage = allArrived ? 3 : 2;
+        const estimateTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+        const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+        return res.json({
+          groupId: groupIdRaw,
+          reason,
+          createdTime,
+          stage,
+          headerTitle: stage === 3 ? "Delivered" : "On the way",
+          headerSubtitle: stage === 3 ? "Your cargo has arrived." : "Your cargo is on delivery.",
+          eta: null,
+          totals: { itemsCount: items.length, totalQty, estimateTotal },
+          items,
+          source: "supabase",
+        });
+      }
+
+      if (!looksLikeNotionId(groupIdRaw)) {
+        return res.status(400).json({ error: "Missing or invalid groupId." });
+      }
+      const groupId = toHyphenatedUUID(groupIdRaw);
+
       // Find current user (cached in session if available)
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
@@ -8645,6 +10081,203 @@ function _messagesSerializeChatPage(page, comments = []) {
   };
 }
 
+
+function _sbMessagesEnabled() {
+  if (!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured())) return false;
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return !!(cfg.messagesChatsTable || process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats') &&
+    !!(cfg.messagesTable || process.env.SUPABASE_MESSAGES_TABLE || 'messages');
+}
+
+function _sbMessagesChatsTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return String(cfg.messagesChatsTable || process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
+}
+
+function _sbMessagesTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return String(cfg.messagesTable || process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
+}
+
+function _sbMessageChatId(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const n = Number(raw);
+  return Number.isFinite(n) && String(n) === raw ? n : raw;
+}
+
+function _sbMessageCurrentEmail(req) {
+  const cached = req?.session?.accountCache || {};
+  return String(cached.email || cached.Email || '').trim();
+}
+
+function _sbNormalizeMessageRow(row, req) {
+  const sender = _sbString(_sbGet(row, ['sender_name', 'sender', 'created_by_name', 'name'])) || 'User';
+  const body = _sbString(_sbGet(row, ['body', 'message', 'text', 'last_message'])) || '';
+  const createdTime = _uaSafeDate(_sbGet(row, ['created_at', 'createdTime', 'created_time'])) || new Date().toISOString();
+  const currentName = String(req?.session?.username || '').trim().toLowerCase();
+  const currentEmail = _sbMessageCurrentEmail(req).toLowerCase();
+  const senderKey = String(sender || '').trim().toLowerCase();
+  const senderEmail = _sbString(_sbGet(row, ['sender_email', 'email'])).toLowerCase();
+  return {
+    id: String(_sbGet(row, ['id', 'ID']) ?? ''),
+    discussionId: String(_sbGet(row, ['chat_id', 'chatId']) ?? ''),
+    sender,
+    senderEmail,
+    body,
+    rawText: body,
+    createdTime,
+    createdTimeText: _messagesSafeDate(createdTime),
+    isMine: (!!currentName && senderKey === currentName) || (!!currentEmail && senderEmail === currentEmail),
+    source: 'supabase',
+  };
+}
+
+function _sbSerializeMessageChatRow(row, messages = []) {
+  const id = String(_sbGet(row, ['id', 'ID']) ?? '');
+  const title = _sbString(_sbGet(row, ['title', 'name', 'Name'])) || 'New Chat';
+  const createdTime = _uaSafeDate(_sbGet(row, ['created_at', 'created_time', 'notion_created_time'])) || '';
+  const lastEditedTime = _uaSafeDate(_sbGet(row, ['updated_at', 'last_edited_time', 'notion_last_edited_time'])) || createdTime;
+  const last = Array.isArray(messages) && messages.length ? messages[messages.length - 1] : null;
+  const preview = _sbString(_sbGet(row, ['last_message', 'preview'])) || last?.body || last?.rawText || 'No messages yet';
+  const lastMessageTime = last?.createdTime || lastEditedTime || createdTime;
+  const countRaw = _sbGet(row, ['comments_count', 'messages_count', 'message_count']);
+  const commentsCount = Number.isFinite(Number(countRaw)) ? Number(countRaw) : (Array.isArray(messages) ? messages.length : 0);
+  return {
+    id,
+    title,
+    url: '',
+    createdTime,
+    createdTimeText: _messagesSafeDate(createdTime),
+    lastEditedTime,
+    lastEditedTimeText: _messagesSafeDate(lastEditedTime),
+    commentsCount,
+    preview,
+    lastMessageTime,
+    lastMessageTimeText: _messagesSafeDate(lastMessageTime),
+    participantNames: _sbString(_sbGet(row, ['participant_names', 'participants'])) || '',
+    source: 'supabase',
+  };
+}
+
+async function _sbMessagesForChat(chatId, req = null, { limit = 500 } = {}) {
+  const safeLimit = Math.max(1, Math.min(1000, Number(limit) || 500));
+  const id = _sbMessageChatId(chatId);
+  if (!id) return [];
+  const rows = await supabaseDb.select(_sbMessagesTable(), {
+    select: '*',
+    chat_id: `eq.${id}`,
+    order: 'created_at.asc,id.asc',
+    limit: safeLimit,
+  });
+  return (Array.isArray(rows) ? rows : []).map((row) => _sbNormalizeMessageRow(row, req));
+}
+
+async function _sbMessagesCountsAndLast(chatIds = []) {
+  const ids = (Array.isArray(chatIds) ? chatIds : []).map((id) => String(id || '').trim()).filter(Boolean);
+  if (!ids.length) return new Map();
+  const numericIds = ids.filter((id) => /^\d+$/.test(id));
+  if (!numericIds.length) return new Map();
+  const rows = await supabaseDb.select(_sbMessagesTable(), {
+    select: 'id,chat_id,body,created_at,sender_name,sender_email',
+    chat_id: `in.(${numericIds.join(',')})`,
+    order: 'created_at.asc,id.asc',
+    limit: 5000,
+  }).catch(() => []);
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = String(_sbGet(row, ['chat_id']) ?? '');
+    if (!key) continue;
+    const entry = map.get(key) || { count: 0, last: null };
+    entry.count += 1;
+    entry.last = row;
+    map.set(key, entry);
+  }
+  return map;
+}
+
+async function _sbMessagesChatsList({ limit = 60, includeCounts = true } = {}) {
+  const rows = await supabaseDb.selectAll(_sbMessagesChatsTable(), {
+    limit: Math.max(1, Math.min(100, Number(limit) || 60)),
+    order: 'updated_at.desc,id.desc',
+  });
+  const list = Array.isArray(rows) ? rows : [];
+  let meta = new Map();
+  if (includeCounts && list.length) {
+    meta = await _sbMessagesCountsAndLast(list.map((row) => _sbGet(row, ['id', 'ID'])));
+  }
+  const chats = list.map((row) => {
+    const id = String(_sbGet(row, ['id', 'ID']) ?? '');
+    const info = meta.get(id) || null;
+    const normalizedLast = info?.last ? _sbNormalizeMessageRow(info.last, null) : null;
+    const chat = _sbSerializeMessageChatRow(row, normalizedLast ? [normalizedLast] : []);
+    if (info) chat.commentsCount = info.count;
+    return chat;
+  });
+  chats.sort((a, b) => new Date(b.lastMessageTime || b.lastEditedTime || 0) - new Date(a.lastMessageTime || a.lastEditedTime || 0));
+  return chats;
+}
+
+async function _sbCreateMessageChat(req, payload = {}) {
+  const currentName = String(req.session?.username || 'User').trim() || 'User';
+  const currentEmail = _sbMessageCurrentEmail(req);
+  const targetName = String(payload.targetName || '').trim();
+  let targetEmail = '';
+  if (payload.targetUserId && _sbTeamMembersEnabled()) {
+    try {
+      const targetRow = await _sbFindTeamMemberById(payload.targetUserId);
+      if (targetRow) targetEmail = _sbString(_sbValueForLabel(targetRow, 'Email')) || '';
+    } catch {}
+  }
+  const requestedTitle = String(payload.title || '').trim();
+  const title = requestedTitle || (targetName ? `${currentName} ↔ ${targetName}` : `${currentName} Chat`);
+  const participantNames = [currentName, targetName].filter(Boolean).join(', ');
+  const participantEmails = [currentEmail, targetEmail].filter(Boolean).join(', ');
+
+  let chat = await supabaseDb.insert(_sbMessagesChatsTable(), {
+    title: title.slice(0, 180),
+    participant_names: participantNames || null,
+    participant_emails: participantEmails || null,
+    created_by_name: currentName || null,
+    created_by_email: currentEmail || null,
+  });
+
+  const firstMessage = String(payload.message || '').trim();
+  let comments = [];
+  if (firstMessage && chat?.id) {
+    const comment = await _sbCreateChatMessage(req, chat.id, firstMessage);
+    comments = [comment];
+    try {
+      const refreshed = await supabaseDb.selectById(_sbMessagesChatsTable(), chat.id);
+      if (refreshed) chat = refreshed;
+    } catch {}
+  }
+
+  const serialized = _sbSerializeMessageChatRow(chat, comments);
+  return { chat: serialized, comments };
+}
+
+async function _sbCreateChatMessage(req, chatId, message) {
+  const body = String(message || '').trim();
+  if (!body) throw new Error('Message is required.');
+  const currentName = String(req.session?.username || 'User').trim() || 'User';
+  const currentEmail = _sbMessageCurrentEmail(req);
+  const row = await supabaseDb.insert(_sbMessagesTable(), {
+    chat_id: _sbMessageChatId(chatId),
+    sender_name: currentName || null,
+    sender_email: currentEmail || null,
+    body,
+    message_type: 'text',
+  });
+  try {
+    await supabaseDb.updateById(_sbMessagesChatsTable(), chatId, {
+      updated_at: new Date().toISOString(),
+      last_message: body,
+    });
+  } catch {}
+  return _sbNormalizeMessageRow(row, req);
+}
+
 app.get('/api/messages/team-members', requireAuth, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -8657,10 +10290,15 @@ app.get('/api/messages/team-members', requireAuth, async (req, res) => {
 });
 
 app.get('/api/messages/chats', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
     const limit = Math.max(1, Math.min(80, Number(req.query?.limit || 40)));
+    if (_sbMessagesEnabled()) {
+      const chats = await _sbMessagesChatsList({ limit, includeCounts: true });
+      return res.json({ ok: true, source: 'supabase', chats });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const resp = await notion.databases.query({
       database_id: messagesDatabaseId,
       page_size: limit,
@@ -8678,17 +10316,22 @@ app.get('/api/messages/chats', requireAuth, async (req, res) => {
 
     const chats = pages.map((page) => _messagesSerializeChatPage(page, commentMap.get(page.id) || []));
     chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
-    return res.json({ ok: true, chats });
+    return res.json({ ok: true, source: 'notion', chats });
   } catch (error) {
-    console.error('GET /api/messages/chats error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to load chats from Massage database.' });
+    console.error('GET /api/messages/chats error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _sbMessagesEnabled() ? 'Failed to load chats from Supabase.' : 'Failed to load chats from Massage database.' });
   }
 });
 
 app.post('/api/messages/chats', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
+    if (_sbMessagesEnabled()) {
+      const created = await _sbCreateMessageChat(req, req.body || {});
+      return res.json({ ok: true, source: 'supabase', chat: created.chat, comments: created.comments });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const db = await notion.databases.retrieve({ database_id: messagesDatabaseId });
     const titleProp = _messagesFirstTitlePropName(db?.properties || {});
     const currentName = String(req.session?.username || 'User').trim() || 'User';
@@ -8711,29 +10354,33 @@ app.post('/api/messages/chats', requireAuth, async (req, res) => {
     }
 
     const page = await notion.pages.retrieve({ page_id: created.id }).catch(() => created);
-    return res.json({ ok: true, chat: _messagesSerializeChatPage(page, comments), comments });
+    return res.json({ ok: true, source: 'notion', chat: _messagesSerializeChatPage(page, comments), comments });
   } catch (error) {
-    console.error('POST /api/messages/chats error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to create chat.' });
+    console.error('POST /api/messages/chats error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to create chat.' });
   }
 });
 
 app.get('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();
     if (!pageId) return res.status(400).json({ ok: false, error: 'Missing chat ID.' });
+    if (_sbMessagesEnabled()) {
+      const comments = await _sbMessagesForChat(pageId, req, { limit: 1000 });
+      return res.json({ ok: true, source: 'supabase', comments });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const comments = await _messagesRetrieveComments(pageId, req, { pageSize: 100 });
-    return res.json({ ok: true, comments });
+    return res.json({ ok: true, source: 'notion', comments });
   } catch (error) {
-    console.error('GET /api/messages/chats/:id/comments error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to load chat comments.' });
+    console.error('GET /api/messages/chats/:id/comments error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to load chat messages.' });
   }
 });
 
 app.post('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
-  if (!_messagesRequireDb(res)) return;
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();
@@ -8741,12 +10388,18 @@ app.post('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
     if (!pageId) return res.status(400).json({ ok: false, error: 'Missing chat ID.' });
     if (!message) return res.status(400).json({ ok: false, error: 'Message is required.' });
 
+    if (_sbMessagesEnabled()) {
+      const comment = await _sbCreateChatMessage(req, pageId, message);
+      return res.json({ ok: true, source: 'supabase', comment });
+    }
+
+    if (!_messagesRequireDb(res)) return;
     const currentName = String(req.session?.username || 'User').trim() || 'User';
     const created = await _messagesCreateComment(pageId, currentName, message);
-    return res.json({ ok: true, comment: _messagesNormalizeComment(created, req) });
+    return res.json({ ok: true, source: 'notion', comment: _messagesNormalizeComment(created, req) });
   } catch (error) {
-    console.error('POST /api/messages/chats/:id/comments error:', error?.body || error);
-    return res.status(500).json({ ok: false, error: 'Failed to send message.' });
+    console.error('POST /api/messages/chats/:id/comments error:', error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to send message.' });
   }
 });
 
@@ -8768,6 +10421,86 @@ app.post(
     } catch (error) {
       console.error("POST /api/user-access/admin/verify error:", error?.body || error);
       return res.status(500).json({ ok: false, error: "Failed to verify Admin password." });
+    }
+  },
+);
+
+// User Access & Data — Dynamic form options
+app.get(
+  "/api/user-access/options",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const rows = _sbTeamMembersEnabled() ? await _sbSelectTeamMembersRows() : [];
+      return res.json({
+        ok: true,
+        source: _sbTeamMembersEnabled() ? "supabase" : "notion",
+        schools: await _uaStocktakingSchoolOptions(),
+        allowedPages: _uaAllowedPageOptionsFromRows(rows),
+        svSchools: _uaSvSchoolNameOptionsFromRows(rows),
+      });
+    } catch (error) {
+      console.error("GET /api/user-access/options error:", error?.details || error?.body || error);
+      return res.status(500).json({ ok: false, error: error?.message || "Failed to load User Access options." });
+    }
+  },
+);
+
+// User Access & Data — Add a Stocktaking school column used by the School dropdown
+app.post(
+  "/api/user-access/stocktaking-columns",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_uaAdminVerified(req)) {
+        return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+      }
+      if (!_sbStocktakingEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      }
+      const created = await _uaAddStocktakingSchoolColumn(req.body?.name || req.body?.column || "");
+      await cacheDel("cache:api:user-access:team-members:supabase:v1");
+      return res.json({ ok: true, ...created });
+    } catch (error) {
+      console.error("POST /api/user-access/stocktaking-columns error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add Stocktaking column." });
+    }
+  },
+);
+
+// User Access & Data — Upload profile/media files to Supabase Storage and return public URLs
+app.post(
+  "/api/user-access/upload-file",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_uaAdminVerified(req)) {
+        return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+      }
+      const { dataUrl, filename, kind } = req.body || {};
+      if (!dataUrl) return res.status(400).json({ ok: false, error: "File data is required." });
+      const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+      const uploadKind = String(kind || "file").toLowerCase();
+      if (uploadKind.includes("profile") && !/^image\//i.test(String(mime || ""))) {
+        return res.status(400).json({ ok: false, error: "Profile picture must be an image." });
+      }
+      if (buf.length > 12 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: "File is too large. Maximum size is 12MB." });
+      }
+      const safeOriginalName = String(filename || "upload.bin").trim() || "upload.bin";
+      const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
+      const blobName = `team-members/${uploadKind || "file"}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const publicUrl = await uploadToBlobFromBase64(dataUrl, blobName);
+      return res.json({ ok: true, url: publicUrl, name: safeOriginalName, mime });
+    } catch (error) {
+      console.error("POST /api/user-access/upload-file error:", error?.details || error?.body || error);
+      const message = String(error?.message || "") === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+        ? "Supabase Storage is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as fallback."
+        : (error?.message || "Failed to upload file.");
+      return res.status(error?.status || 500).json({ ok: false, error: message });
     }
   },
 );
@@ -8797,7 +10530,7 @@ app.post(
         const created = await supabaseDb.insert(_sbTeamMembersTable(), writeRow);
         await cacheDel(USER_ACCESS_CACHE_KEY);
         await cacheDel("cache:api:user-access:team-members:supabase:v1");
-        const editableFields = _sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]);
+        const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]), [...(rows || []), created || {}]);
         const member = _sbSerializeTeamMemberRow(created || writeRow, editableFields);
         return res.json({ ok: true, member, source: "supabase" });
       }
@@ -8844,7 +10577,7 @@ app.patch(
         const updated = await supabaseDb.updateById(_sbTeamMembersTable(), pageId, writeRow);
         await cacheDel(USER_ACCESS_CACHE_KEY);
         await cacheDel("cache:api:user-access:team-members:supabase:v1");
-        const editableFields = _sbOrderedEditableFieldsFromRows(rows || []);
+        const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows || []), rows || []);
         const member = _sbSerializeTeamMemberRow(updated || { ...writeRow, id: pageId }, editableFields);
         return res.json({ ok: true, member, source: "supabase" });
       }
@@ -8944,11 +10677,30 @@ app.get(
   requireAuth,
   requirePage(["Requested Orders", "Maintenance Orders"]),
   async (req, res) => {
-    if (!ordersDatabaseId)
+    if (!_sbOrdersEnabled() && !ordersDatabaseId)
       return res.status(500).json({ error: "Orders DB not configured" });
 
     res.set("Cache-Control", "no-store");
     try {
+      if (_sbOrdersEnabled()) {
+        const cacheKey = "cache:api:orders:requested:supabase:v1";
+        const forceFresh =
+          String(req.query?._fresh || "") === "1" ||
+          !!req.query?._refresh ||
+          String(req.get("x-ops-hard-refresh") || "") === "1";
+        const load = async () => _sbRequestedOrdersList();
+        const data = forceFresh
+          ? await (async () => {
+              await cacheDel(cacheKey);
+              const fresh = await load();
+              _memSet(cacheKey, fresh, 60);
+              await _redisSet(cacheKey, fresh, 60);
+              return fresh;
+            })()
+          : await cacheGetOrSet(cacheKey, 60, load);
+        return res.json(data);
+      }
+
       // Cache version is bumped when response logic/shape changes.
       const cacheKey = "cache:api:orders:requested:v7";
       const forceFresh =
@@ -9581,6 +11333,21 @@ app.post(
         return res.status(400).json({ error: "memberIds or memberId required" });
       if (!Array.isArray(memberIds) || memberIds.length === 0) memberIds = memberId ? [memberId] : [];
 
+      if (_sbOrdersEnabled() && orderIds.every((id) => /^\d+$/.test(String(id)))) {
+        let names = [];
+        if (_sbTeamMembersEnabled()) {
+          names = (await Promise.all((memberIds || []).map(async (mid) => {
+            const row = await _sbFindTeamMemberById(mid);
+            return row ? _sbString(_sbValueForLabel(row, "Name")) : String(mid || "");
+          }))).filter(Boolean);
+        } else {
+          names = (memberIds || []).map((x) => String(x || "").trim()).filter(Boolean);
+        }
+        await _sbUpdateOrdersByIds(orderIds, { supervisor: names.join(", ") || null });
+        await _sbInvalidateOrdersCaches();
+        return res.json({ success: true, source: "supabase" });
+      }
+
       // Detect property name "Assigned To"
       const sample = await notion.pages.retrieve({ page_id: orderIds[0] });
       const props = sample.properties || {};
@@ -9645,6 +11412,27 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rnText = Array.isArray(receiptNumber) ? receiptNumber.filter(Boolean).join(", ") : String(receiptNumber || "").trim();
+        const patch = {
+          status: "Shipped",
+          person_received_by_operations: req.session.username || null,
+        };
+        if (rnText) patch.receipt_number = rnText;
+        if (issueDescription) patch.issue_description = String(issueDescription || "").trim();
+        await _sbUpdateOrdersByIdsWithQuantities(ids, patch, quantities || null);
+        await _sbInvalidateOrdersCaches();
+        return res.json({
+          success: true,
+          status: "Shipped",
+          statusColor: "blue",
+          operationsByName: req.session.username || "",
+          issueDescription: issueDescription || null,
+          receiptNumber: rnText || null,
+          source: "supabase",
+        });
+      }
 
       const statusProp = await detectStatusPropName();
 
@@ -10047,6 +11835,12 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await _sbUpdateOrdersByIds(ids, { status: "Archive" });
+        await _sbInvalidateOrdersCaches();
+        return res.json({ success: true, status: "Archive", statusColor: "purple", source: "supabase" });
+      }
+
       const statusProp = await detectStatusPropName();
       const dbProps = await getOrdersDBProps();
       const dbPropMeta = dbProps?.[statusProp] || null;
@@ -10121,6 +11915,12 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await _sbUpdateOrdersByIds(ids, { status: "In progress" });
+        await _sbInvalidateOrdersCaches();
+        return res.json({ success: true, status: "In progress", statusColor: "yellow", source: "supabase" });
+      }
 
       const statusProp = await detectStatusPropName();
       const dbProps = await getOrdersDBProps();
@@ -10455,6 +12255,30 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rnList = Array.isArray(receiptNumbers) ? receiptNumbers : (receiptNumber ? [receiptNumber] : []);
+        const rnText = rnList.map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+        const receiptNames = []
+          .concat(Array.isArray(orderReceiptFilenames) ? orderReceiptFilenames : [])
+          .concat(orderReceiptFilename ? [orderReceiptFilename] : [])
+          .concat(Array.isArray(maintenanceReceiptFilenames) ? maintenanceReceiptFilenames : [])
+          .concat(maintenanceReceiptFilename ? [maintenanceReceiptFilename] : [])
+          .map((x) => String(x || "").trim())
+          .filter(Boolean);
+        const patch = { status: "Arrived" };
+        if (rnText) patch.receipt_number = rnText;
+        if (receiptNames.length) patch.order_receipt = receiptNames.join(", ");
+        await _sbUpdateOrdersByIds(ids, patch);
+        await _sbInvalidateOrdersCaches();
+        return res.json({
+          success: true,
+          status: "Arrived",
+          statusColor: "green",
+          receiptNumber: rnText || null,
+          source: "supabase",
+        });
+      }
+
       const statusProp = await detectStatusPropName();
 
       // Determine property type + pick the exact option name from the DB (case-insensitive)
@@ -10683,8 +12507,8 @@ app.post(
           });
         } catch (uploadErr) {
           const uploadMessage =
-            String(uploadErr?.message || "").trim() === "BLOB_TOKEN_MISSING"
-              ? "Order receipt upload is not configured."
+            String(uploadErr?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+              ? "Supabase Storage upload is not configured."
               : "Failed to upload order receipt.";
           return res.status(500).json({ error: uploadMessage });
         }
@@ -11261,6 +13085,24 @@ app.post(
 
       const vNumRounded = roundQty(vNumRaw);
 
+      if (_sbOrdersEnabled() && /^\d+$/.test(String(id))) {
+        const row = await supabaseDb.selectById(_sbOrdersTable(), id);
+        if (!row) return res.status(404).json({ error: "Order row not found" });
+        const base = _sbSerializeOrderRow(row).quantity || 0;
+        const remaining = roundQty((Number(base) || 0) - vNumRounded);
+        await supabaseDb.updateById(_sbOrdersTable(), id, {
+          quantity_received_by_operations: vNumRounded,
+          quantity_remaining: remaining,
+        });
+        await _sbInvalidateOrdersCaches();
+        return res.json({
+          success: true,
+          value: vNumRounded,
+          quantityRemaining: remaining,
+          source: "supabase",
+        });
+      }
+
       // Detect received quantity property name (Number)
       const receivedProp = (await (async () => {
         const props = await getOrdersDBProps();
@@ -11403,6 +13245,10 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab });
+      }
 
       const parseNumberProp = (prop) => {
         if (!prop) return null;
@@ -11716,6 +13562,10 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderMaintenancePdf(req, res, ids);
+      }
+
       const pages = (await Promise.all(
         ids.map(async (id) => {
           try {
@@ -11972,6 +13822,10 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderExcel(req, res, ids);
+      }
 
       // Helpers
       const parseNumberProp = (prop) => {
@@ -12486,6 +14340,10 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current" });
+      }
+
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
 
@@ -12780,6 +14638,10 @@ app.post(
         .filter(Boolean)
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderExcel(req, res, ids);
+      }
 
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
@@ -13895,6 +15757,16 @@ app.get(
   requirePage("Create New Order"),
   cachedJsonRoute(20 * 60, () => "cache:api:components:v1"),
   async (req, res) => {
+    if (_sbProductsEnabled()) {
+      try {
+        const list = await cacheGetOrSet("cache:api:components:supabase:v1", 20 * 60, async () => _sbProductsList());
+        return res.json(Array.isArray(list) ? list : []);
+      } catch (error) {
+        console.error("/api/components Supabase error:", error?.details || error);
+        return res.status(error?.status || 500).json({ error: "Failed to fetch products from Supabase." });
+      }
+    }
+
     if (!componentsDatabaseId) {
       return res
         .status(500)
@@ -14298,6 +16170,17 @@ app.get(
   requirePage('Damaged Assets'),
   async (req, res) => {
     try {
+      if (_sbProductsEnabled()) {
+        const q = String(req.query.q || '').trim().toLowerCase();
+        const list = await cacheGetOrSet("cache:api:damaged-assets:options:supabase:v1", 20 * 60, async () => _sbProductsList());
+        const options = (Array.isArray(list) ? list : [])
+          .map((p) => ({ id: String(p.id || ''), name: String(p.name || '').trim() }))
+          .filter((p) => p.id && p.name)
+          .filter((p) => !q || p.name.toLowerCase().includes(q));
+        res.set('Cache-Control', 'no-store');
+        return res.json({ options });
+      }
+
       // DB بتاع الـ relation "Products"
       const dbId = componentsDatabaseId || process.env.Products_Database || null;
       if (!dbId) {
@@ -14373,11 +16256,6 @@ app.post(
   requireAuth,
   requirePage("Create New Order"),
   async (req, res) => {
-    if (!ordersDatabaseId || !teamMembersDatabaseId) {
-      return res
-        .status(500)
-        .json({ success: false, message: "Database IDs are not configured." });
-    }
       // Password confirmation (requested): user must enter their password
       // again before submitting an order.
       const password = String(req.body?.password || "").trim();
@@ -14461,6 +16339,47 @@ if (_isRequestMaintenance) {
   if (cleanedProducts.some(p => !p.reason)) {
     return res.status(400).json({ success: false, message: "Each product must include a reason." });
   }
+}
+
+if (_sbOrdersEnabled() && _sbProductsEnabled() && !req.session.editingOrder) {
+  try {
+    const signedProducts = cleanedProducts.map((p) => ({
+      ...p,
+      quantity: Number(p.quantity) * _qtySign,
+    }));
+    const createdItems = await _sbCreateOrdersFromCart(req, signedProducts, orderType);
+    const recentOrders = (createdItems || []).map((item) => ({
+      id: item.id,
+      reason: item.reason,
+      productName: item.productName,
+      quantity: item.quantity,
+      status: item.status || "Order Placed",
+      createdTime: item.createdTime || new Date().toISOString(),
+      orderId: item.orderId || null,
+      orderIdPrefix: item.orderIdPrefix || "ORD",
+      orderIdNumber: item.orderIdNumber || null,
+      orderType: item.orderType || (_canonicalOrderTypeLabel(orderType) || orderType || null),
+      orderTypeColor: item.orderTypeColor || _defaultOrderTypeNotionColor(_canonicalOrderTypeLabel(orderType) || orderType),
+    }));
+    req.session.recentOrders = (req.session.recentOrders || []).concat(recentOrders);
+    if (req.session.recentOrders.length > 50) req.session.recentOrders = req.session.recentOrders.slice(-50);
+    _clearOrderDraftForType(req.session, orderType);
+    return res.json({
+      success: true,
+      message: "Order submitted and saved to Supabase successfully!",
+      source: "supabase",
+      orderItems: (createdItems || []).map((item) => ({ orderPageId: item.id, productId: item.productPageId || item.id })),
+    });
+  } catch (error) {
+    console.error("Error creating order in Supabase:", error?.details || error);
+    return res.status(error?.status || 500).json({ success: false, message: "Failed to save order to Supabase." });
+  }
+}
+
+if (!ordersDatabaseId || !teamMembersDatabaseId) {
+  return res
+    .status(500)
+    .json({ success: false, message: "Database IDs are not configured." });
 }
     
 
@@ -15202,6 +17121,28 @@ let _productsNameToUnityPriceCache = {
 
 async function _getProductsNameToIdCodeMap() {
   try {
+    if (_sbProductsEnabled()) {
+      const now = Date.now();
+      const db = `supabase:${_sbProductsTable()}`;
+      if (
+        _productsNameToIdCodeCache.map &&
+        _productsNameToIdCodeCache.map.size > 0 &&
+        _productsNameToIdCodeCache.db === db &&
+        now - _productsNameToIdCodeCache.ts < _PRODUCTS_IDCODE_CACHE_TTL_MS
+      ) {
+        return _productsNameToIdCodeCache.map;
+      }
+      const map = new Map();
+      const list = await _sbProductsList();
+      for (const product of list) {
+        if (!product?.name || !product?.displayId) continue;
+        const key = _normNameKey(product.name);
+        if (!map.has(key) || !map.get(key)) map.set(key, String(product.displayId));
+      }
+      _productsNameToIdCodeCache = { ts: now, db, map };
+      return map;
+    }
+
     if (!componentsDatabaseId) return new Map();
 
     const now = Date.now();
@@ -15265,6 +17206,30 @@ async function _getProductsNameToIdCodeMap() {
 // Used for Stocktaking Excel export only.
 async function _getProductsNameToUnityPriceMap() {
   try {
+    if (_sbProductsEnabled()) {
+      const now = Date.now();
+      const db = `supabase:${_sbProductsTable()}`;
+      if (
+        _productsNameToUnityPriceCache.map &&
+        _productsNameToUnityPriceCache.map.size > 0 &&
+        _productsNameToUnityPriceCache.db === db &&
+        now - _productsNameToUnityPriceCache.ts < _PRODUCTS_PRICE_CACHE_TTL_MS
+      ) {
+        return _productsNameToUnityPriceCache.map;
+      }
+      const map = new Map();
+      const list = await _sbProductsList();
+      for (const product of list) {
+        if (!product?.name) continue;
+        const price = Number(product.unitPrice);
+        if (!Number.isFinite(price)) continue;
+        const key = _normNameKey(product.name);
+        if (!map.has(key) || map.get(key) === null || typeof map.get(key) === "undefined") map.set(key, price);
+      }
+      _productsNameToUnityPriceCache = { ts: now, db, map };
+      return map;
+    }
+
     if (!componentsDatabaseId) return new Map();
 
     const now = Date.now();
@@ -15324,18 +17289,249 @@ async function _getProductsNameToUnityPriceMap() {
   }
 }
 
+
+// -----------------------------------------------------------------------------
+// Supabase Stocktaking adapter
+// -----------------------------------------------------------------------------
+function _sbStocktakingEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbStocktakingTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return (cfg.stocktakingTable || process.env.SUPABASE_STOCKTAKING_TABLE || "stocktaking").trim() || "stocktaking";
+}
+
+function _sbStocktakingNum(value) {
+  if (value === null || typeof value === "undefined") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return 0;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function _sbStocktakingText(value) {
+  const t = _sbString(value);
+  return t && !/^null$/i.test(t) ? t : "";
+}
+
+function _sbStocktakingColumnKey(label = "") {
+  return String(label || "")
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/%/g, " percent ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+}
+
+function _sbDetectStocktakingQuantityColumn(row = {}, schoolName = "") {
+  const keys = Object.keys(row || {});
+  if (!keys.length) return "";
+  const exact = (wanted) => keys.find((key) => _sbCanon(key) === _sbCanon(wanted));
+  const base = _sbStocktakingColumnKey(schoolName);
+  const candidates = [];
+  if (base) candidates.push(base);
+  if (base && !base.endsWith("_done")) candidates.push(`${base}_done`);
+  if (base && base.endsWith("_done")) candidates.push(base.replace(/_done$/, ""));
+  if (base && !base.endsWith("_2nd_term")) candidates.push(`${base}_2nd_term`);
+  candidates.push(
+    "total_quantity",
+    "all_schools_stock",
+    "all_done",
+    "all_2nd_term",
+    "quantity",
+    "stock",
+  );
+  for (const c of candidates) {
+    const hit = exact(c);
+    if (hit) return hit;
+  }
+  return "";
+}
+
+async function _sbStocktakingCurrentSchoolName(req) {
+  let row = null;
+  if (req?.session?.userSupabaseId) row = await _sbFindTeamMemberById(req.session.userSupabaseId);
+  if (!row && req?.session?.username) row = await _sbFindTeamMemberByName(req.session.username);
+  const schoolName = _sbStocktakingText(_sbValueForLabel(row || {}, "School"));
+  return { row, schoolName };
+}
+
+async function _sbStocktakingRows() {
+  const rows = await supabaseDb.selectAll(_sbStocktakingTable(), {
+    limit: 5000,
+    order: "name.asc,id.asc",
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
+  const quantityColumn = Object.prototype.hasOwnProperty.call(row || {}, schoolNameOrColumn)
+    ? schoolNameOrColumn
+    : _sbDetectStocktakingQuantityColumn(row, schoolNameOrColumn);
+  const name = _sbStocktakingText(_sbGet(row, ["name", "Name", "component", "Component", "product_name", "Product Name"])) || "Untitled";
+  const productName = _sbStocktakingText(_sbGet(row, ["product_name", "Product Name", "product", "Product"])) || name;
+  const url =
+    _sbExtractUrl(_sbGet(row, ["url", "URL"])) ||
+    _sbExtractUrl(_sbGet(row, ["product_url", "Product URL"])) ||
+    _sbExtractUrl(_sbGet(row, ["item_url", "Item URL"])) ||
+    null;
+  const tagName = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
+  return {
+    id: String(_sbGet(row, ["id", "ID", "notion_id", "Notion ID"]) ?? ""),
+    name,
+    productName,
+    url,
+    quantity: _sbStocktakingNum(quantityColumn ? row?.[quantityColumn] : 0),
+    oneKitQuantity: _sbStocktakingNum(_sbGet(row, ["one_kit_quantity", "One Kit Quantity", "one kit quantity"])),
+    idCode: _sbStocktakingText(_sbGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
+    unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
+    tag: { name: tagName, color: "default" },
+    quantityColumn: quantityColumn || null,
+    source: "supabase",
+  };
+}
+
+async function _sbStocktakingForRequest(req) {
+  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
+  if (!schoolName) {
+    const err = new Error("Could not determine school name for the current user.");
+    err.status = 404;
+    throw err;
+  }
+  const rows = await _sbStocktakingRows();
+  const items = rows.map((row) => _sbSerializeStocktakingRow(row, schoolName));
+  return items.filter((item) => Number(item.quantity) > 0);
+}
+
+async function _sbRenderStocktakingPdf(req, res) {
+  const items = await _sbStocktakingForRequest(req);
+  await ensurePdfArabicSupport();
+  const createdAt = new Date();
+  const dateStr = createdAt.toISOString().slice(0, 10);
+  const fileName = `Stocktaking-${dateStr}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.set("Cache-Control", "no-store");
+
+  const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  enableArabicPdf(doc);
+  doc.pipe(res);
+  attachPageNumbers(doc);
+  drawStocktakingHeader(doc, {
+    title: "Stocktaking",
+    subtitle: `Generated ${formatDateTime(createdAt)}`,
+    logoPath: path.join(__dirname, "../public/images/logo.png"),
+  });
+
+  const groups = new Map();
+  for (const item of items) {
+    const tag = item?.tag?.name || "Untagged";
+    if (!groups.has(tag)) groups.set(tag, []);
+    groups.get(tag).push(item);
+  }
+  const tags = Array.from(groups.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  let y = Math.max(doc.y + 14, 120);
+  const rowH = 20;
+  const colIdW = 70;
+  const colQtyW = 55;
+  const colNameW = right - left - colIdW - colQtyW;
+
+  const ensureSpace = (h = rowH) => {
+    if (y + h > bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+  };
+
+  for (const tag of tags) {
+    const groupItems = (groups.get(tag) || []).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    ensureSpace(50);
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#111827").text(`${tag} (${groupItems.length})`, left, y);
+    y += 20;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#374151");
+    doc.text("ID Code", left, y, { width: colIdW });
+    doc.text("Component", left + colIdW, y, { width: colNameW });
+    doc.text("In Stock", right - colQtyW, y, { width: colQtyW, align: "right" });
+    y += 14;
+    doc.moveTo(left, y).lineTo(right, y).strokeColor("#E5E7EB").stroke();
+    y += 4;
+
+    doc.font("Helvetica").fontSize(8).fillColor("#111827");
+    for (const item of groupItems) {
+      ensureSpace(rowH + 4);
+      doc.text(String(item.idCode || "-"), left, y, { width: colIdW - 6 });
+      doc.text(String(item.name || "-"), left + colIdW, y, { width: colNameW - 8 });
+      doc.text(String(item.quantity ?? 0), right - colQtyW, y, { width: colQtyW, align: "right" });
+      y += rowH;
+    }
+    y += 8;
+  }
+
+  doc.end();
+}
+
+async function _sbRenderStocktakingExcel(req, res) {
+  const items = await _sbStocktakingForRequest(req);
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Operations Hub";
+  workbook.created = new Date();
+  const ws = workbook.addWorksheet("Stocktaking");
+  ws.columns = [
+    { header: "Tag", key: "tag", width: 24 },
+    { header: "ID Code", key: "idCode", width: 18 },
+    { header: "Component", key: "name", width: 52 },
+    { header: "In Stock", key: "quantity", width: 12 },
+    { header: "One Kit Quantity", key: "oneKitQuantity", width: 18 },
+    { header: "Unit Price", key: "unitPrice", width: 14 },
+    { header: "URL", key: "url", width: 50 },
+  ];
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  for (const item of items.sort((a, b) => String(a?.tag?.name || "").localeCompare(String(b?.tag?.name || "")) || String(a.name || "").localeCompare(String(b.name || "")))) {
+    ws.addRow({
+      tag: item?.tag?.name || "Untagged",
+      idCode: item.idCode || "",
+      name: item.name || "",
+      quantity: Number(item.quantity) || 0,
+      oneKitQuantity: Number(item.oneKitQuantity) || 0,
+      unitPrice: Number(item.unitPrice) || 0,
+      url: item.url || "",
+    });
+  }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="stocktaking_${dateStr}.xlsx"`);
+  res.set("Cache-Control", "no-store");
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
 app.get(
   "/api/stock",
   requireAuth,
   requirePage("Stocktaking"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v1`),
+  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v2`),
   async (req, res) => {
-    if (!teamMembersDatabaseId || !stocktakingDatabaseId) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res
         .status(500)
         .json({ error: "Database IDs are not configured." });
     }
     try {
+      if (_sbStocktakingEnabled()) {
+        return res.json(await _sbStocktakingForRequest(req));
+      }
       const userResponse = await notion.databases.query({
         database_id: teamMembersDatabaseId,
         filter: { property: "Name", title: { equals: req.session.username } },
@@ -15491,11 +17687,14 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!teamMembersDatabaseId || !stocktakingDatabaseId) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res.status(500).json({ error: "Database IDs are not configured." });
     }
 
     try {
+      if (_sbStocktakingEnabled()) {
+        return await _sbRenderStocktakingPdf(req, res);
+      }
       // Resolve the current user's school (same logic as /api/stock)
       const userResponse = await notion.databases.query({
         database_id: teamMembersDatabaseId,
@@ -16059,11 +18258,14 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!teamMembersDatabaseId || !stocktakingDatabaseId) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res.status(500).json({ error: "Database IDs are not configured." });
     }
 
     try {
+      if (_sbStocktakingEnabled()) {
+        return await _sbRenderStocktakingExcel(req, res);
+      }
       // Resolve the current user's school (same logic as /api/stock)
       const userResponse = await notion.databases.query({
         database_id: teamMembersDatabaseId,
@@ -16660,8 +18862,13 @@ app.get("/api/logistics", requireAuth, requirePage("Logistics"), async (req, res
 // ================== EXPENSES API ==================
 
 // Get Funds Type Options
-app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expenses:types:v2"), async (req, res) => {
+app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expenses:types:v3"), async (req, res) => {
   try {
+    if (_sbExpensesEnabled()) {
+      const options = await _sbExpensesTypesOptions();
+      return res.json({ success: true, options, source: "supabase" });
+    }
+
     const response = await notion.databases.retrieve({
       database_id: process.env.Expenses_Database,
     });
@@ -16705,9 +18912,19 @@ app.get(
   "/api/expenses/cash-in-from/options",
   requireAuth,
   requirePage("Expenses"),
-  cachedJsonRoute(20 * 60, () => "cache:api:expenses:cash-in-from:v1"),
+  cachedJsonRoute(20 * 60, () => "cache:api:expenses:cash-in-from:v2"),
   async (req, res) => {
     try {
+      if (_sbExpensesEnabled() && _sbTeamMembersEnabled()) {
+        const rows = await _sbSelectTeamMembersRows();
+        const options = (rows || []).map((row) => {
+          const id = _sbExpenseText(_sbGet(row, ["id", "ID"])) || _sbExpenseText(_sbValueForLabel(row, "Employee Code")) || _sbExpenseText(_sbValueForLabel(row, "Name"));
+          const name = _sbExpenseText(_sbValueForLabel(row, "Name")) || "Unnamed";
+          return { id, name };
+        }).filter((x) => x.id && x.name);
+        return res.json({ success: true, options, source: "supabase" });
+      }
+
       const expProps = await getExpensesDBProps();
       const cashInFromKey =
         pickPropName(expProps, ["Cash in from", "Cash In From", "Cash In from"]) ||
@@ -16764,9 +18981,38 @@ app.get(
   "/api/expenses/orders/options",
   requireAuth,
   requirePage("Expenses"),
-  cachedJsonRoute(60, () => "cache:api:expenses:orders-options:all:v3"),
+  cachedJsonRoute(60, () => "cache:api:expenses:orders-options:all:v4"),
   async (req, res) => {
     try {
+      if (_sbOrdersEnabled()) {
+        const rows = await _sbSelectOrdersRows({ approvedOnly: true });
+        const groups = new Map();
+        for (const row of rows || []) {
+          const item = _sbSerializeOrderRow(row);
+          const num = item.orderIdNumber || item.orderId || item.id;
+          const key = num ? `ord:${num}` : `row:${item.id}`;
+          if (!groups.has(key)) {
+            groups.set(key, {
+              id: key,
+              key,
+              orderId: item.orderId || key,
+              orderType: item.orderType || "Request Products",
+              label: [item.orderId, item.orderType || "Request Products"].filter(Boolean).join(" - "),
+              relationIds: [],
+              receiptEntries: [],
+              trackingGroupId: key,
+              trackingUrl: `/orders/tracking?groupId=${encodeURIComponent(key)}`,
+            });
+          }
+          const group = groups.get(key);
+          if (item.id && !group.relationIds.includes(item.id)) group.relationIds.push(item.id);
+        }
+        const options = Array.from(groups.values())
+          .sort((a, b) => String(b.orderId || "").localeCompare(String(a.orderId || ""), undefined, { numeric: true }))
+          .slice(0, 300);
+        return res.json({ success: true, options, source: "supabase" });
+      }
+
       if (!ordersDatabaseId) {
         return res.json({ success: true, options: [] });
       }
@@ -17031,6 +19277,53 @@ app.post("/api/expenses/cash-out", async (req, res) => {
   } = req.body;
 
   try {
+    if (_sbExpensesEnabled()) {
+      const member = await _sbCurrentExpenseMember(req);
+      if (!member) {
+        return res.status(401).json({ success: false, error: "Login required" });
+      }
+      if (!fundsType || !date) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+      const normalizedFundsTypeKey = String(fundsType || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      const screenshotRequiredFundsTypes = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
+      const hasScreenshotPayload =
+        (Array.isArray(screenshots) && screenshots.some((shot) => String(shot?.dataUrl || shot?.screenshotDataUrl || "").trim())) ||
+        !!String(screenshotDataUrl || "").trim();
+      if (screenshotRequiredFundsTypes.has(normalizedFundsTypeKey) && !hasScreenshotPayload) {
+        return res.status(400).json({
+          success: false,
+          error: normalizedFundsTypeKey === "owncar" ? "A Google Maps screenshot is required for Own car" : "Screenshot is required for this funds type",
+        });
+      }
+      const amountNum = Number(amount);
+      if (normalizedFundsTypeKey !== "owncar" && (!Number.isFinite(amountNum) || amountNum <= 0)) {
+        return res.status(400).json({ success: false, error: "Cash out amount is required" });
+      }
+      const autoReason = String(reason || "").trim() || [
+        String(orderLabel || "").trim(),
+        String(orderDisplayId || "").trim() && !String(orderLabel || "").trim() ? String(orderDisplayId || "").trim() : "",
+        String(orderType || "").trim() && !String(orderLabel || "").trim() ? String(orderType || "").trim() : "",
+        String(fundsType || "").trim(),
+      ].filter(Boolean).join(" • ") || "Cash out";
+      const shotText = await _sbBuildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix: "receipt" });
+      await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
+        reason: autoReason,
+        expense_date: date,
+        funds_type: fundsType,
+        from_location: from || "",
+        to_location: to || "",
+        cash_out: normalizedFundsTypeKey === "owncar" ? 0 : amountNum,
+        cash_in: null,
+        kilometer: normalizedFundsTypeKey === "owncar" ? (Number(kilometer) || 0) : null,
+        screenshot: shotText,
+        orders_names: String(orderLabel || orderDisplayId || "").trim() || null,
+        orders_raw: Array.isArray(orderIds) ? orderIds.join(",") : (orderId || null),
+      }));
+      await _sbClearExpensesCaches(req, member);
+      return res.json({ success: true, message: "Cash out saved successfully", source: "supabase" });
+    }
+
     const teamMemberPageId = await getCurrentUserRelationPage(req);
 
     if (!fundsType || !date) {
@@ -17229,6 +19522,54 @@ app.post("/api/expenses/cash-in", async (req, res) => {
   } = req.body;
 
   try {
+    if (_sbExpensesEnabled()) {
+      const member = await _sbCurrentExpenseMember(req);
+      if (!member) return res.status(401).json({ success: false, error: "Login required" });
+      if (!date || amount === undefined || amount === null || amount === "") {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+      const amountNum = Number(amount);
+      if (!Number.isFinite(amountNum)) {
+        return res.status(400).json({ success: false, error: "Invalid amount" });
+      }
+      const payerName = String(paymentBy || cashInFrom || "").trim();
+      if (!payerName) {
+        return res.status(400).json({ success: false, error: "Payment by is required" });
+      }
+      const selectedFundsTypeRaw = String(fundsType || "").trim();
+      const selectedFundsTypeKey = normKey(selectedFundsTypeRaw);
+      const isOnlineTransfer = selectedFundsTypeKey === "onlinetransfer";
+      const isCashPayment = selectedFundsTypeKey === "cashpayment" || selectedFundsTypeKey === "cashreceipt" || selectedFundsTypeKey === "cashreciept";
+      if (!selectedFundsTypeKey || (!isOnlineTransfer && !isCashPayment)) {
+        return res.status(400).json({ success: false, error: "Invalid funds type" });
+      }
+      const receipt = String(receiptNumber || "").trim();
+      if (isCashPayment && !receipt) {
+        return res.status(400).json({ success: false, error: "Missing receipt number" });
+      }
+      const hasScreenshotPayload =
+        (Array.isArray(screenshots) && screenshots.some((shot) => String(shot?.dataUrl || shot?.screenshotDataUrl || "").trim())) ||
+        !!String(screenshotDataUrl || "").trim();
+      if (isOnlineTransfer && !hasScreenshotPayload) {
+        return res.status(400).json({ success: false, error: "Screenshot is required for online transfer" });
+      }
+      const cashInFundsTypeName = selectedFundsTypeRaw || (isOnlineTransfer ? "Online Transfer" : "Cash Payment");
+      const titleContent = receipt || cashInFundsTypeName || "Cash In";
+      const shotText = await _sbBuildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix: "cashin" });
+      await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
+        reason: titleContent,
+        expense_date: date,
+        funds_type: cashInFundsTypeName,
+        cash_in: amountNum,
+        cash_out: null,
+        from_location: payerName,
+        to_location: member.name || "",
+        screenshot: shotText,
+      }));
+      await _sbClearExpensesCaches(req, member);
+      return res.json({ success: true, message: "Cash in recorded", source: "supabase" });
+    }
+
     const teamMemberPageId = await getCurrentUserRelationPage(req);
     const currentUsername = String(req.session?.username || "").trim();
     const teamMemberName = currentUsername || (teamMemberPageId ? String(await pageTitleById(teamMemberPageId) || "").trim() : "");
@@ -17388,6 +19729,32 @@ app.post(
   requirePage("Expenses"),
   async (req, res) => {
     try {
+      if (_sbExpensesEnabled()) {
+        const receiptNumber = String(req.body?.receiptNumber || "").trim();
+        if (!receiptNumber) {
+          return res.status(400).json({ success: false, error: "Missing receipt number" });
+        }
+        const { member, rows } = await _sbSelectExpensesForCurrentUser(req);
+        if (!member) return res.status(400).json({ success: false, error: "User not found" });
+        const totalCashIn = rows.reduce((sum, row) => sum + _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0), 0);
+        const totalCashOut = rows.reduce((sum, row) => sum + _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0), 0);
+        const balance = Number(totalCashIn) - Number(totalCashOut);
+        const settleAmount = Math.abs(balance);
+        const today = new Date().toISOString().slice(0, 10);
+        const isPositive = balance > 0;
+        await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
+          reason: receiptNumber,
+          expense_date: today,
+          funds_type: "Settled my account",
+          from_location: "",
+          to_location: "",
+          cash_in: isPositive ? 0 : settleAmount,
+          cash_out: isPositive ? settleAmount : 0,
+        }));
+        await _sbClearExpensesCaches(req, member);
+        return res.json({ success: true, totalCashIn, totalCashOut, balance, settleAmount, direction: isPositive ? "cash_out" : "cash_in", source: "supabase" });
+      }
+
       const receiptNumber = String(req.body?.receiptNumber || "").trim();
       if (!receiptNumber) {
         return res.status(400).json({
@@ -17499,8 +19866,15 @@ app.post(
 );
 
 // Fetch All Expenses — FILTER BY CURRENT USER ONLY
-app.get("/api/expenses", cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:${cacheKeySafe(req.session?.username || "")}:v3`), async (req, res) => {
+app.get("/api/expenses", cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:${cacheKeySafe(req.session?.username || "")}:v4`), async (req, res) => {
   try {
+    if (_sbExpensesEnabled()) {
+      const { rows } = await _sbSelectExpensesForCurrentUser(req);
+      const info = _sbLastSettledInfo(rows);
+      const items = rows.map(_sbSerializeExpenseRow);
+      return res.json({ success: true, items, lastSettledAt: info.lastSettledAt, lastSettledDate: info.lastSettledDate, source: "supabase" });
+    }
+
     // Get current user's Team Member relation PAGE ID
     const teamMemberPageId = await getCurrentUserRelationPage(req);
 
@@ -17796,11 +20170,12 @@ app.get(
   "/api/expenses/users",
   requireAuth,
   requirePage("Expenses Users"),
-  cachedJsonRoute(2 * 60, () => "cache:api:expenses:users:v1"),
+  cachedJsonRoute(2 * 60, () => "cache:api:expenses:users:v2"),
   async (req, res) => {
     try {
       if (_sbExpensesEnabled()) {
-        return res.json(await _sbExpensesUsersPayload());
+        const users = await _sbExpensesUsersSummary();
+        return res.json({ success: true, users, source: "supabase" });
       }
 
       if (!expensesDatabaseId) {
@@ -17902,18 +20277,17 @@ app.get(
   "/api/expenses/user/:memberId",
   requireAuth,
   requirePage("Expenses Users"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:user:${normalizeNotionId(req.params?.memberId || "")}:v2`),
+  cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:user:${cacheKeySafe(req.params?.memberId || "")}:v3`),
   async (req, res) => {
     try {
-      const memberId = String(req.params.memberId || "").trim();
-      if (!memberId) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Missing memberId" });
-      }
-
       if (_sbExpensesEnabled()) {
-        return res.json(await _sbExpensesUserPayload(memberId));
+        const memberId = String(req.params.memberId || "").trim();
+        if (!memberId) return res.status(400).json({ success: false, error: "Missing memberId" });
+        const allRows = await _sbSelectExpensesRows();
+        const rows = _sbExpenseRowsForMemberId(allRows, memberId);
+        const info = _sbLastSettledInfo(rows);
+        const items = rows.map(_sbSerializeExpenseRow);
+        return res.json({ success: true, items, lastSettledAt: info.lastSettledAt, lastSettledDate: info.lastSettledDate, source: "supabase" });
       }
 
       if (!expensesDatabaseId) {
@@ -17923,6 +20297,7 @@ app.get(
         });
       }
 
+      const memberId = String(req.params.memberId || "").trim();
       if (!memberId) {
         return res
           .status(400)
@@ -18224,133 +20599,6 @@ app.get(
 // - We keep it public (no requireAuth) so Excel links behave like the old signed links.
 // - We still restrict it to ONLY pages that belong to the Expenses database.
 // - If you prefer to lock it behind auth, add `requireAuth` as middleware.
-
-// Update a Supabase expense row from the Expenses Users modal.
-app.patch('/api/expenses/:expenseId', requireAuth, requirePage('Expenses Users'), async (req, res) => {
-  try {
-    if (!_sbExpensesEnabled()) {
-      return res.status(400).json({ success: false, error: 'Supabase Expenses table is not configured.' });
-    }
-
-    const expenseId = String(req.params?.expenseId || '').trim();
-    const adminPassword = String(req.body?.adminPassword || '').trim();
-    if (!expenseId) return res.status(400).json({ success: false, error: 'Missing expense id.' });
-    if (!adminPassword) return res.status(400).json({ success: false, error: 'Admin password is required.' });
-
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ success: false, error: 'Invalid Admin password.' });
-
-    const before = await supabaseDb.selectById(_sbExpensesTable(), expenseId);
-    if (!before) return res.status(404).json({ success: false, error: 'Expense not found.' });
-
-    const row = _sbExpenseWriteRowFromBody(req.body || {});
-
-    let screenshotUrls = Array.isArray(req.body?.existingScreenshotUrls)
-      ? req.body.existingScreenshotUrls.map((u) => String(u || '').trim()).filter(Boolean)
-      : _sbExpenseScreenshotsFromRow(before).map((s) => s.url).filter(Boolean);
-
-    const newReceipts = Array.isArray(req.body?.newReceipts) ? req.body.newReceipts : [];
-    for (const receipt of newReceipts) {
-      const dataUrl = String(receipt?.dataUrl || '').trim();
-      if (!dataUrl) continue;
-      const filename = String(receipt?.filename || receipt?.name || 'receipt.webp').trim() || 'receipt.webp';
-      const publicUrl = await _uploadExpenseDataUrlToStorage(dataUrl, filename);
-      if (publicUrl) screenshotUrls.push(publicUrl);
-    }
-
-    screenshotUrls = Array.from(new Set(screenshotUrls.map((u) => String(u || '').trim()).filter(Boolean)));
-    if ('existingScreenshotUrls' in (req.body || {}) || newReceipts.length) {
-      row.screenshot = screenshotUrls.length ? screenshotUrls.join('\n') : null;
-    }
-
-    const updated = await supabaseDb.updateById(_sbExpensesTable(), expenseId, row);
-    await _clearExpenseCachesAfterMutation(req, String(before?.user_id || before?.team_member_id || before?.team_member_name || ''));
-
-    return res.json({ success: true, item: _sbSerializeExpenseRow(updated || { ...before, ...row }) });
-  } catch (error) {
-    console.error('PATCH /api/expenses/:expenseId error:', error?.details || error?.body || error);
-    return res.status(500).json({ success: false, error: error?.message || 'Failed to update expense.' });
-  }
-});
-
-// Delete multiple expense rows from a grouped ticket.
-app.delete('/api/expenses/bulk', requireAuth, requirePage('Expenses Users'), async (req, res) => {
-  try {
-    if (!_sbExpensesEnabled()) {
-      return res.status(400).json({ success: false, error: 'Supabase Expenses table is not configured.' });
-    }
-
-    const adminPassword = String(req.body?.adminPassword || '').trim();
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map((id) => String(id || '').trim()).filter(Boolean) : [];
-    if (!ids.length) return res.status(400).json({ success: false, error: 'No expenses selected.' });
-    if (!adminPassword) return res.status(400).json({ success: false, error: 'Admin password is required.' });
-
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ success: false, error: 'Invalid Admin password.' });
-
-    const result = await _sbDeleteExpenseIds(ids);
-    await _clearExpenseCachesAfterMutation(req, '');
-    return res.json({ success: true, ...result });
-  } catch (error) {
-    console.error('DELETE /api/expenses/bulk error:', error?.details || error?.body || error);
-    return res.status(500).json({ success: false, error: error?.message || 'Failed to delete expenses.' });
-  }
-});
-
-// Delete all expenses for one team member and their Supabase Storage receipt files.
-app.delete('/api/expenses/user/:memberId', requireAuth, requirePage('Expenses Users'), async (req, res) => {
-  try {
-    if (!_sbExpensesEnabled()) {
-      return res.status(400).json({ success: false, error: 'Supabase Expenses table is not configured.' });
-    }
-
-    const memberId = String(req.params?.memberId || '').trim();
-    const adminPassword = String(req.body?.adminPassword || '').trim();
-    if (!memberId) return res.status(400).json({ success: false, error: 'Missing member id.' });
-    if (!adminPassword) return res.status(400).json({ success: false, error: 'Admin password is required.' });
-
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ success: false, error: 'Invalid Admin password.' });
-
-    const found = await _sbExpensesForMember(memberId);
-    const ids = found.rows.map((row) => String(row?.id || '').trim()).filter(Boolean);
-    const result = await _sbDeleteExpenseIds(ids);
-    await _clearExpenseCachesAfterMutation(req, memberId);
-
-    return res.json({ success: true, ...result });
-  } catch (error) {
-    console.error('DELETE /api/expenses/user/:memberId error:', error?.details || error?.body || error);
-    return res.status(500).json({ success: false, error: error?.message || 'Failed to delete user expenses.' });
-  }
-});
-// Delete one expense row and its Supabase Storage receipt files.
-app.delete('/api/expenses/:expenseId', requireAuth, requirePage('Expenses Users'), async (req, res) => {
-  try {
-    if (!_sbExpensesEnabled()) {
-      return res.status(400).json({ success: false, error: 'Supabase Expenses table is not configured.' });
-    }
-
-    const expenseId = String(req.params?.expenseId || '').trim();
-    const adminPassword = String(req.body?.adminPassword || '').trim();
-    if (!expenseId) return res.status(400).json({ success: false, error: 'Missing expense id.' });
-    if (!adminPassword) return res.status(400).json({ success: false, error: 'Admin password is required.' });
-
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ success: false, error: 'Invalid Admin password.' });
-
-    const before = await supabaseDb.selectById(_sbExpensesTable(), expenseId);
-    const result = await _sbDeleteExpenseIds([expenseId]);
-    await _clearExpenseCachesAfterMutation(req, String(before?.user_id || before?.team_member_id || before?.team_member_name || ''));
-
-    return res.json({ success: true, ...result });
-  } catch (error) {
-    console.error('DELETE /api/expenses/:expenseId error:', error?.details || error?.body || error);
-    return res.status(500).json({ success: false, error: error?.message || 'Failed to delete expense.' });
-  }
-});
-
-
-
 app.get("/api/expenses/screenshot/:expenseId", async (req, res) => {
   try {
     const raw = String(req.params.expenseId || "").trim();
@@ -18409,17 +20657,37 @@ app.get("/api/expenses/screenshot/:expenseId", async (req, res) => {
   }
 });
 
-// === Helper: upload base64 image to Vercel Blob (SDK v2) and return a public URL ===
+// === Helper: upload base64 file to Supabase Storage first, then fallback to Vercel Blob ===
+function _cleanStorageObjectPath(filenameHint = "upload.bin") {
+  const raw = String(filenameHint || "upload.bin").trim() || "upload.bin";
+  const parts = raw.split(/[\/]+/).filter(Boolean).map((part) => part.replace(/[^a-z0-9._-]/gi, "_").replace(/^_+|_+$/g, ""));
+  const clean = parts.filter(Boolean).join("/");
+  return clean || `upload-${Date.now()}.bin`;
+}
+
 async function uploadToBlobFromBase64(dataUrl, filenameHint = "receipt.jpg") {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) throw new Error("BLOB_TOKEN_MISSING");
   const m = String(dataUrl || "").match(/^data:(.+?);base64,(.+)$/);
   if (!m) throw new Error("INVALID_DATA_URL");
   const contentType = m[1];
   const b64 = m[2];
   const buffer = Buffer.from(b64, "base64");
+  const cleanPath = _cleanStorageObjectPath(filenameHint);
+
+  const cfg = supabaseDb?.getConfig ? supabaseDb.getConfig() : {};
+  if (supabaseDb?.isConfigured?.() && String(cfg?.storageBucket || "").trim()) {
+    const uploaded = await supabaseDb.uploadStorageObject(cleanPath, buffer, {
+      contentType,
+      bucketName: cfg.storageBucket,
+      upsert: true,
+    });
+    if (!uploaded?.publicUrl) throw new Error("SUPABASE_STORAGE_PUBLIC_URL_MISSING");
+    return uploaded.publicUrl;
+  }
+
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) throw new Error("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING");
   const { put } = await import("@vercel/blob");
-  const res = await put(filenameHint, buffer, {
+  const res = await put(cleanPath, buffer, {
     access: "public",
     token,
     contentType,
@@ -18500,6 +20768,15 @@ async function detectSVSchoolsPropName() {
 // created by the Team Members listed in their "S.V Schools" column (relation)
 // inside the Team Members database.
 async function getVisibleTeamMemberIdsForSV(req) {
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const visible = await _sbVisibleSVInfo(req);
+      if (visible.ids && visible.ids.length) return visible.ids;
+    } catch (err) {
+      console.error("getVisibleTeamMemberIdsForSV supabase error:", err?.message || err);
+    }
+  }
+
   if (!teamMembersDatabaseId) return [];
   const username = req.session?.username;
   if (!username) return [];
@@ -18592,6 +20869,180 @@ async function detectOrderTeamsMembersPropName() {
   );
 }
 
+function _sbSVArray(value) {
+  if (value === null || typeof value === "undefined") return [];
+  if (Array.isArray(value)) return value.map((x) => _sbString(x)).map((x) => x.trim()).filter(Boolean);
+  if (typeof value === "object") return _sbSplitValues(value);
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map((x) => _sbString(x)).map((x) => x.trim()).filter(Boolean);
+  } catch {}
+  // PostgreSQL array text fallback: {1,2,3} or {"A","B"}
+  if (raw.startsWith("{") && raw.endsWith("}")) {
+    return raw.slice(1, -1)
+      .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map((x) => x.trim().replace(/^"|"$/g, "").replace(/\\"/g, '"'))
+      .filter(Boolean);
+  }
+  return raw.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+function _sbSVIds(value) {
+  return _sbSVArray(value)
+    .map((x) => String(x || "").trim())
+    .map((x) => {
+      const m = x.match(/\d+/);
+      return m ? m[0] : "";
+    })
+    .filter(Boolean);
+}
+
+function _sbSVApprovalLabel(value) {
+  const raw = _sbOrderText(value).trim();
+  const n = norm(raw);
+  if (!n || n === "notstarted" || n === "not started") return "Not Started";
+  if (n === "approved") return "Approved";
+  if (n === "rejected") return "Rejected";
+  return raw || "Not Started";
+}
+
+function _sbSVApprovalColor(value) {
+  const n = norm(_sbSVApprovalLabel(value));
+  if (n === "approved") return "green";
+  if (n === "rejected") return "red";
+  return "yellow";
+}
+
+function _sbOrderOwnerId(row = {}) {
+  const id = _sbOrderText(_sbOrderGet(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"]));
+  return id || "";
+}
+
+function _sbOrderOwnerName(row = {}) {
+  return _sbOrderText(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "created_by_name", "created_by", "Created By"])) || "";
+}
+
+function _sbSerializeSVOrderRow(row = {}) {
+  const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
+  const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress"]));
+  const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "quantity", "Quantity"]));
+  const qtyBase = qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0);
+  const qtyEdited = _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor", "quantity_edited", "edited_quantity"]));
+  const approval = _sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]));
+  const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
+  const createdByName = _sbOrderOwnerName(row);
+  const ownerId = _sbOrderOwnerId(row);
+  const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "");
+
+  return {
+    id,
+    teamMemberId: ownerId || createdByName || null,
+    createdById: ownerId || createdByName || null,
+    createdByName: createdByName || null,
+    orderId: Number.isFinite(orderNum) ? `ORD-${orderNum}` : (id ? `ORD-${id}` : null),
+    orderIdPrefix: Number.isFinite(orderNum) ? "ORD" : null,
+    orderIdNumber: Number.isFinite(orderNum) ? orderNum : null,
+    reason: _sbOrderText(_sbOrderGet(row, ["reason", "Reason"])) || "No Reason",
+    issueDescription: _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description", "actual_issue_description", "Actual Issue Description"])) || "",
+    productName: _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name", "product", "Product"])) || "Unknown Product",
+    productImage: null,
+    unitPrice: _sbOrderNum(_sbOrderGet(row, ["unit_price", "Unit price", "Unity Price", "Price"])),
+    quantity: qtyBase,
+    quantityRequested: qtyRequested !== null ? qtyRequested : qtyBase,
+    quantityEdited: qtyEdited,
+    status: _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "",
+    approval,
+    approvalColor: _sbSVApprovalColor(approval),
+    orderType,
+    orderTypeColor: _sbOrderTypeColor(orderType),
+    createdTime: _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) || new Date().toISOString(),
+    source: "supabase",
+  };
+}
+
+async function _sbVisibleSVInfo(req) {
+  const username = String(req?.session?.username || "").trim();
+  if (!_sbTeamMembersEnabled() || !username) return { ids: [], names: [], current: null };
+
+  const current = await _sbFindTeamMemberByName(username).catch(() => null);
+  if (!current) return { ids: [], names: [], current: null };
+
+  const currentId = String(_sbGet(current, ["id", "ID"]) ?? "").trim();
+  let ids = [];
+  let names = [];
+
+  // Preferred normalized junction table created by the S.V Schools cleanup SQL.
+  if (currentId) {
+    try {
+      const relRows = await supabaseDb.select("team_member_sv_schools", {
+        select: "visible_team_member_id,visible_team_member_name",
+        team_member_id: `eq.${currentId}`,
+        limit: 5000,
+      });
+      if (Array.isArray(relRows) && relRows.length) {
+        ids = relRows.map((r) => String(r.visible_team_member_id || "").trim()).filter(Boolean);
+        names = relRows.map((r) => _sbOrderText(r.visible_team_member_name)).filter(Boolean);
+      }
+    } catch (err) {
+      // The junction table is optional; fall back to columns on team_members.
+      console.warn("Supabase S.V junction lookup skipped:", err?.message || err);
+    }
+  }
+
+  if (!ids.length) {
+    ids = _sbSVIds(_sbGet(current, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
+  }
+  if (!names.length) {
+    names = _sbSVArray(_sbGet(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
+  }
+
+  // If old rows only contain names, resolve those names against team_members.
+  if ((!ids.length && names.length) || names.length) {
+    const allMembers = await _sbSelectTeamMembersRows().catch(() => []);
+    const byName = new Map((allMembers || []).map((row) => [norm(_sbString(_sbValueForLabel(row, "Name"))), row]));
+    for (const name of names) {
+      const row = byName.get(norm(name));
+      const id = row ? String(_sbGet(row, ["id", "ID"]) ?? "").trim() : "";
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+  }
+
+  ids = Array.from(new Set(ids.map((x) => String(x || "").trim()).filter(Boolean)));
+  names = Array.from(new Set(names.map((x) => String(x || "").trim()).filter(Boolean)));
+  return { ids, names, current };
+}
+
+function _sbOrderVisibleToSV(row = {}, visible = { ids: [], names: [] }) {
+  const ownerId = _sbOrderOwnerId(row);
+  const ownerName = _sbOrderOwnerName(row);
+  const ids = new Set((visible.ids || []).map((x) => String(x || "").trim()).filter(Boolean));
+  const names = new Set((visible.names || []).map((x) => norm(x)).filter(Boolean));
+  return (!!ownerId && ids.has(String(ownerId))) || (!!ownerName && names.has(norm(ownerName)));
+}
+
+async function _sbSVOrdersList(req, label = "Not Started") {
+  const visible = await _sbVisibleSVInfo(req);
+  if (!visible.ids.length && !visible.names.length) return [];
+
+  const rows = await _sbSelectOrdersRows({ approvedOnly: false });
+  const wanted = label ? norm(label) : "";
+  const filtered = (rows || []).filter((row) => {
+    if (!_sbOrderVisibleToSV(row, visible)) return false;
+    if (!wanted) return true;
+    return norm(_sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]))) === wanted;
+  });
+  return filtered.map(_sbSerializeSVOrderRow);
+}
+
+async function _sbSVOrderRowIfAllowed(req, id) {
+  const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+  if (!row) return { row: null, allowed: false };
+  const visible = await _sbVisibleSVInfo(req);
+  return { row, allowed: _sbOrderVisibleToSV(row, visible) };
+}
+
 
 // ====== Page route: Orders Review ======
 app.get("/orders/sv-orders", requireAuth, requirePage("Orders Review"), (req, res) => {
@@ -18606,6 +21057,24 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
     const value = Number((req.body?.value ?? "").toString().trim());
     if (!pageId) return res.status(400).json({ error: "Missing id" });
     if (!Number.isFinite(value)) return res.status(400).json({ error: "Invalid quantity" });
+
+    if (_sbOrdersEnabled() && /^\d+$/.test(String(pageId))) {
+      const { row, allowed } = await _sbSVOrderRowIfAllowed(req, pageId);
+      if (!row) return res.status(404).json({ error: "Order not found" });
+      if (!allowed) return res.status(403).json({ error: "Not allowed" });
+
+      const serialized = _sbSerializeSVOrderRow(row);
+      const requested = roundOrderQty(Number(serialized.quantity) || 0);
+      const newVal = clampOrderQtyToBase(requested, value);
+      const editedVal = (Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested)) ? null : newVal;
+
+      await supabaseDb.updateById(_sbOrdersTable(), pageId, {
+        quantity_edited_by_supervisor: editedVal,
+      });
+      await clearSVOrdersRouteCaches(req);
+      await _sbInvalidateOrdersCaches().catch(() => {});
+      return res.json({ ok: true, value: newVal, cleared: editedVal === null, source: "supabase" });
+    }
 
     // Security: allow editing ONLY for orders created by members listed in
     // the current user's "S.V Schools" column.
@@ -18681,6 +21150,12 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
     const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v2`;
 
     const items = await cacheGetOrSet(cacheKey, 30, async () => {
+      // Supabase mode: use the normalized team_members.sv_school_member_ids
+      // or team_member_sv_schools junction table instead of Notion relations.
+      if (_sbOrdersEnabled()) {
+        return await _sbSVOrdersList(req, label);
+      }
+
       // Identify which Team Members this S.V user can see (from Team Members DB)
       const visibleIds = await getVisibleTeamMemberIdsForSV(req);
       if (!visibleIds.length) {
@@ -18932,6 +21407,17 @@ app.post(
         return res.status(400).json({ ok:false, error: "Invalid id or decision" });
       }
 
+      if (_sbOrdersEnabled() && /^\d+$/.test(String(pageId))) {
+        const { row, allowed } = await _sbSVOrderRowIfAllowed(req, pageId);
+        if (!row) return res.status(404).json({ ok:false, error: "Order not found" });
+        if (!allowed) return res.status(403).json({ ok:false, error: "Not allowed" });
+
+        await supabaseDb.updateById(_sbOrdersTable(), pageId, { sv_approval: decision });
+        await clearSVOrdersRouteCaches(req);
+        await _sbInvalidateOrdersCaches().catch(() => {});
+        return res.json({ ok:true, id: pageId, decision, source: "supabase" });
+      }
+
       // Security: allow approval ONLY for orders created by members listed in
       // the current user's "S.V Schools" column.
       const visibleIds = await getVisibleTeamMemberIdsForSV(req);
@@ -19140,7 +21626,7 @@ app.post("/api/damaged-assets", requireAuth, requirePage("Damaged Assets"), asyn
   }
 });
 
-// === Notion: رفع صورة DataURL -> Vercel Blob -> ربطها في Files & media ===
+// === Notion legacy: رفع صورة DataURL -> Supabase Storage/Vercel Blob -> ربطها في Files & media ===
 app.post('/api/notion/upload-file', requireAuth, async (req, res) => {
   try {
     const { pageId, dataUrl, filename, propName, mode } = req.body || {};
@@ -19156,7 +21642,7 @@ app.post('/api/notion/upload-file', requireAuth, async (req, res) => {
       return res.status(413).json({ ok:false, error:'File > 20MB' });
     }
 
-    // 3) ارفع الملف على Vercel Blob وخد رابط عام
+    // 3) ارفع الملف على Supabase Storage وخد رابط عام
     //    (الهيلبر uploadToBlobFromBase64 موجود عندك بالفعل)
     const publicUrl = await uploadToBlobFromBase64(`data:${mime};base64,${buf.toString('base64')}`, filename || 'upload.jpg');
 

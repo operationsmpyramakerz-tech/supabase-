@@ -19,9 +19,6 @@ let FILTERED_PAST_ITEMS = [];
 
 // UI state
 let SHOW_PAST_EXPENSES = false;
-let CURRENT_USER_ID = "";
-let CURRENT_USER_NAME = "";
-let LAST_ADMIN_PASSWORD = "";
 
 // Last settlement metadata (best-effort)
 let LAST_SETTLED_AT = null;   // ISO string (Notion created_time)
@@ -281,360 +278,6 @@ function getExpenseRowTypeLabel(item) {
 function getExpensePrimaryScreenshot(item) {
   const shots = getReceiptImages(item);
   return shots.length ? shots[0] : null;
-}
-
-function getExpenseItemId(item) {
-  return String(item?.id || item?.expenseId || item?.pageId || "").trim();
-}
-
-function findExpenseItemById(id) {
-  const wanted = String(id || "").trim();
-  if (!wanted) return null;
-  return getCombinedExpenseItems(CURRENT_USER_ITEMS).find((item) => getExpenseItemId(item) === wanted) || null;
-}
-
-function encodeExpenseActionData(value) {
-  try { return encodeURIComponent(JSON.stringify(value)); } catch { return ""; }
-}
-
-function decodeExpenseActionData(value) {
-  try { return JSON.parse(decodeURIComponent(String(value || ""))); } catch { return null; }
-}
-
-function injectExpenseUsersActionStyles() {
-  if (document.getElementById("expenseUsersActionStyles")) return;
-  const style = document.createElement("style");
-  style.id = "expenseUsersActionStyles";
-  style.textContent = `
-    .sheet-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;}
-    .sheet-header-actions{display:flex;align-items:center;gap:.55rem;}
-    .expenses-delete-all-btn{border:0;border-radius:999px;background:#fee2e2;color:#b91c1c;font-weight:900;padding:.62rem .9rem;display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;box-shadow:0 12px 24px rgba(185,28,28,.12);}
-    .expenses-delete-all-btn:hover{background:#fecaca;}
-    .expense-ticket__actions{position:relative;display:flex;align-items:center;justify-content:flex-end;z-index:5;}
-    .expense-ticket__menu-btn{width:38px;height:38px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;color:#111827;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 18px rgba(15,23,42,.08);}
-    .expense-ticket__menu-btn:hover{background:#f8fafc;}
-    .expense-ticket__menu{position:absolute;top:44px;right:0;min-width:142px;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:.42rem;box-shadow:0 18px 42px rgba(15,23,42,.18);display:none;z-index:9999;}
-    .expense-ticket__menu.is-open{display:block;}
-    .expense-ticket__menu-action{width:100%;border:0;background:transparent;border-radius:13px;padding:.68rem .72rem;text-align:left;font-weight:850;color:#0f172a;display:flex;align-items:center;gap:.55rem;cursor:pointer;}
-    .expense-ticket__menu-action:hover{background:#f8fafc;}
-    .expense-ticket__menu-action.is-danger{color:#dc2626;}
-    .expense-ticket__menu-action.is-danger:hover{background:#fee2e2;}
-    .expense-admin-modal,.expense-edit-modal{position:fixed;inset:0;background:rgba(15,23,42,.48);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100500;padding:1rem;}
-    .expense-admin-card,.expense-edit-card{width:min(96vw,420px);background:#fff;border-radius:28px;box-shadow:0 28px 80px rgba(15,23,42,.28);border:1px solid rgba(226,232,240,.95);overflow:hidden;}
-    .expense-edit-card{width:min(96vw,720px);max-height:88vh;display:flex;flex-direction:column;}
-    .expense-admin-head,.expense-edit-head{padding:1.2rem 1.25rem .9rem;border-bottom:1px solid #edf2f7;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;}
-    .expense-admin-title,.expense-edit-title{font-size:1.2rem;font-weight:950;letter-spacing:-.02em;color:#0f172a;margin:0;}
-    .expense-admin-sub,.expense-edit-sub{font-size:.86rem;color:#64748b;margin-top:.24rem;line-height:1.45;}
-    .expense-admin-body,.expense-edit-body{padding:1.1rem 1.25rem;overflow:auto;}
-    .expense-admin-input,.expense-edit-input,.expense-edit-select,.expense-edit-textarea{width:100%;border:1.4px solid #e5e7eb;border-radius:16px;padding:.82rem .92rem;font-weight:800;color:#0f172a;background:#fbfdff;outline:none;}
-    .expense-edit-textarea{min-height:82px;resize:vertical;}
-    .expense-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;}
-    .expense-edit-field{display:flex;flex-direction:column;gap:.35rem;}
-    .expense-edit-label{font-size:.72rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase;color:#64748b;}
-    .expense-admin-actions,.expense-edit-actions{padding:1rem 1.25rem 1.2rem;border-top:1px solid #edf2f7;display:flex;justify-content:flex-end;gap:.65rem;}
-    .expense-dialog-btn{border:0;border-radius:16px;padding:.76rem 1rem;font-weight:950;cursor:pointer;}
-    .expense-dialog-btn.secondary{background:#f8fafc;color:#0f172a;border:1px solid #e5e7eb;}
-    .expense-dialog-btn.primary{background:#0f172a;color:#fff;}
-    .expense-dialog-btn.danger{background:#ef4444;color:#fff;}
-    .expense-dialog-close{border:0;background:#f1f5f9;color:#0f172a;width:38px;height:38px;border-radius:50%;font-size:1.25rem;font-weight:900;cursor:pointer;}
-    .expense-edit-receipts{display:flex;flex-direction:column;gap:.5rem;margin-top:.25rem;}
-    .expense-edit-receipt-line{display:flex;gap:.45rem;align-items:center;}
-    .expense-edit-receipt-line input{flex:1;}
-    .expense-edit-remove-url{border:0;border-radius:12px;background:#fee2e2;color:#b91c1c;font-weight:900;padding:.65rem .75rem;cursor:pointer;}
-    .expense-edit-upload{border:1.5px dashed #cbd5e1;border-radius:18px;padding:.8rem;background:#f8fafc;font-size:.86rem;font-weight:800;color:#475569;}
-    @media(max-width:640px){.expense-edit-grid{grid-template-columns:1fr}.expense-admin-card,.expense-edit-card{border-radius:22px}.sheet-header{flex-direction:column}.sheet-header-actions{width:100%;justify-content:flex-end}}
-  `;
-  document.head.appendChild(style);
-}
-
-function closeAllExpenseTicketMenus() {
-  document.querySelectorAll(".expense-ticket__menu.is-open").forEach((menu) => menu.classList.remove("is-open"));
-}
-
-function promptAdminPassword({ title = "Admin verification", message = "Enter the Admin password to continue.", danger = false } = {}) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "expense-admin-modal";
-    overlay.innerHTML = `
-      <div class="expense-admin-card" role="dialog" aria-modal="true">
-        <div class="expense-admin-head">
-          <div>
-            <h3 class="expense-admin-title">${escapeHtml(title)}</h3>
-            <div class="expense-admin-sub">${escapeHtml(message)}</div>
-          </div>
-          <button type="button" class="expense-dialog-close" data-admin-cancel aria-label="Close">×</button>
-        </div>
-        <div class="expense-admin-body">
-          <input class="expense-admin-input" type="password" autocomplete="current-password" placeholder="Admin password" />
-        </div>
-        <div class="expense-admin-actions">
-          <button type="button" class="expense-dialog-btn secondary" data-admin-cancel>Cancel</button>
-          <button type="button" class="expense-dialog-btn ${danger ? "danger" : "primary"}" data-admin-confirm>Continue</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    const input = overlay.querySelector(".expense-admin-input");
-    const finish = (value) => { overlay.remove(); resolve(value); };
-    overlay.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (e.target === overlay || e.target.closest("[data-admin-cancel]")) finish(null);
-      if (e.target.closest("[data-admin-confirm]")) finish(String(input.value || "").trim());
-    });
-    overlay.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") finish(null);
-      if (e.key === "Enter") finish(String(input.value || "").trim());
-    });
-    setTimeout(() => input?.focus(), 50);
-  });
-}
-
-async function verifyAdminPasswordClient(password) {
-  const pwd = String(password || "").trim();
-  if (!pwd) return false;
-  const res = await fetch("/api/user-access/admin/verify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: pwd }),
-  });
-  if (!res.ok) return false;
-  LAST_ADMIN_PASSWORD = pwd;
-  return true;
-}
-
-async function requestAdminPassword({ title, message, danger } = {}) {
-  const pwd = await promptAdminPassword({ title, message, danger });
-  if (!pwd) return null;
-  const ok = await verifyAdminPasswordClient(pwd);
-  if (!ok) {
-    showExpensesUsersToast({ type: "error", title: "Invalid Admin password", message: "Please try again." });
-    return null;
-  }
-  return pwd;
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Failed to read file."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function compressImageFile(file, { maxWidth = 1400, quality = 0.74 } = {}) {
-  return new Promise((resolve) => {
-    if (!file || !/^image\//i.test(file.type || "")) return resolve(fileToDataUrl(file));
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const ratio = Math.min(1, maxWidth / Math.max(1, img.width));
-        const w = Math.max(1, Math.round(img.width * ratio));
-        const h = Math.max(1, Math.round(img.height * ratio));
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL("image/webp", quality);
-        URL.revokeObjectURL(img.src);
-        resolve(dataUrl);
-      } catch {
-        resolve(fileToDataUrl(file));
-      }
-    };
-    img.onerror = () => resolve(fileToDataUrl(file));
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-function buildExpenseEditModal(item, adminPassword) {
-  const shots = getReceiptImages(item);
-  const overlay = document.createElement("div");
-  overlay.className = "expense-edit-modal";
-  overlay.innerHTML = `
-    <div class="expense-edit-card" role="dialog" aria-modal="true">
-      <div class="expense-edit-head">
-        <div>
-          <h3 class="expense-edit-title">Edit Expense</h3>
-          <div class="expense-edit-sub">Update expense details and receipt images.</div>
-        </div>
-        <button type="button" class="expense-dialog-close" data-edit-close aria-label="Close">×</button>
-      </div>
-      <form class="expense-edit-form">
-        <div class="expense-edit-body">
-          <div class="expense-edit-grid">
-            <label class="expense-edit-field"><span class="expense-edit-label">Date</span><input class="expense-edit-input" name="date" type="date" value="${escapeHtml(toLocalDateKey(item.date || item.createdTime || ""))}"></label>
-            <label class="expense-edit-field"><span class="expense-edit-label">Funds Type</span><input class="expense-edit-input" name="fundsType" value="${escapeHtml(item.fundsType || "")}" placeholder="DiDi / Own car / Cash In..."></label>
-            <label class="expense-edit-field"><span class="expense-edit-label">Cash In</span><input class="expense-edit-input" name="cashIn" type="number" step="0.01" value="${escapeHtml(item.cashIn || 0)}"></label>
-            <label class="expense-edit-field"><span class="expense-edit-label">Cash Out</span><input class="expense-edit-input" name="cashOut" type="number" step="0.01" value="${escapeHtml(item.cashOut || 0)}"></label>
-            <label class="expense-edit-field"><span class="expense-edit-label">From</span><input class="expense-edit-input" name="from" value="${escapeHtml(item.from || "")}"></label>
-            <label class="expense-edit-field"><span class="expense-edit-label">To</span><input class="expense-edit-input" name="to" value="${escapeHtml(item.to || "")}"></label>
-            <label class="expense-edit-field"><span class="expense-edit-label">Kilometer</span><input class="expense-edit-input" name="kilometer" type="number" step="0.01" value="${escapeHtml(item.kilometer || 0)}"></label>
-          </div>
-          <label class="expense-edit-field" style="margin-top:.85rem;"><span class="expense-edit-label">Reason</span><textarea class="expense-edit-textarea" name="reason">${escapeHtml(item.reason || "")}</textarea></label>
-          <div class="expense-edit-field" style="margin-top:.85rem;">
-            <span class="expense-edit-label">Receipt URLs</span>
-            <div class="expense-edit-receipts" data-receipt-list>
-              ${(shots.length ? shots : [{ url: "" }]).map((s) => `
-                <div class="expense-edit-receipt-line">
-                  <input class="expense-edit-input" data-receipt-url value="${escapeHtml(s.url || "")}" placeholder="Receipt image URL">
-                  <button type="button" class="expense-edit-remove-url" data-remove-receipt>Remove</button>
-                </div>
-              `).join("")}
-            </div>
-            <button type="button" class="expense-dialog-btn secondary" data-add-receipt-url style="align-self:flex-start;margin-top:.5rem;">Add link</button>
-          </div>
-          <label class="expense-edit-upload" style="margin-top:.85rem;display:block;">
-            Add receipt image(s) — images will be compressed before upload
-            <input type="file" data-new-receipts accept="image/*" multiple style="display:block;margin-top:.55rem;">
-          </label>
-        </div>
-        <div class="expense-edit-actions">
-          <button type="button" class="expense-dialog-btn secondary" data-edit-close>Cancel</button>
-          <button type="submit" class="expense-dialog-btn primary">Save Changes</button>
-        </div>
-      </form>
-    </div>
-  `;
-
-  overlay.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (e.target === overlay || e.target.closest("[data-edit-close]")) overlay.remove();
-    if (e.target.closest("[data-add-receipt-url]")) {
-      const list = overlay.querySelector("[data-receipt-list]");
-      const line = document.createElement("div");
-      line.className = "expense-edit-receipt-line";
-      line.innerHTML = `<input class="expense-edit-input" data-receipt-url placeholder="Receipt image URL"><button type="button" class="expense-edit-remove-url" data-remove-receipt>Remove</button>`;
-      list.appendChild(line);
-    }
-    if (e.target.closest("[data-remove-receipt]")) {
-      const lines = overlay.querySelectorAll(".expense-edit-receipt-line");
-      if (lines.length <= 1) e.target.closest(".expense-edit-receipt-line").querySelector("input").value = "";
-      else e.target.closest(".expense-edit-receipt-line").remove();
-    }
-  });
-
-  overlay.querySelector(".expense-edit-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const submit = form.querySelector("button[type='submit']");
-    submit.disabled = true;
-    submit.textContent = "Saving...";
-    try {
-      const newReceipts = [];
-      const files = Array.from(overlay.querySelector("[data-new-receipts]")?.files || []);
-      for (const file of files) {
-        const dataUrl = await compressImageFile(file);
-        newReceipts.push({ filename: file.name || "receipt.webp", dataUrl });
-      }
-      const els = form.elements;
-      const body = {
-        adminPassword,
-        date: els.date?.value || "",
-        fundsType: els.fundsType?.value || "",
-        cashIn: els.cashIn?.value || 0,
-        cashOut: els.cashOut?.value || 0,
-        from: els.from?.value || "",
-        to: els.to?.value || "",
-        kilometer: els.kilometer?.value || 0,
-        reason: els.reason?.value || "",
-        existingScreenshotUrls: Array.from(overlay.querySelectorAll("[data-receipt-url]")).map((input) => input.value.trim()).filter(Boolean),
-        newReceipts,
-      };
-      const res = await fetch(`/api/expenses/${encodeURIComponent(getExpenseItemId(item))}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to update expense.");
-      overlay.remove();
-      showExpensesUsersToast({ type: "success", title: "Saved", message: "Expense updated successfully." });
-      await reloadCurrentUserExpenses();
-      await loadExpenseUsers();
-    } catch (err) {
-      showExpensesUsersToast({ type: "error", title: "Save failed", message: err?.message || "Failed to update expense." });
-    } finally {
-      submit.disabled = false;
-      submit.textContent = "Save Changes";
-    }
-  });
-  return overlay;
-}
-
-async function openEditExpense(item) {
-  const adminPassword = await requestAdminPassword({ title: "Edit expense", message: "Enter Admin password to edit this expense." });
-  if (!adminPassword) return;
-  const modal = buildExpenseEditModal(item, adminPassword);
-  document.body.appendChild(modal);
-}
-
-async function deleteExpenseIds(ids, { title = "Delete expense", message = "This will permanently delete the expense and its receipt images." } = {}) {
-  const cleanIds = (Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean);
-  if (!cleanIds.length) return;
-  const adminPassword = await requestAdminPassword({ title, message, danger: true });
-  if (!adminPassword) return;
-  if (!confirm(`Delete ${cleanIds.length} expense record${cleanIds.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
-  const endpoint = cleanIds.length === 1 ? `/api/expenses/${encodeURIComponent(cleanIds[0])}` : "/api/expenses/bulk";
-  const body = cleanIds.length === 1 ? { adminPassword } : { adminPassword, ids: cleanIds };
-  const res = await fetch(endpoint, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.success) {
-    showExpensesUsersToast({ type: "error", title: "Delete failed", message: data.error || "Failed to delete expense." });
-    return;
-  }
-  showExpensesUsersToast({ type: "success", title: "Deleted", message: "Expense deleted successfully." });
-  await reloadCurrentUserExpenses();
-  await loadExpenseUsers();
-}
-
-function ensureDeleteAllButton(userId, userName) {
-  const header = document.querySelector("#userExpensesModal .sheet-header");
-  if (!header) return;
-  let actions = header.querySelector(".sheet-header-actions");
-  if (!actions) {
-    actions = document.createElement("div");
-    actions.className = "sheet-header-actions";
-    header.appendChild(actions);
-  }
-  let btn = actions.querySelector("#deleteAllUserExpensesBtn");
-  if (!btn) {
-    btn = document.createElement("button");
-    btn.id = "deleteAllUserExpensesBtn";
-    btn.type = "button";
-    btn.className = "expenses-delete-all-btn";
-    btn.innerHTML = `${featherIconMarkup("trash-2", { width: 16, height: 16 })}<span>Delete All</span>`;
-    actions.appendChild(btn);
-  }
-  btn.onclick = async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const adminPassword = await requestAdminPassword({
-      title: "Delete all expenses",
-      message: `Enter Admin password to delete all expenses for ${userName}.`,
-      danger: true,
-    });
-    if (!adminPassword) return;
-    if (!confirm(`Delete ALL expenses and receipt images for ${userName}? This cannot be undone.`)) return;
-    const res = await fetch(`/api/expenses/user/${encodeURIComponent(userId)}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminPassword }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) {
-      showExpensesUsersToast({ type: "error", title: "Delete failed", message: data.error || "Failed to delete user expenses." });
-      return;
-    }
-    closeUserExpensesModal();
-    await loadExpenseUsers();
-    showExpensesUsersToast({ type: "success", title: "Deleted", message: `Deleted ${data.deleted || 0} expense records.` });
-  };
-}
-
-async function reloadCurrentUserExpenses() {
-  if (!CURRENT_USER_ID) return;
-  await openUserExpensesModal(CURRENT_USER_ID, CURRENT_USER_NAME || "User");
 }
 
 
@@ -957,8 +600,6 @@ async function loadExpenseUsers() {
 // ---------------------------
 
 async function openUserExpensesModal(userId, userName) {
-  CURRENT_USER_ID = String(userId || "");
-  CURRENT_USER_NAME = String(userName || "");
   const modal = document.getElementById("userExpensesModal");
   const sheet = document.getElementById("userExpensesSheet");
   const titleEl = document.getElementById("userExpensesTitle");
@@ -974,7 +615,6 @@ async function openUserExpensesModal(userId, userName) {
   if (pastWrapper) pastWrapper.style.display = "none";
 
   titleEl.textContent = `Expenses — ${userName}`;
-  ensureDeleteAllButton(userId, userName);
   totalEl.textContent = formatGBP(0);
   setTotalBalanceCard(0);
   listEl.innerHTML = '<div class="expenses-empty">Loading expenses…</div>';
@@ -1340,17 +980,6 @@ function buildUserExpenseTicketHtml(group, { compact = false } = {}) {
   const secondaryReasonHtml = hasOrders && reasonHtml
     ? `<div class="expense-ticket__reason expense-ticket__reason--block">${escapeHtml(reasonText)}</div>`
     : "";
-  const expenseIds = rows.map(getExpenseItemId).filter(Boolean);
-  const primaryExpenseId = expenseIds[0] || "";
-  const actionsHtml = primaryExpenseId
-    ? `<div class="expense-ticket__actions">
-        <button type="button" class="expense-ticket__menu-btn" data-expense-menu-toggle data-primary-expense-id="${escapeHtml(primaryExpenseId)}" data-expense-ids="${escapeHtml(encodeExpenseActionData(expenseIds))}" aria-label="Expense actions">${featherIconMarkup("more-horizontal", { width: 18, height: 18 })}</button>
-        <div class="expense-ticket__menu" data-expense-menu>
-          <button type="button" class="expense-ticket__menu-action" data-expense-edit data-expense-id="${escapeHtml(primaryExpenseId)}">${featherIconMarkup("edit-2", { width: 15, height: 15 })}<span>Edit</span></button>
-          <button type="button" class="expense-ticket__menu-action is-danger" data-expense-delete data-expense-ids="${escapeHtml(encodeExpenseActionData(expenseIds))}">${featherIconMarkup("trash-2", { width: 15, height: 15 })}<span>Delete</span></button>
-        </div>
-      </div>`
-    : "";
 
   return `
     <article class="expense-ticket${compact ? " expense-ticket--compact" : ""}">
@@ -1360,7 +989,6 @@ function buildUserExpenseTicketHtml(group, { compact = false } = {}) {
             <span class="expense-ticket__date">${escapeHtml(formatExpenseGroupDateLabel(group?.date))}</span>
           </div>
           ${headerSideHtml}
-          ${actionsHtml}
         </div>
         ${secondaryReasonHtml}
         <div class="expense-ticket__header-divider" aria-hidden="true"></div>
@@ -1597,55 +1225,6 @@ if (togglePastBtn) {
 }
 
 // ---------------------------
-// EXPENSE CARD ACTIONS
-// ---------------------------
-
-document.addEventListener("click", async (event) => {
-  const toggle = event.target.closest("[data-expense-menu-toggle]");
-  if (toggle) {
-    event.preventDefault();
-    event.stopPropagation();
-    const wrapper = toggle.closest(".expense-ticket__actions");
-    const menu = wrapper?.querySelector("[data-expense-menu]");
-    const wasOpen = menu?.classList.contains("is-open");
-    closeAllExpenseTicketMenus();
-    if (menu && !wasOpen) menu.classList.add("is-open");
-    return;
-  }
-
-  const editBtn = event.target.closest("[data-expense-edit]");
-  if (editBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    closeAllExpenseTicketMenus();
-    const item = findExpenseItemById(editBtn.getAttribute("data-expense-id"));
-    if (!item) {
-      showExpensesUsersToast({ type: "error", title: "Not found", message: "Expense record could not be found." });
-      return;
-    }
-    await openEditExpense(item);
-    return;
-  }
-
-  const deleteBtn = event.target.closest("[data-expense-delete]");
-  if (deleteBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    closeAllExpenseTicketMenus();
-    const ids = decodeExpenseActionData(deleteBtn.getAttribute("data-expense-ids")) || [];
-    await deleteExpenseIds(ids, {
-      title: "Delete expense",
-      message: "Enter Admin password to delete this expense and its receipt images.",
-    });
-    return;
-  }
-
-  if (!event.target.closest(".expense-ticket__actions")) {
-    closeAllExpenseTicketMenus();
-  }
-});
-
-// ---------------------------
 // CLOSE MODAL (outside click)
 // ---------------------------
 
@@ -1658,7 +1237,6 @@ document.addEventListener("click", (e) => {
   if (modal.style.display !== "flex") return;
   if (shotsModal && shotsModal.style.display === "flex") return;
   if (e.target.closest(".user-tab")) return;
-  if (e.target.closest(".expense-admin-modal, .expense-edit-modal, .expense-ticket__menu, .expense-ticket__menu-btn")) return;
 
   if (!sheet.contains(e.target)) closeUserExpensesModal();
 });
@@ -1686,7 +1264,6 @@ function closeUserExpensesModal() {
 
 // ---------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  injectExpenseUsersActionStyles();
   setupExpenseShotsViewer();
   loadExpenseUsers();
 });
