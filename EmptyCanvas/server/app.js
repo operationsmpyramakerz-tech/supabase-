@@ -1838,7 +1838,20 @@ function _sbAllColumnKeys(rows = []) {
 
 function _sbNonEditableColumn(key) {
   const canon = _sbCanon(key);
-  return ["id", "createdat", "updatedat", "lasteditedtime", "createdtime"].includes(canon);
+  return [
+    "id",
+    "createdat",
+    "updatedat",
+    "importedat",
+    "lasteditedtime",
+    "createdtime",
+    "isactive",
+    "svschoolsraw",
+    "svschoolsnotionurls",
+    "svschoolmemberids",
+    "svschoolmembernames",
+    "svschoolsunmatched",
+  ].includes(canon);
 }
 
 function _sbFieldTypeFromLabel(label) {
@@ -1846,8 +1859,11 @@ function _sbFieldTypeFromLabel(label) {
   if (canon === "name") return "title";
   if (canon === "email") return "email";
   if (canon === "phone") return "phone_number";
-  if (canon === "allowedpages" || canon === "svschools") return "multi_select";
-  if (canon === "profilepicture" || canon === "filesmedia") return "files";
+  if (canon === "school") return "school_select";
+  if (canon === "allowedpages") return "ua_multi_select";
+  if (canon === "svschools") return "ua_multi_select";
+  if (canon === "profilepicture") return "ua_profile_upload";
+  if (canon === "filesmedia") return "ua_file_links";
   if (canon === "employeecode") return "text";
   return "rich_text";
 }
@@ -1866,6 +1882,162 @@ function _sbOrderedEditableFieldsFromRows(rows = []) {
     const label = _sbLabelForColumn(key);
     return { name: label, type: _sbFieldTypeFromLabel(label), required: _sbCanon(label) === "name", sourceColumn: key };
   });
+}
+
+
+function _uaTitleCaseLabel(value = "") {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function _uaIsUsefulStocktakingSchoolColumn(key = "") {
+  const canon = _sbCanon(key);
+  if (!canon) return false;
+  const blocked = new Set([
+    "id", "createdat", "updatedat", "importedat", "createdtime", "lasteditedtime", "lasteditedby",
+    "name", "product", "products", "productname", "producturl", "itemurl", "url", "tag", "tags",
+    "idcode", "receiptNumber", "receiptnumber", "onekitquantity", "unityprice", "unitprice", "onepieceprice",
+    "totalprice", "totalcost", "totalquantity", "allprice", "manualquantitytopurchase", "quantitytopurchase",
+    "allschoolsneed", "allschoolsquantities", "allschoolsstock", "schoolkit", "schooltotalquantites", "schooltotalquantities"
+  ]);
+  if (blocked.has(canon)) return false;
+  if (/^(g|grade)\d/.test(canon)) return false;
+  if (/^(checkbox|button|a|b|c)$/.test(canon)) return false;
+  return true;
+}
+
+async function _uaStocktakingSchoolOptions() {
+  if (!_sbStocktakingEnabled()) return [];
+  try {
+    const rows = await supabaseDb.selectAll(_sbStocktakingTable(), { limit: 1 });
+    const row = Array.isArray(rows) ? rows[0] || {} : {};
+    return Object.keys(row || {})
+      .filter(_uaIsUsefulStocktakingSchoolColumn)
+      .map((key) => ({ value: _uaTitleCaseLabel(key), column: key }))
+      .sort((a, b) => String(a.value || "").localeCompare(String(b.value || "")));
+  } catch (error) {
+    console.warn("[user-access] failed to load stocktaking columns:", error?.message || error);
+    return [];
+  }
+}
+
+function _uaAllowedPageOptionsFromRows(rows = []) {
+  const set = new Set(ALL_PAGES || []);
+  for (const row of rows || []) {
+    for (const value of _sbSplitValues(_sbValueForLabel(row, "Allowed Pages"))) {
+      if (value) set.add(value);
+    }
+  }
+  return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function _uaSvSchoolNameOptionsFromRows(rows = []) {
+  const set = new Set();
+  for (const row of rows || []) {
+    const name = _sbString(_sbValueForLabel(row, "Name"));
+    if (name) set.add(name);
+  }
+  return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []) {
+  const schoolOptions = await _uaStocktakingSchoolOptions();
+  const allowedOptions = _uaAllowedPageOptionsFromRows(rows);
+  const svOptions = _uaSvSchoolNameOptionsFromRows(rows);
+  return (editableFields || []).map((field) => {
+    const canon = _sbCanon(field?.name || "");
+    if (canon === "school") {
+      return { ...field, type: "school_select", options: schoolOptions.map((x) => x.value), optionMeta: schoolOptions };
+    }
+    if (canon === "allowedpages") {
+      return { ...field, type: "ua_multi_select", options: allowedOptions, allowCustom: true };
+    }
+    if (canon === "svschools") {
+      return { ...field, type: "ua_multi_select", options: svOptions, allowCustom: false };
+    }
+    if (canon === "profilepicture") {
+      return { ...field, type: "ua_profile_upload" };
+    }
+    if (canon === "filesmedia") {
+      return { ...field, type: "ua_file_links" };
+    }
+    return field;
+  });
+}
+
+function _uaSafeSqlIdentifierFromLabel(label = "") {
+  return _sbStocktakingColumnKey(label);
+}
+
+async function _uaAddStocktakingSchoolColumn(displayName = "") {
+  const label = String(displayName || "").replace(/\s+/g, " ").trim();
+  if (!label) {
+    const err = new Error("School name is required.");
+    err.status = 400;
+    throw err;
+  }
+  const columnName = _uaSafeSqlIdentifierFromLabel(label);
+  if (!/^[a-z][a-z0-9_]{1,62}$/.test(columnName)) {
+    const err = new Error("Invalid school column name. Use letters/numbers and avoid special characters.");
+    err.status = 400;
+    throw err;
+  }
+  try {
+    await supabaseDb.request('/rpc/add_stocktaking_school_column', {
+      method: 'POST',
+      body: { column_name: columnName },
+    });
+  } catch (error) {
+    const msg = String(error?.message || "");
+    if (/function .*add_stocktaking_school_column|Could not find the function|PGRST202|schema cache/i.test(msg)) {
+      const err = new Error("Supabase helper function is not installed. Run supabase_user_access_helpers.sql once, then try again.");
+      err.status = 500;
+      throw err;
+    }
+    throw error;
+  }
+  return { label: _uaTitleCaseLabel(columnName), column: columnName };
+}
+
+function _uaResolveTeamMemberNamesToIds(value, rows = []) {
+  const values = _sbSplitValues(value);
+  const ids = [];
+  const names = [];
+  const unmatched = [];
+  for (const item of values) {
+    const wanted = norm(item);
+    if (!wanted) continue;
+    const hit = (rows || []).find((row) => {
+      const id = String(_sbGet(row, ["id", "ID"]) ?? "");
+      const name = _sbString(_sbValueForLabel(row, "Name"));
+      return norm(id) === wanted || norm(name) === wanted;
+    });
+    if (hit) {
+      const id = String(_sbGet(hit, ["id", "ID"]) ?? "").trim();
+      const name = _sbString(_sbValueForLabel(hit, "Name"));
+      if (id && !ids.includes(id)) ids.push(id);
+      if (name && !names.includes(name)) names.push(name);
+    } else {
+      unmatched.push(item);
+    }
+  }
+  return { ids, names, unmatched };
+}
+
+function _uaAttachSvSchoolLinkColumns(writeRow = {}, keys = [], fields = {}, rows = []) {
+  const svValue = fields?.["S.V Schools"] ?? fields?.["sv_schools"] ?? fields?.["SV Schools"] ?? fields?.["S.V schools"];
+  if (typeof svValue === "undefined") return writeRow;
+  const resolved = _uaResolveTeamMemberNamesToIds(svValue, rows);
+  const idKey = _sbFindKey(keys, ["sv_school_member_ids", "sv school member ids"]);
+  const nameKey = _sbFindKey(keys, ["sv_school_member_names", "sv school member names"]);
+  const unmatchedKey = _sbFindKey(keys, ["sv_schools_unmatched", "sv schools unmatched"]);
+  if (idKey) writeRow[idKey] = resolved.ids.join(", ") || null;
+  if (nameKey) writeRow[nameKey] = resolved.names.join(", ") || null;
+  if (unmatchedKey) writeRow[unmatchedKey] = resolved.unmatched.join(", ") || null;
+  return writeRow;
 }
 
 function _sbValueForLabel(row, label) {
@@ -1991,12 +2163,12 @@ function _sbBuildWriteRowFromFields(fields = {}, rows = []) {
     const value = String(rawValue ?? "").trim();
     row[actual] = value || null;
   }
-  return row;
+  return _uaAttachSvSchoolLinkColumns(row, keys, fields, rows);
 }
 
 async function _sbQueryAllTeamMembersForUserAccess() {
   const rows = await _sbSelectTeamMembersRows();
-  const editableFields = _sbOrderedEditableFieldsFromRows(rows);
+  const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows), rows);
   const members = (rows || []).map((row) => _sbSerializeTeamMemberRow(row, editableFields));
   members.sort((a, b) => {
     const da = String(a.department || "").localeCompare(String(b.department || ""));
@@ -10218,6 +10390,86 @@ app.post(
   },
 );
 
+// User Access & Data — Dynamic form options
+app.get(
+  "/api/user-access/options",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const rows = _sbTeamMembersEnabled() ? await _sbSelectTeamMembersRows() : [];
+      return res.json({
+        ok: true,
+        source: _sbTeamMembersEnabled() ? "supabase" : "notion",
+        schools: await _uaStocktakingSchoolOptions(),
+        allowedPages: _uaAllowedPageOptionsFromRows(rows),
+        svSchools: _uaSvSchoolNameOptionsFromRows(rows),
+      });
+    } catch (error) {
+      console.error("GET /api/user-access/options error:", error?.details || error?.body || error);
+      return res.status(500).json({ ok: false, error: error?.message || "Failed to load User Access options." });
+    }
+  },
+);
+
+// User Access & Data — Add a Stocktaking school column used by the School dropdown
+app.post(
+  "/api/user-access/stocktaking-columns",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_uaAdminVerified(req)) {
+        return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+      }
+      if (!_sbStocktakingEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      }
+      const created = await _uaAddStocktakingSchoolColumn(req.body?.name || req.body?.column || "");
+      await cacheDel("cache:api:user-access:team-members:supabase:v1");
+      return res.json({ ok: true, ...created });
+    } catch (error) {
+      console.error("POST /api/user-access/stocktaking-columns error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add Stocktaking column." });
+    }
+  },
+);
+
+// User Access & Data — Upload profile/media files to Vercel Blob and return public URLs
+app.post(
+  "/api/user-access/upload-file",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_uaAdminVerified(req)) {
+        return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+      }
+      const { dataUrl, filename, kind } = req.body || {};
+      if (!dataUrl) return res.status(400).json({ ok: false, error: "File data is required." });
+      const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+      const uploadKind = String(kind || "file").toLowerCase();
+      if (uploadKind.includes("profile") && !/^image\//i.test(String(mime || ""))) {
+        return res.status(400).json({ ok: false, error: "Profile picture must be an image." });
+      }
+      if (buf.length > 12 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: "File is too large. Maximum size is 12MB." });
+      }
+      const safeOriginalName = String(filename || "upload.bin").trim() || "upload.bin";
+      const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
+      const blobName = `team-members/${uploadKind || "file"}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const publicUrl = await uploadToBlobFromBase64(dataUrl, blobName);
+      return res.json({ ok: true, url: publicUrl, name: safeOriginalName, mime });
+    } catch (error) {
+      console.error("POST /api/user-access/upload-file error:", error?.details || error?.body || error);
+      const message = String(error?.message || "") === "BLOB_TOKEN_MISSING"
+        ? "Vercel Blob is not configured. Add BLOB_READ_WRITE_TOKEN in Vercel."
+        : (error?.message || "Failed to upload file.");
+      return res.status(error?.status || 500).json({ ok: false, error: message });
+    }
+  },
+);
+
 // User Access & Data — Create Team Member
 app.post(
   "/api/user-access/team-members",
@@ -10243,7 +10495,7 @@ app.post(
         const created = await supabaseDb.insert(_sbTeamMembersTable(), writeRow);
         await cacheDel(USER_ACCESS_CACHE_KEY);
         await cacheDel("cache:api:user-access:team-members:supabase:v1");
-        const editableFields = _sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]);
+        const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]), [...(rows || []), created || {}]);
         const member = _sbSerializeTeamMemberRow(created || writeRow, editableFields);
         return res.json({ ok: true, member, source: "supabase" });
       }
@@ -10290,7 +10542,7 @@ app.patch(
         const updated = await supabaseDb.updateById(_sbTeamMembersTable(), pageId, writeRow);
         await cacheDel(USER_ACCESS_CACHE_KEY);
         await cacheDel("cache:api:user-access:team-members:supabase:v1");
-        const editableFields = _sbOrderedEditableFieldsFromRows(rows || []);
+        const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows || []), rows || []);
         const member = _sbSerializeTeamMemberRow(updated || { ...writeRow, id: pageId }, editableFields);
         return res.json({ ok: true, member, source: "supabase" });
       }

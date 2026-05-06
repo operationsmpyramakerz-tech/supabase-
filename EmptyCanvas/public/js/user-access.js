@@ -296,14 +296,154 @@
     return `<datalist id="${escapeHTML(id)}">${options.map((o) => `<option value="${escapeHTML(o)}"></option>`).join('')}</datalist>`;
   }
 
+  function splitCsvValues(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x || '').trim()).filter(Boolean);
+    } catch {}
+    return raw.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean);
+  }
+
+  function uniqValues(values) {
+    const out = [];
+    const seen = new Set();
+    for (const value of values || []) {
+      const clean = String(value || '').trim();
+      const key = clean.toLowerCase();
+      if (!clean || seen.has(key)) continue;
+      seen.add(key);
+      out.push(clean);
+    }
+    return out;
+  }
+
+  function fieldOptions(field) {
+    return uniqValues(Array.isArray(field?.options) ? field.options : []);
+  }
+
+  function multiSelectHTML(field, value) {
+    const name = String(field.name || '');
+    const type = String(field.type || 'ua_multi_select');
+    const selected = uniqValues(splitCsvValues(value));
+    const options = uniqValues([...selected, ...fieldOptions(field)]);
+    const allowCustom = field.allowCustom !== false;
+    const label = escapeHTML(name);
+    const hiddenValue = escapeHTML(selected.join(', '));
+    const optionHtml = options.length
+      ? options.map((option, index) => {
+          const checked = selected.some((x) => x.toLowerCase() === String(option).toLowerCase()) ? 'checked' : '';
+          return `
+            <label class="ua-ms-option">
+              <input type="checkbox" data-ms-option value="${escapeHTML(option)}" ${checked}>
+              <span>${escapeHTML(option)}</span>
+            </label>
+          `;
+        }).join('')
+      : '<div class="ua-ms-empty">No options yet.</div>';
+    return `
+      <div class="ua-form-field ua-form-field--wide ua-form-field--tokens">
+        <span>${label}</span>
+        <div class="ua-multiselect" data-multiselect data-field-label="${label}">
+          <input type="hidden" data-field-name="${label}" data-field-type="${escapeHTML(type)}" value="${hiddenValue}">
+          <div class="ua-token-list" data-ms-selected>
+            ${selected.length ? selected.map((x) => `<span class="ua-token">${escapeHTML(x)}</span>`).join('') : '<span class="ua-token ua-token--muted">No values selected</span>'}
+          </div>
+          <div class="ua-ms-options">${optionHtml}</div>
+          ${allowCustom ? `
+            <div class="ua-inline-add">
+              <input type="text" data-ms-custom placeholder="Add new option then press Add">
+              <button type="button" class="ua-mini-btn" data-ms-add>Add</button>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function schoolSelectHTML(field, value) {
+    const name = String(field.name || 'School');
+    const options = uniqValues([String(value || '').trim(), ...fieldOptions(field)]).filter(Boolean);
+    const selected = String(value || '').trim();
+    const label = escapeHTML(name);
+    return `
+      <div class="ua-form-field ua-form-field--wide ua-form-field--school">
+        <span>${label}</span>
+        <select data-field-name="${label}" data-field-type="school_select">
+          <option value="">Select school / stocktaking column</option>
+          ${options.map((option) => `<option value="${escapeHTML(option)}" ${option === selected ? 'selected' : ''}>${escapeHTML(option)}</option>`).join('')}
+        </select>
+        <div class="ua-inline-add">
+          <input type="text" data-school-column-name placeholder="Add new Stocktaking column, e.g. New School Done">
+          <button type="button" class="ua-mini-btn" data-school-add>Add column</button>
+        </div>
+        <small>Adding a school creates a new column in the Supabase stocktaking table, then selects it here.</small>
+      </div>
+    `;
+  }
+
+  function profileUploadHTML(field, value) {
+    const name = String(field.name || 'Profile picture');
+    const url = String(value || '').trim();
+    const label = escapeHTML(name);
+    return `
+      <div class="ua-form-field ua-form-field--wide ua-upload-field" data-upload-widget="profile">
+        <span>${label}</span>
+        <input type="hidden" data-field-name="${label}" data-field-type="ua_profile_upload" value="${escapeHTML(url)}">
+        <div class="ua-profile-uploader">
+          <div class="ua-profile-preview" data-profile-preview>${url ? `<img src="${escapeHTML(url)}" alt="Profile picture">` : '<i data-feather="image"></i>'}</div>
+          <div class="ua-upload-actions">
+            <label class="ua-file-pick">
+              <i data-feather="upload-cloud"></i>
+              <span>${url ? 'Replace image' : 'Upload image'}</span>
+              <input type="file" accept="image/*" data-profile-file>
+            </label>
+            <input type="url" data-profile-url placeholder="Or paste image URL" value="${escapeHTML(url)}">
+            <button type="button" class="ua-mini-btn" data-profile-use-url>Use link</button>
+          </div>
+        </div>
+        <small data-upload-status></small>
+      </div>
+    `;
+  }
+
+  function fileLinksHTML(field, value) {
+    const name = String(field.name || 'Files & media');
+    const label = escapeHTML(name);
+    const safeValue = escapeHTML(value || '');
+    return `
+      <div class="ua-form-field ua-form-field--wide ua-upload-field" data-upload-widget="files">
+        <span>${label}</span>
+        <textarea rows="4" data-field-name="${label}" data-field-type="ua_file_links" placeholder="Uploaded or pasted links, one per line">${safeValue}</textarea>
+        <div class="ua-upload-row">
+          <label class="ua-file-pick ua-file-pick--small">
+            <i data-feather="paperclip"></i>
+            <span>Upload file</span>
+            <input type="file" data-media-file multiple>
+          </label>
+          <input type="url" data-media-link placeholder="Insert external link">
+          <button type="button" class="ua-mini-btn" data-media-insert-link>Insert link</button>
+        </div>
+        <small data-upload-status>Use upload for files, or paste a link manually.</small>
+      </div>
+    `;
+  }
+
   function formControlHTML(field, value) {
     const name = String(field.name || '');
     const type = String(field.type || 'rich_text');
+    const canon = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     const label = escapeHTML(name);
     const safeValue = escapeHTML(value || '');
     const required = field.required || type === 'title' ? 'required' : '';
     const placeholder = field.placeholder || '';
     const commonAttrs = `data-field-name="${label}" data-field-type="${escapeHTML(type)}" ${required}`;
+
+    if (type === 'school_select' || canon === 'school') return schoolSelectHTML(field, value);
+    if (type === 'ua_multi_select' || type === 'multi_select') return multiSelectHTML(field, value);
+    if (type === 'ua_profile_upload' || canon === 'profilepicture') return profileUploadHTML(field, value);
+    if (type === 'ua_file_links' || canon === 'filesmedia') return fileLinksHTML(field, value);
 
     if (type === 'checkbox') {
       const yes = /^(yes|true|1)$/i.test(String(value || ''));
@@ -318,33 +458,9 @@
       `;
     }
 
-    if (type === 'files') {
-      return `
-        <label class="ua-form-field ua-form-field--wide">
-          <span>${label}</span>
-          <textarea rows="3" ${commonAttrs} placeholder="Paste external file/image URLs, one per line">${safeValue}</textarea>
-        </label>
-      `;
-    }
+    if (type === 'files') return fileLinksHTML(field, value);
 
-    if (type === 'relation') {
-      return `
-        <label class="ua-form-field ua-form-field--wide">
-          <span>${label}</span>
-          <textarea rows="2" ${commonAttrs} placeholder="Optional: Notion page IDs separated by comma or new line">${safeValue}</textarea>
-          <small>Relation fields accept Notion page IDs. Existing names are shown in the user details but saving needs IDs.</small>
-        </label>
-      `;
-    }
-
-    if (type === 'multi_select') {
-      return `
-        <label class="ua-form-field ua-form-field--wide">
-          <span>${label}</span>
-          <input type="text" ${commonAttrs} value="${safeValue}" placeholder="Comma separated values">
-        </label>
-      `;
-    }
+    if (type === 'relation') return multiSelectHTML({ ...field, type: 'ua_multi_select', allowCustom: false }, value);
 
     if (type === 'rich_text' || type === 'text') {
       const isLong = String(value || '').length > 90 || /notes?|comment|address|description/i.test(name);
@@ -622,6 +738,204 @@
     }
   }
 
+  function syncMultiSelectWidget(widget) {
+    if (!widget) return;
+    const hidden = widget.querySelector('input[type="hidden"][data-field-name]');
+    const selectedBox = widget.querySelector('[data-ms-selected]');
+    const values = Array.from(widget.querySelectorAll('input[data-ms-option]:checked'))
+      .map((input) => input.value)
+      .filter(Boolean);
+    const clean = uniqValues(values);
+    if (hidden) hidden.value = clean.join(', ');
+    if (selectedBox) {
+      selectedBox.innerHTML = clean.length
+        ? clean.map((x) => `<span class="ua-token">${escapeHTML(x)}</span>`).join('')
+        : '<span class="ua-token ua-token--muted">No values selected</span>';
+    }
+  }
+
+  function addMultiSelectOption(widget, value, checked = true) {
+    if (!widget || !value) return;
+    const optionsBox = widget.querySelector('.ua-ms-options');
+    if (!optionsBox) return;
+    const exists = Array.from(optionsBox.querySelectorAll('input[data-ms-option]'))
+      .some((input) => String(input.value || '').trim().toLowerCase() === String(value).trim().toLowerCase());
+    if (!exists) {
+      const empty = optionsBox.querySelector('.ua-ms-empty');
+      if (empty) empty.remove();
+      const label = document.createElement('label');
+      label.className = 'ua-ms-option';
+      label.innerHTML = `<input type="checkbox" data-ms-option value="${escapeHTML(value)}" ${checked ? 'checked' : ''}><span>${escapeHTML(value)}</span>`;
+      optionsBox.prepend(label);
+    } else if (checked) {
+      const input = Array.from(optionsBox.querySelectorAll('input[data-ms-option]'))
+        .find((x) => String(x.value || '').trim().toLowerCase() === String(value).trim().toLowerCase());
+      if (input) input.checked = true;
+    }
+    syncMultiSelectWidget(widget);
+  }
+
+  function setUploadStatus(widget, message, isError = false) {
+    const status = widget?.querySelector('[data-upload-status]');
+    if (!status) return;
+    status.textContent = message || '';
+    status.classList.toggle('is-error', !!isError);
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadUserAccessFile(file, kind) {
+    const dataUrl = await readFileAsDataUrl(file);
+    const res = await fetch('/api/user-access/upload-file', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, filename: file.name || 'upload.bin', kind }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Upload failed.');
+    return data;
+  }
+
+  async function handleSchoolAdd(button) {
+    const field = button.closest('.ua-form-field--school');
+    const input = field?.querySelector('[data-school-column-name]');
+    const select = field?.querySelector('select[data-field-name]');
+    const name = String(input?.value || '').trim();
+    if (!name) return toast('warning', 'Missing school', 'Enter the new school / column name first.');
+    button.disabled = true;
+    button.classList.add('is-loading');
+    try {
+      const res = await fetch('/api/user-access/stocktaking-columns', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to add column.');
+      const label = data.label || name;
+      if (select && !Array.from(select.options).some((o) => o.value.toLowerCase() === String(label).toLowerCase())) {
+        const opt = new Option(label, label, true, true);
+        select.add(opt, 1);
+      }
+      if (select) select.value = label;
+      if (input) input.value = '';
+      toast('success', 'School added', `${label} was added to Stocktaking.`);
+    } catch (error) {
+      toast('error', 'Could not add school', error?.message || 'Failed to add Stocktaking column.');
+    } finally {
+      button.disabled = false;
+      button.classList.remove('is-loading');
+    }
+  }
+
+  async function handleProfileFile(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    const widget = input.closest('[data-upload-widget="profile"]');
+    const hidden = widget?.querySelector('input[type="hidden"][data-field-name]');
+    const preview = widget?.querySelector('[data-profile-preview]');
+    setUploadStatus(widget, 'Uploading profile picture...');
+    try {
+      const data = await uploadUserAccessFile(file, 'profile-picture');
+      if (hidden) hidden.value = data.url || '';
+      const urlInput = widget?.querySelector('[data-profile-url]');
+      if (urlInput) urlInput.value = data.url || '';
+      if (preview) preview.innerHTML = `<img src="${escapeHTML(data.url || '')}" alt="Profile picture">`;
+      setUploadStatus(widget, 'Profile picture uploaded. Save changes to apply it.');
+      toast('success', 'Uploaded', 'Profile picture uploaded.');
+    } catch (error) {
+      setUploadStatus(widget, error?.message || 'Upload failed.', true);
+      toast('error', 'Upload failed', error?.message || 'Profile picture upload failed.');
+    } finally {
+      input.value = '';
+    }
+  }
+
+  async function handleMediaFiles(input) {
+    const files = Array.from(input?.files || []);
+    if (!files.length) return;
+    const widget = input.closest('[data-upload-widget="files"]');
+    const textarea = widget?.querySelector('textarea[data-field-name]');
+    setUploadStatus(widget, `Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`);
+    try {
+      const urls = [];
+      for (const file of files) {
+        const data = await uploadUserAccessFile(file, 'files-media');
+        if (data?.url) urls.push(data.url);
+      }
+      if (textarea && urls.length) {
+        const existing = String(textarea.value || '').trim();
+        textarea.value = [existing, ...urls].filter(Boolean).join('\n');
+      }
+      setUploadStatus(widget, `${urls.length} file${urls.length === 1 ? '' : 's'} uploaded. Save changes to apply.`);
+      toast('success', 'Uploaded', `${urls.length} file${urls.length === 1 ? '' : 's'} uploaded.`);
+    } catch (error) {
+      setUploadStatus(widget, error?.message || 'Upload failed.', true);
+      toast('error', 'Upload failed', error?.message || 'File upload failed.');
+    } finally {
+      input.value = '';
+    }
+  }
+
+  function handleFormBodyClick(event) {
+    const msAdd = event.target.closest('[data-ms-add]');
+    if (msAdd) {
+      const widget = msAdd.closest('[data-multiselect]');
+      const input = widget?.querySelector('[data-ms-custom]');
+      const value = String(input?.value || '').trim();
+      if (!value) return;
+      addMultiSelectOption(widget, value, true);
+      if (input) input.value = '';
+      return;
+    }
+
+    const schoolAdd = event.target.closest('[data-school-add]');
+    if (schoolAdd) return handleSchoolAdd(schoolAdd);
+
+    const useProfileUrl = event.target.closest('[data-profile-use-url]');
+    if (useProfileUrl) {
+      const widget = useProfileUrl.closest('[data-upload-widget="profile"]');
+      const input = widget?.querySelector('[data-profile-url]');
+      const hidden = widget?.querySelector('input[type="hidden"][data-field-name]');
+      const preview = widget?.querySelector('[data-profile-preview]');
+      const url = String(input?.value || '').trim();
+      if (!url) return;
+      if (hidden) hidden.value = url;
+      if (preview) preview.innerHTML = `<img src="${escapeHTML(url)}" alt="Profile picture">`;
+      setUploadStatus(widget, 'Image link inserted. Save changes to apply it.');
+      return;
+    }
+
+    const mediaInsert = event.target.closest('[data-media-insert-link]');
+    if (mediaInsert) {
+      const widget = mediaInsert.closest('[data-upload-widget="files"]');
+      const input = widget?.querySelector('[data-media-link]');
+      const textarea = widget?.querySelector('textarea[data-field-name]');
+      const url = String(input?.value || '').trim();
+      if (!url) return;
+      const existing = String(textarea?.value || '').trim();
+      if (textarea) textarea.value = [existing, url].filter(Boolean).join('\n');
+      if (input) input.value = '';
+      setUploadStatus(widget, 'Link inserted. Save changes to apply it.');
+    }
+  }
+
+  function handleFormBodyChange(event) {
+    const option = event.target.closest('input[data-ms-option]');
+    if (option) return syncMultiSelectWidget(option.closest('[data-multiselect]'));
+    if (event.target.matches('[data-profile-file]')) return handleProfileFile(event.target);
+    if (event.target.matches('[data-media-file]')) return handleMediaFiles(event.target);
+  }
+
   function bindEvents() {
     els.folders?.addEventListener('click', (event) => {
       const btn = event.target.closest('.ua-folder[data-dept-id]');
@@ -656,6 +970,8 @@
     });
 
     els.form?.addEventListener('submit', submitMemberForm);
+    els.formBody?.addEventListener('click', handleFormBodyClick);
+    els.formBody?.addEventListener('change', handleFormBodyChange);
     els.formCancelBtn?.addEventListener('click', closeFormModal);
     els.formClose?.addEventListener('click', closeFormModal);
     els.formModal?.addEventListener('click', (event) => {
