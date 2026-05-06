@@ -2513,6 +2513,313 @@ async function _sbInvalidateOrdersCaches() {
 }
 
 
+function _sbOrderExportIds(ids = []) {
+  return (Array.isArray(ids) ? ids : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .filter((x) => /^\d+$/.test(x));
+}
+
+async function _sbOrderRowsByIds(ids = []) {
+  const cleanIds = _sbOrderExportIds(ids);
+  if (!cleanIds.length) return [];
+  const rows = await Promise.all(
+    cleanIds.map((id) => supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null)),
+  );
+  const byId = new Map(rows.filter(Boolean).map((row) => [String(row.id), row]));
+  return cleanIds.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+function _sbComputeOrderIdRangeFromItems(items = []) {
+  const nums = (items || [])
+    .map((item) => Number(item?.orderIdNumber))
+    .filter((n) => Number.isFinite(n));
+  if (nums.length) {
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    if (min === max) return `ORD-${min}`;
+    return `ORD-${min} : ORD-${max}`;
+  }
+  const ids = (items || []).map((item) => item?.orderId).filter(Boolean);
+  if (!ids.length) return "Order";
+  if (ids.length === 1) return ids[0];
+  return `${ids[0]} : ${ids[ids.length - 1]}`;
+}
+
+async function _sbProductsMapByName() {
+  if (!_sbProductsEnabled()) return new Map();
+  const products = await _sbProductsList().catch(() => []);
+  const map = new Map();
+  for (const p of products || []) {
+    const key = normKey(p?.name || "");
+    if (key && !map.has(key)) map.set(key, p);
+  }
+  return map;
+}
+
+async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
+  const rowsRaw = await _sbOrderRowsByIds(orderIds);
+  if (!rowsRaw.length) {
+    const err = new Error("Orders not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const items = rowsRaw.map(_sbSerializeOrderRow);
+  const productNameMap = await _sbProductsMapByName();
+  const createdTimes = items
+    .map((item) => new Date(item.createdTime || Date.now()))
+    .filter((d) => !Number.isNaN(d.getTime()));
+  const createdAt = createdTimes.length
+    ? new Date(Math.min(...createdTimes.map((d) => d.getTime())))
+    : new Date();
+
+  const orderIdRange = _sbComputeOrderIdRangeFromItems(items);
+  const first = items[0] || {};
+  const teamMember = first.createdByName || first.assignedToName || "";
+  const operationsBy = first.operationsByName || req?.session?.username || "";
+  const receiptView = _receiptPresentationForOrderType(first.orderType || "Request Products");
+
+  const rows = [];
+  let grandQty = 0;
+  let grandTotal = 0;
+  for (const item of items) {
+    const prod = productNameMap.get(normKey(item.productName || "")) || null;
+    const qtyCandidate = item.quantityReceived !== null && typeof item.quantityReceived !== "undefined"
+      ? item.quantityReceived
+      : (item.quantityProgress !== null && typeof item.quantityProgress !== "undefined" ? item.quantityProgress : item.quantity);
+    const qty = Number.isFinite(Number(qtyCandidate)) ? Number(qtyCandidate) : 0;
+    const unitCandidate = item.unitPrice !== null && typeof item.unitPrice !== "undefined" ? item.unitPrice : prod?.unitPrice;
+    const unit = Number.isFinite(Number(unitCandidate)) ? Number(unitCandidate) : 0;
+    const total = qty * unit;
+    grandQty += qty;
+    grandTotal += total;
+    rows.push({
+      idCode: prod?.displayId || "",
+      component: item.productName || prod?.name || "Unknown Product",
+      qty,
+      reason: item.reason || "No Reason",
+      link: item.productUrl || prod?.url || "",
+      unit,
+      total,
+    });
+  }
+
+  const reasonCounts = new Map();
+  for (const row of rows) {
+    const key = String(row?.reason || "").trim() || "No Reason";
+    reasonCounts.set(key, (reasonCounts.get(key) || 0) + 1);
+  }
+  const groupReason = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "No Reason";
+
+  return {
+    rawRows: rowsRaw,
+    items,
+    rows,
+    grandQty,
+    grandTotal,
+    createdAt,
+    orderIdRange,
+    teamMember,
+    operationsBy,
+    groupReason,
+    receiptView,
+    first,
+  };
+}
+
+function _sbSafeExportName(value = "order") {
+  return String(value || "order")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_")
+    .slice(0, 60);
+}
+
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "" } = {}) {
+  const tabKey = String(tab || "").trim().toLowerCase();
+  const hideCosts = tabKey === "received" || tabKey === "delivered";
+  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  const { pipeDeliveryReceiptPDF } = require("./deliveryReceiptPdf");
+  await pipeDeliveryReceiptPDF({
+    orderId: payload.orderIdRange,
+    createdAt: payload.createdAt,
+    teamMember: payload.teamMember,
+    preparedBy: payload.groupReason,
+    rows: payload.rows,
+    grandQty: payload.grandQty,
+    grandTotal: payload.grandTotal,
+    metaLayout: "teamReasonFirst",
+    showReasonTagBar: false,
+    groupByReason: false,
+    headerColorKey: payload.groupReason,
+    showCosts: !hideCosts,
+    documentTitle: payload.receiptView.documentTitle,
+    recipientLabelLeft: payload.receiptView.recipientLabelLeft,
+    thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
+  }, res);
+}
+
+async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
+  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const first = payload.first || {};
+  if (_normKeyOrderType(first.orderType || "") !== _normKeyOrderType("Request Maintenance")) {
+    return res.status(400).json({ error: "This export is only available for maintenance orders." });
+  }
+  const fileName = `maintenance_receipt_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  const { pipeMaintenanceReceiptPDF } = require("./maintenanceReceiptPdf");
+  await pipeMaintenanceReceiptPDF({
+    orderId: payload.orderIdRange,
+    createdAt: payload.createdAt,
+    requestedBy: payload.teamMember,
+    operationsBy: payload.operationsBy,
+    issueDescription: first.issueDescription || "—",
+    actualIssueDescription: first.actualIssueDescription || "—",
+    repairAction: first.repairAction || "—",
+    resolutionMethod: first.resolutionMethod || "—",
+    sparePartsReplacedList: first.sparePartsReplacedNames || [],
+    rows: payload.rows,
+    maintenanceReceiptName: first.maintenanceReceiptName || "",
+    maintenanceReceiptUrl: first.maintenanceReceiptUrl || "",
+  }, res);
+}
+
+async function _sbPipeOrderExcel(req, res, orderIds = []) {
+  const ExcelJS = require("exceljs");
+  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Operations Hub";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Order");
+
+  const formatDateTime = (date) => {
+    try {
+      const d = date instanceof Date ? date : new Date(date);
+      if (Number.isNaN(d.getTime())) return String(date || "-");
+      return d.toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return String(date || "-");
+    }
+  };
+
+  const borderThin = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "thin", color: { argb: "FF000000" } },
+  };
+  const borderLight = {
+    top: { style: "thin", color: { argb: "FFE5E7EB" } },
+    left: { style: "thin", color: { argb: "FFE5E7EB" } },
+    bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+    right: { style: "thin", color: { argb: "FFE5E7EB" } },
+  };
+
+  ws.addRow(["Order ID", payload.orderIdRange, "Date", formatDateTime(payload.createdAt)]);
+  ws.addRow(["Team member", payload.teamMember || "", "Prepared by (Operations)", String(req.session?.username || "—")]);
+  ws.addRow(["Total quantity", Number(payload.grandQty) || 0, "Estimate total", Number(payload.grandTotal) || 0]);
+  for (let r = 1; r <= 3; r += 1) {
+    const row = ws.getRow(r);
+    row.height = 20;
+    for (let c = 1; c <= 4; c += 1) {
+      const cell = row.getCell(c);
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+      if (c === 1 || c === 3) {
+        cell.font = { bold: true };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } };
+      } else {
+        cell.font = { bold: true };
+      }
+    }
+  }
+  ws.getRow(3).getCell(2).numFmt = "0";
+  ws.getRow(3).getCell(4).numFmt = '"£"#,##0.00';
+  ws.addRow([]);
+
+  const reasonMap = new Map();
+  for (const row of payload.rows || []) {
+    const reason = String(row.reason || "").trim() || "No Reason";
+    if (!reasonMap.has(reason)) reasonMap.set(reason, []);
+    reasonMap.get(reason).push(row);
+  }
+  const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+  const headerCols = ["ID Code", "Component", "Quantity", "Reason", "Component link", "Unit cost", "Total cost"];
+
+  for (const reason of reasons) {
+    const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
+    const titleNum = titleRow.number;
+    ws.mergeCells(`A${titleNum}:G${titleNum}`);
+    for (let c = 1; c <= 7; c += 1) {
+      const cell = ws.getRow(titleNum).getCell(c);
+      cell.border = borderThin;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
+      cell.font = { bold: true, color: { argb: "FF5B21B6" } };
+    }
+    const header = ws.addRow(headerCols);
+    header.font = { bold: true, color: { argb: "FF111827" } };
+    header.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", wrapText: true };
+    });
+    const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
+    for (const item of items) {
+      const r = ws.addRow([
+        item.idCode || "",
+        item.component || "",
+        Number(item.qty) || 0,
+        item.reason || "",
+        item.link || "",
+        Number(item.unit) || 0,
+        Number(item.total) || 0,
+      ]);
+      if (item.link) {
+        r.getCell(5).value = { text: item.link, hyperlink: item.link };
+        r.getCell(5).font = { color: { argb: "FF2563EB" }, underline: true };
+      }
+      r.getCell(3).numFmt = "0.######";
+      r.getCell(6).numFmt = '"£"#,##0.00';
+      r.getCell(7).numFmt = '"£"#,##0.00';
+      r.eachCell((cell) => {
+        cell.border = borderLight;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    }
+    ws.addRow([]);
+  }
+
+  ws.columns = [
+    { width: 14 },
+    { width: 36 },
+    { width: 12 },
+    { width: 24 },
+    { width: 54 },
+    { width: 14 },
+    { width: 14 },
+  ];
+  ws.views = [{ state: "frozen", ySplit: 4 }];
+  const fileName = `order_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
+  const buf = await wb.xlsx.writeBuffer();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  res.send(Buffer.from(buf));
+}
+
+
 // -----------------------------------------------------------------------------
 // Supabase Products adapter
 // -----------------------------------------------------------------------------
@@ -12652,6 +12959,10 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab });
+      }
+
       const parseNumberProp = (prop) => {
         if (!prop) return null;
         try {
@@ -12964,6 +13275,10 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderMaintenancePdf(req, res, ids);
+      }
+
       const pages = (await Promise.all(
         ids.map(async (id) => {
           try {
@@ -13220,6 +13535,10 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderExcel(req, res, ids);
+      }
 
       // Helpers
       const parseNumberProp = (prop) => {
@@ -13734,6 +14053,10 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current" });
+      }
+
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
 
@@ -14028,6 +14351,10 @@ app.post(
         .filter(Boolean)
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        return await _sbPipeOrderExcel(req, res, ids);
+      }
 
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
