@@ -20461,6 +20461,15 @@ async function detectSVSchoolsPropName() {
 // created by the Team Members listed in their "S.V Schools" column (relation)
 // inside the Team Members database.
 async function getVisibleTeamMemberIdsForSV(req) {
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const visible = await _sbVisibleSVInfo(req);
+      if (visible.ids && visible.ids.length) return visible.ids;
+    } catch (err) {
+      console.error("getVisibleTeamMemberIdsForSV supabase error:", err?.message || err);
+    }
+  }
+
   if (!teamMembersDatabaseId) return [];
   const username = req.session?.username;
   if (!username) return [];
@@ -20553,6 +20562,180 @@ async function detectOrderTeamsMembersPropName() {
   );
 }
 
+function _sbSVArray(value) {
+  if (value === null || typeof value === "undefined") return [];
+  if (Array.isArray(value)) return value.map((x) => _sbString(x)).map((x) => x.trim()).filter(Boolean);
+  if (typeof value === "object") return _sbSplitValues(value);
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map((x) => _sbString(x)).map((x) => x.trim()).filter(Boolean);
+  } catch {}
+  // PostgreSQL array text fallback: {1,2,3} or {"A","B"}
+  if (raw.startsWith("{") && raw.endsWith("}")) {
+    return raw.slice(1, -1)
+      .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map((x) => x.trim().replace(/^"|"$/g, "").replace(/\\"/g, '"'))
+      .filter(Boolean);
+  }
+  return raw.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+function _sbSVIds(value) {
+  return _sbSVArray(value)
+    .map((x) => String(x || "").trim())
+    .map((x) => {
+      const m = x.match(/\d+/);
+      return m ? m[0] : "";
+    })
+    .filter(Boolean);
+}
+
+function _sbSVApprovalLabel(value) {
+  const raw = _sbOrderText(value).trim();
+  const n = norm(raw);
+  if (!n || n === "notstarted" || n === "not started") return "Not Started";
+  if (n === "approved") return "Approved";
+  if (n === "rejected") return "Rejected";
+  return raw || "Not Started";
+}
+
+function _sbSVApprovalColor(value) {
+  const n = norm(_sbSVApprovalLabel(value));
+  if (n === "approved") return "green";
+  if (n === "rejected") return "red";
+  return "yellow";
+}
+
+function _sbOrderOwnerId(row = {}) {
+  const id = _sbOrderText(_sbOrderGet(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"]));
+  return id || "";
+}
+
+function _sbOrderOwnerName(row = {}) {
+  return _sbOrderText(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "created_by_name", "created_by", "Created By"])) || "";
+}
+
+function _sbSerializeSVOrderRow(row = {}) {
+  const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
+  const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress"]));
+  const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "quantity", "Quantity"]));
+  const qtyBase = qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0);
+  const qtyEdited = _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor", "quantity_edited", "edited_quantity"]));
+  const approval = _sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]));
+  const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
+  const createdByName = _sbOrderOwnerName(row);
+  const ownerId = _sbOrderOwnerId(row);
+  const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "");
+
+  return {
+    id,
+    teamMemberId: ownerId || createdByName || null,
+    createdById: ownerId || createdByName || null,
+    createdByName: createdByName || null,
+    orderId: Number.isFinite(orderNum) ? `ORD-${orderNum}` : (id ? `ORD-${id}` : null),
+    orderIdPrefix: Number.isFinite(orderNum) ? "ORD" : null,
+    orderIdNumber: Number.isFinite(orderNum) ? orderNum : null,
+    reason: _sbOrderText(_sbOrderGet(row, ["reason", "Reason"])) || "No Reason",
+    issueDescription: _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description", "actual_issue_description", "Actual Issue Description"])) || "",
+    productName: _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name", "product", "Product"])) || "Unknown Product",
+    productImage: null,
+    unitPrice: _sbOrderNum(_sbOrderGet(row, ["unit_price", "Unit price", "Unity Price", "Price"])),
+    quantity: qtyBase,
+    quantityRequested: qtyRequested !== null ? qtyRequested : qtyBase,
+    quantityEdited: qtyEdited,
+    status: _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "",
+    approval,
+    approvalColor: _sbSVApprovalColor(approval),
+    orderType,
+    orderTypeColor: _sbOrderTypeColor(orderType),
+    createdTime: _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) || new Date().toISOString(),
+    source: "supabase",
+  };
+}
+
+async function _sbVisibleSVInfo(req) {
+  const username = String(req?.session?.username || "").trim();
+  if (!_sbTeamMembersEnabled() || !username) return { ids: [], names: [], current: null };
+
+  const current = await _sbFindTeamMemberByName(username).catch(() => null);
+  if (!current) return { ids: [], names: [], current: null };
+
+  const currentId = String(_sbGet(current, ["id", "ID"]) ?? "").trim();
+  let ids = [];
+  let names = [];
+
+  // Preferred normalized junction table created by the S.V Schools cleanup SQL.
+  if (currentId) {
+    try {
+      const relRows = await supabaseDb.select("team_member_sv_schools", {
+        select: "visible_team_member_id,visible_team_member_name",
+        team_member_id: `eq.${currentId}`,
+        limit: 5000,
+      });
+      if (Array.isArray(relRows) && relRows.length) {
+        ids = relRows.map((r) => String(r.visible_team_member_id || "").trim()).filter(Boolean);
+        names = relRows.map((r) => _sbOrderText(r.visible_team_member_name)).filter(Boolean);
+      }
+    } catch (err) {
+      // The junction table is optional; fall back to columns on team_members.
+      console.warn("Supabase S.V junction lookup skipped:", err?.message || err);
+    }
+  }
+
+  if (!ids.length) {
+    ids = _sbSVIds(_sbGet(current, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
+  }
+  if (!names.length) {
+    names = _sbSVArray(_sbGet(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
+  }
+
+  // If old rows only contain names, resolve those names against team_members.
+  if ((!ids.length && names.length) || names.length) {
+    const allMembers = await _sbSelectTeamMembersRows().catch(() => []);
+    const byName = new Map((allMembers || []).map((row) => [norm(_sbString(_sbValueForLabel(row, "Name"))), row]));
+    for (const name of names) {
+      const row = byName.get(norm(name));
+      const id = row ? String(_sbGet(row, ["id", "ID"]) ?? "").trim() : "";
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+  }
+
+  ids = Array.from(new Set(ids.map((x) => String(x || "").trim()).filter(Boolean)));
+  names = Array.from(new Set(names.map((x) => String(x || "").trim()).filter(Boolean)));
+  return { ids, names, current };
+}
+
+function _sbOrderVisibleToSV(row = {}, visible = { ids: [], names: [] }) {
+  const ownerId = _sbOrderOwnerId(row);
+  const ownerName = _sbOrderOwnerName(row);
+  const ids = new Set((visible.ids || []).map((x) => String(x || "").trim()).filter(Boolean));
+  const names = new Set((visible.names || []).map((x) => norm(x)).filter(Boolean));
+  return (!!ownerId && ids.has(String(ownerId))) || (!!ownerName && names.has(norm(ownerName)));
+}
+
+async function _sbSVOrdersList(req, label = "Not Started") {
+  const visible = await _sbVisibleSVInfo(req);
+  if (!visible.ids.length && !visible.names.length) return [];
+
+  const rows = await _sbSelectOrdersRows({ approvedOnly: false });
+  const wanted = label ? norm(label) : "";
+  const filtered = (rows || []).filter((row) => {
+    if (!_sbOrderVisibleToSV(row, visible)) return false;
+    if (!wanted) return true;
+    return norm(_sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]))) === wanted;
+  });
+  return filtered.map(_sbSerializeSVOrderRow);
+}
+
+async function _sbSVOrderRowIfAllowed(req, id) {
+  const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+  if (!row) return { row: null, allowed: false };
+  const visible = await _sbVisibleSVInfo(req);
+  return { row, allowed: _sbOrderVisibleToSV(row, visible) };
+}
+
 
 // ====== Page route: Orders Review ======
 app.get("/orders/sv-orders", requireAuth, requirePage("Orders Review"), (req, res) => {
@@ -20567,6 +20750,24 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
     const value = Number((req.body?.value ?? "").toString().trim());
     if (!pageId) return res.status(400).json({ error: "Missing id" });
     if (!Number.isFinite(value)) return res.status(400).json({ error: "Invalid quantity" });
+
+    if (_sbOrdersEnabled() && /^\d+$/.test(String(pageId))) {
+      const { row, allowed } = await _sbSVOrderRowIfAllowed(req, pageId);
+      if (!row) return res.status(404).json({ error: "Order not found" });
+      if (!allowed) return res.status(403).json({ error: "Not allowed" });
+
+      const serialized = _sbSerializeSVOrderRow(row);
+      const requested = roundOrderQty(Number(serialized.quantity) || 0);
+      const newVal = clampOrderQtyToBase(requested, value);
+      const editedVal = (Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested)) ? null : newVal;
+
+      await supabaseDb.updateById(_sbOrdersTable(), pageId, {
+        quantity_edited_by_supervisor: editedVal,
+      });
+      await clearSVOrdersRouteCaches(req);
+      await _sbInvalidateOrdersCaches().catch(() => {});
+      return res.json({ ok: true, value: newVal, cleared: editedVal === null, source: "supabase" });
+    }
 
     // Security: allow editing ONLY for orders created by members listed in
     // the current user's "S.V Schools" column.
@@ -20642,6 +20843,12 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
     const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v2`;
 
     const items = await cacheGetOrSet(cacheKey, 30, async () => {
+      // Supabase mode: use the normalized team_members.sv_school_member_ids
+      // or team_member_sv_schools junction table instead of Notion relations.
+      if (_sbOrdersEnabled()) {
+        return await _sbSVOrdersList(req, label);
+      }
+
       // Identify which Team Members this S.V user can see (from Team Members DB)
       const visibleIds = await getVisibleTeamMemberIdsForSV(req);
       if (!visibleIds.length) {
@@ -20891,6 +21098,17 @@ app.post(
 
       if (!pageId || !decision) {
         return res.status(400).json({ ok:false, error: "Invalid id or decision" });
+      }
+
+      if (_sbOrdersEnabled() && /^\d+$/.test(String(pageId))) {
+        const { row, allowed } = await _sbSVOrderRowIfAllowed(req, pageId);
+        if (!row) return res.status(404).json({ ok:false, error: "Order not found" });
+        if (!allowed) return res.status(403).json({ ok:false, error: "Not allowed" });
+
+        await supabaseDb.updateById(_sbOrdersTable(), pageId, { sv_approval: decision });
+        await clearSVOrdersRouteCaches(req);
+        await _sbInvalidateOrdersCaches().catch(() => {});
+        return res.json({ ok:true, id: pageId, decision, source: "supabase" });
       }
 
       // Security: allow approval ONLY for orders created by members listed in
