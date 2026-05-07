@@ -1679,7 +1679,7 @@ function normalizePages(names = []) {
   const set = new Set(names.map((n) => String(n || "").trim().toLowerCase()));
   const out = [];
   if (set.has("current orders")) out.push("Current Orders");
-  if (set.has("requested orders") || set.has("schools requested orders")) {
+  if (set.has("requested orders") || set.has("schools requested orders") || set.has("operations orders")) {
     out.push("Requested Orders");
   }
   if (
@@ -1696,6 +1696,7 @@ function normalizePages(names = []) {
   if (
     set.has("expenses users") ||
     set.has("expenses by user") ||
+    set.has("expenses by users") ||
     set.has("team expenses")
   ) {
     out.push("Expenses Users");
@@ -1878,6 +1879,10 @@ function _sbOrderedEditableFieldsFromRows(rows = []) {
   for (const key of keys) {
     if (!ordered.includes(key)) ordered.push(key);
   }
+  if (!ordered.some((key) => _sbCanon(key) === "allowedpages")) {
+    const passwordIdx = ordered.findIndex((key) => _sbCanon(key) === "password");
+    ordered.splice(passwordIdx >= 0 ? passwordIdx + 1 : Math.min(ordered.length, 5), 0, "Allowed Pages");
+  }
   return ordered.map((key) => {
     const label = _sbLabelForColumn(key);
     return { name: label, type: _sbFieldTypeFromLabel(label), required: _sbCanon(label) === "name", sourceColumn: key };
@@ -1934,6 +1939,13 @@ function _uaAllowedPageOptionsFromRows(rows = []) {
   return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
 }
 
+function _uaAllowedPageOptionsFromAppPages(pages = []) {
+  const labels = (pages || [])
+    .map((page) => String(page?.pageName || page?.page_name || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(labels)).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
 function _uaSvSchoolNameOptionsFromRows(rows = []) {
   const set = new Set();
   for (const row of rows || []) {
@@ -1945,7 +1957,8 @@ function _uaSvSchoolNameOptionsFromRows(rows = []) {
 
 async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []) {
   const schoolOptions = await _uaStocktakingSchoolOptions();
-  const allowedOptions = _uaAllowedPageOptionsFromRows(rows);
+  const appPages = await _sbSelectAppPages({ assignableOnly: true }).catch(() => []);
+  const allowedOptions = appPages.length ? _uaAllowedPageOptionsFromAppPages(appPages) : _uaAllowedPageOptionsFromRows(rows);
   const svOptions = _uaSvSchoolNameOptionsFromRows(rows);
   return (editableFields || []).map((field) => {
     const canon = _sbCanon(field?.name || "");
@@ -1953,7 +1966,13 @@ async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []
       return { ...field, type: "school_select", options: schoolOptions.map((x) => x.value), optionMeta: schoolOptions };
     }
     if (canon === "allowedpages") {
-      return { ...field, type: "ua_multi_select", options: allowedOptions, allowCustom: true };
+      return {
+        ...field,
+        type: "ua_page_access_manager",
+        options: allowedOptions,
+        pageOptions: appPages,
+        allowCustom: false,
+      };
     }
     if (canon === "svschools") {
       return { ...field, type: "ua_multi_select", options: svOptions, allowCustom: false };
@@ -2158,6 +2177,7 @@ function _sbBuildWriteRowFromFields(fields = {}, rows = []) {
   const keys = _sbAllColumnKeys(rows).filter((key) => !_sbNonEditableColumn(key));
   const row = {};
   for (const [incomingName, rawValue] of Object.entries(fields || {})) {
+    if (_sbCanon(incomingName) === "allowedpages") continue;
     const actual = _sbColumnForIncomingField(keys, incomingName);
     if (!actual) continue;
     const value = String(rawValue ?? "").trim();
@@ -2166,10 +2186,268 @@ function _sbBuildWriteRowFromFields(fields = {}, rows = []) {
   return _uaAttachSvSchoolLinkColumns(row, keys, fields, rows);
 }
 
+function _sbBool(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return fallback;
+  if (["true", "t", "yes", "y", "1", "on", "enabled"].includes(raw)) return true;
+  if (["false", "f", "no", "n", "0", "off", "disabled"].includes(raw)) return false;
+  return fallback;
+}
+
+function _sbRestFilterValue(value) {
+  return encodeURIComponent(String(value ?? ""));
+}
+
+function _sbRestStringList(values = []) {
+  const clean = (Array.isArray(values) ? values : [])
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .map((value) => `"${value.replace(/"/g, '\\"')}"`);
+  return encodeURIComponent(clean.join(","));
+}
+
+function _sbSerializeAppPage(row = {}) {
+  const id = _sbGet(row, ["id", "page_id", "ID"]);
+  return {
+    id: String(id ?? ""),
+    pageId: String(id ?? ""),
+    pageKey: _sbString(_sbGet(row, ["page_key", "pageKey"])) || "",
+    pageName: _sbString(_sbGet(row, ["page_name", "pageName", "name"])) || "",
+    routePath: _sbString(_sbGet(row, ["route_path", "routePath"])) || "",
+    routePattern: _sbString(_sbGet(row, ["route_pattern", "routePattern"])) || "",
+    moduleName: _sbString(_sbGet(row, ["module_name", "moduleName"])) || "General",
+    parentPageKey: _sbString(_sbGet(row, ["parent_page_key", "parentPageKey"])) || "",
+    sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 100),
+    isActive: _sbBool(_sbGet(row, ["is_active", "isActive"]), true),
+    isAssignable: _sbBool(_sbGet(row, ["is_assignable", "isAssignable"]), true),
+    visibleInSidebar: _sbBool(_sbGet(row, ["visible_in_sidebar", "visibleInSidebar"]), true),
+  };
+}
+
+async function _sbSelectAppPages({ assignableOnly = true, activeOnly = true } = {}) {
+  if (!_sbTeamMembersEnabled()) return [];
+  const params = ["select=*", "order=sort_order.asc", "limit=1000"];
+  if (activeOnly) params.push("is_active=eq.true");
+  if (assignableOnly) params.push("is_assignable=eq.true");
+  const rows = await supabaseDb.request(`/app_pages?${params.join("&")}`);
+  return (Array.isArray(rows) ? rows : []).map(_sbSerializeAppPage).filter((page) => page.id && page.pageKey && page.pageName);
+}
+
+function _sbLegacyAllowedPagesFromAppPage(page = {}) {
+  const key = String(page?.pageKey || page?.page_key || "").trim();
+  const name = String(page?.pageName || page?.page_name || "").trim();
+  const map = {
+    "current-orders": "Current Orders",
+    "operations-orders": "Requested Orders",
+    "maintenance-orders": "Maintenance Orders",
+    "shopping-cart": "Create New Order",
+    stocktaking: "Stocktaking",
+    "orders-review": "Orders Review",
+    expenses: "Expenses",
+    "expenses-users": "Expenses Users",
+    b2b: "B2B",
+    tasks: "Tasks",
+    "user-access-data": USER_ACCESS_PAGE_NAME,
+  };
+  const mapped = map[key];
+  if (mapped) return [mapped];
+  return normalizePages([name]);
+}
+
+function _sbAllowedPagesFromPageAccessRows(rows = []) {
+  const names = [];
+  for (const row of rows || []) {
+    if (!_sbBool(_sbGet(row, ["is_enabled", "isEnabled"]), false)) continue;
+    const page = _sbSerializeAppPage(row);
+    const mapped = _sbLegacyAllowedPagesFromAppPage(page);
+    for (const name of mapped) if (name) names.push(name);
+  }
+  return normalizePages(names);
+}
+
+function _sbPageAccessSummaryFromRows(rows = []) {
+  const enabledRows = (rows || []).filter((row) => _sbBool(_sbGet(row, ["is_enabled", "isEnabled"]), false));
+  const adminRows = enabledRows.filter((row) => String(_sbGet(row, ["access_level", "accessLevel"]) || "user").toLowerCase() === "admin");
+  return {
+    allowedPages: expandAllowedForUI(_sbAllowedPagesFromPageAccessRows(enabledRows)),
+    accessCount: enabledRows.length,
+    adminCount: adminRows.length,
+  };
+}
+
+async function _sbSelectPageAccessViewForMember(teamMemberId) {
+  const id = String(teamMemberId || "").trim();
+  if (!_sbTeamMembersEnabled() || !id) return [];
+  const rows = await supabaseDb.request(`/team_member_page_access_view?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&order=sort_order.asc&limit=1000`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbSelectAllPageAccessView() {
+  if (!_sbTeamMembersEnabled()) return [];
+  const rows = await supabaseDb.request('/team_member_page_access_view?select=*&order=sort_order.asc&limit=5000');
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbSelectRawPageAccessForMember(teamMemberId) {
+  const id = String(teamMemberId || "").trim();
+  if (!_sbTeamMembersEnabled() || !id) return [];
+  const rows = await supabaseDb.request(`/team_member_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbResolveAllowedPagesForTeamMember(row = {}) {
+  const memberId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+  const fallback = _sbExtractAllowedPages(row);
+  if (!memberId) return fallback;
+  try {
+    const accessRows = await _sbSelectPageAccessViewForMember(memberId);
+    if (Array.isArray(accessRows) && accessRows.length) {
+      return _sbAllowedPagesFromPageAccessRows(accessRows);
+    }
+  } catch (error) {
+    console.warn("[user-access] page-access lookup failed, using legacy allowed-pages column:", error?.message || error);
+  }
+  return fallback;
+}
+
+async function _sbAccountPayloadWithAccess(row, fallbackUsername = "") {
+  const payload = _sbAccountPayload(row, fallbackUsername);
+  const allowedNormalized = await _sbResolveAllowedPagesForTeamMember(row);
+  const allowedUI = expandAllowedForUI(allowedNormalized);
+  payload.allowedPages = allowedUI;
+  return { accountPayload: payload, allowedNormalized, allowedUI };
+}
+
+function _sbGroupPageAccessRowsByMember(rows = []) {
+  const map = new Map();
+  for (const row of rows || []) {
+    const id = String(_sbGet(row, ["team_member_id", "teamMemberId"]) || "").trim();
+    if (!id) continue;
+    if (!map.has(id)) map.set(id, []);
+    map.get(id).push(row);
+  }
+  return map;
+}
+
+function _sbAttachPageAccessSummary(member, rows = []) {
+  const summary = _sbPageAccessSummaryFromRows(rows || []);
+  const fallbackAllowed = Array.isArray(summary.allowedPages) && summary.allowedPages.length
+    ? summary.allowedPages
+    : expandAllowedForUI(_sbExtractAllowedPages({ allowed_pages: fieldValueFromLikeMember(member, "Allowed Pages") }));
+  member.pageAccessSummary = {
+    allowedPages: fallbackAllowed,
+    accessCount: summary.accessCount || (fallbackAllowed || []).filter((name) => ALL_PAGES.includes(name)).length,
+    adminCount: summary.adminCount || 0,
+  };
+  return member;
+}
+
+function fieldValueFromLikeMember(member = {}, fieldName = "") {
+  const field = (member?.fields || []).find((f) => String(f?.label || "") === String(fieldName || ""));
+  return field?.value || "";
+}
+
+function _sbNormalizePageAccessEntries(entries = []) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => {
+      const pageId = String(entry?.pageId || entry?.page_id || entry?.id || "").trim();
+      const pageKey = String(entry?.pageKey || entry?.page_key || "").trim();
+      const accessLevel = String(entry?.accessLevel || entry?.access_level || "user").trim().toLowerCase() === "admin" ? "admin" : "user";
+      const isEnabled = _sbBool(entry?.isEnabled ?? entry?.is_enabled ?? entry?.enabled, false);
+      return { pageId, pageKey, accessLevel, isEnabled };
+    })
+    .filter((entry) => entry.pageId || entry.pageKey);
+}
+
+async function _sbPageAccessPayloadForMember(teamMemberId) {
+  const pages = await _sbSelectAppPages({ assignableOnly: true });
+  const accessRows = await _sbSelectRawPageAccessForMember(teamMemberId).catch(() => []);
+  const byPageId = new Map((accessRows || []).map((row) => [String(_sbGet(row, ["page_id", "pageId"]) ?? ""), row]));
+  const items = pages.map((page) => {
+    const access = byPageId.get(String(page.pageId || page.id));
+    return {
+      ...page,
+      accessId: String(_sbGet(access || {}, ["id", "access_id", "accessId"]) ?? ""),
+      accessLevel: String(_sbGet(access || {}, ["access_level", "accessLevel"]) || "user").toLowerCase() === "admin" ? "admin" : "user",
+      isEnabled: access ? _sbBool(_sbGet(access, ["is_enabled", "isEnabled"]), false) : false,
+    };
+  });
+  return { pages: items, summary: _sbPageAccessSummaryFromRows(items.map((x) => ({ ...x, page_key: x.pageKey, page_name: x.pageName, is_enabled: x.isEnabled, access_level: x.accessLevel }))) };
+}
+
+async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemberName = "", grantedBy = "" } = {}) {
+  const memberId = String(teamMemberId || "").trim();
+  if (!memberId) {
+    const err = new Error("Missing team member ID.");
+    err.status = 400;
+    throw err;
+  }
+  const pages = await _sbSelectAppPages({ assignableOnly: true });
+  const pagesById = new Map(pages.map((page) => [String(page.pageId || page.id), page]));
+  const pagesByKey = new Map(pages.map((page) => [String(page.pageKey), page]));
+  const cleanEntries = _sbNormalizePageAccessEntries(entries);
+  const existing = await _sbSelectRawPageAccessForMember(memberId).catch(() => []);
+  const existingByPageId = new Map((existing || []).map((row) => [String(_sbGet(row, ["page_id", "pageId"]) ?? ""), row]));
+  const results = [];
+
+  for (const entry of cleanEntries) {
+    const page = (entry.pageId && pagesById.get(entry.pageId)) || (entry.pageKey && pagesByKey.get(entry.pageKey));
+    if (!page) continue;
+    const pageId = String(page.pageId || page.id);
+    const current = existingByPageId.get(pageId);
+    const body = {
+      team_member_id: memberId,
+      team_member_name: teamMemberName || null,
+      page_id: Number(pageId),
+      access_level: entry.accessLevel,
+      is_enabled: !!entry.isEnabled,
+      granted_by: grantedBy || null,
+    };
+
+    if (current) {
+      const accessId = String(_sbGet(current, ["id", "access_id", "accessId"]) || "").trim();
+      if (!accessId) continue;
+      const rows = await supabaseDb.request(`/team_member_page_access?id=eq.${_sbRestFilterValue(accessId)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: {
+          team_member_name: body.team_member_name,
+          access_level: body.access_level,
+          is_enabled: body.is_enabled,
+          granted_by: body.granted_by,
+        },
+      });
+      if (Array.isArray(rows) && rows[0]) results.push(rows[0]);
+      continue;
+    }
+
+    if (!entry.isEnabled) continue;
+    const created = await supabaseDb.request('/team_member_page_access', {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body,
+    });
+    if (Array.isArray(created) && created[0]) results.push(created[0]);
+  }
+
+  return results;
+}
+
 async function _sbQueryAllTeamMembersForUserAccess() {
   const rows = await _sbSelectTeamMembersRows();
   const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows), rows);
-  const members = (rows || []).map((row) => _sbSerializeTeamMemberRow(row, editableFields));
+  const accessRows = await _sbSelectAllPageAccessView().catch((error) => {
+    console.warn("[user-access] failed to load page-access summary:", error?.message || error);
+    return [];
+  });
+  const accessByMember = _sbGroupPageAccessRowsByMember(accessRows);
+  const members = (rows || []).map((row) => {
+    const member = _sbSerializeTeamMemberRow(row, editableFields);
+    const id = String(member?.id || "").trim();
+    return _sbAttachPageAccessSummary(member, accessByMember.get(id) || []);
+  });
   members.sort((a, b) => {
     const da = String(a.department || "").localeCompare(String(b.department || ""));
     if (da) return da;
@@ -4359,9 +4637,7 @@ app.post("/api/login", async (req, res) => {
       if (row) {
         const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
         if (storedPassword && String(storedPassword) === providedPassword) {
-          const accountPayload = _sbAccountPayload(row, providedUsername);
-          const allowedNormalized = _sbExtractAllowedPages(row);
-          const allowedUI = expandAllowedForUI(allowedNormalized);
+          const { accountPayload, allowedNormalized, allowedUI } = await _sbAccountPayloadWithAccess(row, providedUsername);
 
           req.session.authenticated = true;
           req.session.username = accountPayload.username || providedUsername;
@@ -4502,10 +4778,10 @@ app.get("/api/account", requireAuth, async (req, res) => {
     try {
       const row = await _sbFindTeamMemberById(req.session.userSupabaseId);
       if (row) {
-        const data = _sbAccountPayload(row, req.session.username || "");
+        const { accountPayload: data, allowedNormalized } = await _sbAccountPayloadWithAccess(row, req.session.username || "");
         try {
           req.session.username = data.username || req.session.username || "";
-          req.session.allowedPages = _sbExtractAllowedPages(row);
+          req.session.allowedPages = allowedNormalized;
           req.session.accountCache = data;
           req.session.accountCacheTs = Date.now();
         } catch {}
@@ -11860,6 +12136,111 @@ app.post(
         ? "Supabase Storage is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as fallback."
         : (error?.message || "Failed to upload file.");
       return res.status(error?.status || 500).json({ ok: false, error: message });
+    }
+  },
+);
+
+// User Access & Data — Page-access catalog from Supabase app_pages
+app.get(
+  "/api/user-access/pages",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase is required for page-access management." });
+      }
+      const pages = await _sbSelectAppPages({ assignableOnly: true });
+      return res.json({ ok: true, source: "supabase", pages });
+    } catch (error) {
+      console.error("GET /api/user-access/pages error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load application pages." });
+    }
+  },
+);
+
+// User Access & Data — Read one member's page-access matrix
+app.get(
+  "/api/user-access/team-members/:id/page-access",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase is required for page-access management." });
+      }
+      const memberId = String(req.params?.id || "").trim();
+      if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
+      const member = await _sbFindTeamMemberById(memberId).catch(() => null);
+      const payload = await _sbPageAccessPayloadForMember(memberId);
+      return res.json({
+        ok: true,
+        source: "supabase",
+        memberId,
+        memberName: _sbString(_sbValueForLabel(member || {}, "Name")) || "",
+        pages: payload.pages,
+        summary: payload.summary,
+      });
+    } catch (error) {
+      console.error("GET /api/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load page access." });
+    }
+  },
+);
+
+// User Access & Data — Save one member's page-access matrix
+app.patch(
+  "/api/user-access/team-members/:id/page-access",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_uaAdminVerified(req)) {
+        return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password again." });
+      }
+      if (!_sbTeamMembersEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase is required for page-access management." });
+      }
+      const memberId = String(req.params?.id || "").trim();
+      if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
+
+      const member = await _sbFindTeamMemberById(memberId).catch(() => null);
+      const memberName = _sbString(_sbValueForLabel(member || {}, "Name"));
+      const grantedBy = String(req.session?.username || "Admin").trim() || "Admin";
+      await _sbSavePageAccessForMember(memberId, req.body?.pages || req.body?.access || [], { teamMemberName: memberName, grantedBy });
+
+      await cacheDel(USER_ACCESS_CACHE_KEY);
+      await cacheDel("cache:api:user-access:team-members:supabase:v1");
+
+      const payload = await _sbPageAccessPayloadForMember(memberId);
+      const currentSessionUserId = String(req.session?.userSupabaseId || "").trim();
+      if (currentSessionUserId && currentSessionUserId === memberId) {
+        const allowedNormalized = _sbAllowedPagesFromPageAccessRows(
+          payload.pages.map((page) => ({
+            page_key: page.pageKey,
+            page_name: page.pageName,
+            is_enabled: page.isEnabled,
+            access_level: page.accessLevel,
+          })),
+        );
+        req.session.allowedPages = allowedNormalized;
+        if (req.session.accountCache) {
+          req.session.accountCache.allowedPages = expandAllowedForUI(allowedNormalized);
+          req.session.accountCacheTs = Date.now();
+        }
+      }
+
+      return res.json({
+        ok: true,
+        source: "supabase",
+        memberId,
+        memberName,
+        pages: payload.pages,
+        summary: payload.summary,
+      });
+    } catch (error) {
+      console.error("PATCH /api/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save page access." });
     }
   },
 );
