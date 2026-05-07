@@ -522,11 +522,17 @@ function setupExpenseShotsViewer() {
 // SPLIT BY LAST SETTLEMENT
 // ------------------------
 
+function isSettledExpenseItem(it) {
+  const fundsType = normalizeFundsType(it?.fundsType);
+  const reason = normalizeFundsType(it?.reason);
+  return fundsType === normalizeFundsType("Settled my account") || reason === normalizeFundsType("Settled my account");
+}
+
 function findLastSettledItem(items) {
   let best = null;
   let bestT = -Infinity;
   for (const it of Array.isArray(items) ? items : []) {
-    if (normalizeFundsType(it?.fundsType) !== normalizeFundsType("Settled my account")) continue;
+    if (!isSettledExpenseItem(it)) continue;
     const t = getTimeValue(it);
     if (t > bestT) {
       best = it;
@@ -1152,18 +1158,18 @@ function renderUserExpensesGrouped(recentItems, pastItems, totalEl, listEl) {
 
   let html = "";
 
-  if (totalItems.length === 0) {
-    if (dateFilterActive) {
-      html += '<div class="expenses-empty">No expenses found for the selected period.</div>';
+  if (dateFilterActive) {
+    html += filteredPeriodItems.length
+      ? buildUserExpensesTicketsHtml(filteredPeriodItems)
+      : '<div class="expenses-empty">No expenses found for the selected period.</div>';
+  } else {
+    if (recent.length > 0) {
+      html += buildUserExpensesTicketsHtml(recent);
     } else if (PAST_USER_ITEMS.length > 0) {
       html += '<div class="expenses-empty">No expenses since the last settlement.</div>';
     } else {
       html += '<div class="expenses-empty">No expenses for this user.</div>';
     }
-  } else if (dateFilterActive) {
-    html += buildUserExpensesTicketsHtml(filteredPeriodItems);
-  } else {
-    html += buildUserExpensesTicketsHtml(recent);
 
     if (SHOW_PAST_EXPENSES && past.length > 0) {
       html += '<div class="expenses-separator"><span>Past expenses</span></div>';
