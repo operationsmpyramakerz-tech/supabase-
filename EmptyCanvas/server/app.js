@@ -5427,6 +5427,378 @@ async function _sbUpdateByIdWithMissingColumnFallback(table, id, row = {}, requi
   throw new Error(`Failed to update ${table} after removing unsupported columns.`);
 }
 
+
+function _sbTaskStatusColorFromName(name = "") {
+  const raw = String(name || "").trim().toLowerCase();
+  if (raw === "done" || raw === "complete" || raw === "completed") return "green";
+  if (raw.includes("progress")) return "yellow";
+  return "default";
+}
+
+function _sbTaskRawPointsArrayFromRow(row = {}) {
+  const value = _sbGet(row, [
+    "task_points", "Task Points", "Task points", "checkpoints", "Checkpoints",
+    "todos", "todo", "checklist", "Checklist", "points", "Points", "Plan", "plan"
+  ]);
+
+  const parseMaybeJson = (v) => {
+    if (v === null || typeof v === "undefined" || v === "") return [];
+    if (Array.isArray(v)) return v.slice();
+    if (typeof v === "object") {
+      if (Array.isArray(v.task_points)) return v.task_points.slice();
+      if (Array.isArray(v.todos)) return v.todos.slice();
+      if (Array.isArray(v.checklist)) return v.checklist.slice();
+      if (Array.isArray(v.points)) return v.points.slice();
+      if (Array.isArray(v.items)) return v.items.slice();
+      if (Array.isArray(v.values)) return v.values.slice();
+      return [v];
+    }
+    const raw = String(v || "").trim();
+    if (!raw || /^null$/i.test(raw)) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return parseMaybeJson(parsed);
+    } catch {}
+    return [];
+  };
+
+  return parseMaybeJson(value)
+    .map((item) => (item && typeof item === "object" ? { ...item } : item))
+    .filter(Boolean);
+}
+
+function _sbTaskPointText(point = {}) {
+  return _sbString(point.text || point.title || point.name || point.task_point || point.taskPoint || point.checkpoint || point.description || "");
+}
+
+function _sbTaskPointId(point = {}, taskId = "", index = 0) {
+  return _sbString(point.id || point.point_id || point.task_point_id || point.uuid || point.checkpoint_id || "") || `${taskId || "task"}:point:${index + 1}`;
+}
+
+function _sbTaskPointMatches(point = {}, rawId = "", taskId = "", index = 0) {
+  const wanted = String(rawId || "").trim();
+  if (!wanted) return false;
+  const candidates = [
+    _sbTaskPointId(point, taskId, index),
+    point.id,
+    point.point_id,
+    point.task_point_id,
+    point.uuid,
+    point.checkpoint_id,
+    `${taskId || "task"}:point:${index + 1}`,
+  ].map((x) => String(x || "").trim()).filter(Boolean);
+  return candidates.some((x) => x === wanted);
+}
+
+function _sbTaskComputeJsonPointsStats(points = []) {
+  const list = (Array.isArray(points) ? points : []).filter((p) => _sbTaskPointText(p));
+  const total = list.length;
+  const checkedCount = list.reduce((acc, p) => acc + (p && (p.checked || p.checkbox || p.done || p.completed) ? 1 : 0), 0);
+  const completionPct = total ? Math.max(0, Math.min(100, Math.round((checkedCount / total) * 100))) : 0;
+  const statusName = _sbTaskStatusFromCompletion(completionPct, "");
+  return {
+    total,
+    checked: checkedCount,
+    completionPct,
+    taskStatus: { name: statusName, color: _sbTaskStatusColorFromName(statusName) },
+  };
+}
+
+async function _sbFindSupabaseTaskPoint(rawPointId) {
+  const pointId = String(rawPointId || "").trim();
+  if (!pointId) {
+    const err = new Error("Missing pointId");
+    err.status = 400;
+    throw err;
+  }
+
+  // Normalized checkpoint rows created by the Supabase migration use bigint IDs.
+  // Avoid querying bigint id with arbitrary strings like "12:point:1" because PostgREST
+  // can reject that before returning an empty result.
+  if (/^\d+$/.test(pointId)) {
+    try {
+      const checkpoint = await supabaseDb.selectById(_sbTaskCheckpointsTable(), pointId);
+      if (checkpoint) {
+        let taskRow = null;
+        try {
+          taskRow = checkpoint.task_id ? await supabaseDb.selectById(_sbTasksTable(), checkpoint.task_id) : null;
+        } catch {}
+        return { source: "checkpoint", pointId, checkpoint, taskRow, taskId: String(checkpoint.task_id || "").trim() };
+      }
+    } catch (err) {
+      // If the table does not exist yet, fall back to the JSONB compatibility column.
+      console.warn("[tasks:supabase] checkpoint lookup fallback:", err?.details || err?.message || err);
+    }
+  }
+
+  // Fallback for deployments that only have tasks.task_points JSONB.
+  const rows = await supabaseDb.selectAll(_sbTasksTable(), { limit: 5000, order: "created_at.desc,id.desc" });
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const taskId = String(_sbTaskRowId(row) || row?.id || "").trim();
+    const points = _sbTaskRawPointsArrayFromRow(row);
+    const index = points.findIndex((p, i) => p && typeof p === "object" && _sbTaskPointMatches(p, pointId, taskId, i));
+    if (index !== -1) {
+      return { source: "json", pointId, taskRow: row, taskId, points, pointIndex: index, point: points[index] };
+    }
+  }
+
+  const err = new Error("Task point not found");
+  err.status = 404;
+  throw err;
+}
+
+async function _sbSyncTaskStatusAfterCheckpointUpdate(taskId) {
+  const id = String(taskId || "").trim();
+  if (!id) return { completionPct: null, taskStatus: null };
+
+  let rows = [];
+  try {
+    rows = await supabaseDb.select(_sbTaskCheckpointsTable(), {
+      select: "*",
+      task_id: `eq.${id}`,
+      limit: 5000,
+      order: "sort_order.asc,id.asc",
+    });
+  } catch (err) {
+    console.warn("[tasks:supabase] checkpoint stats fallback:", err?.details || err?.message || err);
+  }
+
+  const list = Array.isArray(rows) ? rows : [];
+  const total = list.length;
+  const checkedCount = list.reduce((acc, row) => acc + (row && row.checkbox ? 1 : 0), 0);
+  const completionPct = total ? Math.max(0, Math.min(100, Math.round((checkedCount / total) * 100))) : 0;
+  const statusName = _sbTaskStatusFromCompletion(completionPct, "");
+  const taskStatus = { name: statusName, color: _sbTaskStatusColorFromName(statusName) };
+
+  try {
+    await _sbUpdateByIdWithMissingColumnFallback(_sbTasksTable(), id, {
+      completion_percent: completionPct,
+      status: statusName,
+    }, []);
+  } catch (err) {
+    console.warn("[tasks:supabase] parent task status patch skipped:", err?.details || err?.message || err);
+  }
+
+  return { completionPct, taskStatus };
+}
+
+async function _sbPatchJsonTaskPoint(hit, pointPatch = {}) {
+  const points = Array.isArray(hit?.points) ? hit.points.slice() : _sbTaskRawPointsArrayFromRow(hit?.taskRow || {});
+  const index = Number(hit?.pointIndex);
+  if (!Number.isFinite(index) || index < 0 || index >= points.length) {
+    const err = new Error("Task point not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const prev = points[index] && typeof points[index] === "object" ? points[index] : {};
+  points[index] = { ...prev, ...pointPatch };
+  const stats = _sbTaskComputeJsonPointsStats(points);
+
+  await _sbUpdateByIdWithMissingColumnFallback(_sbTasksTable(), hit.taskId, {
+    task_points: points,
+    completion_percent: stats.completionPct,
+    status: stats.taskStatus?.name || "Not started",
+  }, []);
+
+  return { ...stats, point: points[index] };
+}
+
+function _sbTaskSafeExternalUrl(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "http:" || u.protocol === "https:") return u.toString();
+  } catch {}
+  return "";
+}
+
+async function _sbTaskBuildWorkFiles(attachments = [], { existingFiles = [], replace = true, taskCode = "task", pointId = "point" } = {}) {
+  const nextFiles = [];
+  const items = Array.isArray(attachments) ? attachments : [];
+
+  for (let i = 0; i < items.length; i++) {
+    const a = items[i] || {};
+    const directUrl = _sbTaskSafeExternalUrl(a.url || a.href || a.link || a.externalUrl || a.publicUrl || "");
+    if (directUrl) {
+      let linkName = String(a.name || a.filename || a.title || "").trim();
+      if (!linkName) {
+        try {
+          const u = new URL(directUrl);
+          linkName = decodeURIComponent((u.pathname.split("/").pop() || "").trim()) || u.hostname || "link";
+        } catch {
+          linkName = "link";
+        }
+      }
+      nextFiles.push({ name: linkName, url: directUrl });
+      continue;
+    }
+
+    const dataUrl = String(a.dataUrl || a.fileDataUrl || a.screenshotDataUrl || "").trim();
+    if (!dataUrl) continue;
+
+    const originalName = String(a.name || a.filename || a.title || `attachment-${i + 1}`).trim() || `attachment-${i + 1}`;
+    const safeName = _sbTaskCleanFileName(originalName);
+    const objectPath = `tasks/${_sbTaskCleanFileName(taskCode || "task")}/work-${_sbTaskCleanFileName(pointId || "point")}/${Date.now()}-${i}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
+    if (url) nextFiles.push({ name: originalName, url });
+  }
+
+  const existing = _sbTaskFiles(existingFiles);
+  const combined = replace ? nextFiles : [...existing, ...nextFiles];
+  const seen = new Set();
+  return combined
+    .map((f, index) => {
+      const url = _sbTaskSafeExternalUrl(f?.url || f?.href || f?.link || f?.externalUrl || f?.publicUrl || "");
+      if (!url) return null;
+      return { name: String(f?.name || f?.filename || f?.title || `file-${index + 1}`).trim() || `file-${index + 1}`, url };
+    })
+    .filter((f) => {
+      if (!f || seen.has(f.url)) return false;
+      seen.add(f.url);
+      return true;
+    })
+    .slice(-20);
+}
+
+async function _sbUpdateSupabaseTaskPointCheck(rawPointId, checked) {
+  const hit = await _sbFindSupabaseTaskPoint(rawPointId);
+  const isChecked = !!checked;
+
+  if (hit.source === "checkpoint") {
+    const updated = await _sbUpdateByIdWithMissingColumnFallback(_sbTaskCheckpointsTable(), hit.pointId, {
+      checkbox: isChecked,
+      status: isChecked ? "Done" : "Not started",
+    }, []);
+    const stats = await _sbSyncTaskStatusAfterCheckpointUpdate(hit.taskId || updated?.task_id || hit.checkpoint?.task_id);
+    return {
+      ok: true,
+      pointId: hit.pointId,
+      checked: isChecked,
+      completionPct: stats.completionPct,
+      taskStatus: stats.taskStatus,
+      source: "supabase",
+    };
+  }
+
+  const stats = await _sbPatchJsonTaskPoint(hit, {
+    checked: isChecked,
+    checkbox: isChecked,
+    status: isChecked ? "Done" : "Not started",
+  });
+  return {
+    ok: true,
+    pointId: hit.pointId,
+    checked: isChecked,
+    completionPct: stats.completionPct,
+    taskStatus: stats.taskStatus,
+    source: "supabase",
+  };
+}
+
+
+function _sbTaskDedupFiles(files = []) {
+  const seen = new Set();
+  return (Array.isArray(files) ? files : [])
+    .map((f, index) => {
+      const url = _sbTaskSafeExternalUrl(f?.url || f?.href || f?.link || f?.externalUrl || f?.publicUrl || "");
+      if (!url) return null;
+      return { name: String(f?.name || f?.filename || f?.title || `file-${index + 1}`).trim() || `file-${index + 1}`, url };
+    })
+    .filter((f) => {
+      if (!f || seen.has(f.url)) return false;
+      seen.add(f.url);
+      return true;
+    })
+    .slice(-20);
+}
+
+async function _sbUpdateSupabaseTaskPointAttachments(rawPointId, attachments = []) {
+  const hit = await _sbFindSupabaseTaskPoint(rawPointId);
+
+  if (hit.source === "checkpoint") {
+    const checkpoint = hit.checkpoint || {};
+    const taskCode = checkpoint.task_code || hit.taskRow?.task_code || hit.taskRow?.Task_Code || hit.taskId || "task";
+    const existing = _sbTaskFiles(checkpoint.files_media || checkpoint.files || checkpoint.attachments || []);
+    const uploaded = await _sbTaskUploadAttachments(attachments, { taskCode, pointIndex: Number(hit.pointId) || 0 });
+    const files = _sbTaskDedupFiles([...existing, ...uploaded]);
+
+    await _sbUpdateByIdWithMissingColumnFallback(_sbTaskCheckpointsTable(), hit.pointId, {
+      files_media: files,
+    }, []);
+
+    return { ok: true, pointId: hit.pointId, filesCount: files.length, files, source: "supabase" };
+  }
+
+  const currentPoint = hit.point && typeof hit.point === "object" ? hit.point : {};
+  const taskCode = hit.taskRow?.task_code || hit.taskRow?.Task_Code || hit.taskId || "task";
+  const existing = _sbTaskFiles(currentPoint.files || currentPoint.attachments || currentPoint.files_media || []);
+  const uploaded = await _sbTaskUploadAttachments(attachments, { taskCode, pointIndex: Number(hit.pointIndex) || 0 });
+  const files = _sbTaskDedupFiles([...existing, ...uploaded]);
+
+  await _sbPatchJsonTaskPoint(hit, { files, attachments: files, files_media: files });
+
+  return { ok: true, pointId: hit.pointId, filesCount: files.length, files, source: "supabase" };
+}
+
+async function _sbUpdateSupabaseTaskPointWork(rawPointId, { report = "", replace = true, attachments = [] } = {}) {
+  const hit = await _sbFindSupabaseTaskPoint(rawPointId);
+  const cleanReport = String(report || "").replace(/\r\n/g, "\n").trim();
+
+  if (hit.source === "checkpoint") {
+    const checkpoint = hit.checkpoint || {};
+    const taskCode = checkpoint.task_code || hit.taskRow?.task_code || hit.taskRow?.Task_Code || hit.taskId || "task";
+    const existingFiles = _sbTaskFiles(checkpoint.work_files || checkpoint.workFiles || []);
+    const workFiles = await _sbTaskBuildWorkFiles(attachments, {
+      existingFiles,
+      replace,
+      taskCode,
+      pointId: hit.pointId,
+    });
+
+    await _sbUpdateByIdWithMissingColumnFallback(_sbTaskCheckpointsTable(), hit.pointId, {
+      work_report: cleanReport || null,
+      work_files: workFiles,
+    }, []);
+
+    return {
+      ok: true,
+      pointId: hit.pointId,
+      workReport: cleanReport,
+      workFilesCount: workFiles.length,
+      workFiles,
+      source: "supabase",
+    };
+  }
+
+  const currentPoint = hit.point && typeof hit.point === "object" ? hit.point : {};
+  const taskCode = hit.taskRow?.task_code || hit.taskRow?.Task_Code || hit.taskId || "task";
+  const existingFiles = _sbTaskFiles(currentPoint.workFiles || currentPoint.work_files || []);
+  const workFiles = await _sbTaskBuildWorkFiles(attachments, {
+    existingFiles,
+    replace,
+    taskCode,
+    pointId: hit.pointId,
+  });
+
+  await _sbPatchJsonTaskPoint(hit, {
+    workReport: cleanReport,
+    work_report: cleanReport,
+    workFiles,
+    work_files: workFiles,
+  });
+
+  return {
+    ok: true,
+    pointId: hit.pointId,
+    workReport: cleanReport,
+    workFilesCount: workFiles.length,
+    workFiles,
+    source: "supabase",
+  };
+}
+
 async function _sbCreateTaskFromRequest(req) {
   const title = String(req.body?.title || req.body?.subject || "").trim();
   if (!title) {
@@ -7269,10 +7641,23 @@ app.post("/api/task-points/:pointId/check", requireAuth, requirePage("Tasks"), a
     if (!raw) return res.status(400).json({ error: "Missing pointId" });
 
     const rawNoHyphen = raw.replace(/-/g, "");
+    const checked = !!req.body?.checked;
+
+    // Supabase task checkpoints use numeric IDs. The old Notion-only route rejected
+    // them as "Invalid pointId", which made the green check button do nothing.
+    if (_sbTasksEnabled() && !looksLikeNotionId(rawNoHyphen)) {
+      try {
+        const result = await _sbUpdateSupabaseTaskPointCheck(raw, checked);
+        return res.json(result);
+      } catch (err) {
+        console.error("Supabase task point check error:", err?.details || err?.message || err);
+        return res.status(err?.status || 500).json({ error: err?.message || "Failed to update task point." });
+      }
+    }
+
     if (!looksLikeNotionId(rawNoHyphen)) return res.status(400).json({ error: "Invalid pointId" });
 
     const pointId = toHyphenatedUUID(rawNoHyphen);
-    const checked = !!req.body?.checked;
 
     // Resolve parent task and validate assignee
     const taskPageId = await _resolveParentTaskIdFromPoint(pointId);
@@ -7367,8 +7752,6 @@ app.post("/api/task-points/:pointId/attachments", requireAuth, requirePage("Task
     const raw = String(req.params.pointId || "").trim();
     if (!raw) return res.status(400).json({ error: "Missing pointId" });
     const rawNoHyphen = raw.replace(/-/g, "");
-    if (!looksLikeNotionId(rawNoHyphen)) return res.status(400).json({ error: "Invalid pointId" });
-    const pointId = toHyphenatedUUID(rawNoHyphen);
 
     const attachments = Array.isArray(req.body?.attachments)
       ? req.body.attachments
@@ -7377,6 +7760,21 @@ app.post("/api/task-points/:pointId/attachments", requireAuth, requirePage("Task
         : [];
 
     if (!attachments.length) return res.status(400).json({ error: "No attachments" });
+
+    // Supabase task checkpoints use numeric IDs. Support the same upload action
+    // used by the orange plus button after the Notion -> Supabase migration.
+    if (_sbTasksEnabled() && !looksLikeNotionId(rawNoHyphen)) {
+      try {
+        const result = await _sbUpdateSupabaseTaskPointAttachments(raw, attachments);
+        return res.json(result);
+      } catch (err) {
+        console.error("Supabase task point attachment error:", err?.details || err?.message || err);
+        return res.status(err?.status || 500).json({ error: err?.message || "Failed to upload attachment." });
+      }
+    }
+
+    if (!looksLikeNotionId(rawNoHyphen)) return res.status(400).json({ error: "Invalid pointId" });
+    const pointId = toHyphenatedUUID(rawNoHyphen);
 
     // Resolve parent task and validate assignee
     const taskPageId = await _resolveParentTaskIdFromPoint(pointId);
@@ -7453,8 +7851,6 @@ app.post("/api/task-points/:pointId/work", requireAuth, requirePage("Tasks"), as
     const raw = String(req.params.pointId || "").trim();
     if (!raw) return res.status(400).json({ error: "Missing pointId" });
     const rawNoHyphen = raw.replace(/-/g, "");
-    if (!looksLikeNotionId(rawNoHyphen)) return res.status(400).json({ error: "Invalid pointId" });
-    const pointId = toHyphenatedUUID(rawNoHyphen);
 
     const report = String(req.body?.report || req.body?.workReport || "").replace(/\r\n/g, "\n").trim();
     const replace = req.body?.replace !== false;
@@ -7465,6 +7861,21 @@ app.post("/api/task-points/:pointId/work", requireAuth, requirePage("Tasks"), as
         : Array.isArray(req.body?.files)
           ? req.body.files
           : [];
+
+    // Supabase task checkpoints use numeric IDs. Handle them before the legacy
+    // Notion UUID validation so Save work can persist reports/files after migration.
+    if (_sbTasksEnabled() && !looksLikeNotionId(rawNoHyphen)) {
+      try {
+        const result = await _sbUpdateSupabaseTaskPointWork(raw, { report, replace, attachments });
+        return res.json(result);
+      } catch (err) {
+        console.error("Supabase task point work update error:", err?.details || err?.message || err);
+        return res.status(err?.status || 500).json({ error: err?.message || "Failed to update work report." });
+      }
+    }
+
+    if (!looksLikeNotionId(rawNoHyphen)) return res.status(400).json({ error: "Invalid pointId" });
+    const pointId = toHyphenatedUUID(rawNoHyphen);
 
     const taskPageId = await _resolveParentTaskIdFromPoint(pointId);
     if (!taskPageId) return res.status(404).json({ error: "Parent task not found" });
