@@ -1328,6 +1328,13 @@ const toolbarHTML = `
     let tv2WorkCurrentPoint = null;
     let tv2WorkEditable = false;
     let tv2WorkFilesBuffer = [];
+    let tv2WorkLinkOverlay = null;
+    let tv2WorkLinkForm = null;
+    let tv2WorkLinkUrlInput = null;
+    let tv2WorkLinkNameInput = null;
+    let tv2WorkLinkSaveBtn = null;
+    let tv2WorkLinkCancelBtn = null;
+    let tv2WorkLinkCloseBtn = null;
 
     function tv2EnsureNewTaskModal() {
       if (tv2NewTaskOverlay) return;
@@ -2886,6 +2893,125 @@ const toolbarHTML = `
       return `file-${fallbackIndex + 1}`;
     }
 
+    function tv2CloseWorkLinkModal() {
+      if (!tv2WorkLinkOverlay) return;
+      tv2WorkLinkOverlay.hidden = true;
+      tv2WorkLinkOverlay.style.display = "none";
+    }
+
+    function tv2EnsureWorkLinkModal() {
+      if (tv2WorkLinkOverlay) return;
+
+      tv2WorkLinkOverlay = document.createElement("div");
+      tv2WorkLinkOverlay.className = "tv2-modal-overlay tv2-work-link-overlay";
+      tv2WorkLinkOverlay.id = "tv2WorkLinkOverlay";
+      tv2WorkLinkOverlay.hidden = true;
+      tv2WorkLinkOverlay.style.display = "none";
+
+      tv2WorkLinkOverlay.innerHTML = `
+        <div class="tv2-mini-modal tv2-work-link-modal" role="dialog" aria-modal="true" aria-labelledby="tv2WorkLinkTitle">
+          <div class="tv2-mini-modal__header tv2-work-link-modal__header">
+            <div class="tv2-work-link-modal__headcopy">
+              <h4 class="tv2-mini-modal__title" id="tv2WorkLinkTitle">Add work link</h4>
+              <div class="tv2-work-link-modal__meta">Attach a URL to this checkpoint work report.</div>
+            </div>
+            <button class="tv2-modal-icon-btn tv2-modal-icon-btn--sm" type="button" id="tv2WorkLinkCloseBtn" aria-label="Close link window">
+              <span class="tv2-x" aria-hidden="true">×</span>
+            </button>
+          </div>
+
+          <form class="tv2-mini-modal__form" id="tv2WorkLinkForm">
+            <div class="tv2-mini-modal__body tv2-work-link-modal__body">
+              <div class="tv2-form-row tv2-form-row--full">
+                <label class="tv2-label" for="tv2WorkLinkUrlInput">Link URL</label>
+                <div class="tv2-field tv2-work-link-field">
+                  <span class="tv2-field__icon" aria-hidden="true"><i data-feather="link-2"></i></span>
+                  <input class="tv2-input" id="tv2WorkLinkUrlInput" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/file" required />
+                </div>
+              </div>
+
+              <div class="tv2-form-row tv2-form-row--full">
+                <label class="tv2-label" for="tv2WorkLinkNameInput">Display name <span class="tv2-optional-label">optional</span></label>
+                <div class="tv2-field tv2-work-link-field">
+                  <span class="tv2-field__icon" aria-hidden="true"><i data-feather="file-text"></i></span>
+                  <input class="tv2-input" id="tv2WorkLinkNameInput" type="text" autocomplete="off" placeholder="File name or short label" />
+                </div>
+              </div>
+            </div>
+
+            <div class="tv2-mini-modal__footer tv2-work-link-modal__footer">
+              <button class="tv2-btn tv2-btn--ghost" type="button" id="tv2WorkLinkCancelBtn">Cancel</button>
+              <button class="tv2-btn tv2-btn--primary" type="submit" id="tv2WorkLinkSaveBtn">Add link</button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      document.body.appendChild(tv2WorkLinkOverlay);
+
+      tv2WorkLinkForm = tv2WorkLinkOverlay.querySelector("#tv2WorkLinkForm");
+      tv2WorkLinkUrlInput = tv2WorkLinkOverlay.querySelector("#tv2WorkLinkUrlInput");
+      tv2WorkLinkNameInput = tv2WorkLinkOverlay.querySelector("#tv2WorkLinkNameInput");
+      tv2WorkLinkSaveBtn = tv2WorkLinkOverlay.querySelector("#tv2WorkLinkSaveBtn");
+      tv2WorkLinkCancelBtn = tv2WorkLinkOverlay.querySelector("#tv2WorkLinkCancelBtn");
+      tv2WorkLinkCloseBtn = tv2WorkLinkOverlay.querySelector("#tv2WorkLinkCloseBtn");
+
+      tv2WorkLinkOverlay.addEventListener("click", (e) => {
+        if (e.target === tv2WorkLinkOverlay) tv2CloseWorkLinkModal();
+      });
+
+      [tv2WorkLinkCancelBtn, tv2WorkLinkCloseBtn].forEach((btn) => {
+        if (!btn) return;
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          tv2CloseWorkLinkModal();
+        });
+      });
+
+      if (tv2WorkLinkForm) {
+        tv2WorkLinkForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          if (!tv2WorkEditable) return;
+
+          const cleanUrl = String(tv2WorkLinkUrlInput?.value || "").trim();
+          if (!cleanUrl) {
+            if (window.toast) window.toast.error("Please paste the work file link");
+            return;
+          }
+          if (!/^https?:\/\//i.test(cleanUrl)) {
+            if (window.toast) window.toast.error("Link must start with http or https");
+            if (tv2WorkLinkUrlInput) tv2WorkLinkUrlInput.focus();
+            return;
+          }
+
+          const cleanName = String(tv2WorkLinkNameInput?.value || "").trim();
+          tv2WorkFilesBuffer.push({
+            name: cleanName || tv2WorkFileDisplayName({ url: cleanUrl }, tv2WorkFilesBuffer.length),
+            url: cleanUrl,
+          });
+          tv2RenderWorkFilesList();
+          tv2CloseWorkLinkModal();
+        });
+      }
+
+      if (window.feather) window.feather.replace();
+    }
+
+    function tv2OpenWorkLinkModal() {
+      if (!tv2WorkEditable) return;
+      tv2EnsureWorkLinkModal();
+      if (tv2WorkLinkUrlInput) tv2WorkLinkUrlInput.value = "";
+      if (tv2WorkLinkNameInput) tv2WorkLinkNameInput.value = "";
+      if (tv2WorkLinkOverlay) {
+        tv2WorkLinkOverlay.hidden = false;
+        tv2WorkLinkOverlay.style.display = "flex";
+      }
+      setTimeout(() => {
+        try { tv2WorkLinkUrlInput?.focus?.(); } catch {}
+      }, 40);
+      if (window.feather) window.feather.replace();
+    }
+
     function tv2EnsureWorkModal() {
       if (tv2WorkOverlay) return;
 
@@ -3000,16 +3126,7 @@ const toolbarHTML = `
         tv2WorkAddLinkBtn.addEventListener("click", (e) => {
           e.preventDefault();
           if (!tv2WorkEditable) return;
-          const rawUrl = window.prompt("Paste the work file link");
-          const cleanUrl = String(rawUrl || "").trim();
-          if (!cleanUrl) return;
-          if (!/^https?:\/\//i.test(cleanUrl)) {
-            if (window.toast) window.toast.error("Link must start with http or https");
-            return;
-          }
-          const rawName = window.prompt("Link name (optional)");
-          tv2WorkFilesBuffer.push({ name: String(rawName || "").trim() || tv2WorkFileDisplayName({ url: cleanUrl }, tv2WorkFilesBuffer.length), url: cleanUrl });
-          tv2RenderWorkFilesList();
+          tv2OpenWorkLinkModal();
         });
       }
 
