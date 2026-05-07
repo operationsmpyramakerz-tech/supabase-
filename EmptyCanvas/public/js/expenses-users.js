@@ -1081,14 +1081,16 @@ function buildUserExpenseTicketHtml(group, { compact = false } = {}) {
   const reasonHtml = hideReason
     ? ""
     : `<div class="expense-ticket__reason">${escapeHtml(reasonText)}</div>`;
-  const headerSideHtml = hasOrders ? ordersHtml : reasonHtml;
+  const headerLabelHtml = hasOrders ? ordersHtml : reasonHtml;
+  const headerSideHtml = (actionHtml || headerLabelHtml)
+    ? `<div class="expense-ticket__header-side">${actionHtml}${headerLabelHtml}</div>`
+    : "";
   const secondaryReasonHtml = hasOrders && reasonHtml
     ? `<div class="expense-ticket__reason expense-ticket__reason--block">${escapeHtml(reasonText)}</div>`
     : "";
 
   return `
     <article class="expense-ticket${compact ? " expense-ticket--compact" : ""}">
-      ${actionHtml}
       <div class="expense-ticket__top">
         <div class="expense-ticket__header-row${hasOrders ? " expense-ticket__header-row--with-order" : ""}">
           <div class="expense-ticket__meta">
@@ -1182,9 +1184,14 @@ function injectExpenseUserActionStyles() {
   const style = document.createElement("style");
   style.id = "expenseUserActionStyles";
   style.textContent = `
-    .expense-ticket__actions{position:absolute;top:14px;right:14px;z-index:12;}
-    .expense-ticket__more{width:38px;height:38px;border:none;border-radius:999px;background:#f8fafc;color:#0f172a;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 18px rgba(15,23,42,.10);border:1px solid #e2e8f0;}
+    .expense-ticket__header-side{flex:1 1 auto;min-width:0;display:flex;flex-direction:row-reverse;align-items:flex-start;justify-content:flex-start;gap:10px;}
+    .expense-ticket__header-side .expense-ticket__reason{flex:1 1 auto;min-width:0;max-width:100%;padding-top:4px;overflow-wrap:anywhere;}
+    .expense-ticket__header-side .expense-ticket__order-actions{flex:1 1 auto;min-width:0;padding-top:1px;}
+    .expense-ticket__actions{position:relative;top:auto;right:auto;z-index:20;flex:0 0 auto;display:inline-flex;align-items:flex-start;}
+    .expense-ticket__more{width:38px;height:38px;border:none;border-radius:999px;background:#f8fafc;color:#0f172a;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 18px rgba(15,23,42,.10);border:1px solid #e2e8f0;font-size:23px;font-weight:900;line-height:1;letter-spacing:1px;}
     .expense-ticket__more:hover{background:#eef2ff;transform:translateY(-1px);}
+    .expense-ticket__more svg{display:none;}
+    .expense-ticket__more::before{content:"⋯";display:block;margin-top:-4px;line-height:1;color:#0f172a;}
     .expense-ticket__menu{position:absolute;top:44px;right:0;min-width:148px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 20px 46px rgba(15,23,42,.18);padding:6px;display:none;}
     .expense-ticket__actions.is-open .expense-ticket__menu{display:block;}
     .expense-ticket__menu-item{width:100%;border:none;background:transparent;color:#0f172a;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:12px;font-weight:800;text-align:left;cursor:pointer;}
@@ -1211,7 +1218,7 @@ function injectExpenseUserActionStyles() {
     .expense-user-action-btn--danger{background:#ef4444;color:#fff;}
     .expense-user-action-btn:disabled{opacity:.65;cursor:not-allowed;}
     .expense-user-action-note{margin-top:10px;color:#64748b;font-size:13px;line-height:1.45;}
-    @media(max-width:640px){.expense-user-action-grid{grid-template-columns:1fr}.expense-ticket__actions{top:10px;right:10px}.expense-ticket__top{padding-right:34px}}
+    @media(max-width:640px){.expense-user-action-grid{grid-template-columns:1fr}.expense-ticket__header-side{gap:8px}.expense-ticket__more{width:34px;height:34px;font-size:21px}.expense-ticket__top{padding-right:0}}
   `;
   document.head.appendChild(style);
 }
