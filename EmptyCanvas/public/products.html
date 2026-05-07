@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Products | Operations Hub</title>
+  <link href="/css/style.css" rel="stylesheet" />
+  <link href="/css/ui-redesign.css" rel="stylesheet" />
+  <link href="/css/products.css" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading products-page">
+  <script>
+    (function() {
+      try {
+        if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+          document.body.classList.add('sidebar-mini');
+        }
+      } catch(e) {}
+    })();
+  </script>
+
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Dashboard</h2>
+        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+          <i data-feather="chevrons-left"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <ul class="nav-list">
+          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+          <li><a class="nav-link active" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
+          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+          <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+          <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+          <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">User Access & Data</span></a></li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header">
+        <div class="header-row1">
+          <div class="left">
+            <div aria-live="polite" class="greeting-pill">
+              <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
+              <div class="greet-text">
+                <div class="greet-title">Hi, <span data-username>...</span> 👋</div>
+                <div class="greet-sub">Manage products, tags, prices, and supplier links</div>
+              </div>
+            </div>
+          </div>
+          <div class="right topbar-right">
+            <a aria-label="My account" class="account-mini" href="/account" title="My account">
+              <span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span>
+              <span class="label">My account</span>
+            </a>
+          </div>
+        </div>
+        <div class="header-row2">
+          <h1 class="page-title">Products</h1>
+        </div>
+      </header>
+
+      <main class="products-shell">
+        <section class="products-hero" aria-labelledby="productsTitle">
+          <div class="products-hero__content">
+            <div class="products-eyebrow"><i data-feather="package"></i><span>Supabase Products</span></div>
+            <h2 id="productsTitle">A clean product catalog grouped by tag.</h2>
+            <p>Edit every product record, keep prices and URLs up to date, and add new products without opening Notion.</p>
+            <div class="products-actions-row">
+              <label class="products-search" for="productsSearchInput">
+                <i data-feather="search"></i>
+                <input id="productsSearchInput" type="search" autocomplete="off" placeholder="Search product, ID code, tag, URL..." />
+              </label>
+              <button type="button" class="products-refresh-btn" id="productsRefreshBtn">
+                <i data-feather="refresh-cw"></i>
+                <span>Refresh</span>
+              </button>
+              <button type="button" class="products-add-btn" id="productsAddBtn">
+                <i data-feather="plus-circle"></i>
+                <span>Add Product</span>
+              </button>
+            </div>
+          </div>
+          <div class="products-hero__panel" aria-label="Products summary">
+            <div class="products-stat-card products-stat-card--primary">
+              <span class="products-stat-card__label">Products</span>
+              <strong id="productsTotalCount">—</strong>
+            </div>
+            <div class="products-stat-card">
+              <span class="products-stat-card__label">Groups</span>
+              <strong id="productsGroupsCount">—</strong>
+            </div>
+            <div class="products-stat-card">
+              <span class="products-stat-card__label">Priced Items</span>
+              <strong id="productsPricedCount">—</strong>
+            </div>
+            <div class="products-stat-card">
+              <span class="products-stat-card__label">Avg. Price</span>
+              <strong id="productsAveragePrice">—</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="products-filter-panel" aria-labelledby="productsTagsTitle">
+          <div class="products-section-head">
+            <div>
+              <h3 id="productsTagsTitle">Tags</h3>
+              <p>Switch between product groups quickly.</p>
+            </div>
+            <div class="products-view-pill" id="productsViewPill">Loading...</div>
+          </div>
+          <div class="products-tags" id="productsTags" aria-live="polite"></div>
+        </section>
+
+        <section class="products-results" id="productsResults" aria-live="polite">
+          <div class="products-loading-card">
+            <div class="products-spinner" aria-hidden="true"></div>
+            <div>
+              <strong>Loading products...</strong>
+              <span>Reading the products table from Supabase.</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="products-modal-overlay" id="productModal" aria-hidden="true" hidden>
+    <form class="products-modal" id="productForm" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+      <button type="button" class="products-modal__close" id="productModalClose" aria-label="Close product form">
+        <i data-feather="x"></i>
+      </button>
+      <div class="products-modal__header">
+        <div class="products-modal__icon"><i data-feather="box"></i></div>
+        <div>
+          <h2 id="productModalTitle">Product</h2>
+          <p id="productModalSubtitle">Add or update a product record in Supabase.</p>
+        </div>
+      </div>
+
+      <div class="products-form-grid">
+        <label class="products-field products-field--wide">
+          <span>Product Name <em>*</em></span>
+          <input id="productNameInput" name="name" type="text" autocomplete="off" required placeholder="Example: Arduino Nano Type-C USB" />
+        </label>
+        <label class="products-field">
+          <span>ID Code</span>
+          <input id="productIdCodeInput" name="idCode" type="text" autocomplete="off" placeholder="A100217" />
+        </label>
+        <label class="products-field">
+          <span>Unit Price</span>
+          <input id="productPriceInput" name="unitPrice" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" />
+        </label>
+        <label class="products-field">
+          <span>Quantity</span>
+          <input id="productQuantityInput" name="quantity" type="number" step="1" min="0" inputmode="numeric" placeholder="Optional" />
+        </label>
+        <label class="products-field">
+          <span>Tag</span>
+          <input id="productTagsInput" name="tags" type="text" list="productsTagOptions" autocomplete="off" placeholder="1/ Electric components" />
+          <datalist id="productsTagOptions"></datalist>
+        </label>
+        <label class="products-field">
+          <span>Category Code</span>
+          <input id="productCategoryCodeInput" name="categoryCode" type="number" step="1" min="0" inputmode="numeric" placeholder="1" />
+        </label>
+        <label class="products-field">
+          <span>Category Name</span>
+          <input id="productCategoryNameInput" name="categoryName" type="text" autocomplete="off" placeholder="Electric components" />
+        </label>
+        <label class="products-field products-field--wide">
+          <span>Product URL</span>
+          <input id="productUrlInput" name="url" type="url" autocomplete="off" placeholder="https://supplier.com/product" />
+        </label>
+      </div>
+
+      <div class="products-form-error" id="productFormError" aria-live="polite"></div>
+
+      <div class="products-modal__actions">
+        <button type="button" class="products-btn products-btn--light" id="productModalCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark" id="productSaveBtn">
+          <i data-feather="save"></i>
+          <span>Save Product</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>if (window.feather) feather.replace();</script>
+  <script src="/js/common-ui.js"></script>
+  <script src="/js/products.js"></script>
+</body>
+</html>
