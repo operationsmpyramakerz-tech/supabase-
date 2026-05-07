@@ -1661,18 +1661,13 @@ const ALL_PAGES = [
   "Current Orders",
   "Requested Orders",
   "Maintenance Orders",
-  "Assigned Schools Requested Orders",
   "Create New Order",
   "Stocktaking",
   "Tasks",
   "B2B",
-  "Funds",
   "Expenses",
   "Expenses Users",
-  "Logistics",
   "Orders Review",
-  "Damaged Assets",
-  "S.V Schools Assets",
   USER_ACCESS_PAGE_NAME,
 ];
 
@@ -1693,20 +1688,10 @@ function normalizePages(names = []) {
   ) {
     out.push("Maintenance Orders");
   }
-  if (
-    set.has("assigned schools requested orders") ||
-    set.has("assigned requested orders") ||
-    set.has("assigned orders") ||
-    set.has("my assigned orders") ||
-    set.has("storage") // alias: Storage
-  ) {
-    out.push("Assigned Schools Requested Orders");
-  }
   if (set.has("create new order")) out.push("Create New Order");
   if (set.has("stocktaking")) out.push("Stocktaking");
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
   if (set.has("b2b")) out.push("B2B");
-  if (set.has("funds")) out.push("Funds");
   if (set.has("expenses")) out.push("Expenses");
   if (
     set.has("expenses users") ||
@@ -1715,7 +1700,6 @@ function normalizePages(names = []) {
   ) {
     out.push("Expenses Users");
   }
-  if (set.has("logistics")) out.push("Logistics");
 
   // Orders Review (formerly: "S.V schools orders")
   if (
@@ -1726,10 +1710,6 @@ function normalizePages(names = []) {
   ) {
     out.push("Orders Review");
   }
-  if (set.has("damaged assets")) out.push("Damaged Assets");
-  if (set.has("s.v schools assets") || set.has("sv schools assets")) 
-  out.push("S.V Schools Assets");
-
   if (
     set.has("user access & data") ||
     set.has("user access") ||
@@ -3306,7 +3286,6 @@ async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") 
 async function _sbInvalidateProductsCaches() {
   await Promise.all([
     cacheDel("cache:api:components:supabase:v1"),
-    cacheDel("cache:api:damaged-assets:options:supabase:v1"),
   ]);
 }
 
@@ -3321,12 +3300,7 @@ function expandAllowedForUI(list = []) {
   }
   if (set.has("Maintenance Orders")) {
     set.add("Maintenance Orders");
-  }
-  if (set.has("Assigned Schools Requested Orders")) {
-    set.add("Assigned Schools Requested Orders");
-    set.add("Storage"); // الواجهة تعرض Storage
-  }
-  if (set.has("Funds")) {
+  }  if (set.has("Funds")) {
     set.add("Funds");
   }
   if (set.has("Expenses")) {
@@ -3334,14 +3308,9 @@ function expandAllowedForUI(list = []) {
   }
   if (set.has("Expenses Users")) {
     set.add("Expenses Users");
-  }
-  if (set.has("Logistics")) {
-    set.add("Logistics");
-  }
-  if (set.has("Tasks")) {
+  }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
-  if (set.has("Damaged Assets")) { set.add("Damaged Assets"); }
   if (set.has(USER_ACCESS_PAGE_NAME)) {
     set.add(USER_ACCESS_PAGE_NAME);
     set.add("User Access");
@@ -3385,16 +3354,11 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Current Orders")) return "/orders";
   if (list.includes("Requested Orders")) return "/orders/requested";
   if (list.includes("Maintenance Orders")) return "/orders/maintenance-orders";
-  if (list.includes("Assigned Schools Requested Orders")) return "/orders/assigned";
   if (list.includes("Orders Review")) return "/orders/sv-orders";
   if (list.includes("Create New Order")) return "/orders/new";
   if (list.includes("Stocktaking")) return "/stocktaking";
   if (list.includes("Tasks")) return "/tasks";
   if (list.includes("B2B")) return "/b2b";
-  if (list.includes("Logistics")) return "/logistics";
-  if (list.includes("Damaged Assets")) return "/damaged-assets";
-  if (list.includes("S.V Schools Assets")) return "/sv-assets";
-  if (list.includes("Funds")) return "/funds";
   if (list.includes("Expenses Users")) return "/expenses/users";
   if (list.includes("Expenses")) return "/expenses";
   if (list.includes(USER_ACCESS_PAGE_NAME)) return "/user-access";
@@ -4314,17 +4278,6 @@ app.get(
     res.sendFile(path.join(__dirname, "..", "public", "maintenance-orders.html"));
   },
 );
-
-// صفحة جديدة: الطلبات المُسندة للمستخدم الحالي فقط
-app.get(
-  "/orders/assigned",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "public", "assigned-orders.html"));
-  },
-);
-
 // 3-step order pages
 
 app.get(
@@ -4345,20 +4298,7 @@ app.get(
   (req, res) => {
     res.sendFile(path.join(__dirname, "..", "public", "create-order-products.html"));
   },
-);
-app.get(
-  "/orders/new/review",
-  requireAuth,
-  requirePage("Create New Order"),
-  (req, res) => {
-    // Review step removed — Checkout now submits directly from Products page
-    const queryIndex = String(req.originalUrl || '').indexOf('?');
-    const query = queryIndex >= 0 ? String(req.originalUrl || '').slice(queryIndex) : '';
-    return res.redirect(`/orders/new/products${query}`);
-  },
-);
-
-app.get("/stocktaking", requireAuth, requirePage("Stocktaking"), (req, res) => {
+);app.get("/stocktaking", requireAuth, requirePage("Stocktaking"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "stocktaking.html"));
 });
 
@@ -4391,18 +4331,12 @@ app.get("/how-it-works", requireAuth, (req, res) => {
 app.get("/notifications", requireAuth, (req, res) => {
   res.redirect("/home");
 });
-
-// Funds page
-app.get("/funds", requireAuth, requirePage("Funds"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "funds.html"));
-});
-
 // Expenses page 
 app.get("/expenses", requireAuth, requirePage("Expenses"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "expenses.html"));
 });
 
-// Expenses Users page (logistics / admin view)
+// Expenses Users page (admin view)
 app.get(
   "/expenses/users",
   requireAuth,
@@ -4411,21 +4345,6 @@ app.get(
     res.sendFile(path.join(__dirname, "..", "public", "expenses-users.html"));
   }
 );;
-
-// Logistics page
-app.get("/logistics", requireAuth, requirePage("Logistics"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "logistics.html"));
-});
-// Damaged Assets page
-app.get("/damaged-assets", requireAuth, requirePage("Damaged Assets"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "damaged-assets.html"));
-  });
-app.get("/sv-assets", requireAuth, requirePage("S.V Schools Assets"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "sv-assets.html"));
-});
-app.get("/damaged-assets-reviewed", requireAuth, requirePage("Damaged Assets"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "damaged-assets-reviewed.html"));
-});
 // --- API Routes ---
 
 // Login
@@ -4518,7 +4437,7 @@ app.post("/api/login", async (req, res) => {
     res.status(500).json({ error: "Login failed" });
   }
 });
-// === Helper: Received Quantity (number) — used to keep Rec visible on Logistics ===
+// === Helper: Received Quantity (number) ===
 async function detectReceivedQtyPropName() {
   const envName = (process.env.NOTION_REC_PROP || "").trim();
   const props = await getOrdersDBProps();
@@ -16468,655 +16387,6 @@ app.post(
   },
 );
 
-// ========== Assigned: APIs ==========
-// 1) جلب الطلبات المسندة للمستخدم الحالي — مع reason + status
-app.get(
-  "/api/orders/assigned",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      const userId = await getSessionUserNotionId(req);
-      if (!userId) return res.status(404).json({ error: "User not found." });
-
-      // Small TTL cache: this endpoint is hit often (reloads + polling)
-      const cacheKey = `cache:api:orders:assigned:${userId}:v3`;
-      const items = await cacheGetOrSet(cacheKey, 60, async () => {
-        const assignedProp = await detectAssignedPropName();
-        const availableProp = await detectAvailableQtyPropName(); // may be null
-        const statusProp = await detectStatusPropName(); // usually "Status"
-        const receivedProp = await (async () => {
-          const props = await getOrdersDBProps();
-          if (props[REC_PROP_HARDBIND] && props[REC_PROP_HARDBIND].type === "number") return REC_PROP_HARDBIND;
-          return await detectReceivedQtyPropName();
-        })();
-
-        const orderGroupIdProp = await detectOrderGroupIdPropName();
-
-        const raw = [];
-        const productIds = new Set();
-        let hasMore = true;
-        let startCursor = undefined;
-
-        while (hasMore) {
-          const resp = await notion.databases.query({
-            database_id: ordersDatabaseId,
-            start_cursor: startCursor,
-            filter: { property: assignedProp, relation: { contains: userId } },
-            sorts: [{ timestamp: "created_time", direction: "descending" }],
-            page_size: 100,
-          });
-
-          for (const page of resp.results || []) {
-            const props = page.properties || {};
-            const productPageId = props.Product?.relation?.[0]?.id || null;
-            if (productPageId) productIds.add(productPageId);
-
-            raw.push({
-              id: page.id,
-              productPageId,
-              requested: Number(props["Quantity Requested"]?.number || 0),
-              available: availableProp ? Number(props[availableProp]?.number || 0) : 0,
-              reason: props.Reason?.title?.[0]?.plain_text || "No Reason",
-              status: statusProp ? (props[statusProp]?.select?.name || props[statusProp]?.status?.name || "") : "",
-              rec: receivedProp ? Number(props[receivedProp]?.number || 0) : 0,
-              createdTime: page.created_time,
-              orderIdNumber: orderGroupIdProp ? _extractPropNumber(props[orderGroupIdProp] || null) : null,
-            });
-          }
-
-          hasMore = resp.has_more;
-          startCursor = resp.next_cursor;
-        }
-
-        const productMap = await mapWithConcurrency(productIds, 3, getProductInfoCached);
-        return raw.map((r) => {
-          const productName = r.productPageId ? (productMap.get(r.productPageId)?.name || "Unknown Product") : "Unknown Product";
-          const remaining = Math.max(0, Number(r.requested) - Number(r.available));
-          const orderIdNumberSafe = Number(r.orderIdNumber);
-          const orderIdSafe = Number.isFinite(orderIdNumberSafe) ? `ORD-${orderIdNumberSafe}` : null;
-
-          return {
-            id: r.id,
-            orderId: orderIdSafe,
-            orderIdPrefix: orderIdSafe ? "ORD" : null,
-            orderIdNumber: Number.isFinite(orderIdNumberSafe) ? orderIdNumberSafe : null,
-            productName,
-            requested: r.requested,
-            available: r.available,
-            remaining,
-            quantityReceivedByOperations: r.rec,
-            rec: r.rec,
-            createdTime: r.createdTime,
-            reason: r.reason,
-            status: r.status,
-          };
-        });
-      });
-
-      return res.json(items);
-    } catch (e) {
-      console.error(e);
-      return res.status(500).json({ error: "Failed to fetch assigned orders" });
-    }
-  },
-);
-
-// 2) تعليم عنصر أنه "متوفر بالكامل" (تجعل المتاح = المطلوب)
-app.post(
-  "/api/orders/assigned/mark-in-stock",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  async (req, res) => {
-    try {
-      const { orderPageId } = req.body || {};
-      if (!orderPageId) return res.status(400).json({ error: "orderPageId required" });
-
-      const availableProp = await detectAvailableQtyPropName();
-      if (!availableProp) {
-        return res.status(400).json({
-          error:
-            'Please add a Number property "Available Quantity" (or alias) to the Orders database.',
-        });
-      }
-
-      const page = await notion.pages.retrieve({ page_id: orderPageId });
-      const requested = Number(page.properties?.["Quantity Requested"]?.number || 0);
-      const newAvailable = requested;
-
-      const statusProp = await detectStatusPropName();
-      const updates = { [availableProp]: { number: newAvailable } };
-      if (statusProp) {
-        const t = page.properties?.[statusProp]?.type || 'select';
-        if (t === 'status') updates[statusProp] = { status: { name: 'Prepared' } };
-        else updates[statusProp] = { select: { name: 'Prepared' } };
-      }
-
-      await notion.pages.update({
-        page_id: orderPageId,
-        properties: updates,
-      });
-
-      // Invalidate the assigned list cache for the current user.
-      const userId = await getSessionUserNotionId(req);
-      if (userId) {
-        await cacheDel(`cache:api:orders:assigned:${userId}:v3`);
-      }
-
-      res.json({
-        success: true,
-        available: newAvailable,
-        remaining: 0,
-      });
-    } catch (e) {
-      console.error(e.body || e);
-      res.status(500).json({ error: "Failed to update availability" });
-    }
-  },
-);
-
-// 3) إدخال كمية متاحة جزئيًا
-app.post(
-  "/api/orders/assigned/available",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  async (req, res) => {
-    try {
-      const { orderPageId, available } = req.body || {};
-      const availNum = Number(available);
-      if (!orderPageId) return res.status(400).json({ error: "orderPageId required" });
-      if (Number.isNaN(availNum) || availNum < 0) {
-        return res.status(400).json({ error: "available must be a non-negative number" });
-      }
-
-      const availableProp = await detectAvailableQtyPropName();
-      if (!availableProp) {
-        return res.status(400).json({
-          error:
-            'Please add a Number property "Available Quantity" (or alias) to the Orders database.',
-        });
-      }
-
-      const page = await notion.pages.retrieve({ page_id: orderPageId });
-      const requested = Number(page.properties?.["Quantity Requested"]?.number || 0);
-      const newAvailable = Math.min(requested, Math.max(0, Math.floor(availNum)));
-      const remaining = Math.max(0, requested - newAvailable);
-
-      const statusProp = await detectStatusPropName();
-      const updates = { [availableProp]: { number: newAvailable } };
-      if (statusProp && newAvailable === requested) {
-        const t = page.properties?.[statusProp]?.type || 'select';
-        if (t === 'status') updates[statusProp] = { status: { name: 'Prepared' } };
-        else updates[statusProp] = { select: { name: 'Prepared' } };
-      }
-
-      await notion.pages.update({
-        page_id: orderPageId,
-        properties: updates,
-      });
-
-      const userId = await getSessionUserNotionId(req);
-      if (userId) {
-        await cacheDel(`cache:api:orders:assigned:${userId}:v3`);
-      }
-
-      res.json({ success: true, available: newAvailable, remaining });
-    } catch (e) {
-      console.error(e.body || e);
-      res.status(500).json({ error: "Failed to update available quantity" });
-    }
-  },
-);
-
-// 3-b) تحويل حالة مجموعة عناصر طلب إلى Prepared (زر في الكارت)
-app.post(
-  "/api/orders/assigned/mark-prepared",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  async (req, res) => {
-    try {
-      const { orderIds } = req.body || {};
-      if (!Array.isArray(orderIds) || orderIds.length === 0) {
-        return res.status(400).json({ error: "orderIds required" });
-      }
-      const statusProp = await detectStatusPropName();
-      if (!statusProp) {
-        return res.status(400).json({ error: 'Please add a Select property "Status" to the Orders database.' });
-      }
-
-      await Promise.all(
-        orderIds.map((id) =>
-          notion.pages.update({
-            page_id: id,
-            properties: { [statusProp]: { select: { name: "Prepared" } } },
-          }),
-        ),
-      );
-
-      const userId = await getSessionUserNotionId(req);
-      if (userId) {
-        await cacheDel(`cache:api:orders:assigned:${userId}:v3`);
-      }
-
-      res.json({ success: true, updated: orderIds.length });
-    } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to mark as Prepared" });
-    }
-  },
-);
-
-// --- Logistics: mark-received (Status + Quantity received by operations) ---
-app.post('/api/logistics/mark-received', requireAuth, async (req, res) => {
-  try {
-    const { itemIds = [], statusById = {}, recMap = {} } = req.body || {};
-    if (!Array.isArray(itemIds) || itemIds.length === 0) {
-      return res.status(400).json({ ok: false, error: 'No itemIds' });
-    }
-
-    const STATUS_PROP_ENV = (process.env.NOTION_STATUS_PROP || '').trim(); // e.g. "Status"
-    const REQ_PROP_ENV    = (process.env.NOTION_REQ_PROP    || '').trim(); // e.g. "Quantity Requested"
-    const REC_PROP_ENV    = (process.env.NOTION_REC_PROP    || '').trim(); // "Quantity received by operations"
-    const AVAIL_PROP_ENV  = (process.env.NOTION_AVAIL_PROP  || '').trim(); // e.g. "Available"
-
-    const REC_HARDBIND = (typeof REC_PROP_HARDBIND !== 'undefined' && REC_PROP_HARDBIND)
-      ? REC_PROP_HARDBIND
-      : (REC_PROP_ENV || 'Quantity received by operations');
-
-    const pickProp = (props, preferredName, typeWanted, aliases = [], regexHint = null) => {
-      if (preferredName && props[preferredName] && (!typeWanted || props[preferredName].type === typeWanted)) {
-        return preferredName;
-      }
-      for (const n of aliases) {
-        if (n && props[n] && (!typeWanted || props[n].type === typeWanted)) return n;
-      }
-      if (regexHint) {
-        const rx = new RegExp(regexHint, 'i');
-        for (const k of Object.keys(props || {})) {
-          if ((!typeWanted || props[k]?.type === typeWanted) && rx.test(k)) return k;
-        }
-      }
-      if (typeWanted) {
-        const any = Object.keys(props || {}).find(k => props[k]?.type === typeWanted);
-        if (any) return any;
-      }
-      return null;
-    };
-
-    const results = [];
-
-    for (const pageId of itemIds) {
-      const page  = await notion.pages.retrieve({ page_id: pageId });
-      const props = page?.properties || {};
-
-      const statusPropName = pickProp(
-        props,
-        STATUS_PROP_ENV,
-        null,
-        ['Status', 'Order Status', 'Operations Status']
-      );
-      const requestedPropName = pickProp(
-        props,
-        REQ_PROP_ENV,
-        'number',
-        ['Quantity Requested', 'Requested Qty', 'Req', 'Request Qty'],
-        '(request|req)'
-      );
-      const availablePropName = pickProp(
-        props,
-        AVAIL_PROP_ENV,
-        'number',
-        ['Available', 'Quantity Available', 'Avail'],
-        '(avail|available)'
-      );
-      let recPropName = pickProp(
-        props,
-        REC_HARDBIND,
-        'number',
-        ['Quantity received by operations', 'Received Qty', 'Received Quantity', 'Quantity Received', 'Rec', 'REC'],
-        '(received|rec\\b)'
-      );
-
-      const reqNow   = Number(props?.[requestedPropName]?.number ?? NaN);
-      const availNow = Number(props?.[availablePropName]?.number ?? NaN);
-
-      let recValue = Number(recMap[pageId]);
-      if (Number.isFinite(availNow)) recValue = availNow;
-
-      const missing = (Number.isFinite(reqNow) && Number.isFinite(availNow))
-        ? Math.max(0, reqNow - availNow)
-        : NaN;
-
-      const forceFullyPrepared =
-        Number.isFinite(reqNow) && Number.isFinite(availNow) &&
-        reqNow === availNow && Number.isFinite(recValue) && recValue < reqNow && missing === 0;
-
-      const updateProps = {};
-
-      if (Number.isFinite(recValue)) {
-        if (recPropName && props[recPropName]?.type === 'number') {
-          updateProps[recPropName] = { number: recValue };
-        } else if (props['Quantity received by operations']?.type === 'number') {
-          updateProps['Quantity received by operations'] = { number: recValue };
-        }
-      }
-
-      const nextStatusName = forceFullyPrepared ? 'Prepared' : String(statusById[pageId] || '').trim();
-      if (nextStatusName && statusPropName && props[statusPropName]) {
-        const t = props[statusPropName].type;
-        if (t === 'select') {
-          updateProps[statusPropName] = { select: { name: nextStatusName } };
-        } else if (t === 'status') {
-          updateProps[statusPropName] = { status: { name: nextStatusName } };
-        }
-      }
-
-      if (Object.keys(updateProps).length === 0) {
-        results.push({ pageId, skipped: true, reason: 'No matching properties on page' });
-        continue;
-      }
-
-      await notion.pages.update({ page_id: pageId, properties: updateProps });
-      results.push({ pageId, ok: true, forcedFullyPrepared: !!forceFullyPrepared });
-    }
-
-    return res.json({ ok: true, updated: results });
-  } catch (e) {
-    console.error('logistics/mark-received error:', e?.body || e);
-    return res.status(500).json({ ok: false, error: 'Failed to mark received' });
-  }
-});
-
-// 4-b) PDF استلام المكونات (Receipt) لمجموعة عناصر طلب (ids)
-// يستخدم ids=pageId1,pageId2,...
-app.get(
-  "/api/orders/assigned/receipt",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  async (req, res) => {
-    try {
-      const userId = await getCurrentUserPageId(req.session.username);
-      if (!userId) return res.status(404).json({ error: "User not found." });
-
-      const assignedProp  = await detectAssignedPropName();
-      const availableProp = await detectAvailableQtyPropName();
-      const statusProp    = await detectStatusPropName();
-
-      const ids = String(req.query.ids || "")
-        .split(",")
-        .map(s => s.trim())
-        .filter(Boolean);
-
-      if (!ids.length) {
-        return res.status(400).json({ error: "ids query is required" });
-      }
-
-      const items = [];
-      let reasonTitle = "";
-      let createdAt = null;
-
-      for (const id of ids) {
-        try {
-          const page = await notion.pages.retrieve({ page_id: id });
-          const props = page.properties || {};
-
-          const rel = props[assignedProp]?.relation || [];
-          const isMine = Array.isArray(rel) && rel.some(r => r.id === userId);
-          if (!isMine) continue;
-
-          let productName = "Unknown Product";
-          const relP = props.Product?.relation;
-          if (Array.isArray(relP) && relP.length) {
-            try {
-              const productPage = await notion.pages.retrieve({ page_id: relP[0].id });
-              productName =
-                productPage.properties?.Name?.title?.[0]?.plain_text || productName;
-            } catch {}
-          }
-
-          const requested = Number(props["Quantity Requested"]?.number || 0);
-          const available = availableProp ? Number(props[availableProp]?.number || 0) : 0;
-          const status    = statusProp ? (props[statusProp]?.select?.name || "") : "";
-
-          items.push({
-            productName,
-            requested,
-            available,
-            status
-          });
-
-          if (!reasonTitle) {
-            reasonTitle = props.Reason?.title?.[0]?.plain_text || "";
-            createdAt = page.created_time || null;
-          }
-        } catch {}
-      }
-
-      if (!items.length) {
-        return res.status(404).json({ error: "No items found for this receipt." });
-      }
-
-      const fname = `Receipt-${new Date().toISOString().slice(0, 10)}.pdf`;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-
-      await ensurePdfArabicSupport();
-      const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
-      enableArabicPdf(doc);
-      doc.pipe(res);
-      attachPageNumbers(doc);
-
-      drawStocktakingHeader(doc, {
-        title: "Components Receipt",
-        subtitle: `User: ${req.session.username || "-"}  •  Generated: ${formatDateTime(new Date())}`,
-      });
-
-      if (reasonTitle) {
-        doc.moveDown(0.3);
-        doc.font("Helvetica").fontSize(11).fillColor("#111")
-          .text(`Reason: ${reasonTitle}`);
-      }
-      if (createdAt) {
-        doc.font("Helvetica").fontSize(10).fillColor("#777")
-          .text(`Order created: ${new Date(createdAt).toLocaleString()}`);
-      }
-
-      doc.moveDown(0.8);
-      const pageInnerWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
-      const colNameW = Math.floor(pageInnerWidth * 0.60);
-      const colReqW  = Math.floor(pageInnerWidth * 0.18);
-      const colAvailW= pageInnerWidth - colNameW - colReqW;
-
-      const drawHead = () => {
-        const y = doc.y, h = 22;
-        doc.save();
-        doc.roundedRect(doc.page.margins.left, y, pageInnerWidth, h, 6)
-          .fillColor("#F3F4F6").strokeColor("#E5E7EB").lineWidth(1).fillAndStroke();
-        doc.fillColor("#111").font("Helvetica-Bold").fontSize(10);
-        doc.text("Component", doc.page.margins.left + 10, y + 6, { width: colNameW });
-        doc.text("Quantity",  doc.page.margins.left + 10 + colNameW, y + 6, {
-          width: colReqW - 10, align: "right",
-        });
-        doc.text("Available", doc.page.margins.left + colNameW + colReqW, y + 6, {
-          width: colAvailW - 10, align: "right",
-        });
-        doc.restore();
-        doc.moveDown(1.2);
-      };
-
-      const ensureSpace = (need) => {
-        const bottom = doc.page.height - doc.page.margins.bottom;
-        if (doc.y + need > bottom) { doc.addPage(); drawHead(); }
-      };
-
-      drawHead();
-      doc.font("Helvetica").fontSize(11).fillColor("#111");
-
-      items.forEach((it) => {
-        ensureSpace(24);
-        const y = doc.y, h = 18;
-        doc.text(it.productName || "-", doc.page.margins.left + 2, y, { width: colNameW });
-        doc.text(String(it.requested || 0), doc.page.margins.left + colNameW, y, {
-          width: colReqW - 10, align: "right",
-        });
-        doc.text(String(it.available ?? ""), doc.page.margins.left + colNameW + colReqW, y, {
-          width: colAvailW - 10, align: "right",
-        });
-        doc.moveTo(doc.page.margins.left, y + h + 4)
-          .lineTo(doc.page.margins.left + pageInnerWidth, y + h + 4)
-          .strokeColor("#EEE").lineWidth(1).stroke();
-        doc.y = y + h + 6;
-      });
-
-      doc.moveDown(1.2);
-      doc.font("Helvetica").fontSize(10).fillColor("#555")
-        .text("Signature:", { continued: true })
-        .text(" _________________________________", { align: "left" });
-
-      doc.end();
-    } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to generate receipt PDF" });
-    }
-  },
-);
-
-// 4-c) PDF النواقص للطلبات المسندة (Shortage List)
-app.get(
-  "/api/orders/assigned/pdf",
-  requireAuth,
-  requirePage("Assigned Schools Requested Orders"),
-  async (req, res) => {
-    try {
-      const userId = await getCurrentUserPageId(req.session.username);
-      if (!userId) return res.status(404).json({ error: "User not found." });
-
-      const assignedProp  = await detectAssignedPropName();
-      const availableProp = await detectAvailableQtyPropName();
-
-      const idsStr = String(req.query.ids || "").trim();
-      const items = [];
-
-      if (idsStr) {
-        const ids = idsStr.split(",").map((s) => s.trim()).filter(Boolean);
-        for (const id of ids) {
-          try {
-            const page = await notion.pages.retrieve({ page_id: id });
-            const props = page.properties || {};
-
-            const rel = props[assignedProp]?.relation || [];
-            const isMine = Array.isArray(rel) && rel.some((r) => r.id === userId);
-            if (!isMine) continue;
-
-            let productName = "Unknown Product";
-            const productRel = props.Product?.relation;
-            if (Array.isArray(productRel) && productRel.length) {
-              try {
-                const productPage = await notion.pages.retrieve({ page_id: productRel[0].id });
-                productName = productPage.properties?.Name?.title?.[0]?.plain_text || productName;
-              } catch {}
-            }
-
-            const requested = Number(props["Quantity Requested"]?.number || 0);
-            const available = availableProp ? Number(props[availableProp]?.number || 0) : 0;
-            const remaining = Math.max(0, requested - available);
-            if (remaining > 0) items.push({ productName, requested, available, remaining });
-          } catch {}
-        }
-      } else {
-        let hasMore = true, startCursor;
-        while (hasMore) {
-          const resp = await notion.databases.query({
-            database_id: ordersDatabaseId,
-            start_cursor: startCursor,
-            filter: { property: assignedProp, relation: { contains: userId } },
-            sorts: [{ timestamp: "created_time", direction: "descending" }],
-          });
-
-          for (const page of resp.results) {
-            const props = page.properties || {};
-            let productName = "Unknown Product";
-            const productRel = props.Product?.relation;
-            if (Array.isArray(productRel) && productRel.length) {
-              try {
-                const productPage = await notion.pages.retrieve({ page_id: productRel[0].id });
-                productName = productPage.properties?.Name?.title?.[0]?.plain_text || productName;
-              } catch {}
-            }
-            const requested = Number(props["Quantity Requested"]?.number || 0);
-            const available = availableProp ? Number(props[availableProp]?.number || 0) : 0;
-            const remaining = Math.max(0, requested - available);
-            if (remaining > 0) items.push({ productName, requested, available, remaining });
-          }
-
-          hasMore = resp.has_more;
-          startCursor = resp.next_cursor;
-        }
-      }
-
-      const fname = `Assigned-Shortage-${new Date().toISOString().slice(0, 10)}.pdf`;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-
-      await ensurePdfArabicSupport();
-      const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
-      enableArabicPdf(doc);
-      doc.pipe(res);
-      attachPageNumbers(doc);
-
-      drawStocktakingHeader(doc, {
-        title: "Assigned Orders — Shortage List",
-        subtitle: `User: ${req.session.username || "-"}  •  Generated: ${formatDateTime(new Date())}`,
-      });
-
-      const pageInnerWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      const colNameW = Math.floor(pageInnerWidth * 0.5);
-      const colReqW  = Math.floor(pageInnerWidth * 0.15);
-      const colAvailW= Math.floor(pageInnerWidth * 0.15);
-      const colRemW  = pageInnerWidth - colNameW - colReqW - colAvailW;
-
-      const drawHead = () => {
-        const y = doc.y;
-        const h = 20;
-        doc.save();
-        doc.rect(doc.page.margins.left, y, pageInnerWidth, h).fill("#F3F4F6");
-        doc.fillColor("#111").font("Helvetica-Bold").fontSize(10);
-        doc.text("Component", doc.page.margins.left + 6, y + 5, { width: colNameW });
-        doc.text("Requested", doc.page.margins.left + 6 + colNameW, y + 5, { width: colReqW, align: "right" });
-        doc.text("Available", doc.page.margins.left + 6 + colNameW + colReqW, y + 5, { width: colAvailW, align: "right" });
-        doc.text("Missing", doc.page.margins.left + 6 + colNameW + colReqW + colAvailW, y + 5, { width: colRemW, align: "right" });
-        doc.restore();
-        doc.moveDown(1);
-      };
-      const ensureSpace = (need) => {
-        const bottom = doc.page.height - doc.page.margins.bottom;
-        if (doc.y + need > bottom) { doc.addPage(); drawHead(); }
-      };
-      drawHead();
-
-      doc.font("Helvetica").fontSize(11).fillColor("#111");
-      items.forEach((it) => {
-        ensureSpace(22);
-        const y = doc.y;
-        const h = 18;
-        doc.text(it.productName || "-", doc.page.margins.left + 2, y, { width: colNameW });
-        doc.text(String(it.requested || 0), doc.page.margins.left + colNameW, y, { width: colReqW, align: "right" });
-        doc.text(String(it.available || 0), doc.page.margins.left + colNameW + colReqW, y, { width: colAvailW, align: "right" });
-        doc.text(String(it.remaining || 0), doc.page.margins.left + colNameW + colReqW + colAvailW, y, { width: colRemW, align: "right" });
-        doc.moveTo(doc.page.margins.left, y + h).lineTo(doc.page.margins.left + pageInnerWidth, y + h).strokeColor("#EEE").lineWidth(1).stroke();
-        doc.y = y + h + 2;
-      });
-
-      doc.end();
-    } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to generate PDF" });
-    }
-  },
-);
-      
 // Components list — requires Create New Order
 app.get(
   "/api/order-types",
@@ -17602,93 +16872,6 @@ app.get(
       res.status(500).json({ error: "Failed to fetch data from Notion API." });
     }
   },
-);
-// == Damaged Assets: Products options (works even if title prop isn't named "Name")
-app.get(
-  '/api/damaged-assets/options',
-  requireAuth,
-  requirePage('Damaged Assets'),
-  async (req, res) => {
-    try {
-      if (_sbProductsEnabled()) {
-        const q = String(req.query.q || '').trim().toLowerCase();
-        const list = await cacheGetOrSet("cache:api:damaged-assets:options:supabase:v1", 20 * 60, async () => _sbProductsList());
-        const options = (Array.isArray(list) ? list : [])
-          .map((p) => ({ id: String(p.id || ''), name: String(p.name || '').trim() }))
-          .filter((p) => p.id && p.name)
-          .filter((p) => !q || p.name.toLowerCase().includes(q));
-        res.set('Cache-Control', 'no-store');
-        return res.json({ options });
-      }
-
-      // DB بتاع الـ relation "Products"
-      const dbId = componentsDatabaseId || process.env.Products_Database || null;
-      if (!dbId) {
-        return res
-          .status(500)
-          .json({ options: [], error: 'Products_Database is not set' });
-      }
-
-      const q = String(req.query.q || '').trim(); // فلترة اختيارية
-
-      const options = [];
-      let startCursor = undefined;
-      let hasMore = true;
-
-      while (hasMore) {
-        const resp = await notion.databases.query({
-          database_id: dbId,
-          start_cursor: startCursor,
-          // نحاول نفلتر بالاسم لو فيه q، ولو اسم العمود مختلف مافيش مشكلة: هنفلتر بعد السحب
-          ...(q
-            ? {
-                filter: {
-                  or: [
-                    { property: 'Name', title: { contains: q } },
-                    { property: 'Title', title: { contains: q } },
-                  ],
-                },
-              }
-            : {}),
-          sorts: [{ property: 'Name', direction: 'ascending' }],
-          page_size: 50,
-        });
-
-        for (const page of resp.results) {
-          // استخرج أول عمود type=title ديناميكيًا مهما كان اسمه
-          let titleText = '';
-          const props = page.properties || {};
-          for (const key in props) {
-            const p = props[key];
-            if (p?.type === 'title') {
-              titleText = (p.title || [])
-                .map((t) => t.plain_text || '')
-                .join('')
-                .trim();
-              break;
-            }
-          }
-          // fallback لو فاضي
-          if (!titleText) titleText = 'Untitled';
-
-          options.push({ id: page.id, name: titleText });
-        }
-
-        hasMore = resp.has_more;
-        startCursor = resp.next_cursor;
-      }
-
-      // فلترة إضافية في السيرفر لو اسم العمود مش "Name"
-      const filtered =
-        q ? options.filter((o) => o.name.toLowerCase().includes(q.toLowerCase())) : options;
-
-      res.set('Cache-Control', 'no-store');
-      return res.json({ options: filtered });
-    } catch (e) {
-      console.error('GET /api/damaged-assets/options:', e?.body || e);
-      return res.status(500).json({ options: [], error: 'Failed to load products' });
-    }
-  }
 );
 // Submit Order — requires Create New Order
 app.post(
@@ -20240,65 +19423,6 @@ async function detectOrderIdPropName() {
 }
 
 
-// ===== Logistics listing — requires Logistics =====
-app.get("/api/logistics", requireAuth, requirePage("Logistics"), async (req, res) => {
-  try {
-    const statusFilter = String(req.query.status || "Prepared");
-    const statusProp = await detectStatusPropName();
-    const availableProp = await detectAvailableQtyPropName();
-    const receivedProp = await (async()=>{
-      const props = await getOrdersDBProps();
-      if (props[REC_PROP_HARDBIND] && props[REC_PROP_HARDBIND].type === 'number') return REC_PROP_HARDBIND;
-      return await detectReceivedQtyPropName();
-    })();
-    const items = [];
-    let hasMore = true, cursor;
-
-    while (hasMore) {
-      const q = await notion.databases.query({
-        database_id: ordersDatabaseId,
-        start_cursor: cursor,
-        filter: { property: statusProp, select: { equals: statusFilter } },
-        sorts: [{ timestamp: "created_time", direction: "descending" }],
-      });
-
-      for (const page of q.results) {
-        const props = page.properties || {};
-        let productName = "Unknown Product";
-        const productRel = props.Product?.relation;
-        if (Array.isArray(productRel) && productRel.length) {
-          try {
-            const productPage = await notion.pages.retrieve({ page_id: productRel[0].id });
-            productName = productPage.properties?.Name?.title?.[0]?.plain_text || productName;
-          } catch {}
-        }
-        const requested = Number(props["Quantity Requested"]?.number || 0);
-        const available = availableProp ? Number(props[availableProp]?.number || 0) : 0;
-        // For Prepared tab we only show fully available
-        if (statusFilter === "Prepared" && requested > 0 && available < requested) continue;
-
-        const recVal = receivedProp ? Number(props[receivedProp]?.number || 0) : (props[REC_PROP_HARDBIND]?.type === 'number' ? Number(props[REC_PROP_HARDBIND]?.number || 0) : 0);
-        items.push({
-          id: page.id,
-          reason: props.Reason?.title?.[0]?.plain_text || "No Reason",
-          productName,
-          requested,
-          available,
-          quantityReceivedByOperations: recVal,
-          status: props[statusProp]?.select?.name || statusFilter,
-        });
-      }
-      hasMore = q.has_more;
-      cursor = q.next_cursor;
-    }
-    res.set("Cache-Control", "no-store");
-    res.json(items);
-  } catch (e) {
-    console.error("Logistics list error:", e.body || e);
-    res.status(500).json({ error: "Failed to fetch logistics list" });
-  }
-});
-
 // ================== EXPENSES API ==================
 
 // Get Funds Type Options
@@ -21658,7 +20782,7 @@ app.get("/api/expenses", cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:${
   }
 });
 
-// List users who have expenses (for logistics/admin view)
+// List users who have expenses (admin view)
 app.get(
   "/api/expenses/users",
   requireAuth,
@@ -23065,530 +22189,6 @@ app.post(
     }
   }
 );
-// === Damaged Assets: submit report (يدعم body.items[] أو النموذج القديم) ===
-app.post("/api/damaged-assets", requireAuth, requirePage("Damaged Assets"), async (req, res) => {
-  try {
-    if (!damagedAssetsDatabaseId) {
-      return res.status(500).json({ ok: false, error: "Damaged_Assets database ID is not configured." });
-    }
-
-    const productsDatabaseId =
-      componentsDatabaseId ||
-      process.env.Products_Database ||
-      process.env.NOTION_PRODUCTS_DATABASE_ID ||
-      process.env.PRODUCTS_DATABASE_ID ||
-      null;
-
-    // اقرأ خصائص قاعدة Damaged_Assets
-    const db = await notion.databases.retrieve({ database_id: damagedAssetsDatabaseId });
-    const props = db.properties || {};
-    const titleKey = Object.keys(props).find(k => props[k]?.type === "title") || "Name";
-
-    const findProp = (type, cands = [], hint = null) => {
-      for (const c of cands) if (props[c]?.type === type) return c;
-      if (hint) {
-        const rx = new RegExp(hint, "i");
-        for (const k of Object.keys(props)) if (props[k]?.type === type && rx.test(k)) return k;
-      }
-      for (const k of Object.keys(props)) if (props[k]?.type === type) return k;
-      return null;
-    };
-
-    const descKey   = findProp("rich_text", ["Description of issue","Damage Description","Description","Details","Notes"], "(desc|issue|damage|note|detail)");
-    const reasonKey = findProp("rich_text", ["Issue Reason","Reason"], "(reason)");
-    const dateKey   = findProp("date",      ["Date","Reported On","Report Date"], "(date|report)");
-    const filesKey  = Object.keys(props).find(k => props[k]?.type === "files");
-
-    // Team Members relation
-    let reporterKey = null;
-    if (teamMembersDatabaseId) {
-      for (const [k, v] of Object.entries(props)) {
-        if (v?.type === "relation" && v?.relation?.database_id === teamMembersDatabaseId) { reporterKey = k; break; }
-      }
-    }
-    if (!reporterKey) {
-      for (const [k, v] of Object.entries(props)) {
-        if (v?.type === "relation" && /team|member/i.test(k)) { reporterKey = k; break; }
-      }
-    }
-
-    // Products relation
-    let productsKey = null;
-    for (const [k, v] of Object.entries(props)) {
-      if (v?.type === "relation" && productsDatabaseId && v?.relation?.database_id === productsDatabaseId) { productsKey = k; break; }
-      if (!productsKey && v?.type === "relation" && /product/i.test(k)) productsKey = k;
-    }
-
-    // هات صفحة المستخدم الحالي مرّة واحدة
-    let currentUserId = null;
-    if (teamMembersDatabaseId && req.session?.username) {
-      try {
-        const q = await notion.databases.query({
-          database_id: teamMembersDatabaseId,
-          filter: { property: "Name", title: { equals: String(req.session.username).trim() } },
-          page_size: 1
-        });
-        currentUserId = q.results?.[0]?.id || null;
-      } catch {}
-    }
-    if (!currentUserId && teamMembersDatabaseId) {
-      try {
-        const tmDb = await notion.databases.retrieve({ database_id: teamMembersDatabaseId });
-        const tProps = tmDb.properties || {};
-        const emailProp = Object.keys(tProps).find(k => tProps[k]?.type === "email") || null;
-        const titleProp = Object.keys(tProps).find(k => tProps[k]?.type === "title") || "Name";
-        const email = req.user?.email || req.session?.email || null;
-        const name  = req.user?.name  || req.session?.username || req.session?.name || null;
-
-        if (email && emailProp) {
-          const q1 = await notion.databases.query({
-            database_id: teamMembersDatabaseId,
-            filter: { property: emailProp, email: { equals: String(email).trim() } },
-            page_size: 1
-          });
-          currentUserId = q1.results?.[0]?.id || currentUserId;
-        }
-        if (!currentUserId && name && titleProp) {
-          const q2 = await notion.databases.query({
-            database_id: teamMembersDatabaseId,
-            filter: { property: titleProp, title: { contains: String(name).trim() } },
-            page_size: 1
-          });
-          currentUserId = q2.results?.[0]?.id || currentUserId;
-        }
-      } catch {}
-    }
-
-    // === V2: items[] ===
-    const items = Array.isArray(req.body?.items) ? req.body.items : null;
-    if (items && items.length) {
-      const created = [];
-      for (const it of items) {
-        const productId = it?.product?.id || it?.productId || null;
-        const title     = (it?.title || "").toString().trim();
-        const reason    = (it?.reason || "").toString().trim();
-
-        const properties = {};
-        properties[titleKey] = { title: [{ text: { content: title || "Damaged asset" } }] };
-        if (descKey)                     properties[descKey]   = { rich_text: [{ text: { content: title } }] };
-        if (reasonKey && reason)         properties[reasonKey] = { rich_text: [{ text: { content: reason } }] };
-        if (productsKey && productId)    properties[productsKey] = { relation: [{ id: productId }] };
-        if (reporterKey && currentUserId)properties[reporterKey] = { relation: [{ id: currentUserId }] };
-        if (dateKey) {
-          const today = new Date().toISOString().slice(0, 10);
-          properties[dateKey] = { date: { start: today } };
-        }
-
-        const page = await notion.pages.create({
-          parent: { database_id: damagedAssetsDatabaseId },
-          properties,
-        });
-
-        if (filesKey && Array.isArray(it?.files) && it.files.some(f => f?.url)) {
-          const files = it.files.filter(f => !!f.url).slice(0,10)
-            .map((f,i) => ({ type:"external", name: f.name || `file-${i+1}`, external:{ url:f.url } }));
-          try { await notion.pages.update({ page_id: page.id, properties: { [filesKey]: { files } } }); } catch {}
-        }
-
-        created.push(page.id);
-      }
-      return res.json({ ok: true, created });
-    }
-
-    // === Legacy body ===
-    const { assetName, damageDescription, location, severity, photos = [] } = req.body || {};
-    const properties = {};
-    properties[titleKey] = { title: [{ text: { content: (assetName || "Damaged asset").toString() } }] };
-    if (descKey && (damageDescription || "") !== "") {
-      properties[descKey] = { rich_text: [{ text: { content: damageDescription.toString() } }] };
-    }
-    const placeKey = findProp("rich_text", ["Location","Place","Area","Site"], "(locat|place|site|area)");
-    if (placeKey && location) properties[placeKey] = { rich_text: [{ text: { content: location.toString() } }] };
-    if (dateKey) {
-      const today = new Date().toISOString().slice(0,10);
-      properties[dateKey] = { date: { start: today } };
-    }
-    if (reporterKey && currentUserId) {
-      properties[reporterKey] = { relation: [{ id: currentUserId }] };
-    }
-    const severityKey = findProp("select", ["Severity","Level","Priority"], "(severity|level|priority)");
-    if (severityKey && severity) properties[severityKey] = { select: { name: severity.toString() } };
-
-    const created = await notion.pages.create({
-      parent: { database_id: damagedAssetsDatabaseId },
-      properties,
-    });
-
-    if (filesKey && Array.isArray(photos) && photos.length) {
-      const files = photos.slice(0,10).map((u,i) => ({ type:"external", name:`photo-${i+1}`, external:{ url:u } }));
-      try { await notion.pages.update({ page_id: created.id, properties: { [filesKey]: { files } } }); } catch {}
-    }
-
-    return res.json({ ok: true, id: created.id });
-  } catch (e) {
-    console.error("Damaged Assets submit error:", e?.body || e);
-    return res.status(500).json({ ok: false, error: "Failed to save damaged asset report", details: e?.body || String(e) });
-  }
-});
-
-// === Notion legacy: رفع صورة DataURL -> Supabase Storage/Vercel Blob -> ربطها في Files & media ===
-app.post('/api/notion/upload-file', requireAuth, async (req, res) => {
-  try {
-    const { pageId, dataUrl, filename, propName, mode } = req.body || {};
-
-    if (!pageId)  return res.status(400).json({ ok:false, error:'pageId required' });
-    if (!dataUrl) return res.status(400).json({ ok:false, error:'dataUrl required' });
-
-    // 1) Parse DataURL
-    const { mime, buf } = parseDataUrlToBuffer(dataUrl);
-
-    // 2) تأكد من الحد الأقصى 20MB (على الملف قبل Base64)
-    if (buf.length > 20 * 1024 * 1024) {
-      return res.status(413).json({ ok:false, error:'File > 20MB' });
-    }
-
-    // 3) ارفع الملف على Supabase Storage وخد رابط عام
-    //    (الهيلبر uploadToBlobFromBase64 موجود عندك بالفعل)
-    const publicUrl = await uploadToBlobFromBase64(`data:${mime};base64,${buf.toString('base64')}`, filename || 'upload.jpg');
-
-    // 4) تأكد من اسم عمود Files & media (أو أي عمود files لو الاسم مختلف)
-    const prop = await ensureFilesPropName(pageId, propName || 'Files & media');
-
-    // 5) كوّن عنصر external file واكتبه في الخاصية (append افتراضيًا)
-    const fileObj = makeExternalFile(filename || 'upload.jpg', publicUrl);
-    const { count } = await writeFilesProp(pageId, prop, fileObj, (mode === 'replace' ? 'replace' : 'append'));
-
-    return res.json({ ok: true, pageId, prop, url: publicUrl, totalFiles: count });
-  } catch (e) {
-    console.error('upload-file error:', e?.body || e);
-    return res.status(500).json({ ok:false, error: e?.message || 'Upload failed' });
-  }
-});
-
-// === API: List Damaged Assets for the logged-in user ===
-app.get('/api/sv-assets', requireAuth, requirePage('S.V Schools Assets'), async (req, res) => {
-  try {
-    if (!damagedAssetsDatabaseId || !teamMembersDatabaseId) {
-      return res.status(500).json({ error: 'Database IDs are not configured.' });
-    }
-
-    // 1. حدد المستخدم الحالي
-    const userQuery = await notion.databases.query({
-      database_id: teamMembersDatabaseId,
-      filter: { property: 'Name', title: { equals: req.session.username } },
-    });
-
-    if (!userQuery.results.length) {
-      return res.status(404).json({ error: 'User not found in Team Members.' });
-    }
-
-    const userId = userQuery.results[0].id;
-    const items = [];
-    let hasMore = true;
-    let startCursor = undefined;
-
-    // 2. جلب البيانات من Damaged_Assets المرتبطة بالمستخدم
-    while (hasMore) {
-      const resp = await notion.databases.query({
-        database_id: damagedAssetsDatabaseId,
-        start_cursor: startCursor,
-        filter: { property: 'Teams Members', relation: { contains: userId } },
-        sorts: [{ timestamp: 'created_time', direction: 'descending' }],
-      });
-
-      for (const page of resp.results) {
-        const props = page.properties || {};
-
-        // تحديد اسم العنوان والوصف والملفات لو موجودة
-        const title =
-          props.Name?.title?.[0]?.plain_text ||
-          props['Title']?.title?.[0]?.plain_text ||
-          'Untitled';
-        const reason =
-          props['Issue Reason']?.rich_text?.[0]?.plain_text ||
-          props['Reason']?.rich_text?.[0]?.plain_text ||
-          '';
-        const createdTime = page.created_time;
-
-        // استخراج الملفات
-        let files = [];
-        const fileProp = Object.values(props).find(p => p?.type === 'files');
-        if (fileProp?.files?.length) {
-          files = fileProp.files.map(f =>
-            f?.type === 'external' ? f.external.url : f.file.url
-          );
-        }
-// قراءة S.V Comment إن وجد
-const svCommentKey = Object.keys(props).find(k =>
-  k.toLowerCase().includes("s.v comment") || k.toLowerCase().includes("sv comment")
-);
-const svComment =
-  svCommentKey && props[svCommentKey]?.rich_text?.length
-    ? props[svCommentKey].rich_text.map(t => t.plain_text || "").join(" ").trim()
-    : "";
-
-items.push({
-  id: page.id,
-  title,
-  reason,
-  createdTime,
-  files,
-  "S.V Comment": svComment,
-});
-      }
-
-      hasMore = resp.has_more;
-      startCursor = resp.next_cursor;
-    }
-
-    res.set('Cache-Control', 'no-store');
-    res.json({ ok: true, rows: items });
-  } catch (e) {
-    console.error('GET /api/sv-assets error:', e?.body || e);
-    res.status(500).json({ ok: false, error: 'Failed to load user assets' });
-  }
-});
-
-// === API: Update S.V Comment for a specific asset ===
-app.post('/api/sv-assets/:id/comment', requireAuth, requirePage('S.V Schools Assets'), async (req, res) => {
-  try {
-    const pageId = req.params.id;
-    const comment = String(req.body?.comment || '').trim();
-    if (!pageId) return res.status(400).json({ ok: false, error: 'Missing asset id' });
-
-    // جلب خصائص قاعدة البيانات لتحديد اسم عمود S.V Comment
-    const db = await notion.databases.retrieve({ database_id: damagedAssetsDatabaseId });
-    const props = db.properties || {};
-    const svCommentProp =
-      Object.keys(props).find(k =>
-        k.toLowerCase().includes('s.v comment') ||
-        k.toLowerCase().includes('sv comment')
-      ) || 'S.V Comment';
-
-    await notion.pages.update({
-      page_id: pageId,
-      properties: {
-        [svCommentProp]: { rich_text: [{ text: { content: comment } }] },
-      },
-    });
-
-    res.json({ ok: true, id: pageId, comment });
-  } catch (e) {
-    console.error('POST /api/sv-assets/:id/comment error:', e?.body || e);
-    res.status(500).json({ ok: false, error: 'Failed to save S.V Comment' });
-  }
-});
-app.get('/api/damaged-assets/reviewed', requireAuth, requirePage('Damaged Assets'), async (req, res) => {
-  try {
-    if (!damagedAssetsDatabaseId) {
-      return res.status(500).json({ error: 'Database ID not configured.' });
-    }
-
-    const all = [];
-    let startCursor;
-    let hasMore = true;
-
-    while (hasMore) {
-      const resp = await notion.databases.query({
-        database_id: damagedAssetsDatabaseId,
-        start_cursor: startCursor,
-        sorts: [{ timestamp: "created_time", direction: "descending" }],
-      });
-
-      for (const page of resp.results) {
-        const props = page.properties || {};
-        const comment = props["S.V Comment"]?.rich_text?.[0]?.plain_text || "";
-        if (!comment.trim()) continue; // فقط اللي عندهم comment
-
-        const title =
-          props.Name?.title?.[0]?.plain_text ||
-          props.Title?.title?.[0]?.plain_text ||
-          "Untitled";
-
-        let files = [];
-        const fileProp = Object.values(props).find(p => p?.type === 'files');
-        if (fileProp?.files?.length) {
-          files = fileProp.files.map(f =>
-            f?.type === 'external' ? f.external.url : f.file.url
-          );
-        }
-
-        all.push({
-          id: page.id,
-          title,
-          comment,
-          files,
-          createdTime: page.created_time,
-        });
-      }
-
-      hasMore = resp.has_more;
-      startCursor = resp.next_cursor;
-    }
-
-    res.json({ ok: true, rows: all });
-  } catch (e) {
-    console.error('GET /api/damaged-assets/reviewed error:', e?.body || e);
-    res.status(500).json({ ok: false, error: 'Failed to load reviewed assets' });
-  }
-});
-
-// === API: Generate PDF for a reviewed damaged asset ===
-// === Generate one PDF per report (ID), not per component ===
-app.get('/api/damaged-assets/report/:reportId/pdf', requireAuth, requirePage('Damaged Assets'), async (req, res) => {
-  try {
-    const reportId = req.params.reportId;
-    if (!reportId) return res.status(400).json({ error: 'Missing report ID' });
-
-    // 1️⃣ Fetch all pages with this ID value
-    const resp = await notion.databases.query({
-      database_id: damagedAssetsDatabaseId,
-      filter: {
-        property: 'ID',
-        rich_text: { equals: reportId }
-      },
-      sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
-    });
-
-    if (!resp.results.length) {
-      return res.status(404).json({ error: 'No pages found for this report ID' });
-    }
-
-    // 2️⃣ Prepare PDF
-    const fname = `${reportId}_Report.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
-
-    await ensurePdfArabicSupport();
-    const doc = new PDFDocument({ size: 'A4', margin: 36, bufferPages: true });
-    enableArabicPdf(doc);
-    doc.pipe(res);
-    attachPageNumbers(doc);
-
-    drawStocktakingHeader(doc, {
-      title: 'Damaged Report',
-      subtitle: `Report ID: ${reportId}  •  Generated: ${formatDateTime(new Date())}`,
-    });
-    doc.moveDown(0.6);
-
-    for (const page of resp.results) {
-      const props = page.properties || {};
-      const title =
-        props.Name?.title?.[0]?.plain_text ||
-        props.Title?.title?.[0]?.plain_text ||
-        'Untitled';
-      const reason =
-        props['Issue Reason']?.rich_text?.[0]?.plain_text ||
-        props['Reason']?.rich_text?.[0]?.plain_text || '';
-      const comment =
-        props['S.V Comment']?.rich_text?.[0]?.plain_text ||
-        props['SV Comment']?.rich_text?.[0]?.plain_text || '';
-
-      doc.font('Helvetica-Bold').fontSize(13).fillColor('#111').text(`Component: ${title}`);
-      if (reason) doc.font('Helvetica').fontSize(12).fillColor('#222').text(`Reason: ${reason}`);
-      if (comment) doc.font('Helvetica').fontSize(12).fillColor('#333').text(`S.V Comment: ${comment}`);
-      doc.moveDown(0.5);
-
-      const fileProp = Object.values(props).find(p => p?.type === 'files');
-      if (fileProp?.files?.length) {
-        for (const f of fileProp.files) {
-          try {
-            const url = f.type === 'external' ? f.external.url : f.file.url;
-            const response = await fetch(url);
-            const buf = Buffer.from(await response.arrayBuffer());
-            doc.image(buf, { fit: [400, 250], align: 'center', valign: 'center' });
-            doc.moveDown(0.5);
-          } catch {}
-        }
-      }
-
-      doc.moveDown(1);
-      doc.moveTo(doc.x, doc.y).lineTo(doc.page.width - 36, doc.y).strokeColor('#ccc').stroke();
-      doc.moveDown(1);
-    }
-
-    doc.font('Helvetica').fontSize(10).fillColor('#555').text('Generated by Pyramakerz Dashboard');
-    doc.end();
-  } catch (e) {
-    console.error('GET /api/damaged-assets/report/:reportId/pdf error:', e?.body || e);
-    res.status(500).json({ error: 'Failed to generate report PDF' });
-  }
-});
-// ================== Logistics: Verify User Password ==================
-app.post("/api/logistics/verify-user", requireAuth, async (req, res) => {
-  try {
-    const { userId, password } = req.body || {};
-    if (!userId || !password) {
-      return res.status(400).json({ ok: false, error: "Missing userId or password" });
-    }
-
-    // Fetch page from Team Members DB
-    const userPage = await notion.pages.retrieve({ page_id: userId });
-    if (!userPage) return res.status(404).json({ ok: false, error: "User not found" });
-
-    const props = userPage.properties || {};
-    const name =
-      props.Name?.title?.[0]?.plain_text ||
-      props.Username?.title?.[0]?.plain_text ||
-      "User";
-
-    const storedPassword = _extractPropText(props.Password);
-
-    if (storedPassword === null || typeof storedPassword === "undefined") {
-      return res.status(400).json({ ok: false, error: "Password not set for this user" });
-    }
-
-    if (storedPassword.toString() !== password.toString()) {
-      return res.json({ ok: false, error: "Incorrect password" });
-    }
-
-    return res.json({ ok: true, name });
-  } catch (e) {
-    console.error("verify-user error:", e.body || e);
-    return res.status(500).json({ ok: false, error: "Server error verifying user" });
-  }
-});
-// ========= Get Relation users for "Received from" column =========
-app.get("/api/logistics/receivers", requireAuth, async (req, res) => {
-  try {
-    if (!ordersDatabaseId) {
-      return res.status(500).json({ ok:false, error:"Orders DB missing" });
-    }
-
-    // Get DB schema
-    const db = await notion.databases.retrieve({ database_id: ordersDatabaseId });
-    const props = db.properties || {};
-
-    // Detect the Relation column "Received from"
-    let receivedFromKey = Object.keys(props).find(k =>
-      k.toLowerCase().includes("received from") ||
-      k.toLowerCase().includes("received_from")
-    );
-
-    if (!receivedFromKey) return res.json({ ok:true, users:[] });
-
-    // Get database ID of relation target
-    const relDbId = props[receivedFromKey]?.relation?.database_id;
-    if (!relDbId) return res.json({ ok:true, users:[] });
-
-    // Fetch all users from relation target database
-    const result = await notion.databases.query({
-      database_id: relDbId,
-      sorts: [{ property: "Name", direction: "ascending" }],
-    });
-
-    const users = result.results.map(p => ({
-      id: p.id,
-      name: p.properties?.Name?.title?.[0]?.plain_text || "Unnamed"
-    }));
-
-    return res.json({ ok:true, users });
-  } catch (e) {
-    console.error("GET /api/logistics/receivers error:", e.body || e);
-    return res.status(500).json({ ok:false, error:"Failed to load receiver users" });
-  }
-});
-
 const generateExpensePDF = require("./pdfGenerator");
 
 app.post("/api/expenses/export/pdf", async (req, res) => {
@@ -24690,9 +23290,7 @@ app.get("/api/cron/notifications", async (req, res) => {
       const orderPages = new Set([
         "Current Orders",
         "Requested Orders",
-        "Assigned Schools Requested Orders",
-        "Logistics",
-        "Orders Review",
+                    "Orders Review",
       ]);
 
       for (const u of users) {
