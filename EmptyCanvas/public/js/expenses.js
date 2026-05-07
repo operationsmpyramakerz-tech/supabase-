@@ -30,7 +30,7 @@ const DEFAULT_FUNDS_TYPES = [
 ];
 
 const EXTRA_FUNDS_TYPES = [...DEFAULT_FUNDS_TYPES];
-const HIDDEN_FUNDS_TYPE_KEYS = new Set(["cashreceipt", "cashreciept"]);
+const HIDDEN_FUNDS_TYPE_KEYS = new Set(["cashreceipt", "cashreciept", "settledmyaccount"]);
 const REQUIRED_SCREENSHOT_FUNDS_TYPE_KEYS = new Set([
   "owncar",
   "swvl",
@@ -1221,6 +1221,146 @@ function setCashInFundsTypeSelection(value = "") {
   syncCashInFormTypeState();
 }
 
+function getSettleFundsTypeOptions() {
+  return getCashInFundsTypeOptions();
+}
+
+function positionSettleFundsTypeDropdown() {
+  const trigger = document.getElementById("settleFundsTypeTrigger");
+  const dropdown = document.getElementById("settleFundsTypeDropdown");
+  if (!trigger || !dropdown || dropdown.hidden) return;
+
+  const rect = trigger.getBoundingClientRect();
+  const viewportPad = 16;
+  const width = Math.min(rect.width, window.innerWidth - viewportPad * 2);
+  const left = Math.min(Math.max(viewportPad, rect.left), window.innerWidth - viewportPad - width);
+  const spaceBelow = Math.max(120, window.innerHeight - rect.bottom - viewportPad);
+  const spaceAbove = Math.max(120, rect.top - viewportPad);
+  const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+  const availableSpace = placeAbove ? spaceAbove : spaceBelow;
+  const optionsList = document.getElementById("settleFundsTypeOptionsList");
+
+  dropdown.style.left = `${left}px`;
+  dropdown.style.width = `${width}px`;
+  dropdown.style.maxHeight = `${Math.min(300, availableSpace)}px`;
+  if (optionsList) {
+    optionsList.style.maxHeight = `${Math.max(100, Math.min(220, availableSpace - 24))}px`;
+  }
+
+  if (placeAbove) {
+    dropdown.style.top = "auto";
+    dropdown.style.bottom = `${Math.max(viewportPad, window.innerHeight - rect.top + 8)}px`;
+  } else {
+    dropdown.style.bottom = "auto";
+    dropdown.style.top = `${Math.min(window.innerHeight - viewportPad, rect.bottom + 8)}px`;
+  }
+}
+
+function renderSettleFundsTypeDropdown() {
+  const listEl = document.getElementById("settleFundsTypeOptionsList");
+  const stateEl = document.getElementById("settleFundsTypeDropdownState");
+  const selectEl = document.getElementById("settle_funds_type");
+  if (!listEl || !stateEl || !selectEl) return;
+
+  const options = getSettleFundsTypeOptions();
+  const selectedValue = String(selectEl.value || "").trim();
+
+  stateEl.style.display = options.length ? "none" : "block";
+  if (!options.length) stateEl.textContent = "No funds types available right now.";
+
+  listEl.innerHTML = options.map((type) => {
+    const selected = type === selectedValue;
+    return `
+      <button
+        type="button"
+        class="order-select__option${selected ? " is-selected" : ""}"
+        data-settle-funds-type="${escapeHtml(type)}"
+        role="option"
+        aria-selected="${selected ? "true" : "false"}"
+        title="${escapeHtml(type)}"
+      >
+        <span class="funds-select__option-main">
+          <span class="order-select__option-id">${escapeHtml(type)}</span>
+          <span class="funds-select__option-note">${escapeHtml(getCashInFundsTypeNote(type))}</span>
+        </span>
+      </button>
+    `;
+  }).join("");
+
+  window.requestAnimationFrame(positionSettleFundsTypeDropdown);
+}
+
+function openSettleFundsTypeDropdown() {
+  const trigger = document.getElementById("settleFundsTypeTrigger");
+  const dropdown = document.getElementById("settleFundsTypeDropdown");
+  if (!trigger || !dropdown) return;
+  dropdown.hidden = false;
+  trigger.classList.add("is-open");
+  trigger.setAttribute("aria-expanded", "true");
+  renderSettleFundsTypeDropdown();
+  window.requestAnimationFrame(positionSettleFundsTypeDropdown);
+}
+
+function closeSettleFundsTypeDropdown() {
+  const trigger = document.getElementById("settleFundsTypeTrigger");
+  const dropdown = document.getElementById("settleFundsTypeDropdown");
+  if (!trigger || !dropdown) return;
+  dropdown.hidden = true;
+  trigger.classList.remove("is-open");
+  trigger.setAttribute("aria-expanded", "false");
+}
+
+function syncSettleFormTypeState() {
+  const selectEl = document.getElementById("settle_funds_type");
+  const trigger = document.getElementById("settleFundsTypeTrigger");
+  const triggerText = document.getElementById("settleFundsTypeTriggerText");
+  const receiptBlock = document.getElementById("settle_receipt_block");
+  const receiptInput = document.getElementById("settle_receipt");
+  const screenshotBlock = document.getElementById("settle_screenshot_block");
+  const screenshotInput = document.getElementById("settle_screenshot");
+  const screenshotName = document.getElementById("settle_screenshot_name");
+  const selectedType = String(selectEl?.value || "").trim();
+  const isTransfer = isCashInOnlineTransfer(selectedType);
+  const isPayment = isCashInCashPayment(selectedType);
+
+  if (triggerText) {
+    triggerText.textContent = selectedType || "Select funds type...";
+  }
+
+  if (trigger) {
+    trigger.classList.toggle("is-placeholder", !selectedType);
+    trigger.classList.toggle("is-selected", !!selectedType);
+  }
+
+  if (receiptBlock) receiptBlock.style.display = isPayment ? "block" : "none";
+  if (receiptInput) {
+    receiptInput.required = isPayment;
+    if (!isPayment) receiptInput.value = "";
+  }
+
+  if (screenshotBlock) screenshotBlock.style.display = isTransfer ? "block" : "none";
+  if (screenshotInput) {
+    screenshotInput.required = isTransfer;
+    if (!isTransfer) screenshotInput.value = "";
+  }
+  if (!isTransfer && screenshotName) screenshotName.textContent = "No file chosen";
+
+  renderSettleFundsTypeDropdown();
+}
+
+function setSettleFundsTypeSelection(value = "") {
+  const selectEl = document.getElementById("settle_funds_type");
+  if (!selectEl) return;
+
+  const nextValue = String(value || "").trim();
+  selectEl.value = nextValue;
+  if (selectEl.value !== nextValue) {
+    selectEl.value = "";
+  }
+
+  syncSettleFormTypeState();
+}
+
 function syncFundsTypeHiddenSelect() {
   const selectEl = document.getElementById("co_type");
   if (!selectEl) return;
@@ -1585,11 +1725,12 @@ function formatHeroMoney(value, { sign = "", absolute = false } = {}) {
 }
 
 function isSettledMyAccountItem(item) {
-  return normalizeFundsTypeKey(item?.fundsType) === "settledmyaccount";
+  return normalizeFundsTypeKey(item?.fundsType) === "settledmyaccount"
+    || normalizeFundsTypeKey(item?.reason) === "settledmyaccount";
 }
 
 function getSettlementReceiptNumber(item) {
-  return String(item?.reason || "").trim();
+  return String(item?.receiptNumber || item?.receipt || item?.ordersRaw || "").trim();
 }
 
 function findLatestSettlementReceiptNumber(items, lastSettledAt) {
@@ -2751,24 +2892,25 @@ function todayInputValue() {
 
 function openSettleModal() {
   const date = document.getElementById("settle_date");
-  const fundsType = document.getElementById("settle_funds_type");
   const settledBy = document.getElementById("settle_by");
   const receipt = document.getElementById("settle_receipt");
   const screenshotInput = document.getElementById("settle_screenshot");
   const screenshotName = document.getElementById("settle_screenshot_name");
 
   if (date) date.value = todayInputValue();
-  if (fundsType) fundsType.value = "Settled my account";
+  setSettleFundsTypeSelection("");
   if (settledBy) settledBy.value = "";
   if (receipt) receipt.value = "";
   if (screenshotInput) screenshotInput.value = "";
   if (screenshotName) screenshotName.textContent = "No file chosen";
+  closeSettleFundsTypeDropdown();
 
   const modal = document.getElementById("settleModal");
   if (modal) modal.style.display = "flex";
 }
 
 function closeSettleModal() {
+  closeSettleFundsTypeDropdown();
   const modal = document.getElementById("settleModal");
   if (modal) modal.style.display = "none";
 }
@@ -2781,16 +2923,33 @@ async function submitSettleAccount() {
   const screenshotInput = document.getElementById("settle_screenshot");
 
   const date = String(dateInput?.value || "").trim();
-  const fundsType = String(fundsTypeInput?.value || "Settled my account").trim() || "Settled my account";
+  const fundsType = String(fundsTypeInput?.value || "").trim();
   const settledBy = String(settledByInput?.value || "").trim();
   const receiptNumber = String(receiptInput?.value || "").trim();
+  const isTransfer = isCashInOnlineTransfer(fundsType);
+  const isPayment = isCashInCashPayment(fundsType);
 
-  if (!date || !settledBy || !receiptNumber) {
+  if (!date || !fundsType || !settledBy) {
     showToast("Please fill required fields.", "error");
     return;
   }
 
+  if (!isTransfer && !isPayment) {
+    showToast("Please select a valid funds type.", "error");
+    return;
+  }
+
+  if (isPayment && !receiptNumber) {
+    showToast("Receipt number is required for cash payment.", "error");
+    return;
+  }
+
   const files = Array.from(screenshotInput?.files || []);
+  if (isTransfer && !files.length) {
+    showToast("Transfer screenshot is required.", "error");
+    return;
+  }
+
   let screenshots = [];
 
   if (files.length) {
@@ -2842,6 +3001,7 @@ async function submitSettleAccount() {
       showToast("Error: " + (data?.error || "Unknown error"), "error");
       openSettleModal();
       if (dateInput) dateInput.value = date;
+      setSettleFundsTypeSelection(fundsType);
       if (settledByInput) settledByInput.value = settledBy;
       if (receiptInput) receiptInput.value = receiptNumber;
       return;
@@ -2852,6 +3012,7 @@ async function submitSettleAccount() {
     showToast("Failed to settle account.", "error");
     openSettleModal();
     if (dateInput) dateInput.value = date;
+    setSettleFundsTypeSelection(fundsType);
     if (settledByInput) settledByInput.value = settledBy;
     if (receiptInput) receiptInput.value = receiptNumber;
   } finally {
@@ -2922,6 +3083,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const cashInFundsTypePicker = document.getElementById("cashInFundsTypePicker");
     const cashInFundsTypeTrigger = document.getElementById("cashInFundsTypeTrigger");
     const cashInFundsTypeOptionsList = document.getElementById("cashInFundsTypeOptionsList");
+    const settleFundsTypePicker = document.getElementById("settleFundsTypePicker");
+    const settleFundsTypeTrigger = document.getElementById("settleFundsTypeTrigger");
+    const settleFundsTypeOptionsList = document.getElementById("settleFundsTypeOptionsList");
     const fundsTypePicker = document.getElementById("fundsTypePicker");
     const fundsTypeTrigger = document.getElementById("fundsTypeTrigger");
     const fundsTypeOptionsList = document.getElementById("fundsTypeOptionsList");
@@ -2953,6 +3117,14 @@ document.addEventListener("DOMContentLoaded", () => {
             else closeCashInFundsTypeDropdown();
         });
     }
+    if (settleFundsTypeTrigger) {
+        settleFundsTypeTrigger.addEventListener("click", (e) => {
+            e.preventDefault();
+            const dropdown = document.getElementById("settleFundsTypeDropdown");
+            if (dropdown?.hidden) openSettleFundsTypeDropdown();
+            else closeSettleFundsTypeDropdown();
+        });
+    }
     if (fundsTypeTrigger) {
         fundsTypeTrigger.addEventListener("click", (e) => {
             e.preventDefault();
@@ -2976,6 +3148,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const fundsType = String(optionBtn.getAttribute("data-cashin-funds-type") || "").trim();
             setCashInFundsTypeSelection(fundsType);
             closeCashInFundsTypeDropdown();
+        });
+    }
+    if (settleFundsTypeOptionsList) {
+        settleFundsTypeOptionsList.addEventListener("click", (e) => {
+            const optionBtn = e.target?.closest ? e.target.closest(".order-select__option") : null;
+            if (!optionBtn) return;
+            const fundsType = String(optionBtn.getAttribute("data-settle-funds-type") || "").trim();
+            setSettleFundsTypeSelection(fundsType);
+            closeSettleFundsTypeDropdown();
         });
     }
     if (fundsTypeOptionsList) {
@@ -3033,6 +3214,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!cashInFundsTypePicker || !cashInFundsTypePicker.contains(e.target)) {
           closeCashInFundsTypeDropdown();
         }
+        if (!settleFundsTypePicker || !settleFundsTypePicker.contains(e.target)) {
+          closeSettleFundsTypeDropdown();
+        }
         if (!fundsTypePicker || !fundsTypePicker.contains(e.target)) {
           closeFundsTypeDropdown();
         }
@@ -3041,6 +3225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.key === "Escape") {
           closeExpenseOrderDropdown();
           closeCashInFundsTypeDropdown();
+          closeSettleFundsTypeDropdown();
           closeFundsTypeDropdown();
           closeOwnCarInfoModal();
         }
@@ -3048,11 +3233,13 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("scroll", () => {
         positionExpenseOrderDropdown();
         positionCashInFundsTypeDropdown();
+        positionSettleFundsTypeDropdown();
         positionFundsTypeDropdown();
     }, true);
     window.addEventListener("resize", () => {
         positionExpenseOrderDropdown();
         positionCashInFundsTypeDropdown();
+        positionSettleFundsTypeDropdown();
         positionFundsTypeDropdown();
     });
     if (cashOutOrderAddExpenseBtn) {
