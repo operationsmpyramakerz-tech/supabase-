@@ -743,11 +743,17 @@ async function clearExpensesRouteCaches(req, teamMemberPageId = "") {
       cacheDel("cache:api:expenses:orders-options:all:v4"),
     ];
 
-    const memberKey = normalizeNotionId(teamMemberPageId || "");
+    const rawMemberKey = cacheKeySafe(teamMemberPageId || "");
+    const memberKey = normalizeNotionId(teamMemberPageId || "") || rawMemberKey;
     if (memberKey) {
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v1`));
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v2`));
       tasks.push(cacheDel(`cache:api:expenses:user:${memberKey}:v3`));
+    }
+    if (rawMemberKey && rawMemberKey !== memberKey) {
+      tasks.push(cacheDel(`cache:api:expenses:user:${rawMemberKey}:v1`));
+      tasks.push(cacheDel(`cache:api:expenses:user:${rawMemberKey}:v2`));
+      tasks.push(cacheDel(`cache:api:expenses:user:${rawMemberKey}:v3`));
     }
 
     await Promise.all(tasks);
@@ -2486,6 +2492,126 @@ function _sbExpenseRowsForMemberId(rows = [], memberId = "") {
     const id = norm(_sbExpenseGet(row, ["id"]));
     return key === userId || key === name || key === id;
   });
+}
+
+function _sbExpenseScreenshotFieldFromEntries(entries = []) {
+  const clean = (Array.isArray(entries) ? entries : [])
+    .map((entry, index) => ({
+      name: String(entry?.name || `Receipt ${index + 1}`).trim() || `Receipt ${index + 1}`,
+      url: String(entry?.url || entry?.href || entry?.publicUrl || '').trim(),
+    }))
+    .filter((entry) => entry.url);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
+function _sbStoragePathsFromExpenseScreenshots(entries = []) {
+  const cfg = supabaseDb?.getConfig ? supabaseDb.getConfig() : {};
+  const base = String(cfg?.url || process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1\/?$/i, '');
+  const bucket = String(cfg?.storageBucket || process.env.SUPABASE_STORAGE_BUCKET || '').trim();
+  if (!base || !bucket) return [];
+  const publicPrefix = `${base}/storage/v1/object/public/${encodeURIComponent(bucket)}/`;
+  const signedPrefix = `${base}/storage/v1/object/sign/${encodeURIComponent(bucket)}/`;
+  const out = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const rawUrl = String(entry?.url || entry || '').trim();
+    if (!rawUrl) continue;
+    let path = '';
+    if (rawUrl.startsWith(publicPrefix)) {
+      path = rawUrl.slice(publicPrefix.length);
+    } else if (rawUrl.startsWith(signedPrefix)) {
+      path = rawUrl.slice(signedPrefix.length).split('?')[0];
+    } else {
+      try {
+        const u = new URL(rawUrl);
+        const publicMarker = `/storage/v1/object/public/${bucket}/`;
+        const signedMarker = `/storage/v1/object/sign/${bucket}/`;
+        if (u.pathname.includes(publicMarker)) path = u.pathname.split(publicMarker)[1] || '';
+        if (!path && u.pathname.includes(signedMarker)) path = u.pathname.split(signedMarker)[1] || '';
+      } catch {}
+    }
+    if (!path) continue;
+    try { path = decodeURIComponent(path); } catch {}
+    path = path.replace(/^\/+/, '').split('?')[0];
+    if (path) out.push(path);
+  }
+  return Array.from(new Set(out));
+}
+
+async function _sbDeleteExpenseStorageForRow(row = {}) {
+  if (!supabaseDb?.deleteStorageObjects) return { deleted: 0, skipped: true };
+  const entries = _sbParseScreenshotEntries(_sbExpenseGet(row, ["screenshot", "Screenshot", "files_media"]));
+  const paths = _sbStoragePathsFromExpenseScreenshots(entries);
+  if (!paths.length) return { deleted: 0, paths: [] };
+  try {
+    await supabaseDb.deleteStorageObjects(paths);
+    return { deleted: paths.length, paths };
+  } catch (error) {
+    console.warn('[supabase] expense storage delete failed:', error?.message || error);
+    return { deleted: 0, paths, error: error?.message || String(error) };
+  }
+}
+
+async function _sbPatchExpenseRowFromUserPayload(expenseId, payload = {}) {
+  const current = await supabaseDb.selectById(_sbExpensesTable(), expenseId);
+  if (!current) {
+    const err = new Error('Expense not found.');
+    err.status = 404;
+    throw err;
+  }
+
+  const nextScreenshots = [];
+  const existingUrls = Array.isArray(payload?.screenshotUrls)
+    ? payload.screenshotUrls
+    : String(payload?.screenshotUrls || '').split(/[\n,]+/);
+  existingUrls
+    .map((url) => String(url || '').trim())
+    .filter(Boolean)
+    .forEach((url, index) => nextScreenshots.push({ name: `Receipt ${index + 1}`, url }));
+
+  const newShotText = await _sbBuildExpenseScreenshotText({
+    screenshots: Array.isArray(payload?.screenshots) ? payload.screenshots : [],
+    screenshotDataUrl: payload?.screenshotDataUrl || '',
+    screenshotName: payload?.screenshotName || '',
+    prefix: `expense-edit-${expenseId}`,
+  });
+
+  try {
+    const parsedNew = newShotText ? JSON.parse(newShotText) : [];
+    if (Array.isArray(parsedNew)) {
+      parsedNew.forEach((entry) => {
+        if (entry?.url) nextScreenshots.push({ name: entry.name || 'Receipt', url: entry.url });
+      });
+    }
+  } catch {}
+
+  const uniqueScreenshots = [];
+  const seenUrls = new Set();
+  for (const shot of nextScreenshots) {
+    const url = String(shot?.url || '').trim();
+    if (!url || seenUrls.has(url)) continue;
+    seenUrls.add(url);
+    uniqueScreenshots.push({ name: String(shot?.name || 'Receipt').trim() || 'Receipt', url });
+  }
+
+  const row = {
+    reason: String(payload?.reason || '').trim(),
+    expense_date: String(payload?.date || '').trim() || null,
+    funds_type: String(payload?.fundsType || '').trim(),
+    from_location: String(payload?.from || '').trim(),
+    to_location: String(payload?.to || '').trim(),
+    cash_in: _sbExpenseNum(payload?.cashIn, 0),
+    cash_out: _sbExpenseNum(payload?.cashOut, 0),
+    kilometer: _sbExpenseNum(payload?.kilometer, 0),
+    cash_in_from: String(payload?.cashInFrom || '').trim(),
+    screenshot: _sbExpenseScreenshotFieldFromEntries(uniqueScreenshots),
+  };
+
+  Object.keys(row).forEach((key) => {
+    if (row[key] === '') row[key] = null;
+  });
+
+  const updated = await supabaseDb.updateById(_sbExpensesTable(), expenseId, row);
+  return { current, updated };
 }
 
 
@@ -20582,6 +20708,75 @@ app.get(
       res
         .status(500)
         .json({ success: false, error: "Failed to load user expenses" });
+    }
+  }
+);
+
+
+// Expenses by User — edit/delete individual Supabase expense rows.
+app.patch(
+  "/api/expenses/user-expense/:expenseId",
+  requireAuth,
+  requirePage("Expenses Users"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbExpensesEnabled()) {
+        return res.status(400).json({ success: false, error: "Supabase expenses are not enabled." });
+      }
+
+      const expenseId = String(req.params?.expenseId || "").trim();
+      const adminPassword = String(req.body?.adminPassword || "").trim();
+      const payload = req.body?.expense || {};
+
+      if (!expenseId) return res.status(400).json({ success: false, error: "Missing expense ID." });
+      if (!adminPassword) return res.status(400).json({ success: false, error: "Admin password is required." });
+
+      const ok = await verifyAdminPassword(adminPassword);
+      if (!ok) return res.status(401).json({ success: false, error: "Invalid Admin password." });
+
+      const { updated } = await _sbPatchExpenseRowFromUserPayload(expenseId, payload);
+      await _sbClearExpensesCaches(req, { id: updated?.user_id || updated?.employee_code || updated?.team_member_name || "" });
+
+      return res.json({ success: true, item: _sbSerializeExpenseRow(updated), source: "supabase" });
+    } catch (err) {
+      console.error("PATCH /api/expenses/user-expense/:expenseId error:", err?.details || err?.body || err);
+      return res.status(err?.status || 500).json({ success: false, error: err?.message || "Failed to update expense." });
+    }
+  }
+);
+
+app.delete(
+  "/api/expenses/user-expense/:expenseId",
+  requireAuth,
+  requirePage("Expenses Users"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbExpensesEnabled()) {
+        return res.status(400).json({ success: false, error: "Supabase expenses are not enabled." });
+      }
+
+      const expenseId = String(req.params?.expenseId || "").trim();
+      const adminPassword = String(req.body?.adminPassword || "").trim();
+
+      if (!expenseId) return res.status(400).json({ success: false, error: "Missing expense ID." });
+      if (!adminPassword) return res.status(400).json({ success: false, error: "Admin password is required." });
+
+      const ok = await verifyAdminPassword(adminPassword);
+      if (!ok) return res.status(401).json({ success: false, error: "Invalid Admin password." });
+
+      const row = await supabaseDb.selectById(_sbExpensesTable(), expenseId);
+      if (!row) return res.status(404).json({ success: false, error: "Expense not found." });
+
+      const storage = await _sbDeleteExpenseStorageForRow(row);
+      await supabaseDb.deleteById(_sbExpensesTable(), expenseId);
+      await _sbClearExpensesCaches(req, { id: row?.user_id || row?.employee_code || row?.team_member_name || "" });
+
+      return res.json({ success: true, deletedId: expenseId, storage, source: "supabase" });
+    } catch (err) {
+      console.error("DELETE /api/expenses/user-expense/:expenseId error:", err?.details || err?.body || err);
+      return res.status(err?.status || 500).json({ success: false, error: err?.message || "Failed to delete expense." });
     }
   }
 );

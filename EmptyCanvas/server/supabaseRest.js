@@ -142,6 +142,27 @@ async function updateByIds(table, ids = [], row = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
+async function deleteById(table, id) {
+  const rows = await request(`/${encodeTableName(table)}?id=eq.${encodeFilterValue(id)}`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=representation' },
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function deleteByIds(table, ids = []) {
+  const clean = (Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!clean.length) return [];
+  const inList = clean.map((id) => `"${String(id).replace(/"/g, '\"')}"`).join(',');
+  const rows = await request(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=representation' },
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
 function encodeStoragePath(objectPath) {
   return String(objectPath || '')
     .split('/')
@@ -205,4 +226,44 @@ async function uploadStorageObject(objectPath, buffer, { contentType = 'applicat
   };
 }
 
-module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, uploadStorageObject, storagePublicUrl };
+async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}) {
+  const { url, key, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const prefixes = (Array.isArray(objectPaths) ? objectPaths : [objectPaths])
+    .map((path) => String(path || '').replace(/^\/+/, '').trim())
+    .filter(Boolean);
+  if (!prefixes.length) return { deleted: 0, data: null };
+  if (!isConfigured() || !bucket) {
+    const err = new Error('Supabase Storage is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_STORAGE_BUCKET.');
+    err.code = 'SUPABASE_STORAGE_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
+    method: 'DELETE',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prefixes }),
+  });
+
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+  if (!res.ok) {
+    const message = data && typeof data === 'object'
+      ? (data.message || data.error || JSON.stringify(data))
+      : (text || `Supabase Storage delete failed with status ${res.status}`);
+    const err = new Error(message);
+    err.status = res.status;
+    err.details = data;
+    throw err;
+  }
+
+  return { deleted: prefixes.length, data };
+}
+
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, deleteById, deleteByIds, uploadStorageObject, deleteStorageObjects, storagePublicUrl };
