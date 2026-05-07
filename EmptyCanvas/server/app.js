@@ -1663,6 +1663,7 @@ const ALL_PAGES = [
   "Maintenance Orders",
   "Create New Order",
   "Stocktaking",
+  "Products",
   "Tasks",
   "B2B",
   "Expenses",
@@ -1690,6 +1691,7 @@ function normalizePages(names = []) {
   }
   if (set.has("create new order")) out.push("Create New Order");
   if (set.has("stocktaking")) out.push("Stocktaking");
+  if (set.has("products") || set.has("product") || set.has("components") || set.has("inventory products")) out.push("Products");
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
   if (set.has("b2b")) out.push("B2B");
   if (set.has("expenses")) out.push("Expenses");
@@ -2244,6 +2246,7 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     "maintenance-orders": "Maintenance Orders",
     "shopping-cart": "Create New Order",
     stocktaking: "Stocktaking",
+    products: "Products",
     "orders-review": "Orders Review",
     expenses: "Expenses",
     "expenses-users": "Expenses Users",
@@ -3509,6 +3512,97 @@ async function _sbProductsList() {
   return rows.map(_sbSerializeProductRow).filter((p) => p && p.id && p.name);
 }
 
+function _sbProductNullableText(value) {
+  const text = _sbProductText(value).trim();
+  return text ? text : null;
+}
+
+function _sbProductNullableNum(value) {
+  const n = _sbProductNum(value);
+  return n === null ? null : n;
+}
+
+function _sbProductCleanUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw.replace(/^\/+/, "")}`;
+}
+
+function _sbNormalizeProductPayload(body = {}, { partial = false } = {}) {
+  const out = {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(body || {}, key);
+
+  const setText = (target, keys) => {
+    for (const key of keys) {
+      if (!has(key)) continue;
+      out[target] = _sbProductNullableText(body[key]);
+      return;
+    }
+  };
+  const setNum = (target, keys) => {
+    for (const key of keys) {
+      if (!has(key)) continue;
+      out[target] = _sbProductNullableNum(body[key]);
+      return;
+    }
+  };
+
+  setText("name", ["name", "productName", "product_name"]);
+  setText("id_code", ["idCode", "id_code", "code"]);
+  setText("tags", ["tags", "tag"]);
+  setText("category_name", ["categoryName", "category_name", "category"]);
+  setNum("category_code", ["categoryCode", "category_code"]);
+  setNum("unit_price", ["unitPrice", "unit_price", "price"]);
+  setNum("quantity", ["quantity", "qty"]);
+
+  if (has("url") || has("productUrl") || has("product_url") || has("link")) {
+    out.url = _sbProductCleanUrl(body.url ?? body.productUrl ?? body.product_url ?? body.link);
+  }
+
+  if (!partial && !String(out.name || "").trim()) {
+    const err = new Error("Product name is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(out, "name") && !String(out.name || "").trim()) {
+    const err = new Error("Product name is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  out.updated_at = new Date().toISOString();
+  return out;
+}
+
+async function _sbProductById(productId) {
+  const id = String(productId || "").trim();
+  if (!id) return null;
+  const row = await supabaseDb.selectById(_sbProductsTable(), id);
+  return row ? _sbSerializeProductRow(row) : null;
+}
+
+async function _sbCreateProduct(body = {}) {
+  const row = _sbNormalizeProductPayload(body, { partial: false });
+  const created = await supabaseDb.insert(_sbProductsTable(), row);
+  await _sbInvalidateProductsCaches();
+  return _sbSerializeProductRow(created || row);
+}
+
+async function _sbUpdateProduct(productId, body = {}) {
+  const id = String(productId || "").trim();
+  if (!id) {
+    const err = new Error("Missing product ID.");
+    err.status = 400;
+    throw err;
+  }
+  const row = _sbNormalizeProductPayload(body, { partial: true });
+  const updated = await supabaseDb.updateById(_sbProductsTable(), id, row);
+  await _sbInvalidateProductsCaches();
+  return _sbSerializeProductRow(updated || { ...row, id });
+}
+
 async function _sbProductsMapById() {
   const products = await _sbProductsList();
   return new Map(products.map((p) => [String(p.id), p]));
@@ -3581,6 +3675,12 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Funds")) {
     set.add("Funds");
   }
+  if (set.has("Products")) {
+    set.add("Products");
+    set.add("Product");
+    set.add("Components");
+    set.add("/products");
+  }
   if (set.has("Expenses")) {
     set.add("Expenses");
   }
@@ -3635,6 +3735,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Orders Review")) return "/orders/sv-orders";
   if (list.includes("Create New Order")) return "/orders/new";
   if (list.includes("Stocktaking")) return "/stocktaking";
+  if (list.includes("Products")) return "/products";
   if (list.includes("Tasks")) return "/tasks";
   if (list.includes("B2B")) return "/b2b";
   if (list.includes("Expenses Users")) return "/expenses/users";
@@ -4576,8 +4677,14 @@ app.get(
   (req, res) => {
     res.sendFile(path.join(__dirname, "..", "public", "create-order-products.html"));
   },
-);app.get("/stocktaking", requireAuth, requirePage("Stocktaking"), (req, res) => {
+);
+
+app.get("/stocktaking", requireAuth, requirePage("Stocktaking"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "stocktaking.html"));
+});
+
+app.get("/products", requireAuth, requirePage("Products"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "products.html"));
 });
 
 app.get("/tasks", requireAuth, requirePage("Tasks"), (req, res) => {
@@ -16764,6 +16871,84 @@ app.post(
     } catch (e) {
       console.error("export current excel error:", e?.body || e);
       res.status(500).json({ error: "Failed to export Excel" });
+    }
+  },
+);
+
+// Products Management — requires Products page access
+app.get(
+  "/api/products",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const rows = await _sbProductsList();
+      return res.json({ ok: true, source: "supabase", products: rows });
+    } catch (error) {
+      console.error("GET /api/products error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load products." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/:id",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const product = await _sbProductById(req.params.id);
+      if (!product) return res.status(404).json({ ok: false, error: "Product not found." });
+      return res.json({ ok: true, source: "supabase", product });
+    } catch (error) {
+      console.error("GET /api/products/:id error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load product." });
+    }
+  },
+);
+
+app.post(
+  "/api/products",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const product = await _sbCreateProduct(req.body || {});
+      return res.status(201).json({ ok: true, source: "supabase", product });
+    } catch (error) {
+      console.error("POST /api/products error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create product." });
+    }
+  },
+);
+
+app.patch(
+  "/api/products/:id",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const product = await _sbUpdateProduct(req.params.id, req.body || {});
+      return res.json({ ok: true, source: "supabase", product });
+    } catch (error) {
+      console.error("PATCH /api/products/:id error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update product." });
     }
   },
 );
