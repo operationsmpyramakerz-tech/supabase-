@@ -1105,3 +1105,234 @@
     height: 78px;
   }
 }
+
+/* Supabase page-access manager */
+.ua-page-access-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: #fbfcfe;
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.ua-page-access-card strong {
+  display: block;
+  color: #0b1220;
+  font-size: 14px;
+  font-weight: 950;
+  margin-bottom: 4px;
+}
+
+.ua-page-access-card small {
+  display: block;
+  color: #8b95a6;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.ua-page-access-open {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  min-height: 44px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: #0b1220;
+  color: #fff;
+  font-weight: 950;
+  white-space: nowrap;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
+}
+
+.ua-page-access-open svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 3;
+}
+
+.ua-modal--page-access {
+  width: min(760px, 94vw);
+}
+
+.ua-page-access-body {
+  display: grid;
+  gap: 12px;
+}
+
+.ua-page-access-head,
+.ua-page-access-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(130px, 0.65fr) minmax(90px, 0.35fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.ua-page-access-head {
+  padding: 0 10px;
+  color: #7b8494;
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ua-page-access-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(430px, 56vh);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.ua-page-access-row {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 12px;
+  background: #ffffff;
+  transition: opacity 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.ua-page-access-row.is-disabled {
+  opacity: 0.62;
+  background: #f8fafc;
+}
+
+.ua-page-access-name {
+  min-width: 0;
+}
+
+.ua-page-access-name strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 950;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ua-page-access-name small {
+  display: block;
+  color: #8b95a6;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ua-page-access-row select {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 14px;
+  background: #fbfcfe;
+  color: #0b1220;
+  font: inherit;
+  font-weight: 900;
+  outline: 0;
+  padding: 11px 12px;
+}
+
+.ua-page-access-enable {
+  display: flex;
+  justify-content: center;
+}
+
+.ua-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 54px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.ua-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ua-switch span {
+  width: 54px;
+  height: 32px;
+  border-radius: 999px;
+  background: #d8dee8;
+  transition: background 0.16s ease;
+  position: relative;
+}
+
+.ua-switch span::after {
+  content: "";
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  top: 4px;
+  left: 4px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+  transition: transform 0.16s ease;
+}
+
+.ua-switch input:checked + span {
+  background: #e46520;
+}
+
+.ua-switch input:checked + span::after {
+  transform: translateX(22px);
+}
+
+.ua-page-access-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 150px;
+  color: #6b7280;
+  font-weight: 900;
+}
+
+.ua-page-access-loading span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid rgba(15, 23, 42, 0.12);
+  border-top-color: #0b1220;
+  animation: uaSpin 0.8s linear infinite;
+}
+
+@media (max-width: 700px) {
+  .ua-page-access-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ua-page-access-open {
+    width: 100%;
+  }
+
+  .ua-page-access-head {
+    display: none;
+  }
+
+  .ua-page-access-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ua-page-access-enable {
+    justify-content: flex-start;
+  }
+}
