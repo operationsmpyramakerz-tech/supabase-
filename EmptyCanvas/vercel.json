@@ -2,19 +2,11 @@
   "rewrites": [
     {
       "source": "/orders/new",
-      "destination": "/create-order-type.html"
-    },
-    {
-      "source": "/orders/new/details",
-      "destination": "/create-order-details.html"
+      "destination": "/api/index"
     },
     {
       "source": "/orders/new/products",
       "destination": "/create-order-products.html"
-    },
-    {
-      "source": "/orders/new/review",
-      "destination": "/create-order-review.html"
     },
     {
       "source": "/(.*)",
