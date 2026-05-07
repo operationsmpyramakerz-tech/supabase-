@@ -196,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { name: 'b2b-school-stock', test: (url) => /^\/api\/b2b\/schools\/[^/]+\/stock$/.test(url.pathname), ttlMs: 2 * 60 * 1000 },
     { name: 'order-types', test: (url) => url.pathname === '/api/order-types', ttlMs: 20 * 60 * 1000 },
     { name: 'components', test: (url) => url.pathname === '/api/components', ttlMs: 20 * 60 * 1000 },
+    { name: 'products', test: (url) => url.pathname === '/api/products', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-current', test: (url) => url.pathname === '/api/orders', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-requested', test: (url) => url.pathname === '/api/orders/requested', ttlMs: 2 * 60 * 1000 },
     { name: 'tasks-users', test: (url) => url.pathname === '/api/tasks/users', ttlMs: 10 * 60 * 1000 },
@@ -251,6 +252,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (hasAllowedPage(allowedPages, ['Stocktaking', '/stocktaking'])) {
       urls.push('/api/stock');
+    }
+    if (hasAllowedPage(allowedPages, ['Products', 'Product', 'Components', '/products'])) {
+      urls.push('/api/products');
     }
     if (hasAllowedPage(allowedPages, ['Expenses', '/expenses'])) {
       urls.push('/api/expenses', '/api/expenses/types', '/api/expenses/cash-in-from/options');
@@ -1090,6 +1094,9 @@ if (document.querySelector('.sidebar')) {
     'current orders': 'a[href="/orders"]',
     'create new order': 'a[href="/orders/new"]',
     'stocktaking': 'a[href="/stocktaking"]',
+    'products': 'a[href="/products"]',
+    'product': 'a[href="/products"]',
+    'components': 'a[href="/products"]',
     'tasks': 'a[href="/tasks"]',
 
     'requested orders': 'a[href="/orders/requested"]',
@@ -1582,7 +1589,8 @@ if (document.querySelector('.sidebar')) {
   // لو عندك لينكات بتتعمل inject في صفحات معينة:
     // Home should appear for everyone (not tied to permissions)
   ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
-ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
+  ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
+  ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
   ensureLink({ href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' });
   ensureLink({ href: '/user-access', label: 'User Access & Data', icon: 'shield' });
@@ -3376,6 +3384,7 @@ function deriveOpsShellTitle(path) {
     ['/orders/sv-orders', 'Orders Review'],
     ['/orders', 'Current Orders'],
     ['/stocktaking', 'Stocktaking'],
+    ['/products', 'Products'],
     ['/expenses/users', 'Expenses Users'],
     ['/expenses', 'Expenses'],
     ['/b2b', 'B2B'],
