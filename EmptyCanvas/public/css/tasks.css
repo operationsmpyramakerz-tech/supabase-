@@ -5260,3 +5260,74 @@ body.tasks-v2 .tv2-checkpoint-card__menu-item{
     font-size: 12px;
   }
 }
+
+/* Modern work-link dialog (replaces native browser prompt) */
+body.tasks-v2 .tv2-work-link-overlay{
+  z-index: 10045;
+  padding: max(18px, env(safe-area-inset-top, 0px) + 10px) 18px max(18px, env(safe-area-inset-bottom, 0px) + 10px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+body.tasks-v2 .tv2-work-link-modal{
+  width: min(460px, calc(100vw - 28px));
+  max-height: min(82dvh, 620px);
+  box-shadow: 0 34px 82px rgba(15,23,42,0.30);
+}
+
+body.tasks-v2 .tv2-work-link-modal__header{
+  align-items: flex-start;
+}
+
+body.tasks-v2 .tv2-work-link-modal__headcopy{
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+body.tasks-v2 .tv2-work-link-modal__meta{
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 700;
+  color: rgba(17,24,39,0.56);
+}
+
+body.tasks-v2 .tv2-work-link-modal__body{
+  gap: 16px;
+}
+
+body.tasks-v2 .tv2-work-link-field{
+  min-height: 58px;
+}
+
+body.tasks-v2 .tv2-optional-label{
+  color: rgba(100,116,139,0.82);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+body.tasks-v2 .tv2-work-link-modal__footer .tv2-btn{
+  min-width: 132px;
+}
+
+@media (max-width: 640px){
+  body.tasks-v2 .tv2-work-link-overlay{
+    align-items: flex-end;
+    padding: 14px;
+  }
+
+  body.tasks-v2 .tv2-work-link-modal{
+    width: 100%;
+    border-radius: 24px;
+  }
+
+  body.tasks-v2 .tv2-work-link-modal__footer{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body.tasks-v2 .tv2-work-link-modal__footer .tv2-btn{
+    min-width: 0;
+    width: 100%;
+  }
+}
