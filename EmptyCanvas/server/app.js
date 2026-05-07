@@ -4824,6 +4824,401 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
 // expose the list of users in the same Department for the Tasks UI.
 const _TEAM_MEMBERS_BY_DEPT_TTL_SEC = 5 * 60; // 5 minutes
 
+// ---- Supabase Tasks adapter ----
+// The project has been migrated from Notion to Supabase.  The Tasks UI still
+// expects the old Notion-shaped JSON, so this adapter reads flexible Supabase
+// column names and returns the same payload shape used by public/js/tasks-v2.js.
+function _sbTasksEnabled() {
+  return !!(supabaseDb && supabaseDb.isConfigured && supabaseDb.isConfigured());
+}
+
+function _sbTasksTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return String(cfg.tasksTable || process.env.SUPABASE_TASKS_TABLE || "tasks").trim() || "tasks";
+}
+
+function _sbTaskText(row, aliases = []) {
+  return _sbString(_sbGet(row, aliases));
+}
+
+function _sbTaskDate(value) {
+  if (value === null || typeof value === "undefined" || value === "") return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const raw = _sbString(value);
+  if (!raw || /^null$/i.test(raw)) return "";
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return "";
+}
+
+function _sbTaskDateTime(value) {
+  if (value === null || typeof value === "undefined" || value === "") return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  const raw = _sbString(value);
+  if (!raw || /^null$/i.test(raw)) return "";
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return d.toISOString();
+  return raw;
+}
+
+function _sbTaskSelect(value, fallbackName = "") {
+  if (value === null || typeof value === "undefined" || value === "") {
+    const fb = String(fallbackName || "").trim();
+    return fb ? { name: fb, color: "default" } : null;
+  }
+  if (Array.isArray(value)) {
+    const first = value.find((x) => _sbString(x));
+    return _sbTaskSelect(first, fallbackName);
+  }
+  if (typeof value === "object") {
+    const name = _sbString(value.name || value.label || value.value || value.title || value.text || value.status || value.priority || "");
+    const color = _sbString(value.color || value.colour || "default") || "default";
+    return name ? { name, color } : _sbTaskSelect(JSON.stringify(value), fallbackName);
+  }
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) {
+    const fb = String(fallbackName || "").trim();
+    return fb ? { name: fb, color: "default" } : null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed !== raw) {
+      const picked = _sbTaskSelect(parsed, fallbackName);
+      if (picked) return picked;
+    }
+  } catch {}
+  return { name: raw, color: "default" };
+}
+
+function _sbTaskNumber(value, fallback = null) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  const raw = _sbString(value);
+  if (!raw || /^null$/i.test(raw)) return fallback;
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function _sbTaskFiles(value) {
+  const out = [];
+  const pushUrl = (name, url) => {
+    const cleanUrl = _sbExtractUrl(url || name);
+    if (!cleanUrl) return;
+    out.push({ name: _sbString(name) || cleanUrl.split("/").pop() || "File", url: cleanUrl });
+  };
+  const walk = (v) => {
+    if (v === null || typeof v === "undefined" || v === "") return;
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (typeof v === "object") {
+      if (v.url || v.publicUrl || v.href || v.external?.url || v.file?.url) return pushUrl(v.name || v.filename || v.title || "File", v.url || v.publicUrl || v.href || v.external?.url || v.file?.url);
+      if (Array.isArray(v.files)) return v.files.forEach(walk);
+      if (Array.isArray(v.items)) return v.items.forEach(walk);
+      if (Array.isArray(v.values)) return v.values.forEach(walk);
+      return;
+    }
+    const raw = String(v || "").trim();
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed !== raw) return walk(parsed);
+    } catch {}
+    raw.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean).forEach((part) => pushUrl(part, part));
+  };
+  walk(value);
+  const seen = new Set();
+  return out.filter((f) => {
+    const key = f.url;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function _sbTaskSplit(value) {
+  if (value === null || typeof value === "undefined" || value === "") return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((x) => _sbTaskSplit(x)).map((x) => String(x || "").trim()).filter(Boolean);
+  }
+  if (typeof value === "object") {
+    if (Array.isArray(value.items)) return _sbTaskSplit(value.items);
+    if (Array.isArray(value.values)) return _sbTaskSplit(value.values);
+    if (Array.isArray(value.names)) return _sbTaskSplit(value.names);
+    if (Array.isArray(value.ids)) return _sbTaskSplit(value.ids);
+    const one = _sbString(value.name || value.label || value.value || value.title || value.text || value.id || "");
+    return one ? [one] : [];
+  }
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed !== raw) return _sbTaskSplit(parsed);
+  } catch {}
+  return raw.split(/[\n,;|]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+function _sbTaskNormalizePersonToken(value) {
+  return _sbCanon(String(value || "").replace(/[{}]/g, "").trim());
+}
+
+function _sbTaskIncludesPerson(values = [], person = {}) {
+  const tokens = (Array.isArray(values) ? values : [values])
+    .flatMap(_sbTaskSplit)
+    .map(_sbTaskNormalizePersonToken)
+    .filter(Boolean);
+  if (!tokens.length) return false;
+  const wanted = [person.id, person.name, person.username, person.email]
+    .map(_sbTaskNormalizePersonToken)
+    .filter(Boolean);
+  return wanted.some((w) => tokens.includes(w));
+}
+
+function _sbTaskNamesFromValues(values, usersById = new Map()) {
+  const arr = (Array.isArray(values) ? values : [values]).flatMap(_sbTaskSplit);
+  const out = [];
+  for (const token of arr) {
+    const raw = String(token || "").trim();
+    if (!raw) continue;
+    const byId = usersById.get(raw) || usersById.get(String(raw));
+    out.push(byId || raw);
+  }
+  return Array.from(new Set(out.filter(Boolean)));
+}
+
+function _sbTaskParseTodos(value, taskId, row = {}, usersById = new Map()) {
+  const parseMaybeJson = (v) => {
+    if (v === null || typeof v === "undefined" || v === "") return [];
+    if (Array.isArray(v)) return v;
+    if (typeof v === "object") {
+      if (Array.isArray(v.todos)) return v.todos;
+      if (Array.isArray(v.checklist)) return v.checklist;
+      if (Array.isArray(v.points)) return v.points;
+      if (Array.isArray(v.items)) return v.items;
+      if (Array.isArray(v.values)) return v.values;
+      return [v];
+    }
+    const raw = String(v || "").trim();
+    if (!raw || /^null$/i.test(raw)) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return parseMaybeJson(parsed);
+    } catch {}
+    return raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  };
+
+  const rawItems = parseMaybeJson(value);
+  return rawItems
+    .map((item, index) => {
+      if (typeof item === "string") {
+        const cleaned = item.replace(/^[-*☐✅\s]+/, "").trim();
+        return {
+          id: `${taskId || "task"}:point:${index + 1}`,
+          text: cleaned,
+          checked: /^\s*(✅|\[x\]|x\s*-)/i.test(item),
+          assigneeId: "",
+          assigneeName: "",
+          dueDate: "",
+          priority: "",
+          files: [],
+          workReport: "",
+          workFiles: [],
+        };
+      }
+      const obj = item && typeof item === "object" ? item : {};
+      const id = _sbString(obj.id || obj.point_id || obj.task_point_id || obj.uuid || "") || `${taskId || "task"}:point:${index + 1}`;
+      const text = _sbString(obj.text || obj.title || obj.name || obj.task || obj.checkpoint || obj.description || "");
+      const assigneeId = _sbString(obj.assigneeId || obj.assignee_id || obj.assigneeToId || obj.assignee_to_id || "");
+      let assigneeName = _sbString(obj.assigneeName || obj.assignee_name || obj.assignee || obj.assignedTo || obj.assigned_to || obj.assigneeTo || obj.assignee_to || "");
+      if (!assigneeName && assigneeId) assigneeName = usersById.get(assigneeId) || "";
+      const priority = _sbString(obj.priority || obj.priorityName || obj.priority_name || "");
+      const dueDate = _sbTaskDate(obj.dueDate || obj.due_date || obj.deliveryDate || obj.delivery_date || "");
+      return {
+        id,
+        text,
+        checked: !!(obj.checked || obj.done || obj.completed || obj.is_done || obj.isDone),
+        assigneeId,
+        assigneeName,
+        dueDate,
+        priority,
+        files: _sbTaskFiles(obj.files || obj.attachments || obj.media || obj.file_urls || obj.attachment_urls || []),
+        workReport: _sbString(obj.workReport || obj.work_report || obj.report || ""),
+        workFiles: _sbTaskFiles(obj.workFiles || obj.work_files || obj.work_attachments || []),
+      };
+    })
+    .filter((item) => String(item.text || "").trim());
+}
+
+function _sbTaskTodosFromRow(row, taskId, usersById = new Map()) {
+  const value = _sbGet(row, [
+    "todos", "todo", "checklist", "Checklist", "Task Points", "Task points", "task_points",
+    "points", "Points", "Plan", "plan", "Checkpoints", "checkpoints"
+  ]);
+  return _sbTaskParseTodos(value, taskId, row, usersById);
+}
+
+function _sbTaskCompletion(value, todos = []) {
+  const n = _sbTaskNumber(value, null);
+  if (n !== null) {
+    if (n >= 0 && n <= 1) return Math.round(n * 100);
+    return Math.max(0, Math.min(100, Math.round(n)));
+  }
+  return _completionPercentFromTodos(todos);
+}
+
+function _sbTaskRowId(row) {
+  return _sbString(_sbGet(row, ["id", "ID", "uuid", "task_uuid", "Task UUID"])) || _sbString(row?.id || "");
+}
+
+function _sbTaskSerializeRow(row, { detail = false, scope = "mine", currentUser = {}, usersById = new Map() } = {}) {
+  const id = _sbTaskRowId(row);
+  const title = _sbTaskText(row, ["Name", "name", "Title", "title", "Task", "task", "Task Name", "task_name", "Project", "project", "Subject", "subject"]) || "Untitled";
+  const url = _sbExtractUrl(_sbGet(row, ["url", "URL", "Notion URL", "notion_url", "page_url", "task_url", "link", "Link"]));
+  const idText = _sbTaskText(row, ["ID", "Task ID", "task_id", "id_text", "unique_id", "Unique ID", "code", "Code", "Task Code"]);
+  const priority = _sbTaskSelect(_sbGet(row, ["Priority", "priority", "Priority Level", "priority_level"]));
+  const outerStatus = _sbTaskSelect(_sbGet(row, ["Status", "status"]));
+  const dueDate = _sbTaskDate(_sbGet(row, ["Delivery Date", "delivery_date", "Due Date", "due_date", "date", "Date", "deadline", "Deadline"]));
+  const createdTime = _sbTaskDateTime(_sbGet(row, ["created_at", "Created time", "created_time", "createdTime", "Created Time"])) || _sbTaskDateTime(row?.created_at);
+  const lastEditedTime = _sbTaskDateTime(_sbGet(row, ["updated_at", "Updated time", "last_edited_time", "lastEditedTime", "Updated Time"])) || _sbTaskDateTime(row?.updated_at);
+
+  const createdByValues = [
+    _sbGet(row, ["Created By", "Created by", "created_by", "creator", "Creator", "owner", "Owner"]),
+    _sbGet(row, ["created_by_name", "Created By Name", "creator_name", "owner_name"]),
+    _sbGet(row, ["created_by_id", "Created By ID", "creator_id", "owner_id"]),
+  ];
+  const createdByNames = _sbTaskNamesFromValues(createdByValues, usersById).filter((x) => !looksLikeNotionId(x));
+  const createdBy = createdByNames[0] || _sbTaskText(row, ["created_by_name", "Created By Name", "creator_name", "owner_name"]);
+
+  const assigneeValues = [
+    _sbGet(row, ["Assignee To", "Assignee", "Assigned To", "assignee_to", "assignee", "assigned_to", "assignees", "Assignees"]),
+    _sbGet(row, ["assignee_names", "assignee_to_names", "assigned_to_names", "Assignee Names", "Assignee To Names"]),
+    _sbGet(row, ["assignee_id", "assignee_ids", "assignee_to_ids", "assigned_to_ids", "Assignee IDs", "Assignee To IDs"]),
+  ];
+  let assignees = _sbTaskNamesFromValues(assigneeValues, usersById).filter((x) => !looksLikeNotionId(x) || usersById.get(x));
+
+  let todos = _sbTaskTodosFromRow(row, id, usersById);
+  if (scope === "mine" && todos.length) {
+    const assignedTodos = todos.filter((t) => {
+      const values = [t.assigneeId, t.assigneeName, t.assignee, t.assignedTo];
+      return _sbTaskIncludesPerson(values, currentUser);
+    });
+    if (assignedTodos.length) todos = assignedTodos;
+  }
+
+  if (!assignees.length && todos.length) {
+    assignees = _collectAssigneeNamesFromTodos(todos);
+  }
+
+  const completionRaw = _sbGet(row, ["Completion", "completion", "Complete", "complete", "Progress", "progress", "completion_pct", "completion_percent"]);
+  const completion = _sbTaskCompletion(completionRaw, todos);
+  const status = _deriveStatusFromPct(completion, outerStatus) || outerStatus || { name: "Not started", color: "default" };
+
+  const payload = {
+    id,
+    url,
+    title,
+    idText,
+    priority,
+    status,
+    dueDate,
+    completion,
+    createdTime,
+    lastEditedTime,
+    createdBy,
+    assignees,
+    source: "supabase",
+  };
+  if (detail) payload.todos = todos;
+  return payload;
+}
+
+async function _sbTasksContext(req) {
+  const rows = await _sbSelectTeamMembersRows().catch(() => []);
+  const users = Array.isArray(rows) ? rows : [];
+  const usersById = new Map();
+  for (const row of users) {
+    const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+    const name = _sbString(_sbValueForLabel(row, "Name"));
+    if (id && name) usersById.set(id, name);
+  }
+
+  let currentRow = null;
+  const sid = String(req.session?.userSupabaseId || "").trim();
+  if (sid) currentRow = users.find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === sid) || null;
+  if (!currentRow && req.session?.username) {
+    const wanted = norm(String(req.session.username || ""));
+    currentRow = users.find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted) || null;
+  }
+
+  const currentUser = {
+    id: String(_sbGet(currentRow, ["id", "ID"]) ?? req.session?.userSupabaseId ?? "").trim(),
+    name: _sbString(_sbValueForLabel(currentRow || {}, "Name")) || String(req.session?.username || "").trim(),
+    username: String(req.session?.username || "").trim(),
+    email: _sbString(_sbValueForLabel(currentRow || {}, "Email")),
+    department: _sbString(_sbValueForLabel(currentRow || {}, "Department")) || String(req.session?.accountCache?.department || "").trim(),
+  };
+
+  return { users, usersById, currentUser };
+}
+
+function _sbTaskMatchesScope(row, serialized, scope, currentUser) {
+  const sc = String(scope || "mine").toLowerCase();
+  if (sc !== "mine" && sc !== "delegated") return true;
+  const assigneeValues = [
+    _sbGet(row, ["Assignee To", "Assignee", "Assigned To", "assignee_to", "assignee", "assigned_to", "assignees", "Assignees"]),
+    _sbGet(row, ["assignee_names", "assignee_to_names", "assigned_to_names", "Assignee Names", "Assignee To Names"]),
+    _sbGet(row, ["assignee_id", "assignee_ids", "assignee_to_ids", "assigned_to_ids", "Assignee IDs", "Assignee To IDs"]),
+    serialized?.assignees || [],
+  ];
+  const createdByValues = [
+    _sbGet(row, ["Created By", "Created by", "created_by", "creator", "Creator", "owner", "Owner"]),
+    _sbGet(row, ["created_by_name", "Created By Name", "creator_name", "owner_name"]),
+    _sbGet(row, ["created_by_id", "Created By ID", "creator_id", "owner_id"]),
+    serialized?.createdBy || "",
+  ];
+
+  const hasAssigneeInfo = assigneeValues.some((v) => _sbTaskSplit(v).length);
+  const hasCreatorInfo = createdByValues.some((v) => _sbTaskSplit(v).length);
+  const assignedToMe = _sbTaskIncludesPerson(assigneeValues, currentUser);
+  const createdByMe = _sbTaskIncludesPerson(createdByValues, currentUser);
+
+  if (sc === "mine") {
+    if (hasAssigneeInfo) return assignedToMe;
+    if (hasCreatorInfo) return createdByMe;
+    return true; // keep rows visible if the migrated schema has no assignment columns
+  }
+
+  if (sc === "delegated") {
+    if (hasCreatorInfo) return createdByMe;
+    return true;
+  }
+
+  return true;
+}
+
+async function _sbQueryTasks(req, { scope = "mine" } = {}) {
+  const ctx = await _sbTasksContext(req);
+  const rows = await supabaseDb.selectAll(_sbTasksTable(), { limit: 5000, order: "created_at.desc,id.desc" });
+  const list = Array.isArray(rows) ? rows : [];
+  const tasks = list
+    .map((row) => ({ row, task: _sbTaskSerializeRow(row, { scope, currentUser: ctx.currentUser, usersById: ctx.usersById }) }))
+    .filter(({ row, task }) => task.id && _sbTaskMatchesScope(row, task, scope, ctx.currentUser))
+    .map(({ task }) => task);
+  return { tasks, context: ctx };
+}
+
+async function _sbFindTaskRowById(taskId) {
+  const id = String(taskId || "").trim();
+  if (!id) return null;
+  try {
+    const row = await supabaseDb.selectById(_sbTasksTable(), id);
+    if (row) return row;
+  } catch (e) {
+    // Some migrations keep the original Notion id in a different column; fall back to scanning.
+  }
+  const rows = await supabaseDb.selectAll(_sbTasksTable(), { limit: 5000, order: "created_at.desc,id.desc" });
+  return (Array.isArray(rows) ? rows : []).find((row) => String(_sbTaskRowId(row)) === id) || null;
+}
+
 async function getSessionUserDepartment(req) {
   try {
     const cached = req.session?.accountCache?.department;
@@ -5763,6 +6158,37 @@ async function getTaskCompletionPercentCached(pageId, taskTitle) {
 // Meta for building UI (priority options etc.)
 app.get("/api/tasks/meta", requireAuth, requirePage("Tasks"), async (req, res) => {
   res.set("Cache-Control", "no-store");
+
+  if (_sbTasksEnabled()) {
+    try {
+      const rows = await supabaseDb.selectAll(_sbTasksTable(), { limit: 5000, order: "created_at.desc,id.desc" });
+      const prioritySet = new Set();
+      const statusSet = new Set();
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const pr = _sbTaskSelect(_sbGet(row, ["Priority", "priority", "Priority Level", "priority_level"]));
+        const st = _sbTaskSelect(_sbGet(row, ["Status", "status"]));
+        if (pr?.name) prioritySet.add(pr.name);
+        if (st?.name) statusSet.add(st.name);
+      }
+      return res.json({
+        source: "supabase",
+        titleProp: "title",
+        priorityProp: "priority",
+        statusProp: "status",
+        deliveryDateProp: "dueDate",
+        completionProp: "completion",
+        idProp: "id",
+        options: {
+          priority: Array.from(prioritySet).map((name) => ({ name, color: "default" })),
+          status: Array.from(statusSet).map((name) => ({ name, color: "default" })),
+        },
+      });
+    } catch (e) {
+      console.warn("Supabase tasks meta fallback:", e?.details || e?.message || e);
+      if (!tasksDatabaseId) return res.status(500).json({ error: "Failed to load Supabase tasks metadata." });
+    }
+  }
+
   if (!tasksDatabaseId) return res.status(500).json({ error: "TASKS database ID is not configured." });
 
   try {
@@ -5804,6 +6230,26 @@ app.get("/api/tasks/meta", requireAuth, requirePage("Tasks"), async (req, res) =
 // - Used by "Assignee To" in the New Task modal.
 app.get("/api/tasks/users", requireAuth, requirePage("Tasks"), async (req, res) => {
   res.set("Cache-Control", "no-store");
+
+  if (_sbTeamMembersEnabled()) {
+    try {
+      const ctx = await _sbTasksContext(req);
+      const users = (ctx.users || []).map((row) => ({
+        id: String(_sbGet(row, ["id", "ID"]) ?? ""),
+        name: _sbString(_sbValueForLabel(row, "Name")) || "Unnamed",
+      })).filter((u) => u.id || u.name);
+      return res.json({
+        source: "supabase",
+        department: ctx.currentUser?.department || "",
+        meId: ctx.currentUser?.id || "",
+        users,
+      });
+    } catch (e) {
+      console.warn("Supabase tasks users fallback:", e?.details || e?.message || e);
+      if (!teamMembersDatabaseId) return res.status(500).json({ error: "Failed to load Supabase tasks users." });
+    }
+  }
+
   if (!teamMembersDatabaseId) {
     return res.status(500).json({ error: "Team_Members database ID is not configured." });
   }
@@ -5828,6 +6274,18 @@ app.get("/api/tasks/users", requireAuth, requirePage("Tasks"), async (req, res) 
 
 app.get("/api/tasks", requireAuth, requirePage("Tasks"), async (req, res) => {
   res.set("Cache-Control", "no-store");
+
+  if (_sbTasksEnabled()) {
+    try {
+      const scope = String(req.query.scope || "mine").trim().toLowerCase();
+      const { tasks } = await _sbQueryTasks(req, { scope });
+      return res.json({ source: "supabase", tasks });
+    } catch (e) {
+      console.warn("Supabase tasks list fallback:", e?.details || e?.message || e);
+      if (!tasksDatabaseId) return res.status(500).json({ error: "Failed to load Supabase tasks." });
+    }
+  }
+
   if (!tasksDatabaseId) return res.status(500).json({ error: "TASKS database ID is not configured." });
 
   try {
@@ -5989,6 +6447,20 @@ app.get("/api/tasks/:id", requireAuth, requirePage("Tasks"), async (req, res) =>
   res.set("Cache-Control", "no-store");
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "Missing task id" });
+
+  if (_sbTasksEnabled()) {
+    try {
+      const row = await _sbFindTaskRowById(id);
+      if (!row) return res.status(404).json({ error: "Task not found" });
+      const scope = String(req.query.scope || "mine").trim().toLowerCase();
+      const ctx = await _sbTasksContext(req);
+      const task = _sbTaskSerializeRow(row, { detail: true, scope, currentUser: ctx.currentUser, usersById: ctx.usersById });
+      return res.json(task);
+    } catch (e) {
+      console.warn("Supabase task details fallback:", e?.details || e?.message || e);
+      if (!tasksDatabaseId) return res.status(500).json({ error: "Failed to load Supabase task details." });
+    }
+  }
 
   try {
     const schema = await getTasksSchemaCached();
