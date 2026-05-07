@@ -2884,17 +2884,33 @@ body.expense-shots-modal-open{
     <input id="settle_date" type="date" class="ex-input"/>
 
     <label class="field-label"><i data-feather="tag"></i> Funds Type <span class="req-star">*</span></label>
-    <input id="settle_funds_type" type="text" class="ex-input" value="Settled my account" readonly/>
+    <div id="settleFundsTypePicker" class="order-select funds-select">
+      <button id="settleFundsTypeTrigger" type="button" class="order-select__trigger is-placeholder" aria-haspopup="listbox" aria-expanded="false">
+        <span id="settleFundsTypeTriggerText" class="order-select__trigger-label">Select funds type...</span>
+        <i data-feather="chevron-down"></i>
+      </button>
+      <div id="settleFundsTypeDropdown" class="order-select__dropdown" hidden>
+        <div id="settleFundsTypeDropdownState" class="order-select__status">Choose funds type</div>
+        <div id="settleFundsTypeOptionsList" class="order-select__options" role="listbox" aria-label="Settlement funds types"></div>
+      </div>
+      <select id="settle_funds_type" class="ex-input order-select-hidden" aria-hidden="true" tabindex="-1">
+        <option value="">Select funds type...</option>
+        <option value="Cash Payment">Cash Payment</option>
+        <option value="Online Transfer">Online Transfer</option>
+      </select>
+    </div>
 
     <label class="field-label"><i data-feather="user-check"></i> Settled by <span class="req-star">*</span></label>
     <input id="settle_by" type="text" class="ex-input" placeholder="Enter the person name"/>
 
-    <label class="field-label"><i data-feather="hash"></i> Receipt number <span class="req-star">*</span></label>
-    <input id="settle_receipt" type="text" class="ex-input" placeholder="Enter receipt number"/>
+    <div id="settle_receipt_block" style="display:none;">
+      <label class="field-label"><i data-feather="hash"></i> Receipt number <span class="req-star">*</span></label>
+      <input id="settle_receipt" type="text" class="ex-input" placeholder="Enter receipt number"/>
+    </div>
 
-    <div id="settle_screenshot_block">
-      <label for="settle_screenshot" class="field-label"><i data-feather="image"></i> Screenshot <span class="opt-tag">(Optional)</span></label>
-      <div id="settle_screenshot_wrap" class="upload-control">
+    <div id="settle_screenshot_block" style="display:none;">
+      <label for="settle_screenshot" class="field-label"><i data-feather="image"></i> Screenshot <span id="settle_screenshot_indicator" class="req-text">(Required)</span></label>
+      <div id="settle_screenshot_wrap" class="upload-control is-required">
         <input id="settle_screenshot" class="upload-input" type="file" accept="image/*" multiple />
         <div class="upload-row">
           <button id="settle_screenshot_btn" type="button" class="upload-btn">
@@ -2904,7 +2920,7 @@ body.expense-shots-modal-open{
           <span id="settle_screenshot_name" class="upload-filename">No file chosen</span>
         </div>
       </div>
-      <small id="settle_screenshot_help" class="help">Upload settlement receipt screenshots (JPG/PNG).</small>
+      <small id="settle_screenshot_help" class="help is-emphasis">Upload the transfer screenshot (JPG/PNG).</small>
     </div>
 
     <div class="ex-modal-actions">
