@@ -6,8 +6,31 @@ let FUNDS_TYPES = [];
 let FUNDS_TYPES_LOADED = false;
 let FUNDS_TYPES_LOADING = false;
 
-const EXTRA_FUNDS_TYPES = ["نقل", "توكتوك", "مشال", "مصروفات"];
-const HIDDEN_FUNDS_TYPE_KEYS = new Set(["settledmyaccount", "cashreceipt", "cashreciept"]);
+const DEFAULT_FUNDS_TYPES = [
+  "Online Transfer",
+  "SWVL",
+  "Go Bus",
+  "By Bus",
+  "ترام",
+  "Train",
+  "Metro",
+  "Indrive",
+  "Uber",
+  "DiDi",
+  "Taxi",
+  "توكتوك",
+  "نقل",
+  "Public transportation",
+  "Cash Payment",
+  "Meal allowance",
+  "مشال",
+  "مصروفات",
+  "Own car",
+  "Settled my account",
+];
+
+const EXTRA_FUNDS_TYPES = [...DEFAULT_FUNDS_TYPES];
+const HIDDEN_FUNDS_TYPE_KEYS = new Set(["cashreceipt", "cashreciept"]);
 const REQUIRED_SCREENSHOT_FUNDS_TYPE_KEYS = new Set([
   "owncar",
   "swvl",
@@ -817,13 +840,13 @@ async function loadFundsTypes() {
         const res = await fetch("/api/expenses/types");
         const data = await res.json();
         if (data.success && Array.isArray(data.options)) {
-            FUNDS_TYPES = data.options;
+            FUNDS_TYPES = [...DEFAULT_FUNDS_TYPES, ...data.options];
         } else {
-            FUNDS_TYPES = [];
+            FUNDS_TYPES = [...DEFAULT_FUNDS_TYPES];
         }
     } catch (err) {
         console.error("Funds Type Load Error", err);
-        FUNDS_TYPES = [];
+        FUNDS_TYPES = [...DEFAULT_FUNDS_TYPES];
     } finally {
         FUNDS_TYPES_LOADED = true;
         FUNDS_TYPES_LOADING = false;
