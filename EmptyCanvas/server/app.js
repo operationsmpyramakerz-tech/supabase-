@@ -19877,38 +19877,54 @@ app.post(
   requirePage("Expenses"),
   async (req, res) => {
     try {
+      const receiptNumber = String(req.body?.receiptNumber || "").trim();
+      const settledBy = String(req.body?.settledBy || req.body?.paymentBy || "").trim();
+      const settlementDate = String(req.body?.date || "").trim() || new Date().toISOString().slice(0, 10);
+      const settlementFundsType = "Settled my account";
+      const screenshots = Array.isArray(req.body?.screenshots) ? req.body.screenshots : [];
+      const screenshotDataUrl = req.body?.screenshotDataUrl || "";
+      const screenshotName = req.body?.screenshotName || "";
+
+      if (!receiptNumber) {
+        return res.status(400).json({
+          success: false,
+          error: "Missing receipt number",
+        });
+      }
+
+      if (!settledBy) {
+        return res.status(400).json({
+          success: false,
+          error: "Settled by is required",
+        });
+      }
+
       if (_sbExpensesEnabled()) {
-        const receiptNumber = String(req.body?.receiptNumber || "").trim();
-        if (!receiptNumber) {
-          return res.status(400).json({ success: false, error: "Missing receipt number" });
-        }
         const { member, rows } = await _sbSelectExpensesForCurrentUser(req);
         if (!member) return res.status(400).json({ success: false, error: "User not found" });
         const totalCashIn = rows.reduce((sum, row) => sum + _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0), 0);
         const totalCashOut = rows.reduce((sum, row) => sum + _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0), 0);
         const balance = Number(totalCashIn) - Number(totalCashOut);
         const settleAmount = Math.abs(balance);
-        const today = new Date().toISOString().slice(0, 10);
         const isPositive = balance > 0;
+        const shotText = await _sbBuildExpenseScreenshotText({
+          screenshots,
+          screenshotDataUrl,
+          screenshotName,
+          prefix: "settlement",
+        });
         await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
           reason: receiptNumber,
-          expense_date: today,
-          funds_type: "Settled my account",
-          from_location: "",
-          to_location: "",
+          expense_date: settlementDate,
+          funds_type: settlementFundsType,
+          from_location: settledBy,
+          to_location: member.name || "",
           cash_in: isPositive ? 0 : settleAmount,
           cash_out: isPositive ? settleAmount : 0,
+          screenshot: shotText,
         }));
         await _sbClearExpensesCaches(req, member);
         return res.json({ success: true, totalCashIn, totalCashOut, balance, settleAmount, direction: isPositive ? "cash_out" : "cash_in", source: "supabase" });
-      }
-
-      const receiptNumber = String(req.body?.receiptNumber || "").trim();
-      if (!receiptNumber) {
-        return res.status(400).json({
-          success: false,
-          error: "Missing receipt number",
-        });
       }
 
       const dbId = expensesDatabaseId || process.env.Expenses_Database;
@@ -19958,7 +19974,6 @@ app.post(
       const settleAmount = Math.abs(balance);
 
       // 2) Create a balancing transaction
-      const today = new Date().toISOString().slice(0, 10);
       const isPositive = balance > 0;
 
       const props = {
@@ -19972,13 +19987,13 @@ app.post(
           title: [{ text: { content: receiptNumber } }],
         },
         "Date": {
-          date: { start: today },
+          date: { start: settlementDate },
         },
         "From": {
-          rich_text: [{ type: "text", text: { content: "" } }],
+          rich_text: [{ type: "text", text: { content: settledBy } }],
         },
         "To": {
-          rich_text: [{ type: "text", text: { content: "" } }],
+          rich_text: [{ type: "text", text: { content: String(req.session?.username || "").trim() } }],
         },
         "Cash in": {
           number: isPositive ? 0 : settleAmount,
@@ -19987,6 +20002,35 @@ app.post(
           number: isPositive ? settleAmount : 0,
         },
       };
+
+      const settlementFilesToAttach = [];
+
+      if (Array.isArray(screenshots) && screenshots.length) {
+        for (let i = 0; i < screenshots.length; i++) {
+          const s = screenshots[i] || {};
+          const dataUrl = s.dataUrl || s.screenshotDataUrl || "";
+          if (!dataUrl) continue;
+
+          const originalName = String(s.name || s.filename || "settlement.png").trim() || "settlement.png";
+          const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+          const filename = `settlement-${Date.now()}-${i}-${Math.random().toString(16).slice(2)}-${safeName}`;
+
+          const url = await uploadToBlobFromBase64(dataUrl, filename);
+          settlementFilesToAttach.push(makeExternalFile(originalName, url));
+        }
+      }
+
+      if (!settlementFilesToAttach.length && screenshotDataUrl) {
+        const originalName = (screenshotName && String(screenshotName).trim()) || `settlement-${Date.now()}.png`;
+        const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+        const filename = `settlement-${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
+        const url = await uploadToBlobFromBase64(screenshotDataUrl, filename);
+        settlementFilesToAttach.push(makeExternalFile(originalName, url));
+      }
+
+      if (settlementFilesToAttach.length) {
+        props["Screenshot"] = { files: settlementFilesToAttach };
+      }
 
       await notion.pages.create({
         parent: { database_id: dbId },
