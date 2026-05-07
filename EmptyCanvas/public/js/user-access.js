@@ -14,6 +14,13 @@
     pendingPasswordAction: 'edit',
     formMode: 'create',
     formMemberId: '',
+    formMemberSnapshot: null,
+    pageAccessCache: new Map(),
+    pageAccessDraft: [],
+    pageAccessModalRows: [],
+    pageAccessModalMemberId: '',
+    pageAccessModalLoading: false,
+    pageAccessSaving: false,
   };
 
   const els = {};
@@ -323,6 +330,82 @@
     return uniqValues(Array.isArray(field?.options) ? field.options : []);
   }
 
+  function canonFieldName(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function isAllowedPagesField(fieldOrName) {
+    const name = typeof fieldOrName === 'string' ? fieldOrName : fieldOrName?.name;
+    return canonFieldName(name) === 'allowedpages';
+  }
+
+  function normalizeAccessRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        pageId: String(row?.pageId || row?.page_id || row?.id || '').trim(),
+        pageKey: String(row?.pageKey || row?.page_key || '').trim(),
+        pageName: String(row?.pageName || row?.page_name || row?.name || 'Page').trim() || 'Page',
+        moduleName: String(row?.moduleName || row?.module_name || 'General').trim() || 'General',
+        routePath: String(row?.routePath || row?.route_path || '').trim(),
+        sortOrder: Number(row?.sortOrder || row?.sort_order || 100),
+        accessLevel: String(row?.accessLevel || row?.access_level || 'user').toLowerCase() === 'admin' ? 'admin' : 'user',
+        isEnabled: !!(row?.isEnabled ?? row?.is_enabled ?? row?.enabled),
+      }))
+      .filter((row) => row.pageId || row.pageKey)
+      .sort((a, b) => (Number(a.sortOrder || 0) - Number(b.sortOrder || 0)) || a.pageName.localeCompare(b.pageName));
+  }
+
+  function pageAccessSummaryFromRows(rows) {
+    const enabled = (rows || []).filter((row) => !!row.isEnabled);
+    const admins = enabled.filter((row) => row.accessLevel === 'admin');
+    return { enabledCount: enabled.length, adminCount: admins.length };
+  }
+
+  function pageAccessSummaryText(member = null) {
+    const memberId = String(member?.id || state.formMemberId || '').trim();
+    let summary = null;
+    if (memberId && state.pageAccessCache.has(memberId)) {
+      summary = pageAccessSummaryFromRows(state.pageAccessCache.get(memberId));
+    } else if (state.formMode === 'create' && state.pageAccessDraft.length) {
+      summary = pageAccessSummaryFromRows(state.pageAccessDraft);
+    } else if (member?.pageAccessSummary) {
+      summary = {
+        enabledCount: Number(member.pageAccessSummary.accessCount || 0),
+        adminCount: Number(member.pageAccessSummary.adminCount || 0),
+      };
+    }
+
+    if (!summary || !summary.enabledCount) return 'No pages enabled yet. Open the access window to configure permissions.';
+    const adminPart = summary.adminCount ? ` • ${summary.adminCount} admin` : '';
+    return `${summary.enabledCount} enabled page${summary.enabledCount === 1 ? '' : 's'}${adminPart}`;
+  }
+
+  function updatePageAccessSummaryText() {
+    const summary = els.formBody?.querySelector('[data-page-access-summary]');
+    if (summary) summary.textContent = pageAccessSummaryText(state.formMemberSnapshot);
+  }
+
+  function pageAccessManagerHTML(field, value) {
+    const name = String(field?.name || 'Allowed Pages');
+    const label = escapeHTML(name);
+    const summary = escapeHTML(pageAccessSummaryText(state.formMemberSnapshot));
+    return `
+      <div class="ua-form-field ua-form-field--wide ua-page-access-field">
+        <span>${label}</span>
+        <div class="ua-page-access-card">
+          <div>
+            <strong>Supabase page access</strong>
+            <small data-page-access-summary>${summary}</small>
+          </div>
+          <button type="button" class="ua-page-access-open" data-page-access-open>
+            <i data-feather="shield"></i>
+            <span>Manage Access</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   function multiSelectHTML(field, value) {
     const name = String(field.name || '');
     const type = String(field.type || 'ua_multi_select');
@@ -440,6 +523,7 @@
     const placeholder = field.placeholder || '';
     const commonAttrs = `data-field-name="${label}" data-field-type="${escapeHTML(type)}" ${required}`;
 
+    if (isAllowedPagesField(field) || type === 'ua_page_access_manager') return pageAccessManagerHTML(field, value);
     if (type === 'school_select' || canon === 'school') return schoolSelectHTML(field, value);
     if (type === 'ua_multi_select' || type === 'multi_select') return multiSelectHTML(field, value);
     if (type === 'ua_profile_upload' || canon === 'profilepicture') return profileUploadHTML(field, value);
@@ -491,6 +575,8 @@
     if (!els.formModal || !els.formBody) return;
     state.formMode = mode;
     state.formMemberId = mode === 'edit' ? String(member?.id || '') : '';
+    state.formMemberSnapshot = mode === 'edit' ? member : null;
+    if (mode === 'create') state.pageAccessDraft = [];
 
     const dept = activeDepartment();
     const fields = schemaFields();
@@ -524,6 +610,7 @@
     document.body.classList.remove('ua-modal-open');
     state.formMode = 'create';
     state.formMemberId = '';
+    state.formMemberSnapshot = null;
   }
 
   function collectFormFields() {
@@ -572,6 +659,11 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save member.');
+
+      if (mode === 'create' && Array.isArray(state.pageAccessDraft) && state.pageAccessDraft.length && data?.member?.id) {
+        await savePageAccessForMember(String(data.member.id), state.pageAccessDraft);
+        state.pageAccessDraft = [];
+      }
 
       toast('success', mode === 'edit' ? 'Updated' : 'Created', mode === 'edit' ? 'Team member data updated.' : 'New team member added.');
       closeFormModal();
@@ -848,6 +940,235 @@
     return data;
   }
 
+  function ensurePageAccessModal() {
+    if (els.pageAccessModal) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ua-modal-overlay';
+    wrapper.id = 'uaPageAccessModal';
+    wrapper.hidden = true;
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.innerHTML = `
+      <form class="ua-modal ua-modal--page-access" id="uaPageAccessForm" role="dialog" aria-modal="true" aria-labelledby="uaPageAccessTitle">
+        <button type="button" class="ua-modal__close" id="uaPageAccessClose" aria-label="Close page access window">
+          <i data-feather="x"></i>
+        </button>
+        <div class="ua-modal__header ua-modal__header--compact">
+          <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="shield"></i></div>
+          <div>
+            <h2 id="uaPageAccessTitle">Page Access</h2>
+            <p id="uaPageAccessSubtitle">Set page permissions for this team member.</p>
+          </div>
+        </div>
+        <div class="ua-modal__body ua-page-access-body">
+          <div class="ua-page-access-head">
+            <div>Page name</div>
+            <div>Access type</div>
+            <div>Enable</div>
+          </div>
+          <div class="ua-page-access-list" id="uaPageAccessList"></div>
+        </div>
+        <div class="ua-modal__actions">
+          <button type="button" class="ua-btn ua-btn--light" id="uaPageAccessCancel">Cancel</button>
+          <button type="submit" class="ua-btn ua-btn--dark" id="uaPageAccessSave">
+            <i data-feather="save"></i>
+            <span>Save Access</span>
+          </button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(wrapper);
+
+    els.pageAccessModal = wrapper;
+    els.pageAccessForm = wrapper.querySelector('#uaPageAccessForm');
+    els.pageAccessList = wrapper.querySelector('#uaPageAccessList');
+    els.pageAccessTitle = wrapper.querySelector('#uaPageAccessTitle');
+    els.pageAccessSubtitle = wrapper.querySelector('#uaPageAccessSubtitle');
+    els.pageAccessSaveBtn = wrapper.querySelector('#uaPageAccessSave');
+    els.pageAccessCancelBtn = wrapper.querySelector('#uaPageAccessCancel');
+    els.pageAccessClose = wrapper.querySelector('#uaPageAccessClose');
+
+    els.pageAccessForm?.addEventListener('submit', submitPageAccessForm);
+    els.pageAccessCancelBtn?.addEventListener('click', closePageAccessModal);
+    els.pageAccessClose?.addEventListener('click', closePageAccessModal);
+    els.pageAccessModal?.addEventListener('click', (event) => {
+      if (event.target === els.pageAccessModal) closePageAccessModal();
+    });
+    els.pageAccessList?.addEventListener('change', (event) => {
+      const row = event.target.closest('.ua-page-access-row');
+      if (!row) return;
+      const enabled = row.querySelector('[data-pa-enabled]')?.checked;
+      row.classList.toggle('is-disabled', !enabled);
+    });
+    hydrateIcons(wrapper);
+  }
+
+  function setPageAccessSaving(saving) {
+    state.pageAccessSaving = saving;
+    if (els.pageAccessSaveBtn) {
+      els.pageAccessSaveBtn.disabled = saving || state.pageAccessModalLoading;
+      els.pageAccessSaveBtn.classList.toggle('is-loading', saving);
+    }
+    if (els.pageAccessCancelBtn) els.pageAccessCancelBtn.disabled = saving;
+  }
+
+  function renderPageAccessList() {
+    if (!els.pageAccessList) return;
+    if (state.pageAccessModalLoading) {
+      els.pageAccessList.innerHTML = '<div class="ua-page-access-loading"><span></span> Loading pages from Supabase...</div>';
+      if (els.pageAccessSaveBtn) els.pageAccessSaveBtn.disabled = true;
+      return;
+    }
+    if (els.pageAccessSaveBtn) els.pageAccessSaveBtn.disabled = state.pageAccessSaving;
+    const rows = normalizeAccessRows(state.pageAccessModalRows);
+    state.pageAccessModalRows = rows;
+    if (!rows.length) {
+      els.pageAccessList.innerHTML = '<div class="ua-empty">No pages were found in the Supabase app_pages table.</div>';
+      return;
+    }
+    els.pageAccessList.innerHTML = rows.map((row) => {
+      const enabled = !!row.isEnabled;
+      const userSelected = row.accessLevel === 'admin' ? '' : 'selected';
+      const adminSelected = row.accessLevel === 'admin' ? 'selected' : '';
+      return `
+        <div class="ua-page-access-row ${enabled ? '' : 'is-disabled'}" data-page-id="${escapeHTML(row.pageId)}" data-page-key="${escapeHTML(row.pageKey)}">
+          <div class="ua-page-access-name">
+            <strong>${escapeHTML(row.pageName)}</strong>
+            <small>${escapeHTML(row.moduleName)}${row.routePath ? ` • ${escapeHTML(row.routePath)}` : ''}</small>
+          </div>
+          <div>
+            <select data-pa-level aria-label="Access type for ${escapeHTML(row.pageName)}">
+              <option value="user" ${userSelected}>User</option>
+              <option value="admin" ${adminSelected}>Admin</option>
+            </select>
+          </div>
+          <div class="ua-page-access-enable">
+            <label class="ua-switch" title="Enable ${escapeHTML(row.pageName)}">
+              <input type="checkbox" data-pa-enabled ${enabled ? 'checked' : ''}>
+              <span></span>
+            </label>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function loadPageAccessRowsForCurrentForm() {
+    const memberId = String(state.formMemberId || '').trim();
+    if (state.formMode === 'create') {
+      if (state.pageAccessDraft.length) return normalizeAccessRows(state.pageAccessDraft);
+      const res = await fetch('/api/user-access/pages', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load pages.');
+      return normalizeAccessRows((data.pages || []).map((page) => ({ ...page, accessLevel: 'user', isEnabled: false })));
+    }
+    if (!memberId) throw new Error('Missing team member ID.');
+    if (state.pageAccessCache.has(memberId)) return normalizeAccessRows(state.pageAccessCache.get(memberId));
+    const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/page-access`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load page access.');
+    const rows = normalizeAccessRows(data.pages || []);
+    state.pageAccessCache.set(memberId, rows);
+    const member = state.membersById.get(memberId);
+    if (member && data.summary) member.pageAccessSummary = { accessCount: data.summary.accessCount || 0, adminCount: data.summary.adminCount || 0 };
+    return rows;
+  }
+
+  async function openPageAccessModal() {
+    ensurePageAccessModal();
+    state.pageAccessModalMemberId = String(state.formMemberId || '').trim();
+    state.pageAccessModalLoading = true;
+    state.pageAccessModalRows = [];
+    if (els.pageAccessTitle) els.pageAccessTitle.textContent = 'Page Access';
+    if (els.pageAccessSubtitle) {
+      const memberName = state.formMode === 'create' ? 'new team member' : (state.formMemberSnapshot?.name || 'this team member');
+      els.pageAccessSubtitle.textContent = `Configure page access for ${memberName}.`;
+    }
+    els.pageAccessModal.hidden = false;
+    els.pageAccessModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    renderPageAccessList();
+    try {
+      state.pageAccessModalRows = await loadPageAccessRowsForCurrentForm();
+    } catch (error) {
+      console.error(error);
+      toast('error', 'Load failed', error?.message || 'Failed to load page access.');
+      if (els.pageAccessList) els.pageAccessList.innerHTML = `<div class="ua-error">${escapeHTML(error?.message || 'Failed to load page access.')}</div>`;
+    } finally {
+      state.pageAccessModalLoading = false;
+      renderPageAccessList();
+      hydrateIcons(els.pageAccessModal);
+    }
+  }
+
+  function closePageAccessModal() {
+    if (!els.pageAccessModal) return;
+    els.pageAccessModal.hidden = true;
+    els.pageAccessModal.setAttribute('aria-hidden', 'true');
+    if (!els.formModal || els.formModal.hidden) document.body.classList.remove('ua-modal-open');
+    state.pageAccessModalRows = [];
+    state.pageAccessModalMemberId = '';
+  }
+
+  function collectPageAccessRowsFromModal() {
+    if (!els.pageAccessList) return [];
+    return Array.from(els.pageAccessList.querySelectorAll('.ua-page-access-row')).map((row) => ({
+      pageId: String(row.getAttribute('data-page-id') || '').trim(),
+      pageKey: String(row.getAttribute('data-page-key') || '').trim(),
+      pageName: String(row.querySelector('.ua-page-access-name strong')?.textContent || '').trim(),
+      accessLevel: row.querySelector('[data-pa-level]')?.value === 'admin' ? 'admin' : 'user',
+      isEnabled: !!row.querySelector('[data-pa-enabled]')?.checked,
+    }));
+  }
+
+  async function savePageAccessForMember(memberId, rows) {
+    const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/page-access`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pages: rows }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save page access.');
+    const normalized = normalizeAccessRows(data.pages || rows);
+    state.pageAccessCache.set(String(memberId), normalized);
+    const member = state.membersById.get(String(memberId));
+    if (member) {
+      member.pageAccessSummary = data.summary || pageAccessSummaryFromRows(normalized);
+      state.formMemberSnapshot = member;
+    }
+    return { data, rows: normalized };
+  }
+
+  async function submitPageAccessForm(event) {
+    event?.preventDefault?.();
+    if (state.pageAccessSaving || state.pageAccessModalLoading) return;
+    const rows = collectPageAccessRowsFromModal();
+    setPageAccessSaving(true);
+    try {
+      if (state.formMode === 'create') {
+        state.pageAccessDraft = normalizeAccessRows(rows);
+        updatePageAccessSummaryText();
+        closePageAccessModal();
+        toast('success', 'Access prepared', 'Page access will be saved after creating the member.');
+        return;
+      }
+      const memberId = String(state.formMemberId || '').trim();
+      if (!memberId) throw new Error('Missing team member ID.');
+      await savePageAccessForMember(memberId, rows);
+      updatePageAccessSummaryText();
+      closePageAccessModal();
+      toast('success', 'Access updated', 'Page permissions were saved.');
+    } catch (error) {
+      console.error(error);
+      toast('error', 'Save failed', error?.message || 'Failed to save page access.');
+    } finally {
+      setPageAccessSaving(false);
+    }
+  }
+
   async function handleSchoolAdd(button) {
     const field = button.closest('.ua-form-field--school');
     const input = field?.querySelector('[data-school-column-name]');
@@ -931,6 +1252,9 @@
   }
 
   function handleFormBodyClick(event) {
+    const pageAccessOpen = event.target.closest('[data-page-access-open]');
+    if (pageAccessOpen) return openPageAccessModal();
+
     const msAdd = event.target.closest('[data-ms-add]');
     if (msAdd) {
       const widget = msAdd.closest('[data-multiselect]');
@@ -1024,6 +1348,7 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
+      if (els.pageAccessModal && !els.pageAccessModal.hidden) return closePageAccessModal();
       if (els.passwordModal && !els.passwordModal.hidden) return closePasswordModal();
       if (els.formModal && !els.formModal.hidden) return closeFormModal();
     });
