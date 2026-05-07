@@ -198,7 +198,6 @@ document.addEventListener('DOMContentLoaded', () => {
     { name: 'components', test: (url) => url.pathname === '/api/components', ttlMs: 20 * 60 * 1000 },
     { name: 'orders-current', test: (url) => url.pathname === '/api/orders', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-requested', test: (url) => url.pathname === '/api/orders/requested', ttlMs: 2 * 60 * 1000 },
-    { name: 'orders-assigned', test: (url) => url.pathname === '/api/orders/assigned', ttlMs: 2 * 60 * 1000 },
     { name: 'tasks-users', test: (url) => url.pathname === '/api/tasks/users', ttlMs: 10 * 60 * 1000 },
     { name: 'tasks-list', test: (url) => url.pathname === '/api/tasks', ttlMs: 90 * 1000 },
     { name: 'task-detail', test: (url) => /^\/api\/tasks\/[^/]+$/.test(url.pathname), ttlMs: 90 * 1000 },
@@ -246,9 +245,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (hasAllowedPage(allowedPages, ['Maintenance Orders', '/orders/maintenance-orders'])) {
       urls.push('/api/orders/requested');
-    }
-    if (hasAllowedPage(allowedPages, ['Assigned Schools Requested Orders', 'Assigned Orders', 'Storage', '/orders/assigned'])) {
-      urls.push('/api/orders/assigned');
     }
     if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
       urls.push('/api/tasks?scope=mine', '/api/tasks/users');
@@ -1100,9 +1096,6 @@ if (document.querySelector('.sidebar')) {
     'schools requested orders': 'a[href="/orders/requested"]',
     'maintenance orders': 'a[href="/orders/maintenance-orders"]',
 
-    'assigned schools requested orders': 'a[href="/orders/assigned"]',
-    'storage': 'a[href="/orders/assigned"]',
-
     // Orders Review (formerly: "S.V schools orders")
     'orders review': 'a[href="/orders/sv-orders"]',
     's.v schools orders': 'a[href="/orders/sv-orders"]',
@@ -1110,24 +1103,12 @@ if (document.querySelector('.sidebar')) {
     // ===== B2B =====
     'b2b': 'a[href="/b2b"]',
 
-    // ===== Logistics =====
-    'logistics': 'a[href="/logistics"]',
-
     // ===== Expenses =====
     'my expenses': 'a[href="/expenses"]',
     'expenses': 'a[href="/expenses"]',
 
     'expenses users': 'a[href^="/expenses/users"]',
     'expenses by user': 'a[href^="/expenses/users"]',
-
-    // ===== Finance =====
-    'funds': 'a[href="/funds"]',
-
-    // ===== Assets =====
-    'damaged assets': 'a[href="/damaged-assets"]',
-    's.v schools assets': 'a[href="/sv-assets"]',
-    'damaged assets reviewed': 'a[href="/damaged-assets-reviewed"]',
-    'reviewed damaged assets': 'a[href="/damaged-assets-reviewed"]',
 
     // ===== User Access =====
     'user access & data': 'a[href="/user-access"]',
