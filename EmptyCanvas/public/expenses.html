@@ -2880,8 +2880,32 @@ body.expense-shots-modal-open{
 
     <h3 class="ex-modal-title">Settled my account</h3>
 
+    <label class="field-label"><i data-feather="calendar"></i> Date <span class="req-star">*</span></label>
+    <input id="settle_date" type="date" class="ex-input"/>
+
+    <label class="field-label"><i data-feather="tag"></i> Funds Type <span class="req-star">*</span></label>
+    <input id="settle_funds_type" type="text" class="ex-input" value="Settled my account" readonly/>
+
+    <label class="field-label"><i data-feather="user-check"></i> Settled by <span class="req-star">*</span></label>
+    <input id="settle_by" type="text" class="ex-input" placeholder="Enter the person name"/>
+
     <label class="field-label"><i data-feather="hash"></i> Receipt number <span class="req-star">*</span></label>
     <input id="settle_receipt" type="text" class="ex-input" placeholder="Enter receipt number"/>
+
+    <div id="settle_screenshot_block">
+      <label for="settle_screenshot" class="field-label"><i data-feather="image"></i> Screenshot <span class="opt-tag">(Optional)</span></label>
+      <div id="settle_screenshot_wrap" class="upload-control">
+        <input id="settle_screenshot" class="upload-input" type="file" accept="image/*" multiple />
+        <div class="upload-row">
+          <button id="settle_screenshot_btn" type="button" class="upload-btn">
+            <i data-feather="upload"></i>
+            <span>Upload screenshot</span>
+          </button>
+          <span id="settle_screenshot_name" class="upload-filename">No file chosen</span>
+        </div>
+      </div>
+      <small id="settle_screenshot_help" class="help">Upload settlement receipt screenshots (JPG/PNG).</small>
+    </div>
 
     <div class="ex-modal-actions">
       <button id="settle_submit" class="ex-btn ex-primary">Submit</button>
