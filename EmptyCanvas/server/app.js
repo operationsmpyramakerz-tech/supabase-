@@ -653,6 +653,7 @@ async function clearUserServerCaches(req, opts = {}) {
     cacheDel("cache:api:expenses:types:v1"),
     cacheDel("cache:api:expenses:types:v2"),
     cacheDel("cache:api:expenses:types:v3"),
+    cacheDel("cache:api:expenses:types:v4"),
     cacheDel("cache:api:expenses:cash-in-from:v1"),
     cacheDel("cache:api:expenses:cash-in-from:v2"),
     cacheDel("cache:api:expenses:orders-options:all:v3"),
@@ -737,6 +738,7 @@ async function clearExpensesRouteCaches(req, teamMemberPageId = "") {
       cacheDel("cache:api:expenses:users:v2"),
       cacheDel("cache:api:expenses:types:v2"),
       cacheDel("cache:api:expenses:types:v3"),
+      cacheDel("cache:api:expenses:types:v4"),
       cacheDel("cache:api:expenses:cash-in-from:v1"),
       cacheDel("cache:api:expenses:cash-in-from:v2"),
       cacheDel("cache:api:expenses:orders-options:all:v3"),
@@ -2444,23 +2446,58 @@ async function _sbClearExpensesCaches(req, member = {}) {
   await clearExpensesRouteCaches(req, member?.id || member?.code || member?.name || "");
 }
 
-async function _sbExpensesTypesOptions() {
-  const hiddenKeys = new Set(["settledmyaccount", "cashreceipt", "cashreciept"]);
-  const extraOptions = ["نقل", "توكتوك", "مشال", "مصروفات"];
-  const rows = await _sbSelectExpensesRows();
+const EXPENSES_FUNDS_TYPE_OPTIONS = [
+  "Online Transfer",
+  "SWVL",
+  "Go Bus",
+  "By Bus",
+  "ترام",
+  "Train",
+  "Metro",
+  "Indrive",
+  "Uber",
+  "DiDi",
+  "Taxi",
+  "توكتوك",
+  "نقل",
+  "Public transportation",
+  "Cash Payment",
+  "Meal allowance",
+  "مشال",
+  "مصروفات",
+  "Own car",
+  "Settled my account",
+];
+
+function _expenseFundsTypeKey(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
+}
+
+function _dedupeExpenseFundsTypes(list = []) {
   const options = [];
   const seen = new Set();
   const pushOption = (name) => {
     const raw = String(name || "").trim();
     if (!raw) return;
-    const key = raw.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
-    if (!key || hiddenKeys.has(key) || seen.has(key)) return;
+    const key = _expenseFundsTypeKey(raw);
+    if (!key || seen.has(key)) return;
     seen.add(key);
     options.push(raw);
   };
-  rows.forEach((row) => pushOption(_sbExpenseGet(row, ["funds_type", "Funds Type"])));
-  extraOptions.forEach(pushOption);
-  return options.sort((a, b) => String(a).localeCompare(String(b)));
+  list.forEach(pushOption);
+  return options;
+}
+
+async function _sbExpensesTypesOptions() {
+  const rows = await _sbSelectExpensesRows();
+  const rowOptions = (rows || []).map((row) => _sbExpenseGet(row, ["funds_type", "Funds Type"]));
+  return _dedupeExpenseFundsTypes([
+    ...EXPENSES_FUNDS_TYPE_OPTIONS,
+    ...rowOptions,
+  ]);
 }
 
 async function _sbExpensesUsersSummary() {
@@ -18988,7 +19025,7 @@ app.get("/api/logistics", requireAuth, requirePage("Logistics"), async (req, res
 // ================== EXPENSES API ==================
 
 // Get Funds Type Options
-app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expenses:types:v3"), async (req, res) => {
+app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expenses:types:v4"), async (req, res) => {
   try {
     if (_sbExpensesEnabled()) {
       const options = await _sbExpensesTypesOptions();
@@ -18999,26 +19036,11 @@ app.get("/api/expenses/types", cachedJsonRoute(20 * 60, () => "cache:api:expense
       database_id: process.env.Expenses_Database,
     });
 
-    const hiddenKeys = new Set(["settledmyaccount", "cashreceipt", "cashreciept"]);
-    const extraOptions = ["نقل", "توكتوك", "مشال", "مصروفات"];
-    const options = [];
-    const seen = new Set();
-
-    const pushOption = (name) => {
-      const raw = String(name || "").trim();
-      if (!raw) return;
-      const key = raw.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, "");
-      if (!key || hiddenKeys.has(key) || seen.has(key)) return;
-      seen.add(key);
-      options.push(raw);
-    };
-
-    for (const opt of response.properties["Funds Type"].select.options || []) {
-      pushOption(opt?.name);
-    }
-    for (const extra of extraOptions) {
-      pushOption(extra);
-    }
+    const notionOptions = (response.properties["Funds Type"]?.select?.options || []).map((opt) => opt?.name);
+    const options = _dedupeExpenseFundsTypes([
+      ...EXPENSES_FUNDS_TYPE_OPTIONS,
+      ...notionOptions,
+    ]);
 
     res.json({ success: true, options });
   } catch (err) {
