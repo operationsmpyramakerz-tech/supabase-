@@ -19,6 +19,8 @@ let FILTERED_PAST_ITEMS = [];
 
 // UI state
 let SHOW_PAST_EXPENSES = false;
+let CURRENT_MODAL_USER_ID = "";
+let CURRENT_MODAL_USER_NAME = "";
 
 // Last settlement metadata (best-effort)
 let LAST_SETTLED_AT = null;   // ISO string (Notion created_time)
@@ -325,6 +327,79 @@ function decodeExpenseShotsData(value) {
   }
 }
 
+
+function encodeExpenseActionData(value) {
+  try {
+    return encodeURIComponent(JSON.stringify(value));
+  } catch (err) {
+    return "";
+  }
+}
+
+function decodeExpenseActionData(value, fallback = null) {
+  try {
+    const parsed = JSON.parse(decodeURIComponent(String(value || "")));
+    return parsed ?? fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function readExpenseActionFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("File read failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function shouldCompressExpenseActionImage(file) {
+  const type = String(file?.type || "").toLowerCase();
+  const name = String(file?.name || "").toLowerCase();
+  if (type === "image/gif" || type === "image/svg+xml" || /\.(gif|svg)$/i.test(name)) return false;
+  return type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name);
+}
+
+function loadExpenseActionImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image for compression."));
+    img.src = dataUrl;
+  });
+}
+
+async function compressExpenseActionImageDataURL(file, rawDataUrl) {
+  if (!shouldCompressExpenseActionImage(file)) return rawDataUrl;
+  try {
+    const img = await loadExpenseActionImage(rawDataUrl);
+    const maxW = 1600;
+    const maxH = 1600;
+    const ratio = Math.min(1, maxW / Math.max(1, img.naturalWidth || img.width), maxH / Math.max(1, img.naturalHeight || img.height));
+    const w = Math.max(1, Math.round((img.naturalWidth || img.width) * ratio));
+    const h = Math.max(1, Math.round((img.naturalHeight || img.height) * ratio));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    let compressed = canvas.toDataURL("image/webp", 0.72);
+    if (!/^data:image\/webp/i.test(compressed)) compressed = canvas.toDataURL("image/jpeg", 0.74);
+    return compressed && compressed.length < rawDataUrl.length ? compressed : rawDataUrl;
+  } catch (err) {
+    console.warn("Expense edit image compression skipped:", err);
+    return rawDataUrl;
+  }
+}
+
+async function expenseActionFileToDataURL(file) {
+  const raw = await readExpenseActionFileAsDataURL(file);
+  if (!raw) return null;
+  return compressExpenseActionImageDataURL(file, raw);
+}
+
 function buildExpenseScreenshotButtonHtml(item) {
   const shots = getReceiptImages(item);
   const hasShots = shots.length > 0;
@@ -600,6 +675,8 @@ async function loadExpenseUsers() {
 // ---------------------------
 
 async function openUserExpensesModal(userId, userName) {
+  CURRENT_MODAL_USER_ID = String(userId || "");
+  CURRENT_MODAL_USER_NAME = String(userName || "");
   const modal = document.getElementById("userExpensesModal");
   const sheet = document.getElementById("userExpensesSheet");
   const titleEl = document.getElementById("userExpensesTitle");
@@ -970,6 +1047,34 @@ function buildUserExpenseTicketHtml(group, { compact = false } = {}) {
   const hideReason = shouldHideExpenseGroupReason(group);
   const hasOrders = Array.isArray(group?.orders) && group.orders.length > 0;
   const reasonText = String(group?.reason || "No reason").trim() || "No reason";
+  const primaryItem = rows[0] || null;
+  const groupIds = rows.map((item) => String(item?.id || "").trim()).filter(Boolean);
+  const actionHtml = groupIds.length
+    ? `
+      <div class="expense-ticket__actions" data-expense-actions>
+        <button
+          type="button"
+          class="expense-ticket__more"
+          aria-label="Expense actions"
+          data-expense-menu-trigger
+          data-expense-ids="${escapeHtml(encodeExpenseActionData(groupIds))}"
+          data-expense-item="${escapeHtml(encodeExpenseActionData(primaryItem || {}))}"
+        >
+          ${featherIconMarkup("more-horizontal", { width: 18, height: 18 }) || "⋯"}
+        </button>
+        <div class="expense-ticket__menu" data-expense-menu>
+          <button type="button" class="expense-ticket__menu-item" data-expense-action="edit">
+            ${featherIconMarkup("edit-2", { width: 15, height: 15 })}
+            <span>Edit</span>
+          </button>
+          <button type="button" class="expense-ticket__menu-item expense-ticket__menu-item--danger" data-expense-action="delete">
+            ${featherIconMarkup("trash-2", { width: 15, height: 15 })}
+            <span>Delete</span>
+          </button>
+        </div>
+      </div>
+    `
+    : "";
   const ordersHtml = hasOrders
     ? `<div class="expense-ticket__order-actions">${group.orders.map(buildExpenseOrderActionHtml).join("")}</div>`
     : "";
@@ -983,6 +1088,7 @@ function buildUserExpenseTicketHtml(group, { compact = false } = {}) {
 
   return `
     <article class="expense-ticket${compact ? " expense-ticket--compact" : ""}">
+      ${actionHtml}
       <div class="expense-ticket__top">
         <div class="expense-ticket__header-row${hasOrders ? " expense-ticket__header-row--with-order" : ""}">
           <div class="expense-ticket__meta">
@@ -1064,6 +1170,333 @@ function renderUserExpensesGrouped(recentItems, pastItems, totalEl, listEl) {
   }
 
   listEl.innerHTML = html;
+}
+
+
+// ---------------------------
+// EXPENSE CARD ACTIONS
+// ---------------------------
+
+function injectExpenseUserActionStyles() {
+  if (document.getElementById("expenseUserActionStyles")) return;
+  const style = document.createElement("style");
+  style.id = "expenseUserActionStyles";
+  style.textContent = `
+    .expense-ticket__actions{position:absolute;top:14px;right:14px;z-index:12;}
+    .expense-ticket__more{width:38px;height:38px;border:none;border-radius:999px;background:#f8fafc;color:#0f172a;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 18px rgba(15,23,42,.10);border:1px solid #e2e8f0;}
+    .expense-ticket__more:hover{background:#eef2ff;transform:translateY(-1px);}
+    .expense-ticket__menu{position:absolute;top:44px;right:0;min-width:148px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 20px 46px rgba(15,23,42,.18);padding:6px;display:none;}
+    .expense-ticket__actions.is-open .expense-ticket__menu{display:block;}
+    .expense-ticket__menu-item{width:100%;border:none;background:transparent;color:#0f172a;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:12px;font-weight:800;text-align:left;cursor:pointer;}
+    .expense-ticket__menu-item:hover{background:#f8fafc;}
+    .expense-ticket__menu-item--danger{color:#dc2626;}
+    .expense-user-action-modal{position:fixed;inset:0;z-index:100260;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.52);backdrop-filter:blur(8px);}
+    .expense-user-action-modal.is-open{display:flex;}
+    .expense-user-action-card{width:min(520px,100%);max-height:min(88vh,760px);overflow:auto;border-radius:28px;background:#fff;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:22px;}
+    .expense-user-action-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px;}
+    .expense-user-action-title{font-size:22px;font-weight:950;letter-spacing:-.03em;color:#0f172a;margin:0;}
+    .expense-user-action-sub{margin-top:5px;color:#64748b;font-weight:600;font-size:14px;line-height:1.45;}
+    .expense-user-action-close{width:40px;height:40px;border:none;border-radius:999px;background:#f1f5f9;color:#0f172a;font-size:26px;line-height:1;cursor:pointer;}
+    .expense-user-action-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .expense-user-action-field{display:flex;flex-direction:column;gap:6px;}
+    .expense-user-action-field.is-wide{grid-column:1/-1;}
+    .expense-user-action-field label{font-size:12px;font-weight:900;text-transform:uppercase;color:#64748b;letter-spacing:.05em;}
+    .expense-user-action-field input,.expense-user-action-field textarea{width:100%;border:1px solid #dbe3ef;border-radius:16px;background:#f8fafc;color:#0f172a;padding:12px 13px;font-weight:750;outline:none;}
+    .expense-user-action-field textarea{min-height:86px;resize:vertical;line-height:1.45;}
+    .expense-user-action-field input:focus,.expense-user-action-field textarea:focus{border-color:#93c5fd;box-shadow:0 0 0 4px rgba(59,130,246,.12);background:#fff;}
+    .expense-user-action-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+    .expense-user-action-btn{border:none;border-radius:16px;padding:12px 18px;font-weight:900;cursor:pointer;}
+    .expense-user-action-btn--muted{background:#f1f5f9;color:#0f172a;}
+    .expense-user-action-btn--primary{background:#0f172a;color:#fff;}
+    .expense-user-action-btn--danger{background:#ef4444;color:#fff;}
+    .expense-user-action-btn:disabled{opacity:.65;cursor:not-allowed;}
+    .expense-user-action-note{margin-top:10px;color:#64748b;font-size:13px;line-height:1.45;}
+    @media(max-width:640px){.expense-user-action-grid{grid-template-columns:1fr}.expense-ticket__actions{top:10px;right:10px}.expense-ticket__top{padding-right:34px}}
+  `;
+  document.head.appendChild(style);
+}
+
+function closeAllExpenseCardMenus() {
+  document.querySelectorAll("[data-expense-actions].is-open").forEach((el) => el.classList.remove("is-open"));
+}
+
+function ensureExpenseActionModal(id) {
+  let modal = document.getElementById(id);
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = id;
+  modal.className = "expense-user-action-modal";
+  modal.setAttribute("aria-hidden", "true");
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function closeExpenseActionModal(modal) {
+  if (!modal) return;
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+  modal.innerHTML = "";
+}
+
+function requestExpenseAdminPassword({ title = "Admin confirmation", message = "Enter the Admin password to continue.", confirmLabel = "Continue", danger = false } = {}) {
+  return new Promise((resolve) => {
+    const modal = ensureExpenseActionModal("expenseAdminConfirmModal");
+    modal.innerHTML = `
+      <div class="expense-user-action-card" role="dialog" aria-modal="true">
+        <div class="expense-user-action-head">
+          <div>
+            <h3 class="expense-user-action-title">${escapeHtml(title)}</h3>
+            <div class="expense-user-action-sub">${escapeHtml(message)}</div>
+          </div>
+          <button type="button" class="expense-user-action-close" data-close>&times;</button>
+        </div>
+        <div class="expense-user-action-field">
+          <label>Admin password</label>
+          <input type="password" data-admin-password autocomplete="current-password" placeholder="Enter Admin password" />
+        </div>
+        <div class="expense-user-action-actions">
+          <button type="button" class="expense-user-action-btn expense-user-action-btn--muted" data-cancel>Cancel</button>
+          <button type="button" class="expense-user-action-btn ${danger ? "expense-user-action-btn--danger" : "expense-user-action-btn--primary"}" data-confirm>${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>
+    `;
+    const input = modal.querySelector("[data-admin-password]");
+    const done = (value) => {
+      closeExpenseActionModal(modal);
+      resolve(value);
+    };
+    modal.addEventListener("click", function onClick(event) {
+      if (event.target === modal || event.target.closest("[data-close]") || event.target.closest("[data-cancel]")) {
+        modal.removeEventListener("click", onClick);
+        done(null);
+        return;
+      }
+      if (event.target.closest("[data-confirm]")) {
+        modal.removeEventListener("click", onClick);
+        done(String(input?.value || "").trim());
+      }
+    });
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    setTimeout(() => input?.focus(), 50);
+  });
+}
+
+function openExpenseEditModal(item = {}, adminPassword = "") {
+  return new Promise((resolve) => {
+    const modal = ensureExpenseActionModal("expenseEditActionModal");
+    const shots = getReceiptImages(item);
+    const receiptUrls = shots.map((shot) => shot.url).filter(Boolean).join("\n");
+    modal.innerHTML = `
+      <form class="expense-user-action-card" data-edit-form role="dialog" aria-modal="true">
+        <div class="expense-user-action-head">
+          <div>
+            <h3 class="expense-user-action-title">Edit Expense</h3>
+            <div class="expense-user-action-sub">Update this expense, then save the changes.</div>
+          </div>
+          <button type="button" class="expense-user-action-close" data-close>&times;</button>
+        </div>
+        <div class="expense-user-action-grid">
+          <div class="expense-user-action-field">
+            <label>Date</label>
+            <input name="date" type="date" value="${escapeHtml(toLocalDateKey(item?.date || item?.createdTime || ""))}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>Funds Type</label>
+            <input name="fundsType" value="${escapeHtml(item?.fundsType || "")}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>Cash In</label>
+            <input name="cashIn" type="number" step="0.01" value="${escapeHtml(item?.cashIn || 0)}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>Cash Out</label>
+            <input name="cashOut" type="number" step="0.01" value="${escapeHtml(item?.cashOut || 0)}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>From</label>
+            <input name="from" value="${escapeHtml(item?.from || item?.cashInFrom || "")}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>To</label>
+            <input name="to" value="${escapeHtml(item?.to || "")}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>Kilometer</label>
+            <input name="kilometer" type="number" step="0.01" value="${escapeHtml(item?.kilometer || 0)}" />
+          </div>
+          <div class="expense-user-action-field">
+            <label>Cash In From</label>
+            <input name="cashInFrom" value="${escapeHtml(item?.cashInFrom || "")}" />
+          </div>
+          <div class="expense-user-action-field is-wide">
+            <label>Reason</label>
+            <textarea name="reason">${escapeHtml(item?.reason || getExpenseDisplayReason(item) || "")}</textarea>
+          </div>
+          <div class="expense-user-action-field is-wide">
+            <label>Receipt URLs</label>
+            <textarea name="screenshotUrls" placeholder="One URL per line">${escapeHtml(receiptUrls)}</textarea>
+          </div>
+          <div class="expense-user-action-field is-wide">
+            <label>Add receipt image</label>
+            <input name="receiptFiles" type="file" accept="image/*" multiple />
+            <div class="expense-user-action-note">Images are compressed in the browser before uploading.</div>
+          </div>
+        </div>
+        <div class="expense-user-action-actions">
+          <button type="button" class="expense-user-action-btn expense-user-action-btn--muted" data-cancel>Cancel</button>
+          <button type="submit" class="expense-user-action-btn expense-user-action-btn--primary" data-save>Save changes</button>
+        </div>
+      </form>
+    `;
+    const form = modal.querySelector("[data-edit-form]");
+    const finish = (value) => {
+      closeExpenseActionModal(modal);
+      resolve(value);
+    };
+    modal.addEventListener("click", function onClick(event) {
+      if (event.target === modal || event.target.closest("[data-close]") || event.target.closest("[data-cancel]")) {
+        modal.removeEventListener("click", onClick);
+        finish(null);
+      }
+    });
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const saveBtn = form.querySelector("[data-save]");
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Saving..."; }
+      try {
+        const fd = new FormData(form);
+        const files = Array.from(form.elements.receiptFiles?.files || []);
+        const screenshots = [];
+        for (const file of files) {
+          const dataUrl = await expenseActionFileToDataURL(file);
+          if (dataUrl) screenshots.push({ name: file.name || "receipt.webp", dataUrl });
+        }
+        finish({
+          adminPassword,
+          expense: {
+            date: String(fd.get("date") || ""),
+            fundsType: String(fd.get("fundsType") || ""),
+            cashIn: Number(fd.get("cashIn") || 0),
+            cashOut: Number(fd.get("cashOut") || 0),
+            from: String(fd.get("from") || ""),
+            to: String(fd.get("to") || ""),
+            kilometer: Number(fd.get("kilometer") || 0),
+            cashInFrom: String(fd.get("cashInFrom") || ""),
+            reason: String(fd.get("reason") || ""),
+            screenshotUrls: String(fd.get("screenshotUrls") || "").split(/[\n]+/).map((url) => url.trim()).filter(Boolean),
+            screenshots,
+          },
+        });
+      } catch (err) {
+        console.error("expense edit payload error:", err);
+        showExpensesUsersToast({ type: "error", title: "Upload failed", message: err?.message || "Failed to prepare image." });
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save changes"; }
+      }
+    });
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+  });
+}
+
+async function reloadOpenUserExpensesModal() {
+  if (!CURRENT_MODAL_USER_ID) return;
+  await openUserExpensesModal(CURRENT_MODAL_USER_ID, CURRENT_MODAL_USER_NAME || "User");
+}
+
+async function handleExpenseEditAction(item) {
+  const id = String(item?.id || "").trim();
+  if (!id) return;
+  const adminPassword = await requestExpenseAdminPassword({
+    title: "Edit expense",
+    message: "Enter the Admin password to edit this expense.",
+    confirmLabel: "Continue",
+  });
+  if (!adminPassword) return;
+  const payload = await openExpenseEditModal(item, adminPassword);
+  if (!payload) return;
+  try {
+    const res = await fetch(`/api/expenses/user-expense/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || "Failed to update expense.");
+    showExpensesUsersToast({ type: "success", title: "Saved", message: "Expense updated successfully." });
+    await reloadOpenUserExpensesModal();
+  } catch (err) {
+    console.error("edit expense error:", err);
+    showExpensesUsersToast({ type: "error", title: "Edit failed", message: err?.message || "Failed to update expense." });
+  }
+}
+
+async function handleExpenseDeleteAction(ids) {
+  const cleanIds = (Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (!cleanIds.length) return;
+  const adminPassword = await requestExpenseAdminPassword({
+    title: "Delete expense",
+    message: cleanIds.length > 1
+      ? `This will delete ${cleanIds.length} expense rows and their uploaded receipts.`
+      : "This will delete this expense and its uploaded receipts.",
+    confirmLabel: "Delete",
+    danger: true,
+  });
+  if (!adminPassword) return;
+  if (!confirm(cleanIds.length > 1 ? "Delete this full expense card?" : "Delete this expense?")) return;
+  try {
+    for (const id of cleanIds) {
+      const res = await fetch(`/api/expenses/user-expense/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to delete expense.");
+    }
+    showExpensesUsersToast({ type: "success", title: "Deleted", message: "Expense deleted successfully." });
+    await reloadOpenUserExpensesModal();
+  } catch (err) {
+    console.error("delete expense error:", err);
+    showExpensesUsersToast({ type: "error", title: "Delete failed", message: err?.message || "Failed to delete expense." });
+  }
+}
+
+function setupExpenseUserCardActions() {
+  injectExpenseUserActionStyles();
+  document.addEventListener("click", async (event) => {
+    const trigger = event.target.closest("[data-expense-menu-trigger]");
+    if (trigger) {
+      event.preventDefault();
+      event.stopPropagation();
+      const holder = trigger.closest("[data-expense-actions]");
+      const wasOpen = holder?.classList.contains("is-open");
+      closeAllExpenseCardMenus();
+      if (holder && !wasOpen) holder.classList.add("is-open");
+      return;
+    }
+
+    const actionButton = event.target.closest("[data-expense-action]");
+    if (actionButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const holder = actionButton.closest("[data-expense-actions]");
+      const triggerBtn = holder?.querySelector("[data-expense-menu-trigger]");
+      const ids = decodeExpenseActionData(triggerBtn?.getAttribute("data-expense-ids"), []);
+      const item = decodeExpenseActionData(triggerBtn?.getAttribute("data-expense-item"), {});
+      const action = actionButton.getAttribute("data-expense-action");
+      closeAllExpenseCardMenus();
+      if (action === "edit") await handleExpenseEditAction(item);
+      if (action === "delete") await handleExpenseDeleteAction(ids);
+      return;
+    }
+
+    if (!event.target.closest("[data-expense-actions]")) {
+      closeAllExpenseCardMenus();
+    }
+  });
 }
 
 // ---------------------------
@@ -1265,5 +1698,6 @@ function closeUserExpensesModal() {
 // ---------------------------
 document.addEventListener("DOMContentLoaded", () => {
   setupExpenseShotsViewer();
+  setupExpenseUserCardActions();
   loadExpenseUsers();
 });
