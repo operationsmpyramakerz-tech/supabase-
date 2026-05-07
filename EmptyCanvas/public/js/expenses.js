@@ -2735,14 +2735,35 @@ function setupUploadInputUI(inputId, buttonId, nameId, emptyText = "No file chos
 function setupScreenshotUploadUI() {
   setupUploadInputUI("co_screenshot", "co_screenshot_btn", "co_screenshot_name");
   setupUploadInputUI("ci_screenshot", "ci_screenshot_btn", "ci_screenshot_name");
+  setupUploadInputUI("settle_screenshot", "settle_screenshot_btn", "settle_screenshot_name");
 }
 
 /* =============================
    SETTLE ACCOUNT
    ============================= */
+function todayInputValue() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function openSettleModal() {
+  const date = document.getElementById("settle_date");
+  const fundsType = document.getElementById("settle_funds_type");
+  const settledBy = document.getElementById("settle_by");
   const receipt = document.getElementById("settle_receipt");
+  const screenshotInput = document.getElementById("settle_screenshot");
+  const screenshotName = document.getElementById("settle_screenshot_name");
+
+  if (date) date.value = todayInputValue();
+  if (fundsType) fundsType.value = "Settled my account";
+  if (settledBy) settledBy.value = "";
   if (receipt) receipt.value = "";
+  if (screenshotInput) screenshotInput.value = "";
+  if (screenshotName) screenshotName.textContent = "No file chosen";
+
   const modal = document.getElementById("settleModal");
   if (modal) modal.style.display = "flex";
 }
@@ -2753,12 +2774,46 @@ function closeSettleModal() {
 }
 
 async function submitSettleAccount() {
+  const dateInput = document.getElementById("settle_date");
+  const fundsTypeInput = document.getElementById("settle_funds_type");
+  const settledByInput = document.getElementById("settle_by");
   const receiptInput = document.getElementById("settle_receipt");
+  const screenshotInput = document.getElementById("settle_screenshot");
+
+  const date = String(dateInput?.value || "").trim();
+  const fundsType = String(fundsTypeInput?.value || "Settled my account").trim() || "Settled my account";
+  const settledBy = String(settledByInput?.value || "").trim();
   const receiptNumber = String(receiptInput?.value || "").trim();
 
-  if (!receiptNumber) {
-    showToast("Please enter receipt number.", "error");
+  if (!date || !settledBy || !receiptNumber) {
+    showToast("Please fill required fields.", "error");
     return;
+  }
+
+  const files = Array.from(screenshotInput?.files || []);
+  let screenshots = [];
+
+  if (files.length) {
+    const MAX_FILES = 6;
+    if (files.length > MAX_FILES) {
+      showToast(`You can upload up to ${MAX_FILES} images.`, "error");
+      return;
+    }
+
+    try {
+      screenshots = (await Promise.all(files.map(async (file) => {
+        const dataUrl = await fileToDataURL(file);
+        if (!dataUrl) return null;
+        return {
+          name: file?.name || "settlement.png",
+          dataUrl,
+        };
+      }))).filter(Boolean);
+    } catch (fileErr) {
+      console.error("Settlement screenshot read error:", fileErr);
+      showToast("Failed to read the uploaded screenshot.", "error");
+      return;
+    }
   }
 
   const btn = document.getElementById("settle_submit");
@@ -2767,23 +2822,40 @@ async function submitSettleAccount() {
     btn.textContent = "Saving...";
   }
 
+  closeSettleModal();
+  showSubmitLoader("Saving settlement...");
+
   try {
     const res = await fetch("/api/expenses/settle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ receiptNumber }),
+      body: JSON.stringify({
+        date,
+        fundsType,
+        settledBy,
+        receiptNumber,
+        screenshots,
+      }),
     });
     const data = await res.json();
     if (!data?.success) {
       showToast("Error: " + (data?.error || "Unknown error"), "error");
+      openSettleModal();
+      if (dateInput) dateInput.value = date;
+      if (settledByInput) settledByInput.value = settledBy;
+      if (receiptInput) receiptInput.value = receiptNumber;
       return;
     }
-    closeSettleModal();
     await loadExpenses();
   } catch (err) {
     console.error("Settle account error:", err);
     showToast("Failed to settle account.", "error");
+    openSettleModal();
+    if (dateInput) dateInput.value = date;
+    if (settledByInput) settledByInput.value = settledBy;
+    if (receiptInput) receiptInput.value = receiptNumber;
   } finally {
+    hideSubmitLoader();
     if (btn) {
       btn.disabled = false;
       btn.textContent = "Submit";
