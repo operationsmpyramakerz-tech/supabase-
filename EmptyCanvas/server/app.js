@@ -2361,6 +2361,8 @@ function _sbSerializeExpenseRow(row = {}) {
     screenshotName: screenshots[0]?.name || "",
     teamMemberName: _sbExpenseText(_sbExpenseGet(row, ["team_member_name", "Team Member"])),
     userId: _sbExpenseText(_sbExpenseGet(row, ["user_id", "employee_code"])),
+    receiptNumber: _sbExpenseText(_sbExpenseGet(row, ["receipt_number", "receiptNumber", "orders_raw", "orders_names"])),
+    ordersRaw: _sbExpenseText(_sbExpenseGet(row, ["orders_raw", "orders_names"])),
     source: "supabase",
   };
 }
@@ -2386,12 +2388,17 @@ async function _sbSelectExpensesForCurrentUser(req) {
   return { member, rows: rows.filter((row) => _sbExpenseMatchesMember(row, member)) };
 }
 
+function _sbExpenseIsSettlementRow(row = {}) {
+  const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
+  const reason = norm(_sbExpenseGet(row, ["reason", "Reason"]));
+  return ft === "settled my account" || reason === "settled my account";
+}
+
 function _sbLastSettledInfo(rows = []) {
   let lastSettledAt = null;
   let lastSettledDate = null;
   for (const row of rows || []) {
-    const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
-    if (ft !== "settled my account") continue;
+    if (!_sbExpenseIsSettlementRow(row)) continue;
     const ct = _sbExpenseDateTime(_sbExpenseGet(row, ["notion_created_time", "created_at"]));
     if (!ct) continue;
     if (!lastSettledAt || new Date(ct).getTime() > new Date(lastSettledAt).getTime()) {
@@ -2511,8 +2518,7 @@ async function _sbExpensesUsersSummary() {
     const agg = perUser.get(key);
     agg.total += _sbExpenseNum(_sbExpenseGet(row, ["cash_in", "Cash in"]), 0) - _sbExpenseNum(_sbExpenseGet(row, ["cash_out", "Cash out"]), 0);
     agg.count += 1;
-    const ft = norm(_sbExpenseGet(row, ["funds_type", "Funds Type"]));
-    if (ft === "settled my account" && !agg.lastSettledDate) {
+    if (_sbExpenseIsSettlementRow(row) && !agg.lastSettledDate) {
       agg.lastSettledDate = _sbExpenseDate(_sbExpenseGet(row, ["expense_date", "Date"]));
     }
   }
@@ -19880,15 +19886,37 @@ app.post(
       const receiptNumber = String(req.body?.receiptNumber || "").trim();
       const settledBy = String(req.body?.settledBy || req.body?.paymentBy || "").trim();
       const settlementDate = String(req.body?.date || "").trim() || new Date().toISOString().slice(0, 10);
-      const settlementFundsType = "Settled my account";
+      const settlementReason = "Settled my account";
+      const settlementFundsTypeRaw = String(req.body?.fundsType || "").trim();
+      const settlementFundsTypeKey = normKey(settlementFundsTypeRaw);
+      const isOnlineTransfer = settlementFundsTypeKey === "onlinetransfer" || settlementFundsTypeKey === "onlinepayment";
+      const isCashPayment = settlementFundsTypeKey === "cashpayment" || settlementFundsTypeKey === "cashreceipt" || settlementFundsTypeKey === "cashreciept";
+      const settlementFundsType = settlementFundsTypeRaw || (isOnlineTransfer ? "Online Transfer" : isCashPayment ? "Cash Payment" : "");
       const screenshots = Array.isArray(req.body?.screenshots) ? req.body.screenshots : [];
       const screenshotDataUrl = req.body?.screenshotDataUrl || "";
       const screenshotName = req.body?.screenshotName || "";
+      const hasScreenshotPayload =
+        (Array.isArray(screenshots) && screenshots.some((shot) => String(shot?.dataUrl || shot?.screenshotDataUrl || "").trim())) ||
+        !!String(screenshotDataUrl || "").trim();
 
-      if (!receiptNumber) {
+      if (!settlementFundsTypeKey || (!isOnlineTransfer && !isCashPayment)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid funds type",
+        });
+      }
+
+      if (isCashPayment && !receiptNumber) {
         return res.status(400).json({
           success: false,
           error: "Missing receipt number",
+        });
+      }
+
+      if (isOnlineTransfer && !hasScreenshotPayload) {
+        return res.status(400).json({
+          success: false,
+          error: "Screenshot is required for online transfer",
         });
       }
 
@@ -19914,13 +19942,15 @@ app.post(
           prefix: "settlement",
         });
         await _sbInsertExpense(_sbExpenseBaseRowForMember(member, {
-          reason: receiptNumber,
+          reason: settlementReason,
           expense_date: settlementDate,
           funds_type: settlementFundsType,
           from_location: settledBy,
           to_location: member.name || "",
           cash_in: isPositive ? 0 : settleAmount,
           cash_out: isPositive ? settleAmount : 0,
+          orders_raw: receiptNumber || null,
+          orders_names: receiptNumber || null,
           screenshot: shotText,
         }));
         await _sbClearExpensesCaches(req, member);
@@ -19981,10 +20011,10 @@ app.post(
           relation: [{ id: teamMemberPageId }],
         },
         "Funds Type": {
-          select: { name: "Settled my account" },
+          select: { name: settlementFundsType },
         },
         "Reason": {
-          title: [{ text: { content: receiptNumber } }],
+          title: [{ text: { content: settlementReason } }],
         },
         "Date": {
           date: { start: settlementDate },
