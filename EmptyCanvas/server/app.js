@@ -5219,6 +5219,382 @@ async function _sbFindTaskRowById(taskId) {
   return (Array.isArray(rows) ? rows : []).find((row) => String(_sbTaskRowId(row)) === id) || null;
 }
 
+
+function _sbTaskCheckpointsTable() {
+  const cfg = supabaseDb.getConfig ? supabaseDb.getConfig() : {};
+  return String(cfg.taskCheckpointsTable || process.env.SUPABASE_TASK_CHECKPOINTS_TABLE || "task_checkpoints").trim() || "task_checkpoints";
+}
+
+function _sbTaskCleanFileName(name = "attachment") {
+  const raw = String(name || "attachment").trim() || "attachment";
+  return raw.replace(/[^a-z0-9._-]/gi, "_").replace(/^_+|_+$/g, "") || "attachment";
+}
+
+function _sbTaskAttachmentArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "object") return [value];
+  return [];
+}
+
+function _sbTaskPriorityWeight(value) {
+  const s = String(value || "").trim().toLowerCase();
+  if (s === "high" || s === "urgent" || s === "critical") return 3;
+  if (s === "medium" || s === "normal") return 2;
+  if (s === "low") return 1;
+  return 0;
+}
+
+function _sbTaskPickParentPriority(checklist = [], fallback = "") {
+  const items = Array.isArray(checklist) ? checklist : [];
+  let best = String(fallback || "").trim();
+  let bestWeight = _sbTaskPriorityWeight(best);
+  for (const item of items) {
+    const p = String(item?.priority || "").trim();
+    const w = _sbTaskPriorityWeight(p);
+    if (w > bestWeight) {
+      best = p;
+      bestWeight = w;
+    }
+  }
+  return best || "";
+}
+
+function _sbTaskEarliestDate(checklist = [], fallback = "") {
+  const dates = (Array.isArray(checklist) ? checklist : [])
+    .map((item) => _sbTaskDate(item?.dueDate || item?.deliveryDate || ""))
+    .filter(Boolean)
+    .sort();
+  return dates[0] || _sbTaskDate(fallback) || null;
+}
+
+function _sbTaskUniqueStrings(values = []) {
+  const out = [];
+  const seen = new Set();
+  for (const value of Array.isArray(values) ? values : [values]) {
+    const s = String(value || "").trim();
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
+function _sbTaskCompletionFromChecklist(checklist = []) {
+  const items = Array.isArray(checklist) ? checklist : [];
+  if (!items.length) return 0;
+  const checked = items.filter((item) => !!item?.checked).length;
+  return Math.max(0, Math.min(100, Math.round((checked / items.length) * 100)));
+}
+
+function _sbTaskStatusFromCompletion(completion, fallback = "") {
+  const explicit = String(fallback || "").trim();
+  if (explicit) return explicit;
+  const n = Number(completion);
+  if (Number.isFinite(n) && n >= 100) return "Done";
+  if (Number.isFinite(n) && n > 0) return "In progress";
+  return "Not started";
+}
+
+function _sbTaskNormalizeIncomingChecklist(rawChecklist = [], usersById = new Map()) {
+  return (Array.isArray(rawChecklist) ? rawChecklist : [])
+    .map((x) => {
+      if (typeof x === "string") {
+        return {
+          text: x.trim(),
+          checked: false,
+          assigneeId: "",
+          assigneeName: "",
+          dueDate: "",
+          priority: "",
+          attachments: [],
+        };
+      }
+
+      if (!x || typeof x !== "object") return null;
+      const text = String(x.text || x.title || x.name || x.taskPoint || x.task_point || "").trim();
+      const assigneeId = String(x.assigneeId || x.assignee_id || x.assigneeToId || x.assignee_to_id || x.assignee || x.assigneeTo || "").trim();
+      const assigneeName = String(x.assigneeName || x.assignee_name || x.assigneeLabel || x.assignee_label || x.assignedTo || usersById.get(assigneeId) || "").trim();
+      return {
+        text,
+        checked: !!(x.checked || x.done || x.completed || x.is_done || x.isDone),
+        assigneeId,
+        assigneeName,
+        dueDate: _sbTaskDate(x.dueDate || x.deliveryDate || x.delivery_date || x.date || ""),
+        priority: String(x.priority || x.priorityName || x.priority_level || "").trim(),
+        attachments: _sbTaskAttachmentArray(x.attachments || x.files || x.media || x.files_media),
+      };
+    })
+    .filter((item) => item && item.text);
+}
+
+async function _sbTaskUploadAttachments(attachments = [], { taskCode = "task", pointIndex = 0 } = {}) {
+  const out = [];
+  const items = Array.isArray(attachments) ? attachments : [];
+  for (let i = 0; i < items.length; i++) {
+    const a = items[i] || {};
+    const existingUrl = String(a.url || a.href || a.publicUrl || a.externalUrl || a.link || "").trim();
+    const originalName = String(a.name || a.filename || a.title || `attachment-${i + 1}`).trim() || `attachment-${i + 1}`;
+    if (existingUrl) {
+      out.push({ name: originalName, url: existingUrl });
+      continue;
+    }
+
+    const dataUrl = String(a.dataUrl || a.fileDataUrl || a.screenshotDataUrl || "").trim();
+    if (!dataUrl) continue;
+    const safeName = _sbTaskCleanFileName(originalName);
+    const objectPath = `tasks/${_sbTaskCleanFileName(taskCode)}/checkpoint-${pointIndex + 1}/${Date.now()}-${i}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
+    if (url) out.push({ name: originalName, url });
+  }
+  return out;
+}
+
+async function _sbTaskNextCode() {
+  let max = 0;
+  try {
+    const rows = await supabaseDb.selectAll(_sbTasksTable(), { limit: 5000, order: "id.desc" });
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const raw = _sbString(_sbGet(row, ["task_code", "Task Code", "code", "Code", "id_text", "ID"])) || _sbString(row?.task_code || "");
+      const m = String(raw || "").match(/TAS\s*-\s*(\d+)/i);
+      if (m) max = Math.max(max, Number(m[1]) || 0);
+    }
+  } catch (e) {
+    console.warn("[tasks:supabase] Failed to read latest task code; using timestamp fallback:", e?.details || e?.message || e);
+  }
+  if (max > 0) return `TAS-${max + 1}`;
+  return `TAS-${Date.now().toString().slice(-6)}`;
+}
+
+
+function _sbMissingColumnFromError(err) {
+  const parts = [
+    err?.message,
+    err?.details?.message,
+    err?.details?.details,
+    err?.details?.hint,
+    typeof err?.details === "string" ? err.details : "",
+  ].filter(Boolean).join("\n");
+  const msg = String(parts || "");
+  const match = msg.match(/find the '([^']+)' column/i) || msg.match(/column "([^"]+)"/i);
+  return match ? String(match[1] || "").trim() : "";
+}
+
+async function _sbInsertWithMissingColumnFallback(table, row = {}, requiredColumns = []) {
+  const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).map((x) => String(x || "").trim()).filter(Boolean));
+  const current = { ...(row || {}) };
+  const removed = [];
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      const created = await supabaseDb.insert(table, current);
+      if (removed.length) {
+        console.warn(`[tasks:supabase] Inserted ${table} after skipping unsupported columns: ${removed.join(", ")}`);
+      }
+      return created;
+    } catch (err) {
+      const missing = _sbMissingColumnFromError(err);
+      if (!missing || !Object.prototype.hasOwnProperty.call(current, missing) || required.has(missing)) throw err;
+      delete current[missing];
+      removed.push(missing);
+      continue;
+    }
+  }
+  throw new Error(`Failed to insert ${table} after removing unsupported columns.`);
+}
+
+
+async function _sbUpdateByIdWithMissingColumnFallback(table, id, row = {}, requiredColumns = []) {
+  const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).map((x) => String(x || "").trim()).filter(Boolean));
+  const current = { ...(row || {}) };
+  const removed = [];
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      const updated = await supabaseDb.updateById(table, id, current);
+      if (removed.length) {
+        console.warn(`[tasks:supabase] Updated ${table} after skipping unsupported columns: ${removed.join(", ")}`);
+      }
+      return updated;
+    } catch (err) {
+      const missing = _sbMissingColumnFromError(err);
+      if (!missing || !Object.prototype.hasOwnProperty.call(current, missing) || required.has(missing)) throw err;
+      delete current[missing];
+      removed.push(missing);
+      continue;
+    }
+  }
+  throw new Error(`Failed to update ${table} after removing unsupported columns.`);
+}
+
+async function _sbCreateTaskFromRequest(req) {
+  const title = String(req.body?.title || req.body?.subject || "").trim();
+  if (!title) {
+    const err = new Error("Title is required");
+    err.status = 400;
+    throw err;
+  }
+
+  const ctx = await _sbTasksContext(req);
+  const rawChecklist = Array.isArray(req.body?.checklist)
+    ? req.body.checklist
+    : Array.isArray(req.body?.todos)
+      ? req.body.todos
+      : [];
+  const checklist = _sbTaskNormalizeIncomingChecklist(rawChecklist, ctx.usersById);
+
+  const invalidChecklistItem = checklist.find((item) => {
+    if (!String(item?.text || "").trim()) return true;
+    if (!String(item?.assigneeId || item?.assigneeName || "").trim()) return true;
+    if (!String(item?.dueDate || "").trim()) return true;
+    if (!String(item?.priority || "").trim()) return true;
+    return false;
+  });
+
+  if (invalidChecklistItem) {
+    const err = new Error("Each checkpoint requires assignee, delivery date, and priority.");
+    err.status = 400;
+    throw err;
+  }
+
+  const parentAttachments = _sbTaskAttachmentArray(
+    Array.isArray(req.body?.attachments) ? req.body.attachments
+      : Array.isArray(req.body?.files) ? req.body.files
+        : Array.isArray(req.body?.media) ? req.body.media
+          : []
+  );
+
+  let created = null;
+  let taskCode = "";
+  let lastInsertErr = null;
+  const completion = _sbTaskCompletionFromChecklist(checklist);
+  const status = _sbTaskStatusFromCompletion(completion, req.body?.status || "");
+  const priority = _sbTaskPickParentPriority(checklist, req.body?.priority || "");
+  const deliveryDate = _sbTaskEarliestDate(checklist, req.body?.dueDate || req.body?.deliveryDate || "");
+  const assigneeNames = _sbTaskUniqueStrings(checklist.map((item) => item.assigneeName || (item.assigneeId ? ctx.usersById.get(item.assigneeId) : "")));
+  const assigneeIds = _sbTaskUniqueStrings(checklist.map((item) => item.assigneeId));
+  const nowIso = new Date().toISOString();
+
+  for (let attempt = 0; attempt < 4 && !created; attempt++) {
+    const baseCode = await _sbTaskNextCode();
+    if (attempt === 0) taskCode = baseCode;
+    else {
+      const m = String(baseCode || "").match(/^(.*?)(\d+)$/);
+      taskCode = m ? `${m[1]}${Number(m[2]) + attempt}` : `TAS-${Date.now().toString().slice(-6)}-${attempt}`;
+    }
+
+    const parentFiles = await _sbTaskUploadAttachments(parentAttachments, { taskCode, pointIndex: 0 });
+    const row = {
+      subject: title,
+      created_by_name: ctx.currentUser?.name || String(req.session?.username || "").trim() || null,
+      created_by_url: null,
+      notion_created_time: nowIso,
+      notion_last_edited_time: nowIso,
+      delivery_date: deliveryDate || null,
+      files_media: parentFiles,
+      task_code: taskCode,
+      priority_level: priority || null,
+      status,
+    };
+
+    try {
+      created = await _sbInsertWithMissingColumnFallback(_sbTasksTable(), row, ["subject"]);
+    } catch (err) {
+      lastInsertErr = err;
+      const msg = String(err?.message || err?.details?.message || "");
+      if (/duplicate|unique/i.test(msg) && attempt < 3) continue;
+      throw err;
+    }
+  }
+
+  if (!created) throw lastInsertErr || new Error("Failed to create Supabase task.");
+
+  const taskId = String(_sbGet(created, ["id", "ID"]) ?? created?.id ?? "").trim();
+  const jsonPoints = [];
+  let checkpointsTableOk = true;
+
+  for (let index = 0; index < checklist.length; index++) {
+    const item = checklist[index];
+    const files = await _sbTaskUploadAttachments(item.attachments, { taskCode, pointIndex: index });
+    const pointJson = {
+      id: `${taskId || taskCode}:point:${index + 1}`,
+      text: item.text,
+      checked: !!item.checked,
+      assigneeId: item.assigneeId || "",
+      assigneeName: item.assigneeName || (item.assigneeId ? ctx.usersById.get(item.assigneeId) || "" : ""),
+      dueDate: item.dueDate || "",
+      priority: item.priority || "",
+      files,
+      workReport: "",
+      workFiles: [],
+      sortOrder: index,
+    };
+    jsonPoints.push(pointJson);
+
+    if (!taskId || !checkpointsTableOk) continue;
+    try {
+      const cp = await _sbInsertWithMissingColumnFallback(_sbTaskCheckpointsTable(), {
+        task_id: taskId,
+        task_code: taskCode,
+        task_point: item.text,
+        assignee_to_name: pointJson.assigneeName || null,
+        assignee_to_id: item.assigneeId || null,
+        checkbox: !!item.checked,
+        delivery_date: item.dueDate || null,
+        files_media: files,
+        priority_level: item.priority || null,
+        status: item.checked ? "Done" : "Not started",
+        sort_order: index,
+        work_report: null,
+        work_files: [],
+      }, ["task_id", "task_point"]);
+      if (cp?.id) pointJson.id = String(cp.id);
+    } catch (err) {
+      checkpointsTableOk = false;
+      console.warn("[tasks:supabase] task_checkpoints insert failed; falling back to tasks.task_points JSON:", err?.details || err?.message || err);
+    }
+  }
+
+  // If the SQL trigger exists, task_checkpoints already rebuilt these fields.
+  // This patch also supports deployments that only have the JSONB compatibility column.
+  if (taskId) {
+    const patch = {
+      task_points: jsonPoints,
+      assignee_to_names: assigneeNames,
+      assignee_to_ids: assigneeIds,
+      completion_percent: completion,
+    };
+    try {
+      await _sbUpdateByIdWithMissingColumnFallback(_sbTasksTable(), taskId, patch, []);
+    } catch (err) {
+      console.warn("[tasks:supabase] optional task_points patch skipped:", err?.details || err?.message || err);
+    }
+  }
+
+  let finalRow = created;
+  if (taskId) {
+    try {
+      finalRow = (await supabaseDb.selectById(_sbTasksTable(), taskId)) || created;
+    } catch {}
+  }
+
+  const serialized = _sbTaskSerializeRow(finalRow || created || { id: taskId, subject: title, task_code: taskCode, task_points: jsonPoints }, {
+    detail: true,
+    scope: "delegated",
+    currentUser: ctx.currentUser,
+    usersById: ctx.usersById,
+  });
+
+  return {
+    ok: true,
+    id: serialized.id || taskId,
+    url: serialized.url || "",
+    taskCode,
+    task: serialized,
+    source: "supabase",
+  };
+}
+
 async function getSessionUserDepartment(req) {
   try {
     const cached = req.session?.accountCache?.department;
@@ -6530,6 +6906,18 @@ app.get("/api/tasks/:id", requireAuth, requirePage("Tasks"), async (req, res) =>
 
 app.post("/api/tasks", requireAuth, requirePage("Tasks"), async (req, res) => {
   res.set("Cache-Control", "no-store");
+
+  if (_sbTasksEnabled()) {
+    try {
+      const created = await _sbCreateTaskFromRequest(req);
+      return res.json(created);
+    } catch (e) {
+      console.error("Supabase task create error:", e?.details || e?.message || e);
+      const status = e?.status && Number(e.status) >= 400 && Number(e.status) < 600 ? Number(e.status) : 500;
+      return res.status(status).json({ error: e?.message || "Failed to create Supabase task." });
+    }
+  }
+
   if (!tasksDatabaseId) return res.status(500).json({ error: "TASKS database ID is not configured." });
 
   try {
