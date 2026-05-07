@@ -20890,17 +20890,62 @@ app.delete(
 // - We keep it public (no requireAuth) so Excel links behave like the old signed links.
 // - We still restrict it to ONLY pages that belong to the Expenses database.
 // - If you prefer to lock it behind auth, add `requireAuth` as middleware.
+function _expenseScreenshotRedirectUrl(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+
+  // Already a public/signed URL.
+  if (/^https?:\/\//i.test(value)) return value;
+
+  // Some imports may store only the Supabase Storage object path instead of the full URL.
+  // Convert that path to a public Storage URL using the configured bucket.
+  if (supabaseDb?.storagePublicUrl) {
+    const publicUrl = supabaseDb.storagePublicUrl(value);
+    if (/^https?:\/\//i.test(publicUrl)) return publicUrl;
+  }
+
+  return "";
+}
+
 app.get("/api/expenses/screenshot/:expenseId", async (req, res) => {
+  const requestedIndex = Number.parseInt(String(req.query?.index || "0"), 10);
+  const shotIndex = Number.isFinite(requestedIndex) && requestedIndex >= 0 ? requestedIndex : 0;
+
   try {
     const raw = String(req.params.expenseId || "").trim();
     if (!raw) return res.status(400).send("Missing expenseId");
 
-    // Accept both hyphenated and non-hyphenated UUIDs
+    // Supabase migration support:
+    // Excel exports link back to this stable endpoint. In Supabase, expense IDs can be
+    // numeric or UUIDs, so they must NOT pass through the old Notion UUID validator.
+    if (_sbExpensesEnabled()) {
+      try {
+        const row = await supabaseDb.selectById(_sbExpensesTable(), raw);
+        if (row) {
+          const screenshotEntries = _sbParseScreenshotEntries(
+            _sbExpenseGet(row, ["screenshot", "Screenshot", "files_media"]),
+          );
+          const shot = screenshotEntries[shotIndex] || screenshotEntries[0];
+          const url = _expenseScreenshotRedirectUrl(shot?.url || shot?.href || shot?.publicUrl || shot);
+
+          if (!url) return res.status(404).send("No screenshot");
+
+          res.setHeader("Cache-Control", "no-store");
+          return res.redirect(url);
+        }
+      } catch (sbErr) {
+        // Keep the Notion fallback alive for old exports / old data, but log enough
+        // detail to diagnose Supabase ID/type mismatches in Vercel logs.
+        console.warn("/api/expenses/screenshot Supabase lookup skipped:", sbErr?.details || sbErr?.message || sbErr);
+      }
+    }
+
+    // Legacy Notion fallback for older Excel files created before the Supabase migration.
+    // Accept both hyphenated and non-hyphenated Notion UUIDs.
     if (!looksLikeNotionId(raw)) {
-      // allow already-hyphenated UUIDs
       const noHyphen = raw.replace(/-/g, "");
       if (!looksLikeNotionId(noHyphen)) {
-        return res.status(400).send("Invalid expenseId");
+        return res.status(404).send("Expense screenshot not found");
       }
     }
 
@@ -20926,8 +20971,6 @@ app.get("/api/expenses/screenshot/:expenseId", async (req, res) => {
       return res.status(404).send("No screenshot");
     }
 
-    const requestedIndex = Number.parseInt(String(req.query?.index || "0"), 10);
-    const shotIndex = Number.isFinite(requestedIndex) && requestedIndex >= 0 ? requestedIndex : 0;
     const files = Array.isArray(screenshotProp.files) ? screenshotProp.files : [];
     const f = files[shotIndex] || files[0];
     if (!f) return res.status(404).send("No screenshot");
