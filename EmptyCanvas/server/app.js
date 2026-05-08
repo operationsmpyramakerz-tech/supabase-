@@ -2121,6 +2121,141 @@ async function _sbRenameUserAccessDepartment(departmentId = "", name = "") {
   return _sbDepartmentPayload(clean, { count: affectedIds.length, isCustomDepartment: !!departmentRecord, departmentRecordId: _sbGet(departmentRecord || {}, ["id", "ID"]) });
 }
 
+
+function _sbTeamMembersDepartmentColumn(rows = []) {
+  const keys = _sbAllColumnKeys(rows || []);
+  return _sbFindKey(keys, ["Department", "department"]);
+}
+
+async function _sbResolveUserAccessDepartmentName(departmentId = "") {
+  const targetKey = String(departmentId || "").trim();
+  if (!targetKey || targetKey === _uaDepartmentKey("No Department")) return "";
+  const [teamRows, departmentRows] = await Promise.all([
+    _sbSelectTeamMembersRows(),
+    _sbSelectDepartmentRows().catch(() => []),
+  ]);
+  const names = [
+    ...(departmentRows || []).map(_sbDepartmentNameFromRow).filter(Boolean),
+    ...(teamRows || []).map((row) => _uaNormalizeDepartmentName(_sbValueForLabel(row, "Department"))).filter(Boolean),
+  ];
+  const hit = names.find((name) => _uaDepartmentKey(name) === targetKey);
+  if (!hit) {
+    const err = new Error("Target department was not found.");
+    err.status = 404;
+    throw err;
+  }
+  return hit;
+}
+
+async function _sbMoveUserAccessTeamMember(memberId = "", departmentId = "") {
+  const id = String(memberId || "").trim();
+  if (!id) {
+    const err = new Error("Missing team member ID.");
+    err.status = 400;
+    throw err;
+  }
+  const rows = await _sbSelectTeamMembersRows();
+  const departmentColumn = _sbTeamMembersDepartmentColumn(rows);
+  if (!departmentColumn) {
+    const err = new Error("Team Members table does not have a Department column.");
+    err.status = 500;
+    throw err;
+  }
+  const member = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === id) || await _sbFindTeamMemberById(id);
+  if (!member) {
+    const err = new Error("Team member was not found.");
+    err.status = 404;
+    throw err;
+  }
+  const targetName = await _sbResolveUserAccessDepartmentName(departmentId);
+  const updated = await supabaseDb.updateById(_sbTeamMembersTable(), id, { [departmentColumn]: targetName || null });
+  await _uaClearUserAccessCaches();
+  const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows || []), rows || []);
+  return {
+    member: _sbSerializeTeamMemberRow(updated || { ...member, [departmentColumn]: targetName || null }, editableFields),
+    departmentName: targetName || "No Department",
+  };
+}
+
+async function _sbDeleteUserAccessTeamMember(memberId = "") {
+  const id = String(memberId || "").trim();
+  if (!id) {
+    const err = new Error("Missing team member ID.");
+    err.status = 400;
+    throw err;
+  }
+  const member = await _sbFindTeamMemberById(id);
+  if (!member) {
+    const err = new Error("Team member was not found.");
+    err.status = 404;
+    throw err;
+  }
+  await supabaseDb.request(`/team_member_page_access?team_member_id=eq.${_sbRestFilterValue(id)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  }).catch((error) => {
+    console.warn("[user-access] failed to delete member page-access rows:", error?.message || error);
+    return [];
+  });
+  const deleted = await supabaseDb.deleteById(_sbTeamMembersTable(), id);
+  await _uaClearUserAccessCaches();
+  return {
+    id,
+    name: _sbString(_sbValueForLabel(member, "Name")) || "Team member",
+    deleted: deleted || member,
+  };
+}
+
+async function _sbDeleteUserAccessDepartment(departmentId = "") {
+  const oldKey = String(departmentId || "").trim();
+  if (!oldKey) {
+    const err = new Error("Department ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (oldKey === _uaDepartmentKey("No Department")) {
+    const err = new Error("The default No Department folder cannot be deleted.");
+    err.status = 400;
+    throw err;
+  }
+
+  const [teamRows, departmentRows] = await Promise.all([
+    _sbSelectTeamMembersRows(),
+    _sbSelectDepartmentRows({ throwIfMissing: true }),
+  ]);
+  const departmentColumn = _sbTeamMembersDepartmentColumn(teamRows || []);
+  if (!departmentColumn) {
+    const err = new Error("Team Members table does not have a Department column.");
+    err.status = 500;
+    throw err;
+  }
+
+  const affectedIds = (teamRows || [])
+    .filter((row) => _uaDepartmentKey(_uaNormalizeDepartmentName(_sbValueForLabel(row, "Department")) || "No Department") === oldKey)
+    .map((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim())
+    .filter(Boolean);
+
+  if (affectedIds.length) {
+    await supabaseDb.updateByIds(_sbTeamMembersTable(), affectedIds, { [departmentColumn]: null });
+  }
+
+  const departmentRecord = (departmentRows || []).find((row) => _uaDepartmentKey(_sbDepartmentNameFromRow(row)) === oldKey);
+  if (departmentRecord && _sbGet(departmentRecord, ["id", "ID"]) !== undefined) {
+    await supabaseDb.deleteById(_sbTeamMemberDepartmentsTable(), _sbGet(departmentRecord, ["id", "ID"]));
+  } else if (!affectedIds.length) {
+    const err = new Error("Department was not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  await _uaClearUserAccessCaches();
+  return {
+    id: oldKey,
+    movedMembers: affectedIds.length,
+    name: departmentRecord ? _sbDepartmentNameFromRow(departmentRecord) : oldKey,
+  };
+}
+
 async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []) {
   const schoolOptions = await _uaStocktakingSchoolOptions();
   const departmentOptions = await _uaDepartmentOptionsForSupabase(rows);
@@ -12622,6 +12757,50 @@ app.patch(
   },
 );
 
+app.delete(
+  "/api/user-access/departments/:id",
+  requireAuth,
+  async (req, res) => {
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ ok: false, error: "Supabase Team Members source is required to manage departments." });
+    }
+    if (!_uaAdminVerified(req)) {
+      return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+    }
+    res.set("Cache-Control", "no-store");
+    try {
+      const result = await _sbDeleteUserAccessDepartment(req.params?.id || "");
+      const suffix = result.movedMembers ? ` ${result.movedMembers} member${result.movedMembers === 1 ? "" : "s"} moved to No Department.` : "";
+      return res.json({ ok: true, source: "supabase", result, message: `Department deleted.${suffix}` });
+    } catch (error) {
+      console.error("DELETE /api/user-access/departments/:id error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete department." });
+    }
+  },
+);
+
+// User Access & Data — Move Team Member to another Department
+app.patch(
+  "/api/user-access/team-members/:id/department",
+  requireAuth,
+  async (req, res) => {
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ ok: false, error: "Supabase Team Members source is required to move members." });
+    }
+    if (!_uaAdminVerified(req)) {
+      return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+    }
+    res.set("Cache-Control", "no-store");
+    try {
+      const result = await _sbMoveUserAccessTeamMember(req.params?.id || "", req.body?.departmentId || req.body?.department || "");
+      return res.json({ ok: true, source: "supabase", member: result.member, message: `${result.member.name || "Team member"} moved to ${result.departmentName}.` });
+    } catch (error) {
+      console.error("PATCH /api/user-access/team-members/:id/department error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to move team member." });
+    }
+  },
+);
+
 // User Access & Data — Create Team Member
 app.post(
   "/api/user-access/team-members",
@@ -12713,6 +12892,28 @@ app.patch(
     } catch (error) {
       console.error("PATCH /api/user-access/team-members/:id error:", error?.details || error?.body || error);
       return res.status(500).json({ ok: false, error: error?.message || "Failed to update team member." });
+    }
+  },
+);
+
+// User Access & Data — Delete Team Member
+app.delete(
+  "/api/user-access/team-members/:id",
+  requireAuth,
+  async (req, res) => {
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ ok: false, error: "Supabase Team Members source is required to delete members." });
+    }
+    if (!_uaAdminVerified(req)) {
+      return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+    }
+    res.set("Cache-Control", "no-store");
+    try {
+      const result = await _sbDeleteUserAccessTeamMember(req.params?.id || "");
+      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted.` });
+    } catch (error) {
+      console.error("DELETE /api/user-access/team-members/:id error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete team member." });
     }
   },
 );
