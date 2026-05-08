@@ -5564,27 +5564,59 @@ app.post("/api/logout", (req, res) => {
   });
 });
 
-// App download links for the profile menu
+// App download/install links for the profile menu
 app.get("/api/app-download-links", requireAuth, (req, res) => {
   res.set("Cache-Control", "no-store");
 
-  const androidUrl = String(
+  function cleanDownloadUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    // Ignore documentation placeholders that may have been copied into Vercel env vars.
+    const lower = raw.toLowerCase();
+    const placeholderFragments = [
+      "your-android-download-link",
+      "your-windows-download-link",
+      "your-download-link",
+      "your-app-link",
+      "yourdomain.com",
+      "example.com",
+      "https://your-",
+      "http://your-",
+    ];
+    if (placeholderFragments.some((part) => lower.includes(part))) return "";
+
+    // Absolute URLs are safe to open directly. Relative URLs are also allowed for
+    // files hosted under the same Vercel deployment, for example /downloads/app.apk.
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("/")) return raw;
+    return "";
+  }
+
+  const forwardedProto = String(req.get("x-forwarded-proto") || "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "https";
+  const host = req.get("host") || "";
+  const origin = host ? `${proto}://${host}` : "";
+
+  const androidUrl = cleanDownloadUrl(
     process.env.ANDROID_APP_DOWNLOAD_URL ||
     process.env.APP_ANDROID_URL ||
     process.env.APK_DOWNLOAD_URL ||
     ""
-  ).trim();
+  );
 
-  const windowsUrl = String(
+  const windowsUrl = cleanDownloadUrl(
     process.env.WINDOWS_APP_DOWNLOAD_URL ||
     process.env.APP_WINDOWS_URL ||
     process.env.WINDOWS_SETUP_URL ||
     ""
-  ).trim();
+  );
 
   res.json({
     androidUrl,
     windowsUrl,
+    pwaUrl: origin ? `${origin}/home` : "/home",
+    manifestUrl: origin ? `${origin}/manifest.webmanifest` : "/manifest.webmanifest",
+    installMode: "pwa",
   });
 });
 
