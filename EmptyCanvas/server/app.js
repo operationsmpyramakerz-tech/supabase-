@@ -66,6 +66,7 @@ const messagesDatabaseId = _extractNotionIdFromEnv(
   null,
 );
 const messagesPresenceMemory = new Map();
+const messagesReactionsMemory = new Map();
 const NOTION_VER = process.env.NOTION_VERSION || '2022-06-28'; // المطلوب في أمثلة Notion 
 // Team Members DB (from ENV)
 const teamMembersDatabaseId =
@@ -12474,7 +12475,10 @@ function _messagesAttachmentFromBody(body = '') {
 
 function _messagesAttachmentPreview(attachment = {}) {
   const clean = _messagesNormalizeAttachmentPayload(attachment);
-  return clean ? `📎 ${clean.name || 'Attachment'}` : '📎 Attachment';
+  if (!clean) return '📎 Attachment';
+  const mime = String(clean.mime || '').toLowerCase();
+  const icon = mime.startsWith('audio/') ? '🎙️' : '📎';
+  return `${icon} ${clean.name || (mime.startsWith('audio/') ? 'Voice message' : 'Attachment')}`;
 }
 
 function _messagesNormalizeComment(comment, req) {
@@ -12952,6 +12956,175 @@ async function _sbCreateChatMessage(req, chatId, message, options = {}) {
   } catch {}
   return _sbNormalizeMessageRow(row, req);
 }
+
+function _sbMessagesReactionsTable() {
+  return String(process.env.SUPABASE_MESSAGES_REACTIONS_TABLE || 'messages_reactions').trim() || 'messages_reactions';
+}
+
+function _messagesReactionUserKey(req) {
+  const identity = _messagesCurrentIdentity(req);
+  return (identity.emailKey || identity.nameKey || String(req?.sessionID || 'anonymous').toLowerCase())
+    .replace(/[^a-z0-9._@-]+/g, '_')
+    .slice(0, 180) || 'anonymous';
+}
+
+const MESSAGES_ALLOWED_REACTIONS = new Set(['👍', '❤️', '😂', '😮', '😢', '🙏']);
+
+function _messagesCleanReactionEmoji(value) {
+  const emoji = String(value || '').trim();
+  return MESSAGES_ALLOWED_REACTIONS.has(emoji) ? emoji : '';
+}
+
+function _messagesMemoryReactionRows(messageIds = []) {
+  const wanted = new Set((Array.isArray(messageIds) ? messageIds : []).map((id) => String(id || '').trim()).filter(Boolean));
+  return Array.from(messagesReactionsMemory.values()).filter((row) => !wanted.size || wanted.has(String(row.message_id || '')));
+}
+
+function _messagesAggregateReactionRows(rows = [], req = null) {
+  const currentKey = req ? _messagesReactionUserKey(req) : '';
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const messageId = String(_sbGet(row, ['message_id', 'messageId']) || '').trim();
+    const emoji = String(_sbGet(row, ['emoji', 'reaction']) || '').trim();
+    if (!messageId || !emoji) continue;
+    const key = `${messageId}::${emoji}`;
+    const item = map.get(key) || { messageId, emoji, count: 0, mine: false };
+    item.count += 1;
+    if (currentKey && String(_sbGet(row, ['user_key', 'userKey']) || '').trim().toLowerCase() === currentKey) item.mine = true;
+    map.set(key, item);
+  }
+  return Array.from(map.values()).sort((a, b) => String(a.messageId).localeCompare(String(b.messageId)) || b.count - a.count);
+}
+
+function _messagesQuotedTextList(values = []) {
+  return (Array.isArray(values) ? values : [])
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+    .map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
+    .join(',');
+}
+
+async function _messagesLoadReactionRows(messageIds = []) {
+  const ids = (Array.isArray(messageIds) ? messageIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!ids.length) return [];
+  const fallbackRows = _messagesMemoryReactionRows(ids);
+  if (_sbMessagesEnabled()) {
+    try {
+      const inList = _messagesQuotedTextList(ids);
+      if (!inList) return fallbackRows;
+      const rows = await supabaseDb.select(_sbMessagesReactionsTable(), {
+        select: '*',
+        message_id: `in.(${inList})`,
+        limit: 5000,
+      });
+      return Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') console.warn('[messages reactions] list fallback:', error?.message || error);
+    }
+  }
+  return fallbackRows;
+}
+
+async function _messagesSetReaction(req, { messageId, chatId, emoji } = {}) {
+  const cleanMessageId = String(messageId || '').trim();
+  const cleanChatId = String(chatId || '').trim();
+  const cleanEmoji = _messagesCleanReactionEmoji(emoji);
+  if (!cleanMessageId) {
+    const err = new Error('Message ID is required.');
+    err.status = 400;
+    throw err;
+  }
+  if (!cleanEmoji) {
+    const err = new Error('Unsupported reaction.');
+    err.status = 400;
+    throw err;
+  }
+
+  if (cleanChatId && _sbMessagesEnabled()) {
+    const chatRow = await supabaseDb.selectById(_sbMessagesChatsTable(), cleanChatId).catch(() => null);
+    if (chatRow && !_messagesRowVisibleToCurrentUser(chatRow, req)) {
+      const err = new Error('You do not have access to this chat.');
+      err.status = 403;
+      throw err;
+    }
+  }
+
+  const userKey = _messagesReactionUserKey(req);
+  const identity = _messagesCurrentIdentity(req);
+  const now = new Date().toISOString();
+  const row = {
+    message_id: cleanMessageId,
+    chat_id: cleanChatId || null,
+    user_key: userKey,
+    user_name: identity.name || req?.session?.username || 'User',
+    user_email: identity.email || null,
+    emoji: cleanEmoji,
+    updated_at: now,
+  };
+
+  const memoryKey = `${cleanMessageId}::${userKey}`;
+  const memoryExisting = messagesReactionsMemory.get(memoryKey);
+
+  if (_sbMessagesEnabled()) {
+    try {
+      const existingRows = await supabaseDb.select(_sbMessagesReactionsTable(), {
+        select: '*',
+        message_id: `eq.${cleanMessageId}`,
+        user_key: `eq.${userKey}`,
+        limit: 1,
+      });
+      const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+      if (existing && String(existing.emoji || '') === cleanEmoji) {
+        await supabaseDb.deleteById(_sbMessagesReactionsTable(), _sbGet(existing, ['id']));
+      } else if (existing) {
+        await supabaseDb.updateById(_sbMessagesReactionsTable(), _sbGet(existing, ['id']), row);
+      } else {
+        await supabaseDb.insert(_sbMessagesReactionsTable(), { ...row, created_at: now });
+      }
+      const rows = await _messagesLoadReactionRows([cleanMessageId]);
+      return _messagesAggregateReactionRows(rows, req);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') console.warn('[messages reactions] upsert fallback:', error?.message || error);
+    }
+  }
+
+  if (memoryExisting && String(memoryExisting.emoji || '') === cleanEmoji) {
+    messagesReactionsMemory.delete(memoryKey);
+  } else {
+    messagesReactionsMemory.set(memoryKey, { ...row, id: memoryKey, created_at: memoryExisting?.created_at || now });
+  }
+  return _messagesAggregateReactionRows(_messagesMemoryReactionRows([cleanMessageId]), req);
+}
+
+app.get('/api/messages/reactions', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const ids = String(req.query?.messageIds || req.query?.message_ids || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .slice(0, 500);
+    if (!ids.length) return res.json({ ok: true, reactions: [] });
+    const rows = await _messagesLoadReactionRows(ids);
+    return res.json({ ok: true, reactions: _messagesAggregateReactionRows(rows, req) });
+  } catch (error) {
+    console.error('GET /api/messages/reactions error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to load message reactions.' });
+  }
+});
+
+app.post('/api/messages/reactions', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const reactions = await _messagesSetReaction(req, req.body || {});
+    return res.json({ ok: true, reactions });
+  } catch (error) {
+    console.error('POST /api/messages/reactions error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to save reaction.' });
+  }
+});
 
 
 function _sbMessagesPresenceTable() {
