@@ -2930,19 +2930,49 @@ function initUserMenuWidget() {
       if (isAndroid) {
         return `
           <ol class="app-download-steps">
-            <li>Open the app in Chrome on Android.</li>
-            <li>Tap the browser menu <strong>⋮</strong>.</li>
-            <li>Choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+            <li>Open the app in <strong>Chrome on Android</strong>.</li>
+            <li>Make sure <strong>Desktop site is OFF</strong>. If it is ON, Chrome often creates only a shortcut instead of installing the PWA app.</li>
+            <li>Stay on the page for about <strong>30 seconds</strong> and tap anywhere once, then reopen this App window.</li>
+            <li>Tap <strong>Android PWA</strong>. If the browser menu still says only <strong>Add to Home screen</strong>, choose it, then select <strong>Install</strong> if Chrome shows that option.</li>
           </ol>
         `;
       }
       return `
         <ol class="app-download-steps">
-          <li>Open the app in Chrome or Microsoft Edge on Windows.</li>
+          <li>Open the app in <strong>Chrome</strong> or <strong>Microsoft Edge</strong> on Windows.</li>
           <li>Click the install icon in the address bar, or open <strong>⋮ → Apps → Install this site as an app</strong>.</li>
           <li>Confirm <strong>Install</strong>.</li>
         </ol>
       `;
+    }
+
+    function getPwaInstallDiagnostic() {
+      const isAndroid = /Android/i.test(String(navigator.userAgent || ''));
+      const isStandalone = !!(window.OpsPWAInstall && window.OpsPWAInstall.isStandalone && window.OpsPWAInstall.isStandalone());
+      const canPrompt = !!(window.OpsPWAInstall && window.OpsPWAInstall.canPrompt && window.OpsPWAInstall.canPrompt());
+      const swReady = !!(window.OpsPWAInstall && window.OpsPWAInstall.serviceWorkerReady);
+
+      if (isStandalone) {
+        return `<div class="app-download-diagnostic app-download-diagnostic--success">This device is already running the app in installed mode.</div>`;
+      }
+
+      if (canPrompt) {
+        return `<div class="app-download-diagnostic app-download-diagnostic--success">PWA install is ready. Press Android PWA or Windows PWA below.</div>`;
+      }
+
+      if (isAndroid) {
+        return `
+          <div class="app-download-diagnostic app-download-diagnostic--warning">
+            If Chrome shows <strong>Create shortcut</strong> only, turn off <strong>Desktop site</strong> from the Chrome menu, then refresh and try again. Chrome may also need one tap and about 30 seconds on the site before showing the real install prompt.
+          </div>
+        `;
+      }
+
+      if (!swReady) {
+        return `<div class="app-download-diagnostic app-download-diagnostic--warning">The service worker is still preparing. Refresh once, then try installing again.</div>`;
+      }
+
+      return `<div class="app-download-diagnostic">If the install prompt is not available yet, use the browser install option from the menu.</div>`;
     }
 
     function setAppDownloadStatus(message, type = 'info', detailsHtml = '') {
@@ -3015,6 +3045,7 @@ function initUserMenuWidget() {
             <strong>Install the PWA version</strong>
             <span>This installs the current Operations Hub website as an app on Android or Windows. No APK/domain is required.</span>
           </div>
+          ${getPwaInstallDiagnostic()}
           ${renderPwaInstallOption('android', 'Android PWA', 'Install to Android Home screen', 'smartphone')}
           ${renderPwaInstallOption('windows', 'Windows PWA', 'Install as a desktop app in Chrome or Edge', 'monitor')}
           ${directAndroid || directWindows ? `
