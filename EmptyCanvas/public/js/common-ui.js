@@ -2261,7 +2261,8 @@ function initFloatingSearchWidget() {
       "#b2bSearch",
       "#stockSearch",
       "#schoolStockSearch",
-      "#notifSearch"
+      "#notifSearch",
+      "#msgSearchInput"
     ].join(",");
 
     return uniqueElements(getSearchDocs().flatMap((doc) => Array.from(doc.querySelectorAll(selector)))).filter((el) => {
@@ -2281,7 +2282,9 @@ function initFloatingSearchWidget() {
       ".school-folder-card",
       ".folder-card",
       ".notif-row",
-      ".product-card"
+      ".product-card",
+      ".msg-chat-row",
+      ".msg-person-card"
     ].join(",");
 
     return uniqueElements(getSearchDocs().flatMap((doc) => Array.from(doc.querySelectorAll(selector)))).filter((el) => !el.closest('[data-ops-shell-legacy="1"]'));

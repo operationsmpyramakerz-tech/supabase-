@@ -11,6 +11,8 @@
     query: '',
     currentUser: null,
     loading: false,
+    newMenuOpen: false,
+    createMode: 'chat',
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -23,6 +25,10 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  function normalizeSearch(value) {
+    return String(value || '').trim().toLowerCase();
   }
 
   function initials(name) {
@@ -43,11 +49,12 @@
     if (!el) return;
     el.disabled = !!busy;
     if (text) {
+      const label = el.querySelector('span') || el;
       if (busy) {
-        el.dataset.originalText = el.textContent || '';
-        el.textContent = text;
+        el.dataset.originalText = label.textContent || '';
+        label.textContent = text;
       } else if (el.dataset.originalText) {
-        el.textContent = el.dataset.originalText;
+        label.textContent = el.dataset.originalText;
         delete el.dataset.originalText;
       }
     }
@@ -78,16 +85,40 @@
     return data;
   }
 
+  function hydrateIcons() {
+    if (window.feather) {
+      try { window.feather.replace(); } catch {}
+    }
+  }
+
+  function currentUserKey() {
+    const name = normalizeSearch(state.currentUser?.name);
+    const email = normalizeSearch(state.currentUser?.email);
+    return { name, email };
+  }
+
+  function isCurrentUserMember(member) {
+    const cur = currentUserKey();
+    const name = normalizeSearch(member?.name);
+    const email = normalizeSearch(member?.email);
+    return (!!cur.email && !!email && cur.email === email) || (!!cur.name && !!name && cur.name === name);
+  }
+
+  function selectableMembers() {
+    return state.members.filter((member) => !isCurrentUserMember(member));
+  }
+
   async function loadCurrentUser() {
     try {
       const data = await apiJson('/api/account');
       state.currentUser = {
         name: data.name || data.username || '',
+        email: data.email || '',
         photoUrl: data.photoUrl || '',
       };
     } catch {
       const cached = (localStorage.getItem('username') || '').trim();
-      state.currentUser = { name: cached || 'User', photoUrl: '' };
+      state.currentUser = { name: cached || 'User', email: '', photoUrl: '' };
     }
   }
 
@@ -97,7 +128,7 @@
   }
 
   async function loadChats() {
-    const data = await apiJson('/api/messages/chats?limit=60');
+    const data = await apiJson('/api/messages/chats?limit=80');
     state.chats = Array.isArray(data.chats) ? data.chats : [];
   }
 
@@ -111,6 +142,7 @@
       renderPeopleStrip();
       renderChatsList();
       populateNewChatMembers();
+      renderGroupMemberPicker();
       if (keepSelection && state.selectedChatId) {
         const stillExists = state.chats.find((c) => c.id === state.selectedChatId);
         if (stillExists) {
@@ -132,13 +164,10 @@
     const list = $('#msgChatsList');
     if (people && !state.members.length) {
       people.innerHTML = `
-        <button type="button" class="msg-person-card msg-person-card--new" id="msgNewChatBtn">
-          <span class="msg-person-plus"><i data-feather="plus"></i></span>
-          <span>New Chat</span>
-        </button>
+        ${newButtonMarkup()}
         <div class="msg-strip-loading">Loading users...</div>
       `;
-      $('#msgNewChatBtn')?.addEventListener('click', () => openNewChatModal());
+      bindNewMenu();
     }
     if (list && !state.chats.length) {
       list.innerHTML = `<div class="msg-list-loading"><span></span> Loading chats...</div>`;
@@ -154,11 +183,60 @@
     }
   }
 
+  function newButtonMarkup() {
+    return `
+      <div class="msg-new-menu-wrap ${state.newMenuOpen ? 'is-open' : ''}">
+        <button type="button" class="msg-person-card msg-person-card--new" id="msgNewBtn" aria-haspopup="true" aria-expanded="${state.newMenuOpen ? 'true' : 'false'}">
+          <span class="msg-person-plus"><i data-feather="plus"></i></span>
+          <span>New</span>
+        </button>
+        <div class="msg-new-menu" id="msgNewMenu" ${state.newMenuOpen ? '' : 'hidden'}>
+          <button type="button" class="msg-new-choice" id="msgOpenNewChat" aria-label="New chat">
+            <span><i data-feather="message-circle"></i></span>
+            <strong>New Chat</strong>
+          </button>
+          <button type="button" class="msg-new-choice" id="msgOpenNewGroup" aria-label="New group">
+            <span><i data-feather="users"></i></span>
+            <strong>New Group</strong>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function setNewMenu(open) {
+    state.newMenuOpen = !!open;
+    const wrap = $('.msg-new-menu-wrap');
+    const menu = $('#msgNewMenu');
+    const btn = $('#msgNewBtn');
+    if (wrap) wrap.classList.toggle('is-open', state.newMenuOpen);
+    if (menu) menu.hidden = !state.newMenuOpen;
+    if (btn) btn.setAttribute('aria-expanded', state.newMenuOpen ? 'true' : 'false');
+    hydrateIcons();
+  }
+
+  function bindNewMenu() {
+    $('#msgNewBtn')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setNewMenu(!state.newMenuOpen);
+    });
+    $('#msgOpenNewChat')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setNewMenu(false);
+      openNewChatModal('chat');
+    });
+    $('#msgOpenNewGroup')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setNewMenu(false);
+      openNewChatModal('group');
+    });
+  }
+
   function renderPeopleStrip() {
     const el = $('#msgPeopleStrip');
     if (!el) return;
     const q = state.query.trim().toLowerCase();
-    const members = state.members
+    const members = selectableMembers()
       .filter((m) => !q || [m.name, m.position, m.department, m.email, m.phone].some((x) => String(x || '').toLowerCase().includes(q)))
       .slice(0, 30);
 
@@ -166,8 +244,9 @@
       const avatar = m.photoUrl
         ? `<span class="msg-person-avatar"><img src="${escapeHtml(m.photoUrl)}" alt="${escapeHtml(m.name || 'User')}" /></span>`
         : `<span class="msg-person-avatar">${escapeHtml(initials(m.name))}</span>`;
+      const search = [m.name, m.position, m.department, m.email, m.phone].filter(Boolean).join(' ');
       return `
-        <button type="button" class="msg-person-card" data-member-id="${escapeHtml(m.id)}" title="${escapeHtml(m.name || '')}">
+        <button type="button" class="msg-person-card" data-member-id="${escapeHtml(m.id)}" data-search="${escapeHtml(search)}" title="${escapeHtml(m.name || '')}">
           ${avatar}
           <span>${escapeHtml(shortName(m.name))}</span>
         </button>
@@ -175,18 +254,15 @@
     }).join('');
 
     el.innerHTML = `
-      <button type="button" class="msg-person-card msg-person-card--new" id="msgNewChatBtn">
-        <span class="msg-person-plus"><i data-feather="plus"></i></span>
-        <span>New Chat</span>
-      </button>
+      ${newButtonMarkup()}
       ${rows || '<div class="msg-strip-loading">No users found</div>'}
     `;
 
-    $('#msgNewChatBtn')?.addEventListener('click', () => openNewChatModal());
+    bindNewMenu();
     $$('[data-member-id]', el).forEach((btn) => {
       btn.addEventListener('click', () => {
         const member = state.members.find((m) => m.id === btn.dataset.memberId);
-        if (member) createChatForMember(member);
+        if (member) openNewChatModal('chat', member);
       });
     });
     hydrateIcons();
@@ -198,7 +274,7 @@
     if (!el) return;
 
     const q = state.query.trim().toLowerCase();
-    const chats = state.chats.filter((c) => !q || [c.title, c.preview].some((x) => String(x || '').toLowerCase().includes(q)));
+    const chats = state.chats.filter((c) => !q || [c.title, c.preview, c.participantNames].some((x) => String(x || '').toLowerCase().includes(q)));
 
     if (count) count.textContent = String(chats.length);
 
@@ -207,16 +283,19 @@
       return;
     }
 
-    el.innerHTML = chats.map((chat) => `
-      <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''}" data-chat-id="${escapeHtml(chat.id)}">
-        <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
-        <span class="msg-chat-main">
-          <span class="msg-chat-title">${escapeHtml(chat.title || 'Chat')}</span>
-          <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No messages yet')}</span>
-        </span>
-        <span class="msg-chat-meta">${escapeHtml(chat.lastMessageTimeText || chat.lastEditedTimeText || '')}</span>
-      </button>
-    `).join('');
+    el.innerHTML = chats.map((chat) => {
+      const search = [chat.title, chat.preview, chat.participantNames].filter(Boolean).join(' ');
+      return `
+        <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''}" data-chat-id="${escapeHtml(chat.id)}" data-search="${escapeHtml(search)}">
+          <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
+          <span class="msg-chat-main">
+            <span class="msg-chat-title">${escapeHtml(chat.title || 'Chat')}</span>
+            <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No messages yet')}</span>
+          </span>
+          <span class="msg-chat-meta">${escapeHtml(chat.lastMessageTimeText || chat.lastEditedTimeText || '')}</span>
+        </button>
+      `;
+    }).join('');
 
     $$('[data-chat-id]', el).forEach((row) => {
       row.addEventListener('click', () => selectChat(row.dataset.chatId));
@@ -255,8 +334,9 @@
     const subEl = $('#msgConvSubtitle');
     const avEl = $('#msgConvAvatar');
     const notionLink = $('#msgOpenNotion');
+    const participants = String(chat.participantNames || '').trim();
     if (titleEl) titleEl.textContent = title;
-    if (subEl) subEl.textContent = `${Number(chat.commentsCount || 0)} message${Number(chat.commentsCount || 0) === 1 ? '' : 's'} · Supabase chat`;
+    if (subEl) subEl.textContent = participants || `${Number(chat.commentsCount || 0)} message${Number(chat.commentsCount || 0) === 1 ? '' : 's'}`;
     if (avEl) avEl.textContent = initials(title);
     if (notionLink) {
       if (chat.url) {
@@ -273,18 +353,27 @@
     const el = $('#msgComments');
     if (!el) return;
     if (!state.comments.length) {
-      el.innerHTML = `<div class="msg-empty-list">No messages yet. Send the first message.</div>`;
+      el.innerHTML = `<div class="msg-empty-list">No messages yet.</div>`;
       return;
     }
-    el.innerHTML = state.comments.map((c) => `
-      <div class="msg-bubble-row ${c.isMine ? 'is-mine' : ''}">
-        <div class="msg-bubble">
-          <div class="msg-bubble-sender">${escapeHtml(c.sender || 'User')}</div>
-          <div class="msg-bubble-body">${escapeHtml(c.body || c.rawText || '')}</div>
-          <div class="msg-bubble-time">${escapeHtml(c.createdTimeText || '')}</div>
+    el.innerHTML = state.comments.map((c) => {
+      if (c.isSystem || String(c.messageType || '').toLowerCase() === 'system') {
+        return `
+          <div class="msg-system-row">
+            <span>${escapeHtml(c.body || c.rawText || '')}</span>
+          </div>
+        `;
+      }
+      return `
+        <div class="msg-bubble-row ${c.isMine ? 'is-mine' : ''}">
+          <div class="msg-bubble">
+            <div class="msg-bubble-sender">${escapeHtml(c.sender || 'User')}</div>
+            <div class="msg-bubble-body">${escapeHtml(c.body || c.rawText || '')}</div>
+            <div class="msg-bubble-time">${escapeHtml(c.createdTimeText || '')}</div>
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
     requestAnimationFrame(() => {
       try { el.scrollTop = el.scrollHeight; } catch {}
     });
@@ -305,7 +394,6 @@
       if (input) input.value = '';
       if (data.comment) state.comments.push(data.comment);
       renderComments();
-      // Update local preview without waiting for a full reload.
       state.chats = state.chats.map((c) => {
         if (c.id !== state.selectedChatId) return c;
         return {
@@ -330,24 +418,70 @@
   function populateNewChatMembers(selectedId = '') {
     const select = $('#msgNewChatMember');
     if (!select) return;
-    select.innerHTML = state.members.map((m) => `
+    const members = selectableMembers();
+    select.innerHTML = members.map((m) => `
       <option value="${escapeHtml(m.id)}" ${m.id === selectedId ? 'selected' : ''}>${escapeHtml(m.name || 'Unnamed')}${m.department ? ` — ${escapeHtml(m.department)}` : ''}</option>
     `).join('');
   }
 
-  function openNewChatModal(member = null) {
+  function renderGroupMemberPicker(selectedIds = []) {
+    const box = $('#msgGroupMembersList');
+    if (!box) return;
+    const selected = new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => String(id)));
+    const members = selectableMembers();
+    if (!members.length) {
+      box.innerHTML = '<div class="msg-empty-list">No team members available.</div>';
+      return;
+    }
+    box.innerHTML = members.map((m) => {
+      const avatar = m.photoUrl
+        ? `<span class="msg-member-check-avatar"><img src="${escapeHtml(m.photoUrl)}" alt="${escapeHtml(m.name || 'User')}" /></span>`
+        : `<span class="msg-member-check-avatar">${escapeHtml(initials(m.name))}</span>`;
+      return `
+        <label class="msg-member-check">
+          <input type="checkbox" value="${escapeHtml(m.id)}" ${selected.has(String(m.id)) ? 'checked' : ''} />
+          ${avatar}
+          <span class="msg-member-check-text">
+            <strong>${escapeHtml(m.name || 'Unnamed')}</strong>
+            <small>${escapeHtml(m.department || m.position || 'Team member')}</small>
+          </span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  function setCreateMode(mode, member = null) {
+    state.createMode = mode === 'group' ? 'group' : 'chat';
+    const isGroup = state.createMode === 'group';
+    const modeInput = $('#msgNewChatMode');
+    const title = $('#msgNewChatTitle');
+    const subtitle = $('#msgNewChatSubtitle');
+    const icon = $('#msgNewChatIcon');
+    const singleField = $('#msgSingleMemberField');
+    const groupField = $('#msgGroupMembersField');
+    const submitLabel = $('#msgNewChatCreate span');
+    if (modeInput) modeInput.value = state.createMode;
+    if (title) title.textContent = isGroup ? 'New Group' : 'New Chat';
+    if (subtitle) subtitle.textContent = isGroup ? 'Choose a subject and the people for this group room.' : 'Choose a subject and the team member for this chat room.';
+    if (icon) icon.innerHTML = `<i data-feather="${isGroup ? 'users' : 'message-circle'}"></i>`;
+    if (singleField) singleField.hidden = isGroup;
+    if (groupField) groupField.hidden = !isGroup;
+    if (submitLabel) submitLabel.textContent = isGroup ? 'Create Group' : 'Create Chat';
+    populateNewChatMembers(member?.id || '');
+    renderGroupMemberPicker(member ? [member.id] : []);
+  }
+
+  function openNewChatModal(mode = 'chat', member = null) {
     const overlay = $('#msgNewChatModal');
     if (!overlay) return;
-    populateNewChatMembers(member?.id || '');
-    const titleInput = $('#msgNewChatTitleInput');
-    const msgInput = $('#msgNewChatMessage');
+    setCreateMode(mode, member);
+    const subjectInput = $('#msgNewChatSubject');
     const err = $('#msgNewChatError');
-    if (titleInput) titleInput.value = '';
-    if (msgInput) msgInput.value = '';
+    if (subjectInput) subjectInput.value = '';
     if (err) err.textContent = '';
     overlay.hidden = false;
     overlay.setAttribute('aria-hidden', 'false');
-    setTimeout(() => $('#msgNewChatMessage')?.focus(), 80);
+    setTimeout(() => $('#msgNewChatSubject')?.focus(), 80);
     hydrateIcons();
   }
 
@@ -356,28 +490,6 @@
     if (!overlay) return;
     overlay.hidden = true;
     overlay.setAttribute('aria-hidden', 'true');
-  }
-
-  async function createChatForMember(member) {
-    if (!member) return;
-    const title = `${state.currentUser?.name || 'User'} ↔ ${member.name || 'User'}`;
-    try {
-      const data = await apiJson('/api/messages/chats', {
-        method: 'POST',
-        body: {
-          targetUserId: member.id,
-          targetName: member.name || '',
-          title,
-        },
-      });
-      if (data.chat) {
-        state.chats.unshift(data.chat);
-        state.comments = Array.isArray(data.comments) ? data.comments : [];
-        await selectCreatedChat(data.chat, state.comments);
-      }
-    } catch (error) {
-      toast(error.message || 'Failed to create chat.', 'error');
-    }
   }
 
   async function selectCreatedChat(chat, comments) {
@@ -389,35 +501,52 @@
     renderComments();
   }
 
+  function selectedGroupMemberIds() {
+    return $$('#msgGroupMembersList input[type="checkbox"]:checked').map((input) => String(input.value || '').trim()).filter(Boolean);
+  }
+
   async function submitNewChat(event) {
     event.preventDefault();
     const select = $('#msgNewChatMember');
-    const titleInput = $('#msgNewChatTitleInput');
-    const messageInput = $('#msgNewChatMessage');
+    const subjectInput = $('#msgNewChatSubject');
     const createBtn = $('#msgNewChatCreate');
     const err = $('#msgNewChatError');
+    const mode = String($('#msgNewChatMode')?.value || state.createMode || 'chat');
+    const subject = String(subjectInput?.value || '').trim();
 
-    const member = state.members.find((m) => m.id === select?.value) || null;
-    if (!member) {
-      if (err) err.textContent = 'Please select a team member.';
+    if (!subject) {
+      if (err) err.textContent = 'Please enter the subject.';
+      subjectInput?.focus();
       return;
     }
 
-    setBusy(createBtn, true);
+    let body = { title: subject };
+    if (mode === 'group') {
+      const ids = selectedGroupMemberIds();
+      if (!ids.length) {
+        if (err) err.textContent = 'Please select at least one person.';
+        return;
+      }
+      body = { ...body, type: 'group', targetUserIds: ids };
+    } else {
+      const member = state.members.find((m) => m.id === select?.value) || null;
+      if (!member) {
+        if (err) err.textContent = 'Please select a team member.';
+        return;
+      }
+      body = { ...body, type: 'chat', targetUserId: member.id, targetName: member.name || '' };
+    }
+
+    setBusy(createBtn, true, 'Creating...');
     if (err) err.textContent = '';
     try {
       const data = await apiJson('/api/messages/chats', {
         method: 'POST',
-        body: {
-          targetUserId: member.id,
-          targetName: member.name || '',
-          title: titleInput?.value || '',
-          message: messageInput?.value || '',
-        },
+        body,
       });
       closeNewChatModal();
       if (data.chat) {
-        state.chats.unshift(data.chat);
+        state.chats = [data.chat, ...state.chats.filter((c) => String(c.id) !== String(data.chat.id))];
         await selectCreatedChat(data.chat, data.comments || []);
       }
     } catch (error) {
@@ -443,15 +572,16 @@
     $('#msgNewChatModal')?.addEventListener('click', (e) => {
       if (e.target === $('#msgNewChatModal')) closeNewChatModal();
     });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !$('#msgNewChatModal')?.hidden) closeNewChatModal();
+    document.addEventListener('click', (e) => {
+      if (!state.newMenuOpen) return;
+      if (!e.target.closest('.msg-new-menu-wrap')) setNewMenu(false);
     });
-  }
-
-  function hydrateIcons() {
-    if (window.feather) {
-      try { window.feather.replace(); } catch {}
-    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!$('#msgNewChatModal')?.hidden) closeNewChatModal();
+        setNewMenu(false);
+      }
+    });
   }
 
   document.addEventListener('DOMContentLoaded', () => {
