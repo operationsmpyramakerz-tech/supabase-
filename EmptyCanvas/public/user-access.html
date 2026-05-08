@@ -112,14 +112,9 @@
               </button>
               <div>
                 <h3 id="uaMembersTitle">Team Members</h3>
-                <p id="uaMembersSubtitle">Select a department folder.</p>
               </div>
             </div>
             <div class="ua-members-actions">
-              <button type="button" class="ua-edit-dept-btn" id="uaEditActiveDepartmentBtn">
-                <i data-feather="edit-3"></i>
-                <span>Edit Department</span>
-              </button>
               <button type="button" class="ua-add-member-btn" id="uaAddMemberBtn">
                 <i data-feather="user-plus"></i>
                 <span>Add Member</span>
@@ -213,6 +208,35 @@
         <button type="submit" class="ua-btn ua-btn--dark" id="uaDepartmentSave">
           <i data-feather="save"></i>
           <span id="uaDepartmentSaveLabel">Save</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="ua-modal-overlay" id="uaMoveMemberModal" aria-hidden="true" hidden>
+    <form class="ua-modal ua-modal--small" id="uaMoveMemberForm" role="dialog" aria-modal="true" aria-labelledby="uaMoveMemberTitle">
+      <button type="button" class="ua-modal__close" id="uaMoveMemberClose" aria-label="Close move member window">
+        <i data-feather="x"></i>
+      </button>
+      <div class="ua-modal__header ua-modal__header--compact">
+        <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="shuffle"></i></div>
+        <div>
+          <h2 id="uaMoveMemberTitle">Move Member</h2>
+          <p id="uaMoveMemberSubtitle">Move this user to another department.</p>
+        </div>
+      </div>
+      <div class="ua-modal__body ua-modal__body--compact">
+        <label class="ua-form-field ua-form-field--wide">
+          <span>Target Department</span>
+          <select id="uaMoveDepartmentSelect" required></select>
+        </label>
+        <div class="ua-form-error" id="uaMoveMemberError" aria-live="polite"></div>
+      </div>
+      <div class="ua-modal__actions">
+        <button type="button" class="ua-btn ua-btn--light" id="uaMoveMemberCancel">Cancel</button>
+        <button type="submit" class="ua-btn ua-btn--dark" id="uaMoveMemberSave">
+          <i data-feather="shuffle"></i>
+          <span>Move</span>
         </button>
       </div>
     </form>
