@@ -13,6 +13,9 @@
     loading: false,
     newMenuOpen: false,
     createMode: 'chat',
+    activeFilter: 'all',
+    readState: {},
+    pendingAttachment: null,
     mentionItems: [],
     mentionActiveIndex: 0,
     mentionStart: -1,
@@ -128,6 +131,116 @@
     return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
   }
 
+  function attachmentIsImage(attachment) {
+    const mime = String(attachment?.mime || '').toLowerCase();
+    const url = String(attachment?.url || attachment?.previewUrl || '').toLowerCase();
+    return mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(url);
+  }
+
+  function readStateKey() {
+    const email = normalizeSearch(state.currentUser?.email);
+    const name = normalizeSearch(state.currentUser?.name);
+    return `operationsHub.messages.readState.${email || name || 'anonymous'}`;
+  }
+
+  function loadReadState() {
+    try {
+      const raw = localStorage.getItem(readStateKey());
+      state.readState = raw ? JSON.parse(raw) || {} : {};
+    } catch {
+      state.readState = {};
+    }
+  }
+
+  function saveReadState() {
+    try { localStorage.setItem(readStateKey(), JSON.stringify(state.readState || {})); } catch {}
+  }
+
+  function markChatRead(chat) {
+    const id = String(chat?.id || state.selectedChatId || '');
+    if (!id) return;
+    const lastTime = String(chat?.lastMessageTime || chat?.lastEditedTime || chat?.createdTime || new Date().toISOString());
+    state.readState[id] = lastTime;
+    saveReadState();
+  }
+
+  function chatTimeValue(value) {
+    const time = Date.parse(value || '');
+    return Number.isFinite(time) ? time : 0;
+  }
+
+  function isChatUnread(chat) {
+    if (!chat || String(chat.id || '') === String(state.selectedChatId || '')) return false;
+    const count = Number(chat.commentsCount || 0);
+    if (!count) return false;
+    const last = chatTimeValue(chat.lastMessageTime || chat.lastEditedTime || chat.createdTime);
+    const read = chatTimeValue(state.readState?.[String(chat.id || '')]);
+    return last > read;
+  }
+
+  function chatParticipantCount(chat) {
+    return String(chat?.participantNames || '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean).length;
+  }
+
+  function isGroupChat(chat) {
+    const type = String(chat?.chatType || chat?.type || '').toLowerCase();
+    return type === 'group' || type === 'room' || chatParticipantCount(chat) > 2;
+  }
+
+  function chatStatus(chat) {
+    return String(chat?.status || chat?.state || '').trim().toLowerCase();
+  }
+
+  function isArchivedChat(chat) {
+    const status = chatStatus(chat);
+    return !!chat?.archived || status === 'archived' || status === 'archive';
+  }
+
+  function isClosedChat(chat) {
+    const status = chatStatus(chat);
+    return !!chat?.closed || status === 'closed' || status === 'done';
+  }
+
+  function chatMatchesFilter(chat, filter = state.activeFilter) {
+    switch (filter) {
+      case 'unread': return isChatUnread(chat);
+      case 'groups': return isGroupChat(chat);
+      case 'archived': return isArchivedChat(chat);
+      case 'closed': return isClosedChat(chat);
+      case 'all':
+      default: return !isArchivedChat(chat) && !isClosedChat(chat);
+    }
+  }
+
+  function filteredChats() {
+    const q = state.query.trim().toLowerCase();
+    return state.chats
+      .filter((c) => chatMatchesFilter(c))
+      .filter((c) => !q || [c.title, c.preview, c.participantNames].some((x) => String(x || '').toLowerCase().includes(q)));
+  }
+
+  function renderFilterTabs() {
+    const tabs = $('#msgFilterTabs');
+    if (!tabs) return;
+    const filters = ['all', 'unread', 'groups', 'archived', 'closed'];
+    const counts = Object.fromEntries(filters.map((f) => [f, state.chats.filter((chat) => chatMatchesFilter(chat, f)).length]));
+    $$('[data-filter]', tabs).forEach((btn) => {
+      const filter = btn.dataset.filter || 'all';
+      btn.classList.toggle('is-active', filter === state.activeFilter);
+      const badge = btn.querySelector('span');
+      if (badge) badge.textContent = String(counts[filter] || 0);
+    });
+  }
+
+  function setActiveFilter(filter) {
+    state.activeFilter = ['all', 'unread', 'groups', 'archived', 'closed'].includes(filter) ? filter : 'all';
+    renderFilterTabs();
+    renderChatsList();
+  }
+
   function formatMessageText(value) {
     let safe = escapeHtml(value || '');
     const names = (state.members || [])
@@ -146,14 +259,22 @@
     if (!attachment?.url) return '';
     const name = escapeHtml(attachment.name || 'Attachment');
     const meta = [attachment.mime, humanFileSize(attachment.size)].filter(Boolean).join(' • ');
+    const url = escapeHtml(attachment.url);
+    const isImage = attachmentIsImage(attachment);
+    const preview = isImage
+      ? `<span class="msg-attachment-image"><img src="${url}" alt="${name}" loading="lazy" /></span>`
+      : '';
     return `
-      <a class="msg-attachment-card" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
-        <span class="msg-attachment-icon"><i data-feather="paperclip"></i></span>
-        <span class="msg-attachment-info">
-          <strong>${name}</strong>
-          <small>${escapeHtml(meta || 'Open attachment')}</small>
+      <a class="msg-attachment-card ${isImage ? 'is-image' : ''}" href="${url}" target="_blank" rel="noopener">
+        ${preview}
+        <span class="msg-attachment-file-row">
+          <span class="msg-attachment-icon"><i data-feather="${isImage ? 'image' : 'paperclip'}"></i></span>
+          <span class="msg-attachment-info">
+            <strong>${name}</strong>
+            <small>${escapeHtml(meta || 'Open attachment')}</small>
+          </span>
+          <span class="msg-attachment-open"><i data-feather="external-link"></i></span>
         </span>
-        <span class="msg-attachment-open"><i data-feather="external-link"></i></span>
       </a>
     `;
   }
@@ -322,8 +443,11 @@
     try {
       state.loading = true;
       renderLoading();
-      await Promise.all([loadCurrentUser(), loadMembers(), loadChats()]);
+      await loadCurrentUser();
+      loadReadState();
+      await Promise.all([loadMembers(), loadChats()]);
       renderPeopleStrip();
+      renderFilterTabs();
       renderChatsList();
       populateNewChatMembers();
       renderGroupMemberPicker();
@@ -455,26 +579,52 @@
   function renderChatsList() {
     const el = $('#msgChatsList');
     const count = $('#msgChatsCount');
+    const title = $('#msgListTitle');
     if (!el) return;
 
-    const q = state.query.trim().toLowerCase();
-    const chats = state.chats.filter((c) => !q || [c.title, c.preview, c.participantNames].some((x) => String(x || '').toLowerCase().includes(q)));
+    const chats = filteredChats();
+    const labels = {
+      all: 'Recent chats',
+      unread: 'Unread chats',
+      groups: 'Group rooms',
+      archived: 'Archived chats',
+      closed: 'Closed chats',
+    };
 
+    if (title) title.textContent = labels[state.activeFilter] || 'Recent chats';
     if (count) count.textContent = String(chats.length);
+    renderFilterTabs();
 
     if (!chats.length) {
-      el.innerHTML = `<div class="msg-empty-list">No chats found.</div>`;
+      const emptyMessages = {
+        all: 'No chats found.',
+        unread: 'No unread chats.',
+        groups: 'No group chats yet.',
+        archived: 'No archived chats.',
+        closed: 'No closed chats.',
+      };
+      el.innerHTML = `<div class="msg-empty-list">${escapeHtml(emptyMessages[state.activeFilter] || 'No chats found.')}</div>`;
       return;
     }
 
     el.innerHTML = chats.map((chat) => {
       const search = [chat.title, chat.preview, chat.participantNames].filter(Boolean).join(' ');
+      const unread = isChatUnread(chat);
+      const badges = [
+        isGroupChat(chat) ? '<span class="msg-chat-badge">Group</span>' : '',
+        isArchivedChat(chat) ? '<span class="msg-chat-badge">Archived</span>' : '',
+        isClosedChat(chat) ? '<span class="msg-chat-badge">Closed</span>' : '',
+      ].filter(Boolean).join('');
       return `
-        <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''}" data-chat-id="${escapeHtml(chat.id)}" data-search="${escapeHtml(search)}">
+        <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''} ${unread ? 'is-unread' : ''}" data-chat-id="${escapeHtml(chat.id)}" data-search="${escapeHtml(search)}">
           <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
           <span class="msg-chat-main">
-            <span class="msg-chat-title">${escapeHtml(chat.title || 'Chat')}</span>
+            <span class="msg-chat-title-wrap">
+              <span class="msg-chat-title">${escapeHtml(chat.title || 'Chat')}</span>
+              ${unread ? '<span class="msg-unread-dot" aria-label="Unread"></span>' : ''}
+            </span>
             <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No messages yet')}</span>
+            ${badges ? `<span class="msg-chat-badges">${badges}</span>` : ''}
           </span>
           <span class="msg-chat-meta">${escapeHtml(chat.lastMessageTimeText || chat.lastEditedTimeText || '')}</span>
         </button>
@@ -491,6 +641,7 @@
     if (!chat) return;
     state.selectedChatId = chatId;
     state.selectedChat = chat;
+    clearPendingAttachment();
     renderChatsList();
     renderSelectedChatShell();
     const commentsEl = $('#msgComments');
@@ -498,10 +649,26 @@
     try {
       const data = await apiJson(`/api/messages/chats/${encodeURIComponent(chatId)}/comments`);
       state.comments = Array.isArray(data.comments) ? data.comments : [];
+      markChatRead(state.selectedChat);
+      renderChatsList();
       renderComments();
     } catch (error) {
       if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load messages.')}</div>`;
     }
+  }
+
+  function closeActiveChat() {
+    state.selectedChatId = '';
+    state.selectedChat = null;
+    state.comments = [];
+    const empty = $('#msgEmptyState');
+    const conv = $('#msgConversation');
+    const shell = $('.messages-shell');
+    if (empty) empty.hidden = false;
+    if (conv) conv.hidden = true;
+    shell?.classList.remove('is-chat-open');
+    clearPendingAttachment();
+    renderChatsList();
   }
 
   function renderSelectedChatShell() {
@@ -566,45 +733,102 @@
     });
   }
 
-  async function sendMessage(event) {
-    event.preventDefault();
-    const input = $('#msgComposerInput');
-    const btn = $('#msgSendBtn');
-    const msg = String(input?.value || '').trim();
-    if (!state.selectedChatId || !msg) return;
-    setBusy(btn, true);
-    try {
-      const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/comments`, {
-        method: 'POST',
-        body: { message: msg },
-      });
-      if (input) input.value = '';
-      closeMentionMenu();
-      if (data.comment) state.comments.push(data.comment);
-      renderComments();
-      state.chats = state.chats.map((c) => {
-        if (c.id !== state.selectedChatId) return c;
-        return {
-          ...c,
-          preview: data.comment?.body || msg,
-          commentsCount: Number(c.commentsCount || 0) + 1,
-          lastMessageTime: data.comment?.createdTime || new Date().toISOString(),
-          lastMessageTimeText: data.comment?.createdTimeText || 'just now',
-        };
-      });
-      state.chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
-      state.selectedChat = state.chats.find((c) => c.id === state.selectedChatId) || state.selectedChat;
-      renderChatsList();
-      renderSelectedChatShell();
-    } catch (error) {
-      toast(error.message || 'Failed to send message.', 'error');
-    } finally {
-      setBusy(btn, false);
-    }
+  function updateChatAfterComment(comment, fallbackPreview = '') {
+    if (!comment || !state.selectedChatId) return;
+    const preview = comment.attachment
+      ? `📎 ${comment.attachment.name || 'Attachment'}`
+      : (comment.body || fallbackPreview || 'New message');
+    state.chats = state.chats.map((c) => {
+      if (String(c.id) !== String(state.selectedChatId)) return c;
+      return {
+        ...c,
+        preview,
+        commentsCount: Number(c.commentsCount || 0) + 1,
+        lastMessageTime: comment.createdTime || new Date().toISOString(),
+        lastMessageTimeText: comment.createdTimeText || 'just now',
+      };
+    });
+    state.chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
+    state.selectedChat = state.chats.find((c) => String(c.id) === String(state.selectedChatId)) || state.selectedChat;
+    markChatRead(state.selectedChat);
+    renderChatsList();
+    renderFilterTabs();
+    renderSelectedChatShell();
   }
 
+  async function postTextMessage(message) {
+    const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/comments`, {
+      method: 'POST',
+      body: { message },
+    });
+    if (data.comment) {
+      state.comments.push(data.comment);
+      updateChatAfterComment(data.comment, message);
+    }
+    return data.comment || null;
+  }
 
-  async function uploadAttachmentFile(file) {
+  async function postAttachmentMessage(attachment) {
+    const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/attachments`, {
+      method: 'POST',
+      body: {
+        filename: attachment.file?.name || attachment.name || 'attachment',
+        mime: attachment.file?.type || attachment.mime || 'application/octet-stream',
+        size: attachment.file?.size || attachment.size || 0,
+        dataUrl: attachment.dataUrl,
+      },
+    });
+    if (data.comment) {
+      state.comments.push(data.comment);
+      updateChatAfterComment(data.comment, `📎 ${attachment.name || 'Attachment'}`);
+    }
+    return data.comment || null;
+  }
+
+  function clearPendingAttachment() {
+    const oldUrl = state.pendingAttachment?.previewUrl || '';
+    if (oldUrl) {
+      try { URL.revokeObjectURL(oldUrl); } catch {}
+    }
+    state.pendingAttachment = null;
+    renderAttachmentDraft();
+    const input = $('#msgAttachmentInput');
+    if (input) input.value = '';
+  }
+
+  function renderAttachmentDraft() {
+    const box = $('#msgAttachmentDraft');
+    if (!box) return;
+    const item = state.pendingAttachment;
+    if (!item) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    const isPreparing = item.status === 'reading';
+    const isUploading = item.status === 'uploading';
+    const isImage = attachmentIsImage(item);
+    const thumbnail = isImage && item.previewUrl
+      ? `<span class="msg-draft-thumb is-image"><img src="${escapeHtml(item.previewUrl)}" alt="${escapeHtml(item.name || 'Attachment')}" /></span>`
+      : `<span class="msg-draft-thumb"><i data-feather="paperclip"></i></span>`;
+    const statusText = isUploading ? 'Uploading...' : (isPreparing ? 'Preparing preview...' : 'Ready to send');
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="msg-draft-card ${isPreparing || isUploading ? 'is-loading' : ''}">
+        ${thumbnail}
+        <span class="msg-draft-info">
+          <strong>${escapeHtml(item.name || 'Attachment')}</strong>
+          <small>${escapeHtml([item.mime, humanFileSize(item.size), statusText].filter(Boolean).join(' • '))}</small>
+          <span class="msg-draft-progress"><i></i></span>
+        </span>
+        <button type="button" class="msg-draft-remove" id="msgDraftRemove" aria-label="Remove selected attachment">×</button>
+      </div>
+    `;
+    $('#msgDraftRemove')?.addEventListener('click', clearPendingAttachment);
+    hydrateIcons();
+  }
+
+  async function prepareAttachmentFile(file) {
     if (!state.selectedChatId) {
       toast('Please select a chat first.', 'error');
       return;
@@ -614,40 +838,64 @@
       toast('File is too large. Maximum size is 12MB.', 'error');
       return;
     }
-    const attachBtn = $('#msgAttachBtn');
-    setBusy(attachBtn, true);
+    clearPendingAttachment();
+    const previewUrl = file.type && file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
+    state.pendingAttachment = {
+      file,
+      name: file.name || 'attachment',
+      mime: file.type || 'application/octet-stream',
+      size: file.size || 0,
+      previewUrl,
+      dataUrl: '',
+      status: 'reading',
+    };
+    renderAttachmentDraft();
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/attachments`, {
-        method: 'POST',
-        body: {
-          filename: file.name || 'attachment',
-          mime: file.type || 'application/octet-stream',
-          size: file.size || 0,
-          dataUrl,
-        },
-      });
-      if (data.comment) state.comments.push(data.comment);
-      renderComments();
-      const preview = `📎 ${data.comment?.attachment?.name || file.name || 'Attachment'}`;
-      state.chats = state.chats.map((c) => c.id === state.selectedChatId ? {
-        ...c,
-        preview,
-        commentsCount: Number(c.commentsCount || 0) + 1,
-        lastMessageTime: data.comment?.createdTime || new Date().toISOString(),
-        lastMessageTimeText: data.comment?.createdTimeText || 'just now',
-      } : c);
-      state.chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
-      state.selectedChat = state.chats.find((c) => c.id === state.selectedChatId) || state.selectedChat;
-      renderChatsList();
-      renderSelectedChatShell();
-      toast('Attachment sent.', 'success');
+      if (!state.pendingAttachment || state.pendingAttachment.file !== file) return;
+      state.pendingAttachment.dataUrl = dataUrl;
+      state.pendingAttachment.status = 'ready';
+      renderAttachmentDraft();
+      toast('Attachment selected. Press Send to upload it.', 'success');
     } catch (error) {
-      toast(error.message || 'Failed to upload attachment.', 'error');
+      clearPendingAttachment();
+      toast(error.message || 'Failed to read attachment.', 'error');
+    }
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault();
+    const input = $('#msgComposerInput');
+    const btn = $('#msgSendBtn');
+    const msg = String(input?.value || '').trim();
+    const pending = state.pendingAttachment;
+    if (!state.selectedChatId || (!msg && !pending)) return;
+    if (pending && pending.status === 'reading') {
+      toast('Please wait until the attachment preview is ready.', 'info');
+      return;
+    }
+    setBusy(btn, true, pending ? 'Sending...' : undefined);
+    try {
+      if (msg) {
+        await postTextMessage(msg);
+        if (input) input.value = '';
+        closeMentionMenu();
+      }
+      if (pending) {
+        pending.status = 'uploading';
+        renderAttachmentDraft();
+        await postAttachmentMessage(pending);
+        clearPendingAttachment();
+      }
+      renderComments();
+    } catch (error) {
+      if (pending && state.pendingAttachment) {
+        state.pendingAttachment.status = 'ready';
+        renderAttachmentDraft();
+      }
+      toast(error.message || 'Failed to send message.', 'error');
     } finally {
-      setBusy(attachBtn, false);
-      const input = $('#msgAttachmentInput');
-      if (input) input.value = '';
+      setBusy(btn, false);
     }
   }
 
@@ -731,7 +979,10 @@
   async function selectCreatedChat(chat, comments) {
     state.selectedChatId = chat.id;
     state.selectedChat = chat;
+    clearPendingAttachment();
     state.comments = Array.isArray(comments) ? comments : [];
+    markChatRead(chat);
+    renderFilterTabs();
     renderChatsList();
     renderSelectedChatShell();
     renderComments();
@@ -801,11 +1052,16 @@
     });
     $('#msgComposer')?.addEventListener('submit', sendMessage);
     $('#msgAttachBtn')?.addEventListener('click', () => $('#msgAttachmentInput')?.click());
-    $('#msgAttachmentInput')?.addEventListener('change', (event) => uploadAttachmentFile(event.target?.files?.[0] || null));
+    $('#msgAttachmentInput')?.addEventListener('change', (event) => prepareAttachmentFile(event.target?.files?.[0] || null));
     $('#msgComposerInput')?.addEventListener('input', updateMentionSuggestions);
     $('#msgComposerInput')?.addEventListener('keydown', handleMentionKeydown);
     $('#msgComposerInput')?.addEventListener('blur', () => setTimeout(closeMentionMenu, 160));
-    $('#msgBackMobile')?.addEventListener('click', () => $('.messages-shell')?.classList.remove('is-chat-open'));
+    $('#msgBackMobile')?.addEventListener('click', closeActiveChat);
+
+    $('#msgFilterTabs')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-filter]');
+      if (btn) setActiveFilter(btn.dataset.filter || 'all');
+    });
 
     $('#msgNewChatForm')?.addEventListener('submit', submitNewChat);
     $('#msgNewChatClose')?.addEventListener('click', closeNewChatModal);
