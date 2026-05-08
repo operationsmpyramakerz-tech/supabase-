@@ -21,6 +21,8 @@
     pageAccessModalMemberId: '',
     pageAccessModalLoading: false,
     pageAccessSaving: false,
+    departmentModalMode: 'create',
+    departmentTargetId: '',
   };
 
   const els = {};
@@ -97,6 +99,20 @@
     return state.departments.find((d) => d.id === state.activeDepartmentId) || null;
   }
 
+  function departmentById(departmentId) {
+    const id = String(departmentId || '').trim();
+    if (!id) return null;
+    return state.departments.find((d) => String(d.id || '') === id) || null;
+  }
+
+  function departmentName(department) {
+    return String(department?.name || 'No Department').trim() || 'No Department';
+  }
+
+  function canEditDepartment(department) {
+    return !!department && departmentName(department).toLowerCase() !== 'no department';
+  }
+
   function allMembers() {
     return state.departments.flatMap((d) => Array.isArray(d.members) ? d.members : []);
   }
@@ -167,15 +183,22 @@
 
     els.folders.innerHTML = departments.map((department) => {
       const count = Number(department.count || 0);
+      const name = departmentName(department);
+      const editDisabled = canEditDepartment(department) ? '' : 'disabled aria-disabled="true" title="Default fallback department cannot be renamed"';
+      const emptyBadge = count ? '' : '<span class="ua-folder__badge">Empty</span>';
       return `
-        <button type="button" class="ua-folder" data-dept-id="${escapeHTML(department.id)}">
+        <article class="ua-folder" data-dept-id="${escapeHTML(department.id)}" role="button" tabindex="0" aria-label="Open ${escapeHTML(name)} department">
           <span class="ua-folder__icon"><i data-feather="folder"></i></span>
           <span class="ua-folder__text">
-            <span class="ua-folder__name">${escapeHTML(department.name || 'No Department')}</span>
-            <span class="ua-folder__count">${count} ${count === 1 ? 'member' : 'members'}</span>
+            <span class="ua-folder__name">${escapeHTML(name)}</span>
+            <span class="ua-folder__count">${count} ${count === 1 ? 'member' : 'members'}${emptyBadge}</span>
           </span>
+          <button type="button" class="ua-folder__edit" data-action="edit-department" data-dept-id="${escapeHTML(department.id)}" ${editDisabled}>
+            <i data-feather="edit-3"></i>
+            <span>Edit</span>
+          </button>
           <span class="ua-folder__open"><i data-feather="chevron-right"></i></span>
-        </button>
+        </article>
       `;
     }).join('');
     hydrateIcons(els.folders);
@@ -210,6 +233,10 @@
       const total = Array.isArray(dept?.members) ? dept.members.length : 0;
       const visible = members.length;
       els.membersSubtitle.textContent = `${visible} of ${total} user${total === 1 ? '' : 's'} shown from this department.`;
+    }
+    if (els.editActiveDeptBtn) {
+      els.editActiveDeptBtn.disabled = !canEditDepartment(dept);
+      els.editActiveDeptBtn.title = canEditDepartment(dept) ? `Rename ${departmentName(dept)}` : 'Default fallback department cannot be renamed';
     }
 
     if (!members.length) {
@@ -673,6 +700,93 @@
       toast('error', 'Save failed', error?.message || 'Failed to save member.');
     } finally {
       setFormSaving(false);
+    }
+  }
+
+  function openDepartmentModal(mode, department = null) {
+    if (!els.departmentModal || !els.departmentNameInput) return;
+    state.departmentModalMode = mode === 'edit' ? 'edit' : 'create';
+    state.departmentTargetId = state.departmentModalMode === 'edit' ? String(department?.id || '') : '';
+
+    const isEdit = state.departmentModalMode === 'edit';
+    if (els.departmentTitle) els.departmentTitle.textContent = isEdit ? 'Edit Department' : 'New Department';
+    if (els.departmentSubtitle) {
+      els.departmentSubtitle.textContent = isEdit
+        ? 'Rename this department for all assigned team members.'
+        : 'Create an empty department folder, then assign members to it later.';
+    }
+    if (els.departmentSaveLabel) els.departmentSaveLabel.textContent = isEdit ? 'Save Department' : 'Create Department';
+    if (els.departmentError) els.departmentError.textContent = '';
+    els.departmentNameInput.value = isEdit ? departmentName(department) : '';
+    els.departmentModal.hidden = false;
+    els.departmentModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    hydrateIcons(els.departmentModal);
+    setTimeout(() => els.departmentNameInput?.focus(), 50);
+  }
+
+  function closeDepartmentModal() {
+    if (!els.departmentModal) return;
+    els.departmentModal.hidden = true;
+    els.departmentModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('ua-modal-open');
+    state.departmentModalMode = 'create';
+    state.departmentTargetId = '';
+    if (els.departmentNameInput) els.departmentNameInput.value = '';
+    if (els.departmentError) els.departmentError.textContent = '';
+  }
+
+  function setDepartmentSaving(saving) {
+    if (els.departmentSaveBtn) {
+      els.departmentSaveBtn.disabled = !!saving;
+      els.departmentSaveBtn.classList.toggle('is-loading', !!saving);
+    }
+    if (els.departmentCancelBtn) els.departmentCancelBtn.disabled = !!saving;
+    if (els.departmentNameInput) els.departmentNameInput.disabled = !!saving;
+  }
+
+  async function submitDepartmentForm(event) {
+    event?.preventDefault?.();
+    const name = String(els.departmentNameInput?.value || '').replace(/\s+/g, ' ').trim();
+    if (!name) {
+      if (els.departmentError) els.departmentError.textContent = 'Department name is required.';
+      return;
+    }
+
+    const isEdit = state.departmentModalMode === 'edit';
+    const targetId = String(state.departmentTargetId || '').trim();
+    if (isEdit && !targetId) {
+      if (els.departmentError) els.departmentError.textContent = 'Select a department first.';
+      return;
+    }
+
+    setDepartmentSaving(true);
+    if (els.departmentError) els.departmentError.textContent = '';
+    try {
+      const endpoint = isEdit
+        ? `/api/user-access/departments/${encodeURIComponent(targetId)}`
+        : '/api/user-access/departments';
+      const res = await fetch(endpoint, {
+        method: isEdit ? 'PATCH' : 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save department.');
+
+      const newDepartmentId = String(data?.department?.id || data?.departmentId || '').trim();
+      closeDepartmentModal();
+      await loadMembers({ force: true, keepDepartment: true });
+      if (newDepartmentId && state.departments.some((d) => String(d.id || '') === newDepartmentId)) {
+        navigateToDepartment(newDepartmentId);
+      }
+      toast('success', isEdit ? 'Department updated' : 'Department added', data?.message || `${name} was saved.`);
+    } catch (error) {
+      if (els.departmentError) els.departmentError.textContent = error?.message || 'Failed to save department.';
+      toast('error', 'Department save failed', error?.message || 'Failed to save department.');
+    } finally {
+      setDepartmentSaving(false);
     }
   }
 
@@ -1306,9 +1420,26 @@
 
   function bindEvents() {
     els.folders?.addEventListener('click', (event) => {
-      const btn = event.target.closest('.ua-folder[data-dept-id]');
-      if (!btn) return;
-      navigateToDepartment(btn.getAttribute('data-dept-id') || '');
+      const editBtn = event.target.closest('[data-action="edit-department"][data-dept-id]');
+      if (editBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (editBtn.disabled) return;
+        const department = departmentById(editBtn.getAttribute('data-dept-id') || '');
+        if (department && canEditDepartment(department)) openDepartmentModal('edit', department);
+        return;
+      }
+      const card = event.target.closest('.ua-folder[data-dept-id]');
+      if (!card) return;
+      navigateToDepartment(card.getAttribute('data-dept-id') || '');
+    });
+
+    els.folders?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const card = event.target.closest('.ua-folder[data-dept-id]');
+      if (!card || event.target.closest('button')) return;
+      event.preventDefault();
+      navigateToDepartment(card.getAttribute('data-dept-id') || '');
     });
 
     els.membersGrid?.addEventListener('click', (event) => {
@@ -1329,6 +1460,18 @@
     els.refreshBtn?.addEventListener('click', () => loadMembers({ force: true, keepDepartment: true }));
     els.backBtn?.addEventListener('click', () => backToDepartments());
     els.addMemberBtn?.addEventListener('click', () => openPasswordModal('', 'create'));
+    els.addDepartmentBtn?.addEventListener('click', () => openDepartmentModal('create'));
+    els.editActiveDeptBtn?.addEventListener('click', () => {
+      const dept = activeDepartment();
+      if (dept && canEditDepartment(dept)) openDepartmentModal('edit', dept);
+    });
+
+    els.departmentForm?.addEventListener('submit', submitDepartmentForm);
+    els.departmentCancelBtn?.addEventListener('click', closeDepartmentModal);
+    els.departmentClose?.addEventListener('click', closeDepartmentModal);
+    els.departmentModal?.addEventListener('click', (event) => {
+      if (event.target === els.departmentModal) closeDepartmentModal();
+    });
 
     els.passwordForm?.addEventListener('submit', submitAdminPassword);
     els.passwordCancelBtn?.addEventListener('click', closePasswordModal);
@@ -1349,6 +1492,7 @@
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
       if (els.pageAccessModal && !els.pageAccessModal.hidden) return closePageAccessModal();
+      if (els.departmentModal && !els.departmentModal.hidden) return closeDepartmentModal();
       if (els.passwordModal && !els.passwordModal.hidden) return closePasswordModal();
       if (els.formModal && !els.formModal.hidden) return closeFormModal();
     });
@@ -1372,6 +1516,19 @@
     els.membersSubtitle = $('uaMembersSubtitle');
     els.backBtn = $('uaBackToDepartments');
     els.addMemberBtn = $('uaAddMemberBtn');
+    els.addDepartmentBtn = $('uaAddDepartmentBtn');
+    els.editActiveDeptBtn = $('uaEditActiveDepartmentBtn');
+
+    els.departmentModal = $('uaDepartmentModal');
+    els.departmentForm = $('uaDepartmentForm');
+    els.departmentTitle = $('uaDepartmentTitle');
+    els.departmentSubtitle = $('uaDepartmentSubtitle');
+    els.departmentNameInput = $('uaDepartmentNameInput');
+    els.departmentError = $('uaDepartmentError');
+    els.departmentSaveBtn = $('uaDepartmentSave');
+    els.departmentSaveLabel = $('uaDepartmentSaveLabel');
+    els.departmentCancelBtn = $('uaDepartmentCancel');
+    els.departmentClose = $('uaDepartmentClose');
 
     els.passwordModal = $('uaAdminPasswordModal');
     els.passwordForm = $('uaAdminPasswordForm');
