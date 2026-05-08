@@ -27,6 +27,45 @@ document.addEventListener('DOMContentLoaded', () => {
   const CACHE_ALLOWED  = 'allowedPages';     // sessionStorage key
   const isMobile = () => window.innerWidth <= 768;
 
+  // =====================================================
+  // PWA install prompt helper
+  // - There is no real "download" file for a PWA. Android/Windows install is
+  //   handled by the browser through the beforeinstallprompt event.
+  // - If the browser does not expose the prompt, we show clear manual steps.
+  // =====================================================
+  window.OpsPWAInstall = window.OpsPWAInstall || {
+    deferredPrompt: null,
+    lastOutcome: null,
+    installedAt: null,
+    isStandalone() {
+      try {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true ||
+          document.referrer.startsWith('android-app://');
+      } catch {
+        return false;
+      }
+    },
+    canPrompt() {
+      return !!this.deferredPrompt;
+    },
+  };
+
+  if (!window.__opsPwaInstallPromptBound) {
+    window.__opsPwaInstallPromptBound = true;
+    window.addEventListener('beforeinstallprompt', (event) => {
+      try { event.preventDefault(); } catch {}
+      window.OpsPWAInstall.deferredPrompt = event;
+      try { window.dispatchEvent(new CustomEvent('ops:pwa-install-available')); } catch {}
+    });
+    window.addEventListener('appinstalled', () => {
+      window.OpsPWAInstall.deferredPrompt = null;
+      window.OpsPWAInstall.lastOutcome = 'accepted';
+      window.OpsPWAInstall.installedAt = Date.now();
+      try { window.dispatchEvent(new CustomEvent('ops:pwa-installed')); } catch {}
+    });
+  }
+
 
   // =====================================================
   // API data cache (sessionStorage) + background prefetch
@@ -2812,6 +2851,15 @@ function initUserMenuWidget() {
       document.body.appendChild(overlay);
 
       overlay.addEventListener('click', (event) => {
+        const installBtn = event.target && event.target.closest ? event.target.closest('[data-pwa-install-platform]') : null;
+        if (installBtn) {
+          event.preventDefault();
+          event.stopPropagation();
+          const platform = installBtn.getAttribute('data-pwa-install-platform') || '';
+          try { runPwaInstallPrompt(platform); } catch (error) { console.error('PWA install click failed:', error); }
+          return;
+        }
+
         const closeBtn = event.target && event.target.closest ? event.target.closest('[data-app-download-close]') : null;
         if (closeBtn || event.target === overlay) {
           overlay.hidden = true;
@@ -2831,22 +2879,29 @@ function initUserMenuWidget() {
       return overlay;
     }
 
-    function renderAppDownloadLink(label, sublabel, iconName, url) {
-      const cleanUrl = String(url || '').trim();
-      if (!cleanUrl) {
-        return `
-          <div class="app-download-option app-download-option--disabled" aria-disabled="true">
-            <span class="app-download-option__icon"><i data-feather="${safeUserMenuText(iconName)}"></i></span>
-            <span class="app-download-option__text">
-              <strong>${safeUserMenuText(label)}</strong>
-              <small>Download link is not configured yet.</small>
-            </span>
-          </div>
-        `;
-      }
+    function isUsableDownloadUrl(value) {
+      const clean = String(value || '').trim();
+      if (!clean) return false;
+      const lower = clean.toLowerCase();
+      const badParts = [
+        'your-android-download-link',
+        'your-windows-download-link',
+        'your-download-link',
+        'your-app-link',
+        'yourdomain.com',
+        'example.com',
+        'https://your-',
+        'http://your-',
+      ];
+      if (badParts.some((part) => lower.includes(part))) return false;
+      return /^https?:\/\//i.test(clean) || clean.startsWith('/');
+    }
 
+    function renderDirectDownloadOption(label, sublabel, iconName, url) {
+      const cleanUrl = String(url || '').trim();
+      if (!isUsableDownloadUrl(cleanUrl)) return '';
       return `
-        <a class="app-download-option" href="${safeUserMenuText(cleanUrl)}" target="_blank" rel="noopener noreferrer">
+        <a class="app-download-option" href="${safeUserMenuText(cleanUrl)}" target="_blank" rel="noopener noreferrer" data-app-download-direct>
           <span class="app-download-option__icon"><i data-feather="${safeUserMenuText(iconName)}"></i></span>
           <span class="app-download-option__text">
             <strong>${safeUserMenuText(label)}</strong>
@@ -2857,10 +2912,88 @@ function initUserMenuWidget() {
       `;
     }
 
+    function renderPwaInstallOption(platform, label, sublabel, iconName) {
+      return `
+        <button type="button" class="app-download-option app-download-option--button" data-pwa-install-platform="${safeUserMenuText(platform)}">
+          <span class="app-download-option__icon"><i data-feather="${safeUserMenuText(iconName)}"></i></span>
+          <span class="app-download-option__text">
+            <strong>${safeUserMenuText(label)}</strong>
+            <small>${safeUserMenuText(sublabel)}</small>
+          </span>
+          <span class="app-download-option__arrow"><i data-feather="download"></i></span>
+        </button>
+      `;
+    }
+
+    function getPwaManualSteps(platform) {
+      const isAndroid = String(platform || '').toLowerCase() === 'android';
+      if (isAndroid) {
+        return `
+          <ol class="app-download-steps">
+            <li>Open the app in Chrome on Android.</li>
+            <li>Tap the browser menu <strong>⋮</strong>.</li>
+            <li>Choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+          </ol>
+        `;
+      }
+      return `
+        <ol class="app-download-steps">
+          <li>Open the app in Chrome or Microsoft Edge on Windows.</li>
+          <li>Click the install icon in the address bar, or open <strong>⋮ → Apps → Install this site as an app</strong>.</li>
+          <li>Confirm <strong>Install</strong>.</li>
+        </ol>
+      `;
+    }
+
+    function setAppDownloadStatus(message, type = 'info', detailsHtml = '') {
+      const overlay = document.getElementById('appDownloadOverlay');
+      if (!overlay) return;
+      const status = overlay.querySelector('[data-app-download-status]');
+      if (!status) return;
+      status.className = `app-download-status app-download-status--${String(type || 'info').replace(/[^a-z0-9_-]/gi, '')}`;
+      status.innerHTML = `
+        <div class="app-download-status__title">${safeUserMenuText(message)}</div>
+        ${detailsHtml || ''}
+      `;
+      status.hidden = false;
+    }
+
+    async function runPwaInstallPrompt(platform) {
+      if (window.OpsPWAInstall && window.OpsPWAInstall.isStandalone && window.OpsPWAInstall.isStandalone()) {
+        setAppDownloadStatus('The app is already installed on this device.', 'success');
+        return;
+      }
+
+      const deferredPrompt = window.OpsPWAInstall && window.OpsPWAInstall.deferredPrompt;
+      if (!deferredPrompt) {
+        setAppDownloadStatus('Browser install prompt is not available right now.', 'warning', getPwaManualSteps(platform));
+        return;
+      }
+
+      setAppDownloadStatus('Opening the browser install prompt...', 'info');
+      try {
+        await deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice.catch(() => null);
+        const outcome = choice && choice.outcome ? String(choice.outcome) : '';
+        window.OpsPWAInstall.deferredPrompt = null;
+        window.OpsPWAInstall.lastOutcome = outcome || null;
+
+        if (outcome === 'accepted') {
+          setAppDownloadStatus('Install request accepted. The app will be added by the browser.', 'success');
+        } else {
+          setAppDownloadStatus('Install was dismissed. You can try again from the browser menu.', 'warning', getPwaManualSteps(platform));
+        }
+      } catch (error) {
+        console.error('PWA install prompt failed:', error);
+        window.OpsPWAInstall.deferredPrompt = null;
+        setAppDownloadStatus('Could not open the install prompt automatically.', 'warning', getPwaManualSteps(platform));
+      }
+    }
+
     async function openAppDownloadModal() {
       const overlay = ensureAppDownloadModal();
       const body = overlay.querySelector('[data-app-download-body]');
-      if (body) body.innerHTML = '<div class="app-download-loading">Loading download links...</div>';
+      if (body) body.innerHTML = '<div class="app-download-loading">Preparing app install options...</div>';
       overlay.hidden = false;
 
       let links = {};
@@ -2873,10 +3006,23 @@ function initUserMenuWidget() {
         links = {};
       }
 
+      const directAndroid = renderDirectDownloadOption('Android APK', 'Download a configured APK file', 'smartphone', links.androidUrl);
+      const directWindows = renderDirectDownloadOption('Windows installer', 'Download a configured Windows installer', 'monitor', links.windowsUrl);
+
       if (body) {
         body.innerHTML = `
-          ${renderAppDownloadLink('Android version', 'Download APK / Android package', 'smartphone', links.androidUrl)}
-          ${renderAppDownloadLink('Windows version', 'Download Windows installer', 'monitor', links.windowsUrl)}
+          <div class="app-download-note">
+            <strong>Install the PWA version</strong>
+            <span>This installs the current Operations Hub website as an app on Android or Windows. No APK/domain is required.</span>
+          </div>
+          ${renderPwaInstallOption('android', 'Android PWA', 'Install to Android Home screen', 'smartphone')}
+          ${renderPwaInstallOption('windows', 'Windows PWA', 'Install as a desktop app in Chrome or Edge', 'monitor')}
+          ${directAndroid || directWindows ? `
+            <div class="app-download-divider"><span>Configured direct downloads</span></div>
+            ${directAndroid}
+            ${directWindows}
+          ` : ''}
+          <div class="app-download-status" data-app-download-status hidden></div>
         `;
       }
 
