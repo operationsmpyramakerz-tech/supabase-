@@ -2845,9 +2845,9 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="req-receipt-photo-card__meta">Receipt ${index + 1}</div>
           </div>
           ${canOpen ? `
-            <a class="req-receipt-photo-card__open" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHTML(name)}">
-              <i data-feather="external-link"></i>
-            </a>
+            <button class="req-receipt-photo-card__open" type="button" data-receipt-open-url="${escapeHTML(url)}" aria-label="Open ${escapeHTML(name)}">
+              <i data-feather="maximize-2"></i>
+            </button>
           ` : `
             <div class="req-receipt-photo-card__missing" title="No public image link saved">No link</div>
           `}
@@ -4343,6 +4343,17 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   receiptPhotosDoneBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     closeReceiptPhotosModal();
+  });
+
+  receiptPhotosGrid?.addEventListener("click", (e) => {
+    const openBtn = e.target?.closest?.("[data-receipt-open-url]");
+    if (!openBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const url = String(openBtn.getAttribute("data-receipt-open-url") || "").trim();
+    if (!url) return;
+    // Keep the receipt viewer compact. Opening is explicit and separate from the image card size.
+    window.open(url, "_blank", "noopener,noreferrer");
   });
 
   excelBtn?.addEventListener("click", (e) => {
