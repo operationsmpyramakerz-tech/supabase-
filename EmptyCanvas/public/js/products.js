@@ -10,6 +10,8 @@
     activeTag: '__all__',
     modalMode: 'create',
     editingId: '',
+    savingTag: false,
+    editingTag: '',
   };
 
   const els = {};
@@ -135,6 +137,11 @@
       const label = state.activeTag === '__all__' ? 'All groups' : state.activeTag;
       els.viewPill.textContent = `${formatNumber(filteredProducts.length)} shown • ${label}`;
     }
+    if (els.editSelectedTagBtn) {
+      const canEdit = state.activeTag && state.activeTag !== '__all__';
+      els.editSelectedTagBtn.disabled = !canEdit || state.savingTag;
+      els.editSelectedTagBtn.title = canEdit ? `Edit ${state.activeTag}` : 'Select a tag first';
+    }
   }
 
   function renderTags() {
@@ -182,8 +189,10 @@
       ? `<a class="product-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer"><i data-feather="external-link"></i><span>Open URL</span></a>`
       : `<span class="product-link is-disabled"><i data-feather="link-2"></i><span>No URL</span></span>`;
 
+    const searchText = [name, tag, code, category, price, qty, url, product?.categoryCode].join(' ');
+
     return `
-      <article class="product-card" data-product-id="${escapeHTML(id)}">
+      <article class="product-card" data-product-id="${escapeHTML(id)}" data-search="${escapeHTML(searchText)}">
         <div class="product-card__top">
           <span class="product-card__badge" title="${escapeHTML(tag)}"><i data-feather="tag"></i>${escapeHTML(tag)}</span>
           <button type="button" class="product-card__edit" data-action="edit-product" data-product-id="${escapeHTML(id)}" aria-label="Edit ${escapeHTML(name)}">
@@ -219,6 +228,9 @@
             </div>
           </div>
           <div class="products-group__metrics">
+            <button type="button" class="products-group-edit-tag" data-action="edit-tag" data-tag="${escapeHTML(group.tag)}">
+              <i data-feather="edit-3"></i><span>Edit Tag</span>
+            </button>
             <span class="products-mini-metric"><i data-feather="box"></i>${formatNumber(metrics.count)} items</span>
             <span class="products-mini-metric"><i data-feather="dollar-sign"></i>${escapeHTML(avgText)} avg</span>
             <span class="products-mini-metric"><i data-feather="link"></i>${formatNumber(metrics.withLinks)} URLs</span>
@@ -386,6 +398,66 @@
     resetForm();
   }
 
+  function tagProductsCount(tag) {
+    const wanted = String(tag || '').trim();
+    return (state.products || []).filter((product) => firstTag(product) === wanted).length;
+  }
+
+  function setTagModalError(message) {
+    if (els.tagFormError) els.tagFormError.textContent = message || '';
+  }
+
+  function setTagSaving(isSaving) {
+    state.savingTag = !!isSaving;
+    if (els.tagSaveBtn) {
+      els.tagSaveBtn.disabled = state.savingTag;
+      const label = els.tagSaveBtn.querySelector('span');
+      if (label) label.textContent = state.savingTag ? 'Updating...' : 'Update Tag';
+    }
+    if (els.editSelectedTagBtn) {
+      const canEdit = state.activeTag && state.activeTag !== '__all__';
+      els.editSelectedTagBtn.disabled = !canEdit || state.savingTag;
+    }
+    document.querySelectorAll('[data-action="edit-tag"]').forEach((btn) => {
+      btn.disabled = state.savingTag;
+    });
+  }
+
+  function openTagModal(tag) {
+    const currentTag = String(tag || '').trim();
+    if (!currentTag || currentTag === '__all__') return;
+    state.editingTag = currentTag;
+    setTagModalError('');
+
+    if (els.tagCurrentLabel) els.tagCurrentLabel.textContent = currentTag;
+    if (els.tagCountLabel) {
+      const count = tagProductsCount(currentTag);
+      els.tagCountLabel.textContent = `${formatNumber(count)} product${count === 1 ? '' : 's'} will be updated`;
+    }
+    setInputValue(els.newTagInput, currentTag);
+
+    if (els.tagModal) {
+      els.tagModal.hidden = false;
+      els.tagModal.setAttribute('aria-hidden', 'false');
+    }
+    document.body.classList.add('products-modal-open');
+    setTimeout(() => { try { els.newTagInput && els.newTagInput.focus(); els.newTagInput && els.newTagInput.select(); } catch {} }, 40);
+    hydrateIcons(els.tagModal || document);
+  }
+
+  function closeTagModal() {
+    if (state.savingTag) return;
+    if (els.tagModal) {
+      els.tagModal.hidden = true;
+      els.tagModal.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('products-modal-open');
+    state.editingTag = '';
+    setTagModalError('');
+    setInputValue(els.newTagInput, '');
+  }
+
+
   function inputNumberValue(el) {
     const raw = String(el?.value || '').trim();
     if (!raw) return null;
@@ -456,6 +528,52 @@
     }
   }
 
+  async function saveTag(event) {
+    event.preventDefault();
+    if (state.savingTag) return;
+
+    const oldTag = String(state.editingTag || '').trim();
+    const newTag = String(els.newTagInput?.value || '').trim();
+    setTagModalError('');
+
+    if (!oldTag) {
+      setTagModalError('Please select a tag first.');
+      return;
+    }
+    if (!newTag) {
+      setTagModalError('New tag is required.');
+      return;
+    }
+    if (normalizeText(oldTag) === normalizeText(newTag)) {
+      setTagModalError('Please enter a different tag name.');
+      return;
+    }
+
+    setTagSaving(true);
+    try {
+      const res = await fetch('/api/products/tags', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldTag, newTag }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || 'Failed to update tag.');
+      }
+      setTagSaving(false);
+      closeTagModal();
+      state.activeTag = newTag;
+      await loadProducts({ silent: true });
+      toast('success', 'Products', `Tag updated for ${formatNumber(data?.updatedCount || 0)} product${Number(data?.updatedCount || 0) === 1 ? '' : 's'}.`);
+    } catch (error) {
+      setTagModalError(error?.message || 'Failed to update tag.');
+      toast('error', 'Products', error?.message || 'Failed to update tag.');
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
   function bindEvents() {
     if (els.searchInput) {
       els.searchInput.addEventListener('input', () => {
@@ -476,6 +594,12 @@
       els.addBtn.addEventListener('click', () => openModal('create'));
     }
 
+    if (els.editSelectedTagBtn) {
+      els.editSelectedTagBtn.addEventListener('click', () => {
+        if (state.activeTag && state.activeTag !== '__all__') openTagModal(state.activeTag);
+      });
+    }
+
     if (els.tags) {
       els.tags.addEventListener('click', (event) => {
         const btn = event.target.closest('.products-tag-chip');
@@ -487,6 +611,11 @@
 
     if (els.results) {
       els.results.addEventListener('click', (event) => {
+        const tagBtn = event.target.closest('[data-action="edit-tag"]');
+        if (tagBtn) {
+          openTagModal(tagBtn.getAttribute('data-tag'));
+          return;
+        }
         const btn = event.target.closest('[data-action="edit-product"]');
         if (!btn) return;
         const product = findProduct(btn.getAttribute('data-product-id'));
@@ -496,6 +625,7 @@
     }
 
     if (els.form) els.form.addEventListener('submit', saveProduct);
+    if (els.tagForm) els.tagForm.addEventListener('submit', saveTag);
     if (els.closeBtn) els.closeBtn.addEventListener('click', closeModal);
     if (els.cancelBtn) els.cancelBtn.addEventListener('click', closeModal);
     if (els.modal) {
@@ -503,8 +633,17 @@
         if (event.target === els.modal) closeModal();
       });
     }
+    if (els.tagCloseBtn) els.tagCloseBtn.addEventListener('click', closeTagModal);
+    if (els.tagCancelBtn) els.tagCancelBtn.addEventListener('click', closeTagModal);
+    if (els.tagModal) {
+      els.tagModal.addEventListener('click', (event) => {
+        if (event.target === els.tagModal) closeTagModal();
+      });
+    }
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && els.modal && !els.modal.hidden) closeModal();
+      if (event.key !== 'Escape') return;
+      if (els.modal && !els.modal.hidden) closeModal();
+      if (els.tagModal && !els.tagModal.hidden) closeTagModal();
     });
   }
 
@@ -538,6 +677,17 @@
     els.categoryCodeInput = $('productCategoryCodeInput');
     els.categoryNameInput = $('productCategoryNameInput');
     els.urlInput = $('productUrlInput');
+
+    els.editSelectedTagBtn = $('productsEditSelectedTagBtn');
+    els.tagModal = $('productTagModal');
+    els.tagForm = $('productTagForm');
+    els.tagCloseBtn = $('productTagModalClose');
+    els.tagCancelBtn = $('productTagModalCancel');
+    els.tagSaveBtn = $('productTagSaveBtn');
+    els.tagFormError = $('productTagFormError');
+    els.tagCurrentLabel = $('productTagCurrentLabel');
+    els.tagCountLabel = $('productTagCountLabel');
+    els.newTagInput = $('productNewTagInput');
   }
 
   function init() {

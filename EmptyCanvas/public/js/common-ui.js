@@ -2280,7 +2280,8 @@ function initFloatingSearchWidget() {
       ".stock-item",
       ".school-folder-card",
       ".folder-card",
-      ".notif-row"
+      ".notif-row",
+      ".product-card"
     ].join(",");
 
     return uniqueElements(getSearchDocs().flatMap((doc) => Array.from(doc.querySelectorAll(selector)))).filter((el) => !el.closest('[data-ops-shell-legacy="1"]'));
@@ -3556,7 +3557,8 @@ function applyOpsShellSearchToFrame(query) {
     '.stock-item',
     '.school-folder-card',
     '.folder-card',
-    '.notif-row'
+    '.notif-row',
+    '.product-card'
   ].join(',')));
 
   const needle = q.trim().toLowerCase();
