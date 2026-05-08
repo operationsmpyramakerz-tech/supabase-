@@ -2832,6 +2832,7 @@ document.addEventListener("DOMContentLoaded", () => {
       dialog.style.setProperty('box-sizing', 'border-box', 'important');
       dialog.style.setProperty('padding', '14px', 'important');
       dialog.style.setProperty('border-radius', '22px', 'important');
+      dialog.style.setProperty('pointer-events', 'auto', 'important');
     }
 
     if (body) {
@@ -2854,7 +2855,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!receiptPhotosGrid) return;
     const cleanEntries = normalizeReceiptEntries(entries);
     if (receiptPhotosCount) {
-      receiptPhotosCount.textContent = `${cleanEntries.length} ${cleanEntries.length === 1 ? "photo" : "photos"}`;
+      receiptPhotosCount.textContent = "";
+      receiptPhotosCount.hidden = true;
     }
 
     if (!cleanEntries.length) {
@@ -2875,19 +2877,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const canOpen = isPublicReceiptUrl(url);
       const image = canOpen && isImageReceipt(entry);
       const media = image
-        ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;max-width:100%;max-height:160px;object-fit:contain;object-position:center center;border-radius:12px;" />`
+        ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;max-width:100%;max-height:170px;object-fit:contain;object-position:center center;border-radius:12px;" />`
         : `<div class="req-receipt-photos-file"><i data-feather="file"></i></div>`;
+      const openAttr = canOpen ? ` data-receipt-open-url="${escapeHTML(url)}"` : "";
+      const buttonLabel = canOpen ? "Open receipt photo" : "Receipt photo preview";
 
       return `
-        <article class="req-receipt-photo-card" style="width:100%;max-width:100%;overflow:hidden;border-radius:16px;">
-          <div class="req-receipt-photo-card__media" style="width:100%;height:160px;max-height:160px;min-height:120px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+        <button type="button" class="req-receipt-photo-card"${openAttr} aria-label="${escapeHTML(buttonLabel)}" style="width:100%;max-width:100%;overflow:hidden;border-radius:16px;cursor:${canOpen ? 'pointer' : 'default'};">
+          <span class="req-receipt-photo-card__media" style="width:100%;height:170px;max-height:170px;min-height:120px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
             ${media}
-          </div>
-          <div class="req-receipt-photo-card__body" style="padding:10px 12px 12px 12px;">
-            <div class="req-receipt-photo-card__title">${escapeHTML(name)}</div>
-            <div class="req-receipt-photo-card__meta">Receipt ${index + 1}${canOpen ? ' • preview only' : ''}</div>
-          </div>
-        </article>
+          </span>
+        </button>
       `;
     }).join("");
 
@@ -2901,16 +2901,18 @@ document.addEventListener("DOMContentLoaded", () => {
   function openReceiptPhotosModal(group = activeGroup) {
     if (!receiptPhotosModal) return;
     const entries = collectReceiptEntriesFromGroup(group || {});
-    const orderLabel = group?.orderIdRange || (group?.orderIdNumber ? `ORD-${group.orderIdNumber}` : "this order");
-
-    if (receiptPhotosTitle) receiptPhotosTitle.textContent = "Receipt Photos";
-    if (receiptPhotosSub) receiptPhotosSub.textContent = `Delivery receipt photos for ${orderLabel}.`;
+    if (receiptPhotosTitle) receiptPhotosTitle.textContent = "Receipt photos";
+    if (receiptPhotosSub) {
+      receiptPhotosSub.textContent = "";
+      receiptPhotosSub.hidden = true;
+    }
     renderReceiptPhotos(entries);
 
     receiptPhotosLastFocus = document.activeElement;
     receiptPhotosModal.hidden = false;
     receiptPhotosModal.classList.add("is-open");
     receiptPhotosModal.setAttribute("aria-hidden", "false");
+    receiptPhotosModal.style.setProperty("display", "flex", "important");
     forceCompactReceiptPhotosViewer();
     setTimeout(() => {
       forceCompactReceiptPhotosViewer();
@@ -2924,6 +2926,7 @@ document.addEventListener("DOMContentLoaded", () => {
     receiptPhotosModal.classList.remove("is-open");
     receiptPhotosModal.setAttribute("aria-hidden", "true");
     receiptPhotosModal.hidden = true;
+    receiptPhotosModal.style.setProperty("display", "none", "important");
     if (restoreFocus) {
       setTimeout(() => {
         try { receiptPhotosLastFocus?.focus?.(); } catch {}
@@ -4383,14 +4386,22 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     closeReceiptPhotosModal();
   });
 
+  document.addEventListener("click", (e) => {
+    const closeBtn = e.target?.closest?.("#reqReceiptPhotosClose, #reqReceiptPhotosDone");
+    if (!closeBtn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeReceiptPhotosModal();
+  });
+
   receiptPhotosGrid?.addEventListener("click", (e) => {
     const openBtn = e.target?.closest?.("[data-receipt-open-url]");
     if (!openBtn) return;
     e.preventDefault();
     e.stopPropagation();
-    // Receipt photos must stay inside the compact viewer on mobile/tablet.
-    // Do not open the full-size image in a new tab because Chrome can render it as a huge page.
-    forceCompactReceiptPhotosViewer();
+    const url = String(openBtn.getAttribute("data-receipt-open-url") || "").trim();
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
   });
 
   excelBtn?.addEventListener("click", (e) => {
