@@ -12366,6 +12366,7 @@ function _messagesNormalizeComment(comment, req) {
   const parsed = _messagesParseCommentText(text);
   const currentName = String(req?.session?.username || '').trim().toLowerCase();
   const senderKey = String(parsed.sender || '').trim().toLowerCase();
+  const isSystem = senderKey === 'system';
   return {
     id: comment?.id || '',
     discussionId: comment?.discussion_id || '',
@@ -12374,7 +12375,9 @@ function _messagesNormalizeComment(comment, req) {
     rawText: parsed.raw || text || '',
     createdTime: comment?.created_time || '',
     createdTimeText: _messagesSafeDate(comment?.created_time || ''),
-    isMine: !!currentName && senderKey === currentName,
+    messageType: isSystem ? 'system' : 'text',
+    isSystem,
+    isMine: !isSystem && !!currentName && senderKey === currentName,
   };
 }
 
@@ -12557,10 +12560,12 @@ function _sbNormalizeMessageRow(row, req) {
   const sender = _sbString(_sbGet(row, ['sender_name', 'sender', 'created_by_name', 'name'])) || 'User';
   const body = _sbString(_sbGet(row, ['body', 'message', 'text', 'last_message'])) || '';
   const createdTime = _uaSafeDate(_sbGet(row, ['created_at', 'createdTime', 'created_time'])) || new Date().toISOString();
+  const messageType = String(_sbGet(row, ['message_type', 'type']) || '').trim().toLowerCase() || 'text';
   const currentName = String(req?.session?.username || '').trim().toLowerCase();
   const currentEmail = _sbMessageCurrentEmail(req).toLowerCase();
   const senderKey = String(sender || '').trim().toLowerCase();
   const senderEmail = _sbString(_sbGet(row, ['sender_email', 'email'])).toLowerCase();
+  const isSystem = messageType === 'system' || senderKey === 'system';
   return {
     id: String(_sbGet(row, ['id', 'ID']) ?? ''),
     discussionId: String(_sbGet(row, ['chat_id', 'chatId']) ?? ''),
@@ -12570,7 +12575,9 @@ function _sbNormalizeMessageRow(row, req) {
     rawText: body,
     createdTime,
     createdTimeText: _messagesSafeDate(createdTime),
-    isMine: (!!currentName && senderKey === currentName) || (!!currentEmail && senderEmail === currentEmail),
+    messageType,
+    isSystem,
+    isMine: !isSystem && ((!!currentName && senderKey === currentName) || (!!currentEmail && senderEmail === currentEmail)),
     source: 'supabase',
   };
 }
@@ -12621,7 +12628,7 @@ async function _sbMessagesCountsAndLast(chatIds = []) {
   const numericIds = ids.filter((id) => /^\d+$/.test(id));
   if (!numericIds.length) return new Map();
   const rows = await supabaseDb.select(_sbMessagesTable(), {
-    select: 'id,chat_id,body,created_at,sender_name,sender_email',
+    select: 'id,chat_id,body,created_at,sender_name,sender_email,message_type',
     chat_id: `in.(${numericIds.join(',')})`,
     order: 'created_at.asc,id.asc',
     limit: 5000,
@@ -12660,34 +12667,66 @@ async function _sbMessagesChatsList({ limit = 60, includeCounts = true } = {}) {
   return chats;
 }
 
+async function _sbMessageMemberInfo(memberId) {
+  if (!memberId || !_sbTeamMembersEnabled()) return null;
+  try {
+    const row = await _sbFindTeamMemberById(memberId);
+    if (!row) return null;
+    const fields = _sbOrderedEditableFieldsFromRows([row]);
+    const member = _sbSerializeTeamMemberRow(row, fields);
+    return {
+      id: member.id,
+      name: member.name || '',
+      email: member.email || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function _sbCreateMessageChat(req, payload = {}) {
   const currentName = String(req.session?.username || 'User').trim() || 'User';
   const currentEmail = _sbMessageCurrentEmail(req);
-  const targetName = String(payload.targetName || '').trim();
-  let targetEmail = '';
-  if (payload.targetUserId && _sbTeamMembersEnabled()) {
-    try {
-      const targetRow = await _sbFindTeamMemberById(payload.targetUserId);
-      if (targetRow) targetEmail = _sbString(_sbValueForLabel(targetRow, 'Email')) || '';
-    } catch {}
+  const requestedTitle = String(payload.title || payload.subject || '').trim();
+  if (!requestedTitle) throw new Error('Chat subject is required.');
+
+  const rawIds = [
+    ...(Array.isArray(payload.targetUserIds) ? payload.targetUserIds : []),
+    ...(Array.isArray(payload.participantIds) ? payload.participantIds : []),
+    payload.targetUserId,
+  ].map((id) => String(id || '').trim()).filter(Boolean);
+  const uniqueIds = Array.from(new Set(rawIds));
+
+  const memberInfos = [];
+  for (const id of uniqueIds) {
+    const info = await _sbMessageMemberInfo(id);
+    if (info && info.id) memberInfos.push(info);
   }
-  const requestedTitle = String(payload.title || '').trim();
-  const title = requestedTitle || (targetName ? `${currentName} ↔ ${targetName}` : `${currentName} Chat`);
-  const participantNames = [currentName, targetName].filter(Boolean).join(', ');
-  const participantEmails = [currentEmail, targetEmail].filter(Boolean).join(', ');
+
+  const fallbackTargetName = String(payload.targetName || '').trim();
+  const participantNames = [currentName, ...memberInfos.map((m) => m.name), fallbackTargetName]
+    .map((name) => String(name || '').trim())
+    .filter(Boolean)
+    .filter((name, index, arr) => arr.findIndex((x) => x.toLowerCase() === name.toLowerCase()) === index)
+    .join(', ');
+  const participantEmails = [currentEmail, ...memberInfos.map((m) => m.email)]
+    .map((email) => String(email || '').trim())
+    .filter(Boolean)
+    .filter((email, index, arr) => arr.findIndex((x) => x.toLowerCase() === email.toLowerCase()) === index)
+    .join(', ');
 
   let chat = await supabaseDb.insert(_sbMessagesChatsTable(), {
-    title: title.slice(0, 180),
+    title: requestedTitle.slice(0, 180),
     participant_names: participantNames || null,
     participant_emails: participantEmails || null,
     created_by_name: currentName || null,
     created_by_email: currentEmail || null,
   });
 
-  const firstMessage = String(payload.message || '').trim();
   let comments = [];
-  if (firstMessage && chat?.id) {
-    const comment = await _sbCreateChatMessage(req, chat.id, firstMessage);
+  if (chat?.id) {
+    const systemBody = `${currentName} created this room.`;
+    const comment = await _sbCreateChatMessage(req, chat.id, systemBody, { system: true });
     comments = [comment];
     try {
       const refreshed = await supabaseDb.selectById(_sbMessagesChatsTable(), chat.id);
@@ -12699,17 +12738,18 @@ async function _sbCreateMessageChat(req, payload = {}) {
   return { chat: serialized, comments };
 }
 
-async function _sbCreateChatMessage(req, chatId, message) {
+async function _sbCreateChatMessage(req, chatId, message, options = {}) {
   const body = String(message || '').trim();
   if (!body) throw new Error('Message is required.');
+  const isSystem = !!options.system;
   const currentName = String(req.session?.username || 'User').trim() || 'User';
   const currentEmail = _sbMessageCurrentEmail(req);
   const row = await supabaseDb.insert(_sbMessagesTable(), {
     chat_id: _sbMessageChatId(chatId),
-    sender_name: currentName || null,
-    sender_email: currentEmail || null,
+    sender_name: isSystem ? 'System' : (currentName || null),
+    sender_email: isSystem ? null : (currentEmail || null),
     body,
-    message_type: 'text',
+    message_type: isSystem ? 'system' : 'text',
   });
   try {
     await supabaseDb.updateById(_sbMessagesChatsTable(), chatId, {
@@ -12777,9 +12817,9 @@ app.post('/api/messages/chats', requireAuth, async (req, res) => {
     const db = await notion.databases.retrieve({ database_id: messagesDatabaseId });
     const titleProp = _messagesFirstTitlePropName(db?.properties || {});
     const currentName = String(req.session?.username || 'User').trim() || 'User';
-    const targetName = String(req.body?.targetName || '').trim();
-    const requestedTitle = String(req.body?.title || '').trim();
-    const title = requestedTitle || (targetName ? `${currentName} ↔ ${targetName}` : `${currentName} Chat`);
+    const requestedTitle = String(req.body?.title || req.body?.subject || '').trim();
+    if (!requestedTitle) return res.status(400).json({ ok: false, error: 'Chat subject is required.' });
+    const title = requestedTitle;
 
     const created = await notion.pages.create({
       parent: { database_id: messagesDatabaseId },
@@ -12788,12 +12828,11 @@ app.post('/api/messages/chats', requireAuth, async (req, res) => {
       },
     });
 
-    const firstMessage = String(req.body?.message || '').trim();
     let comments = [];
-    if (firstMessage) {
-      const c = await _messagesCreateComment(created.id, currentName, firstMessage);
+    try {
+      const c = await _messagesCreateComment(created.id, 'System', `${currentName} created this room.`);
       comments = [_messagesNormalizeComment(c, req)];
-    }
+    } catch {}
 
     const page = await notion.pages.retrieve({ page_id: created.id }).catch(() => created);
     return res.json({ ok: true, source: 'notion', chat: _messagesSerializeChatPage(page, comments), comments });
