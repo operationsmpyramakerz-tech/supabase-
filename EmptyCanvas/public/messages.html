@@ -87,34 +87,30 @@
       <main class="messages-body">
         <section class="messages-shell" aria-label="Messages">
           <div class="messages-left-panel">
-            <div class="messages-hero">
+            <div class="msg-inbox-top">
               <div>
-                <div class="messages-eyebrow"><i data-feather="message-circle"></i><span>Massage Database</span></div>
-                <h2>Messages</h2>
-                <p>Start a chat and continue the conversation inside the Operations Hub.</p>
+                <span class="msg-inbox-kicker">Team Inbox</span>
+                <h2>Chats</h2>
               </div>
               <button type="button" class="msg-refresh-btn" id="msgRefreshBtn" aria-label="Refresh chats">
                 <i data-feather="refresh-cw"></i>
               </button>
             </div>
 
-            <div class="msg-search-row">
-              <label class="msg-search" for="msgSearchInput">
-                <i data-feather="search"></i>
-                <input id="msgSearchInput" type="search" autocomplete="off" placeholder="Search chats or users..." />
-              </label>
-            </div>
+            <input id="msgSearchInput" class="msg-hidden-search" type="search" autocomplete="off" placeholder="Search chats or team members..." aria-hidden="true" tabindex="-1" />
 
             <div class="msg-people-strip" id="msgPeopleStrip" aria-label="Team members">
-              <button type="button" class="msg-person-card msg-person-card--new" id="msgNewChatBtn">
-                <span class="msg-person-plus"><i data-feather="plus"></i></span>
-                <span>New Chat</span>
-              </button>
+              <div class="msg-new-menu-wrap">
+                <button type="button" class="msg-person-card msg-person-card--new" id="msgNewBtn" aria-haspopup="true" aria-expanded="false">
+                  <span class="msg-person-plus"><i data-feather="plus"></i></span>
+                  <span>New</span>
+                </button>
+              </div>
               <div class="msg-strip-loading">Loading users...</div>
             </div>
 
             <div class="msg-list-head">
-              <h3>Chats</h3>
+              <h3>Recent chats</h3>
               <span id="msgChatsCount">—</span>
             </div>
             <div class="msg-chats-list" id="msgChatsList" aria-live="polite">
@@ -165,32 +161,33 @@
         <i data-feather="x"></i>
       </button>
       <div class="msg-modal-head">
-        <div class="msg-modal-icon"><i data-feather="message-circle"></i></div>
+        <div class="msg-modal-icon" id="msgNewChatIcon"><i data-feather="message-circle"></i></div>
         <div>
           <h2 id="msgNewChatTitle">New Chat</h2>
-          <p>Create a new chat in the Messages database.</p>
+          <p id="msgNewChatSubtitle">Create a room and choose the conversation subject.</p>
         </div>
       </div>
       <div class="msg-modal-body">
+        <input id="msgNewChatMode" type="hidden" value="chat" />
         <label class="msg-field">
-          <span>Team Member</span>
+          <span>Subject <b>*</b></span>
+          <input id="msgNewChatSubject" type="text" maxlength="180" required placeholder="Write the chat subject..." />
+        </label>
+        <label class="msg-field" id="msgSingleMemberField">
+          <span>Team Member <b>*</b></span>
           <select id="msgNewChatMember"></select>
         </label>
-        <label class="msg-field">
-          <span>Chat Title</span>
-          <input id="msgNewChatTitleInput" type="text" placeholder="Auto: Your name ↔ member name" />
-        </label>
-        <label class="msg-field">
-          <span>First Message</span>
-          <textarea id="msgNewChatMessage" rows="4" placeholder="Optional first message..."></textarea>
-        </label>
+        <div class="msg-field msg-group-members-field" id="msgGroupMembersField" hidden>
+          <span>People <b>*</b></span>
+          <div class="msg-member-picker" id="msgGroupMembersList" aria-label="Select people for group chat"></div>
+        </div>
         <div class="msg-form-error" id="msgNewChatError" aria-live="polite"></div>
       </div>
       <div class="msg-modal-actions">
         <button type="button" class="msg-btn msg-btn--light" id="msgNewChatCancel">Cancel</button>
         <button type="submit" class="msg-btn msg-btn--dark" id="msgNewChatCreate">
           <i data-feather="plus-circle"></i>
-          <span>Create Chat</span>
+          <span>Create Room</span>
         </button>
       </div>
     </form>
