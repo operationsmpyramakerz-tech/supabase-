@@ -1814,11 +1814,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return r === null || r === undefined ? 0 : r;
   }
 
-  // Remaining quantity. Prefer the dedicated Notion column "Quantity Remaining" if present.
+  // Remaining quantity. Prefer the dedicated column when it is meaningful.
+  // During the Notion -> Supabase migration, blank number cells may arrive as 0.
+  // A row with base!=0, received=0 and remaining=0 is usually an unedited placeholder,
+  // so the UI must treat it as "remaining = base" instead of "fully received".
   function remainingQty(it) {
+    const base = baseQty(it);
     const stored = Number(it?.quantityRemaining);
-    if (Number.isFinite(stored)) return roundQty(stored);
-    return roundQty(baseQty(it) - receivedQtyOrZero(it));
+    const rec = receivedQtyRaw(it);
+    const recIsZero = rec !== null && rec !== undefined && Math.abs(Number(rec) || 0) < 1e-9;
+    const storedIsZero = Number.isFinite(stored) && Math.abs(stored) < 1e-9;
+    const edited = !!it?.quantityReceivedEdited;
+    if (Number.isFinite(stored)) {
+      if (!edited && hasNonZeroQty(base) && recIsZero && storedIsZero) return roundQty(base);
+      return roundQty(stored);
+    }
+    return roundQty(base - receivedQtyOrZero(it));
   }
 
   function hasRemainingQty(it) {
@@ -1826,7 +1837,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function hasReceivedNumber(it) {
-    return receivedQtyRaw(it) !== null && receivedQtyRaw(it) !== undefined;
+    const r = receivedQtyRaw(it);
+    return r !== null && r !== undefined && hasNonZeroQty(r);
   }
 
 
