@@ -136,8 +136,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(
   express.static(path.join(__dirname, "..", "public"), {
     setHeaders(res, filePath) {
-      if (filePath.endsWith("service-worker.js") || filePath.endsWith("manifest.webmanifest")) {
-        res.setHeader("Cache-Control", "no-cache");
+      if (filePath.endsWith("service-worker.js")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Service-Worker-Allowed", "/");
+      }
+      if (filePath.endsWith("manifest.webmanifest") || filePath.endsWith("manifest.json")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
       }
     },
   })
@@ -4972,6 +4977,26 @@ function requirePage(pageNameOrNames) {
 
 // --- Page Serving Routes --- //
 
+// Public PWA start URL used by manifest.start_url.
+// It must not require authentication; otherwise Chrome may treat the site as a
+// shortcut-only page instead of an installable PWA. The page immediately routes
+// the user to /home, where normal authentication/redirect logic continues.
+app.get("/pwa-start", (req, res) => {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.sendFile(path.join(__dirname, "..", "public", "pwa-start.html"));
+});
+
+app.get("/pwa-offline", (req, res) => {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.sendFile(path.join(__dirname, "..", "public", "pwa-offline.html"));
+});
+
+app.get("/manifest.json", (req, res) => {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.type("application/manifest+json");
+  res.sendFile(path.join(__dirname, "..", "public", "manifest.json"));
+});
+
 app.get("/login", (req, res) => {
   // ✅ Home is the default landing for all authenticated users
   if (req.session?.authenticated) return res.redirect("/home");
@@ -5614,8 +5639,9 @@ app.get("/api/app-download-links", requireAuth, (req, res) => {
   res.json({
     androidUrl,
     windowsUrl,
-    pwaUrl: origin ? `${origin}/home` : "/home",
+    pwaUrl: origin ? `${origin}/pwa-start` : "/pwa-start",
     manifestUrl: origin ? `${origin}/manifest.webmanifest` : "/manifest.webmanifest",
+    pwaStartUrl: origin ? `${origin}/pwa-start` : "/pwa-start",
     installMode: "pwa",
   });
 });
