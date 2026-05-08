@@ -12645,6 +12645,10 @@ function _sbSerializeMessageChatRow(row, messages = []) {
     lastMessageTime,
     lastMessageTimeText: _messagesSafeDate(lastMessageTime),
     participantNames: _sbString(_sbGet(row, ['participant_names', 'participants'])) || '',
+    chatType: _sbString(_sbGet(row, ['chat_type', 'room_type', 'type'])) || '',
+    status: _sbString(_sbGet(row, ['status', 'state', 'chat_status'])) || '',
+    archived: _sbBool(_sbGet(row, ['archived', 'is_archived'])) || false,
+    closed: _sbBool(_sbGet(row, ['closed', 'is_closed'])) || false,
     source: 'supabase',
   };
 }
