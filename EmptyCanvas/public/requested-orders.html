@@ -217,6 +217,11 @@
           </div>
         </div>
 
+        <button type="button" class="ro-action-btn ro-action-btn--light req-receipt-photos-btn" id="reqReceiptPhotosBtn" style="display:none;">
+          <i data-feather="image"></i>
+          <span>Receipt Photos</span>
+        </button>
+
         <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceivedBtn">
           <i data-feather="truck"></i>
           Received by operations
@@ -239,6 +244,31 @@
       </div>
 
       <div class="co-modal-items" id="reqModalItems"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RECEIPT PHOTOS VIEWER MODAL ===================== -->
+<div id="reqReceiptPhotosModal" class="co-submodal-overlay req-receipt-photos-modal" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog req-receipt-photos-dialog" role="dialog" aria-modal="true" aria-labelledby="reqReceiptPhotosTitle" aria-describedby="reqReceiptPhotosSub">
+    <button type="button" class="co-submodal-close" id="reqReceiptPhotosClose" aria-label="Close receipt photos">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header req-receipt-photos-header">
+      <div>
+        <div class="co-submodal-title" id="reqReceiptPhotosTitle">Receipt Photos</div>
+        <div class="co-submodal-sub" id="reqReceiptPhotosSub">Delivery receipt images attached to this order.</div>
+      </div>
+      <div class="req-receipt-photos-count" id="reqReceiptPhotosCount">0 photos</div>
+    </div>
+
+    <div class="co-submodal-body">
+      <div class="req-receipt-photos-grid" id="reqReceiptPhotosGrid"></div>
+    </div>
+
+    <div class="co-submodal-actions req-receipt-photos-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceiptPhotosDone">Done</button>
     </div>
   </div>
 </div>
