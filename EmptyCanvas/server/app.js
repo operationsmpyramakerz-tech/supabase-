@@ -65,6 +65,7 @@ const messagesDatabaseId = _extractNotionIdFromEnv(
   process.env.MESSAGE_DB_ID ||
   null,
 );
+const messagesPresenceMemory = new Map();
 const NOTION_VER = process.env.NOTION_VERSION || '2022-06-28'; // المطلوب في أمثلة Notion 
 // Team Members DB (from ENV)
 const teamMembersDatabaseId =
@@ -12951,6 +12952,123 @@ async function _sbCreateChatMessage(req, chatId, message, options = {}) {
   } catch {}
   return _sbNormalizeMessageRow(row, req);
 }
+
+
+function _sbMessagesPresenceTable() {
+  return String(process.env.SUPABASE_MESSAGES_PRESENCE_TABLE || 'messages_presence').trim() || 'messages_presence';
+}
+
+function _messagesPresenceId(req) {
+  const identity = _messagesCurrentIdentity(req);
+  const raw = identity.emailKey || identity.nameKey || String(req?.sessionID || 'anonymous').toLowerCase();
+  return String(raw || 'anonymous').trim().toLowerCase().replace(/[^a-z0-9._@-]+/g, '_').slice(0, 160) || 'anonymous';
+}
+
+function _messagesCurrentPresencePayload(req, payload = {}) {
+  const cached = req?.session?.accountCache || {};
+  const identity = _messagesCurrentIdentity(req);
+  const now = new Date().toISOString();
+  return {
+    id: _messagesPresenceId(req),
+    user_name: identity.name || cached.name || req?.session?.username || 'User',
+    user_email: identity.email || cached.email || '',
+    photo_url: String(cached.photoUrl || cached.photo || '').trim(),
+    active_chat_id: String(payload.activeChatId || '').trim() || null,
+    is_typing: !!payload.isTyping,
+    last_seen_at: now,
+    updated_at: now,
+  };
+}
+
+function _messagesPresenceSerialize(row = {}) {
+  const lastSeen = _uaSafeDate(_sbGet(row, ['last_seen_at', 'lastSeenAt', 'updated_at'])) || '';
+  const lastSeenMs = Date.parse(lastSeen || '');
+  const online = Number.isFinite(lastSeenMs) ? (Date.now() - lastSeenMs < 45 * 1000) : false;
+  const typing = online && !!_sbBool(_sbGet(row, ['is_typing', 'isTyping'])) && (Date.now() - lastSeenMs < 8 * 1000);
+  return {
+    id: String(_sbGet(row, ['id']) || ''),
+    name: _sbString(_sbGet(row, ['user_name', 'name', 'userName'])) || 'User',
+    email: _sbString(_sbGet(row, ['user_email', 'email', 'userEmail'])) || '',
+    photoUrl: _sbString(_sbGet(row, ['photo_url', 'photoUrl'])) || '',
+    activeChatId: String(_sbGet(row, ['active_chat_id', 'activeChatId']) || ''),
+    isTyping: typing,
+    lastSeenAt: lastSeen,
+    online,
+  };
+}
+
+function _messagesPresenceMemoryRows() {
+  const cutoff = Date.now() - 45 * 1000;
+  return Array.from(messagesPresenceMemory.values())
+    .filter((row) => Date.parse(row.last_seen_at || row.updated_at || '') >= cutoff)
+    .map(_messagesPresenceSerialize)
+    .filter((row) => row.online);
+}
+
+async function _messagesPresenceUpsert(req, payload = {}) {
+  const row = _messagesCurrentPresencePayload(req, payload);
+  if (payload.offline) {
+    row.active_chat_id = null;
+    row.is_typing = false;
+    row.last_seen_at = new Date(Date.now() - 60 * 1000).toISOString();
+    row.updated_at = row.last_seen_at;
+  }
+  messagesPresenceMemory.set(row.id, row);
+  if (_sbMessagesEnabled()) {
+    try {
+      const table = _sbMessagesPresenceTable();
+      const existing = await supabaseDb.selectById(table, row.id).catch(() => null);
+      if (existing) await supabaseDb.updateById(table, row.id, row);
+      else await supabaseDb.insert(table, row);
+    } catch (error) {
+      // Presence table is optional until the migration is run; memory fallback keeps UI usable.
+      if (process.env.NODE_ENV !== 'production') console.warn('[messages presence] upsert fallback:', error?.message || error);
+    }
+  }
+  return _messagesPresenceSerialize(row);
+}
+
+async function _messagesPresenceList() {
+  const fallback = _messagesPresenceMemoryRows();
+  if (!_sbMessagesEnabled()) return fallback;
+  try {
+    const cutoff = new Date(Date.now() - 45 * 1000).toISOString();
+    const rows = await supabaseDb.request(`/${encodeURIComponent(_sbMessagesPresenceTable())}?select=*&last_seen_at=gte.${encodeURIComponent(cutoff)}&order=last_seen_at.desc&limit=500`);
+    const out = (Array.isArray(rows) ? rows : []).map(_messagesPresenceSerialize).filter((row) => row.online);
+    return out.length ? out : fallback;
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') console.warn('[messages presence] list fallback:', error?.message || error);
+    return fallback;
+  }
+}
+
+app.post('/api/messages/presence', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const entry = await _messagesPresenceUpsert(req, req.body || {});
+    return res.json({ ok: true, entry });
+  } catch (error) {
+    console.error('POST /api/messages/presence error:', error?.details || error);
+    return res.status(500).json({ ok: false, error: 'Failed to update presence.' });
+  }
+});
+
+app.get('/api/messages/presence', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const entries = await _messagesPresenceList();
+    const chatId = String(req.query?.chatId || '').trim();
+    return res.json({
+      ok: true,
+      entries: chatId
+        ? entries.filter((entry) => !entry.activeChatId || String(entry.activeChatId) === chatId || entry.online)
+        : entries,
+    });
+  } catch (error) {
+    console.error('GET /api/messages/presence error:', error?.details || error);
+    return res.status(500).json({ ok: false, error: 'Failed to load presence.' });
+  }
+});
 
 app.get('/api/messages/team-members', requireAuth, async (req, res) => {
   res.set('Cache-Control', 'no-store');
