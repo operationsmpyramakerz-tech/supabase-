@@ -3603,6 +3603,88 @@ async function _sbUpdateProduct(productId, body = {}) {
   return _sbSerializeProductRow(updated || { ...row, id });
 }
 
+function _sbProductInferCategoryFromTag(tag) {
+  const clean = _sbProductText(tag).trim();
+  if (!clean) return { categoryCode: null, categoryName: null };
+
+  const match = clean.match(/^([0-9]+)\s*\/\s*(.+)$/);
+  if (match) {
+    const code = Number(match[1]);
+    const name = String(match[2] || "").trim() || clean;
+    return {
+      categoryCode: Number.isFinite(code) ? code : null,
+      categoryName: name || null,
+    };
+  }
+
+  return { categoryCode: null, categoryName: clean };
+}
+
+function _sbProductChunk(list = [], size = 100) {
+  const out = [];
+  const cleanSize = Math.max(1, Number(size) || 100);
+  for (let i = 0; i < list.length; i += cleanSize) out.push(list.slice(i, i + cleanSize));
+  return out;
+}
+
+async function _sbUpdateProductsTag(oldTag, newTag) {
+  const fromTag = _sbProductText(oldTag).trim();
+  const toTag = _sbProductText(newTag).trim();
+
+  if (!fromTag) {
+    const err = new Error("Current tag is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!toTag) {
+    const err = new Error("New tag is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (normKey(fromTag) === normKey(toTag)) {
+    const err = new Error("Please enter a different tag name.");
+    err.status = 400;
+    throw err;
+  }
+
+  const products = await _sbProductsList();
+  const matches = products.filter((product) => firstProductTagForServer(product) === fromTag);
+  if (!matches.length) {
+    const err = new Error("No products were found under this tag.");
+    err.status = 404;
+    throw err;
+  }
+
+  const inferred = _sbProductInferCategoryFromTag(toTag);
+  const row = {
+    tags: toTag,
+    category_code: inferred.categoryCode,
+    category_name: inferred.categoryName,
+    updated_at: new Date().toISOString(),
+  };
+
+  const updatedRows = [];
+  for (const ids of _sbProductChunk(matches.map((product) => product.id), 120)) {
+    const batch = await supabaseDb.updateByIds(_sbProductsTable(), ids, row);
+    if (Array.isArray(batch)) updatedRows.push(...batch);
+  }
+
+  await _sbInvalidateProductsCaches();
+
+  return {
+    oldTag: fromTag,
+    newTag: toTag,
+    updatedCount: matches.length,
+    products: updatedRows.map(_sbSerializeProductRow).filter((product) => product && product.id),
+  };
+}
+
+function firstProductTagForServer(product) {
+  const tags = Array.isArray(product?.tags) ? product.tags : [];
+  const first = tags.map((x) => String(x || "").trim()).find(Boolean);
+  return first || "Uncategorized";
+}
+
 async function _sbProductsMapById() {
   const products = await _sbProductsList();
   return new Map(products.map((p) => [String(p.id), p]));
@@ -16891,6 +16973,25 @@ app.get(
     } catch (error) {
       console.error("GET /api/products error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load products." });
+    }
+  },
+);
+
+app.patch(
+  "/api/products/tags",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const result = await _sbUpdateProductsTag(req.body?.oldTag, req.body?.newTag);
+      return res.json({ ok: true, source: "supabase", ...result });
+    } catch (error) {
+      console.error("PATCH /api/products/tags error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update products tag." });
     }
   },
 );
