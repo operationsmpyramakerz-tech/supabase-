@@ -143,7 +143,7 @@
   <div class="products-modal-overlay" id="productModal" aria-hidden="true" hidden>
     <form class="products-modal" id="productForm" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
       <button type="button" class="products-modal__close" id="productModalClose" aria-label="Close product form">
-        <i data-feather="x"></i>
+        <span aria-hidden="true">×</span>
       </button>
       <div class="products-modal__header">
         <div class="products-modal__icon"><i data-feather="box"></i></div>
@@ -167,21 +167,9 @@
           <input id="productPriceInput" name="unitPrice" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" />
         </label>
         <label class="products-field">
-          <span>Quantity</span>
-          <input id="productQuantityInput" name="quantity" type="number" step="1" min="0" inputmode="numeric" placeholder="Optional" />
-        </label>
-        <label class="products-field">
           <span>Tag</span>
           <input id="productTagsInput" name="tags" type="text" list="productsTagOptions" autocomplete="off" placeholder="1/ Electric components" />
           <datalist id="productsTagOptions"></datalist>
-        </label>
-        <label class="products-field">
-          <span>Category Code</span>
-          <input id="productCategoryCodeInput" name="categoryCode" type="number" step="1" min="0" inputmode="numeric" placeholder="1" />
-        </label>
-        <label class="products-field">
-          <span>Category Name</span>
-          <input id="productCategoryNameInput" name="categoryName" type="text" autocomplete="off" placeholder="Electric components" />
         </label>
         <label class="products-field products-field--wide">
           <span>Product URL</span>
@@ -204,7 +192,7 @@
   <div class="products-modal-overlay" id="productTagModal" aria-hidden="true" hidden>
     <form class="products-modal products-tag-modal" id="productTagForm" role="dialog" aria-modal="true" aria-labelledby="productTagModalTitle">
       <button type="button" class="products-modal__close" id="productTagModalClose" aria-label="Close tag form">
-        <i data-feather="x"></i>
+        <span aria-hidden="true">×</span>
       </button>
       <div class="products-modal__header">
         <div class="products-modal__icon"><i data-feather="tag"></i></div>
