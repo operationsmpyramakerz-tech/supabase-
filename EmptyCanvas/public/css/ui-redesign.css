@@ -2559,3 +2559,31 @@ body.ops-hard-refresh-active{
   color: #0F172A;
   font-weight: 950;
 }
+
+.app-download-diagnostic{
+  padding: 13px 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(37,99,235,0.18);
+  background: rgba(239,246,255,0.96);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.app-download-diagnostic strong{
+  color: #0F172A;
+  font-weight: 950;
+}
+
+.app-download-diagnostic--success{
+  border-color: rgba(34,197,94,0.26);
+  background: rgba(240,253,244,0.96);
+  color: #166534;
+}
+
+.app-download-diagnostic--warning{
+  border-color: rgba(245,158,11,0.30);
+  background: rgba(255,251,235,0.96);
+  color: #92400E;
+}
