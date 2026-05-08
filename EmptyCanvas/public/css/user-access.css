@@ -1475,3 +1475,238 @@
     margin-top: 6px;
   }
 }
+
+/* Department folder layout cleanup + destructive/member actions */
+.ua-folders {
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 18px;
+}
+
+.ua-folder {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 150px;
+  padding: 18px;
+}
+
+.ua-folder__main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ua-folder__text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ua-folder__name {
+  font-size: 17px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+
+.ua-folder__count {
+  font-size: 13px;
+}
+
+.ua-folder__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.ua-folder__edit,
+.ua-folder__delete {
+  min-height: 40px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.ua-folder__delete {
+  border: 1px solid rgba(220, 38, 38, 0.16);
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #dc2626;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, 0.08);
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ua-folder__delete:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(220, 38, 38, 0.18);
+}
+
+.ua-folder__delete svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 3;
+}
+
+.ua-folder__delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.ua-folder__open {
+  margin-left: 0;
+  justify-self: end;
+}
+
+.ua-section-head--members {
+  align-items: center;
+}
+
+.ua-members-actions {
+  margin-left: auto;
+}
+
+.ua-member-card {
+  position: relative;
+}
+
+.ua-member-card__top {
+  position: relative;
+  padding-right: 46px;
+}
+
+.ua-member-menu-wrap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 6;
+}
+
+.ua-member-menu-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  color: #0b1220;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ua-member-menu-btn:hover,
+.ua-member-menu-btn[aria-expanded="true"] {
+  transform: translateY(-1px);
+  background: #0b1220;
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16);
+}
+
+.ua-member-menu-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 3;
+}
+
+.ua-member-menu {
+  position: absolute;
+  top: 46px;
+  right: 0;
+  min-width: 150px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.16);
+}
+
+.ua-member-menu[hidden] {
+  display: none !important;
+}
+
+.ua-member-menu button {
+  border: 0;
+  border-radius: 12px;
+  min-height: 38px;
+  padding: 0 10px;
+  background: #f8fafc;
+  color: #0b1220;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ua-member-menu button:hover {
+  background: #eef2f7;
+}
+
+.ua-member-menu button.is-danger {
+  color: #dc2626;
+  background: #fff1f2;
+}
+
+.ua-member-menu button.is-danger:hover {
+  color: #fff;
+  background: #dc2626;
+}
+
+.ua-member-menu button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 3;
+}
+
+@media (max-width: 760px) {
+  .ua-folders {
+    grid-template-columns: 1fr;
+  }
+
+  .ua-folder {
+    display: flex;
+  }
+
+  .ua-folder__actions {
+    grid-template-columns: 1fr 1fr auto;
+  }
+
+  .ua-folder__edit,
+  .ua-folder__delete {
+    grid-column: auto;
+    justify-self: stretch;
+    margin-top: 0;
+  }
+
+  .ua-section-head--members {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ua-members-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+}
