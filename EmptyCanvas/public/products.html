@@ -77,15 +77,9 @@
 
       <main class="products-shell">
         <section class="products-hero" aria-labelledby="productsTitle">
-          <div class="products-hero__content">
-            <div class="products-eyebrow"><i data-feather="package"></i><span>Supabase Products</span></div>
-            <h2 id="productsTitle">A clean product catalog grouped by tag.</h2>
-            <p>Edit every product record, keep prices and URLs up to date, and add new products without opening Notion.</p>
-            <div class="products-actions-row">
-              <label class="products-search" for="productsSearchInput">
-                <i data-feather="search"></i>
-                <input id="productsSearchInput" type="search" autocomplete="off" placeholder="Search product, ID code, tag, URL..." />
-              </label>
+          <div class="products-hero__content products-hero__content--compact">
+            <div class="products-eyebrow" id="productsTitle"><i data-feather="package"></i><span>Supabase Products</span></div>
+            <div class="products-actions-row products-actions-row--compact">
               <button type="button" class="products-refresh-btn" id="productsRefreshBtn">
                 <i data-feather="refresh-cw"></i>
                 <span>Refresh</span>
@@ -122,7 +116,13 @@
               <h3 id="productsTagsTitle">Tags</h3>
               <p>Switch between product groups quickly.</p>
             </div>
-            <div class="products-view-pill" id="productsViewPill">Loading...</div>
+            <div class="products-tags-actions">
+              <button type="button" class="products-edit-tag-btn" id="productsEditSelectedTagBtn" disabled>
+                <i data-feather="edit-3"></i>
+                <span>Edit Tag</span>
+              </button>
+              <div class="products-view-pill" id="productsViewPill">Loading...</div>
+            </div>
           </div>
           <div class="products-tags" id="productsTags" aria-live="polite"></div>
         </section>
@@ -200,6 +200,45 @@
       </div>
     </form>
   </div>
+
+  <div class="products-modal-overlay" id="productTagModal" aria-hidden="true" hidden>
+    <form class="products-modal products-tag-modal" id="productTagForm" role="dialog" aria-modal="true" aria-labelledby="productTagModalTitle">
+      <button type="button" class="products-modal__close" id="productTagModalClose" aria-label="Close tag form">
+        <i data-feather="x"></i>
+      </button>
+      <div class="products-modal__header">
+        <div class="products-modal__icon"><i data-feather="tag"></i></div>
+        <div>
+          <h2 id="productTagModalTitle">Edit Tag</h2>
+          <p id="productTagModalSubtitle">Rename the selected tag for all products inside this group.</p>
+        </div>
+      </div>
+
+      <div class="products-tag-summary">
+        <span>Current Tag</span>
+        <strong id="productTagCurrentLabel">—</strong>
+        <small id="productTagCountLabel">0 products will be updated</small>
+      </div>
+
+      <div class="products-form-grid">
+        <label class="products-field products-field--wide">
+          <span>New Tag <em>*</em></span>
+          <input id="productNewTagInput" name="newTag" type="text" list="productsTagOptions" autocomplete="off" required placeholder="Example: 1/ Electric components" />
+        </label>
+      </div>
+
+      <div class="products-form-error" id="productTagFormError" aria-live="polite"></div>
+
+      <div class="products-modal__actions">
+        <button type="button" class="products-btn products-btn--light" id="productTagModalCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark" id="productTagSaveBtn">
+          <i data-feather="save"></i>
+          <span>Update Tag</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js"></script>
