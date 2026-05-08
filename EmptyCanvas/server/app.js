@@ -3470,9 +3470,6 @@ function _sbProductTags(row = {}) {
     if (t && !tags.some((x) => normKey(x) === normKey(t))) tags.push(t);
   };
   push(_sbProductGet(row, ["tags", "Tags", "tag", "Tag"]));
-  const categoryName = _sbProductText(_sbProductGet(row, ["category_name", "Category Name", "category", "Category"]));
-  const categoryCode = _sbProductText(_sbProductGet(row, ["category_code", "Category Code"]));
-  if (categoryName) push(categoryCode ? `${categoryCode}/ ${categoryName}` : categoryName);
   return tags;
 }
 
@@ -3481,7 +3478,6 @@ function _sbSerializeProductRow(row = {}) {
   const name = _sbProductText(_sbProductGet(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product";
   const displayId = _sbProductText(_sbProductGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
   const unitPrice = _sbProductNum(_sbProductGet(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"]));
-  const quantity = _sbProductNum(_sbProductGet(row, ["quantity", "Quantity", "qty", "Qty"]));
   const url = _sbExtractUrl(_sbProductGet(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"]));
   const imageUrl = _sbExtractUrl(_sbProductGet(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"]));
   return {
@@ -3492,9 +3488,6 @@ function _sbSerializeProductRow(row = {}) {
     displayId,
     imageUrl: imageUrl || null,
     tags: _sbProductTags(row),
-    quantity: quantity !== null ? quantity : null,
-    categoryCode: _sbProductText(_sbProductGet(row, ["category_code", "Category Code"])) || null,
-    categoryName: _sbProductText(_sbProductGet(row, ["category_name", "Category Name", "category", "Category"])) || null,
     source: "supabase",
   };
 }
@@ -3551,10 +3544,7 @@ function _sbNormalizeProductPayload(body = {}, { partial = false } = {}) {
   setText("name", ["name", "productName", "product_name"]);
   setText("id_code", ["idCode", "id_code", "code"]);
   setText("tags", ["tags", "tag"]);
-  setText("category_name", ["categoryName", "category_name", "category"]);
-  setNum("category_code", ["categoryCode", "category_code"]);
   setNum("unit_price", ["unitPrice", "unit_price", "price"]);
-  setNum("quantity", ["quantity", "qty"]);
 
   if (has("url") || has("productUrl") || has("product_url") || has("link")) {
     out.url = _sbProductCleanUrl(body.url ?? body.productUrl ?? body.product_url ?? body.link);
@@ -3603,23 +3593,6 @@ async function _sbUpdateProduct(productId, body = {}) {
   return _sbSerializeProductRow(updated || { ...row, id });
 }
 
-function _sbProductInferCategoryFromTag(tag) {
-  const clean = _sbProductText(tag).trim();
-  if (!clean) return { categoryCode: null, categoryName: null };
-
-  const match = clean.match(/^([0-9]+)\s*\/\s*(.+)$/);
-  if (match) {
-    const code = Number(match[1]);
-    const name = String(match[2] || "").trim() || clean;
-    return {
-      categoryCode: Number.isFinite(code) ? code : null,
-      categoryName: name || null,
-    };
-  }
-
-  return { categoryCode: null, categoryName: clean };
-}
-
 function _sbProductChunk(list = [], size = 100) {
   const out = [];
   const cleanSize = Math.max(1, Number(size) || 100);
@@ -3655,11 +3628,8 @@ async function _sbUpdateProductsTag(oldTag, newTag) {
     throw err;
   }
 
-  const inferred = _sbProductInferCategoryFromTag(toTag);
   const row = {
     tags: toTag,
-    category_code: inferred.categoryCode,
-    category_name: inferred.categoryName,
     updated_at: new Date().toISOString(),
   };
 
