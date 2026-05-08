@@ -673,3 +673,105 @@ body.products-page{
   .product-card__meta{ grid-template-columns:1fr; }
   .product-card__footer{ align-items:flex-start; flex-direction:column; }
 }
+
+/* Products page refinement: compact hero + bulk tag editing */
+.products-hero__content--compact{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-width:0;
+}
+.products-actions-row--compact{
+  margin-top:0;
+  justify-content:flex-end;
+  flex:0 0 auto;
+}
+.products-tags-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.products-edit-tag-btn,
+.products-group-edit-tag{
+  border:0;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:36px;
+  padding:0 12px;
+  border-radius:999px;
+  font-weight:950;
+  font-size:.78rem;
+  color:#c2410c;
+  background:linear-gradient(135deg,#fff7ed,#fffbf7);
+  border:1px solid rgba(249,115,22,.22);
+  box-shadow:0 10px 22px rgba(249,115,22,.10);
+  transition:transform .18s ease, box-shadow .18s ease, background .18s ease, color .18s ease;
+}
+.products-edit-tag-btn:hover,
+.products-group-edit-tag:hover{
+  transform:translateY(-1px);
+  color:#9a3412;
+  box-shadow:0 16px 28px rgba(249,115,22,.16);
+}
+.products-edit-tag-btn svg,
+.products-group-edit-tag svg{ width:15px; height:15px; }
+.products-edit-tag-btn[disabled],
+.products-group-edit-tag[disabled]{
+  opacity:.46;
+  cursor:not-allowed;
+  transform:none !important;
+  box-shadow:none;
+}
+.products-tag-summary{
+  margin:0 0 18px;
+  padding:16px 18px;
+  border-radius:22px;
+  border:1px solid rgba(249,115,22,.18);
+  background:linear-gradient(135deg,#fff7ed,#fff);
+  display:grid;
+  gap:4px;
+}
+.products-tag-summary span{
+  color:#9a3412;
+  font-size:.72rem;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  font-weight:950;
+}
+.products-tag-summary strong{
+  color:#111827;
+  font-size:1.08rem;
+  font-weight:950;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.products-tag-summary small{
+  color:#667085;
+  font-weight:850;
+}
+.products-tag-modal{ width:min(620px,100%); }
+
+@media (max-width:820px){
+  .products-hero__content--compact{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .products-actions-row--compact{
+    justify-content:stretch;
+  }
+  .products-tags-actions{
+    justify-content:flex-start;
+  }
+  .products-edit-tag-btn,
+  .products-group-edit-tag,
+  .products-view-pill{
+    flex:1 1 auto;
+  }
+}
