@@ -1405,3 +1405,178 @@
     margin: 0 14px 8px;
   }
 }
+
+/* Message timeline, reactions, and voice messages */
+.messages-page .msg-composer {
+  grid-template-columns: 86px minmax(0, 1fr) 82px 92px;
+}
+.messages-page .msg-voice-btn {
+  border: 1px solid rgba(15, 23, 42, 0.09) !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07) !important;
+}
+.messages-page .msg-voice-btn.is-recording {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  border-color: rgba(220, 38, 38, 0.26) !important;
+  animation: msg-record-pulse 1.15s ease-in-out infinite;
+}
+@keyframes msg-record-pulse {
+  0%, 100% { box-shadow: 0 10px 24px rgba(220, 38, 38, 0.10); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.11), 0 10px 24px rgba(220, 38, 38, 0.14); }
+}
+
+.messages-page .msg-date-divider {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0 10px;
+  position: sticky;
+  top: 10px;
+  z-index: 2;
+  pointer-events: none;
+}
+.messages-page .msg-date-divider span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.92);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 950;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(10px);
+}
+.messages-page .msg-bubble {
+  position: relative;
+  touch-action: manipulation;
+  user-select: text;
+}
+.messages-page .msg-bubble-time {
+  display: none;
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #94a3b8;
+}
+.messages-page .msg-bubble.is-time-visible .msg-bubble-time {
+  display: block;
+}
+.messages-page .msg-bubble-row.is-mine .msg-bubble-time {
+  color: rgba(255,255,255,.68);
+}
+
+.messages-page .msg-reaction-picker {
+  position: absolute;
+  left: 12px;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.97);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.20);
+  backdrop-filter: blur(16px);
+}
+.messages-page .msg-bubble-row.is-mine .msg-reaction-picker {
+  left: auto;
+  right: 12px;
+}
+.messages-page .msg-reaction-picker button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  transition: transform .14s ease, background .14s ease;
+}
+.messages-page .msg-reaction-picker button:hover,
+.messages-page .msg-reaction-picker button:focus-visible {
+  background: #f1f5f9;
+  transform: translateY(-2px) scale(1.08);
+  outline: none;
+}
+.messages-page .msg-reaction-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.messages-page .msg-reaction-badge {
+  min-height: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+}
+.messages-page .msg-reaction-badge.is-mine {
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+.messages-page .msg-bubble-row.is-mine .msg-reaction-badge {
+  background: rgba(255,255,255,.13);
+  color: #fff;
+  border-color: rgba(255,255,255,.18);
+}
+.messages-page .msg-reaction-badge b {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.messages-page .msg-attachment-audio {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.07);
+}
+.messages-page .msg-attachment-audio audio,
+.messages-page .msg-draft-audio {
+  width: 100%;
+  max-width: 360px;
+  display: block;
+}
+.messages-page .msg-draft-thumb.is-audio {
+  background: #0b1020;
+  color: #fff;
+}
+
+@media (max-width: 540px) {
+  .messages-page .msg-composer {
+    grid-template-columns: 50px minmax(0, 1fr) 50px 62px;
+    gap: 7px;
+  }
+  .messages-page .msg-composer .msg-composer-btn {
+    min-width: 0;
+    padding: 0;
+    font-size: 0;
+  }
+  .messages-page .msg-reaction-picker {
+    left: 0;
+    gap: 2px;
+    padding: 6px;
+  }
+  .messages-page .msg-bubble-row.is-mine .msg-reaction-picker {
+    right: 0;
+  }
+  .messages-page .msg-reaction-picker button {
+    width: 31px;
+    height: 31px;
+    font-size: 18px;
+  }
+}
