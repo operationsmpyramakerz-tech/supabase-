@@ -29,6 +29,16 @@
     chatsTimer: null,
     commentsTimer: null,
     commentsSignature: '',
+    reactions: new Map(),
+    reactionsSignature: '',
+    visibleTimes: new Set(),
+    activeReactionMessageId: '',
+    longPressFired: false,
+    mediaRecorder: null,
+    mediaStream: null,
+    voiceChunks: [],
+    isRecording: false,
+    recordStartedAt: 0,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -179,6 +189,43 @@
     return Number.isFinite(time) ? time : 0;
   }
 
+  function dateKey(value) {
+    const time = Date.parse(value || '');
+    if (!Number.isFinite(time)) return '';
+    const d = new Date(time);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function formatDateDivider(value) {
+    const time = Date.parse(value || '');
+    if (!Number.isFinite(time)) return '';
+    const d = new Date(time);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const key = dateKey(value);
+    if (key === dateKey(today.toISOString())) return 'Today';
+    if (key === dateKey(yesterday.toISOString())) return 'Yesterday';
+    try {
+      return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+    } catch {
+      return key;
+    }
+  }
+
+  function formatMessageTime(value) {
+    const time = Date.parse(value || '');
+    if (!Number.isFinite(time)) return '';
+    try {
+      return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(time));
+    } catch {
+      return '';
+    }
+  }
+
   function isChatUnread(chat) {
     if (!chat || String(chat.id || '') === String(state.selectedChatId || '')) return false;
     const count = Number(chat.commentsCount || 0);
@@ -271,14 +318,15 @@
     const meta = [attachment.mime, humanFileSize(attachment.size)].filter(Boolean).join(' • ');
     const url = escapeHtml(attachment.url);
     const isImage = attachmentIsImage(attachment);
+    const isAudio = String(attachment?.mime || '').toLowerCase().startsWith('audio/');
     const preview = isImage
       ? `<span class="msg-attachment-image"><img src="${url}" alt="${name}" loading="lazy" /></span>`
-      : '';
+      : (isAudio ? `<span class="msg-attachment-audio"><audio src="${url}" controls preload="metadata"></audio></span>` : '');
     return `
-      <a class="msg-attachment-card ${isImage ? 'is-image' : ''}" href="${url}" target="_blank" rel="noopener">
+      <a class="msg-attachment-card ${isImage ? 'is-image' : ''} ${isAudio ? 'is-audio' : ''}" href="${url}" target="_blank" rel="noopener">
         ${preview}
         <span class="msg-attachment-file-row">
-          <span class="msg-attachment-icon"><i data-feather="${isImage ? 'image' : 'paperclip'}"></i></span>
+          <span class="msg-attachment-icon"><i data-feather="${isImage ? 'image' : (isAudio ? 'mic' : 'paperclip')}"></i></span>
           <span class="msg-attachment-info">
             <strong>${name}</strong>
             <small>${escapeHtml(meta || 'Open attachment')}</small>
@@ -297,6 +345,105 @@
       reader.readAsDataURL(file);
     });
   }
+
+  const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+  function reactionsSignature(items = []) {
+    return (Array.isArray(items) ? items : [])
+      .map((item) => `${item.messageId || ''}:${item.emoji || ''}:${item.count || 0}:${item.mine ? '1' : '0'}`)
+      .sort()
+      .join('|');
+  }
+
+  function syncReactions(items = []) {
+    const nextSig = reactionsSignature(items);
+    const changed = nextSig !== state.reactionsSignature;
+    const map = new Map();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const id = String(item.messageId || '').trim();
+      if (!id) return;
+      const list = map.get(id) || [];
+      list.push({
+        emoji: String(item.emoji || '').trim(),
+        count: Number(item.count || 0) || 0,
+        mine: !!item.mine,
+      });
+      map.set(id, list);
+    });
+    state.reactions = map;
+    state.reactionsSignature = nextSig;
+    return changed;
+  }
+
+  async function loadReactionsForComments(comments = state.comments) {
+    const ids = (Array.isArray(comments) ? comments : [])
+      .map((c) => String(c?.id || '').trim())
+      .filter(Boolean);
+    if (!ids.length) return syncReactions([]);
+    try {
+      const data = await apiJson(`/api/messages/reactions?messageIds=${encodeURIComponent(ids.join(','))}`);
+      return syncReactions(data.reactions || []);
+    } catch {
+      return false;
+    }
+  }
+
+  function reactionBadgesMarkup(messageId) {
+    const list = state.reactions.get(String(messageId || '')) || [];
+    const visible = list.filter((item) => item.emoji && item.count > 0);
+    if (!visible.length) return '';
+    return `<div class="msg-reaction-badges">${visible.map((item) => `
+      <button type="button" class="msg-reaction-badge ${item.mine ? 'is-mine' : ''}" data-reaction-message-id="${escapeHtml(messageId)}" data-reaction-emoji="${escapeHtml(item.emoji)}" aria-label="${escapeHtml(item.emoji)} reaction">
+        <span>${escapeHtml(item.emoji)}</span><b>${escapeHtml(item.count)}</b>
+      </button>
+    `).join('')}</div>`;
+  }
+
+  function reactionPickerMarkup(messageId) {
+    if (String(state.activeReactionMessageId || '') !== String(messageId || '')) return '';
+    return `<div class="msg-reaction-picker" data-picker-for="${escapeHtml(messageId)}">
+      ${QUICK_REACTIONS.map((emoji) => `<button type="button" data-reaction-message-id="${escapeHtml(messageId)}" data-reaction-emoji="${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`).join('')}
+    </div>`;
+  }
+
+  async function setMessageReaction(messageId, emoji) {
+    const id = String(messageId || '').trim();
+    const cleanEmoji = String(emoji || '').trim();
+    if (!id || !cleanEmoji) return;
+    try {
+      const data = await apiJson('/api/messages/reactions', {
+        method: 'POST',
+        body: {
+          messageId: id,
+          chatId: state.selectedChatId || '',
+          emoji: cleanEmoji,
+        },
+      });
+      syncReactions(data.reactions || []);
+      state.activeReactionMessageId = '';
+      renderComments({ scrollToBottom: false });
+    } catch (error) {
+      toast(error.message || 'Failed to save reaction.', 'error');
+    }
+  }
+
+  function toggleMessageTime(messageId) {
+    const id = String(messageId || '').trim();
+    if (!id) return;
+    if (state.visibleTimes.has(id)) state.visibleTimes.delete(id);
+    else state.visibleTimes.add(id);
+    state.activeReactionMessageId = '';
+    renderComments({ scrollToBottom: false });
+  }
+
+  function openReactionPicker(messageId) {
+    const id = String(messageId || '').trim();
+    if (!id) return;
+    state.activeReactionMessageId = state.activeReactionMessageId === id ? '' : id;
+    renderComments({ scrollToBottom: false });
+    try { navigator.vibrate?.(18); } catch {}
+  }
+
 
   function getMentionContext(input) {
     if (!input) return null;
@@ -582,11 +729,15 @@
       const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/comments`);
       const comments = Array.isArray(data.comments) ? data.comments : [];
       const sig = commentsSignature(comments);
-      if (sig !== state.commentsSignature) {
+      const commentsChanged = sig !== state.commentsSignature;
+      const reactionsChanged = await loadReactionsForComments(comments);
+      if (commentsChanged) {
         state.comments = comments;
         state.commentsSignature = sig;
         markChatRead(state.selectedChat);
-        renderComments();
+      }
+      if (commentsChanged || reactionsChanged) {
+        renderComments({ scrollToBottom: commentsChanged });
         renderFilterTabs();
         renderChatsList();
       }
@@ -830,6 +981,7 @@
       const data = await apiJson(`/api/messages/chats/${encodeURIComponent(chatId)}/comments`);
       state.comments = Array.isArray(data.comments) ? data.comments : [];
       state.commentsSignature = commentsSignature(state.comments);
+      await loadReactionsForComments(state.comments);
       markChatRead(state.selectedChat);
       renderChatsList();
       renderComments();
@@ -845,6 +997,10 @@
     state.selectedChat = null;
     state.comments = [];
     state.commentsSignature = '';
+    state.reactions = new Map();
+    state.reactionsSignature = '';
+    state.visibleTimes = new Set();
+    state.activeReactionMessageId = '';
     sendPresence({ isTyping: false });
     const empty = $('#msgEmptyState');
     const conv = $('#msgConversation');
@@ -889,44 +1045,118 @@
     hydrateIcons();
   }
 
-  function renderComments() {
+  function renderComments({ scrollToBottom = true } = {}) {
     const el = $('#msgComments');
     if (!el) return;
     state.commentsSignature = commentsSignature(state.comments);
+    state.visibleTimes = new Set(Array.from(state.visibleTimes || []).filter((id) => (state.comments || []).some((c) => String(c.id || '') === String(id))));
     if (!state.comments.length) {
       el.innerHTML = `<div class="msg-empty-list">No messages yet.</div>`;
       return;
     }
-    el.innerHTML = state.comments.map((c) => {
+
+    let previousDateKey = '';
+    const blocks = [];
+    (state.comments || []).forEach((c) => {
+      const created = c.createdTime || c.created_at || '';
+      const key = dateKey(created);
+      if (key && key !== previousDateKey) {
+        previousDateKey = key;
+        blocks.push(`
+          <div class="msg-date-divider" data-date-key="${escapeHtml(key)}">
+            <span>${escapeHtml(formatDateDivider(created))}</span>
+          </div>
+        `);
+      }
+
       if (c.isSystem || String(c.messageType || '').toLowerCase() === 'system') {
-        return `
+        blocks.push(`
           <div class="msg-system-row">
             <span>${escapeHtml(c.body || c.rawText || '')}</span>
           </div>
-        `;
+        `);
+        return;
       }
+
+      const messageId = String(c.id || '');
       const attachment = c.attachment || parseAttachment(c.body || c.rawText || '');
       const bodyHtml = attachment ? attachmentMarkup(attachment) : formatMessageText(c.body || c.rawText || '');
-      return `
-        <div class="msg-bubble-row ${c.isMine ? 'is-mine' : ''}">
-          <div class="msg-bubble ${attachment ? 'has-attachment' : ''}">
+      const timeText = formatMessageTime(created) || c.createdTimeText || '';
+      const showTime = state.visibleTimes.has(messageId);
+      blocks.push(`
+        <div class="msg-bubble-row ${c.isMine ? 'is-mine' : ''}" data-message-row-id="${escapeHtml(messageId)}">
+          <div class="msg-bubble ${attachment ? 'has-attachment' : ''} ${showTime ? 'is-time-visible' : ''}" data-message-id="${escapeHtml(messageId)}" tabindex="0" role="button" aria-label="Message from ${escapeHtml(c.sender || 'User')}">
+            ${reactionPickerMarkup(messageId)}
             <div class="msg-bubble-sender">${escapeHtml(c.sender || 'User')}</div>
             <div class="msg-bubble-body">${bodyHtml}</div>
-            <div class="msg-bubble-time">${escapeHtml(c.createdTimeText || '')}</div>
+            <div class="msg-bubble-time">${escapeHtml(timeText)}</div>
+            ${reactionBadgesMarkup(messageId)}
           </div>
         </div>
-      `;
-    }).join('');
+      `);
+    });
+
+    el.innerHTML = blocks.join('');
+    bindCommentInteractions(el);
     hydrateIcons();
-    requestAnimationFrame(() => {
-      try { el.scrollTop = el.scrollHeight; } catch {}
+    if (scrollToBottom) {
+      requestAnimationFrame(() => {
+        try { el.scrollTop = el.scrollHeight; } catch {}
+      });
+    }
+  }
+
+  function bindCommentInteractions(root) {
+    const bubbles = $$('.msg-bubble[data-message-id]', root);
+    bubbles.forEach((bubble) => {
+      let pressTimer = null;
+      const messageId = bubble.dataset.messageId || '';
+      const cancelPress = () => {
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = null;
+      };
+      bubble.addEventListener('pointerdown', (event) => {
+        if (event.target.closest('a, audio, button, .msg-reaction-picker, .msg-reaction-badges')) return;
+        state.longPressFired = false;
+        cancelPress();
+        pressTimer = setTimeout(() => {
+          state.longPressFired = true;
+          openReactionPicker(messageId);
+        }, 560);
+      });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach((type) => {
+        bubble.addEventListener(type, cancelPress);
+      });
+      bubble.addEventListener('click', (event) => {
+        if (event.target.closest('a, audio, button, .msg-reaction-picker, .msg-reaction-badges')) return;
+        if (state.longPressFired) {
+          state.longPressFired = false;
+          event.preventDefault();
+          return;
+        }
+        toggleMessageTime(messageId);
+      });
+      bubble.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleMessageTime(messageId);
+        }
+      });
+    });
+
+    $$('[data-reaction-message-id][data-reaction-emoji]', root).forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setMessageReaction(btn.dataset.reactionMessageId || '', btn.dataset.reactionEmoji || '');
+      });
     });
   }
 
   function updateChatAfterComment(comment, fallbackPreview = '') {
     if (!comment || !state.selectedChatId) return;
     const preview = comment.attachment
-      ? `📎 ${comment.attachment.name || 'Attachment'}`
+      ? `${String(comment.attachment.mime || '').toLowerCase().startsWith('audio/') ? '🎙️' : '📎'} ${comment.attachment.name || 'Attachment'}`
       : (comment.body || fallbackPreview || 'New message');
     state.chats = state.chats.map((c) => {
       if (String(c.id) !== String(state.selectedChatId)) return c;
@@ -970,7 +1200,7 @@
     });
     if (data.comment) {
       state.comments.push(data.comment);
-      updateChatAfterComment(data.comment, `📎 ${attachment.name || 'Attachment'}`);
+      updateChatAfterComment(data.comment, `${String(attachment.mime || '').toLowerCase().startsWith('audio/') ? '🎙️' : '📎'} ${attachment.name || 'Attachment'}`);
     }
     return data.comment || null;
   }
@@ -998,9 +1228,10 @@
     const isPreparing = item.status === 'reading';
     const isUploading = item.status === 'uploading';
     const isImage = attachmentIsImage(item);
+    const isAudio = String(item.mime || '').toLowerCase().startsWith('audio/');
     const thumbnail = isImage && item.previewUrl
       ? `<span class="msg-draft-thumb is-image"><img src="${escapeHtml(item.previewUrl)}" alt="${escapeHtml(item.name || 'Attachment')}" /></span>`
-      : `<span class="msg-draft-thumb"><i data-feather="paperclip"></i></span>`;
+      : `<span class="msg-draft-thumb ${isAudio ? 'is-audio' : ''}"><i data-feather="${isAudio ? 'mic' : 'paperclip'}"></i></span>`;
     const statusText = isUploading ? 'Uploading...' : (isPreparing ? 'Preparing preview...' : 'Ready to send');
     box.hidden = false;
     box.innerHTML = `
@@ -1009,6 +1240,7 @@
         <span class="msg-draft-info">
           <strong>${escapeHtml(item.name || 'Attachment')}</strong>
           <small>${escapeHtml([item.mime, humanFileSize(item.size), statusText].filter(Boolean).join(' • '))}</small>
+          ${isAudio && item.previewUrl ? `<audio class="msg-draft-audio" src="${escapeHtml(item.previewUrl)}" controls preload="metadata"></audio>` : ''}
           <span class="msg-draft-progress"><i></i></span>
         </span>
         <button type="button" class="msg-draft-remove" id="msgDraftRemove" aria-label="Remove selected attachment">×</button>
@@ -1051,6 +1283,118 @@
       clearPendingAttachment();
       toast(error.message || 'Failed to read attachment.', 'error');
     }
+  }
+
+  function updateVoiceButton() {
+    const btn = $('#msgVoiceBtn');
+    if (!btn) return;
+    btn.classList.toggle('is-recording', !!state.isRecording);
+    const label = btn.querySelector('span');
+    if (label) label.textContent = state.isRecording ? 'Stop' : 'Voice';
+    const icon = btn.querySelector('i');
+    if (icon) icon.setAttribute('data-feather', state.isRecording ? 'square' : 'mic');
+    hydrateIcons();
+  }
+
+  function stopMediaStream() {
+    try {
+      (state.mediaStream?.getTracks?.() || []).forEach((track) => track.stop());
+    } catch {}
+    state.mediaStream = null;
+  }
+
+  async function startVoiceRecording() {
+    if (!state.selectedChatId) {
+      toast('Please select a chat first.', 'error');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast('Voice recording is not supported in this browser.', 'error');
+      return;
+    }
+    clearPendingAttachment();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => {
+        try { return MediaRecorder.isTypeSupported(type); } catch { return false; }
+      }) || '';
+      const recorder = new MediaRecorder(stream, preferredMime ? { mimeType: preferredMime } : undefined);
+      state.mediaStream = stream;
+      state.mediaRecorder = recorder;
+      state.voiceChunks = [];
+      state.isRecording = true;
+      state.recordStartedAt = Date.now();
+      updateVoiceButton();
+      toast('Recording voice message...', 'info');
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) state.voiceChunks.push(event.data);
+      });
+      recorder.addEventListener('stop', async () => {
+        const chunks = state.voiceChunks || [];
+        const mime = recorder.mimeType || preferredMime || 'audio/webm';
+        const blob = new Blob(chunks, { type: mime });
+        const durationMs = Math.max(0, Date.now() - Number(state.recordStartedAt || Date.now()));
+        state.mediaRecorder = null;
+        state.voiceChunks = [];
+        state.isRecording = false;
+        updateVoiceButton();
+        stopMediaStream();
+        if (!blob.size) {
+          toast('No voice audio was recorded.', 'error');
+          return;
+        }
+        const ext = mime.includes('mp4') ? 'm4a' : 'webm';
+        const previewUrl = URL.createObjectURL(blob);
+        state.pendingAttachment = {
+          file: null,
+          name: `voice-message-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`,
+          mime,
+          size: blob.size,
+          previewUrl,
+          dataUrl: '',
+          status: 'reading',
+          isVoice: true,
+          durationMs,
+        };
+        renderAttachmentDraft();
+        try {
+          state.pendingAttachment.dataUrl = await readFileAsDataUrl(blob);
+          state.pendingAttachment.status = 'ready';
+          renderAttachmentDraft();
+          toast('Voice message ready. Press Send to upload it.', 'success');
+        } catch (error) {
+          clearPendingAttachment();
+          toast(error.message || 'Failed to prepare voice message.', 'error');
+        }
+      });
+      recorder.start();
+    } catch (error) {
+      state.isRecording = false;
+      updateVoiceButton();
+      stopMediaStream();
+      toast(error?.message || 'Microphone permission was denied.', 'error');
+    }
+  }
+
+  function stopVoiceRecording() {
+    try {
+      if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
+      else {
+        state.isRecording = false;
+        updateVoiceButton();
+        stopMediaStream();
+      }
+    } catch (error) {
+      state.isRecording = false;
+      updateVoiceButton();
+      stopMediaStream();
+      toast(error.message || 'Failed to stop recording.', 'error');
+    }
+  }
+
+  function toggleVoiceRecording() {
+    if (state.isRecording) stopVoiceRecording();
+    else startVoiceRecording();
   }
 
   async function sendMessage(event) {
@@ -1174,6 +1518,7 @@
     clearPendingAttachment();
     state.comments = Array.isArray(comments) ? comments : [];
     state.commentsSignature = commentsSignature(state.comments);
+    await loadReactionsForComments(state.comments);
     markChatRead(chat);
     renderFilterTabs();
     renderChatsList();
@@ -1246,6 +1591,7 @@
     $('#msgComposer')?.addEventListener('submit', sendMessage);
     $('#msgAttachBtn')?.addEventListener('click', () => $('#msgAttachmentInput')?.click());
     $('#msgAttachmentInput')?.addEventListener('change', (event) => prepareAttachmentFile(event.target?.files?.[0] || null));
+    $('#msgVoiceBtn')?.addEventListener('click', toggleVoiceRecording);
     $('#msgComposerInput')?.addEventListener('input', (event) => {
       updateMentionSuggestions(event);
       notifyTyping();
@@ -1277,6 +1623,7 @@
       }
     });
     window.addEventListener('beforeunload', () => {
+      try { if (state.isRecording) stopVoiceRecording(); } catch {}
       try {
         const payload = JSON.stringify({ activeChatId: '', isTyping: false, offline: true });
         const blob = new Blob([payload], { type: 'application/json' });
