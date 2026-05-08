@@ -19,6 +19,16 @@
     mentionItems: [],
     mentionActiveIndex: 0,
     mentionStart: -1,
+    presenceEntries: [],
+    presenceByName: new Map(),
+    presenceByEmail: new Map(),
+    lastTypingAt: 0,
+    typingStopTimer: null,
+    heartbeatTimer: null,
+    presenceTimer: null,
+    chatsTimer: null,
+    commentsTimer: null,
+    commentsSignature: '',
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -437,12 +447,177 @@
     state.chats = Array.isArray(data.chats) ? data.chats : [];
   }
 
-  async function refreshAll({ keepSelection = true } = {}) {
+  function presenceNameKey(value) {
+    return normalizeSearch(value);
+  }
+
+  function presenceEmailKey(value) {
+    return normalizeSearch(value);
+  }
+
+  function isPresenceCurrentUser(entry) {
+    const cur = currentUserKey();
+    const email = presenceEmailKey(entry?.email);
+    const name = presenceNameKey(entry?.name);
+    return (!!cur.email && !!email && cur.email === email) || (!!cur.name && !!name && cur.name === name);
+  }
+
+  function rebuildPresenceMaps() {
+    state.presenceByName = new Map();
+    state.presenceByEmail = new Map();
+    for (const entry of state.presenceEntries || []) {
+      if (!entry || entry.online === false) continue;
+      const name = presenceNameKey(entry.name);
+      const email = presenceEmailKey(entry.email);
+      if (name) state.presenceByName.set(name, entry);
+      if (email) state.presenceByEmail.set(email, entry);
+    }
+  }
+
+  function syncPresenceEntries(entries) {
+    state.presenceEntries = Array.isArray(entries) ? entries : [];
+    rebuildPresenceMaps();
+    renderTypingIndicator();
+  }
+
+  function presenceForMember(member) {
+    const email = presenceEmailKey(member?.email);
+    const name = presenceNameKey(member?.name);
+    return (email && state.presenceByEmail.get(email)) || (name && state.presenceByName.get(name)) || null;
+  }
+
+  function isMemberOnline(member) {
+    const entry = presenceForMember(member);
+    return !!entry && !isPresenceCurrentUser(entry);
+  }
+
+  function selectedChatHasOnlineParticipant() {
+    const chat = state.selectedChat || {};
+    const names = String(chat.participantNames || '')
+      .split(/[,;|]+/)
+      .map((x) => presenceNameKey(x))
+      .filter(Boolean);
+    const emails = String(chat.participantEmails || '')
+      .split(/[,;|]+/)
+      .map((x) => presenceEmailKey(x))
+      .filter(Boolean);
+    return state.presenceEntries.some((entry) => {
+      if (!entry?.online || isPresenceCurrentUser(entry)) return false;
+      const n = presenceNameKey(entry.name);
+      const e = presenceEmailKey(entry.email);
+      return (!!n && names.includes(n)) || (!!e && emails.includes(e));
+    });
+  }
+
+  function renderTypingIndicator() {
+    const el = $('#msgTypingIndicator');
+    if (!el) return;
+    const chatId = String(state.selectedChatId || '');
+    if (!chatId) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    const typing = (state.presenceEntries || [])
+      .filter((entry) => entry && entry.online !== false && entry.isTyping && String(entry.activeChatId || '') === chatId && !isPresenceCurrentUser(entry));
+    if (!typing.length) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    const names = typing.map((entry) => shortName(entry.name || 'Someone')).slice(0, 2);
+    const label = typing.length === 1
+      ? `${names[0]} is typing...`
+      : `${names.join(', ')}${typing.length > 2 ? ` and ${typing.length - 2} others` : ''} are typing...`;
+    el.hidden = false;
+    el.innerHTML = `<span class="msg-typing-dots"><i></i><i></i><i></i></span><strong>${escapeHtml(label)}</strong>`;
+  }
+
+  async function loadPresence() {
+    try {
+      const query = state.selectedChatId ? `?chatId=${encodeURIComponent(state.selectedChatId)}` : '';
+      const data = await apiJson(`/api/messages/presence${query}`);
+      syncPresenceEntries(data.entries || []);
+      renderPeopleStrip();
+      if (state.selectedChatId) renderSelectedChatShell();
+    } catch {
+      // Presence is a live enhancement; keep the chat usable if the endpoint/table is not ready.
+    }
+  }
+
+  async function sendPresence({ isTyping = null } = {}) {
+    try {
+      const typing = typeof isTyping === 'boolean'
+        ? isTyping
+        : (Date.now() - Number(state.lastTypingAt || 0) < 3500);
+      await apiJson('/api/messages/presence', {
+        method: 'POST',
+        body: {
+          activeChatId: state.selectedChatId || '',
+          isTyping: typing,
+        },
+      });
+    } catch {
+      // Ignore presence failures.
+    }
+  }
+
+  function notifyTyping() {
+    if (!state.selectedChatId) return;
+    state.lastTypingAt = Date.now();
+    sendPresence({ isTyping: true });
+    if (state.typingStopTimer) clearTimeout(state.typingStopTimer);
+    state.typingStopTimer = setTimeout(() => sendPresence({ isTyping: false }), 2200);
+  }
+
+  function commentsSignature(comments) {
+    return (Array.isArray(comments) ? comments : [])
+      .map((c) => `${c.id || ''}:${c.createdTime || ''}:${c.rawText || c.body || ''}`)
+      .join('|');
+  }
+
+  async function pollSelectedComments() {
+    if (!state.selectedChatId) return;
+    try {
+      const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/comments`);
+      const comments = Array.isArray(data.comments) ? data.comments : [];
+      const sig = commentsSignature(comments);
+      if (sig !== state.commentsSignature) {
+        state.comments = comments;
+        state.commentsSignature = sig;
+        markChatRead(state.selectedChat);
+        renderComments();
+        renderFilterTabs();
+        renderChatsList();
+      }
+    } catch {}
+  }
+
+  function startRealtimeLoops() {
+    stopRealtimeLoops();
+    sendPresence({ isTyping: false });
+    loadPresence();
+    state.heartbeatTimer = setInterval(() => sendPresence(), 8000);
+    state.presenceTimer = setInterval(loadPresence, 3500);
+    state.chatsTimer = setInterval(() => refreshAll({ keepSelection: true, silent: true }), 10000);
+    state.commentsTimer = setInterval(pollSelectedComments, 3000);
+  }
+
+  function stopRealtimeLoops() {
+    ['heartbeatTimer', 'presenceTimer', 'chatsTimer', 'commentsTimer'].forEach((key) => {
+      if (state[key]) {
+        clearInterval(state[key]);
+        state[key] = null;
+      }
+    });
+  }
+
+  async function refreshAll({ keepSelection = true, silent = false } = {}) {
     const refreshBtn = $('#msgRefreshBtn');
     refreshBtn?.classList.add('is-loading');
     try {
       state.loading = true;
-      renderLoading();
+      if (!silent) renderLoading();
       await loadCurrentUser();
       loadReadState();
       await Promise.all([loadMembers(), loadChats()]);
@@ -451,6 +626,7 @@
       renderChatsList();
       populateNewChatMembers();
       renderGroupMemberPicker();
+      if (!silent) await loadPresence();
       if (keepSelection && state.selectedChatId) {
         const stillExists = state.chats.find((c) => c.id === state.selectedChatId);
         if (stillExists) {
@@ -459,7 +635,7 @@
         }
       }
     } catch (error) {
-      renderError(error.message || 'Failed to load messages.');
+      if (!silent) renderError(error.message || 'Failed to load messages.');
     } finally {
       state.loading = false;
       refreshBtn?.classList.remove('is-loading');
@@ -549,9 +725,11 @@
       .slice(0, 30);
 
     const rows = members.map((m) => {
-      const avatar = m.photoUrl
+      const avatarInner = m.photoUrl
         ? `<span class="msg-person-avatar"><img src="${escapeHtml(m.photoUrl)}" alt="${escapeHtml(m.name || 'User')}" /></span>`
         : `<span class="msg-person-avatar">${escapeHtml(initials(m.name))}</span>`;
+      const online = isMemberOnline(m);
+      const avatar = `<span class="msg-person-avatar-wrap ${online ? 'is-online' : ''}">${avatarInner}${online ? '<span class="msg-online-dot" aria-label="Online"></span>' : ''}</span>`;
       const search = [m.name, m.position, m.department, m.email, m.phone].filter(Boolean).join(' ');
       return `
         <button type="button" class="msg-person-card" data-member-id="${escapeHtml(m.id)}" data-search="${escapeHtml(search)}" title="${escapeHtml(m.name || '')}">
@@ -651,9 +829,12 @@
     try {
       const data = await apiJson(`/api/messages/chats/${encodeURIComponent(chatId)}/comments`);
       state.comments = Array.isArray(data.comments) ? data.comments : [];
+      state.commentsSignature = commentsSignature(state.comments);
       markChatRead(state.selectedChat);
       renderChatsList();
       renderComments();
+      sendPresence({ isTyping: false });
+      loadPresence();
     } catch (error) {
       if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load messages.')}</div>`;
     }
@@ -663,6 +844,8 @@
     state.selectedChatId = '';
     state.selectedChat = null;
     state.comments = [];
+    state.commentsSignature = '';
+    sendPresence({ isTyping: false });
     const empty = $('#msgEmptyState');
     const conv = $('#msgConversation');
     const shell = $('.messages-shell');
@@ -690,7 +873,11 @@
     const participants = String(chat.participantNames || '').trim();
     if (titleEl) titleEl.textContent = title;
     if (subEl) subEl.textContent = participants || `${Number(chat.commentsCount || 0)} message${Number(chat.commentsCount || 0) === 1 ? '' : 's'}`;
-    if (avEl) avEl.textContent = initials(title);
+    if (avEl) {
+      avEl.textContent = initials(title);
+      avEl.classList.toggle('is-online', selectedChatHasOnlineParticipant());
+    }
+    renderTypingIndicator();
     if (notionLink) {
       if (chat.url) {
         notionLink.href = chat.url;
@@ -705,6 +892,7 @@
   function renderComments() {
     const el = $('#msgComments');
     if (!el) return;
+    state.commentsSignature = commentsSignature(state.comments);
     if (!state.comments.length) {
       el.innerHTML = `<div class="msg-empty-list">No messages yet.</div>`;
       return;
@@ -890,6 +1078,8 @@
         clearPendingAttachment();
       }
       renderComments();
+      state.lastTypingAt = 0;
+      sendPresence({ isTyping: false });
     } catch (error) {
       if (pending && state.pendingAttachment) {
         state.pendingAttachment.status = 'ready';
@@ -983,6 +1173,7 @@
     state.selectedChat = chat;
     clearPendingAttachment();
     state.comments = Array.isArray(comments) ? comments : [];
+    state.commentsSignature = commentsSignature(state.comments);
     markChatRead(chat);
     renderFilterTabs();
     renderChatsList();
@@ -1055,7 +1246,10 @@
     $('#msgComposer')?.addEventListener('submit', sendMessage);
     $('#msgAttachBtn')?.addEventListener('click', () => $('#msgAttachmentInput')?.click());
     $('#msgAttachmentInput')?.addEventListener('change', (event) => prepareAttachmentFile(event.target?.files?.[0] || null));
-    $('#msgComposerInput')?.addEventListener('input', updateMentionSuggestions);
+    $('#msgComposerInput')?.addEventListener('input', (event) => {
+      updateMentionSuggestions(event);
+      notifyTyping();
+    });
     $('#msgComposerInput')?.addEventListener('keydown', handleMentionKeydown);
     $('#msgComposerInput')?.addEventListener('blur', () => setTimeout(closeMentionMenu, 160));
     $('#msgBackMobile')?.addEventListener('click', closeActiveChat);
@@ -1082,10 +1276,18 @@
         setNewMenu(false);
       }
     });
+    window.addEventListener('beforeunload', () => {
+      try {
+        const payload = JSON.stringify({ activeChatId: '', isTyping: false, offline: true });
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon?.('/api/messages/presence', blob);
+      } catch {}
+    });
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
     bindEvents();
-    refreshAll({ keepSelection: false });
+    await refreshAll({ keepSelection: false });
+    startRealtimeLoops();
   });
 })();
