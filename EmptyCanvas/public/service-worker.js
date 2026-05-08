@@ -1,63 +1,90 @@
-// Bump this value whenever we change static assets (CSS/JS/images)
-// so existing installs don't keep serving stale cached files.
-const CACHE_NAME = "ops-static-vv42-pwa-install";
+// Operations Hub PWA Service Worker
+// Bump this value whenever we change static assets so old deployments don't stay cached.
+const CACHE_NAME = "ops-static-vv44-pwa-installable";
+
+const PRECACHE_URLS = [
+  "/pwa-start",
+  "/pwa-start.html",
+  "/pwa-offline.html",
+  "/manifest.webmanifest",
+  "/manifest.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME));
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .catch(() => undefined)
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(
-        keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null))
-      );
+      await Promise.all(keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null)));
       await self.clients.claim();
     })()
   );
 });
 
+async function networkFirstNavigation(request) {
+  try {
+    const fresh = await fetch(request);
+    return fresh;
+  } catch {
+    const cachedStart = await caches.match("/pwa-start.html");
+    const cachedOffline = await caches.match("/pwa-offline.html");
+    return cachedStart || cachedOffline || Response.error();
+  }
+}
+
+async function staleWhileRevalidate(request) {
+  const cached = await caches.match(request);
+  const fetchPromise = fetch(request)
+    .then((response) => {
+      if (response && response.ok) {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
+      }
+      return response;
+    })
+    .catch(() => cached);
+
+  return cached || fetchPromise;
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  const url = new URL(req.url);
-
-  // GET فقط
   if (req.method !== "GET") return;
 
-  // نفس الدومين فقط
+  const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-
-  // ممنوع نكاشّش الـ API (عشان السشن والبيانات تفضل سليمة)
   if (url.pathname.startsWith("/api/")) return;
 
-  // ممنوع نكاشّش صفحات HTML (عشان مايحصلش مشاكل لوجين/نسخ قديمة)
-  if (req.destination === "document") return;
+  // This navigation handler is important for Chrome installability checks.
+  // It makes sure the service worker controls the manifest start_url and has
+  // a real navigation fallback instead of being only a static-asset cache.
+  if (req.mode === "navigate" || req.destination === "document") {
+    event.respondWith(networkFirstNavigation(req));
+    return;
+  }
 
-  // كاش للـ static assets فقط
   const isStatic =
     req.destination === "style" ||
     req.destination === "script" ||
     req.destination === "image" ||
-    req.destination === "font";
+    req.destination === "font" ||
+    url.pathname === "/manifest.webmanifest" ||
+    url.pathname === "/manifest.json";
 
   if (!isStatic) return;
-
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const fetchPromise = fetch(req).then((resp) => {
-        const copy = resp.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
-        return resp;
-      }).catch(() => cached);
-
-      // لو موجود كاش رجّعه فورًا (سريع) + حدّث في الخلفية
-      return cached || fetchPromise;
-    })
-  );
+  event.respondWith(staleWhileRevalidate(req));
 });
-
 
 // -------------------------------
 // Push Notifications (Web Push)
@@ -76,7 +103,7 @@ self.addEventListener("push", (event) => {
 
   const title = data.title || "Operations";
   const body = data.body || "New update available";
-  const url = data.url || "/dashboard";
+  const url = data.url || "/home";
 
   const options = {
     body,
@@ -90,7 +117,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification?.data?.url || "/dashboard";
+  const url = event.notification?.data?.url || "/home";
 
   event.waitUntil(
     (async () => {
@@ -98,7 +125,6 @@ self.addEventListener("notificationclick", (event) => {
 
       for (const client of allClients) {
         try {
-          // If there's already a window open, focus it and navigate
           if ("focus" in client) {
             await client.focus();
             if ("navigate" in client) await client.navigate(url);
@@ -107,9 +133,7 @@ self.addEventListener("notificationclick", (event) => {
         } catch {}
       }
 
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
+      if (clients.openWindow) return clients.openWindow(url);
     })()
   );
 });
