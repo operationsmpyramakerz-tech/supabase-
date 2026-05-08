@@ -65,6 +65,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const createWithdrawalBtn = document.getElementById("reqCreateWithdrawalBtn");
   const logMaintenanceBtn = document.getElementById("reqLogMaintenanceBtn");
   const maintenancePdfBtn = document.getElementById("reqMaintenancePdfBtn");
+
+  // Delivered receipt photos viewer
+  const receiptPhotosBtn = document.getElementById("reqReceiptPhotosBtn");
+  const receiptPhotosModal = document.getElementById("reqReceiptPhotosModal");
+  const receiptPhotosCloseBtn = document.getElementById("reqReceiptPhotosClose");
+  const receiptPhotosDoneBtn = document.getElementById("reqReceiptPhotosDone");
+  const receiptPhotosTitle = document.getElementById("reqReceiptPhotosTitle");
+  const receiptPhotosSub = document.getElementById("reqReceiptPhotosSub");
+  const receiptPhotosCount = document.getElementById("reqReceiptPhotosCount");
+  const receiptPhotosGrid = document.getElementById("reqReceiptPhotosGrid");
+  let receiptPhotosLastFocus = null;
+
   // Tracker steps
   const stepEls = {
     1: document.getElementById("reqStep1"),
@@ -428,6 +440,83 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (value !== undefined) push(value);
 
     return out;
+  }
+
+  function isPublicReceiptUrl(value) {
+    const raw = String(value || "").trim();
+    return /^(https?:|data:)/i.test(raw);
+  }
+
+  function receiptFileNameFromUrl(url, fallback = "Receipt photo") {
+    try {
+      const parsed = new URL(String(url || ""), window.location.origin);
+      const name = decodeURIComponent(parsed.pathname.split("/").pop() || "").trim();
+      return name || fallback;
+    } catch {
+      const raw = String(url || "").split(/[?#]/)[0];
+      return raw.split(/[\/]/).pop() || fallback;
+    }
+  }
+
+  function isImageReceipt(entry = {}) {
+    const url = String(entry.url || "").trim();
+    const name = String(entry.name || "").trim();
+    if (/^data:image\//i.test(url)) return true;
+    return /\.(png|jpe?g|webp|gif|bmp|svg)(?:[?#].*)?$/i.test(url || name);
+  }
+
+  function normalizeReceiptEntries(entries = []) {
+    const out = [];
+    const seen = new Set();
+    const push = (entry = {}) => {
+      const rawName = String(entry.name || entry.filename || "").trim();
+      const rawUrl = String(entry.url || entry.href || entry.publicUrl || "").trim();
+      const url = isPublicReceiptUrl(rawUrl) ? rawUrl : "";
+      const name = rawName || receiptFileNameFromUrl(url || rawUrl, "Receipt photo");
+      if (!name && !url) return;
+      const key = `${url || "no-url"}::${name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name: name || "Receipt photo", url, rawUrl });
+    };
+    for (const entry of entries || []) {
+      if (!entry) continue;
+      if (typeof entry === "string") push({ name: receiptFileNameFromUrl(entry, entry), url: entry });
+      else push(entry);
+    }
+    return out;
+  }
+
+  function collectReceiptEntriesFromItem(item = {}) {
+    const entries = [];
+    const pushPairs = (names, urls) => {
+      const nameList = toStringArray(names);
+      const urlList = toStringArray(urls);
+      const max = Math.max(nameList.length, urlList.length);
+      for (let i = 0; i < max; i += 1) {
+        entries.push({
+          name: nameList[i] || receiptFileNameFromUrl(urlList[i], `Receipt ${i + 1}`),
+          url: urlList[i] || "",
+        });
+      }
+    };
+
+    if (Array.isArray(item.orderReceiptEntries)) entries.push(...item.orderReceiptEntries);
+    if (Array.isArray(item.maintenanceReceiptEntries)) entries.push(...item.maintenanceReceiptEntries);
+
+    pushPairs(item.orderReceiptNames || item.orderReceiptName, item.orderReceiptUrls || item.orderReceiptUrl);
+    pushPairs(item.maintenanceReceiptNames || item.maintenanceReceiptName, item.maintenanceReceiptUrls || item.maintenanceReceiptUrl);
+
+    return normalizeReceiptEntries(entries);
+  }
+
+  function collectReceiptEntriesFromGroup(group = {}) {
+    const entries = [];
+    if (Array.isArray(group.receiptEntries)) entries.push(...group.receiptEntries);
+    if (Array.isArray(group.items)) {
+      group.items.forEach((item) => entries.push(...collectReceiptEntriesFromItem(item)));
+    }
+    return normalizeReceiptEntries(entries);
   }
 
   function getSelectSelectedValues(selectEl) {
@@ -1955,10 +2044,13 @@ document.addEventListener("DOMContentLoaded", () => {
         receiptNumber = set.size === 1 ? receiptVals[0] : "Multiple";
       }
 
+      const receiptEntries = collectReceiptEntriesFromGroup({ items: itemsArr });
+
       return {
         ...g,
         reason: rs.title,
         reasons: rs.uniqueReasons,
+        receiptEntries,
         orderIds: itemsArr.map((x) => x.id).filter(Boolean),
         itemsCount: itemsArr.length,
         totalQty,
@@ -2505,6 +2597,7 @@ document.addEventListener("DOMContentLoaded", () => {
         createWithdrawalBtn.innerHTML = '<i data-feather="repeat"></i> Create Withdrawal';
       }
     }
+    setReceiptPhotosButtonVisibility(g);
     if (archiveBtn) {
       const isArchived = (stage?.idx || 1) >= 6 || norm(stage?.key) === "archive";
       const showUnarchive = !isMaintenancePage && currentTab === "archive" && isArchived;
@@ -2665,6 +2758,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeTechVisitModal({ restoreFocus: false });
     closeMaintenanceLogModal({ restoreFocus: false });
     closeMaintenanceReceiptModal({ restoreFocus: false });
+    closeReceiptPhotosModal({ restoreFocus: false });
     closeDownloadMenu();
 
     orderModal.classList.remove("is-open");
@@ -2703,6 +2797,101 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!downloadMenuPanel) return;
     if (downloadMenuPanel.hidden) openDownloadMenu();
     else closeDownloadMenu();
+  }
+
+  // ---------- Delivered receipt photos viewer ----------
+  function setReceiptPhotosButtonVisibility(group = activeGroup) {
+    if (!receiptPhotosBtn) return;
+    const stageIdx = group?.stage?.idx || computeStage(group?.items || [])?.idx || 1;
+    const entries = collectReceiptEntriesFromGroup(group || {});
+    const show = currentTab === "delivered" && stageIdx >= 5 && entries.length > 0;
+    receiptPhotosBtn.style.display = show ? "inline-flex" : "none";
+    receiptPhotosBtn.disabled = !show;
+  }
+
+  function renderReceiptPhotos(entries = []) {
+    if (!receiptPhotosGrid) return;
+    const cleanEntries = normalizeReceiptEntries(entries);
+    if (receiptPhotosCount) {
+      receiptPhotosCount.textContent = `${cleanEntries.length} ${cleanEntries.length === 1 ? "photo" : "photos"}`;
+    }
+
+    if (!cleanEntries.length) {
+      receiptPhotosGrid.innerHTML = `
+        <div class="req-receipt-photos-empty">
+          <i data-feather="image"></i>
+          <strong>No receipt photos found</strong>
+          <span>This order does not have any saved delivery receipt photos yet.</span>
+        </div>
+      `;
+      if (window.feather) window.feather.replace();
+      return;
+    }
+
+    receiptPhotosGrid.innerHTML = cleanEntries.map((entry, index) => {
+      const name = entry.name || `Receipt ${index + 1}`;
+      const url = String(entry.url || "").trim();
+      const canOpen = isPublicReceiptUrl(url);
+      const image = canOpen && isImageReceipt(entry);
+      const media = image
+        ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" />`
+        : `<div class="req-receipt-photos-file"><i data-feather="file"></i></div>`;
+
+      return `
+        <article class="req-receipt-photo-card">
+          <div class="req-receipt-photo-card__media">${media}</div>
+          <div class="req-receipt-photo-card__body">
+            <div class="req-receipt-photo-card__title">${escapeHTML(name)}</div>
+            <div class="req-receipt-photo-card__meta">Receipt ${index + 1}</div>
+          </div>
+          ${canOpen ? `
+            <a class="req-receipt-photo-card__open" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHTML(name)}">
+              <i data-feather="external-link"></i>
+            </a>
+          ` : `
+            <div class="req-receipt-photo-card__missing" title="No public image link saved">No link</div>
+          `}
+        </article>
+      `;
+    }).join("");
+
+    if (window.feather) window.feather.replace();
+  }
+
+  function isReceiptPhotosOpen() {
+    return !!receiptPhotosModal && receiptPhotosModal.classList.contains("is-open");
+  }
+
+  function openReceiptPhotosModal(group = activeGroup) {
+    if (!receiptPhotosModal) return;
+    const entries = collectReceiptEntriesFromGroup(group || {});
+    const orderLabel = group?.orderIdRange || (group?.orderIdNumber ? `ORD-${group.orderIdNumber}` : "this order");
+
+    if (receiptPhotosTitle) receiptPhotosTitle.textContent = "Receipt Photos";
+    if (receiptPhotosSub) receiptPhotosSub.textContent = `Delivery receipt photos for ${orderLabel}.`;
+    renderReceiptPhotos(entries);
+
+    receiptPhotosLastFocus = document.activeElement;
+    receiptPhotosModal.hidden = false;
+    receiptPhotosModal.classList.add("is-open");
+    receiptPhotosModal.setAttribute("aria-hidden", "false");
+    setTimeout(() => {
+      try { receiptPhotosCloseBtn?.focus(); } catch {}
+    }, 0);
+  }
+
+  function closeReceiptPhotosModal({ restoreFocus = true } = {}) {
+    if (!receiptPhotosModal) return;
+    if (!isReceiptPhotosOpen() && receiptPhotosModal.hidden) return;
+    receiptPhotosModal.classList.remove("is-open");
+    receiptPhotosModal.setAttribute("aria-hidden", "true");
+    receiptPhotosModal.hidden = true;
+    if (restoreFocus) {
+      setTimeout(() => {
+        try { receiptPhotosLastFocus?.focus?.(); } catch {}
+      }, 0);
+    }
+    receiptPhotosLastFocus = null;
   }
 
   // ---------- Receipt sub-modal helpers ----------
@@ -4078,6 +4267,9 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   maintenanceReceiptModal?.addEventListener("click", (e) => {
     if (e.target === maintenanceReceiptModal) closeMaintenanceReceiptModal();
   });
+  receiptPhotosModal?.addEventListener("click", (e) => {
+    if (e.target === receiptPhotosModal) closeReceiptPhotosModal();
+  });
 
   // Global Esc handling (close sub-modal -> dropdown -> main modal)
   document.addEventListener("keydown", (e) => {
@@ -4098,6 +4290,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (isMaintenanceReceiptOpen()) {
       e.preventDefault();
       closeMaintenanceReceiptModal();
+      return;
+    }
+
+    if (isReceiptPhotosOpen()) {
+      e.preventDefault();
+      closeReceiptPhotosModal();
       return;
     }
 
@@ -4131,6 +4329,20 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     e.preventDefault();
     e.stopPropagation();
     openQtyPopover(btn, btn.dataset.id, currentTab === "remaining" ? "add" : "set");
+  });
+
+  receiptPhotosBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeDownloadMenu();
+    openReceiptPhotosModal(activeGroup);
+  });
+  receiptPhotosCloseBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeReceiptPhotosModal();
+  });
+  receiptPhotosDoneBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeReceiptPhotosModal();
   });
 
   excelBtn?.addEventListener("click", (e) => {
