@@ -617,11 +617,13 @@
       ].filter(Boolean).join('');
       return `
         <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''} ${unread ? 'is-unread' : ''}" data-chat-id="${escapeHtml(chat.id)}" data-search="${escapeHtml(search)}">
-          <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
+          <span class="msg-chat-avatar-wrap">
+            <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
+            ${unread ? '<span class="msg-unread-dot" aria-label="Unread"></span>' : ''}
+          </span>
           <span class="msg-chat-main">
             <span class="msg-chat-title-wrap">
               <span class="msg-chat-title">${escapeHtml(chat.title || 'Chat')}</span>
-              ${unread ? '<span class="msg-unread-dot" aria-label="Unread"></span>' : ''}
             </span>
             <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No messages yet')}</span>
             ${badges ? `<span class="msg-chat-badges">${badges}</span>` : ''}
