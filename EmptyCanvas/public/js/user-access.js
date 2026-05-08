@@ -23,7 +23,8 @@
     pageAccessSaving: false,
     departmentModalMode: 'create',
     departmentTargetId: '',
-  };
+    moveMemberId: '',
+    };
 
   const els = {};
 
@@ -184,20 +185,31 @@
     els.folders.innerHTML = departments.map((department) => {
       const count = Number(department.count || 0);
       const name = departmentName(department);
-      const editDisabled = canEditDepartment(department) ? '' : 'disabled aria-disabled="true" title="Default fallback department cannot be renamed"';
+      const deptId = String(department.id || '');
+      const canEdit = canEditDepartment(department);
+      const editDisabled = canEdit ? '' : 'disabled aria-disabled="true" title="Default fallback department cannot be renamed"';
+      const deleteDisabled = canEdit ? '' : 'disabled aria-disabled="true" title="Default fallback department cannot be deleted"';
       const emptyBadge = count ? '' : '<span class="ua-folder__badge">Empty</span>';
       return `
-        <article class="ua-folder" data-dept-id="${escapeHTML(department.id)}" role="button" tabindex="0" aria-label="Open ${escapeHTML(name)} department">
-          <span class="ua-folder__icon"><i data-feather="folder"></i></span>
-          <span class="ua-folder__text">
-            <span class="ua-folder__name">${escapeHTML(name)}</span>
-            <span class="ua-folder__count">${count} ${count === 1 ? 'member' : 'members'}${emptyBadge}</span>
-          </span>
-          <button type="button" class="ua-folder__edit" data-action="edit-department" data-dept-id="${escapeHTML(department.id)}" ${editDisabled}>
-            <i data-feather="edit-3"></i>
-            <span>Edit</span>
-          </button>
-          <span class="ua-folder__open"><i data-feather="chevron-right"></i></span>
+        <article class="ua-folder" data-dept-id="${escapeHTML(deptId)}" role="button" tabindex="0" aria-label="Open ${escapeHTML(name)} department">
+          <div class="ua-folder__main">
+            <span class="ua-folder__icon"><i data-feather="folder"></i></span>
+            <span class="ua-folder__text">
+              <span class="ua-folder__name" title="${escapeHTML(name)}">${escapeHTML(name)}</span>
+              <span class="ua-folder__count">${count} ${count === 1 ? 'member' : 'members'}${emptyBadge}</span>
+            </span>
+          </div>
+          <div class="ua-folder__actions">
+            <button type="button" class="ua-folder__edit" data-action="edit-department" data-dept-id="${escapeHTML(deptId)}" ${editDisabled}>
+              <i data-feather="edit-3"></i>
+              <span>Edit</span>
+            </button>
+            <button type="button" class="ua-folder__delete" data-action="delete-department" data-dept-id="${escapeHTML(deptId)}" ${deleteDisabled}>
+              <i data-feather="trash-2"></i>
+              <span>Delete</span>
+            </button>
+            <span class="ua-folder__open"><i data-feather="chevron-right"></i></span>
+          </div>
         </article>
       `;
     }).join('');
@@ -229,15 +241,6 @@
     if (els.membersTitle) {
       els.membersTitle.textContent = `${dept.name || 'No Department'} Members`;
     }
-    if (els.membersSubtitle) {
-      const total = Array.isArray(dept?.members) ? dept.members.length : 0;
-      const visible = members.length;
-      els.membersSubtitle.textContent = `${visible} of ${total} user${total === 1 ? '' : 's'} shown from this department.`;
-    }
-    if (els.editActiveDeptBtn) {
-      els.editActiveDeptBtn.disabled = !canEditDepartment(dept);
-      els.editActiveDeptBtn.title = canEditDepartment(dept) ? `Rename ${departmentName(dept)}` : 'Default fallback department cannot be renamed';
-    }
 
     if (!members.length) {
       els.membersGrid.innerHTML = state.search
@@ -257,6 +260,21 @@
             <div class="ua-member-card__identity">
               <h4 title="${escapeHTML(member.name || 'Unnamed')}">${escapeHTML(member.name || 'Unnamed')}</h4>
               <p title="${escapeHTML(role)}">${escapeHTML(role)}</p>
+            </div>
+            <div class="ua-member-menu-wrap">
+              <button type="button" class="ua-member-menu-btn" data-action="toggle-member-menu" data-member-id="${escapeHTML(member.id)}" aria-label="More actions for ${escapeHTML(member.name || 'user')}">
+                <i data-feather="more-vertical"></i>
+              </button>
+              <div class="ua-member-menu" data-member-menu="${escapeHTML(member.id)}" hidden>
+                <button type="button" data-action="move-member" data-member-id="${escapeHTML(member.id)}">
+                  <i data-feather="shuffle"></i>
+                  <span>Move</span>
+                </button>
+                <button type="button" class="is-danger" data-action="delete-member" data-member-id="${escapeHTML(member.id)}">
+                  <i data-feather="trash-2"></i>
+                  <span>Delete</span>
+                </button>
+              </div>
             </div>
           </div>
           <div class="ua-member-card__meta">
@@ -790,19 +808,192 @@
     }
   }
 
+
+
+  function cssEscapeValue(value) {
+    const raw = String(value || '');
+    try {
+      if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(raw);
+    } catch {}
+    return raw.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
+  }
+
+  function closeMemberMenus(exceptMemberId = '') {
+    if (!els.membersGrid) return;
+    const keep = String(exceptMemberId || '');
+    els.membersGrid.querySelectorAll('[data-member-menu]').forEach((menu) => {
+      if (keep && menu.getAttribute('data-member-menu') === keep) return;
+      menu.hidden = true;
+    });
+    els.membersGrid.querySelectorAll('.ua-member-menu-btn[aria-expanded="true"]').forEach((btn) => {
+      if (keep && btn.getAttribute('data-member-id') === keep) return;
+      btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function toggleMemberMenu(memberId) {
+    const id = String(memberId || '').trim();
+    if (!id || !els.membersGrid) return;
+    const menu = els.membersGrid.querySelector(`[data-member-menu="${cssEscapeValue(id)}"]`);
+    const btn = els.membersGrid.querySelector(`.ua-member-menu-btn[data-member-id="${cssEscapeValue(id)}"]`);
+    if (!menu) return;
+    const willOpen = !!menu.hidden;
+    closeMemberMenus(id);
+    menu.hidden = !willOpen;
+    if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    hydrateIcons(menu);
+  }
+
+  function departmentOptionsForMove(member = null) {
+    const currentKey = _safeDepartmentKey(member?.department || activeDepartment()?.name || '');
+    const departments = (state.departments || []).slice().sort((a, b) => departmentName(a).localeCompare(departmentName(b)));
+    return departments.map((department) => {
+      const id = String(department.id || '');
+      const name = departmentName(department);
+      const selected = id === currentKey ? 'selected' : '';
+      return `<option value="${escapeHTML(id)}" ${selected}>${escapeHTML(name)}</option>`;
+    }).join('');
+  }
+
+  function _safeDepartmentKey(name) {
+    const clean = String(name || 'No Department').trim() || 'No Department';
+    return clean.toLowerCase().replace(/[^a-z0-9]+/g, '').trim() || 'nodepartment';
+  }
+
+  function openMoveMemberModal(member) {
+    if (!els.moveMemberModal || !els.moveDepartmentSelect || !member) return;
+    state.moveMemberId = String(member.id || '').trim();
+    if (els.moveMemberSubtitle) {
+      els.moveMemberSubtitle.textContent = `Move ${member.name || 'this user'} to another department.`;
+    }
+    if (els.moveMemberError) els.moveMemberError.textContent = '';
+    els.moveDepartmentSelect.innerHTML = departmentOptionsForMove(member);
+    els.moveMemberModal.hidden = false;
+    els.moveMemberModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    hydrateIcons(els.moveMemberModal);
+    setTimeout(() => els.moveDepartmentSelect?.focus(), 50);
+  }
+
+  function closeMoveMemberModal() {
+    if (!els.moveMemberModal) return;
+    els.moveMemberModal.hidden = true;
+    els.moveMemberModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('ua-modal-open');
+    state.moveMemberId = '';
+    if (els.moveMemberError) els.moveMemberError.textContent = '';
+  }
+
+  function setMoveSaving(saving) {
+    if (els.moveMemberSaveBtn) {
+      els.moveMemberSaveBtn.disabled = !!saving;
+      els.moveMemberSaveBtn.classList.toggle('is-loading', !!saving);
+    }
+    if (els.moveMemberCancelBtn) els.moveMemberCancelBtn.disabled = !!saving;
+    if (els.moveDepartmentSelect) els.moveDepartmentSelect.disabled = !!saving;
+  }
+
+  async function submitMoveMemberForm(event) {
+    event?.preventDefault?.();
+    const memberId = String(state.moveMemberId || '').trim();
+    const departmentId = String(els.moveDepartmentSelect?.value || '').trim();
+    if (!memberId || !departmentId) {
+      if (els.moveMemberError) els.moveMemberError.textContent = 'Please select a target department.';
+      return;
+    }
+
+    const member = state.membersById.get(memberId);
+    const target = departmentById(departmentId);
+    if (member && target && _safeDepartmentKey(member.department) === String(target.id || '')) {
+      if (els.moveMemberError) els.moveMemberError.textContent = 'This user is already inside this department.';
+      return;
+    }
+
+    setMoveSaving(true);
+    if (els.moveMemberError) els.moveMemberError.textContent = '';
+    try {
+      const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/department`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ departmentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to move member.');
+      closeMoveMemberModal();
+      await loadMembers({ force: true, keepDepartment: false });
+      if (departmentId) navigateToDepartment(departmentId);
+      toast('success', 'Member moved', data?.message || 'Team member moved successfully.');
+    } catch (error) {
+      if (els.moveMemberError) els.moveMemberError.textContent = error?.message || 'Failed to move member.';
+      toast('error', 'Move failed', error?.message || 'Failed to move member.');
+    } finally {
+      setMoveSaving(false);
+    }
+  }
+
+  async function deleteMember(memberId) {
+    const id = String(memberId || '').trim();
+    const member = state.membersById.get(id);
+    if (!id || !member) return;
+    const ok = window.confirm(`Delete ${member.name || 'this user'} permanently from Team Members?`);
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to delete member.');
+      await loadMembers({ force: true, keepDepartment: true });
+      toast('success', 'Member deleted', data?.message || 'Team member deleted.');
+    } catch (error) {
+      toast('error', 'Delete failed', error?.message || 'Failed to delete member.');
+    }
+  }
+
+  async function deleteDepartment(departmentId) {
+    const department = departmentById(departmentId);
+    if (!department || !canEditDepartment(department)) return;
+    const count = Number(department.count || 0);
+    const message = count
+      ? `Delete ${departmentName(department)} department? ${count} user${count === 1 ? '' : 's'} will be moved to No Department.`
+      : `Delete ${departmentName(department)} department?`;
+    if (!window.confirm(message)) return;
+    try {
+      const res = await fetch(`/api/user-access/departments/${encodeURIComponent(department.id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to delete department.');
+      backToDepartments(false);
+      await loadMembers({ force: true, keepDepartment: false });
+      toast('success', 'Department deleted', data?.message || 'Department deleted.');
+    } catch (error) {
+      toast('error', 'Delete failed', error?.message || 'Failed to delete department.');
+    }
+  }
+
   function openPasswordModal(memberId, action = 'edit') {
     if (!els.passwordModal) return;
+    const allowedActions = new Set(['edit', 'create', 'move', 'delete-member', 'delete-department']);
     state.pendingEditMemberId = String(memberId || '');
-    state.pendingPasswordAction = action === 'create' ? 'create' : 'edit';
+    state.pendingPasswordAction = allowedActions.has(action) ? action : 'edit';
     if (els.passwordInput) els.passwordInput.value = '';
     if (els.passwordError) els.passwordError.textContent = '';
     try {
       const title = document.getElementById('uaAdminPasswordTitle');
       const subtitle = els.passwordModal.querySelector('.ua-modal__header p');
-      if (title) title.textContent = state.pendingPasswordAction === 'create' ? 'Admin Verification' : 'Admin Verification';
-      if (subtitle) subtitle.textContent = state.pendingPasswordAction === 'create'
-        ? 'Enter the Admin user password to add a new member.'
-        : 'Enter the Admin user password to open the edit page.';
+      if (title) title.textContent = 'Admin Verification';
+      const copy = {
+        create: 'Enter the Admin user password to add a new member.',
+        edit: 'Enter the Admin user password to open the edit page.',
+        move: 'Enter the Admin user password to move this member.',
+        'delete-member': 'Enter the Admin user password to delete this member.',
+        'delete-department': 'Enter the Admin user password to delete this department.',
+      };
+      if (subtitle) subtitle.textContent = copy[state.pendingPasswordAction] || copy.edit;
     } catch {}
     els.passwordModal.hidden = false;
     els.passwordModal.setAttribute('aria-hidden', 'false');
@@ -848,13 +1039,19 @@
       if (!res.ok || !data?.ok) throw new Error(data?.error || 'Invalid Admin password.');
 
       const action = state.pendingPasswordAction;
-      const memberId = state.pendingEditMemberId;
-      const member = state.membersById.get(memberId);
+      const targetId = state.pendingEditMemberId;
+      const member = state.membersById.get(targetId);
       closePasswordModal();
       if (action === 'create') {
         openFormModal('create');
-      } else if (member) {
+      } else if (action === 'edit' && member) {
         openFormModal('edit', member);
+      } else if (action === 'move' && member) {
+        openMoveMemberModal(member);
+      } else if (action === 'delete-member') {
+        await deleteMember(targetId);
+      } else if (action === 'delete-department') {
+        await deleteDepartment(targetId);
       }
     } catch (error) {
       if (els.passwordError) els.passwordError.textContent = error?.message || 'Invalid Admin password.';
@@ -1429,6 +1626,15 @@
         if (department && canEditDepartment(department)) openDepartmentModal('edit', department);
         return;
       }
+      const deleteBtn = event.target.closest('[data-action="delete-department"][data-dept-id]');
+      if (deleteBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (deleteBtn.disabled) return;
+        const department = departmentById(deleteBtn.getAttribute('data-dept-id') || '');
+        if (department && canEditDepartment(department)) openPasswordModal(department.id, 'delete-department');
+        return;
+      }
       const card = event.target.closest('.ua-folder[data-dept-id]');
       if (!card) return;
       navigateToDepartment(card.getAttribute('data-dept-id') || '');
@@ -1445,11 +1651,16 @@
     els.membersGrid?.addEventListener('click', (event) => {
       const actionBtn = event.target.closest('[data-action][data-member-id]');
       if (!actionBtn) return;
+      event.stopPropagation();
       const id = String(actionBtn.getAttribute('data-member-id') || '');
       const action = String(actionBtn.getAttribute('data-action') || '');
       if (!id) return;
+      if (action === 'toggle-member-menu') return toggleMemberMenu(id);
+      closeMemberMenus();
       if (action === 'edit') openPasswordModal(id);
       if (action === 'message') handleMessage(id);
+      if (action === 'move-member') openPasswordModal(id, 'move');
+      if (action === 'delete-member') openPasswordModal(id, 'delete-member');
     });
 
     els.searchInput?.addEventListener('input', () => {
@@ -1461,16 +1672,18 @@
     els.backBtn?.addEventListener('click', () => backToDepartments());
     els.addMemberBtn?.addEventListener('click', () => openPasswordModal('', 'create'));
     els.addDepartmentBtn?.addEventListener('click', () => openDepartmentModal('create'));
-    els.editActiveDeptBtn?.addEventListener('click', () => {
-      const dept = activeDepartment();
-      if (dept && canEditDepartment(dept)) openDepartmentModal('edit', dept);
-    });
-
     els.departmentForm?.addEventListener('submit', submitDepartmentForm);
     els.departmentCancelBtn?.addEventListener('click', closeDepartmentModal);
     els.departmentClose?.addEventListener('click', closeDepartmentModal);
     els.departmentModal?.addEventListener('click', (event) => {
       if (event.target === els.departmentModal) closeDepartmentModal();
+    });
+
+    els.moveMemberForm?.addEventListener('submit', submitMoveMemberForm);
+    els.moveMemberCancelBtn?.addEventListener('click', closeMoveMemberModal);
+    els.moveMemberClose?.addEventListener('click', closeMoveMemberModal);
+    els.moveMemberModal?.addEventListener('click', (event) => {
+      if (event.target === els.moveMemberModal) closeMoveMemberModal();
     });
 
     els.passwordForm?.addEventListener('submit', submitAdminPassword);
@@ -1493,8 +1706,13 @@
       if (event.key !== 'Escape') return;
       if (els.pageAccessModal && !els.pageAccessModal.hidden) return closePageAccessModal();
       if (els.departmentModal && !els.departmentModal.hidden) return closeDepartmentModal();
+      if (els.moveMemberModal && !els.moveMemberModal.hidden) return closeMoveMemberModal();
       if (els.passwordModal && !els.passwordModal.hidden) return closePasswordModal();
       if (els.formModal && !els.formModal.hidden) return closeFormModal();
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.ua-member-menu-wrap')) closeMemberMenus();
     });
 
     window.addEventListener('popstate', () => {
@@ -1547,6 +1765,15 @@
     els.formSaveLabel = $('uaMemberFormSaveLabel');
     els.formCancelBtn = $('uaMemberFormCancel');
     els.formClose = $('uaMemberFormClose');
+
+    els.moveMemberModal = $('uaMoveMemberModal');
+    els.moveMemberForm = $('uaMoveMemberForm');
+    els.moveMemberSubtitle = $('uaMoveMemberSubtitle');
+    els.moveDepartmentSelect = $('uaMoveDepartmentSelect');
+    els.moveMemberError = $('uaMoveMemberError');
+    els.moveMemberSaveBtn = $('uaMoveMemberSave');
+    els.moveMemberCancelBtn = $('uaMoveMemberCancel');
+    els.moveMemberClose = $('uaMoveMemberClose');
 
     bindEvents();
     loadMembers();
