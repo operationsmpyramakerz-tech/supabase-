@@ -5564,6 +5564,30 @@ app.post("/api/logout", (req, res) => {
   });
 });
 
+// App download links for the profile menu
+app.get("/api/app-download-links", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+
+  const androidUrl = String(
+    process.env.ANDROID_APP_DOWNLOAD_URL ||
+    process.env.APP_ANDROID_URL ||
+    process.env.APK_DOWNLOAD_URL ||
+    ""
+  ).trim();
+
+  const windowsUrl = String(
+    process.env.WINDOWS_APP_DOWNLOAD_URL ||
+    process.env.APP_WINDOWS_URL ||
+    process.env.WINDOWS_SETUP_URL ||
+    ""
+  ).trim();
+
+  res.json({
+    androidUrl,
+    windowsUrl,
+  });
+});
+
 // Account info (returns fresh allowedPages)
 app.get("/api/account", requireAuth, async (req, res) => {
   const hasSupabaseSession = !!req.session?.userSupabaseId && _sbTeamMembersEnabled();
