@@ -109,8 +109,16 @@
               <div class="msg-strip-loading">Loading users...</div>
             </div>
 
+            <div class="msg-filter-tabs" id="msgFilterTabs" role="tablist" aria-label="Chat filters">
+              <button type="button" class="msg-filter-chip is-active" data-filter="all">All <span>0</span></button>
+              <button type="button" class="msg-filter-chip" data-filter="unread">Unread <span>0</span></button>
+              <button type="button" class="msg-filter-chip" data-filter="groups">Groups <span>0</span></button>
+              <button type="button" class="msg-filter-chip" data-filter="archived">Archived <span>0</span></button>
+              <button type="button" class="msg-filter-chip" data-filter="closed">Closed <span>0</span></button>
+            </div>
+
             <div class="msg-list-head">
-              <h3>Recent chats</h3>
+              <h3 id="msgListTitle">Recent chats</h3>
               <span id="msgChatsCount">—</span>
             </div>
             <div class="msg-chats-list" id="msgChatsList" aria-live="polite">
@@ -129,6 +137,7 @@
               <div class="msg-conv-head">
                 <button type="button" class="msg-back-mobile" id="msgBackMobile" aria-label="Back to chats">
                   <i data-feather="arrow-left"></i>
+                  <span>Back</span>
                 </button>
                 <div class="msg-conv-avatar" id="msgConvAvatar">M</div>
                 <div class="msg-conv-title-wrap">
@@ -144,6 +153,7 @@
 
               <form class="msg-composer" id="msgComposer">
                 <input id="msgAttachmentInput" type="file" hidden />
+                <div class="msg-attachment-draft" id="msgAttachmentDraft" hidden aria-live="polite"></div>
                 <button type="button" class="msg-composer-btn msg-attach-btn" id="msgAttachBtn" aria-label="Add attachment" title="Add attachment">
                   <i data-feather="paperclip"></i>
                   <span>Attach</span>
