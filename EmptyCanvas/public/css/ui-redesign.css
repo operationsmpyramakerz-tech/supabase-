@@ -2229,3 +2229,233 @@ body.ops-hard-refresh-active{
   from{ opacity: 0; transform: translateY(8px) scale(0.98); }
   to{ opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* =========================================================
+   App download window from the profile menu
+   ========================================================= */
+.user-menu-item.user-menu-item--app{
+  background: rgba(239,246,255,0.96);
+  color: #1D4ED8;
+}
+
+.user-menu-item.user-menu-item--app:hover{
+  background: rgba(219,234,254,0.98);
+}
+
+.user-menu-item.user-menu-item--app .umi-ico{
+  color: #2563EB;
+}
+
+.app-download-overlay{
+  position: fixed;
+  inset: 0;
+  z-index: 1000000;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(15,23,42,0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.app-download-overlay[hidden]{
+  display: none !important;
+}
+
+.app-download-modal{
+  width: min(520px, calc(100vw - 34px));
+  position: relative;
+  background: #FFFFFF;
+  border: 1px solid rgba(234,88,12,0.16);
+  border-radius: 30px;
+  padding: 26px;
+  box-shadow: 0 30px 90px rgba(15,23,42,0.22);
+  animation: appDownloadPopIn 220ms cubic-bezier(.22, 1, .36, 1);
+}
+
+@keyframes appDownloadPopIn{
+  from{ opacity: 0; transform: translateY(10px) scale(.96); }
+  to{ opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.app-download-close{
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  border: 1px solid rgba(226,232,240,0.95);
+  background: #F8FAFC;
+  color: #0F172A;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.app-download-close:hover{
+  transform: translateY(-1px);
+  background: #FFF7ED;
+  border-color: rgba(234,88,12,0.3);
+}
+
+.app-download-close svg{
+  width: 20px;
+  height: 20px;
+}
+
+.app-download-close svg + span{
+  display: none;
+}
+
+.app-download-head{
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-right: 50px;
+  margin-bottom: 22px;
+}
+
+.app-download-icon{
+  width: 60px;
+  height: 60px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #FFF7ED, #FFFFFF);
+  border: 1px solid rgba(234,88,12,0.16);
+  color: #EA580C;
+  box-shadow: 0 14px 34px rgba(234,88,12,0.12);
+  flex: 0 0 auto;
+}
+
+.app-download-icon svg{
+  width: 27px;
+  height: 27px;
+}
+
+.app-download-kicker{
+  color: #C2410C;
+  font-weight: 900;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 4px;
+}
+
+.app-download-head h2{
+  margin: 0;
+  color: #0F172A;
+  font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.app-download-head p{
+  margin: 8px 0 0;
+  color: #64748B;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.app-download-body{
+  display: grid;
+  gap: 12px;
+}
+
+.app-download-loading{
+  min-height: 112px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  background: #F8FAFC;
+  border: 1px solid rgba(226,232,240,0.9);
+  color: #64748B;
+  font-weight: 850;
+}
+
+.app-download-option{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(226,232,240,0.96);
+  background: linear-gradient(135deg, #FFFFFF, #F8FAFC);
+  color: #0F172A;
+  text-decoration: none;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.app-download-option:hover{
+  transform: translateY(-2px);
+  border-color: rgba(234,88,12,0.32);
+  box-shadow: 0 18px 40px rgba(15,23,42,0.08);
+}
+
+.app-download-option--disabled{
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.app-download-option--disabled:hover{
+  transform: none;
+  border-color: rgba(226,232,240,0.96);
+  box-shadow: none;
+}
+
+.app-download-option__icon{
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: #0F172A;
+  color: #FFFFFF;
+  flex: 0 0 auto;
+}
+
+.app-download-option__icon svg{
+  width: 22px;
+  height: 22px;
+}
+
+.app-download-option__text{
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 4px;
+}
+
+.app-download-option__text strong{
+  color: #0F172A;
+  font-weight: 950;
+  font-size: 15px;
+}
+
+.app-download-option__text small{
+  color: #64748B;
+  font-weight: 750;
+  font-size: 12px;
+}
+
+.app-download-option__arrow{
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #F1F5F9;
+  color: #334155;
+  flex: 0 0 auto;
+}
+
+.app-download-option__arrow svg{
+  width: 17px;
+  height: 17px;
+}
