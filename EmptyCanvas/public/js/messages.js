@@ -13,6 +13,9 @@
     loading: false,
     newMenuOpen: false,
     createMode: 'chat',
+    mentionItems: [],
+    mentionActiveIndex: 0,
+    mentionStart: -1,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -88,6 +91,187 @@
   function hydrateIcons() {
     if (window.feather) {
       try { window.feather.replace(); } catch {}
+    }
+  }
+
+
+  const MESSAGE_ATTACHMENT_PREFIX = '[[OPS_ATTACHMENT_V1]]';
+
+  function parseAttachment(value) {
+    const raw = String(value || '').trim();
+    if (!raw.startsWith(MESSAGE_ATTACHMENT_PREFIX)) return null;
+    try {
+      const data = JSON.parse(raw.slice(MESSAGE_ATTACHMENT_PREFIX.length));
+      const url = String(data?.url || '').trim();
+      if (!url) return null;
+      return {
+        name: String(data?.name || 'Attachment').trim() || 'Attachment',
+        url,
+        mime: String(data?.mime || '').trim(),
+        size: Number(data?.size || 0) || 0,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function humanFileSize(bytes) {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = n;
+    let idx = 0;
+    while (value >= 1024 && idx < units.length - 1) {
+      value /= 1024;
+      idx += 1;
+    }
+    return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+  }
+
+  function formatMessageText(value) {
+    let safe = escapeHtml(value || '');
+    const names = (state.members || [])
+      .map((m) => String(m.name || '').trim())
+      .filter((name) => name.length >= 2)
+      .sort((a, b) => b.length - a.length);
+    for (const name of names) {
+      const escapedName = escapeHtml(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(^|\\s)@(${escapedName})(?=$|\\s|[.,:;!?])`, 'gi');
+      safe = safe.replace(re, '$1<span class="msg-mention">@$2</span>');
+    }
+    return safe.replace(/\n/g, '<br>');
+  }
+
+  function attachmentMarkup(attachment) {
+    if (!attachment?.url) return '';
+    const name = escapeHtml(attachment.name || 'Attachment');
+    const meta = [attachment.mime, humanFileSize(attachment.size)].filter(Boolean).join(' • ');
+    return `
+      <a class="msg-attachment-card" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener">
+        <span class="msg-attachment-icon"><i data-feather="paperclip"></i></span>
+        <span class="msg-attachment-info">
+          <strong>${name}</strong>
+          <small>${escapeHtml(meta || 'Open attachment')}</small>
+        </span>
+        <span class="msg-attachment-open"><i data-feather="external-link"></i></span>
+      </a>
+    `;
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function getMentionContext(input) {
+    if (!input) return null;
+    const value = String(input.value || '');
+    const cursor = Number(input.selectionStart ?? value.length);
+    const before = value.slice(0, cursor);
+    const atIndex = before.lastIndexOf('@');
+    if (atIndex < 0) return null;
+    const prefix = before.slice(0, atIndex);
+    if (prefix && !/[\s(\[{]$/.test(prefix)) return null;
+    const query = before.slice(atIndex + 1);
+    if (/\s/.test(query) || query.length > 40) return null;
+    return { start: atIndex, end: cursor, query: query.toLowerCase() };
+  }
+
+  function closeMentionMenu() {
+    const menu = $('#msgMentionMenu');
+    if (menu) {
+      menu.hidden = true;
+      menu.innerHTML = '';
+    }
+    state.mentionItems = [];
+    state.mentionActiveIndex = 0;
+    state.mentionStart = -1;
+  }
+
+  function renderMentionMenu() {
+    const menu = $('#msgMentionMenu');
+    if (!menu) return;
+    if (!state.mentionItems.length) {
+      closeMentionMenu();
+      return;
+    }
+    menu.hidden = false;
+    menu.innerHTML = state.mentionItems.map((m, index) => {
+      const avatar = m.photoUrl
+        ? `<span class="msg-mention-avatar"><img src="${escapeHtml(m.photoUrl)}" alt="${escapeHtml(m.name || 'User')}" /></span>`
+        : `<span class="msg-mention-avatar">${escapeHtml(initials(m.name))}</span>`;
+      return `
+        <button type="button" class="msg-mention-option ${index === state.mentionActiveIndex ? 'is-active' : ''}" data-mention-index="${index}">
+          ${avatar}
+          <span class="msg-mention-person">
+            <strong>${escapeHtml(m.name || 'Unnamed')}</strong>
+            <small>${escapeHtml(m.department || m.position || 'Team member')}</small>
+          </span>
+        </button>
+      `;
+    }).join('');
+    $$('[data-mention-index]', menu).forEach((btn) => {
+      btn.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        insertMention(Number(btn.dataset.mentionIndex || 0));
+      });
+    });
+    hydrateIcons();
+  }
+
+  function updateMentionSuggestions() {
+    const input = $('#msgComposerInput');
+    const ctx = getMentionContext(input);
+    if (!ctx) {
+      closeMentionMenu();
+      return;
+    }
+    const q = ctx.query;
+    const members = (state.members || []).filter((m) => {
+      const haystack = [m.name, m.department, m.position, m.email].join(' ').toLowerCase();
+      return !q || haystack.includes(q);
+    }).slice(0, 8);
+    state.mentionStart = ctx.start;
+    state.mentionItems = members;
+    state.mentionActiveIndex = 0;
+    renderMentionMenu();
+  }
+
+  function insertMention(index = state.mentionActiveIndex) {
+    const input = $('#msgComposerInput');
+    const member = state.mentionItems[index];
+    if (!input || !member) return;
+    const value = String(input.value || '');
+    const cursor = Number(input.selectionStart ?? value.length);
+    const ctx = getMentionContext(input);
+    if (!ctx) return;
+    const mention = `@${String(member.name || 'User').trim()} `;
+    input.value = `${value.slice(0, ctx.start)}${mention}${value.slice(cursor)}`;
+    const nextPos = ctx.start + mention.length;
+    input.focus();
+    try { input.setSelectionRange(nextPos, nextPos); } catch {}
+    closeMentionMenu();
+  }
+
+  function handleMentionKeydown(event) {
+    if (!state.mentionItems.length || $('#msgMentionMenu')?.hidden) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      state.mentionActiveIndex = (state.mentionActiveIndex + 1) % state.mentionItems.length;
+      renderMentionMenu();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      state.mentionActiveIndex = (state.mentionActiveIndex - 1 + state.mentionItems.length) % state.mentionItems.length;
+      renderMentionMenu();
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      insertMention();
+    } else if (event.key === 'Escape') {
+      closeMentionMenu();
     }
   }
 
@@ -364,16 +548,19 @@
           </div>
         `;
       }
+      const attachment = c.attachment || parseAttachment(c.body || c.rawText || '');
+      const bodyHtml = attachment ? attachmentMarkup(attachment) : formatMessageText(c.body || c.rawText || '');
       return `
         <div class="msg-bubble-row ${c.isMine ? 'is-mine' : ''}">
-          <div class="msg-bubble">
+          <div class="msg-bubble ${attachment ? 'has-attachment' : ''}">
             <div class="msg-bubble-sender">${escapeHtml(c.sender || 'User')}</div>
-            <div class="msg-bubble-body">${escapeHtml(c.body || c.rawText || '')}</div>
+            <div class="msg-bubble-body">${bodyHtml}</div>
             <div class="msg-bubble-time">${escapeHtml(c.createdTimeText || '')}</div>
           </div>
         </div>
       `;
     }).join('');
+    hydrateIcons();
     requestAnimationFrame(() => {
       try { el.scrollTop = el.scrollHeight; } catch {}
     });
@@ -392,6 +579,7 @@
         body: { message: msg },
       });
       if (input) input.value = '';
+      closeMentionMenu();
       if (data.comment) state.comments.push(data.comment);
       renderComments();
       state.chats = state.chats.map((c) => {
@@ -412,6 +600,54 @@
       toast(error.message || 'Failed to send message.', 'error');
     } finally {
       setBusy(btn, false);
+    }
+  }
+
+
+  async function uploadAttachmentFile(file) {
+    if (!state.selectedChatId) {
+      toast('Please select a chat first.', 'error');
+      return;
+    }
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) {
+      toast('File is too large. Maximum size is 12MB.', 'error');
+      return;
+    }
+    const attachBtn = $('#msgAttachBtn');
+    setBusy(attachBtn, true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const data = await apiJson(`/api/messages/chats/${encodeURIComponent(state.selectedChatId)}/attachments`, {
+        method: 'POST',
+        body: {
+          filename: file.name || 'attachment',
+          mime: file.type || 'application/octet-stream',
+          size: file.size || 0,
+          dataUrl,
+        },
+      });
+      if (data.comment) state.comments.push(data.comment);
+      renderComments();
+      const preview = `📎 ${data.comment?.attachment?.name || file.name || 'Attachment'}`;
+      state.chats = state.chats.map((c) => c.id === state.selectedChatId ? {
+        ...c,
+        preview,
+        commentsCount: Number(c.commentsCount || 0) + 1,
+        lastMessageTime: data.comment?.createdTime || new Date().toISOString(),
+        lastMessageTimeText: data.comment?.createdTimeText || 'just now',
+      } : c);
+      state.chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
+      state.selectedChat = state.chats.find((c) => c.id === state.selectedChatId) || state.selectedChat;
+      renderChatsList();
+      renderSelectedChatShell();
+      toast('Attachment sent.', 'success');
+    } catch (error) {
+      toast(error.message || 'Failed to upload attachment.', 'error');
+    } finally {
+      setBusy(attachBtn, false);
+      const input = $('#msgAttachmentInput');
+      if (input) input.value = '';
     }
   }
 
@@ -564,6 +800,11 @@
       renderChatsList();
     });
     $('#msgComposer')?.addEventListener('submit', sendMessage);
+    $('#msgAttachBtn')?.addEventListener('click', () => $('#msgAttachmentInput')?.click());
+    $('#msgAttachmentInput')?.addEventListener('change', (event) => uploadAttachmentFile(event.target?.files?.[0] || null));
+    $('#msgComposerInput')?.addEventListener('input', updateMentionSuggestions);
+    $('#msgComposerInput')?.addEventListener('keydown', handleMentionKeydown);
+    $('#msgComposerInput')?.addEventListener('blur', () => setTimeout(closeMentionMenu, 160));
     $('#msgBackMobile')?.addEventListener('click', () => $('.messages-shell')?.classList.remove('is-chat-open'));
 
     $('#msgNewChatForm')?.addEventListener('submit', submitNewChat);
@@ -579,6 +820,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (!$('#msgNewChatModal')?.hidden) closeNewChatModal();
+        closeMentionMenu();
         setNewMenu(false);
       }
     });
