@@ -1,6 +1,8 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const net = require("net");
+const tls = require("tls");
 const { Client } = require("@notionhq/client");
 const PDFDocument = require("pdfkit"); // PDF
 const { attachPageNumbers } = require("./pdfPageNumbers");
@@ -5099,6 +5101,336 @@ app.get(
   }
 );;
 // --- API Routes ---
+
+// Forgot password / password recovery helpers
+function _normalizeRecoveryEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "";
+  return email;
+}
+
+function _extractEmailAddress(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/<([^<>@\s]+@[^<>@\s]+)>/);
+  if (match) return match[1].trim();
+  return raw;
+}
+
+function _dotStuffSmtpBody(value) {
+  return String(value || "")
+    .replace(/\r?\n/g, "\r\n")
+    .split("\r\n")
+    .map((line) => (line.startsWith(".") ? `.${line}` : line))
+    .join("\r\n");
+}
+
+function _buildRecoveryEmail({ to, name, password }) {
+  const safeName = String(name || "Team Member").trim() || "Team Member";
+  const subject = "Operations Dashboard Password Recovery";
+  const text = [
+    `Hello ${safeName},`,
+    "",
+    "You requested your Operations Dashboard password.",
+    "",
+    `Your registered password is: ${password}`,
+    "",
+    "If you did not request this email, please contact your administrator.",
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;padding:24px;">
+      <div style="border:1px solid #fed7aa;border-radius:18px;padding:22px;background:#fff7ed;">
+        <h2 style="margin:0 0 10px;color:#111827;">Operations Dashboard Password Recovery</h2>
+        <p style="margin:0 0 14px;color:#374151;">Hello ${escapeHtml(safeName)},</p>
+        <p style="margin:0 0 14px;color:#374151;">You requested your Operations Dashboard password.</p>
+        <div style="background:#ffffff;border:1px solid #fdba74;border-radius:14px;padding:16px;margin:18px 0;">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#9a3412;font-weight:700;margin-bottom:6px;">Registered Password</div>
+          <div style="font-size:20px;font-weight:800;color:#111827;word-break:break-word;">${escapeHtml(password)}</div>
+        </div>
+        <p style="margin:0;color:#6b7280;font-size:13px;">If you did not request this email, please contact your administrator.</p>
+      </div>
+    </div>`;
+  return { to, subject, text, html };
+}
+
+async function _sendEmailWithResend({ to, subject, text, html }) {
+  const apiKey = String(process.env.RESEND_API_KEY || process.env.PASSWORD_RECOVERY_RESEND_API_KEY || "").trim();
+  if (!apiKey) return false;
+  const from = String(
+    process.env.PASSWORD_RECOVERY_FROM_EMAIL ||
+    process.env.RESEND_FROM_EMAIL ||
+    process.env.EMAIL_FROM ||
+    "Operations Dashboard <onboarding@resend.dev>"
+  ).trim();
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from, to, subject, text, html }),
+  });
+
+  const raw = await response.text();
+  let payload = null;
+  try { payload = raw ? JSON.parse(raw) : null; } catch { payload = raw; }
+  if (!response.ok) {
+    const err = new Error(
+      payload && typeof payload === "object"
+        ? (payload.message || payload.error || JSON.stringify(payload))
+        : (raw || `Resend failed with status ${response.status}`)
+    );
+    err.status = response.status;
+    err.details = payload;
+    throw err;
+  }
+  return true;
+}
+
+function _createSmtpReader(socket) {
+  let buffer = "";
+  const waiters = [];
+
+  function hasCompleteResponse() {
+    return buffer.split(/\r?\n/).some((line) => /^\d{3} /.test(line));
+  }
+
+  function notify() {
+    if (!hasCompleteResponse()) return;
+    while (waiters.length) waiters.shift()();
+  }
+
+  socket.on("data", (chunk) => {
+    buffer += chunk.toString("utf8");
+    notify();
+  });
+
+  async function readResponse() {
+    while (!hasCompleteResponse()) {
+      await new Promise((resolve, reject) => {
+        const onError = (error) => {
+          cleanup();
+          reject(error);
+        };
+        const onClose = () => {
+          cleanup();
+          reject(new Error("SMTP connection closed before response."));
+        };
+        const cleanup = () => {
+          socket.off("error", onError);
+          socket.off("close", onClose);
+          const idx = waiters.indexOf(done);
+          if (idx >= 0) waiters.splice(idx, 1);
+        };
+        const done = () => {
+          cleanup();
+          resolve();
+        };
+        waiters.push(done);
+        socket.once("error", onError);
+        socket.once("close", onClose);
+      });
+    }
+
+    const lines = buffer.split(/\r?\n/);
+    let endIdx = lines.findIndex((line) => /^\d{3} /.test(line));
+    if (endIdx < 0) endIdx = lines.length - 1;
+    const responseLines = lines.slice(0, endIdx + 1);
+    buffer = lines.slice(endIdx + 1).join("\r\n");
+    const finalLine = responseLines[responseLines.length - 1] || "";
+    const code = Number(finalLine.slice(0, 3));
+    return { code, text: responseLines.join("\n") };
+  }
+
+  return { readResponse };
+}
+
+async function _smtpWriteAndRead(socket, reader, line, expected = []) {
+  socket.write(`${line}\r\n`);
+  const response = await reader.readResponse();
+  const allowed = Array.isArray(expected) ? expected : [expected];
+  if (allowed.length && !allowed.includes(response.code)) {
+    const err = new Error(`SMTP command failed (${response.code}): ${response.text}`);
+    err.status = 502;
+    throw err;
+  }
+  return response;
+}
+
+async function _sendEmailWithSmtp({ to, subject, text, html }) {
+  const host = String(process.env.SMTP_HOST || "").trim();
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "").trim();
+  if (!host || !user || !pass) return false;
+
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = String(process.env.SMTP_SECURE || "").trim().toLowerCase() === "true" || port === 465;
+  const from = String(process.env.PASSWORD_RECOVERY_FROM_EMAIL || process.env.SMTP_FROM || process.env.EMAIL_FROM || user).trim();
+  const fromAddress = _extractEmailAddress(from);
+  const toAddress = _extractEmailAddress(to);
+  const boundary = `erp_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const date = new Date().toUTCString();
+  const message = [
+    `From: ${from}`,
+    `To: ${toAddress}`,
+    `Subject: ${subject}`,
+    `Date: ${date}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    html,
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+
+  let socket = secure
+    ? tls.connect({ host, port, servername: host })
+    : net.connect({ host, port });
+
+  await new Promise((resolve, reject) => {
+    socket.once(secure ? "secureConnect" : "connect", resolve);
+    socket.once("error", reject);
+  });
+
+  let reader = _createSmtpReader(socket);
+  try {
+    let greeting = await reader.readResponse();
+    if (greeting.code !== 220) throw new Error(`SMTP greeting failed: ${greeting.text}`);
+    await _smtpWriteAndRead(socket, reader, `EHLO ${process.env.VERCEL_URL || "localhost"}`, [250]);
+
+    if (!secure) {
+      await _smtpWriteAndRead(socket, reader, "STARTTLS", [220]);
+      socket = tls.connect({ socket, servername: host });
+      await new Promise((resolve, reject) => {
+        socket.once("secureConnect", resolve);
+        socket.once("error", reject);
+      });
+      reader = _createSmtpReader(socket);
+      await _smtpWriteAndRead(socket, reader, `EHLO ${process.env.VERCEL_URL || "localhost"}`, [250]);
+    }
+
+    await _smtpWriteAndRead(socket, reader, "AUTH LOGIN", [334]);
+    await _smtpWriteAndRead(socket, reader, Buffer.from(user, "utf8").toString("base64"), [334]);
+    await _smtpWriteAndRead(socket, reader, Buffer.from(pass, "utf8").toString("base64"), [235]);
+    await _smtpWriteAndRead(socket, reader, `MAIL FROM:<${fromAddress}>`, [250]);
+    await _smtpWriteAndRead(socket, reader, `RCPT TO:<${toAddress}>`, [250, 251]);
+    await _smtpWriteAndRead(socket, reader, "DATA", [354]);
+    socket.write(`${_dotStuffSmtpBody(message)}\r\n.\r\n`);
+    const sent = await reader.readResponse();
+    if (sent.code !== 250) throw new Error(`SMTP send failed: ${sent.text}`);
+    try { await _smtpWriteAndRead(socket, reader, "QUIT", [221]); } catch {}
+    return true;
+  } finally {
+    try { socket.end(); } catch {}
+  }
+}
+
+async function _sendPasswordRecoveryEmail({ to, name, password }) {
+  const email = _buildRecoveryEmail({ to, name, password });
+  const sentWithResend = await _sendEmailWithResend(email);
+  if (sentWithResend) return { provider: "resend" };
+  const sentWithSmtp = await _sendEmailWithSmtp(email);
+  if (sentWithSmtp) return { provider: "smtp" };
+
+  const err = new Error("Email service is not configured. Add RESEND_API_KEY + PASSWORD_RECOVERY_FROM_EMAIL, or SMTP_HOST + SMTP_PORT + SMTP_USER + SMTP_PASS + SMTP_FROM in Vercel Environment Variables.");
+  err.status = 500;
+  throw err;
+}
+
+async function _sbFindTeamMemberByEmail(email) {
+  const wanted = _normalizeRecoveryEmail(email);
+  if (!wanted) return null;
+  const rows = await _sbSelectTeamMembersRows();
+  return (rows || []).find((row) => _normalizeRecoveryEmail(_sbValueForLabel(row, "Email")) === wanted) || null;
+}
+
+async function _notionFindTeamMemberByEmail(email) {
+  const wanted = _normalizeRecoveryEmail(email);
+  if (!wanted || !teamMembersDatabaseId) return null;
+  const response = await notion.databases.query({
+    database_id: teamMembersDatabaseId,
+    filter: { property: "Email", email: { equals: wanted } },
+    page_size: 1,
+  });
+  return response?.results?.[0] || null;
+}
+
+app.post("/api/forgot-password", async (req, res) => {
+  const email = _normalizeRecoveryEmail(req.body?.email);
+  if (!email) {
+    return res.status(400).json({ success: false, error: "Please enter a valid email." });
+  }
+
+  try {
+    let account = null;
+
+    if (_sbTeamMembersEnabled()) {
+      try {
+        const row = await _sbFindTeamMemberByEmail(email);
+        if (row) {
+          account = {
+            source: "supabase",
+            name: _sbString(_sbValueForLabel(row, "Name")) || email,
+            email: _sbString(_sbValueForLabel(row, "Email")) || email,
+            password: _sbString(_sbValueForLabel(row, "Password")),
+          };
+        }
+      } catch (error) {
+        console.error("Supabase forgot password lookup error:", error?.details || error);
+      }
+    }
+
+    if (!account && teamMembersDatabaseId) {
+      const page = await _notionFindTeamMemberByEmail(email);
+      if (page) {
+        const props = page.properties || {};
+        account = {
+          source: "notion",
+          name: props?.Name?.title?.[0]?.plain_text || email,
+          email: props?.Email?.email || email,
+          password: _extractPropText(props?.Password) || "",
+        };
+      }
+    }
+
+    if (!account) {
+      return res.status(404).json({ success: false, error: "No user found with this email." });
+    }
+
+    if (!account.password) {
+      return res.status(409).json({ success: false, error: "This user does not have a saved password." });
+    }
+
+    await _sendPasswordRecoveryEmail({
+      to: account.email || email,
+      name: account.name || email,
+      password: account.password,
+    });
+
+    return res.json({
+      success: true,
+      message: "Password sent successfully. Please check your inbox.",
+      source: account.source,
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error?.details || error);
+    return res.status(error?.status || 500).json({
+      success: false,
+      error: error?.message || "Failed to send password recovery email.",
+    });
+  }
+});
 
 // Login
 app.post("/api/login", async (req, res) => {
