@@ -3548,6 +3548,153 @@ async function _sbInvalidateOrdersCaches() {
 }
 
 
+function _sbOrderFinalStatusName(status) {
+  return /(arrived|delivered|received)/i.test(String(status || ""));
+}
+
+function _sbCleanInsertRow(row = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    if (!key) continue;
+    if (typeof value === "undefined") continue;
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      out[key] = null;
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+function _sbEffectiveDeliveredQty(item = {}) {
+  const received = Number(item.quantityReceived);
+  if (item.quantityReceived !== null && typeof item.quantityReceived !== "undefined" && hasNonZeroOrderQty(received)) {
+    return Math.abs(roundOrderQty(received));
+  }
+
+  const candidates = [item.quantityProgress, item.quantityRequested, item.quantity];
+  for (const candidate of candidates) {
+    const n = Number(candidate);
+    if (Number.isFinite(n) && hasNonZeroOrderQty(n)) return Math.abs(roundOrderQty(n));
+  }
+  return 0;
+}
+
+async function _sbCreateRepeatOrderFromDeliveredRows(orderIds = [], {
+  expectedSourceType,
+  targetType,
+  quantitySign = 1,
+  defaultReason = "Request Products",
+  successMessage = "Order created in Not Started.",
+  noQuantityError = "No delivered quantities were found.",
+  req = null,
+} = {}) {
+  const cleanIds = _sbOrderExportIds(orderIds);
+  if (!cleanIds.length) {
+    const err = new Error("orderIds required");
+    err.status = 400;
+    throw err;
+  }
+
+  const sourceRows = await _sbOrderRowsByIds(cleanIds);
+  if (!sourceRows.length) {
+    const err = new Error("Orders not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const sourceItems = sourceRows.map(_sbSerializeOrderRow);
+  const expectedKey = _normKeyOrderType(expectedSourceType);
+  const wrongType = sourceItems.find((item) => _normKeyOrderType(item?.orderType) !== expectedKey);
+  if (wrongType) {
+    const err = new Error(`Only delivered ${expectedSourceType} orders can create this order.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const notDelivered = sourceItems.find((item) => !_sbOrderFinalStatusName(item?.status));
+  if (notDelivered) {
+    const err = new Error("Order must be in Delivered / Arrived before creating this order.");
+    err.status = 400;
+    throw err;
+  }
+
+  const orderNumber = await _sbNextOrderNumber();
+  const now = new Date().toISOString();
+  const createdRows = [];
+  const sign = Number(quantitySign) < 0 ? -1 : 1;
+  const fallbackUserName = String(req?.session?.username || "").trim() || null;
+
+  for (let index = 0; index < sourceRows.length; index += 1) {
+    const sourceRow = sourceRows[index] || {};
+    const item = sourceItems[index] || _sbSerializeOrderRow(sourceRow);
+    const qtyAbs = _sbEffectiveDeliveredQty(item);
+    if (!hasNonZeroOrderQty(qtyAbs)) continue;
+
+    const qty = roundOrderQty(sign * qtyAbs);
+    const teamMemberName =
+      item.createdByName ||
+      _sbOrderText(_sbOrderGet(sourceRow, ["team_member_name", "teams_members", "Teams Members", "Supervisor", "supervisor"])) ||
+      fallbackUserName;
+    const supervisorName =
+      item.assignedToName ||
+      _sbOrderText(_sbOrderGet(sourceRow, ["supervisor", "Supervisor"])) ||
+      null;
+
+    const row = _sbCleanInsertRow({
+      reason: String(item.reason || defaultReason || "Request Products").trim() || defaultReason || null,
+      order_number: orderNumber,
+      order_type: _canonicalOrderTypeLabel(targetType) || targetType || null,
+      notion_created_time: now,
+      product_name: item.productName || _sbOrderText(_sbOrderGet(sourceRow, ["product_name", "Product Name", "product", "Product"])) || "Unknown Product",
+      product_url: item.productUrl || _sbOrderText(_sbOrderGet(sourceRow, ["product_url", "Product URL"])) || null,
+      unit_price: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "Order Placed",
+      sv_approval: "Approved",
+      team_member_name: teamMemberName || null,
+      issue_description: item.issueDescription || _sbOrderText(_sbOrderGet(sourceRow, ["issue_description", "Issue Description"])) || null,
+      supervisor: supervisorName || null,
+      person_received_by_operations: null,
+      order_receipt: null,
+      receipt_number: null,
+      maintenance_receipt: null,
+    });
+
+    try {
+      createdRows.push(await supabaseDb.insert(_sbOrdersTable(), row));
+    } catch (firstErr) {
+      // Some older Supabase imports may not have optional receipt columns. Retry with
+      // the core order columns only so the Create Withdrawal action remains reliable.
+      const fallbackRow = { ...row };
+      delete fallbackRow.order_receipt;
+      delete fallbackRow.receipt_number;
+      delete fallbackRow.maintenance_receipt;
+      createdRows.push(await supabaseDb.insert(_sbOrdersTable(), fallbackRow));
+    }
+  }
+
+  if (!createdRows.length) {
+    const err = new Error(noQuantityError);
+    err.status = 400;
+    throw err;
+  }
+
+  await _sbInvalidateOrdersCaches();
+
+  return {
+    success: true,
+    source: "supabase",
+    createdCount: createdRows.length,
+    orderIdNumber: Number.isFinite(Number(orderNumber)) ? Number(orderNumber) : null,
+    message: successMessage,
+  };
+}
+
+
 function _sbOrderExportIds(ids = []) {
   return (Array.isArray(ids) ? ids : [])
     .map((x) => String(x || "").trim())
@@ -16090,6 +16237,24 @@ app.post(
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        try {
+          const result = await _sbCreateRepeatOrderFromDeliveredRows(ids, {
+            expectedSourceType: "Request Products",
+            targetType: "Withdraw Products",
+            quantitySign: -1,
+            defaultReason: "Withdraw Products",
+            successMessage: "Withdrawal order created in Not Started.",
+            noQuantityError: "No delivered quantities were found to withdraw.",
+            req,
+          });
+          return res.json(result);
+        } catch (sbError) {
+          console.error("create-withdrawal supabase error:", sbError?.details || sbError?.body || sbError);
+          return res.status(sbError?.status || 500).json({ error: sbError?.message || "Failed to create withdrawal order" });
+        }
+      }
+
       const dbProps = await getOrdersDBProps();
       const statusProp = await detectStatusPropName();
       const orderTypeProp = await detectOrderTypePropName();
@@ -16272,6 +16437,24 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        try {
+          const result = await _sbCreateRepeatOrderFromDeliveredRows(ids, {
+            expectedSourceType: "Withdraw Products",
+            targetType: "Request Products",
+            quantitySign: 1,
+            defaultReason: "Request Products",
+            successMessage: "Delivery order created in Not Started.",
+            noQuantityError: "No delivered quantities were found to create a delivery.",
+            req,
+          });
+          return res.json(result);
+        } catch (sbError) {
+          console.error("create-delivery supabase error:", sbError?.details || sbError?.body || sbError);
+          return res.status(sbError?.status || 500).json({ error: sbError?.message || "Failed to create delivery order" });
+        }
+      }
 
       const dbProps = await getOrdersDBProps();
       const statusProp = await detectStatusPropName();
