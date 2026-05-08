@@ -143,9 +143,18 @@
               <div class="msg-comments" id="msgComments" aria-live="polite"></div>
 
               <form class="msg-composer" id="msgComposer">
-                <input id="msgComposerInput" type="text" autocomplete="off" placeholder="Type a message..." />
-                <button type="submit" id="msgSendBtn" aria-label="Send message">
+                <input id="msgAttachmentInput" type="file" hidden />
+                <button type="button" class="msg-composer-btn msg-attach-btn" id="msgAttachBtn" aria-label="Add attachment" title="Add attachment">
+                  <i data-feather="paperclip"></i>
+                  <span>Attach</span>
+                </button>
+                <div class="msg-input-wrap">
+                  <input id="msgComposerInput" type="text" autocomplete="off" placeholder="Type a message... Use @ to mention someone" />
+                  <div class="msg-mention-menu" id="msgMentionMenu" hidden aria-label="Mention suggestions"></div>
+                </div>
+                <button type="submit" class="msg-composer-btn msg-send-btn" id="msgSendBtn" aria-label="Send message">
                   <i data-feather="send"></i>
+                  <span>Send</span>
                 </button>
               </form>
             </div>
