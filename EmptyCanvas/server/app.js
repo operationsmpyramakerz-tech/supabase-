@@ -1957,13 +1957,181 @@ function _uaSvSchoolNameOptionsFromRows(rows = []) {
   return Array.from(set).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
 }
 
+function _sbTeamMemberDepartmentsTable() {
+  return String(process.env.SUPABASE_TEAM_MEMBER_DEPARTMENTS_TABLE || "team_member_departments").trim() || "team_member_departments";
+}
+
+function _uaNormalizeDepartmentName(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function _uaIsMissingDepartmentsTableError(error) {
+  const msg = String(error?.message || error?.details?.message || error?.details || "");
+  return /team_member_departments|schema cache|Could not find the table|relation .* does not exist|42P01|PGRST205/i.test(msg);
+}
+
+async function _sbSelectDepartmentRows({ throwIfMissing = false } = {}) {
+  try {
+    const rows = await supabaseDb.selectAll(_sbTeamMemberDepartmentsTable(), { limit: 1000, order: "name.asc" });
+    return Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    if (_uaIsMissingDepartmentsTableError(error) && !throwIfMissing) return [];
+    if (_uaIsMissingDepartmentsTableError(error)) {
+      const err = new Error("Department table is not installed. Run supabase_user_access_departments_migration.sql once, then try again.");
+      err.status = 500;
+      throw err;
+    }
+    throw error;
+  }
+}
+
+function _sbDepartmentNameFromRow(row = {}) {
+  return _uaNormalizeDepartmentName(_sbGet(row, ["name", "department", "department_name", "Department", "Name"]));
+}
+
+function _sbDepartmentPayload(name = "", extra = {}) {
+  const clean = _uaNormalizeDepartmentName(name);
+  return {
+    id: _uaDepartmentKey(clean),
+    name: clean || "No Department",
+    count: Number(extra.count || 0),
+    members: Array.isArray(extra.members) ? extra.members : [],
+    isCustomDepartment: !!extra.isCustomDepartment,
+    departmentRecordId: String(extra.departmentRecordId || ""),
+  };
+}
+
+async function _uaDepartmentOptionsForSupabase(rows = []) {
+  const names = new Set();
+  for (const row of rows || []) {
+    const name = _uaNormalizeDepartmentName(_sbValueForLabel(row, "Department"));
+    if (name) names.add(name);
+  }
+  const departmentRows = await _sbSelectDepartmentRows().catch(() => []);
+  for (const row of departmentRows || []) {
+    const name = _sbDepartmentNameFromRow(row);
+    if (name) names.add(name);
+  }
+  return Array.from(names).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _uaClearUserAccessCaches() {
+  await Promise.allSettled([
+    cacheDel(USER_ACCESS_CACHE_KEY),
+    cacheDel("cache:api:user-access:team-members:supabase:v1"),
+  ]);
+}
+
+async function _sbCreateUserAccessDepartment(name = "") {
+  const clean = _uaNormalizeDepartmentName(name);
+  if (!clean) {
+    const err = new Error("Department name is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  const [teamRows, departmentRows] = await Promise.all([
+    _sbSelectTeamMembersRows(),
+    _sbSelectDepartmentRows({ throwIfMissing: true }),
+  ]);
+  const targetKey = _uaDepartmentKey(clean);
+  const existingNames = [
+    ...(teamRows || []).map((row) => _uaNormalizeDepartmentName(_sbValueForLabel(row, "Department"))).filter(Boolean),
+    ...(departmentRows || []).map(_sbDepartmentNameFromRow).filter(Boolean),
+  ];
+  if (existingNames.some((x) => _uaDepartmentKey(x) === targetKey)) {
+    const err = new Error("A department with this name already exists.");
+    err.status = 409;
+    throw err;
+  }
+
+  const created = await supabaseDb.insert(_sbTeamMemberDepartmentsTable(), { name: clean });
+  await _uaClearUserAccessCaches();
+  return _sbDepartmentPayload(clean, { isCustomDepartment: true, departmentRecordId: _sbGet(created || {}, ["id", "ID"]) });
+}
+
+async function _sbRenameUserAccessDepartment(departmentId = "", name = "") {
+  const oldKey = String(departmentId || "").trim();
+  const clean = _uaNormalizeDepartmentName(name);
+  if (!oldKey) {
+    const err = new Error("Department ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!clean) {
+    const err = new Error("Department name is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (oldKey === _uaDepartmentKey("No Department")) {
+    const err = new Error("The default No Department folder cannot be renamed.");
+    err.status = 400;
+    throw err;
+  }
+
+  const [teamRows, departmentRows] = await Promise.all([
+    _sbSelectTeamMembersRows(),
+    _sbSelectDepartmentRows({ throwIfMissing: true }),
+  ]);
+  const targetKey = _uaDepartmentKey(clean);
+  const allExistingNames = [
+    ...(teamRows || []).map((row) => _uaNormalizeDepartmentName(_sbValueForLabel(row, "Department"))).filter(Boolean),
+    ...(departmentRows || []).map(_sbDepartmentNameFromRow).filter(Boolean),
+  ];
+  if (targetKey !== oldKey && allExistingNames.some((x) => _uaDepartmentKey(x) === targetKey)) {
+    const err = new Error("Another department already uses this name.");
+    err.status = 409;
+    throw err;
+  }
+
+  const keys = _sbAllColumnKeys(teamRows || []);
+  const departmentColumn = _sbFindKey(keys, ["Department", "department"]);
+  if (!departmentColumn) {
+    const err = new Error("Team Members table does not have a Department column.");
+    err.status = 500;
+    throw err;
+  }
+
+  const affectedIds = (teamRows || [])
+    .filter((row) => _uaDepartmentKey(_uaNormalizeDepartmentName(_sbValueForLabel(row, "Department")) || "No Department") === oldKey)
+    .map((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim())
+    .filter(Boolean);
+
+  let updatedMembers = [];
+  if (affectedIds.length) {
+    updatedMembers = await supabaseDb.updateByIds(_sbTeamMembersTable(), affectedIds, { [departmentColumn]: clean });
+  }
+
+  const departmentRecord = (departmentRows || []).find((row) => _uaDepartmentKey(_sbDepartmentNameFromRow(row)) === oldKey);
+  if (departmentRecord && _sbGet(departmentRecord, ["id", "ID"]) !== undefined) {
+    await supabaseDb.updateById(_sbTeamMemberDepartmentsTable(), _sbGet(departmentRecord, ["id", "ID"]), { name: clean, updated_at: new Date().toISOString() }).catch(async (error) => {
+      if (/updated_at/i.test(String(error?.message || ""))) {
+        await supabaseDb.updateById(_sbTeamMemberDepartmentsTable(), _sbGet(departmentRecord, ["id", "ID"]), { name: clean });
+        return;
+      }
+      throw error;
+    });
+  } else if (!affectedIds.length) {
+    const err = new Error("Department was not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  await _uaClearUserAccessCaches();
+  return _sbDepartmentPayload(clean, { count: affectedIds.length, isCustomDepartment: !!departmentRecord, departmentRecordId: _sbGet(departmentRecord || {}, ["id", "ID"]) });
+}
+
 async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []) {
   const schoolOptions = await _uaStocktakingSchoolOptions();
+  const departmentOptions = await _uaDepartmentOptionsForSupabase(rows);
   const appPages = await _sbSelectAppPages({ assignableOnly: true }).catch(() => []);
   const allowedOptions = appPages.length ? _uaAllowedPageOptionsFromAppPages(appPages) : _uaAllowedPageOptionsFromRows(rows);
   const svOptions = _uaSvSchoolNameOptionsFromRows(rows);
   return (editableFields || []).map((field) => {
     const canon = _sbCanon(field?.name || "");
+    if (canon === "department") {
+      return { ...field, type: "select", options: departmentOptions };
+    }
     if (canon === "school") {
       return { ...field, type: "school_select", options: schoolOptions.map((x) => x.value), optionMeta: schoolOptions };
     }
@@ -2456,10 +2624,23 @@ async function _sbQueryAllTeamMembersForUserAccess() {
     if (da) return da;
     return String(a.name || "").localeCompare(String(b.name || ""));
   });
+  const departmentRows = await _sbSelectDepartmentRows().catch((error) => {
+    console.warn("[user-access] optional department folders table unavailable:", error?.message || error);
+    return [];
+  });
   const map = new Map();
+  for (const row of departmentRows || []) {
+    const name = _sbDepartmentNameFromRow(row);
+    if (!name) continue;
+    const payload = _sbDepartmentPayload(name, {
+      isCustomDepartment: true,
+      departmentRecordId: _sbGet(row, ["id", "ID"]),
+    });
+    if (!map.has(payload.id)) map.set(payload.id, payload);
+  }
   for (const member of members) {
     const key = member.departmentKey || _uaDepartmentKey(member.department);
-    if (!map.has(key)) map.set(key, { id: key, name: member.department || "No Department", count: 0, members: [] });
+    if (!map.has(key)) map.set(key, _sbDepartmentPayload(member.department || "No Department"));
     const dept = map.get(key);
     dept.members.push(member);
     dept.count += 1;
@@ -12400,6 +12581,43 @@ app.patch(
     } catch (error) {
       console.error("PATCH /api/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save page access." });
+    }
+  },
+);
+
+// User Access & Data — Department folders
+app.post(
+  "/api/user-access/departments",
+  requireAuth,
+  async (req, res) => {
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ ok: false, error: "Supabase Team Members source is required to manage departments." });
+    }
+    res.set("Cache-Control", "no-store");
+    try {
+      const department = await _sbCreateUserAccessDepartment(req.body?.name || "");
+      return res.json({ ok: true, source: "supabase", department, message: `${department.name} department was added.` });
+    } catch (error) {
+      console.error("POST /api/user-access/departments error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create department." });
+    }
+  },
+);
+
+app.patch(
+  "/api/user-access/departments/:id",
+  requireAuth,
+  async (req, res) => {
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ ok: false, error: "Supabase Team Members source is required to manage departments." });
+    }
+    res.set("Cache-Control", "no-store");
+    try {
+      const department = await _sbRenameUserAccessDepartment(req.params?.id || "", req.body?.name || "");
+      return res.json({ ok: true, source: "supabase", department, message: `${department.name} department was updated.` });
+    } catch (error) {
+      console.error("PATCH /api/user-access/departments/:id error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update department." });
     }
   },
 );
