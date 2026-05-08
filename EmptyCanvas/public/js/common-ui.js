@@ -2595,6 +2595,11 @@ function initUserMenuWidget() {
           <span class="umi-label">How it works</span>
         </button>
 
+        <button type="button" class="user-menu-item user-menu-item--app" data-user-menu-action="app-downloads">
+          <span class="umi-ico"><i data-feather="smartphone"></i></span>
+          <span class="umi-label">App</span>
+        </button>
+
         <button type="button" class="user-menu-item user-menu-item--refresh" data-user-menu-action="hard-refresh">
           <span class="umi-ico"><i data-feather="rotate-cw"></i><span class="umi-spinner" aria-hidden="true"></span></span>
           <span class="umi-label">Hard Refresh</span>
@@ -2768,6 +2773,116 @@ function initUserMenuWidget() {
       window.location.replace(url.toString());
     }
 
+    function safeUserMenuText(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function ensureAppDownloadModal() {
+      let overlay = document.getElementById('appDownloadOverlay');
+      if (overlay) return overlay;
+
+      overlay = document.createElement('div');
+      overlay.id = 'appDownloadOverlay';
+      overlay.className = 'app-download-overlay';
+      overlay.hidden = true;
+      overlay.innerHTML = `
+        <div class="app-download-modal" role="dialog" aria-modal="true" aria-labelledby="appDownloadTitle">
+          <button type="button" class="app-download-close" data-app-download-close aria-label="Close app download window">
+            <i data-feather="x"></i>
+            <span aria-hidden="true">×</span>
+          </button>
+          <div class="app-download-head">
+            <span class="app-download-icon"><i data-feather="download-cloud"></i></span>
+            <div>
+              <div class="app-download-kicker">Operations Hub App</div>
+              <h2 id="appDownloadTitle">Download the application</h2>
+              <p>Choose the suitable version for your device.</p>
+            </div>
+          </div>
+          <div class="app-download-body" data-app-download-body>
+            <div class="app-download-loading">Loading download links...</div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      overlay.addEventListener('click', (event) => {
+        const closeBtn = event.target && event.target.closest ? event.target.closest('[data-app-download-close]') : null;
+        if (closeBtn || event.target === overlay) {
+          overlay.hidden = true;
+        }
+      });
+
+      if (!window.__opsAppDownloadEscBound) {
+        window.__opsAppDownloadEscBound = true;
+        document.addEventListener('keydown', (event) => {
+          if (event.key !== 'Escape') return;
+          const activeOverlay = document.getElementById('appDownloadOverlay');
+          if (activeOverlay && !activeOverlay.hidden) activeOverlay.hidden = true;
+        });
+      }
+
+      try { if (window.feather) window.feather.replace(); } catch {}
+      return overlay;
+    }
+
+    function renderAppDownloadLink(label, sublabel, iconName, url) {
+      const cleanUrl = String(url || '').trim();
+      if (!cleanUrl) {
+        return `
+          <div class="app-download-option app-download-option--disabled" aria-disabled="true">
+            <span class="app-download-option__icon"><i data-feather="${safeUserMenuText(iconName)}"></i></span>
+            <span class="app-download-option__text">
+              <strong>${safeUserMenuText(label)}</strong>
+              <small>Download link is not configured yet.</small>
+            </span>
+          </div>
+        `;
+      }
+
+      return `
+        <a class="app-download-option" href="${safeUserMenuText(cleanUrl)}" target="_blank" rel="noopener noreferrer">
+          <span class="app-download-option__icon"><i data-feather="${safeUserMenuText(iconName)}"></i></span>
+          <span class="app-download-option__text">
+            <strong>${safeUserMenuText(label)}</strong>
+            <small>${safeUserMenuText(sublabel)}</small>
+          </span>
+          <span class="app-download-option__arrow"><i data-feather="external-link"></i></span>
+        </a>
+      `;
+    }
+
+    async function openAppDownloadModal() {
+      const overlay = ensureAppDownloadModal();
+      const body = overlay.querySelector('[data-app-download-body]');
+      if (body) body.innerHTML = '<div class="app-download-loading">Loading download links...</div>';
+      overlay.hidden = false;
+
+      let links = {};
+      try {
+        const response = await fetch('/api/app-download-links', { credentials: 'include', cache: 'no-store' });
+        if (!response.ok) throw new Error('Failed to load app download links.');
+        links = await response.json();
+      } catch (error) {
+        console.error('App download links failed:', error);
+        links = {};
+      }
+
+      if (body) {
+        body.innerHTML = `
+          ${renderAppDownloadLink('Android version', 'Download APK / Android package', 'smartphone', links.androidUrl)}
+          ${renderAppDownloadLink('Windows version', 'Download Windows installer', 'monitor', links.windowsUrl)}
+        `;
+      }
+
+      try { if (window.feather) window.feather.replace(); } catch {}
+    }
+
     panel.addEventListener("click", async (e) => {
       const btn = e.target && e.target.closest ? e.target.closest("[data-user-menu-action]") : null;
       if (!btn) return;
@@ -2775,6 +2890,12 @@ function initUserMenuWidget() {
       e.stopPropagation();
 
       const action = btn.getAttribute("data-user-menu-action") || "";
+
+      if (action === "app-downloads") {
+        closeMenu();
+        try { await openAppDownloadModal(); } catch (error) { console.error('App download modal failed:', error); }
+        return;
+      }
 
       if (action === "hard-refresh") {
         try { await doHardRefresh(btn); } catch (error) { console.error('Hard refresh failed:', error); }
