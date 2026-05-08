@@ -84,31 +84,19 @@
       </header>
 
       <main class="page-body ua-page-body">
-        <section class="ua-hero" aria-labelledby="uaTitle">
-          <div class="ua-hero__copy">
-            <div class="ua-eyebrow"><i data-feather="shield"></i><span>Teams Members Database</span></div>
-            <h2 id="uaTitle">User Access & Data</h2>
-            <p>Browse users by department, review access permissions, and inspect each team member record from Notion.</p>
-          </div>
-          <div class="ua-hero__tools">
-            <label class="ua-search" for="uaSearchInput">
-              <i data-feather="search"></i>
-              <input id="uaSearchInput" type="search" autocomplete="off" placeholder="Search users, emails, phones..." />
-            </label>
-            <button type="button" class="ua-refresh" id="uaRefreshBtn">
-              <i data-feather="refresh-cw"></i>
-              <span>Refresh</span>
-            </button>
-          </div>
-        </section>
-
         <section class="ua-folders-panel" id="uaFoldersPanel" aria-labelledby="uaFoldersTitle">
-          <div class="ua-section-head">
+          <div class="ua-section-head ua-section-head--folders">
             <div>
               <h3 id="uaFoldersTitle">Department Folders</h3>
               <p>Select a department folder to view its users.</p>
             </div>
-            <div class="ua-count-pill" id="uaTotalCount">— users</div>
+            <div class="ua-folder-actions">
+              <div class="ua-count-pill" id="uaTotalCount">— users</div>
+              <button type="button" class="ua-dept-btn ua-dept-btn--add" id="uaAddDepartmentBtn">
+                <i data-feather="folder-plus"></i>
+                <span>New Department</span>
+              </button>
+            </div>
           </div>
           <div class="ua-folders" id="uaFolders" aria-live="polite">
             <div class="ua-loading-inline"><span></span> Loading departments...</div>
@@ -127,10 +115,16 @@
                 <p id="uaMembersSubtitle">Select a department folder.</p>
               </div>
             </div>
-            <button type="button" class="ua-add-member-btn" id="uaAddMemberBtn">
-              <i data-feather="user-plus"></i>
-              <span>Add Member</span>
-            </button>
+            <div class="ua-members-actions">
+              <button type="button" class="ua-edit-dept-btn" id="uaEditActiveDepartmentBtn">
+                <i data-feather="edit-3"></i>
+                <span>Edit Department</span>
+              </button>
+              <button type="button" class="ua-add-member-btn" id="uaAddMemberBtn">
+                <i data-feather="user-plus"></i>
+                <span>Add Member</span>
+              </button>
+            </div>
           </div>
           <div class="ua-members-grid" id="uaMembersGrid" aria-live="polite">
             <div class="ua-loading-card">
@@ -190,6 +184,35 @@
         <button type="submit" class="ua-btn ua-btn--dark" id="uaMemberFormSave">
           <i data-feather="save"></i>
           <span id="uaMemberFormSaveLabel">Save</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="ua-modal-overlay" id="uaDepartmentModal" aria-hidden="true" hidden>
+    <form class="ua-modal ua-modal--small" id="uaDepartmentForm" role="dialog" aria-modal="true" aria-labelledby="uaDepartmentTitle">
+      <button type="button" class="ua-modal__close" id="uaDepartmentClose" aria-label="Close department window">
+        <i data-feather="x"></i>
+      </button>
+      <div class="ua-modal__header ua-modal__header--compact">
+        <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="folder"></i></div>
+        <div>
+          <h2 id="uaDepartmentTitle">Department</h2>
+          <p id="uaDepartmentSubtitle">Add or rename a team department.</p>
+        </div>
+      </div>
+      <div class="ua-modal__body ua-modal__body--compact">
+        <label class="ua-form-field ua-form-field--wide">
+          <span>Department Name</span>
+          <input id="uaDepartmentNameInput" type="text" autocomplete="off" placeholder="e.g. Operations" required />
+        </label>
+        <div class="ua-form-error" id="uaDepartmentError" aria-live="polite"></div>
+      </div>
+      <div class="ua-modal__actions">
+        <button type="button" class="ua-btn ua-btn--light" id="uaDepartmentCancel">Cancel</button>
+        <button type="submit" class="ua-btn ua-btn--dark" id="uaDepartmentSave">
+          <i data-feather="save"></i>
+          <span id="uaDepartmentSaveLabel">Save</span>
         </button>
       </div>
     </form>
