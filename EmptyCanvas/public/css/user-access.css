@@ -725,7 +725,9 @@
 }
 
 .ua-back-btn,
-.ua-add-member-btn {
+.ua-add-member-btn,
+.ua-edit-dept-btn,
+.ua-dept-btn {
   border: 0;
   cursor: pointer;
   font: inherit;
@@ -755,12 +757,16 @@
 }
 
 .ua-back-btn:hover,
-.ua-add-member-btn:hover {
+.ua-add-member-btn:hover,
+.ua-edit-dept-btn:hover,
+.ua-dept-btn:hover {
   transform: translateY(-1px);
 }
 
 .ua-back-btn svg,
-.ua-add-member-btn svg {
+.ua-add-member-btn svg,
+.ua-edit-dept-btn svg,
+.ua-dept-btn svg {
   width: 17px;
   height: 17px;
   stroke-width: 3;
@@ -1334,5 +1340,138 @@
 
   .ua-page-access-enable {
     justify-content: flex-start;
+  }
+}
+
+
+/* Department management controls */
+.ua-section-head--folders {
+  align-items: center;
+}
+
+.ua-folder-actions,
+.ua-members-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ua-dept-btn--add {
+  background: #fff3ea;
+  color: #c24d15;
+  border: 1px solid rgba(228, 101, 32, 0.16);
+  box-shadow: 0 14px 28px rgba(228, 101, 32, 0.08);
+  white-space: nowrap;
+}
+
+.ua-edit-dept-btn {
+  background: #fff;
+  color: #0b1220;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.06);
+  white-space: nowrap;
+}
+
+.ua-edit-dept-btn:disabled,
+.ua-dept-btn:disabled,
+.ua-folder__edit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.ua-folder {
+  position: relative;
+}
+
+.ua-folder__text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ua-folder__edit {
+  border: 1px solid rgba(228, 101, 32, 0.16);
+  border-radius: 999px;
+  background: #fff7ef;
+  color: #c24d15;
+  min-height: 34px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 10px 22px rgba(228, 101, 32, 0.08);
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.ua-folder__edit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #e46520;
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(228, 101, 32, 0.18);
+}
+
+.ua-folder__edit svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 3;
+}
+
+.ua-folder__badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ua-folder.is-active .ua-folder__badge {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.ua-modal--small .ua-form-field input#uaDepartmentNameInput {
+  min-height: 52px;
+}
+
+@media (max-width: 760px) {
+  .ua-section-head--folders,
+  .ua-folder-actions,
+  .ua-members-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .ua-folder-actions .ua-count-pill,
+  .ua-dept-btn,
+  .ua-edit-dept-btn,
+  .ua-add-member-btn {
+    width: 100%;
+  }
+
+  .ua-folder {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .ua-folder__edit {
+    grid-column: 2 / -1;
+    justify-self: start;
+    margin-top: 6px;
   }
 }
