@@ -94,9 +94,8 @@
     return [
       product?.name,
       product?.displayId,
+      product?.unitPrice,
       product?.url,
-      product?.categoryCode,
-      product?.categoryName,
       ...(Array.isArray(product?.tags) ? product.tags : []),
     ].join(' ').toLowerCase();
   }
@@ -181,33 +180,28 @@
     const name = String(product?.name || 'Untitled Product').trim();
     const tag = firstTag(product);
     const code = String(product?.displayId || '').trim() || 'No ID';
-    const category = String(product?.categoryName || tag || 'No category').trim();
     const price = formatPrice(product?.unitPrice);
-    const qty = formatNumber(product?.quantity);
     const url = String(product?.url || '').trim();
     const link = url
       ? `<a class="product-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer"><i data-feather="external-link"></i><span>Open URL</span></a>`
       : `<span class="product-link is-disabled"><i data-feather="link-2"></i><span>No URL</span></span>`;
 
-    const searchText = [name, tag, code, category, price, qty, url, product?.categoryCode].join(' ');
+    const searchText = [name, tag, code, price, url].join(' ');
 
     return `
       <article class="product-card" data-product-id="${escapeHTML(id)}" data-search="${escapeHTML(searchText)}">
         <div class="product-card__top">
           <span class="product-card__badge" title="${escapeHTML(tag)}"><i data-feather="tag"></i>${escapeHTML(tag)}</span>
           <button type="button" class="product-card__edit" data-action="edit-product" data-product-id="${escapeHTML(id)}" aria-label="Edit ${escapeHTML(name)}">
-            <i data-feather="edit-3"></i>
+            <i data-feather="edit-3"></i><span>Edit</span>
           </button>
         </div>
         <h4 title="${escapeHTML(name)}">${escapeHTML(name)}</h4>
         <div class="product-card__meta">
           <div class="product-meta-box"><span>ID Code</span><strong title="${escapeHTML(code)}">${escapeHTML(code)}</strong></div>
           <div class="product-meta-box"><span>Unit Price</span><strong>${escapeHTML(price)}</strong></div>
-          <div class="product-meta-box"><span>Quantity</span><strong>${escapeHTML(qty)}</strong></div>
-          <div class="product-meta-box"><span>Category Code</span><strong>${escapeHTML(product?.categoryCode ?? '—')}</strong></div>
         </div>
         <div class="product-card__footer">
-          <span class="product-category" title="${escapeHTML(category)}">${escapeHTML(category)}</span>
           ${link}
         </div>
       </article>
@@ -347,10 +341,7 @@
     setInputValue(els.nameInput, '');
     setInputValue(els.idCodeInput, '');
     setInputValue(els.priceInput, '');
-    setInputValue(els.quantityInput, '');
     setInputValue(els.tagsInput, '');
-    setInputValue(els.categoryCodeInput, '');
-    setInputValue(els.categoryNameInput, '');
     setInputValue(els.urlInput, '');
   }
 
@@ -370,10 +361,7 @@
       setInputValue(els.nameInput, product.name || '');
       setInputValue(els.idCodeInput, product.displayId || '');
       setInputValue(els.priceInput, product.unitPrice ?? '');
-      setInputValue(els.quantityInput, product.quantity ?? '');
       setInputValue(els.tagsInput, firstTag(product) === 'Uncategorized' ? '' : firstTag(product));
-      setInputValue(els.categoryCodeInput, product.categoryCode ?? '');
-      setInputValue(els.categoryNameInput, product.categoryName || '');
       setInputValue(els.urlInput, product.url || '');
     }
 
@@ -472,10 +460,7 @@
       name,
       idCode: String(els.idCodeInput?.value || '').trim() || null,
       unitPrice: inputNumberValue(els.priceInput),
-      quantity: inputNumberValue(els.quantityInput),
       tags: String(els.tagsInput?.value || '').trim() || null,
-      categoryCode: inputNumberValue(els.categoryCodeInput),
-      categoryName: String(els.categoryNameInput?.value || '').trim() || null,
       url: String(els.urlInput?.value || '').trim() || null,
     };
   }
@@ -672,10 +657,7 @@
     els.nameInput = $('productNameInput');
     els.idCodeInput = $('productIdCodeInput');
     els.priceInput = $('productPriceInput');
-    els.quantityInput = $('productQuantityInput');
     els.tagsInput = $('productTagsInput');
-    els.categoryCodeInput = $('productCategoryCodeInput');
-    els.categoryNameInput = $('productCategoryNameInput');
     els.urlInput = $('productUrlInput');
 
     els.editSelectedTagBtn = $('productsEditSelectedTagBtn');
