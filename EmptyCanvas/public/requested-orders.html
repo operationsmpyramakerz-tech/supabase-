@@ -20,7 +20,7 @@
 <style>
   body.permissions-loading .sidebar li { display: none !important; }
 </style>
-<link href="/css/style.css?v=receipt-compact-v4" rel="stylesheet"/>
+<link href="/css/style.css?v=receipt-photos-click-v1" rel="stylesheet"/>
 <link href="/css/ui-redesign.css" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -256,11 +256,9 @@
     </button>
 
     <div class="co-submodal-header req-receipt-photos-header">
-      <div>
-        <div class="co-submodal-title" id="reqReceiptPhotosTitle">Receipt Photos</div>
-        <div class="co-submodal-sub" id="reqReceiptPhotosSub">Delivery receipt images attached to this order.</div>
-      </div>
-      <div class="req-receipt-photos-count" id="reqReceiptPhotosCount">0 photos</div>
+      <div class="co-submodal-title" id="reqReceiptPhotosTitle">Receipt photos</div>
+      <div class="co-submodal-sub" id="reqReceiptPhotosSub" hidden></div>
+      <div class="req-receipt-photos-count" id="reqReceiptPhotosCount" hidden></div>
     </div>
 
     <div class="co-submodal-body">
@@ -473,6 +471,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js"></script>
-<script src="/js/requested-orders.js"></script>
+<script src="/js/requested-orders.js?v=receipt-photos-click-v1"></script>
 </body>
 </html>
