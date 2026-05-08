@@ -12674,6 +12674,66 @@ function _sbMessageCurrentEmail(req) {
   return String(cached.email || cached.Email || '').trim();
 }
 
+function _messagesNormToken(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function _messagesSplitIdentityList(value) {
+  return String(value || '')
+    .split(/[,;|\n]+|\s+↔\s+|\s+->\s+|\s+—\s+|\s+–\s+|\s+and\s+/i)
+    .map((part) => _messagesNormToken(part))
+    .filter(Boolean);
+}
+
+function _messagesCurrentIdentity(req) {
+  const cached = req?.session?.accountCache || {};
+  const name = String(req?.session?.username || cached.username || cached.name || '').trim();
+  const email = String(cached.email || cached.Email || '').trim();
+  const position = String(cached.position || cached.Position || '').trim();
+  const nameKey = _messagesNormToken(name);
+  const positionKey = _messagesNormToken(position);
+  const isAdmin = nameKey === 'admin' || positionKey.includes('admin');
+  return { name, email, position, nameKey, emailKey: _messagesNormToken(email), isAdmin };
+}
+
+function _messagesRowVisibleToCurrentUser(row, req) {
+  if (!req) return true;
+  const identity = _messagesCurrentIdentity(req);
+  if (identity.isAdmin) return true;
+
+  const nameCandidates = [
+    ..._messagesSplitIdentityList(_sbGet(row, ['participant_names', 'participants', 'participantNames'])),
+    ..._messagesSplitIdentityList(_sbGet(row, ['created_by_name', 'createdByName', 'owner_name'])),
+    ..._messagesSplitIdentityList(_sbGet(row, ['title', 'name', 'Name'])),
+  ];
+  const emailCandidates = [
+    ..._messagesSplitIdentityList(_sbGet(row, ['participant_emails', 'participantEmails'])),
+    ..._messagesSplitIdentityList(_sbGet(row, ['created_by_email', 'createdByEmail', 'owner_email'])),
+  ];
+
+  if (identity.emailKey && emailCandidates.includes(identity.emailKey)) return true;
+  if (identity.nameKey && nameCandidates.includes(identity.nameKey)) return true;
+  return false;
+}
+
+function _messagesChatVisibleToCurrentUser(chat, req) {
+  if (!req) return true;
+  const identity = _messagesCurrentIdentity(req);
+  if (identity.isAdmin) return true;
+  const nameCandidates = [
+    ..._messagesSplitIdentityList(chat?.participantNames),
+    ..._messagesSplitIdentityList(chat?.createdByName),
+    ..._messagesSplitIdentityList(chat?.title),
+  ];
+  const emailCandidates = [
+    ..._messagesSplitIdentityList(chat?.participantEmails),
+    ..._messagesSplitIdentityList(chat?.createdByEmail),
+  ];
+  if (identity.emailKey && emailCandidates.includes(identity.emailKey)) return true;
+  if (identity.nameKey && nameCandidates.includes(identity.nameKey)) return true;
+  return false;
+}
+
 function _sbNormalizeMessageRow(row, req) {
   const sender = _sbString(_sbGet(row, ['sender_name', 'sender', 'created_by_name', 'name'])) || 'User';
   const storedBody = _sbString(_sbGet(row, ['body', 'message', 'text', 'last_message'])) || '';
@@ -12727,6 +12787,9 @@ function _sbSerializeMessageChatRow(row, messages = []) {
     lastMessageTime,
     lastMessageTimeText: _messagesSafeDate(lastMessageTime),
     participantNames: _sbString(_sbGet(row, ['participant_names', 'participants'])) || '',
+    participantEmails: _sbString(_sbGet(row, ['participant_emails', 'participantEmails'])) || '',
+    createdByName: _sbString(_sbGet(row, ['created_by_name', 'createdByName', 'owner_name'])) || '',
+    createdByEmail: _sbString(_sbGet(row, ['created_by_email', 'createdByEmail', 'owner_email'])) || '',
     chatType: _sbString(_sbGet(row, ['chat_type', 'room_type', 'type'])) || '',
     status: _sbString(_sbGet(row, ['status', 'state', 'chat_status'])) || '',
     archived: _sbBool(_sbGet(row, ['archived', 'is_archived'])) || false,
@@ -12771,17 +12834,19 @@ async function _sbMessagesCountsAndLast(chatIds = []) {
   return map;
 }
 
-async function _sbMessagesChatsList({ limit = 60, includeCounts = true } = {}) {
+async function _sbMessagesChatsList({ limit = 60, includeCounts = true, req = null } = {}) {
+  const requestedLimit = Math.max(1, Math.min(100, Number(limit) || 60));
   const rows = await supabaseDb.selectAll(_sbMessagesChatsTable(), {
-    limit: Math.max(1, Math.min(100, Number(limit) || 60)),
+    limit: 5000,
     order: 'updated_at.desc,id.desc',
   });
-  const list = Array.isArray(rows) ? rows : [];
+  const visibleRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => _messagesRowVisibleToCurrentUser(row, req));
   let meta = new Map();
-  if (includeCounts && list.length) {
-    meta = await _sbMessagesCountsAndLast(list.map((row) => _sbGet(row, ['id', 'ID'])));
+  if (includeCounts && visibleRows.length) {
+    meta = await _sbMessagesCountsAndLast(visibleRows.map((row) => _sbGet(row, ['id', 'ID'])));
   }
-  const chats = list.map((row) => {
+  const chats = visibleRows.map((row) => {
     const id = String(_sbGet(row, ['id', 'ID']) ?? '');
     const info = meta.get(id) || null;
     const normalizedLast = info?.last ? _sbNormalizeMessageRow(info.last, null) : null;
@@ -12790,7 +12855,7 @@ async function _sbMessagesChatsList({ limit = 60, includeCounts = true } = {}) {
     return chat;
   });
   chats.sort((a, b) => new Date(b.lastMessageTime || b.lastEditedTime || 0) - new Date(a.lastMessageTime || a.lastEditedTime || 0));
-  return chats;
+  return chats.slice(0, requestedLimit);
 }
 
 async function _sbMessageMemberInfo(memberId) {
@@ -12903,7 +12968,7 @@ app.get('/api/messages/chats', requireAuth, async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(80, Number(req.query?.limit || 40)));
     if (_sbMessagesEnabled()) {
-      const chats = await _sbMessagesChatsList({ limit, includeCounts: true });
+      const chats = await _sbMessagesChatsList({ limit, includeCounts: true, req });
       return res.json({ ok: true, source: 'supabase', chats });
     }
 
@@ -12923,7 +12988,9 @@ app.get('/api/messages/chats', requireAuth, async (req, res) => {
       }
     });
 
-    const chats = pages.map((page) => _messagesSerializeChatPage(page, commentMap.get(page.id) || []));
+    const chats = pages
+      .map((page) => _messagesSerializeChatPage(page, commentMap.get(page.id) || []))
+      .filter((chat) => _messagesChatVisibleToCurrentUser(chat, req));
     chats.sort((a, b) => new Date(b.lastMessageTime || 0) - new Date(a.lastMessageTime || 0));
     return res.json({ ok: true, source: 'notion', chats });
   } catch (error) {
@@ -12975,6 +13042,10 @@ app.get('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
     const pageId = String(req.params?.id || '').trim();
     if (!pageId) return res.status(400).json({ ok: false, error: 'Missing chat ID.' });
     if (_sbMessagesEnabled()) {
+      const chatRow = await supabaseDb.selectById(_sbMessagesChatsTable(), pageId).catch(() => null);
+      if (chatRow && !_messagesRowVisibleToCurrentUser(chatRow, req)) {
+        return res.status(403).json({ ok: false, error: 'You do not have access to this chat.' });
+      }
       const comments = await _sbMessagesForChat(pageId, req, { limit: 1000 });
       return res.json({ ok: true, source: 'supabase', comments });
     }
@@ -13016,6 +13087,10 @@ app.post('/api/messages/chats/:id/attachments', requireAuth, async (req, res) =>
     const attachmentBody = _messagesAttachmentBody(attachment);
 
     if (_sbMessagesEnabled()) {
+      const chatRow = await supabaseDb.selectById(_sbMessagesChatsTable(), pageId).catch(() => null);
+      if (chatRow && !_messagesRowVisibleToCurrentUser(chatRow, req)) {
+        return res.status(403).json({ ok: false, error: 'You do not have access to this chat.' });
+      }
       const comment = await _sbCreateChatMessage(req, pageId, attachmentBody, { attachment });
       return res.json({ ok: true, source: 'supabase', comment });
     }
@@ -13043,6 +13118,10 @@ app.post('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
     if (!message) return res.status(400).json({ ok: false, error: 'Message is required.' });
 
     if (_sbMessagesEnabled()) {
+      const chatRow = await supabaseDb.selectById(_sbMessagesChatsTable(), pageId).catch(() => null);
+      if (chatRow && !_messagesRowVisibleToCurrentUser(chatRow, req)) {
+        return res.status(403).json({ ok: false, error: 'You do not have access to this chat.' });
+      }
       const comment = await _sbCreateChatMessage(req, pageId, message);
       return res.json({ ok: true, source: 'supabase', comment });
     }
