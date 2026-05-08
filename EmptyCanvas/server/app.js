@@ -12361,21 +12361,57 @@ function _messagesParseCommentText(text) {
   return { sender: 'Comment', body: raw, raw };
 }
 
+
+const MESSAGES_ATTACHMENT_PREFIX = '[[OPS_ATTACHMENT_V1]]';
+
+function _messagesNormalizeAttachmentPayload(input = {}) {
+  const url = String(input?.url || input?.href || input?.publicUrl || '').trim();
+  if (!url) return null;
+  const name = String(input?.name || input?.filename || 'Attachment').trim() || 'Attachment';
+  const mime = String(input?.mime || input?.contentType || '').trim();
+  const size = Number(input?.size || input?.bytes || 0) || 0;
+  return { name, url, mime, size };
+}
+
+function _messagesAttachmentBody(attachment = {}) {
+  const clean = _messagesNormalizeAttachmentPayload(attachment);
+  if (!clean) throw new Error('Attachment URL is required.');
+  return `${MESSAGES_ATTACHMENT_PREFIX}${JSON.stringify(clean)}`;
+}
+
+function _messagesAttachmentFromBody(body = '') {
+  const raw = String(body || '').trim();
+  if (!raw.startsWith(MESSAGES_ATTACHMENT_PREFIX)) return null;
+  try {
+    return _messagesNormalizeAttachmentPayload(JSON.parse(raw.slice(MESSAGES_ATTACHMENT_PREFIX.length)));
+  } catch {
+    return null;
+  }
+}
+
+function _messagesAttachmentPreview(attachment = {}) {
+  const clean = _messagesNormalizeAttachmentPayload(attachment);
+  return clean ? `📎 ${clean.name || 'Attachment'}` : '📎 Attachment';
+}
+
 function _messagesNormalizeComment(comment, req) {
   const text = _messagesPlainTextFromRichText(comment?.rich_text || []);
   const parsed = _messagesParseCommentText(text);
   const currentName = String(req?.session?.username || '').trim().toLowerCase();
   const senderKey = String(parsed.sender || '').trim().toLowerCase();
-  const isSystem = senderKey === 'system';
+  const attachment = _messagesAttachmentFromBody(parsed.body);
+  const isSystem = senderKey === 'system' && !attachment;
+  const messageType = attachment ? 'attachment' : (isSystem ? 'system' : 'text');
   return {
     id: comment?.id || '',
     discussionId: comment?.discussion_id || '',
     sender: parsed.sender || 'User',
-    body: parsed.body || '',
+    body: attachment ? _messagesAttachmentPreview(attachment) : (parsed.body || ''),
     rawText: parsed.raw || text || '',
     createdTime: comment?.created_time || '',
     createdTimeText: _messagesSafeDate(comment?.created_time || ''),
-    messageType: isSystem ? 'system' : 'text',
+    messageType,
+    attachment,
     isSystem,
     isMine: !isSystem && !!currentName && senderKey === currentName,
   };
@@ -12558,24 +12594,28 @@ function _sbMessageCurrentEmail(req) {
 
 function _sbNormalizeMessageRow(row, req) {
   const sender = _sbString(_sbGet(row, ['sender_name', 'sender', 'created_by_name', 'name'])) || 'User';
-  const body = _sbString(_sbGet(row, ['body', 'message', 'text', 'last_message'])) || '';
+  const storedBody = _sbString(_sbGet(row, ['body', 'message', 'text', 'last_message'])) || '';
+  const attachment = _messagesAttachmentFromBody(storedBody);
   const createdTime = _uaSafeDate(_sbGet(row, ['created_at', 'createdTime', 'created_time'])) || new Date().toISOString();
-  const messageType = String(_sbGet(row, ['message_type', 'type']) || '').trim().toLowerCase() || 'text';
+  const rawType = String(_sbGet(row, ['message_type', 'type']) || '').trim().toLowerCase() || 'text';
+  const messageType = attachment ? 'attachment' : rawType;
   const currentName = String(req?.session?.username || '').trim().toLowerCase();
   const currentEmail = _sbMessageCurrentEmail(req).toLowerCase();
   const senderKey = String(sender || '').trim().toLowerCase();
   const senderEmail = _sbString(_sbGet(row, ['sender_email', 'email'])).toLowerCase();
-  const isSystem = messageType === 'system' || senderKey === 'system';
+  const isSystem = messageType === 'system' || (senderKey === 'system' && !attachment);
+  const body = attachment ? _messagesAttachmentPreview(attachment) : storedBody;
   return {
     id: String(_sbGet(row, ['id', 'ID']) ?? ''),
     discussionId: String(_sbGet(row, ['chat_id', 'chatId']) ?? ''),
     sender,
     senderEmail,
     body,
-    rawText: body,
+    rawText: storedBody,
     createdTime,
     createdTimeText: _messagesSafeDate(createdTime),
     messageType,
+    attachment,
     isSystem,
     isMine: !isSystem && ((!!currentName && senderKey === currentName) || (!!currentEmail && senderEmail === currentEmail)),
     source: 'supabase',
@@ -12742,6 +12782,7 @@ async function _sbCreateChatMessage(req, chatId, message, options = {}) {
   const body = String(message || '').trim();
   if (!body) throw new Error('Message is required.');
   const isSystem = !!options.system;
+  const attachment = options.attachment ? _messagesNormalizeAttachmentPayload(options.attachment) : _messagesAttachmentFromBody(body);
   const currentName = String(req.session?.username || 'User').trim() || 'User';
   const currentEmail = _sbMessageCurrentEmail(req);
   const row = await supabaseDb.insert(_sbMessagesTable(), {
@@ -12749,12 +12790,12 @@ async function _sbCreateChatMessage(req, chatId, message, options = {}) {
     sender_name: isSystem ? 'System' : (currentName || null),
     sender_email: isSystem ? null : (currentEmail || null),
     body,
-    message_type: isSystem ? 'system' : 'text',
+    message_type: isSystem ? 'system' : (attachment ? 'attachment' : 'text'),
   });
   try {
     await supabaseDb.updateById(_sbMessagesChatsTable(), chatId, {
       updated_at: new Date().toISOString(),
-      last_message: body,
+      last_message: attachment ? _messagesAttachmentPreview(attachment) : body,
     });
   } catch {}
   return _sbNormalizeMessageRow(row, req);
@@ -12858,6 +12899,52 @@ app.get('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('GET /api/messages/chats/:id/comments error:', error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: 'Failed to load chat messages.' });
+  }
+});
+
+
+app.post('/api/messages/chats/:id/attachments', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const pageId = String(req.params?.id || '').trim();
+    const { dataUrl, filename, mime: clientMime, size: clientSize } = req.body || {};
+    if (!pageId) return res.status(400).json({ ok: false, error: 'Missing chat ID.' });
+    if (!dataUrl) return res.status(400).json({ ok: false, error: 'Attachment file is required.' });
+
+    const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+    if (buf.length > 12 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: 'File is too large. Maximum size is 12MB.' });
+    }
+
+    const safeOriginalName = String(filename || 'attachment').trim() || 'attachment';
+    const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, '_').replace(/^_+|_+$/g, '') || 'attachment';
+    const safeChatPath = String(pageId).replace(/[^a-z0-9_-]/gi, '_').slice(0, 80) || 'chat';
+    const objectPath = `messages/attachments/${safeChatPath}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+    const publicUrl = await uploadToBlobFromBase64(dataUrl, objectPath);
+    const attachment = {
+      name: safeOriginalName,
+      url: publicUrl,
+      mime: mime || String(clientMime || ''),
+      size: buf.length || Number(clientSize || 0) || 0,
+    };
+    const attachmentBody = _messagesAttachmentBody(attachment);
+
+    if (_sbMessagesEnabled()) {
+      const comment = await _sbCreateChatMessage(req, pageId, attachmentBody, { attachment });
+      return res.json({ ok: true, source: 'supabase', comment });
+    }
+
+    if (!_messagesRequireDb(res)) return;
+    const currentName = String(req.session?.username || 'User').trim() || 'User';
+    const created = await _messagesCreateComment(pageId, currentName, attachmentBody);
+    return res.json({ ok: true, source: 'notion', comment: _messagesNormalizeComment(created, req) });
+  } catch (error) {
+    console.error('POST /api/messages/chats/:id/attachments error:', error?.details || error?.body || error);
+    const rawMessage = String(error?.message || '');
+    const message = rawMessage === 'SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING'
+      ? 'File storage is not configured. Add SUPABASE_STORAGE_BUCKET or BLOB_READ_WRITE_TOKEN in Vercel.'
+      : (rawMessage || 'Failed to upload attachment.');
+    return res.status(error?.status || 500).json({ ok: false, error: message });
   }
 });
 
