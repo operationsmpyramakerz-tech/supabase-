@@ -172,3 +172,60 @@ body {
 }
 .toggle-password:hover { color: #374151; background: rgba(0,0,0,.04); }
 .toggle-password:active { transform: translateY(-50%) scale(.98); }
+
+/* Forgot password flow */
+.login-form[hidden],
+.forgot-form[hidden] {
+  display: none !important;
+}
+
+.forgot-password-link,
+.back-login-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #C2410C;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.forgot-password-link {
+  display: block;
+  margin: -0.35rem 0 1.1rem;
+}
+
+.back-login-link {
+  margin-top: 1rem;
+  color: #6B7280;
+}
+
+.forgot-password-link:hover,
+.back-login-link:hover {
+  color: #EA580C;
+  transform: translateY(-1px);
+}
+
+.forgot-copy {
+  text-align: center;
+  margin: -0.2rem 0 1.4rem;
+  padding: 1rem;
+  border: 1px solid #FED7AA;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.95), rgba(255, 255, 255, 0.95));
+}
+
+.forgot-copy h2 {
+  color: #111827;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 0.45rem;
+}
+
+.forgot-copy p {
+  color: #6B7280;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
