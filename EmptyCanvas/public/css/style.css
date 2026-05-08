@@ -6511,3 +6511,200 @@ body.sidebar-mini .sidebar-footer .account-mini .label{
 @media (max-width: 768px){
   .notif-panel{ width: 92vw; }
 }
+
+/* ===== Requested Orders: delivered receipt photos viewer ===== */
+.req-receipt-photos-btn{
+  flex: 1 1 100%;
+  width: 100%;
+  min-height: 48px;
+}
+
+.req-receipt-photos-dialog{
+  width: min(760px, calc(100vw - 28px));
+  max-height: min(86vh, 760px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.req-receipt-photos-header{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-right: 46px;
+}
+
+.req-receipt-photos-count{
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(234, 88, 12, 0.18);
+  background: rgba(255, 247, 237, 0.92);
+  color: #9A3412;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.req-receipt-photos-modal .co-submodal-body{
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.req-receipt-photos-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.req-receipt-photo-card{
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(229, 231, 235, 0.92);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F9FAFB 100%);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.10);
+}
+
+.req-receipt-photo-card__media{
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(251, 146, 60, 0.20), transparent 32%),
+    linear-gradient(135deg, #FFF7ED 0%, #F3F4F6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.req-receipt-photo-card__media img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.req-receipt-photos-file{
+  width: 74px;
+  height: 74px;
+  border-radius: 22px;
+  background: #111827;
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 18px 34px rgba(17, 24, 39, 0.20);
+}
+
+.req-receipt-photos-file svg{
+  width: 30px;
+  height: 30px;
+}
+
+.req-receipt-photo-card__body{
+  padding: 14px 56px 16px 16px;
+}
+
+.req-receipt-photo-card__title{
+  color: #111827;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.req-receipt-photo-card__meta{
+  margin-top: 5px;
+  color: #6B7280;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.req-receipt-photo-card__open{
+  position: absolute;
+  right: 13px;
+  bottom: 13px;
+  width: 40px;
+  height: 40px;
+  border-radius: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  background: #111827;
+  text-decoration: none;
+  box-shadow: 0 12px 26px rgba(17, 24, 39, 0.22);
+}
+
+.req-receipt-photo-card__open svg{
+  width: 18px;
+  height: 18px;
+}
+
+.req-receipt-photo-card__missing{
+  position: absolute;
+  right: 13px;
+  bottom: 13px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #F3F4F6;
+  color: #6B7280;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.req-receipt-photos-empty{
+  grid-column: 1 / -1;
+  min-height: 210px;
+  border: 1px dashed rgba(209, 213, 219, 0.95);
+  border-radius: 26px;
+  background: rgba(249, 250, 251, 0.78);
+  color: #6B7280;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 26px;
+}
+
+.req-receipt-photos-empty svg{
+  width: 36px;
+  height: 36px;
+  color: #EA580C;
+}
+
+.req-receipt-photos-empty strong{
+  color: #111827;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.req-receipt-photos-empty span{
+  font-size: 13px;
+  font-weight: 750;
+  max-width: 320px;
+}
+
+.req-receipt-photos-actions{
+  margin-top: 14px;
+}
+
+.req-receipt-photos-actions .ro-action-btn{
+  min-width: 140px;
+}
+
+@media (max-width: 560px){
+  .req-receipt-photos-header{
+    flex-direction: column;
+    gap: 10px;
+  }
+  .req-receipt-photos-count{
+    align-self: flex-start;
+  }
+  .req-receipt-photos-grid{
+    grid-template-columns: 1fr;
+  }
+}
