@@ -6980,3 +6980,95 @@ body.sidebar-mini .sidebar-footer .account-mini .label{
     max-height:140px !important;
   }
 }
+
+/* Receipt Photos compact viewer final behavior */
+#reqReceiptPhotosModal[hidden]{
+  display: none !important;
+}
+#reqReceiptPhotosModal.req-receipt-photos-modal{
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+#reqReceiptPhotosModal .req-receipt-photos-dialog{
+  width: min(330px, 86vw) !important;
+  max-width: min(330px, 86vw) !important;
+  max-height: min(58vh, 430px) !important;
+  padding: 14px !important;
+  border-radius: 22px !important;
+  overflow: hidden !important;
+}
+#reqReceiptPhotosModal .req-receipt-photos-header{
+  display: block !important;
+  padding-right: 48px !important;
+  margin-bottom: 10px !important;
+}
+#reqReceiptPhotosModal #reqReceiptPhotosTitle{
+  font-size: 22px !important;
+  line-height: 1.15 !important;
+  font-weight: 950 !important;
+}
+#reqReceiptPhotosModal #reqReceiptPhotosSub,
+#reqReceiptPhotosModal #reqReceiptPhotosCount,
+#reqReceiptPhotosModal .req-receipt-photo-card__body,
+#reqReceiptPhotosModal .req-receipt-photo-card__title,
+#reqReceiptPhotosModal .req-receipt-photo-card__meta,
+#reqReceiptPhotosModal .req-receipt-photo-card__open,
+#reqReceiptPhotosModal .req-receipt-photo-card__missing{
+  display: none !important;
+}
+#reqReceiptPhotosModal .co-submodal-body{
+  max-height: min(34vh, 250px) !important;
+  margin-top: 0 !important;
+  padding: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+#reqReceiptPhotosModal .req-receipt-photos-grid{
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
+}
+#reqReceiptPhotosModal .req-receipt-photo-card{
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  border: 1px solid rgba(229, 231, 235, .95) !important;
+  background: #fff !important;
+  border-radius: 16px !important;
+  padding: 8px !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  text-align: initial !important;
+}
+#reqReceiptPhotosModal .req-receipt-photo-card__media{
+  width: 100% !important;
+  height: 170px !important;
+  max-height: 170px !important;
+  min-height: 120px !important;
+  aspect-ratio: auto !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #f8fafc !important;
+}
+#reqReceiptPhotosModal .req-receipt-photo-card__media img{
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 170px !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  border-radius: 12px !important;
+}
+#reqReceiptPhotosModal .req-receipt-photos-actions{
+  margin-top: 12px !important;
+}
+#reqReceiptPhotosModal #reqReceiptPhotosDone{
+  width: 100% !important;
+  min-height: 48px !important;
+}
