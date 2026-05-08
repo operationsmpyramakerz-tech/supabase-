@@ -3354,7 +3354,23 @@ function _sbSerializeOrderRow(row = {}) {
     _sbOrderText(_sbOrderGet(row, ["team_member_name", "Teams Members", "teams_members", "Supervisor", "supervisor"])) || "";
   const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
   const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
-  const maintenanceReceipt = _sbOrderText(_sbOrderGet(row, ["order_receipt", "Order Receipt", "maintenance_receipt", "Maintenance Receipt"]));
+  const orderReceiptRaw = _sbOrderText(_sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]));
+  const maintenanceReceiptRaw = _sbOrderText(_sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]));
+  const normalizeOrderReceiptEntries = (raw, fallbackPrefix = "Receipt") => {
+    return _sbParseScreenshotEntries(raw)
+      .map((entry, index) => {
+        const url = _sbExtractUrl(entry?.url || entry?.href || entry?.publicUrl || entry?.name || "");
+        const name = String(entry?.name || "").trim() || (url ? String(url).split(/[\/?#]/).filter(Boolean).pop() : `${fallbackPrefix} ${index + 1}`);
+        return { name: name || `${fallbackPrefix} ${index + 1}`, url: url || "" };
+      })
+      .filter((entry) => entry.name || entry.url);
+  };
+  const orderReceiptEntries = normalizeOrderReceiptEntries(orderReceiptRaw, "Receipt photo");
+  const maintenanceReceiptEntries = normalizeOrderReceiptEntries(maintenanceReceiptRaw || orderReceiptRaw, "Receipt photo");
+  const orderReceiptNames = orderReceiptEntries.map((entry) => entry.name).filter(Boolean);
+  const orderReceiptUrls = orderReceiptEntries.map((entry) => entry.url).filter(Boolean);
+  const maintenanceReceiptNames = maintenanceReceiptEntries.map((entry) => entry.name).filter(Boolean);
+  const maintenanceReceiptUrls = maintenanceReceiptEntries.map((entry) => entry.url).filter(Boolean);
   const productName =
     _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name"])) ||
     _sbOrderText(_sbOrderGet(row, ["product", "Product"])) ||
@@ -3394,10 +3410,16 @@ function _sbSerializeOrderRow(row = {}) {
     sparePartsReplacedId: null,
     sparePartsReplacedNames: spareParts,
     sparePartsReplacedName: spareParts.join(", ") || null,
-    maintenanceReceiptNames: maintenanceReceipt ? [maintenanceReceipt] : [],
-    maintenanceReceiptUrls: _sbExtractUrl(maintenanceReceipt) ? [_sbExtractUrl(maintenanceReceipt)] : [],
-    maintenanceReceiptName: maintenanceReceipt || null,
-    maintenanceReceiptUrl: _sbExtractUrl(maintenanceReceipt) || null,
+    orderReceiptEntries,
+    orderReceiptNames,
+    orderReceiptUrls,
+    orderReceiptName: orderReceiptNames[0] || null,
+    orderReceiptUrl: orderReceiptUrls[0] || null,
+    maintenanceReceiptEntries,
+    maintenanceReceiptNames,
+    maintenanceReceiptUrls,
+    maintenanceReceiptName: maintenanceReceiptNames[0] || null,
+    maintenanceReceiptUrl: maintenanceReceiptUrls[0] || null,
     operationsByIds: [],
     operationsByNames: operationsByName ? [operationsByName] : [],
     operationsById: "",
@@ -14579,6 +14601,12 @@ const createdTime = page.created_time;
     sparePartsReplacedId,
     sparePartsReplacedNames,
     sparePartsReplacedName,
+    orderReceiptEntries: maintenanceReceiptMetas,
+    orderReceiptNames: maintenanceReceiptNames,
+    orderReceiptUrls: maintenanceReceiptUrls,
+    orderReceiptName: maintenanceReceiptName,
+    orderReceiptUrl: maintenanceReceiptUrl,
+    maintenanceReceiptEntries: maintenanceReceiptMetas,
     maintenanceReceiptNames,
     maintenanceReceiptUrls,
     maintenanceReceiptName,
@@ -15571,9 +15599,44 @@ app.post(
           .concat(maintenanceReceiptFilename ? [maintenanceReceiptFilename] : [])
           .map((x) => String(x || "").trim())
           .filter(Boolean);
+        const receiptDataUrls = []
+          .concat(Array.isArray(orderReceiptDataUrls) ? orderReceiptDataUrls : [])
+          .concat(orderReceiptDataUrl ? [orderReceiptDataUrl] : [])
+          .concat(Array.isArray(maintenanceReceiptDataUrls) ? maintenanceReceiptDataUrls : [])
+          .concat(maintenanceReceiptDataUrl ? [maintenanceReceiptDataUrl] : [])
+          .map((x) => String(x || "").trim())
+          .filter(Boolean);
+
+        const uploadedReceiptFiles = [];
+        for (let index = 0; index < receiptDataUrls.length; index += 1) {
+          const dataUrl = receiptDataUrls[index];
+          const fallbackName = `delivery-receipt-${index + 1}.jpg`;
+          const rawName = String(receiptNames[index] || receiptNames[0] || fallbackName).trim() || fallbackName;
+          const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
+          const extMatch = cleanName.match(/\.([a-zA-Z0-9]+)$/);
+          const safeExt = extMatch?.[1] ? extMatch[1].toLowerCase() : "jpg";
+          const blobName = `delivery-receipts/${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 10)}.${safeExt}`;
+          try {
+            const publicUrl = await uploadToBlobFromBase64(dataUrl, blobName);
+            uploadedReceiptFiles.push({ name: cleanName, url: publicUrl });
+          } catch (uploadErr) {
+            const uploadMessage =
+              String(uploadErr?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+                ? "Supabase Storage upload is not configured."
+                : "Failed to upload order receipt.";
+            return res.status(500).json({ error: uploadMessage });
+          }
+        }
+
+        const receiptEntries = uploadedReceiptFiles.length
+          ? uploadedReceiptFiles
+          : receiptNames.map((name) => ({ name, url: "" }));
+        const orderReceiptNames = receiptEntries.map((file) => file.name).filter(Boolean);
+        const orderReceiptUrls = receiptEntries.map((file) => file.url).filter(Boolean);
+
         const patch = { status: "Arrived" };
         if (rnText) patch.receipt_number = rnText;
-        if (receiptNames.length) patch.order_receipt = receiptNames.join(", ");
+        if (receiptEntries.length) patch.order_receipt = JSON.stringify(receiptEntries);
         await _sbUpdateOrdersByIds(ids, patch);
         await _sbInvalidateOrdersCaches();
         return res.json({
@@ -15581,6 +15644,15 @@ app.post(
           status: "Arrived",
           statusColor: "green",
           receiptNumber: rnText || null,
+          orderReceiptNames,
+          orderReceiptName: orderReceiptNames[0] || null,
+          orderReceiptUrls,
+          orderReceiptUrl: orderReceiptUrls[0] || null,
+          maintenanceReceiptNames: orderReceiptNames,
+          maintenanceReceiptName: orderReceiptNames[0] || null,
+          maintenanceReceiptUrls: orderReceiptUrls,
+          maintenanceReceiptUrl: orderReceiptUrls[0] || null,
+          primaryReceiptPageId: ids[0] || null,
           source: "supabase",
         });
       }
