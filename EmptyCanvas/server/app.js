@@ -3307,15 +3307,48 @@ function _sbOrderTypeColor(orderType) {
 function _sbSerializeOrderRow(row = {}) {
   const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "");
   const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
-  const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress"]));
-  const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested"]));
-  const qtyBase = qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0);
-  const qtyReceived = _sbOrderNum(_sbOrderGet(row, ["quantity_received_by_operations", "Quantity Received by operations", "Quantity Received by Operations"]));
-  const qtyRemainingStored = _sbOrderNum(_sbOrderGet(row, ["quantity_remaining", "Quantity Remaining"]));
-  const qtyRemaining = qtyRemainingStored !== null
-    ? qtyRemainingStored
-    : roundOrderQty((Number(qtyBase) || 0) - (qtyReceived === null ? 0 : Number(qtyReceived) || 0));
+  const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
+  const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
+  const qtyBase = roundOrderQty(qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0));
+  const qtyReceivedRaw = _sbOrderNum(_sbOrderGet(row, [
+    "quantity_received_by_operations",
+    "Quantity Received by operations",
+    "Quantity Received by Operations",
+    "received_quantity",
+    "quantity_received",
+  ]));
+  const qtyRemainingRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_remaining", "Quantity Remaining", "remaining_quantity"]));
   const status = _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "Pending";
+
+  // Supabase migration note:
+  // Some imported rows store empty Notion number columns as 0 instead of null.
+  // For a non-zero order, received=0 + remaining=0 usually means "not edited yet", not fully received.
+  // The only time we keep remaining=0 with a zero received quantity is when the order is already
+  // in a final arrived/delivered/received state.
+  const statusKeyForQty = norm(status);
+  const isFinalReceivedStatus = /(arrived|delivered|received)/.test(statusKeyForQty);
+  const hasBaseQty = Math.abs(Number(qtyBase) || 0) > 1e-9;
+  const receivedIsZero = qtyReceivedRaw !== null && Math.abs(Number(qtyReceivedRaw) || 0) < 1e-9;
+  const remainingIsZero = qtyRemainingRaw !== null && Math.abs(Number(qtyRemainingRaw) || 0) < 1e-9;
+  const remainingEqualsBase = qtyRemainingRaw !== null && Math.abs(roundOrderQty(Number(qtyRemainingRaw) - Number(qtyBase))) < 1e-9;
+  const zeroZeroPlaceholder = hasBaseQty && receivedIsZero && remainingIsZero && !isFinalReceivedStatus;
+  const zeroReceivedWithBaseRemaining = hasBaseQty && receivedIsZero && remainingEqualsBase;
+
+  let qtyReceived = qtyReceivedRaw;
+  let qtyRemaining;
+  let quantityReceivedEdited = false;
+
+  if (zeroZeroPlaceholder || zeroReceivedWithBaseRemaining) {
+    qtyReceived = null;
+    qtyRemaining = qtyBase;
+  } else if (qtyRemainingRaw !== null) {
+    qtyRemaining = roundOrderQty(qtyRemainingRaw);
+    quantityReceivedEdited = qtyReceivedRaw !== null && Math.abs(Number(qtyReceivedRaw) || 0) > 1e-9;
+  } else {
+    const receivedForRemaining = qtyReceivedRaw === null ? 0 : Number(qtyReceivedRaw) || 0;
+    qtyRemaining = roundOrderQty((Number(qtyBase) || 0) - receivedForRemaining);
+    quantityReceivedEdited = qtyReceivedRaw !== null && Math.abs(Number(qtyReceivedRaw) || 0) > 1e-9;
+  }
   const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
   const createdByName =
     _sbOrderText(_sbOrderGet(row, ["team_member_name", "Teams Members", "teams_members", "Supervisor", "supervisor"])) || "";
@@ -3346,7 +3379,7 @@ function _sbSerializeOrderRow(row = {}) {
     quantityEditedBySupervisor: _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor"])),
     quantityReceived: qtyReceived,
     quantityRemaining: qtyRemaining,
-    quantityReceivedEdited: qtyReceived !== null ? (Math.abs(Number(qtyReceived) || 0) > 1e-9 || qtyRemainingStored !== null) : false,
+    quantityReceivedEdited,
     quantity: qtyBase,
     status,
     statusColor: _sbOrderStatusColor(status),
@@ -3426,19 +3459,60 @@ async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {},
     .filter((x) => /^\d+$/.test(x));
   if (!ids.length) return [];
 
+  const explicitQuantities = quantities && typeof quantities === "object" ? quantities : null;
   const out = [];
+
   for (const id of ids) {
     const patch = { ...basePatch };
-    const explicit = quantities && Object.prototype.hasOwnProperty.call(quantities, id)
-      ? Number(quantities[id])
-      : null;
-    if (explicit !== null && Number.isFinite(explicit)) {
-      const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
-      const base = row ? _sbSerializeOrderRow(row).quantity : 0;
-      const rounded = roundOrderQty(explicit);
+    const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+    const serialized = row ? _sbSerializeOrderRow(row) : null;
+    const base = serialized ? Number(serialized.quantity) || 0 : 0;
+
+    const hasExplicit = explicitQuantities && Object.prototype.hasOwnProperty.call(explicitQuantities, id);
+    const explicit = hasExplicit ? Number(explicitQuantities[id]) : null;
+
+    if (hasExplicit && Number.isFinite(explicit)) {
+      const rounded = clampOrderQtyToBase(base, roundOrderQty(explicit));
       patch.quantity_received_by_operations = rounded;
-      patch.quantity_remaining = roundOrderQty((Number(base) || 0) - rounded);
+      patch.quantity_remaining = roundOrderQty(base - rounded);
+    } else if (row) {
+      // Match the old Notion workflow after moving to Supabase:
+      // clicking "Received by operations" from Not Started should fill the full item quantity
+      // for rows that have not been edited yet. Previously the Supabase branch only changed
+      // status, leaving received=0/remaining=base or 0/0 placeholders, so orders appeared in
+      // both Received and Remaining tabs incorrectly after refresh.
+      const currentReceivedRaw = _sbOrderNum(_sbOrderGet(row, [
+        "quantity_received_by_operations",
+        "Quantity Received by operations",
+        "Quantity Received by Operations",
+        "received_quantity",
+        "quantity_received",
+      ]));
+      const currentRemainingRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_remaining", "Quantity Remaining", "remaining_quantity"]));
+      const currentReceived = serialized.quantityReceived;
+      const currentRemaining = serialized.quantityRemaining;
+      const hasMeaningfulReceived = currentReceived !== null && Math.abs(Number(currentReceived) || 0) > 1e-9;
+      const hasRemaining = Math.abs(Number(currentRemaining) || 0) > 1e-9;
+      const rawLooksPlaceholder =
+        currentReceivedRaw !== null &&
+        Math.abs(Number(currentReceivedRaw) || 0) < 1e-9 &&
+        (
+          currentRemainingRaw === null ||
+          Math.abs(Number(currentRemainingRaw) || 0) < 1e-9 ||
+          Math.abs(roundOrderQty(Number(currentRemainingRaw) - base)) < 1e-9
+        );
+
+      if (!hasMeaningfulReceived || rawLooksPlaceholder) {
+        const rounded = roundOrderQty(base);
+        patch.quantity_received_by_operations = rounded;
+        patch.quantity_remaining = 0;
+      } else if (hasRemaining) {
+        // Preserve a real partial quantity; just keep remaining synchronized.
+        patch.quantity_received_by_operations = roundOrderQty(Number(currentReceived) || 0);
+        patch.quantity_remaining = roundOrderQty(base - (Number(currentReceived) || 0));
+      }
     }
+
     out.push(await supabaseDb.updateById(_sbOrdersTable(), id, patch));
   }
   return out;
@@ -16321,15 +16395,17 @@ app.post(
         const row = await supabaseDb.selectById(_sbOrdersTable(), id);
         if (!row) return res.status(404).json({ error: "Order row not found" });
         const base = _sbSerializeOrderRow(row).quantity || 0;
-        const remaining = roundQty((Number(base) || 0) - vNumRounded);
+        const vNum = clampOrderQtyToBase(base, vNumRounded);
+        const remaining = roundQty((Number(base) || 0) - vNum);
         await supabaseDb.updateById(_sbOrdersTable(), id, {
-          quantity_received_by_operations: vNumRounded,
+          quantity_received_by_operations: vNum,
           quantity_remaining: remaining,
         });
         await _sbInvalidateOrdersCaches();
         return res.json({
           success: true,
-          value: vNumRounded,
+          value: vNum,
+          remaining,
           quantityRemaining: remaining,
           source: "supabase",
         });
