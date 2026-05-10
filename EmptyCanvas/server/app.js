@@ -4766,10 +4766,13 @@ async function _sbAddProductProposalItemsByKit(proposalId, body = {}) {
   }
   const productMap = await _sbProductsMapById();
   let addedCount = 0;
+  const kitMultiplierRaw = body?.quantity ?? body?.qty ?? body?.kitQuantity ?? body?.kit_quantity ?? 1;
+  const kitMultiplier = _sbProposalQuantity(kitMultiplierRaw);
   for (const item of items) {
     const product = productMap.get(String(item.productId || "")) || { id: item.productId, name: item.productName };
     if (!product?.id) continue;
-    await _sbUpsertProductProposalItem(proposalId, product, item.quantity || 1);
+    const itemQty = _sbProposalQuantity(item.quantity || 1);
+    await _sbUpsertProductProposalItem(proposalId, product, itemQty * kitMultiplier);
     addedCount += 1;
   }
   await _sbTouchProductProposal(proposalId);
