@@ -6149,7 +6149,7 @@ app.get("/user-access", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "user-access.html"));
 });
 
-app.get("/messages", requireAuth, (req, res) => {
+app.get(["/messages", "/emails"], requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "messages.html"));
 });
 
