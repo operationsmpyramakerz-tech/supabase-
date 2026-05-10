@@ -10744,6 +10744,44 @@ app.get(
   },
 );
 
+
+app.post(
+  "/api/b2b/upload-file",
+  requireAuth,
+  requirePage("B2B"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const { dataUrl, filename, mime, kind } = req.body || {};
+      const rawDataUrl = String(dataUrl || "").trim();
+      if (!rawDataUrl || !/^data:/i.test(rawDataUrl)) {
+        return res.status(400).json({ error: "Missing uploaded file data." });
+      }
+
+      const safeOriginalName = String(filename || "contract-file.bin").trim() || "contract-file.bin";
+      const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
+      const cleanKind = String(kind || "b2b-file").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "b2b-file";
+      const objectName = `b2b/${cleanKind}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const publicUrl = await uploadToBlobFromBase64(rawDataUrl, objectName);
+
+      return res.json({
+        ok: true,
+        name: safeOriginalName,
+        filename: safeOriginalName,
+        mime: String(mime || "application/octet-stream"),
+        url: publicUrl,
+        publicUrl,
+      });
+    } catch (error) {
+      console.error("POST /api/b2b/upload-file error:", error?.details || error?.body || error);
+      const message = String(error?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+        ? "Supabase Storage upload is not configured."
+        : (error?.message || "Failed to upload file.");
+      return res.status(error?.status || 500).json({ error: message });
+    }
+  },
+);
+
 app.post(
   "/api/b2b/schools",
   requireAuth,

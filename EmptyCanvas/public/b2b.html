@@ -640,6 +640,278 @@
 
     .b2b-school-form-error.is-visible{ display:block; }
 
+
+
+    /* B2B modern controls update */
+    .school-folder-actions{
+      top:7px !important;
+      right:7px !important;
+    }
+
+    .school-folder__menu-btn{
+      width:30px !important;
+      height:30px !important;
+      border-radius:12px !important;
+      border-color:rgba(234,88,12,.16) !important;
+      box-shadow:0 8px 16px rgba(15,23,42,.10) !important;
+    }
+
+    .school-folder__menu-btn svg{ width:15px !important; height:15px !important; }
+    .school-folder__actions-menu{ top:36px !important; right:0 !important; }
+
+    .b2b-modern-select{
+      position:relative;
+      width:100%;
+    }
+
+    .b2b-modern-select__button{
+      width:100%;
+      min-height:54px;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:13px 15px;
+      font:inherit;
+      font-weight:850;
+      text-align:left;
+      cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 10px 22px rgba(15,23,42,.04);
+      transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    }
+
+    .b2b-modern-select__button span{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .b2b-modern-select__button svg{
+      width:18px;
+      height:18px;
+      flex:0 0 auto;
+      color:#64748b;
+      transition:transform .18s ease;
+    }
+
+    .b2b-modern-select.is-open .b2b-modern-select__button{
+      border-color:rgba(249,115,22,.55);
+      box-shadow:0 0 0 4px rgba(249,115,22,.10), 0 16px 30px rgba(15,23,42,.10);
+      transform:translateY(-1px);
+    }
+
+    .b2b-modern-select.is-open .b2b-modern-select__button svg{ transform:rotate(180deg); }
+
+    .b2b-modern-select__panel{
+      position:absolute;
+      left:0;
+      right:0;
+      top:calc(100% + 8px);
+      z-index:30;
+      max-height:220px;
+      overflow:auto;
+      padding:8px;
+      border:1px solid rgba(15,23,42,.08);
+      border-radius:18px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 24px 60px rgba(15,23,42,.18);
+      backdrop-filter:blur(12px);
+    }
+
+    .b2b-modern-option{
+      width:100%;
+      min-height:40px;
+      border:0;
+      border-radius:12px;
+      background:transparent;
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 11px;
+      font:inherit;
+      font-weight:850;
+      text-align:left;
+      cursor:pointer;
+      transition:background .14s ease, color .14s ease;
+    }
+
+    .b2b-modern-option:hover,
+    .b2b-modern-option.is-selected{
+      background:#fff7ed;
+      color:#c2410c;
+    }
+
+    .b2b-modern-option--check input{
+      width:17px;
+      height:17px;
+      flex:0 0 auto;
+      accent-color:#f97316;
+    }
+
+    .b2b-modern-option--check:has(input:checked){
+      background:#fff7ed;
+      color:#c2410c;
+    }
+
+    .b2b-school-field--contract-year > label{ display:none; }
+    .b2b-school-field--contract-year{ min-width:0; }
+
+    .b2b-contract-years{
+      overflow:visible;
+      align-items:end;
+    }
+
+    .b2b-file-upload-btn{
+      width:100%;
+      min-height:72px;
+      border:1px dashed rgba(249,115,22,.45);
+      border-radius:18px;
+      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 58%,#f8fafc 100%);
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      padding:14px;
+      cursor:pointer;
+      text-align:left;
+      box-shadow:0 12px 24px rgba(15,23,42,.06);
+      transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+
+    .b2b-file-upload-btn:hover{
+      transform:translateY(-1px);
+      border-color:#f97316;
+      box-shadow:0 16px 32px rgba(15,23,42,.10);
+    }
+
+    .b2b-file-upload-btn.has-file{ border-style:solid; background:linear-gradient(135deg,#ecfdf5 0%,#fff 100%); }
+
+    .b2b-file-upload-btn__icon{
+      width:46px;
+      height:46px;
+      border-radius:16px;
+      background:#070b1a;
+      color:#fff;
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      box-shadow:0 14px 22px rgba(15,23,42,.18);
+    }
+
+    .b2b-file-upload-btn__icon svg{ width:22px; height:22px; }
+
+    .b2b-file-upload-btn strong{
+      display:block;
+      font-weight:950;
+      margin-bottom:3px;
+    }
+
+    .b2b-file-upload-btn small{
+      display:block;
+      color:#64748b;
+      font-weight:750;
+      line-height:1.35;
+    }
+
+    .b2b-file-upload-meta{
+      color:#64748b;
+      font-size:.84rem;
+      font-weight:750;
+      line-height:1.45;
+    }
+
+    .b2b-file-upload-meta a{ color:#c2410c; font-weight:900; text-decoration:none; }
+
+    .b2b-delete-modal{
+      position:fixed;
+      inset:0;
+      z-index:10050;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+
+    .b2b-delete-modal.is-open{ display:flex; }
+
+    .b2b-delete-modal__backdrop{
+      position:absolute;
+      inset:0;
+      background:rgba(15,23,42,.54);
+      backdrop-filter:blur(9px);
+    }
+
+    .b2b-delete-modal__dialog{
+      position:relative;
+      width:min(390px, calc(100vw - 32px));
+      border-radius:28px;
+      background:#fff;
+      border:1px solid rgba(15,23,42,.08);
+      box-shadow:0 30px 90px rgba(15,23,42,.28);
+      padding:24px;
+      text-align:center;
+    }
+
+    .b2b-delete-modal__icon{
+      width:58px;
+      height:58px;
+      margin:0 auto 14px;
+      border-radius:20px;
+      display:grid;
+      place-items:center;
+      background:#fef2f2;
+      color:#dc2626;
+    }
+
+    .b2b-delete-modal__icon svg{ width:26px; height:26px; }
+
+    .b2b-delete-modal__dialog h3{
+      margin:0;
+      color:#0f172a;
+      font-size:1.35rem;
+      font-weight:950;
+    }
+
+    .b2b-delete-modal__dialog p{
+      margin:8px 0 0;
+      color:#64748b;
+      font-weight:750;
+      line-height:1.5;
+    }
+
+    .b2b-delete-modal__actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:20px;
+    }
+
+    .b2b-delete-modal__btn{
+      border:0;
+      border-radius:16px;
+      padding:13px 16px;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .b2b-delete-modal__btn--light{
+      background:#f8fafc;
+      color:#0f172a;
+      border:1px solid #e2e8f0;
+    }
+
+    .b2b-delete-modal__btn--danger{
+      background:#dc2626;
+      color:#fff;
+      box-shadow:0 14px 26px rgba(220,38,38,.22);
+    }
+
     @media (max-width: 768px){
 
       .b2b-section-head .card-header{ flex-direction:column; align-items:stretch; }
@@ -795,6 +1067,6 @@
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js"></script>
-<script src="/js/b2b.js?v=b2b-dropdown-actions-1"></script>
+<script src="/js/b2b.js?v=b2b-modern-controls-2"></script>
 </body>
 </html>

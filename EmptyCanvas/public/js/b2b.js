@@ -30,8 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { key: 'school_name', label: 'School Name', type: 'text', required: true, placeholder: 'Example: Test School 1' },
         { key: 'contract_status', label: 'Contract Status', type: 'select', options: ['Renewal', 'New'] },
         { key: 'solution_type', label: 'Solution Type', type: 'select', options: ['Full Solution', 'Lab solution', 'STEAM Attack solution'] },
-        { key: 'theme_type', label: 'Theme Type', type: 'select', options: Array.from({ length: 10 }, (_, index) => String(index + 1)) },
-        { key: 'education_system', label: 'Education System', type: 'select', options: ['IG', 'American', 'British', 'National'] },
+        { key: 'theme_type', label: 'Theme Type', type: 'multiselect', options: Array.from({ length: 10 }, (_, index) => String(index + 1)) },
+        { key: 'education_system', label: 'Education System', type: 'multiselect', options: ['IG', 'American', 'British', 'National'] },
       ],
     },
     {
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { key: 'governorate', label: 'Governorate', type: 'select', options: EGYPT_GOVERNORATES },
         { key: 'location', label: 'Location', type: 'url', placeholder: 'Google Maps link' },
         { key: 'date_of_supply', label: 'Date of Supply', type: 'date' },
-        { key: 'contract_file', label: 'Contract File', type: 'url' },
+        { key: 'contract_file', label: 'Contract File', type: 'file-upload' },
         { key: 'contract_period', label: 'Contract Period', type: 'contract-years' },
         { key: 'accreditation', label: 'Accreditation', type: 'text' },
         { key: 'accreditation_time', label: 'Accreditation Time', type: 'text' },
@@ -396,29 +396,114 @@ document.addEventListener('DOMContentLoaded', () => {
     ].join('');
   };
 
+  const parseChoiceValues = (value = '') => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    const raw = String(value ?? '').trim();
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+      }
+    } catch {}
+    return raw.split(/[,\n;|]+/).map((item) => item.trim()).filter(Boolean);
+  };
+
+  const choiceOptions = (field, currentValue = '', { multi = false } = {}) => {
+    const selected = multi ? parseChoiceValues(currentValue) : [String(currentValue ?? '').trim()].filter(Boolean);
+    const options = Array.isArray(field.options) ? field.options.map(String) : [];
+    const selectedMissing = selected.filter((value) => value && !options.some((option) => norm(option) === norm(value)));
+    return [...selectedMissing, ...options];
+  };
+
+  const selectedChoiceLabel = (field, currentValue = '', { multi = false } = {}) => {
+    const selected = multi ? parseChoiceValues(currentValue) : [String(currentValue ?? '').trim()].filter(Boolean);
+    if (selected.length) return selected.join(', ');
+    return field.placeholder || `Select ${field.label}`;
+  };
+
+  const renderModernSelect = (field, currentValue = '', { multi = false, nameOverride = '', idOverride = '', dataAttrs = '' } = {}) => {
+    const options = choiceOptions(field, currentValue, { multi });
+    const selected = multi ? parseChoiceValues(currentValue) : [String(currentValue ?? '').trim()].filter(Boolean);
+    const selectedCanon = new Set(selected.map(norm));
+    const hiddenValue = multi ? selected.join(', ') : (selected[0] || '');
+    const name = nameOverride || field.key;
+    const id = idOverride || `b2b_${field.key}`;
+    return `
+      <div class="b2b-school-field">
+        <label for="${escapeHtml(id)}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
+        <div class="b2b-modern-select" data-b2b-modern-select data-multi="${multi ? 'true' : 'false'}">
+          <input id="${escapeHtml(id)}" type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(hiddenValue)}" ${dataAttrs} />
+          <button class="b2b-modern-select__button" type="button" data-b2b-select-toggle aria-expanded="false">
+            <span data-b2b-select-summary>${escapeHtml(selectedChoiceLabel(field, currentValue, { multi }))}</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+          <div class="b2b-modern-select__panel" data-b2b-select-panel hidden>
+            ${multi ? options.map((option) => `
+              <label class="b2b-modern-option b2b-modern-option--check">
+                <input type="checkbox" data-b2b-option-checkbox value="${escapeHtml(option)}" ${selectedCanon.has(norm(option)) ? 'checked' : ''} />
+                <span>${escapeHtml(option)}</span>
+              </label>
+            `).join('') : `
+              <button class="b2b-modern-option ${hiddenValue ? '' : 'is-selected'}" type="button" data-b2b-option-value="">
+                <span>${escapeHtml(field.placeholder || `Select ${field.label}`)}</span>
+              </button>
+              ${options.map((option) => `
+                <button class="b2b-modern-option ${norm(option) === norm(hiddenValue) ? 'is-selected' : ''}" type="button" data-b2b-option-value="${escapeHtml(option)}">
+                  <span>${escapeHtml(option)}</span>
+                </button>
+              `).join('')}
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
   const renderField = (field, values = {}) => {
     const value = field.type === 'date' ? normalizeDateValue(values[field.key]) : String(values[field.key] ?? '');
 
     if (field.type === 'select') {
+      return renderModernSelect(field, value, { multi: false });
+    }
+
+    if (field.type === 'multiselect') {
+      return renderModernSelect(field, value, { multi: true });
+    }
+
+    if (field.type === 'file-upload') {
+      const hasValue = !!String(value || '').trim();
       return `
-        <div class="b2b-school-field">
-          <label for="b2b_${escapeHtml(field.key)}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
-          <select id="b2b_${escapeHtml(field.key)}" name="${escapeHtml(field.key)}" ${field.required ? 'required' : ''}>
-            ${selectOptionsHtml(field, value)}
-          </select>
+        <div class="b2b-school-field b2b-school-field--wide b2b-file-field">
+          <label for="b2b_${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+          <input id="b2b_${escapeHtml(field.key)}" type="hidden" name="${escapeHtml(field.key)}" value="${escapeHtml(value)}" />
+          <input class="b2b-file-input" type="file" data-b2b-contract-file-input hidden />
+          <button class="b2b-file-upload-btn" type="button" data-b2b-file-upload-btn>
+            <span class="b2b-file-upload-btn__icon"><i data-feather="upload-cloud"></i></span>
+            <span>
+              <strong>${hasValue ? 'Replace contract file' : 'Upload contract file'}</strong>
+              <small>${hasValue ? 'A contract file is already linked.' : 'PDF, image, Word, Excel, or any contract document.'}</small>
+            </span>
+          </button>
+          <div class="b2b-file-upload-meta" data-b2b-file-meta>
+            ${hasValue ? `<a href="${escapeHtml(value)}" target="_blank" rel="noopener">Open current contract file</a>` : 'No contract file selected yet.'}
+          </div>
         </div>
       `;
     }
 
     if (field.type === 'contract-years') {
       const parsed = parseContractYears(value);
+      const yearField = { label: 'Year', options: yearsRange, placeholder: 'Year' };
       return `
         <div class="b2b-school-field b2b-school-field--wide">
           <label>${escapeHtml(field.label)}</label>
           <div class="b2b-contract-years" data-contract-period-field>
-            <select data-contract-period-from aria-label="Contract period start year">${contractYearsOptions(parsed.from)}</select>
+            ${renderModernSelect(yearField, parsed.from, { nameOverride: '', idOverride: 'b2b_contract_from', dataAttrs: 'data-contract-period-from' }).replace('<div class="b2b-school-field">', '<div class="b2b-school-field b2b-school-field--contract-year">')}
             <span>to</span>
-            <select data-contract-period-to aria-label="Contract period end year">${contractYearsOptions(parsed.to)}</select>
+            ${renderModernSelect(yearField, parsed.to, { nameOverride: '', idOverride: 'b2b_contract_to', dataAttrs: 'data-contract-period-to' }).replace('<div class="b2b-school-field">', '<div class="b2b-school-field b2b-school-field--contract-year">')}
           </div>
         </div>
       `;
@@ -439,6 +524,120 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
   };
+
+  function bindModernChoiceControls(container) {
+    const closeAll = (except = null) => {
+      container.querySelectorAll('[data-b2b-modern-select].is-open').forEach((wrap) => {
+        if (except && wrap === except) return;
+        wrap.classList.remove('is-open');
+        const panel = wrap.querySelector('[data-b2b-select-panel]');
+        const toggle = wrap.querySelector('[data-b2b-select-toggle]');
+        if (panel) panel.hidden = true;
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      });
+    };
+
+    container.querySelectorAll('[data-b2b-modern-select]').forEach((wrap) => {
+      const toggle = wrap.querySelector('[data-b2b-select-toggle]');
+      const panel = wrap.querySelector('[data-b2b-select-panel]');
+      const input = wrap.querySelector('input[type="hidden"]');
+      const summary = wrap.querySelector('[data-b2b-select-summary]');
+      const isMulti = wrap.dataset.multi === 'true';
+      const placeholder = summary?.textContent || 'Select';
+
+      const updateSummary = () => {
+        if (!input || !summary) return;
+        const values = isMulti
+          ? Array.from(wrap.querySelectorAll('[data-b2b-option-checkbox]:checked')).map((checkbox) => checkbox.value).filter(Boolean)
+          : [input.value].filter(Boolean);
+        if (isMulti) input.value = values.join(', ');
+        summary.textContent = values.length ? values.join(', ') : placeholder;
+        wrap.classList.toggle('has-value', values.length > 0);
+      };
+
+      updateSummary();
+
+      if (toggle && panel) {
+        toggle.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const willOpen = !wrap.classList.contains('is-open');
+          closeAll(wrap);
+          wrap.classList.toggle('is-open', willOpen);
+          panel.hidden = !willOpen;
+          toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+      }
+
+      if (isMulti) {
+        wrap.querySelectorAll('[data-b2b-option-checkbox]').forEach((checkbox) => {
+          checkbox.addEventListener('change', updateSummary);
+        });
+      } else {
+        wrap.querySelectorAll('[data-b2b-option-value]').forEach((optionBtn) => {
+          optionBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            const value = optionBtn.getAttribute('data-b2b-option-value') || '';
+            if (input) input.value = value;
+            wrap.querySelectorAll('[data-b2b-option-value]').forEach((node) => node.classList.remove('is-selected'));
+            optionBtn.classList.add('is-selected');
+            if (summary) summary.textContent = value || placeholder;
+            closeAll();
+          });
+        });
+      }
+    });
+
+    container.addEventListener('click', (event) => {
+      if (!event.target.closest('[data-b2b-modern-select]')) closeAll();
+    });
+  }
+
+  function bindContractFileUpload(container) {
+    const input = container.querySelector('[data-b2b-contract-file-input]');
+    const button = container.querySelector('[data-b2b-file-upload-btn]');
+    const meta = container.querySelector('[data-b2b-file-meta]');
+    if (!input || !button) return;
+    button.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const sizeKb = Math.max(1, Math.round(file.size / 1024));
+      if (meta) meta.textContent = `${file.name} • ${sizeKb} KB selected. It will upload after saving.`;
+      button.classList.add('has-file');
+    });
+  }
+
+  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file.'));
+    reader.readAsDataURL(file);
+  });
+
+  async function uploadPendingContractFile(form, values = {}) {
+    const input = form.querySelector('[data-b2b-contract-file-input]');
+    const file = input?.files && input.files[0];
+    if (!file) return values;
+    const dataUrl = await fileToDataUrl(file);
+    const response = await fetch('/api/b2b/upload-file', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'contract-file',
+        filename: file.name,
+        mime: file.type || 'application/octet-stream',
+        dataUrl,
+      }),
+    });
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}));
+      throw new Error(errorPayload.error || 'Failed to upload contract file.');
+    }
+    const uploaded = await response.json();
+    return { ...values, contract_file: uploaded.url || uploaded.publicUrl || values.contract_file || '' };
+  }
 
   function selectedGradeLabels(container) {
     const selected = Array.from(container.querySelectorAll('.b2b-grades-menu input[type="checkbox"]:checked'))
@@ -509,6 +708,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ui.body.innerHTML = sections;
     bindGradesDropdown(ui.body);
+    bindModernChoiceControls(ui.body);
+    bindContractFileUpload(ui.body);
     if (window.feather) feather.replace();
   }
 
@@ -561,7 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fields.governorate = fields.governorate || data?.governorate?.name || '';
     fields.location = fields.location || data?.location || '';
     fields.solution_type = fields.solution_type || fields.program_type || data?.programType || data?.solutionType || '';
-    fields.education_system = fields.education_system || (Array.isArray(data?.educationSystem) ? data.educationSystem[0] || '' : '');
+    fields.education_system = fields.education_system || (Array.isArray(data?.educationSystem) ? data.educationSystem.join(', ') : '');
     if (data?.grades && typeof data.grades === 'object') {
       for (let i = 1; i <= 12; i += 1) {
         const key = `g${i}`;
@@ -631,7 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function handleModalSubmit(event) {
     event.preventDefault();
     const ui = ensureModal();
-    const values = getFormValues(ui.form);
+    let values = getFormValues(ui.form);
     const mode = activeEditId ? 'edit' : 'add';
     const url = mode === 'edit'
       ? `/api/b2b/schools/${encodeURIComponent(activeEditId)}`
@@ -643,6 +844,11 @@ document.addEventListener('DOMContentLoaded', () => {
     setModalError('');
 
     try {
+      if (ui.form.querySelector('[data-b2b-contract-file-input]')?.files?.[0]) {
+        ui.submit.textContent = 'Uploading...';
+        values = await uploadPendingContractFile(ui.form, values);
+        ui.submit.textContent = mode === 'edit' ? 'Saving...' : 'Adding...';
+      }
       const response = await fetch(url, {
         method,
         credentials: 'include',
@@ -666,11 +872,70 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function ensureDeleteConfirmModal() {
+    let modal = document.querySelector('[data-b2b-delete-modal]');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'b2b-delete-modal';
+    modal.dataset.b2bDeleteModal = 'true';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+      <div class="b2b-delete-modal__backdrop" data-delete-cancel></div>
+      <div class="b2b-delete-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="b2bDeleteTitle">
+        <div class="b2b-delete-modal__icon"><i data-feather="trash-2"></i></div>
+        <h3 id="b2bDeleteTitle">Delete school?</h3>
+        <p data-delete-message>This action cannot be undone.</p>
+        <div class="b2b-delete-modal__actions">
+          <button type="button" class="b2b-delete-modal__btn b2b-delete-modal__btn--light" data-delete-cancel>Cancel</button>
+          <button type="button" class="b2b-delete-modal__btn b2b-delete-modal__btn--danger" data-delete-confirm>Delete</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    if (window.feather) feather.replace();
+    return modal;
+  }
+
+  function requestDeleteConfirmation(schoolName = '') {
+    const modal = ensureDeleteConfirmModal();
+    const message = modal.querySelector('[data-delete-message]');
+    if (message) {
+      message.textContent = `Delete ${schoolName || 'this school'}? This action cannot be undone.`;
+    }
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+
+    return new Promise((resolve) => {
+      const cleanup = (answer) => {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        modal.querySelectorAll('[data-delete-cancel], [data-delete-confirm]').forEach((node) => {
+          node.removeEventListener('click', onClick);
+        });
+        document.removeEventListener('keydown', onKeydown);
+        resolve(answer);
+      };
+      const onClick = (event) => {
+        if (event.currentTarget.hasAttribute('data-delete-confirm')) cleanup(true);
+        else cleanup(false);
+      };
+      const onKeydown = (event) => {
+        if (event.key === 'Escape') cleanup(false);
+      };
+      modal.querySelectorAll('[data-delete-cancel], [data-delete-confirm]').forEach((node) => {
+        node.addEventListener('click', onClick);
+      });
+      document.addEventListener('keydown', onKeydown);
+    });
+  }
+
   async function deleteSchool(id, schoolName = '') {
     const cleanId = String(id || '').trim();
     if (!cleanId) return;
-    const label = schoolName || 'this school';
-    if (!window.confirm(`Delete ${label}? This action cannot be undone.`)) return;
+    const confirmed = await requestDeleteConfirmation(schoolName || 'this school');
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/b2b/schools/${encodeURIComponent(cleanId)}`, {
