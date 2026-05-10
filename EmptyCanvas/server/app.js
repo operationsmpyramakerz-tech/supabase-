@@ -4298,6 +4298,243 @@ function firstProductTagForServer(product) {
   return first || "Uncategorized";
 }
 
+
+function _sbProductProposalsTable() {
+  return String(process.env.SUPABASE_PRODUCT_PROPOSALS_TABLE || "product_proposals").trim() || "product_proposals";
+}
+
+function _sbProductProposalItemsTable() {
+  return String(process.env.SUPABASE_PRODUCT_PROPOSAL_ITEMS_TABLE || "product_proposal_items").trim() || "product_proposal_items";
+}
+
+function _sbProposalText(value) {
+  return _sbProductText(value).trim();
+}
+
+function _sbProposalQuantity(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.max(1, Math.round(n));
+}
+
+function _sbProposalMissingTableError(error) {
+  if (_sbIsMissingTableError(error)) {
+    const err = new Error("Products proposals tables are not created yet. Please run products_proposals_migration.sql in Supabase first.");
+    err.status = 400;
+    return err;
+  }
+  return error;
+}
+
+function _sbSerializeProductProposal(row = {}, itemsCount = 0) {
+  const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+  const name = _sbProposalText(_sbGet(row, ["name", "Name", "proposal_name", "Proposal Name"])) || "Untitled Proposal";
+  return {
+    id,
+    name,
+    createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
+    createdById: _sbProposalText(_sbGet(row, ["created_by_id", "createdById", "Created By ID"])) || null,
+    createdAt: _sbProposalText(_sbGet(row, ["created_at", "createdAt", "Created At"])) || null,
+    updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
+    itemsCount: Number(itemsCount) || 0,
+  };
+}
+
+function _sbSerializeProductProposalItem(row = {}) {
+  const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+  return {
+    id,
+    proposalId: String(_sbGet(row, ["proposal_id", "proposalId", "Proposal ID"]) ?? "").trim(),
+    productId: String(_sbGet(row, ["product_id", "productId", "Product ID"]) ?? "").trim() || null,
+    productName: _sbProposalText(_sbGet(row, ["product_name", "productName", "Product Name", "name", "Name"])) || "Untitled Product",
+    quantity: _sbProposalQuantity(_sbGet(row, ["quantity", "qty", "Quantity", "Qty"])),
+    createdAt: _sbProposalText(_sbGet(row, ["created_at", "createdAt", "Created At"])) || null,
+    updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
+  };
+}
+
+async function _sbProposalRows() {
+  try {
+    return await supabaseDb.selectAll(_sbProductProposalsTable(), { limit: 1000, order: "updated_at.desc,created_at.desc" });
+  } catch (error) {
+    throw _sbProposalMissingTableError(error);
+  }
+}
+
+async function _sbProposalItemRows(proposalId = null) {
+  try {
+    if (proposalId) {
+      const table = encodeURIComponent(_sbProductProposalItemsTable());
+      const id = encodeURIComponent(String(proposalId || "").trim());
+      const rows = await supabaseDb.request(`/${table}?select=*&proposal_id=eq.${id}&order=created_at.asc`);
+      return Array.isArray(rows) ? rows : [];
+    }
+    return await supabaseDb.selectAll(_sbProductProposalItemsTable(), { limit: 5000, order: "created_at.asc" });
+  } catch (error) {
+    throw _sbProposalMissingTableError(error);
+  }
+}
+
+async function _sbProductsProposalsList() {
+  const [proposals, items] = await Promise.all([_sbProposalRows(), _sbProposalItemRows(null)]);
+  const counts = new Map();
+  for (const item of items || []) {
+    const pid = String(_sbGet(item, ["proposal_id", "proposalId", "Proposal ID"]) ?? "").trim();
+    if (pid) counts.set(pid, (counts.get(pid) || 0) + 1);
+  }
+  return (proposals || []).map((row) => _sbSerializeProductProposal(row, counts.get(String(_sbGet(row, ["id", "ID"]) ?? "").trim()) || 0));
+}
+
+async function _sbProductProposalById(proposalId) {
+  const id = String(proposalId || "").trim();
+  if (!id) return null;
+  try {
+    const row = await supabaseDb.selectById(_sbProductProposalsTable(), id);
+    if (!row) return null;
+    const items = (await _sbProposalItemRows(id)).map(_sbSerializeProductProposalItem).filter((item) => item.id);
+    return { proposal: _sbSerializeProductProposal(row, items.length), items };
+  } catch (error) {
+    throw _sbProposalMissingTableError(error);
+  }
+}
+
+async function _sbTouchProductProposal(proposalId) {
+  try {
+    await supabaseDb.updateById(_sbProductProposalsTable(), proposalId, { updated_at: new Date().toISOString() });
+  } catch (error) {
+    if (!_sbIsMissingTableError(error)) throw error;
+  }
+}
+
+async function _sbCreateProductProposal(body = {}, req = null) {
+  const name = _sbProposalText(body?.name || body?.proposalName || body?.title);
+  if (!name) {
+    const err = new Error("Proposal name is required.");
+    err.status = 400;
+    throw err;
+  }
+  const now = new Date().toISOString();
+  const row = {
+    name,
+    created_by: String(req?.session?.username || "").trim() || null,
+    created_by_id: String(req?.session?.userSupabaseId || "").trim() || null,
+    created_at: now,
+    updated_at: now,
+  };
+  try {
+    const created = await supabaseDb.insert(_sbProductProposalsTable(), row);
+    return _sbSerializeProductProposal(created || row, 0);
+  } catch (error) {
+    throw _sbProposalMissingTableError(error);
+  }
+}
+
+async function _sbUpsertProductProposalItem(proposalId, product, quantity) {
+  const id = String(proposalId || "").trim();
+  const productId = String(product?.id || "").trim();
+  if (!id) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!productId) {
+    const err = new Error("Product is required.");
+    err.status = 400;
+    throw err;
+  }
+  const qty = _sbProposalQuantity(quantity);
+  const now = new Date().toISOString();
+  const existing = (await _sbProposalItemRows(id)).find((item) => String(_sbGet(item, ["product_id", "productId", "Product ID"]) ?? "").trim() === productId);
+  if (existing) {
+    const existingQty = _sbProposalQuantity(_sbGet(existing, ["quantity", "qty", "Quantity", "Qty"]));
+    const updated = await supabaseDb.updateById(_sbProductProposalItemsTable(), String(_sbGet(existing, ["id", "ID"])), {
+      quantity: existingQty + qty,
+      product_name: product.name || "Untitled Product",
+      updated_at: now,
+    });
+    return _sbSerializeProductProposalItem(updated || existing);
+  }
+  const row = {
+    proposal_id: id,
+    product_id: productId,
+    product_name: product.name || "Untitled Product",
+    quantity: qty,
+    created_at: now,
+    updated_at: now,
+  };
+  const created = await supabaseDb.insert(_sbProductProposalItemsTable(), row);
+  return _sbSerializeProductProposalItem(created || row);
+}
+
+async function _sbAddProductProposalItem(proposalId, body = {}) {
+  const productId = String(body?.productId || body?.product_id || body?.id || "").trim();
+  const product = await _sbProductById(productId);
+  if (!product) {
+    const err = new Error("Product not found.");
+    err.status = 404;
+    throw err;
+  }
+  await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1);
+  await _sbTouchProductProposal(proposalId);
+  return await _sbProductProposalById(proposalId);
+}
+
+async function _sbAddProductProposalItemsByTag(proposalId, body = {}) {
+  const tag = _sbProposalText(body?.tag || body?.tags || body?.name);
+  if (!tag) {
+    const err = new Error("Tag is required.");
+    err.status = 400;
+    throw err;
+  }
+  const products = (await _sbProductsList()).filter((product) => firstProductTagForServer(product) === tag);
+  if (!products.length) {
+    const err = new Error("No products were found under this tag.");
+    err.status = 404;
+    throw err;
+  }
+  for (const product of products) {
+    await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1);
+  }
+  await _sbTouchProductProposal(proposalId);
+  const detail = await _sbProductProposalById(proposalId);
+  return { ...detail, addedCount: products.length };
+}
+
+async function _sbUpdateProductProposalItem(proposalId, itemId, body = {}) {
+  const pid = String(proposalId || "").trim();
+  const iid = String(itemId || "").trim();
+  if (!pid || !iid) {
+    const err = new Error("Proposal item ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  const current = (await _sbProposalItemRows(pid)).find((item) => String(_sbGet(item, ["id", "ID"]) ?? "").trim() === iid);
+  if (!current) {
+    const err = new Error("Proposal item not found.");
+    err.status = 404;
+    throw err;
+  }
+  await supabaseDb.updateById(_sbProductProposalItemsTable(), iid, {
+    quantity: _sbProposalQuantity(body?.quantity || body?.qty || 1),
+    updated_at: new Date().toISOString(),
+  });
+  await _sbTouchProductProposal(pid);
+  return await _sbProductProposalById(pid);
+}
+
+async function _sbDeleteProductProposalItem(proposalId, itemId) {
+  const pid = String(proposalId || "").trim();
+  const iid = String(itemId || "").trim();
+  if (!pid || !iid) {
+    const err = new Error("Proposal item ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  await supabaseDb.deleteById(_sbProductProposalItemsTable(), iid);
+  await _sbTouchProductProposal(pid);
+  return await _sbProductProposalById(pid);
+}
+
 async function _sbProductsMapById() {
   const products = await _sbProductsList();
   return new Map(products.map((p) => [String(p.id), p]));
@@ -18971,6 +19208,127 @@ app.patch(
     } catch (error) {
       console.error("PATCH /api/products/tags error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update products tag." });
+    }
+  },
+);
+
+
+app.get(
+  "/api/products/proposals",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const proposals = await _sbProductsProposalsList();
+      return res.json({ ok: true, source: "supabase", proposals });
+    } catch (error) {
+      console.error("GET /api/products/proposals error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load product proposals." });
+    }
+  },
+);
+
+app.post(
+  "/api/products/proposals",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const proposal = await _sbCreateProductProposal(req.body || {}, req);
+      return res.status(201).json({ ok: true, source: "supabase", proposal });
+    } catch (error) {
+      console.error("POST /api/products/proposals error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create product proposal." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/proposals/:proposalId",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const detail = await _sbProductProposalById(req.params.proposalId);
+      if (!detail?.proposal) return res.status(404).json({ ok: false, error: "Proposal not found." });
+      return res.json({ ok: true, source: "supabase", ...detail });
+    } catch (error) {
+      console.error("GET /api/products/proposals/:proposalId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load product proposal." });
+    }
+  },
+);
+
+app.post(
+  "/api/products/proposals/:proposalId/items",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const detail = await _sbAddProductProposalItem(req.params.proposalId, req.body || {});
+      return res.status(201).json({ ok: true, source: "supabase", ...detail });
+    } catch (error) {
+      console.error("POST /api/products/proposals/:proposalId/items error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add product to proposal." });
+    }
+  },
+);
+
+app.post(
+  "/api/products/proposals/:proposalId/items/by-tag",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const detail = await _sbAddProductProposalItemsByTag(req.params.proposalId, req.body || {});
+      return res.status(201).json({ ok: true, source: "supabase", ...detail });
+    } catch (error) {
+      console.error("POST /api/products/proposals/:proposalId/items/by-tag error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add products by tag." });
+    }
+  },
+);
+
+app.patch(
+  "/api/products/proposals/:proposalId/items/:itemId",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const detail = await _sbUpdateProductProposalItem(req.params.proposalId, req.params.itemId, req.body || {});
+      return res.json({ ok: true, source: "supabase", ...detail });
+    } catch (error) {
+      console.error("PATCH /api/products/proposals/:proposalId/items/:itemId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update proposal item." });
+    }
+  },
+);
+
+app.delete(
+  "/api/products/proposals/:proposalId/items/:itemId",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const detail = await _sbDeleteProductProposalItem(req.params.proposalId, req.params.itemId);
+      return res.json({ ok: true, source: "supabase", ...detail });
+    } catch (error) {
+      console.error("DELETE /api/products/proposals/:proposalId/items/:itemId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete proposal item." });
     }
   },
 );

@@ -14,6 +14,13 @@
     editingTag: '',
     tagModalMode: 'edit',
     tagCatalog: [],
+    view: 'catalog',
+    proposals: [],
+    proposalsLoading: false,
+    proposalSaving: false,
+    activeProposal: null,
+    proposalItems: [],
+    proposalItemsLoading: false,
   };
 
   const els = {};
@@ -73,6 +80,13 @@
     try { return n.toLocaleString('en-GB'); } catch { return String(n); }
   }
 
+  function numericInputValue(el, fallback = null) {
+    const raw = String(el?.value || '').trim();
+    if (!raw) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
   function sortProducts(list) {
     return (Array.isArray(list) ? list.slice() : []).sort((a, b) => {
       const tagCmp = firstTag(a).localeCompare(firstTag(b));
@@ -128,7 +142,7 @@
       .sort((a, b) => String(a.tag).localeCompare(String(b.tag)));
   }
 
-  function updateStats(filteredProducts = getFilteredProducts()) {
+  function updateStats() {
     const all = state.products || [];
     const groups = getAllTags();
     if (els.totalCount) els.totalCount.textContent = formatNumber(all.length);
@@ -153,15 +167,26 @@
   }
 
   function renderTagOptions() {
-    if (!els.tagOptions) return;
-    els.tagOptions.innerHTML = getAllTags()
-      .map((tag) => `<option value="${escapeHTML(tag.name)}"></option>`)
-      .join('');
+    if (els.tagOptions) {
+      els.tagOptions.innerHTML = getAllTags()
+        .map((tag) => `<option value="${escapeHTML(tag.name)}"></option>`)
+        .join('');
+    }
+    if (els.proposalTagSelect) {
+      const options = getAllTags().filter((tag) => Number(tag.count) > 0)
+        .map((tag) => `<option value="${escapeHTML(tag.name)}">${escapeHTML(tag.name)} (${formatNumber(tag.count)})</option>`)
+        .join('');
+      els.proposalTagSelect.innerHTML = options || '<option value="">No tags available</option>';
+    }
   }
 
-  function groupMetrics(products) {
-    const count = Array.isArray(products) ? products.length : 0;
-    return { count };
+  function renderProductSelect() {
+    if (!els.proposalProductSelect) return;
+    const options = sortProducts(state.products).map((product) => {
+      const label = `${product.name || 'Untitled Product'}${product.displayId ? ` · ${product.displayId}` : ''}`;
+      return `<option value="${escapeHTML(product.id)}">${escapeHTML(label)}</option>`;
+    }).join('');
+    els.proposalProductSelect.innerHTML = options || '<option value="">No products available</option>';
   }
 
   function productCardHTML(product) {
@@ -198,7 +223,7 @@
   }
 
   function groupHTML(group) {
-    const metrics = groupMetrics(group.products);
+    const count = Array.isArray(group.products) ? group.products.length : 0;
     return `
       <section class="products-group" data-group="${escapeHTML(group.tag)}">
         <header class="products-group__head">
@@ -206,14 +231,14 @@
             <span class="products-group__icon"><i data-feather="layers"></i></span>
             <div>
               <h3 title="${escapeHTML(group.tag)}">${escapeHTML(group.tag)}</h3>
-              <p>${formatNumber(metrics.count)} product${metrics.count === 1 ? '' : 's'} grouped under this tag</p>
+              <p>${formatNumber(count)} product${count === 1 ? '' : 's'} grouped under this tag</p>
             </div>
           </div>
           <div class="products-group__metrics">
             <button type="button" class="products-group-edit-tag" data-action="edit-tag" data-tag="${escapeHTML(group.tag)}">
               <i data-feather="edit-3"></i><span>Edit Tag</span>
             </button>
-            <span class="products-mini-metric"><i data-feather="box"></i>${formatNumber(metrics.count)} items</span>
+            <span class="products-mini-metric"><i data-feather="box"></i>${formatNumber(count)} items</span>
           </div>
         </header>
         <div class="products-grid">
@@ -237,9 +262,10 @@
     }
 
     const filtered = getFilteredProducts();
-    updateStats(filtered);
+    updateStats();
     renderTags();
     renderTagOptions();
+    renderProductSelect();
 
     if (!filtered.length) {
       els.results.innerHTML = `
@@ -257,12 +283,28 @@
     hydrateIcons(els.results);
   }
 
-  function renderAll() {
-    const filtered = getFilteredProducts();
-    updateStats(filtered);
+  function renderCatalog() {
+    updateStats();
     renderTags();
     renderTagOptions();
+    renderProductSelect();
     renderResults();
+  }
+
+  function setProductsView(view) {
+    state.view = view || 'catalog';
+    const showCatalog = state.view === 'catalog';
+    if (els.filterPanel) els.filterPanel.hidden = !showCatalog;
+    if (els.results) els.results.hidden = !showCatalog;
+    if (els.proposalsView) els.proposalsView.hidden = showCatalog;
+    if (els.proposalDetail) els.proposalDetail.hidden = state.view !== 'proposal-detail';
+    if (els.proposalsList) els.proposalsList.hidden = state.view === 'proposal-detail';
+    if (state.view === 'catalog') renderCatalog();
+    if (state.view === 'proposals') {
+      renderProposalsList();
+      if (!state.proposals.length && !state.proposalsLoading) loadProposals();
+    }
+    hydrateIcons(document);
   }
 
   async function loadProducts({ silent = false } = {}) {
@@ -276,13 +318,11 @@
         cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || 'Failed to load products.');
-      }
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load products.');
       state.products = Array.isArray(data?.products) ? data.products : [];
       state.tagCatalog = Array.isArray(data?.tagsCatalog) ? data.tagsCatalog : [];
       state.loading = false;
-      renderAll();
+      renderCatalog();
     } catch (error) {
       state.loading = false;
       if (els.results) {
@@ -391,9 +431,7 @@
       if (label) label.textContent = state.savingTag ? (isCreate ? 'Adding...' : 'Updating...') : (isCreate ? 'Add Tag' : 'Update Tag');
     }
     if (els.addTagBtn) els.addTagBtn.disabled = state.savingTag;
-    document.querySelectorAll('[data-action="edit-tag"]').forEach((btn) => {
-      btn.disabled = state.savingTag;
-    });
+    document.querySelectorAll('[data-action="edit-tag"]').forEach((btn) => { btn.disabled = state.savingTag; });
   }
 
   function openTagModal(tag) {
@@ -457,7 +495,6 @@
     if (els.tagSummary) els.tagSummary.hidden = false;
   }
 
-
   function inputNumberValue(el) {
     const raw = String(el?.value || '').trim();
     if (!raw) return null;
@@ -483,12 +520,8 @@
     setModalError('');
 
     let payload;
-    try {
-      payload = formPayload();
-    } catch (error) {
-      setModalError(error?.message || 'Please check the form.');
-      return;
-    }
+    try { payload = formPayload(); }
+    catch (error) { setModalError(error?.message || 'Please check the form.'); return; }
 
     const isEdit = state.modalMode === 'edit' && state.editingId;
     const url = isEdit ? `/api/products/${encodeURIComponent(state.editingId)}` : '/api/products';
@@ -503,9 +536,7 @@
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || 'Failed to save product.');
-      }
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save product.');
       const product = data?.product;
       if (product && product.id) {
         const idx = state.products.findIndex((p) => String(p?.id) === String(product.id));
@@ -515,7 +546,7 @@
         await loadProducts({ silent: true });
       }
       closeModal();
-      renderAll();
+      renderCatalog();
       toast('success', 'Products', isEdit ? 'Product updated successfully.' : 'Product added successfully.');
     } catch (error) {
       setModalError(error?.message || 'Failed to save product.');
@@ -534,22 +565,10 @@
     const newTag = String(els.newTagInput?.value || '').trim();
     setTagModalError('');
 
-    if (!newTag) {
-      setTagModalError(isCreate ? 'Tag name is required.' : 'New tag is required.');
-      return;
-    }
-    if (!isCreate && !oldTag) {
-      setTagModalError('Please select a tag first.');
-      return;
-    }
-    if (!isCreate && normalizeText(oldTag) === normalizeText(newTag)) {
-      setTagModalError('Please enter a different tag name.');
-      return;
-    }
-    if (isCreate && getAllTags().some((tag) => normalizeText(tag.name) === normalizeText(newTag))) {
-      setTagModalError('This tag already exists.');
-      return;
-    }
+    if (!newTag) { setTagModalError(isCreate ? 'Tag name is required.' : 'New tag is required.'); return; }
+    if (!isCreate && !oldTag) { setTagModalError('Please select a tag first.'); return; }
+    if (!isCreate && normalizeText(oldTag) === normalizeText(newTag)) { setTagModalError('Please enter a different tag name.'); return; }
+    if (isCreate && getAllTags().some((tag) => normalizeText(tag.name) === normalizeText(newTag))) { setTagModalError('This tag already exists.'); return; }
 
     setTagSaving(true);
     try {
@@ -560,17 +579,13 @@
         body: JSON.stringify(isCreate ? { name: newTag } : { oldTag, newTag }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || (isCreate ? 'Failed to add tag.' : 'Failed to update tag.'));
-      }
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || (isCreate ? 'Failed to add tag.' : 'Failed to update tag.'));
       setTagSaving(false);
       closeTagModal();
       state.activeTag = newTag;
       if (isCreate) {
-        if (!state.tagCatalog.some((name) => normalizeText(name) === normalizeText(newTag))) {
-          state.tagCatalog.push(newTag);
-        }
-        renderAll();
+        if (!state.tagCatalog.some((name) => normalizeText(name) === normalizeText(newTag))) state.tagCatalog.push(newTag);
+        renderCatalog();
         toast('success', 'Products', 'Tag added successfully.');
       } else {
         await loadProducts({ silent: true });
@@ -584,11 +599,311 @@
     }
   }
 
+  function proposalFolderHTML(proposal) {
+    const id = String(proposal?.id || '').trim();
+    const name = String(proposal?.name || 'Untitled Proposal').trim();
+    const count = Number(proposal?.itemsCount || proposal?.items_count || 0) || 0;
+    const creator = String(proposal?.createdBy || proposal?.created_by || '').trim();
+    return `
+      <button type="button" class="products-proposal-folder" data-action="open-proposal" data-proposal-id="${escapeHTML(id)}">
+        <span class="products-proposal-folder__icon"><i data-feather="folder"></i><small>Q</small></span>
+        <strong>${escapeHTML(name)}</strong>
+        <span>${formatNumber(count)} component${count === 1 ? '' : 's'}</span>
+        ${creator ? `<em>Created by ${escapeHTML(creator)}</em>` : ''}
+      </button>
+    `;
+  }
+
+  function renderProposalsList() {
+    if (!els.proposalsList) return;
+    if (state.proposalsLoading) {
+      els.proposalsList.innerHTML = `
+        <div class="products-loading-card">
+          <div class="products-spinner" aria-hidden="true"></div>
+          <div><strong>Loading proposals...</strong><span>Reading saved proposal folders.</span></div>
+        </div>
+      `;
+      hydrateIcons(els.proposalsList);
+      return;
+    }
+    const proposals = Array.isArray(state.proposals) ? state.proposals : [];
+    if (!proposals.length) {
+      els.proposalsList.innerHTML = `
+        <div class="products-proposals-empty">
+          <span class="products-group__icon"><i data-feather="folder-plus"></i></span>
+          <div><strong>No proposals yet</strong><span>Click Create New Proposal to save your first quotation component list.</span></div>
+        </div>
+      `;
+      hydrateIcons(els.proposalsList);
+      return;
+    }
+    els.proposalsList.innerHTML = `<div class="products-proposal-folders">${proposals.map(proposalFolderHTML).join('')}</div>`;
+    hydrateIcons(els.proposalsList);
+  }
+
+  async function loadProposals() {
+    state.proposalsLoading = true;
+    renderProposalsList();
+    try {
+      const res = await fetch(`/api/products/proposals?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load proposals.');
+      state.proposals = Array.isArray(data?.proposals) ? data.proposals : [];
+    } catch (error) {
+      if (els.proposalsList) {
+        els.proposalsList.innerHTML = `
+          <div class="products-error">
+            <span class="products-group__icon"><i data-feather="alert-circle"></i></span>
+            <div><strong>Proposals could not be loaded</strong><span>${escapeHTML(error?.message || 'Unknown error')}</span></div>
+          </div>
+        `;
+        hydrateIcons(els.proposalsList);
+      }
+      toast('error', 'Products', error?.message || 'Failed to load proposals.');
+    } finally {
+      state.proposalsLoading = false;
+      renderProposalsList();
+    }
+  }
+
+  function setProposalModalError(message) {
+    if (els.proposalFormError) els.proposalFormError.textContent = message || '';
+  }
+
+  function setProposalSaving(isSaving) {
+    state.proposalSaving = !!isSaving;
+    if (els.proposalSaveBtn) {
+      els.proposalSaveBtn.disabled = state.proposalSaving;
+      const label = els.proposalSaveBtn.querySelector('span');
+      if (label) label.textContent = state.proposalSaving ? 'Creating...' : 'Create Proposal';
+    }
+  }
+
+  function openProposalModal() {
+    setProposalModalError('');
+    setInputValue(els.proposalNameInput, '');
+    if (els.proposalModal) {
+      els.proposalModal.hidden = false;
+      els.proposalModal.setAttribute('aria-hidden', 'false');
+    }
+    document.body.classList.add('products-modal-open');
+    setTimeout(() => { try { els.proposalNameInput && els.proposalNameInput.focus(); } catch {} }, 40);
+    hydrateIcons(els.proposalModal || document);
+  }
+
+  function closeProposalModal() {
+    if (state.proposalSaving) return;
+    if (els.proposalModal) {
+      els.proposalModal.hidden = true;
+      els.proposalModal.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('products-modal-open');
+    setProposalModalError('');
+    setInputValue(els.proposalNameInput, '');
+  }
+
+  async function createProposal(event) {
+    event.preventDefault();
+    if (state.proposalSaving) return;
+    const name = String(els.proposalNameInput?.value || '').trim();
+    if (!name) { setProposalModalError('Proposal name is required.'); return; }
+    setProposalSaving(true);
+    try {
+      const res = await fetch('/api/products/proposals', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to create proposal.');
+      setProposalSaving(false);
+      closeProposalModal();
+      await loadProposals();
+      if (data?.proposal?.id) await openProposalDetail(data.proposal.id);
+      toast('success', 'Products', 'Proposal folder created successfully.');
+    } catch (error) {
+      setProposalModalError(error?.message || 'Failed to create proposal.');
+      toast('error', 'Products', error?.message || 'Failed to create proposal.');
+    } finally {
+      setProposalSaving(false);
+    }
+  }
+
+  function renderProposalDetail() {
+    const proposal = state.activeProposal;
+    if (!proposal || !els.proposalDetail) return;
+    if (els.proposalTitle) els.proposalTitle.textContent = proposal.name || 'Proposal';
+    if (els.proposalMeta) {
+      const count = state.proposalItems.length;
+      els.proposalMeta.textContent = `${formatNumber(count)} saved component${count === 1 ? '' : 's'}`;
+    }
+    if (els.proposalItemsCount) {
+      const count = state.proposalItems.length;
+      els.proposalItemsCount.textContent = `${formatNumber(count)} item${count === 1 ? '' : 's'}`;
+    }
+    renderProductSelect();
+    renderTagOptions();
+    renderProposalItems();
+    hydrateIcons(els.proposalDetail);
+  }
+
+  function renderProposalItems() {
+    if (!els.proposalItemsBody) return;
+    const items = Array.isArray(state.proposalItems) ? state.proposalItems : [];
+    if (state.proposalItemsLoading) {
+      els.proposalItemsBody.innerHTML = `<tr><td colspan="3"><div class="products-table-empty">Loading proposal components...</div></td></tr>`;
+      return;
+    }
+    if (!items.length) {
+      els.proposalItemsBody.innerHTML = `<tr><td colspan="3"><div class="products-table-empty">No components yet. Add one product or a full tag group above.</div></td></tr>`;
+      return;
+    }
+    els.proposalItemsBody.innerHTML = items.map((item) => {
+      const id = String(item?.id || '').trim();
+      const name = String(item?.productName || item?.product_name || 'Untitled Product').trim();
+      const qty = Number(item?.quantity || 0) || 0;
+      return `
+        <tr data-proposal-item-id="${escapeHTML(id)}">
+          <td><strong>${escapeHTML(name)}</strong></td>
+          <td><input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" /></td>
+          <td>
+            <div class="proposal-row-actions">
+              <button type="button" class="proposal-row-save" data-action="save-proposal-item" data-item-id="${escapeHTML(id)}"><i data-feather="save"></i><span>Save</span></button>
+              <button type="button" class="proposal-row-delete" data-action="delete-proposal-item" data-item-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    hydrateIcons(els.proposalItemsBody.closest('.products-proposal-table-card') || document);
+  }
+
+  async function openProposalDetail(proposalId) {
+    const id = String(proposalId || '').trim();
+    if (!id) return;
+    state.view = 'proposal-detail';
+    state.proposalItemsLoading = true;
+    if (els.proposalsList) els.proposalsList.hidden = true;
+    if (els.proposalDetail) els.proposalDetail.hidden = false;
+    if (els.filterPanel) els.filterPanel.hidden = true;
+    if (els.results) els.results.hidden = true;
+    if (els.proposalsView) els.proposalsView.hidden = false;
+    renderProposalItems();
+    try {
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(id)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load proposal.');
+      state.activeProposal = data.proposal || null;
+      state.proposalItems = Array.isArray(data.items) ? data.items : [];
+      state.proposalItemsLoading = false;
+      renderProposalDetail();
+    } catch (error) {
+      state.proposalItemsLoading = false;
+      if (els.proposalDetail) {
+        els.proposalDetail.innerHTML = `<div class="products-error"><span class="products-group__icon"><i data-feather="alert-circle"></i></span><div><strong>Proposal could not be loaded</strong><span>${escapeHTML(error?.message || 'Unknown error')}</span></div></div>`;
+      }
+      toast('error', 'Products', error?.message || 'Failed to load proposal.');
+    }
+  }
+
+  async function refreshActiveProposal() {
+    if (!state.activeProposal?.id) return;
+    await openProposalDetail(state.activeProposal.id);
+    await loadProposals();
+  }
+
+  async function addProposalProduct() {
+    const proposalId = String(state.activeProposal?.id || '').trim();
+    const productId = String(els.proposalProductSelect?.value || '').trim();
+    const quantity = numericInputValue(els.proposalProductQty, 1);
+    if (!proposalId || !productId) return toast('error', 'Products', 'Select a product first.');
+    try {
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, quantity }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to add product.');
+      state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
+      renderProposalDetail();
+      await loadProposals();
+      toast('success', 'Products', 'Product added to proposal.');
+    } catch (error) {
+      toast('error', 'Products', error?.message || 'Failed to add product.');
+    }
+  }
+
+  async function addProposalTag() {
+    const proposalId = String(state.activeProposal?.id || '').trim();
+    const tag = String(els.proposalTagSelect?.value || '').trim();
+    const quantity = numericInputValue(els.proposalTagQty, 1);
+    if (!proposalId || !tag) return toast('error', 'Products', 'Select a tag first.');
+    try {
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-tag`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag, quantity }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to add tag products.');
+      state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
+      renderProposalDetail();
+      await loadProposals();
+      toast('success', 'Products', `Added ${formatNumber(data?.addedCount || 0)} products from tag.`);
+    } catch (error) {
+      toast('error', 'Products', error?.message || 'Failed to add tag products.');
+    }
+  }
+
+  async function saveProposalItem(itemId, row) {
+    const proposalId = String(state.activeProposal?.id || '').trim();
+    const quantity = numericInputValue(row?.querySelector('.proposal-item-qty'), 1);
+    if (!proposalId || !itemId) return;
+    try {
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/${encodeURIComponent(itemId)}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update quantity.');
+      state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
+      renderProposalDetail();
+      toast('success', 'Products', 'Quantity updated.');
+    } catch (error) {
+      toast('error', 'Products', error?.message || 'Failed to update quantity.');
+    }
+  }
+
+  async function deleteProposalItem(itemId) {
+    const proposalId = String(state.activeProposal?.id || '').trim();
+    if (!proposalId || !itemId) return;
+    try {
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/${encodeURIComponent(itemId)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to remove component.');
+      state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
+      renderProposalDetail();
+      await loadProposals();
+      toast('success', 'Products', 'Component removed.');
+    } catch (error) {
+      toast('error', 'Products', error?.message || 'Failed to remove component.');
+    }
+  }
+
   function bindEvents() {
     if (els.searchInput) {
       els.searchInput.addEventListener('input', () => {
         state.search = els.searchInput.value || '';
-        renderAll();
+        renderCatalog();
       });
     }
 
@@ -600,13 +915,15 @@
       });
     }
 
-    if (els.addBtn) {
-      els.addBtn.addEventListener('click', () => openModal('create'));
-    }
+    if (els.addBtn) els.addBtn.addEventListener('click', () => openModal('create'));
+    if (els.proposalsBtn) els.proposalsBtn.addEventListener('click', async () => { setProductsView('proposals'); await loadProposals(); });
+    if (els.backCatalogBtn) els.backCatalogBtn.addEventListener('click', () => setProductsView('catalog'));
+    if (els.createProposalBtn) els.createProposalBtn.addEventListener('click', openProposalModal);
+    if (els.backProposalsBtn) els.backProposalsBtn.addEventListener('click', () => { state.activeProposal = null; state.view = 'proposals'; setProductsView('proposals'); });
+    if (els.addProposalProductBtn) els.addProposalProductBtn.addEventListener('click', addProposalProduct);
+    if (els.addProposalTagBtn) els.addProposalTagBtn.addEventListener('click', addProposalTag);
 
-    if (els.addTagBtn) {
-      els.addTagBtn.addEventListener('click', openCreateTagModal);
-    }
+    if (els.addTagBtn) els.addTagBtn.addEventListener('click', openCreateTagModal);
 
     if (els.editSelectedTagBtn) {
       els.editSelectedTagBtn.addEventListener('click', () => {
@@ -619,17 +936,14 @@
         const btn = event.target.closest('.products-tag-chip');
         if (!btn) return;
         state.activeTag = btn.getAttribute('data-tag') || '__all__';
-        renderAll();
+        renderCatalog();
       });
     }
 
     if (els.results) {
       els.results.addEventListener('click', (event) => {
         const tagBtn = event.target.closest('[data-action="edit-tag"]');
-        if (tagBtn) {
-          openTagModal(tagBtn.getAttribute('data-tag'));
-          return;
-        }
+        if (tagBtn) { openTagModal(tagBtn.getAttribute('data-tag')); return; }
         const btn = event.target.closest('[data-action="edit-product"]');
         if (!btn) return;
         const product = findProduct(btn.getAttribute('data-product-id'));
@@ -638,26 +952,47 @@
       });
     }
 
+    if (els.proposalsList) {
+      els.proposalsList.addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-action="open-proposal"]');
+        if (!btn) return;
+        openProposalDetail(btn.getAttribute('data-proposal-id'));
+      });
+    }
+
+    if (els.proposalDetail) {
+      els.proposalDetail.addEventListener('click', (event) => {
+        const saveBtn = event.target.closest('[data-action="save-proposal-item"]');
+        if (saveBtn) {
+          saveProposalItem(saveBtn.getAttribute('data-item-id'), saveBtn.closest('tr'));
+          return;
+        }
+        const deleteBtn = event.target.closest('[data-action="delete-proposal-item"]');
+        if (deleteBtn) deleteProposalItem(deleteBtn.getAttribute('data-item-id'));
+      });
+    }
+
     if (els.form) els.form.addEventListener('submit', saveProduct);
     if (els.tagForm) els.tagForm.addEventListener('submit', saveTag);
+    if (els.proposalForm) els.proposalForm.addEventListener('submit', createProposal);
+
     if (els.closeBtn) els.closeBtn.addEventListener('click', closeModal);
     if (els.cancelBtn) els.cancelBtn.addEventListener('click', closeModal);
-    if (els.modal) {
-      els.modal.addEventListener('click', (event) => {
-        if (event.target === els.modal) closeModal();
-      });
-    }
+    if (els.modal) els.modal.addEventListener('click', (event) => { if (event.target === els.modal) closeModal(); });
+
     if (els.tagCloseBtn) els.tagCloseBtn.addEventListener('click', closeTagModal);
     if (els.tagCancelBtn) els.tagCancelBtn.addEventListener('click', closeTagModal);
-    if (els.tagModal) {
-      els.tagModal.addEventListener('click', (event) => {
-        if (event.target === els.tagModal) closeTagModal();
-      });
-    }
+    if (els.tagModal) els.tagModal.addEventListener('click', (event) => { if (event.target === els.tagModal) closeTagModal(); });
+
+    if (els.proposalCloseBtn) els.proposalCloseBtn.addEventListener('click', closeProposalModal);
+    if (els.proposalCancelBtn) els.proposalCancelBtn.addEventListener('click', closeProposalModal);
+    if (els.proposalModal) els.proposalModal.addEventListener('click', (event) => { if (event.target === els.proposalModal) closeProposalModal(); });
+
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
       if (els.modal && !els.modal.hidden) closeModal();
       if (els.tagModal && !els.tagModal.hidden) closeTagModal();
+      if (els.proposalModal && !els.proposalModal.hidden) closeProposalModal();
     });
   }
 
@@ -667,10 +1002,29 @@
     els.searchInput = $('productsSearchInput');
     els.refreshBtn = $('productsRefreshBtn');
     els.addBtn = $('productsAddBtn');
+    els.proposalsBtn = $('productsProposalsBtn');
     els.addTagBtn = $('productsAddTagBtn');
     els.tags = $('productsTags');
     els.results = $('productsResults');
+    els.filterPanel = $('productsTagsTitle') ? $('productsTagsTitle').closest('.products-filter-panel') : null;
     els.tagOptions = $('productsTagOptions');
+
+    els.proposalsView = $('productsProposalsView');
+    els.proposalsList = $('productsProposalsList');
+    els.proposalDetail = $('productsProposalDetail');
+    els.backCatalogBtn = $('productsBackCatalogBtn');
+    els.createProposalBtn = $('productsCreateProposalBtn');
+    els.backProposalsBtn = $('productsBackProposalsBtn');
+    els.proposalTitle = $('productsProposalTitle');
+    els.proposalMeta = $('productsProposalMeta');
+    els.proposalItemsCount = $('proposalItemsCount');
+    els.proposalProductSelect = $('proposalProductSelect');
+    els.proposalProductQty = $('proposalProductQty');
+    els.proposalTagSelect = $('proposalTagSelect');
+    els.proposalTagQty = $('proposalTagQty');
+    els.addProposalProductBtn = $('proposalAddProductBtn');
+    els.addProposalTagBtn = $('proposalAddTagBtn');
+    els.proposalItemsBody = $('proposalItemsBody');
 
     els.modal = $('productModal');
     els.form = $('productForm');
@@ -701,6 +1055,14 @@
     els.tagCurrentLabel = $('productTagCurrentLabel');
     els.tagCountLabel = $('productTagCountLabel');
     els.newTagInput = $('productNewTagInput');
+
+    els.proposalModal = $('productProposalModal');
+    els.proposalForm = $('productProposalForm');
+    els.proposalCloseBtn = $('productProposalModalClose');
+    els.proposalCancelBtn = $('productProposalModalCancel');
+    els.proposalSaveBtn = $('productProposalSaveBtn');
+    els.proposalFormError = $('productProposalFormError');
+    els.proposalNameInput = $('productProposalNameInput');
   }
 
   function init() {
@@ -710,9 +1072,6 @@
     loadProducts();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();

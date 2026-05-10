@@ -14,7 +14,7 @@
   <title>Products | Operations Hub</title>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/products.css?v=products-tags-cleanup-v1" rel="stylesheet" />
+  <link href="/css/products.css?v=products-proposals-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page">
@@ -88,6 +88,10 @@
           <div class="products-hero__content products-hero__content--compact">
             <div class="products-eyebrow" id="productsTitle"><i data-feather="package"></i><span>Supabase Products</span></div>
             <div class="products-actions-row products-actions-row--compact">
+              <button type="button" class="products-proposals-btn" id="productsProposalsBtn">
+                <i data-feather="file-text"></i>
+                <span>Proposals</span>
+              </button>
               <button type="button" class="products-add-btn" id="productsAddBtn">
                 <i data-feather="plus-circle"></i>
                 <span>Add Product</span>
@@ -130,6 +134,111 @@
               <span>Reading the products table from Supabase.</span>
             </div>
           </div>
+        </section>
+
+        <section class="products-proposals-view" id="productsProposalsView" aria-live="polite" hidden>
+          <header class="products-proposals-head">
+            <button type="button" class="products-back-btn" id="productsBackCatalogBtn">
+              <i data-feather="arrow-left"></i>
+              <span>Products</span>
+            </button>
+            <div>
+              <span class="products-proposals-kicker">Saved quotations</span>
+              <h2>Proposals</h2>
+              <p>Create reusable component lists for quotation preparation.</p>
+            </div>
+            <button type="button" class="products-add-btn" id="productsCreateProposalBtn">
+              <i data-feather="folder-plus"></i>
+              <span>Create New Proposal</span>
+            </button>
+          </header>
+
+          <div class="products-proposals-list" id="productsProposalsList">
+            <div class="products-loading-card">
+              <div class="products-spinner" aria-hidden="true"></div>
+              <div><strong>Loading proposals...</strong><span>Reading saved proposal folders.</span></div>
+            </div>
+          </div>
+
+          <section class="products-proposal-detail" id="productsProposalDetail" hidden>
+            <header class="products-proposal-detail__head">
+              <button type="button" class="products-back-btn" id="productsBackProposalsBtn">
+                <i data-feather="arrow-left"></i>
+                <span>All Proposals</span>
+              </button>
+              <div>
+                <span class="products-proposals-kicker">Proposal folder</span>
+                <h2 id="productsProposalTitle">Proposal</h2>
+                <p id="productsProposalMeta">Saved component list</p>
+              </div>
+            </header>
+
+            <div class="products-proposal-tools">
+              <div class="products-proposal-tool-card">
+                <div class="products-proposal-tool-title">
+                  <i data-feather="plus-circle"></i>
+                  <span>Add one component</span>
+                </div>
+                <div class="products-proposal-control-grid">
+                  <label class="products-field">
+                    <span>Component</span>
+                    <select id="proposalProductSelect"></select>
+                  </label>
+                  <label class="products-field products-field--qty">
+                    <span>Qty</span>
+                    <input id="proposalProductQty" type="number" min="1" step="1" value="1" inputmode="numeric" />
+                  </label>
+                  <button type="button" class="products-btn products-btn--dark" id="proposalAddProductBtn">
+                    <i data-feather="plus"></i>
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="products-proposal-tool-card">
+                <div class="products-proposal-tool-title">
+                  <i data-feather="layers"></i>
+                  <span>Add products by tag</span>
+                </div>
+                <div class="products-proposal-control-grid">
+                  <label class="products-field">
+                    <span>Tag</span>
+                    <select id="proposalTagSelect"></select>
+                  </label>
+                  <label class="products-field products-field--qty">
+                    <span>Qty each</span>
+                    <input id="proposalTagQty" type="number" min="1" step="1" value="1" inputmode="numeric" />
+                  </label>
+                  <button type="button" class="products-btn products-btn--dark" id="proposalAddTagBtn">
+                    <i data-feather="plus"></i>
+                    <span>Add Tag</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="products-proposal-table-card">
+              <div class="products-proposal-table-head">
+                <div>
+                  <h3>Components table</h3>
+                  <p>Saved products and quantities for this proposal.</p>
+                </div>
+                <span id="proposalItemsCount">0 items</span>
+              </div>
+              <div class="products-proposal-table-wrap">
+                <table class="products-proposal-table">
+                  <thead>
+                    <tr>
+                      <th>Component name</th>
+                      <th>Quantity</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="proposalItemsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         </section>
       </main>
     </div>
@@ -223,8 +332,37 @@
   </div>
 
 
+  <div class="products-modal-overlay" id="productProposalModal" aria-hidden="true" hidden>
+    <form class="products-modal products-proposal-modal" id="productProposalForm" role="dialog" aria-modal="true" aria-labelledby="productProposalModalTitle">
+      <button type="button" class="products-modal__close" id="productProposalModalClose" aria-label="Close proposal form">
+        <span aria-hidden="true">×</span>
+      </button>
+      <div class="products-modal__header">
+        <div class="products-modal__icon"><i data-feather="folder-plus"></i></div>
+        <div>
+          <h2 id="productProposalModalTitle">Create New Proposal</h2>
+          <p>Name this proposal folder so you can return to it later.</p>
+        </div>
+      </div>
+      <div class="products-form-grid">
+        <label class="products-field products-field--wide">
+          <span>Proposal Name <em>*</em></span>
+          <input id="productProposalNameInput" name="proposalName" type="text" autocomplete="off" required placeholder="Example: STEAM Lab quotation" />
+        </label>
+      </div>
+      <div class="products-form-error" id="productProposalFormError" aria-live="polite"></div>
+      <div class="products-modal__actions">
+        <button type="button" class="products-btn products-btn--light" id="productProposalModalCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark" id="productProposalSaveBtn">
+          <i data-feather="save"></i>
+          <span>Create Proposal</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js"></script>
-  <script src="/js/products.js?v=products-tags-cleanup-v1"></script>
+  <script src="/js/products.js?v=products-proposals-v1"></script>
 </body>
 </html>
