@@ -11,16 +11,16 @@
   <script src="/pwa-register.js" defer></script>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Messages</title>
+  <title>Emails</title>
   <style>
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/messages.css" rel="stylesheet" />
+  <link href="/css/messages.css?v=emails-redesign-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
-<body class="permissions-loading messages-page">
+<body class="permissions-loading messages-page emails-page">
   <script>
     (function() {
       try {
@@ -80,20 +80,20 @@
           </div>
         </div>
         <div class="header-row2">
-          <h1 class="page-title">Messages</h1>
+          <h1 class="page-title">Emails</h1>
         </div>
       </header>
 
       <main class="messages-body">
-        <section class="messages-shell" aria-label="Messages">
+        <section class="messages-shell email-shell" aria-label="Emails">
           <div class="messages-left-panel">
             <div class="msg-inbox-top msg-inbox-top--compact">
-              <span class="msg-inbox-kicker">Team Inbox</span>
+              <span class="msg-inbox-kicker">Team Email</span>
             </div>
 
-            <input id="msgSearchInput" class="msg-hidden-search" type="search" autocomplete="off" placeholder="Search chats or team members..." aria-hidden="true" tabindex="-1" />
+            <input id="msgSearchInput" class="msg-hidden-search" type="search" autocomplete="off" placeholder="Search emails or team members..." aria-hidden="true" tabindex="-1" />
 
-            <div class="msg-people-strip" id="msgPeopleStrip" aria-label="Team members">
+            <div class="msg-people-strip" id="msgPeopleStrip" aria-label="Quick recipients">
               <div class="msg-new-menu-wrap">
                 <button type="button" class="msg-person-card msg-person-card--new" id="msgNewBtn" aria-haspopup="true" aria-expanded="false">
                   <span class="msg-person-plus"><i data-feather="plus"></i></span>
@@ -103,40 +103,40 @@
               <div class="msg-strip-loading">Loading users...</div>
             </div>
 
-            <div class="msg-filter-tabs" id="msgFilterTabs" role="tablist" aria-label="Chat filters">
-              <button type="button" class="msg-filter-chip is-active" data-filter="all">All <span>0</span></button>
+            <div class="msg-filter-tabs" id="msgFilterTabs" role="tablist" aria-label="Email filters">
+              <button type="button" class="msg-filter-chip is-active" data-filter="all">Inbox <span>0</span></button>
               <button type="button" class="msg-filter-chip" data-filter="unread">Unread <span>0</span></button>
-              <button type="button" class="msg-filter-chip" data-filter="groups">Groups <span>0</span></button>
+              <button type="button" class="msg-filter-chip" data-filter="groups">Threads <span>0</span></button>
               <button type="button" class="msg-filter-chip" data-filter="archived">Archived <span>0</span></button>
               <button type="button" class="msg-filter-chip" data-filter="closed">Closed <span>0</span></button>
             </div>
 
             <div class="msg-list-head">
-              <h3 id="msgListTitle">Recent chats</h3>
+              <h3 id="msgListTitle">Inbox</h3>
               <span id="msgChatsCount">—</span>
             </div>
             <div class="msg-chats-list" id="msgChatsList" aria-live="polite">
-              <div class="msg-list-loading"><span></span> Loading chats...</div>
+              <div class="msg-list-loading"><span></span> Loading inbox...</div>
             </div>
           </div>
 
           <div class="messages-chat-panel" id="msgChatPanel">
             <div class="msg-empty-state" id="msgEmptyState">
-              <div class="msg-empty-icon"><i data-feather="message-circle"></i></div>
-              <h3>Select a chat</h3>
-              <p>Choose a chat from the list or start a new chat with one of the team members.</p>
+              <div class="msg-empty-icon"><i data-feather="mail"></i></div>
+              <h3>Select an email</h3>
+              <p>Choose an email thread from the inbox or compose a new internal email.</p>
             </div>
 
             <div class="msg-conversation" id="msgConversation" hidden>
               <div class="msg-conv-head">
-                <button type="button" class="msg-back-mobile" id="msgBackMobile" aria-label="Back to chats">
+                <button type="button" class="msg-back-mobile" id="msgBackMobile" aria-label="Back to inbox">
                   <i data-feather="arrow-left"></i>
-                  <span>Back</span>
+                  <span>Inbox</span>
                 </button>
                 <div class="msg-conv-avatar" id="msgConvAvatar">M</div>
                 <div class="msg-conv-title-wrap">
-                  <h3 id="msgConvTitle">Chat</h3>
-                  <p id="msgConvSubtitle">Messages</p>
+                  <h3 id="msgConvTitle">Email</h3>
+                  <p id="msgConvSubtitle">Email thread</p>
                 </div>
                 <a class="msg-open-notion" id="msgOpenNotion" href="#" target="_blank" rel="noopener" hidden>
                   <i data-feather="external-link"></i>
@@ -154,14 +154,14 @@
                   <span>Attach</span>
                 </button>
                 <div class="msg-input-wrap">
-                  <input id="msgComposerInput" type="text" autocomplete="off" placeholder="Type a message... Use @ to mention someone" />
+                  <input id="msgComposerInput" type="text" autocomplete="off" placeholder="Write a reply... Use @ to mention someone" />
                   <div class="msg-mention-menu" id="msgMentionMenu" hidden aria-label="Mention suggestions"></div>
                 </div>
                 <button type="button" class="msg-composer-btn msg-voice-btn" id="msgVoiceBtn" aria-label="Record voice message" title="Record voice message">
                   <i data-feather="mic"></i>
-                  <span>Voice</span>
+                  <span>Audio</span>
                 </button>
-                <button type="submit" class="msg-composer-btn msg-send-btn" id="msgSendBtn" aria-label="Send message">
+                <button type="submit" class="msg-composer-btn msg-send-btn" id="msgSendBtn" aria-label="Send reply">
                   <i data-feather="send"></i>
                   <span>Send</span>
                 </button>
@@ -175,29 +175,29 @@
 
   <div class="msg-modal-overlay" id="msgNewChatModal" hidden aria-hidden="true">
     <form class="msg-modal" id="msgNewChatForm" role="dialog" aria-modal="true" aria-labelledby="msgNewChatTitle">
-      <button type="button" class="msg-modal-close" id="msgNewChatClose" aria-label="Close new chat window">
+      <button type="button" class="msg-modal-close" id="msgNewChatClose" aria-label="Close new email window">
         <i data-feather="x"></i>
       </button>
       <div class="msg-modal-head">
-        <div class="msg-modal-icon" id="msgNewChatIcon"><i data-feather="message-circle"></i></div>
+        <div class="msg-modal-icon" id="msgNewChatIcon"><i data-feather="mail"></i></div>
         <div>
-          <h2 id="msgNewChatTitle">New Chat</h2>
-          <p id="msgNewChatSubtitle">Create a room and choose the conversation subject.</p>
+          <h2 id="msgNewChatTitle">New Email</h2>
+          <p id="msgNewChatSubtitle">Compose an internal email thread and choose the recipients.</p>
         </div>
       </div>
       <div class="msg-modal-body">
         <input id="msgNewChatMode" type="hidden" value="chat" />
         <label class="msg-field">
           <span>Subject <b>*</b></span>
-          <input id="msgNewChatSubject" type="text" maxlength="180" required placeholder="Write the chat subject..." />
+          <input id="msgNewChatSubject" type="text" maxlength="180" required placeholder="Write the email subject..." />
         </label>
         <label class="msg-field" id="msgSingleMemberField">
-          <span>Team Member <b>*</b></span>
+          <span>Recipient <b>*</b></span>
           <select id="msgNewChatMember"></select>
         </label>
         <div class="msg-field msg-group-members-field" id="msgGroupMembersField" hidden>
-          <span>People <b>*</b></span>
-          <div class="msg-member-picker" id="msgGroupMembersList" aria-label="Select people for group chat"></div>
+          <span>Recipients <b>*</b></span>
+          <div class="msg-member-picker" id="msgGroupMembersList" aria-label="Select recipients for team thread"></div>
         </div>
         <div class="msg-form-error" id="msgNewChatError" aria-live="polite"></div>
       </div>
@@ -205,14 +205,14 @@
         <button type="button" class="msg-btn msg-btn--light" id="msgNewChatCancel">Cancel</button>
         <button type="submit" class="msg-btn msg-btn--dark" id="msgNewChatCreate">
           <i data-feather="plus-circle"></i>
-          <span>Create Room</span>
+          <span>Send Email</span>
         </button>
       </div>
     </form>
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js"></script>
-  <script src="/js/messages.js"></script>
+  <script src="/js/common-ui.js?v=emails-redesign-v1"></script>
+  <script src="/js/messages.js?v=emails-redesign-v1"></script>
 </body>
 </html>

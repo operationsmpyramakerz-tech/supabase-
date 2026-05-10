@@ -66,9 +66,9 @@
       ]
     },
     {
-      "name": "Messages",
-      "short_name": "Messages",
-      "description": "Open Messages.",
+      "name": "Emails",
+      "short_name": "Emails",
+      "description": "Open Emails.",
       "url": "/messages",
       "icons": [
         {
