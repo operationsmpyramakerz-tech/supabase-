@@ -4013,6 +4013,18 @@ function _sbProductsTable() {
   return (supabaseDb.getConfig().productsTable || process.env.SUPABASE_PRODUCTS_TABLE || "products").trim() || "products";
 }
 
+function _sbProductTagsTable() {
+  return String(process.env.SUPABASE_PRODUCT_TAGS_TABLE || process.env.SUPABASE_PRODUCTS_TAGS_TABLE || "product_tags").trim() || "product_tags";
+}
+
+function _sbIsMissingTableError(error) {
+  const text = [error?.message, error?.details?.message, error?.details?.details, error?.details?.hint, error?.details?.code]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return error?.status === 404 || text.includes("could not find the table") || text.includes("schema cache") || text.includes("does not exist");
+}
+
 function _sbProductNum(value) {
   if (value === null || typeof value === "undefined") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -4071,6 +4083,69 @@ async function _sbSelectProductsRows() {
 async function _sbProductsList() {
   const rows = await _sbSelectProductsRows();
   return rows.map(_sbSerializeProductRow).filter((p) => p && p.id && p.name);
+}
+
+async function _sbProductTagsTableList({ required = false } = {}) {
+  try {
+    const rows = await supabaseDb.selectAll(_sbProductTagsTable(), {
+      limit: 1000,
+      order: "name.asc",
+    });
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => _sbProductText(_sbGet(row, ["name", "tag", "tags", "Name", "Tag"])) .trim())
+      .filter(Boolean);
+  } catch (error) {
+    if (!required && _sbIsMissingTableError(error)) return [];
+    if (required && _sbIsMissingTableError(error)) {
+      const err = new Error("Product tags table is not created yet. Please run products_tags_catalog_migration.sql in Supabase first.");
+      err.status = 400;
+      throw err;
+    }
+    throw error;
+  }
+}
+
+async function _sbProductsTagCatalogList() {
+  const map = new Map();
+  const add = (value) => {
+    const tag = _sbProductText(value).trim();
+    if (tag && !map.has(normKey(tag))) map.set(normKey(tag), tag);
+  };
+
+  for (const tag of await _sbProductTagsTableList({ required: false })) add(tag);
+  for (const product of await _sbProductsList()) add(firstProductTagForServer(product));
+
+  return Array.from(map.values()).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _sbCreateProductTag(name) {
+  const clean = _sbProductText(name).trim();
+  if (!clean) {
+    const err = new Error("Tag name is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  const existing = await _sbProductsTagCatalogList();
+  if (existing.some((tag) => normKey(tag) === normKey(clean))) {
+    return { name: existing.find((tag) => normKey(tag) === normKey(clean)) || clean, alreadyExists: true };
+  }
+
+  const row = {
+    name: clean,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const created = await supabaseDb.insert(_sbProductTagsTable(), row).catch((error) => {
+    if (_sbIsMissingTableError(error)) {
+      const err = new Error("Product tags table is not created yet. Please run products_tags_catalog_migration.sql in Supabase first.");
+      err.status = 400;
+      throw err;
+    }
+    throw error;
+  });
+  await _sbInvalidateProductsCaches();
+  return { name: _sbProductText(_sbGet(created || row, ["name", "tag", "Name", "Tag"])) || clean, alreadyExists: false };
 }
 
 function _sbProductNullableText(value) {
@@ -10740,44 +10815,6 @@ app.get(
         error: "Failed to fetch B2B schools.",
         details: msg,
       });
-    }
-  },
-);
-
-
-app.post(
-  "/api/b2b/upload-file",
-  requireAuth,
-  requirePage("B2B"),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      const { dataUrl, filename, mime, kind } = req.body || {};
-      const rawDataUrl = String(dataUrl || "").trim();
-      if (!rawDataUrl || !/^data:/i.test(rawDataUrl)) {
-        return res.status(400).json({ error: "Missing uploaded file data." });
-      }
-
-      const safeOriginalName = String(filename || "contract-file.bin").trim() || "contract-file.bin";
-      const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
-      const cleanKind = String(kind || "b2b-file").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "b2b-file";
-      const objectName = `b2b/${cleanKind}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
-      const publicUrl = await uploadToBlobFromBase64(rawDataUrl, objectName);
-
-      return res.json({
-        ok: true,
-        name: safeOriginalName,
-        filename: safeOriginalName,
-        mime: String(mime || "application/octet-stream"),
-        url: publicUrl,
-        publicUrl,
-      });
-    } catch (error) {
-      console.error("POST /api/b2b/upload-file error:", error?.details || error?.body || error);
-      const message = String(error?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
-        ? "Supabase Storage upload is not configured."
-        : (error?.message || "Failed to upload file.");
-      return res.status(error?.status || 500).json({ error: message });
     }
   },
 );
@@ -18872,10 +18909,49 @@ app.get(
         return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
       }
       const rows = await _sbProductsList();
-      return res.json({ ok: true, source: "supabase", products: rows });
+      const tagsCatalog = await _sbProductsTagCatalogList().catch(() => []);
+      return res.json({ ok: true, source: "supabase", products: rows, tagsCatalog });
     } catch (error) {
       console.error("GET /api/products error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load products." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/tags",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const tags = await _sbProductsTagCatalogList();
+      return res.json({ ok: true, source: "supabase", tags });
+    } catch (error) {
+      console.error("GET /api/products/tags error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load product tags." });
+    }
+  },
+);
+
+app.post(
+  "/api/products/tags",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      }
+      const tag = await _sbCreateProductTag(req.body?.name || req.body?.tag || req.body?.newTag);
+      return res.status(tag.alreadyExists ? 200 : 201).json({ ok: true, source: "supabase", tag: tag.name, alreadyExists: !!tag.alreadyExists });
+    } catch (error) {
+      console.error("POST /api/products/tags error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add product tag." });
     }
   },
 );

@@ -14,7 +14,7 @@
   <title>Products | Operations Hub</title>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/products.css" rel="stylesheet" />
+  <link href="/css/products.css?v=products-tags-cleanup-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page">
@@ -88,10 +88,6 @@
           <div class="products-hero__content products-hero__content--compact">
             <div class="products-eyebrow" id="productsTitle"><i data-feather="package"></i><span>Supabase Products</span></div>
             <div class="products-actions-row products-actions-row--compact">
-              <button type="button" class="products-refresh-btn" id="productsRefreshBtn">
-                <i data-feather="refresh-cw"></i>
-                <span>Refresh</span>
-              </button>
               <button type="button" class="products-add-btn" id="productsAddBtn">
                 <i data-feather="plus-circle"></i>
                 <span>Add Product</span>
@@ -107,14 +103,6 @@
               <span class="products-stat-card__label">Groups</span>
               <strong id="productsGroupsCount">—</strong>
             </div>
-            <div class="products-stat-card">
-              <span class="products-stat-card__label">Priced Items</span>
-              <strong id="productsPricedCount">—</strong>
-            </div>
-            <div class="products-stat-card">
-              <span class="products-stat-card__label">Avg. Price</span>
-              <strong id="productsAveragePrice">—</strong>
-            </div>
           </div>
         </section>
 
@@ -125,11 +113,10 @@
               <p>Switch between product groups quickly.</p>
             </div>
             <div class="products-tags-actions">
-              <button type="button" class="products-edit-tag-btn" id="productsEditSelectedTagBtn" disabled>
-                <i data-feather="edit-3"></i>
-                <span>Edit Tag</span>
+              <button type="button" class="products-add-tag-btn" id="productsAddTagBtn">
+                <i data-feather="plus-circle"></i>
+                <span>Add Tag</span>
               </button>
-              <div class="products-view-pill" id="productsViewPill">Loading...</div>
             </div>
           </div>
           <div class="products-tags" id="productsTags" aria-live="polite"></div>
@@ -210,7 +197,7 @@
         </div>
       </div>
 
-      <div class="products-tag-summary">
+      <div class="products-tag-summary" id="productTagSummary">
         <span>Current Tag</span>
         <strong id="productTagCurrentLabel">—</strong>
         <small id="productTagCountLabel">0 products will be updated</small>
@@ -218,8 +205,8 @@
 
       <div class="products-form-grid">
         <label class="products-field products-field--wide">
-          <span>New Tag <em>*</em></span>
-          <input id="productNewTagInput" name="newTag" type="text" list="productsTagOptions" autocomplete="off" required placeholder="Example: 1/ Electric components" />
+          <span id="productTagInputLabel">New Tag <em>*</em></span>
+          <input id="productNewTagInput" name="newTag" type="text" list="productsTagOptions" autocomplete="off" required placeholder="Example: Addons" />
         </label>
       </div>
 
@@ -238,6 +225,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js"></script>
-  <script src="/js/products.js"></script>
+  <script src="/js/products.js?v=products-tags-cleanup-v1"></script>
 </body>
 </html>

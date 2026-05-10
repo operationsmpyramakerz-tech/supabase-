@@ -12,6 +12,8 @@
     editingId: '',
     savingTag: false,
     editingTag: '',
+    tagModalMode: 'edit',
+    tagCatalog: [],
   };
 
   const els = {};
@@ -81,6 +83,10 @@
 
   function getAllTags() {
     const counts = new Map();
+    for (const tag of state.tagCatalog || []) {
+      const clean = String(tag || '').trim();
+      if (clean && !counts.has(clean)) counts.set(clean, 0);
+    }
     for (const product of state.products || []) {
       const tag = firstTag(product);
       counts.set(tag, (counts.get(tag) || 0) + 1);
@@ -125,22 +131,8 @@
   function updateStats(filteredProducts = getFilteredProducts()) {
     const all = state.products || [];
     const groups = getAllTags();
-    const priced = all.filter((p) => Number.isFinite(Number(p?.unitPrice)));
-    const avg = priced.length ? priced.reduce((sum, p) => sum + Number(p.unitPrice || 0), 0) / priced.length : null;
-
     if (els.totalCount) els.totalCount.textContent = formatNumber(all.length);
     if (els.groupsCount) els.groupsCount.textContent = formatNumber(groups.length);
-    if (els.pricedCount) els.pricedCount.textContent = formatNumber(priced.length);
-    if (els.averagePrice) els.averagePrice.textContent = avg === null ? '—' : formatPrice(avg);
-    if (els.viewPill) {
-      const label = state.activeTag === '__all__' ? 'All groups' : state.activeTag;
-      els.viewPill.textContent = `${formatNumber(filteredProducts.length)} shown • ${label}`;
-    }
-    if (els.editSelectedTagBtn) {
-      const canEdit = state.activeTag && state.activeTag !== '__all__';
-      els.editSelectedTagBtn.disabled = !canEdit || state.savingTag;
-      els.editSelectedTagBtn.title = canEdit ? `Edit ${state.activeTag}` : 'Select a tag first';
-    }
   }
 
   function renderTags() {
@@ -169,10 +161,7 @@
 
   function groupMetrics(products) {
     const count = Array.isArray(products) ? products.length : 0;
-    const priced = (products || []).filter((p) => Number.isFinite(Number(p?.unitPrice)));
-    const avg = priced.length ? priced.reduce((sum, p) => sum + Number(p.unitPrice || 0), 0) / priced.length : null;
-    const withLinks = (products || []).filter((p) => String(p?.url || '').trim()).length;
-    return { count, priced: priced.length, avg, withLinks };
+    return { count };
   }
 
   function productCardHTML(product) {
@@ -210,7 +199,6 @@
 
   function groupHTML(group) {
     const metrics = groupMetrics(group.products);
-    const avgText = metrics.avg === null ? '—' : formatPrice(metrics.avg);
     return `
       <section class="products-group" data-group="${escapeHTML(group.tag)}">
         <header class="products-group__head">
@@ -226,8 +214,6 @@
               <i data-feather="edit-3"></i><span>Edit Tag</span>
             </button>
             <span class="products-mini-metric"><i data-feather="box"></i>${formatNumber(metrics.count)} items</span>
-            <span class="products-mini-metric"><i data-feather="dollar-sign"></i>${escapeHTML(avgText)} avg</span>
-            <span class="products-mini-metric"><i data-feather="link"></i>${formatNumber(metrics.withLinks)} URLs</span>
           </div>
         </header>
         <div class="products-grid">
@@ -294,6 +280,7 @@
         throw new Error(data?.error || 'Failed to load products.');
       }
       state.products = Array.isArray(data?.products) ? data.products : [];
+      state.tagCatalog = Array.isArray(data?.tagsCatalog) ? data.tagsCatalog : [];
       state.loading = false;
       renderAll();
     } catch (error) {
@@ -400,12 +387,10 @@
     if (els.tagSaveBtn) {
       els.tagSaveBtn.disabled = state.savingTag;
       const label = els.tagSaveBtn.querySelector('span');
-      if (label) label.textContent = state.savingTag ? 'Updating...' : 'Update Tag';
+      const isCreate = state.tagModalMode === 'create';
+      if (label) label.textContent = state.savingTag ? (isCreate ? 'Adding...' : 'Updating...') : (isCreate ? 'Add Tag' : 'Update Tag');
     }
-    if (els.editSelectedTagBtn) {
-      const canEdit = state.activeTag && state.activeTag !== '__all__';
-      els.editSelectedTagBtn.disabled = !canEdit || state.savingTag;
-    }
+    if (els.addTagBtn) els.addTagBtn.disabled = state.savingTag;
     document.querySelectorAll('[data-action="edit-tag"]').forEach((btn) => {
       btn.disabled = state.savingTag;
     });
@@ -414,15 +399,21 @@
   function openTagModal(tag) {
     const currentTag = String(tag || '').trim();
     if (!currentTag || currentTag === '__all__') return;
+    state.tagModalMode = 'edit';
     state.editingTag = currentTag;
     setTagModalError('');
 
+    if (els.tagModalTitle) els.tagModalTitle.textContent = 'Edit Tag';
+    if (els.tagModalSubtitle) els.tagModalSubtitle.textContent = 'Rename this tag for all products inside the group.';
+    if (els.tagInputLabel) els.tagInputLabel.innerHTML = 'New Tag <em>*</em>';
+    if (els.tagSummary) els.tagSummary.hidden = false;
     if (els.tagCurrentLabel) els.tagCurrentLabel.textContent = currentTag;
     if (els.tagCountLabel) {
       const count = tagProductsCount(currentTag);
       els.tagCountLabel.textContent = `${formatNumber(count)} product${count === 1 ? '' : 's'} will be updated`;
     }
     setInputValue(els.newTagInput, currentTag);
+    setTagSaving(false);
 
     if (els.tagModal) {
       els.tagModal.hidden = false;
@@ -430,6 +421,25 @@
     }
     document.body.classList.add('products-modal-open');
     setTimeout(() => { try { els.newTagInput && els.newTagInput.focus(); els.newTagInput && els.newTagInput.select(); } catch {} }, 40);
+    hydrateIcons(els.tagModal || document);
+  }
+
+  function openCreateTagModal() {
+    state.tagModalMode = 'create';
+    state.editingTag = '';
+    setTagModalError('');
+    if (els.tagModalTitle) els.tagModalTitle.textContent = 'Add Tag';
+    if (els.tagModalSubtitle) els.tagModalSubtitle.textContent = 'Create a new product tag and make it available in the catalog.';
+    if (els.tagInputLabel) els.tagInputLabel.innerHTML = 'Tag Name <em>*</em>';
+    if (els.tagSummary) els.tagSummary.hidden = true;
+    setInputValue(els.newTagInput, '');
+    setTagSaving(false);
+    if (els.tagModal) {
+      els.tagModal.hidden = false;
+      els.tagModal.setAttribute('aria-hidden', 'false');
+    }
+    document.body.classList.add('products-modal-open');
+    setTimeout(() => { try { els.newTagInput && els.newTagInput.focus(); } catch {} }, 40);
     hydrateIcons(els.tagModal || document);
   }
 
@@ -441,8 +451,10 @@
     }
     document.body.classList.remove('products-modal-open');
     state.editingTag = '';
+    state.tagModalMode = 'edit';
     setTagModalError('');
     setInputValue(els.newTagInput, '');
+    if (els.tagSummary) els.tagSummary.hidden = false;
   }
 
 
@@ -517,43 +529,56 @@
     event.preventDefault();
     if (state.savingTag) return;
 
+    const isCreate = state.tagModalMode === 'create';
     const oldTag = String(state.editingTag || '').trim();
     const newTag = String(els.newTagInput?.value || '').trim();
     setTagModalError('');
 
-    if (!oldTag) {
+    if (!newTag) {
+      setTagModalError(isCreate ? 'Tag name is required.' : 'New tag is required.');
+      return;
+    }
+    if (!isCreate && !oldTag) {
       setTagModalError('Please select a tag first.');
       return;
     }
-    if (!newTag) {
-      setTagModalError('New tag is required.');
+    if (!isCreate && normalizeText(oldTag) === normalizeText(newTag)) {
+      setTagModalError('Please enter a different tag name.');
       return;
     }
-    if (normalizeText(oldTag) === normalizeText(newTag)) {
-      setTagModalError('Please enter a different tag name.');
+    if (isCreate && getAllTags().some((tag) => normalizeText(tag.name) === normalizeText(newTag))) {
+      setTagModalError('This tag already exists.');
       return;
     }
 
     setTagSaving(true);
     try {
       const res = await fetch('/api/products/tags', {
-        method: 'PATCH',
+        method: isCreate ? 'POST' : 'PATCH',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldTag, newTag }),
+        body: JSON.stringify(isCreate ? { name: newTag } : { oldTag, newTag }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || 'Failed to update tag.');
+        throw new Error(data?.error || (isCreate ? 'Failed to add tag.' : 'Failed to update tag.'));
       }
       setTagSaving(false);
       closeTagModal();
       state.activeTag = newTag;
-      await loadProducts({ silent: true });
-      toast('success', 'Products', `Tag updated for ${formatNumber(data?.updatedCount || 0)} product${Number(data?.updatedCount || 0) === 1 ? '' : 's'}.`);
+      if (isCreate) {
+        if (!state.tagCatalog.some((name) => normalizeText(name) === normalizeText(newTag))) {
+          state.tagCatalog.push(newTag);
+        }
+        renderAll();
+        toast('success', 'Products', 'Tag added successfully.');
+      } else {
+        await loadProducts({ silent: true });
+        toast('success', 'Products', `Tag updated for ${formatNumber(data?.updatedCount || 0)} product${Number(data?.updatedCount || 0) === 1 ? '' : 's'}.`);
+      }
     } catch (error) {
-      setTagModalError(error?.message || 'Failed to update tag.');
-      toast('error', 'Products', error?.message || 'Failed to update tag.');
+      setTagModalError(error?.message || (isCreate ? 'Failed to add tag.' : 'Failed to update tag.'));
+      toast('error', 'Products', error?.message || (isCreate ? 'Failed to add tag.' : 'Failed to update tag.'));
     } finally {
       setTagSaving(false);
     }
@@ -577,6 +602,10 @@
 
     if (els.addBtn) {
       els.addBtn.addEventListener('click', () => openModal('create'));
+    }
+
+    if (els.addTagBtn) {
+      els.addTagBtn.addEventListener('click', openCreateTagModal);
     }
 
     if (els.editSelectedTagBtn) {
@@ -635,12 +664,10 @@
   function collectEls() {
     els.totalCount = $('productsTotalCount');
     els.groupsCount = $('productsGroupsCount');
-    els.pricedCount = $('productsPricedCount');
-    els.averagePrice = $('productsAveragePrice');
-    els.viewPill = $('productsViewPill');
     els.searchInput = $('productsSearchInput');
     els.refreshBtn = $('productsRefreshBtn');
     els.addBtn = $('productsAddBtn');
+    els.addTagBtn = $('productsAddTagBtn');
     els.tags = $('productsTags');
     els.results = $('productsResults');
     els.tagOptions = $('productsTagOptions');
@@ -663,6 +690,10 @@
     els.editSelectedTagBtn = $('productsEditSelectedTagBtn');
     els.tagModal = $('productTagModal');
     els.tagForm = $('productTagForm');
+    els.tagModalTitle = $('productTagModalTitle');
+    els.tagModalSubtitle = $('productTagModalSubtitle');
+    els.tagSummary = $('productTagSummary');
+    els.tagInputLabel = $('productTagInputLabel');
     els.tagCloseBtn = $('productTagModalClose');
     els.tagCancelBtn = $('productTagModalCancel');
     els.tagSaveBtn = $('productTagSaveBtn');
