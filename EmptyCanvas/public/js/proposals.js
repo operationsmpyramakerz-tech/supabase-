@@ -70,26 +70,79 @@
     return data;
   }
 
-  function productOptions(selectedId = '') {
+  function getProductsList() {
     const products = Array.isArray(state.products) ? state.products.slice() : [];
     products.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
-    if (!products.length) return '<option value="">No products available</option>';
-    return products.map((product) => {
-      const id = String(product?.id || '').trim();
-      const label = `${product?.name || 'Untitled Product'}${product?.displayId ? ` · ${product.displayId}` : ''}`;
-      return `<option value="${escapeHTML(id)}" ${String(selectedId) === id ? 'selected' : ''}>${escapeHTML(label)}</option>`;
-    }).join('');
+    return products.map((product) => ({
+      value: String(product?.id || '').trim(),
+      label: `${product?.name || 'Untitled Product'}${product?.displayId ? ` · ${product.displayId}` : ''}`,
+      meta: product?.displayId ? String(product.displayId) : '',
+    })).filter((item) => item.value);
   }
 
-  function kitOptions(selectedId = '') {
+  function getKitsList() {
     const kits = Array.isArray(state.kits) ? state.kits.slice() : [];
     kits.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
-    if (!kits.length) return '<option value="">No kits available</option>';
-    return kits.map((kit) => {
-      const id = String(kit?.id || '').trim();
-      const label = `${kit?.name || 'Untitled Kit'} · ${formatNumber(kit?.itemsCount || 0)} components`;
-      return `<option value="${escapeHTML(id)}" ${String(selectedId) === id ? 'selected' : ''}>${escapeHTML(label)}</option>`;
-    }).join('');
+    return kits.map((kit) => ({
+      value: String(kit?.id || '').trim(),
+      label: `${kit?.name || 'Untitled Kit'} · ${formatNumber(kit?.itemsCount || 0)} components`,
+      meta: `${formatNumber(kit?.itemsCount || 0)} component${Number(kit?.itemsCount || 0) === 1 ? '' : 's'}`,
+    })).filter((item) => item.value);
+  }
+
+  function searchableSelectHTML({ id, label, placeholder, items, emptyText }) {
+    const safeId = escapeHTML(id);
+    const list = Array.isArray(items) ? items : [];
+    const options = list.length ? list.map((item) => `
+      <button type="button" class="proposal-search-select__option" data-action="choose-search-option" data-value="${escapeHTML(item.value)}" data-label="${escapeHTML(item.label)}">
+        <span>${escapeHTML(item.label)}</span>
+        ${item.meta ? `<small>${escapeHTML(item.meta)}</small>` : ''}
+      </button>
+    `).join('') : `<div class="proposal-search-select__empty">${escapeHTML(emptyText || 'No options available')}</div>`;
+
+    return `
+      <label class="products-field proposals-search-field">
+        <span>${escapeHTML(label)}</span>
+        <div class="proposal-search-select" data-select-root data-target="${safeId}">
+          <input type="hidden" id="${safeId}" value="" />
+          <button type="button" class="proposal-search-select__button" data-action="toggle-search-select" aria-haspopup="listbox" aria-expanded="false">
+            <span class="proposal-search-select__value">${escapeHTML(placeholder)}</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+          <div class="proposal-search-select__menu" role="listbox" hidden>
+            <div class="proposal-search-select__search">
+              <i data-feather="search"></i>
+              <input type="search" data-role="select-search" placeholder="Search..." autocomplete="off" />
+            </div>
+            <div class="proposal-search-select__options">${options}</div>
+          </div>
+        </div>
+      </label>
+    `;
+  }
+
+  function productSelectHTML(id) {
+    return searchableSelectHTML({
+      id,
+      label: 'Component',
+      placeholder: 'Search or select component',
+      items: getProductsList(),
+      emptyText: 'No products available',
+    });
+  }
+
+  function kitSelectHTML(id) {
+    return searchableSelectHTML({
+      id,
+      label: 'Kit',
+      placeholder: 'Search or select saved kit',
+      items: getKitsList(),
+      emptyText: 'No saved kits available',
+    });
+  }
+
+  function selectedValue(id) {
+    return String(document.getElementById(id)?.value || '').trim();
   }
 
   function folderCard(item, kind) {
@@ -200,7 +253,7 @@
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add one component</span></div>
           <div class="products-proposal-control-grid">
-            <label class="products-field"><span>Component</span><select id="proposalProductSelect">${productOptions()}</select></label>
+            ${productSelectHTML('proposalProductSelect')}
             <label class="products-field products-field--qty"><span>Qty</span><input id="proposalProductQty" type="number" min="1" step="1" value="1" inputmode="numeric" /></label>
             <button type="button" class="products-btn products-btn--dark" data-action="add-proposal-product"><i data-feather="plus"></i><span>Add</span></button>
           </div>
@@ -208,7 +261,7 @@
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="box"></i><span>Add saved kit</span></div>
           <div class="products-proposal-control-grid proposals-kit-grid">
-            <label class="products-field"><span>Kit</span><select id="proposalKitSelect">${kitOptions()}</select></label>
+            ${kitSelectHTML('proposalKitSelect')}
             <button type="button" class="products-btn products-btn--dark" data-action="add-proposal-kit"><i data-feather="plus"></i><span>Add Kit</span></button>
           </div>
         </div>
@@ -244,7 +297,7 @@
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add kit component</span></div>
           <div class="products-proposal-control-grid">
-            <label class="products-field"><span>Component</span><select id="kitProductSelect">${productOptions()}</select></label>
+            ${productSelectHTML('kitProductSelect')}
             <label class="products-field products-field--qty"><span>Qty</span><input id="kitProductQty" type="number" min="1" step="1" value="1" inputmode="numeric" /></label>
             <button type="button" class="products-btn products-btn--dark" data-action="add-kit-product"><i data-feather="plus"></i><span>Add</span></button>
           </div>
@@ -449,7 +502,7 @@
 
   async function addProposalProduct() {
     const proposalId = String(state.activeProposal?.id || '').trim();
-    const productId = String(document.getElementById('proposalProductSelect')?.value || '').trim();
+    const productId = selectedValue('proposalProductSelect');
     const quantity = numericInputValue(document.getElementById('proposalProductQty'), 1);
     if (!proposalId || !productId) return toast('error', 'Proposals', 'Select a product first.');
     try {
@@ -464,7 +517,7 @@
 
   async function addProposalKit() {
     const proposalId = String(state.activeProposal?.id || '').trim();
-    const kitId = String(document.getElementById('proposalKitSelect')?.value || '').trim();
+    const kitId = selectedValue('proposalKitSelect');
     if (!proposalId || !kitId) return toast('error', 'Proposals', 'Select a kit first.');
     try {
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId }) });
@@ -478,7 +531,7 @@
 
   async function addKitProduct() {
     const kitId = String(state.activeKit?.id || '').trim();
-    const productId = String(document.getElementById('kitProductSelect')?.value || '').trim();
+    const productId = selectedValue('kitProductSelect');
     const quantity = numericInputValue(document.getElementById('kitProductQty'), 1);
     if (!kitId || !productId) return toast('error', 'Kits', 'Select a product first.');
     try {
@@ -538,7 +591,73 @@
     } catch (error) { toast('error', isKit ? 'Kits' : 'Proposals', error?.message || 'Failed to remove component.'); }
   }
 
+  function closeAllSearchSelects(exceptRoot = null) {
+    document.querySelectorAll('[data-select-root]').forEach((root) => {
+      if (exceptRoot && root === exceptRoot) return;
+      const menu = root.querySelector('.proposal-search-select__menu');
+      const toggle = root.querySelector('.proposal-search-select__button');
+      if (menu) menu.hidden = true;
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      const search = root.querySelector('[data-role="select-search"]');
+      if (search) {
+        search.value = '';
+        filterSearchSelectOptions(root, '');
+      }
+    });
+  }
+
+  function filterSearchSelectOptions(root, query) {
+    if (!root) return;
+    const q = String(query || '').trim().toLowerCase();
+    root.querySelectorAll('.proposal-search-select__option').forEach((option) => {
+      const text = String(option.textContent || '').toLowerCase();
+      option.hidden = q ? !text.includes(q) : false;
+    });
+  }
+
+  function handleSearchSelectClick(event) {
+    const toggle = event.target.closest('[data-action="toggle-search-select"]');
+    if (toggle) {
+      event.preventDefault();
+      const root = toggle.closest('[data-select-root]');
+      const menu = root?.querySelector('.proposal-search-select__menu');
+      if (!root || !menu) return;
+      const shouldOpen = menu.hidden;
+      closeAllSearchSelects(root);
+      menu.hidden = !shouldOpen;
+      toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+      if (shouldOpen) {
+        const search = root.querySelector('[data-role="select-search"]');
+        setTimeout(() => search && search.focus(), 40);
+      }
+      return;
+    }
+
+    const option = event.target.closest('[data-action="choose-search-option"]');
+    if (option) {
+      event.preventDefault();
+      const root = option.closest('[data-select-root]');
+      const targetId = root?.getAttribute('data-target') || '';
+      const input = targetId ? document.getElementById(targetId) : null;
+      const label = option.getAttribute('data-label') || option.textContent || '';
+      if (input) input.value = option.getAttribute('data-value') || '';
+      const valueEl = root?.querySelector('.proposal-search-select__value');
+      if (valueEl) valueEl.textContent = label;
+      closeAllSearchSelects();
+      return;
+    }
+
+    if (!event.target.closest('[data-select-root]')) closeAllSearchSelects();
+  }
+
+  function handleSearchSelectInput(event) {
+    if (!event.target.matches('[data-role="select-search"]')) return;
+    filterSearchSelectOptions(event.target.closest('[data-select-root]'), event.target.value);
+  }
+
   function bindEvents() {
+    document.addEventListener('click', handleSearchSelectClick);
+    document.addEventListener('input', handleSearchSelectInput);
     document.querySelectorAll('.proposals-tab').forEach((btn) => {
       btn.addEventListener('click', () => setTab(btn.getAttribute('data-tab')));
     });
