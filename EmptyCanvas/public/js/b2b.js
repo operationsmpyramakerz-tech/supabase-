@@ -8,34 +8,49 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeEditName = '';
   let modalUi = null;
 
+  const EGYPT_GOVERNORATES = [
+    'Cairo', 'Giza', 'Alexandria', 'Dakahlia', 'Red Sea', 'Beheira', 'Fayoum', 'Gharbia',
+    'Ismailia', 'Menofia', 'Minya', 'Qalyubia', 'New Valley', 'Suez', 'Aswan', 'Assiut',
+    'Beni Suef', 'Port Said', 'Damietta', 'Sharqia', 'South Sinai', 'Kafr El Sheikh',
+    'Matrouh', 'Luxor', 'Qena', 'North Sinai', 'Sohag'
+  ];
+
+  const yearsRange = (() => {
+    const current = new Date().getFullYear();
+    const start = Math.min(2020, current - 3);
+    const end = current + 15;
+    return Array.from({ length: end - start + 1 }, (_, index) => String(start + index));
+  })();
+
   const FIELD_GROUPS = [
     {
       name: 'Main data',
+      icon: 'database',
       fields: [
         { key: 'school_name', label: 'School Name', type: 'text', required: true, placeholder: 'Example: Test School 1' },
-        { key: 'status', label: 'Status', type: 'text' },
-        { key: 'contract_status', label: 'Contract Status', type: 'text' },
-        { key: 'program_type', label: 'Program Type', type: 'text' },
-        { key: 'theme_type', label: 'Theme Type', type: 'text' },
-        { key: 'education_system', label: 'Education System', type: 'text', placeholder: 'National, British, American...' },
+        { key: 'contract_status', label: 'Contract Status', type: 'select', options: ['Renewal', 'New'] },
+        { key: 'solution_type', label: 'Solution Type', type: 'select', options: ['Full Solution', 'Lab solution', 'STEAM Attack solution'] },
+        { key: 'theme_type', label: 'Theme Type', type: 'select', options: Array.from({ length: 10 }, (_, index) => String(index + 1)) },
+        { key: 'education_system', label: 'Education System', type: 'select', options: ['IG', 'American', 'British', 'National'] },
       ],
     },
     {
       name: 'Location & contract',
+      icon: 'map-pin',
       fields: [
-        { key: 'governorate', label: 'Governorate', type: 'text' },
+        { key: 'governorate', label: 'Governorate', type: 'select', options: EGYPT_GOVERNORATES },
         { key: 'location', label: 'Location', type: 'url', placeholder: 'Google Maps link' },
         { key: 'date_of_supply', label: 'Date of Supply', type: 'date' },
         { key: 'contract_file', label: 'Contract File', type: 'url' },
-        { key: 'contract_period', label: 'Contract Period', type: 'text' },
+        { key: 'contract_period', label: 'Contract Period', type: 'contract-years' },
         { key: 'accreditation', label: 'Accreditation', type: 'text' },
         { key: 'accreditation_time', label: 'Accreditation Time', type: 'text' },
       ],
     },
     {
       name: 'Team contacts',
+      icon: 'users',
       fields: [
-        { key: 'assignee_to', label: 'Assignee To', type: 'text' },
         { key: 'coordinator_name', label: 'Coordinator Name', type: 'text' },
         { key: 'coordinator_phone', label: 'Coordinator Phone', type: 'tel' },
         { key: 'accountant_name', label: 'Accountant Name', type: 'text' },
@@ -43,20 +58,29 @@ document.addEventListener('DOMContentLoaded', () => {
       ],
     },
     {
+      name: 'Instructor',
+      icon: 'user-check',
+      fields: [
+        { key: 'number_of_instructor', label: 'Number of Instructors', type: 'number' },
+      ],
+    },
+    {
       name: 'Numbers',
+      icon: 'hash',
       fields: [
         { key: 'max_students_largest_class', label: 'Max Students Largest Class', type: 'number' },
         { key: 'max_students_per_group', label: 'Max Students Per Group', type: 'number' },
         { key: 'number_of_class', label: 'Number of Classes', type: 'number' },
-        { key: 'number_of_instructor', label: 'Number of Instructors', type: 'number' },
         { key: 'total_student_population', label: 'Total Student Population', type: 'number' },
       ],
     },
     {
       name: 'Grades',
+      icon: 'check-square',
       fields: Array.from({ length: 12 }, (_, index) => ({
         key: `g${index + 1}`,
-        label: `G${index + 1}`,
+        label: `Grade ${index + 1}`,
+        shortLabel: `G${index + 1}`,
         type: 'checkbox',
       })),
     },
@@ -98,14 +122,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const buildCaption = (school) => {
     const governorate = school.governorate?.name || '';
-    const program = school.programType || '';
+    const solution = school.programType || school.solutionType || '';
     const educationSystems = Array.isArray(school.educationSystem)
       ? school.educationSystem.filter(Boolean)
       : [];
 
     const parts = [governorate];
-    if (program) {
-      parts.push(program);
+    if (solution) {
+      parts.push(solution);
     } else if (educationSystems.length) {
       parts.push(educationSystems.slice(0, 2).join(' · '));
     }
@@ -115,18 +139,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const buildChips = (school) => {
     const governorate = school.governorate?.name || '';
-    const program = school.programType || '';
+    const solution = school.programType || school.solutionType || '';
     const educationSystems = Array.isArray(school.educationSystem)
       ? school.educationSystem.filter(Boolean)
       : [];
 
-    const rawTokens = [governorate, program, ...educationSystems]
+    const rawTokens = [governorate, solution, ...educationSystems]
       .map(abbreviation)
       .filter(Boolean);
 
     const uniqueTokens = [...new Set(rawTokens)].slice(0, 3);
     return uniqueTokens.length ? uniqueTokens : ['B2'];
   };
+
+  function closeActionMenus() {
+    document.querySelectorAll('.school-folder-card.is-actions-open').forEach((node) => {
+      node.classList.remove('is-actions-open');
+      const btn = node.querySelector('[data-school-actions-toggle]');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
 
   const render = (rows) => {
     if (!grid) return;
@@ -164,18 +196,52 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="school-folder__name" title="${escapeHtml(schoolName)}">${escapeHtml(schoolName)}</div>
             <div class="school-folder__caption">${escapeHtml(caption)}</div>
           </a>
-          <button class="school-folder__edit" type="button" data-edit-school="${escapeHtml(school.id)}" aria-label="Edit ${escapeHtml(schoolName)}">
-            <i data-feather="edit-3"></i>
-            <span>Edit</span>
-          </button>
+          <div class="school-folder-actions">
+            <button class="school-folder__menu-btn" type="button" data-school-actions-toggle aria-label="School actions" aria-expanded="false">
+              <i data-feather="more-horizontal"></i>
+            </button>
+            <div class="school-folder__actions-menu" data-school-actions-menu>
+              <button type="button" data-edit-school="${escapeHtml(school.id)}">
+                <i data-feather="edit-3"></i>
+                <span>Edit</span>
+              </button>
+              <button type="button" class="is-danger" data-delete-school="${escapeHtml(school.id)}">
+                <i data-feather="trash-2"></i>
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
         `;
+
+        const menuToggle = card.querySelector('[data-school-actions-toggle]');
+        if (menuToggle) {
+          menuToggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const willOpen = !card.classList.contains('is-actions-open');
+            closeActionMenus();
+            card.classList.toggle('is-actions-open', willOpen);
+            menuToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+          });
+        }
 
         const editBtn = card.querySelector('[data-edit-school]');
         if (editBtn) {
           editBtn.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
+            closeActionMenus();
             openEditModal(school.id, schoolName);
+          });
+        }
+
+        const deleteBtn = card.querySelector('[data-delete-school]');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            closeActionMenus();
+            deleteSchool(school.id, schoolName);
           });
         }
 
@@ -189,6 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.school-folder-actions')) closeActionMenus();
+  });
+
   const applyFilter = () => {
     const query = norm(searchInput ? searchInput.value : '');
     if (!query) {
@@ -200,8 +270,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const name = norm(school.name);
       const governorate = norm(school.governorate?.name);
       const educationSystem = norm(Array.isArray(school.educationSystem) ? school.educationSystem.join(' ') : '');
-      const program = norm(school.programType);
-      return name.includes(query) || governorate.includes(query) || educationSystem.includes(query) || program.includes(query);
+      const solution = norm(school.programType || school.solutionType);
+      return name.includes(query) || governorate.includes(query) || educationSystem.includes(query) || solution.includes(query);
     });
 
     render(filtered);
@@ -222,23 +292,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const response = await fetch('/api/b2b/schools', { credentials: 'include' });
-      if (response.status === 401 || response.redirected) {
+      if (response.status === 401) {
         window.location.href = '/login';
         return;
       }
-
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.error || 'Failed to load schools');
+        throw new Error(errorPayload.error || 'Failed to load B2B schools');
       }
-
       const data = await response.json();
       allSchools = Array.isArray(data) ? data : [];
       applyFilter();
     } catch (error) {
       console.error(error);
       if (grid) {
-        grid.innerHTML = `<div class="error-block">Error: ${escapeHtml(error.message)}</div>`;
+        grid.innerHTML = `
+          <div class="error-block">
+            <strong>Could not load B2B schools.</strong><br>
+            <span>${escapeHtml(error.message || 'Please try again later.')}</span>
+          </div>
+        `;
       }
     }
   };
@@ -296,52 +369,146 @@ document.addEventListener('DOMContentLoaded', () => {
     return iso || '';
   };
 
+  const selectOptionsHtml = (field, currentValue = '') => {
+    const value = String(currentValue ?? '').trim();
+    const options = Array.isArray(field.options) ? field.options.map(String) : [];
+    const allOptions = value && !options.some((option) => norm(option) === norm(value))
+      ? [value, ...options]
+      : options;
+
+    return [
+      `<option value="">Select ${escapeHtml(field.label)}</option>`,
+      ...allOptions.map((option) => `<option value="${escapeHtml(option)}" ${norm(option) === norm(value) ? 'selected' : ''}>${escapeHtml(option)}</option>`),
+    ].join('');
+  };
+
+  const parseContractYears = (value = '') => {
+    const years = String(value || '').match(/\b(19|20)\d{2}\b/g) || [];
+    return { from: years[0] || '', to: years[1] || '' };
+  };
+
+  const contractYearsOptions = (selected = '') => {
+    const clean = String(selected || '').trim();
+    const list = clean && !yearsRange.includes(clean) ? [clean, ...yearsRange] : yearsRange;
+    return [
+      '<option value="">Year</option>',
+      ...list.map((year) => `<option value="${escapeHtml(year)}" ${year === clean ? 'selected' : ''}>${escapeHtml(year)}</option>`),
+    ].join('');
+  };
+
+  const renderField = (field, values = {}) => {
+    const value = field.type === 'date' ? normalizeDateValue(values[field.key]) : String(values[field.key] ?? '');
+
+    if (field.type === 'select') {
+      return `
+        <div class="b2b-school-field">
+          <label for="b2b_${escapeHtml(field.key)}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
+          <select id="b2b_${escapeHtml(field.key)}" name="${escapeHtml(field.key)}" ${field.required ? 'required' : ''}>
+            ${selectOptionsHtml(field, value)}
+          </select>
+        </div>
+      `;
+    }
+
+    if (field.type === 'contract-years') {
+      const parsed = parseContractYears(value);
+      return `
+        <div class="b2b-school-field b2b-school-field--wide">
+          <label>${escapeHtml(field.label)}</label>
+          <div class="b2b-contract-years" data-contract-period-field>
+            <select data-contract-period-from aria-label="Contract period start year">${contractYearsOptions(parsed.from)}</select>
+            <span>to</span>
+            <select data-contract-period-to aria-label="Contract period end year">${contractYearsOptions(parsed.to)}</select>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="b2b-school-field">
+        <label for="b2b_${escapeHtml(field.key)}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
+        <input
+          id="b2b_${escapeHtml(field.key)}"
+          name="${escapeHtml(field.key)}"
+          type="${escapeHtml(field.type || 'text')}"
+          value="${escapeHtml(value)}"
+          ${field.required ? 'required' : ''}
+          ${field.type === 'number' ? 'step="any"' : ''}
+          placeholder="${escapeHtml(field.placeholder || '')}"
+        />
+      </div>
+    `;
+  };
+
+  function selectedGradeLabels(container) {
+    const selected = Array.from(container.querySelectorAll('.b2b-grades-menu input[type="checkbox"]:checked'))
+      .map((input) => input.getAttribute('data-grade-label') || input.value || '')
+      .filter(Boolean);
+    return selected.length ? selected.join(', ') : 'Select grades';
+  }
+
+  function bindGradesDropdown(container) {
+    const wrap = container.querySelector('[data-b2b-grades-dropdown]');
+    if (!wrap) return;
+    const toggle = wrap.querySelector('[data-b2b-grades-toggle]');
+    const panel = wrap.querySelector('[data-b2b-grades-panel]');
+    const summary = wrap.querySelector('[data-b2b-grades-summary]');
+    const updateSummary = () => {
+      if (summary) summary.textContent = selectedGradeLabels(wrap);
+    };
+    updateSummary();
+    if (toggle && panel) {
+      toggle.addEventListener('click', (event) => {
+        event.preventDefault();
+        const isOpen = wrap.classList.toggle('is-open');
+        panel.hidden = !isOpen;
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+    }
+    wrap.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      input.addEventListener('change', updateSummary);
+    });
+  }
+
+  function renderGradesSection(group, values = {}) {
+    return `
+      <section class="b2b-school-form-section">
+        <h3 class="b2b-school-form-section__title"><i data-feather="${escapeHtml(group.icon || 'check-square')}"></i>${escapeHtml(group.name)}</h3>
+        <div class="b2b-grades-dropdown" data-b2b-grades-dropdown>
+          <button class="b2b-grades-dropdown__toggle" type="button" data-b2b-grades-toggle aria-expanded="false">
+            <span data-b2b-grades-summary>Select grades</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+          <div class="b2b-grades-menu" data-b2b-grades-panel hidden>
+            ${group.fields.map((field) => `
+              <label class="b2b-grade-check">
+                <input type="checkbox" name="${escapeHtml(field.key)}" value="${escapeHtml(field.shortLabel || field.label)}" data-grade-label="${escapeHtml(field.shortLabel || field.label)}" ${values[field.key] ? 'checked' : ''} />
+                <span>${escapeHtml(field.label)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   function renderModalFields(values = {}) {
     const ui = ensureModal();
     const sections = FIELD_GROUPS.map((group) => {
-      if (group.name === 'Grades') {
-        return `
-          <section class="b2b-school-form-section">
-            <h3 class="b2b-school-form-section__title"><i data-feather="check-square"></i>${escapeHtml(group.name)}</h3>
-            <div class="b2b-school-grades">
-              ${group.fields.map((field) => `
-                <label class="b2b-grade-check">
-                  <input type="checkbox" name="${escapeHtml(field.key)}" ${values[field.key] ? 'checked' : ''} />
-                  <span>${escapeHtml(field.label)}</span>
-                </label>
-              `).join('')}
-            </div>
-          </section>
-        `;
-      }
+      if (group.name === 'Grades') return renderGradesSection(group, values);
 
       return `
         <section class="b2b-school-form-section">
-          <h3 class="b2b-school-form-section__title"><i data-feather="database"></i>${escapeHtml(group.name)}</h3>
+          <h3 class="b2b-school-form-section__title"><i data-feather="${escapeHtml(group.icon || 'database')}"></i>${escapeHtml(group.name)}</h3>
           <div class="b2b-school-form-grid">
-            ${group.fields.map((field) => {
-              const value = field.type === 'date' ? normalizeDateValue(values[field.key]) : String(values[field.key] ?? '');
-              return `
-                <div class="b2b-school-field">
-                  <label for="b2b_${escapeHtml(field.key)}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
-                  <input
-                    id="b2b_${escapeHtml(field.key)}"
-                    name="${escapeHtml(field.key)}"
-                    type="${escapeHtml(field.type || 'text')}"
-                    value="${escapeHtml(value)}"
-                    ${field.required ? 'required' : ''}
-                    ${field.type === 'number' ? 'step="any"' : ''}
-                    placeholder="${escapeHtml(field.placeholder || '')}"
-                  />
-                </div>
-              `;
-            }).join('')}
+            ${group.fields.map((field) => renderField(field, values)).join('')}
           </div>
         </section>
       `;
     }).join('');
 
     ui.body.innerHTML = sections;
+    bindGradesDropdown(ui.body);
     if (window.feather) feather.replace();
   }
 
@@ -388,6 +555,22 @@ document.addEventListener('DOMContentLoaded', () => {
     openModal({ mode: 'add', values: {} });
   };
 
+  function normalizeSchoolFieldsForUi(data = {}, fallbackName = '') {
+    const fields = data?.fields && typeof data.fields === 'object' ? { ...data.fields } : {};
+    fields.school_name = fields.school_name || data?.name || fallbackName || '';
+    fields.governorate = fields.governorate || data?.governorate?.name || '';
+    fields.location = fields.location || data?.location || '';
+    fields.solution_type = fields.solution_type || fields.program_type || data?.programType || data?.solutionType || '';
+    fields.education_system = fields.education_system || (Array.isArray(data?.educationSystem) ? data.educationSystem[0] || '' : '');
+    if (data?.grades && typeof data.grades === 'object') {
+      for (let i = 1; i <= 12; i += 1) {
+        const key = `g${i}`;
+        if (typeof fields[key] === 'undefined') fields[key] = !!data.grades[i];
+      }
+    }
+    return fields;
+  }
+
   async function openEditModal(id, schoolName = '') {
     const cleanId = String(id || '').trim();
     if (!cleanId) return;
@@ -406,16 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
       activeEditId = cleanId;
       activeEditName = data?.name || schoolName;
-      const values = data?.fields && typeof data.fields === 'object'
-        ? data.fields
-        : {
-            school_name: data?.name || schoolName,
-            governorate: data?.governorate?.name || '',
-            location: data?.location || '',
-            program_type: data?.programType || '',
-            education_system: Array.isArray(data?.educationSystem) ? data.educationSystem.join(', ') : '',
-            ...(data?.grades || {}),
-          };
+      const values = normalizeSchoolFieldsForUi(data, schoolName);
       ui.title.textContent = 'Edit school';
       ui.subtitle.textContent = `Update ${data?.name || schoolName || 'this school'} data directly in Supabase.`;
       renderModalFields(values);
@@ -429,9 +603,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function getContractPeriodValue(form) {
+    const from = String(form.querySelector('[data-contract-period-from]')?.value || '').trim();
+    const to = String(form.querySelector('[data-contract-period-to]')?.value || '').trim();
+    if (from && to) return `${from} - ${to}`;
+    return from || to || '';
+  }
+
   function getFormValues(form) {
     const values = {};
     ALL_FIELDS.forEach((field) => {
+      if (field.type === 'contract-years') {
+        values[field.key] = getContractPeriodValue(form);
+        return;
+      }
       const el = form.querySelector(`[name="${CSS.escape(field.key)}"]`);
       if (!el) return;
       if (field.type === 'checkbox') {
@@ -478,6 +663,28 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       ui.submit.disabled = false;
       ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
+    }
+  }
+
+  async function deleteSchool(id, schoolName = '') {
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return;
+    const label = schoolName || 'this school';
+    if (!window.confirm(`Delete ${label}? This action cannot be undone.`)) return;
+
+    try {
+      const response = await fetch(`/api/b2b/schools/${encodeURIComponent(cleanId)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || 'Failed to delete school');
+      }
+      await fetchSchools();
+    } catch (error) {
+      console.error(error);
+      window.alert(error.message || 'Failed to delete school.');
     }
   }
 

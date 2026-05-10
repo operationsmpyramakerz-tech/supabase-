@@ -9403,9 +9403,8 @@ async function _sbB2BSchoolsRows() {
 
 const B2B_SCHOOL_FIELD_DEFS = [
   { key: 'school_name', label: 'School Name', type: 'text', required: true, section: 'Main' },
-  { key: 'status', label: 'Status', type: 'text', section: 'Main' },
   { key: 'contract_status', label: 'Contract Status', type: 'text', section: 'Main' },
-  { key: 'program_type', label: 'Program Type', type: 'text', section: 'Main' },
+  { key: 'solution_type', label: 'Solution Type', type: 'text', section: 'Main' },
   { key: 'theme_type', label: 'Theme Type', type: 'text', section: 'Main' },
   { key: 'education_system', label: 'Education System', type: 'text', section: 'Main' },
   { key: 'governorate', label: 'Governorate', type: 'text', section: 'Location' },
@@ -9415,15 +9414,14 @@ const B2B_SCHOOL_FIELD_DEFS = [
   { key: 'contract_period', label: 'Contract Period', type: 'text', section: 'Contract' },
   { key: 'accreditation', label: 'Accreditation', type: 'text', section: 'Contract' },
   { key: 'accreditation_time', label: 'Accreditation Time', type: 'text', section: 'Contract' },
-  { key: 'assignee_to', label: 'Assignee To', type: 'text', section: 'Team' },
   { key: 'coordinator_name', label: 'Coordinator Name', type: 'text', section: 'Team' },
   { key: 'coordinator_phone', label: 'Coordinator Phone', type: 'tel', section: 'Team' },
   { key: 'accountant_name', label: 'Accountant Name', type: 'text', section: 'Team' },
   { key: 'accountant_phone_number', label: 'Accountant Phone Number', type: 'tel', section: 'Team' },
+  { key: 'number_of_instructor', label: 'Number of Instructors', type: 'number', section: 'Instructor' },
   { key: 'max_students_largest_class', label: 'Max Students Largest Class', type: 'number', section: 'Numbers' },
   { key: 'max_students_per_group', label: 'Max Students Per Group', type: 'number', section: 'Numbers' },
   { key: 'number_of_class', label: 'Number of Classes', type: 'number', section: 'Numbers' },
-  { key: 'number_of_instructor', label: 'Number of Instructors', type: 'number', section: 'Numbers' },
   { key: 'total_student_population', label: 'Total Student Population', type: 'number', section: 'Numbers' },
   { key: 'g1', label: 'G1', type: 'checkbox', section: 'Grades' },
   { key: 'g2', label: 'G2', type: 'checkbox', section: 'Grades' },
@@ -9451,6 +9449,8 @@ function _sbB2BPublicFieldValues(row = {}) {
     } else if (B2B_SCHOOL_NUMBER_FIELDS.has(key)) {
       const raw = _sbGet(row, [key]);
       out[key] = raw === null || typeof raw === 'undefined' || raw === '' ? '' : Number(raw);
+    } else if (key === 'solution_type') {
+      out[key] = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program Type', 'Program type']));
     } else {
       out[key] = _sbString(_sbGet(row, [key]));
     }
@@ -9485,6 +9485,12 @@ function _sbBuildB2BSchoolWriteRow(payload = {}) {
 
     const text = String(raw ?? '').trim();
     row[field.key] = text || null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(row, 'solution_type')) {
+    // Temporary compatibility while the Supabase column is being renamed from program_type to solution_type.
+    // The missing-column fallback will keep whichever column exists in the deployed schema.
+    row.program_type = row.solution_type || null;
   }
 
   const schoolName = String(row.school_name || '').trim();
@@ -9528,7 +9534,7 @@ function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
     'Untitled';
   const governorateName = _sbString(_sbGet(row, ['governorate', 'Governorate', 'governorates']));
   const educationSystem = _sbSplitValues(_sbGet(row, ['education_system', 'Education System', 'Education system', 'education']));
-  const programType = _sbString(_sbGet(row, ['program_type', 'Program type', 'Program Type', 'program']));
+  const programType = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program type', 'Program Type', 'program']));
   const location = _sbExtractUrl(_sbGet(row, ['location', 'Location', 'google_maps', 'Google Maps'])) || _sbString(_sbGet(row, ['location', 'Location']));
   const grades = {};
   for (let i = 1; i <= 12; i++) {
@@ -10808,6 +10814,34 @@ app.patch(
     } catch (e) {
       console.error("Error updating B2B school:", e?.details || e);
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to update B2B school." });
+    }
+  },
+);
+
+app.delete(
+  "/api/b2b/schools/:id",
+  requireAuth,
+  requirePage("B2B"),
+  async (req, res) => {
+    if (!_sbB2BSchoolsEnabled()) {
+      return res.status(400).json({ error: "Deleting B2B schools is available only after Supabase migration is configured." });
+    }
+
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ error: "Missing school id." });
+
+    res.set("Cache-Control", "no-store");
+
+    try {
+      const existing = await _sbFindB2BSchoolById(id);
+      if (!existing) return res.status(404).json({ error: "School not found." });
+
+      const deleted = await supabaseDb.deleteById(_sbB2BSchoolsTable(), id);
+      await _sbClearB2BCaches(id);
+      return res.json({ ok: true, deletedId: id, school: _sbSerializeB2BSchoolRow(deleted || existing, { detail: true }) });
+    } catch (e) {
+      console.error("Error deleting B2B school:", e?.details || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to delete B2B school." });
     }
   },
 );
