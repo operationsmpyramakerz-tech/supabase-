@@ -15,7 +15,7 @@
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
   <link href="/css/products.css?v=proposals-page-v1" rel="stylesheet" />
-  <link href="/css/proposals.css?v=proposals-mobile-final-v1" rel="stylesheet" />
+  <link href="/css/proposals.css?v=proposals-permissions-order-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page proposals-page">
@@ -173,7 +173,37 @@
     </form>
   </div>
 
+  <div class="products-modal-overlay" id="makeOrderModal" aria-hidden="true" hidden>
+    <form class="products-modal products-proposal-modal proposal-make-order-modal" id="makeOrderForm" role="dialog" aria-modal="true" aria-labelledby="makeOrderModalTitle">
+      <button type="button" class="products-modal__close" id="makeOrderClose" aria-label="Close make order form"><span aria-hidden="true">×</span></button>
+      <div class="products-modal__header">
+        <div class="products-modal__icon"><i data-feather="shopping-bag"></i></div>
+        <div>
+          <h2 id="makeOrderModalTitle">Make order</h2>
+          <p>Select the team member who will receive this full proposal order.</p>
+        </div>
+      </div>
+      <div class="products-form-grid">
+        <label class="products-field products-field--wide">
+          <span>Team Member <em>*</em></span>
+          <select id="makeOrderMember" required>
+            <option value="">Select team member</option>
+          </select>
+        </label>
+        <label class="products-field products-field--wide">
+          <span>Password <em>*</em></span>
+          <input id="makeOrderPassword" type="password" autocomplete="current-password" required placeholder="Enter selected user password" />
+        </label>
+      </div>
+      <div class="products-form-error" id="makeOrderError" aria-live="polite"></div>
+      <div class="products-modal__actions">
+        <button type="button" class="products-btn products-btn--light" id="makeOrderCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark"><i data-feather="shopping-bag"></i><span>Create Order</span></button>
+      </div>
+    </form>
+  </div>
+
   <script src="/js/common-ui.js"></script>
-  <script src="/js/proposals.js?v=proposals-mobile-final-v1"></script>
+  <script src="/js/proposals.js?v=proposals-permissions-order-v1"></script>
 </body>
 </html>
