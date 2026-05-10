@@ -265,7 +265,7 @@
           <td class="proposal-link-cell">${linkHTML}</td>
           <td>
             <div class="proposal-row-actions">
-              <button type="button" class="proposal-row-delete" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
+              <button type="button" class="proposal-row-delete proposal-row-delete--icon" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}" aria-label="Delete ${escapeHTML(name)}" title="Delete"><i data-feather="trash-2"></i></button>
             </div>
           </td>
         </tr>
