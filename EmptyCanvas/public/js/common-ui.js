@@ -236,6 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
     { name: 'order-types', test: (url) => url.pathname === '/api/order-types', ttlMs: 20 * 60 * 1000 },
     { name: 'components', test: (url) => url.pathname === '/api/components', ttlMs: 20 * 60 * 1000 },
     { name: 'products', test: (url) => url.pathname === '/api/products', ttlMs: 2 * 60 * 1000 },
+    { name: 'product-proposals', test: (url) => url.pathname === '/api/products/proposals', ttlMs: 2 * 60 * 1000 },
+    { name: 'product-kits', test: (url) => url.pathname === '/api/products/kits', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-current', test: (url) => url.pathname === '/api/orders', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-requested', test: (url) => url.pathname === '/api/orders/requested', ttlMs: 2 * 60 * 1000 },
     { name: 'tasks-users', test: (url) => url.pathname === '/api/tasks/users', ttlMs: 10 * 60 * 1000 },
@@ -294,6 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (hasAllowedPage(allowedPages, ['Products', 'Product', 'Components', '/products'])) {
       urls.push('/api/products');
+    }
+    if (hasAllowedPage(allowedPages, ['Proposals', 'Kits', '/proposals', 'Products', '/products'])) {
+      urls.push('/api/products/proposals', '/api/products/kits');
     }
     if (hasAllowedPage(allowedPages, ['Expenses', '/expenses'])) {
       urls.push('/api/expenses', '/api/expenses/types', '/api/expenses/cash-in-from/options');
@@ -1136,6 +1141,9 @@ if (document.querySelector('.sidebar')) {
     'products': 'a[href="/products"]',
     'product': 'a[href="/products"]',
     'components': 'a[href="/products"]',
+    'proposals': 'a[href="/proposals"]',
+    'kits': 'a[href="/proposals"]',
+    'saved quotations': 'a[href="/proposals"]',
     'tasks': 'a[href="/tasks"]',
 
     'requested orders': 'a[href="/orders/requested"]',
@@ -1241,6 +1249,14 @@ if (document.querySelector('.sidebar')) {
     try {
       const home = document.querySelector('a[href="/home"]');
       if (home) showEl(home.closest('li') || home);
+    } catch {}
+
+    // Proposals is a standalone workspace, but existing product users should see it too.
+    try {
+      const proposals = document.querySelector('a[href="/proposals"]');
+      if (proposals && (allowedSet.has('products') || allowedSet.has('/products') || allowedSet.has('proposals') || allowedSet.has('/proposals'))) {
+        showEl(proposals.closest('li') || proposals);
+      }
     } catch {}
 
     // User Access & Data must be visible from the sidebar on every authenticated page.
@@ -1629,6 +1645,7 @@ if (document.querySelector('.sidebar')) {
     // Home should appear for everyone (not tied to permissions)
   ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
   ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
+  ensureLink({ href: '/proposals', label: 'Proposals', icon: 'file-text', beforeHref: '/orders/sv-orders' });
   ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
   ensureLink({ href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' });
@@ -3687,6 +3704,7 @@ function deriveOpsShellTitle(path) {
     ['/orders', 'Current Orders'],
     ['/stocktaking', 'Stocktaking'],
     ['/products', 'Products'],
+    ['/proposals', 'Proposals'],
     ['/expenses/users', 'Expenses Users'],
     ['/expenses', 'Expenses'],
     ['/b2b', 'B2B'],

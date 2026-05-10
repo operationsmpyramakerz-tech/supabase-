@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proposals | Operations Hub</title>
+  <link href="/css/style.css" rel="stylesheet" />
+  <link href="/css/ui-redesign.css" rel="stylesheet" />
+  <link href="/css/products.css?v=proposals-page-v1" rel="stylesheet" />
+  <link href="/css/proposals.css?v=proposals-page-v1" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading products-page proposals-page">
+  <script>
+    (function() {
+      try {
+        if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+          document.body.classList.add('sidebar-mini');
+        }
+      } catch(e) {}
+    })();
+  </script>
+
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Dashboard</h2>
+        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+          <i data-feather="chevrons-left"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <ul class="nav-list">
+          <li><a class="nav-link" href="/home"><i data-feather="home"></i><span class="nav-label">Home</span></a></li>
+          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+          <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
+          <li><a class="nav-link active" href="/proposals"><i data-feather="file-text"></i><span class="nav-label">Proposals</span></a></li>
+          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+          <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+          <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+          <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">User Access & Data</span></a></li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header">
+        <div class="header-row1">
+          <div class="left">
+            <div aria-live="polite" class="greeting-pill">
+              <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
+              <div class="greet-text">
+                <div class="greet-title">Hi, <span data-username>...</span> 👋</div>
+                <div class="greet-sub">Build reusable quotation lists and saved kits</div>
+              </div>
+            </div>
+          </div>
+          <div class="right topbar-right">
+            <a aria-label="My account" class="account-mini" href="/account" title="My account">
+              <span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span>
+              <span class="label">My account</span>
+            </a>
+          </div>
+        </div>
+        <div class="header-row2">
+          <h1 class="page-title">Proposals</h1>
+        </div>
+      </header>
+
+      <main class="products-shell proposals-shell">
+        <section class="products-proposals-view proposals-workspace" aria-live="polite">
+          <header class="products-proposals-head proposals-main-head">
+            <div>
+              <span class="products-proposals-kicker">Quotation workspace</span>
+              <h2>Proposals</h2>
+              <p>Save component lists once, then reuse ready kits while preparing quotations.</p>
+            </div>
+            <div class="proposals-tabs" role="tablist" aria-label="Proposal sections">
+              <button type="button" class="proposals-tab is-active" id="proposalsTabBtn" data-tab="proposals" role="tab" aria-selected="true">
+                <i data-feather="file-text"></i><span>Proposals</span>
+              </button>
+              <button type="button" class="proposals-tab" id="kitsTabBtn" data-tab="kits" role="tab" aria-selected="false">
+                <i data-feather="box"></i><span>Kits</span>
+              </button>
+            </div>
+          </header>
+
+          <section class="proposals-panel" id="proposalsPanel" role="tabpanel">
+            <div class="proposals-section-toolbar">
+              <div>
+                <h3>Saved proposals</h3>
+                <p>Create reusable component lists for quotation preparation.</p>
+              </div>
+              <button type="button" class="products-add-btn" id="createProposalBtn">
+                <i data-feather="folder-plus"></i><span>Create New Proposal</span>
+              </button>
+            </div>
+            <div class="products-proposals-list" id="proposalsList"></div>
+            <section class="products-proposal-detail" id="proposalDetail" hidden></section>
+          </section>
+
+          <section class="proposals-panel" id="kitsPanel" role="tabpanel" hidden>
+            <div class="proposals-section-toolbar">
+              <div>
+                <h3>Saved kits</h3>
+                <p>Create one kit once, then add it to any proposal with one click.</p>
+              </div>
+              <button type="button" class="products-add-btn" id="createKitBtn">
+                <i data-feather="folder-plus"></i><span>Create New Kit</span>
+              </button>
+            </div>
+            <div class="products-proposals-list" id="kitsList"></div>
+            <section class="products-proposal-detail" id="kitDetail" hidden></section>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="products-modal-overlay" id="proposalNameModal" aria-hidden="true" hidden>
+    <form class="products-modal products-proposal-modal" id="proposalNameForm" role="dialog" aria-modal="true" aria-labelledby="proposalNameModalTitle">
+      <button type="button" class="products-modal__close" id="proposalNameClose" aria-label="Close proposal form"><span aria-hidden="true">×</span></button>
+      <div class="products-modal__header">
+        <div class="products-modal__icon"><i data-feather="folder-plus"></i></div>
+        <div>
+          <h2 id="proposalNameModalTitle">Create New Proposal</h2>
+          <p>Name the proposal folder so you can return to it later.</p>
+        </div>
+      </div>
+      <div class="products-form-grid">
+        <label class="products-field products-field--wide">
+          <span>Proposal Name <em>*</em></span>
+          <input id="proposalNameInput" type="text" autocomplete="off" required placeholder="Example: School supplies quotation" />
+        </label>
+      </div>
+      <div class="products-form-error" id="proposalNameError" aria-live="polite"></div>
+      <div class="products-modal__actions">
+        <button type="button" class="products-btn products-btn--light" id="proposalNameCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark" id="proposalNameSave"><i data-feather="save"></i><span>Create Proposal</span></button>
+      </div>
+    </form>
+  </div>
+
+  <div class="products-modal-overlay" id="kitNameModal" aria-hidden="true" hidden>
+    <form class="products-modal products-proposal-modal" id="kitNameForm" role="dialog" aria-modal="true" aria-labelledby="kitNameModalTitle">
+      <button type="button" class="products-modal__close" id="kitNameClose" aria-label="Close kit form"><span aria-hidden="true">×</span></button>
+      <div class="products-modal__header">
+        <div class="products-modal__icon"><i data-feather="box"></i></div>
+        <div>
+          <h2 id="kitNameModalTitle">Create New Kit</h2>
+          <p>Name the kit, then add its reusable components and quantities.</p>
+        </div>
+      </div>
+      <div class="products-form-grid">
+        <label class="products-field products-field--wide">
+          <span>Kit Name <em>*</em></span>
+          <input id="kitNameInput" type="text" autocomplete="off" required placeholder="Example: Arduino starter kit" />
+        </label>
+      </div>
+      <div class="products-form-error" id="kitNameError" aria-live="polite"></div>
+      <div class="products-modal__actions">
+        <button type="button" class="products-btn products-btn--light" id="kitNameCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark" id="kitNameSave"><i data-feather="save"></i><span>Create Kit</span></button>
+      </div>
+    </form>
+  </div>
+
+  <script src="/js/common-ui.js"></script>
+  <script src="/js/proposals.js?v=proposals-page-v1"></script>
+</body>
+</html>

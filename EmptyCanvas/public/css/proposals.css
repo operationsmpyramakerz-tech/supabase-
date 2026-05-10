@@ -1,0 +1,105 @@
+/* Dedicated Proposals page refinements */
+.proposals-shell{
+  max-width:1180px;
+  margin:0 auto;
+}
+.proposals-workspace{
+  margin-top:0;
+  min-height:calc(100vh - 190px);
+}
+.proposals-main-head{
+  align-items:flex-start;
+}
+.proposals-tabs{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:7px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:20px;
+  background:#fff;
+  box-shadow:0 14px 30px rgba(15,23,42,.06);
+  flex:0 0 auto;
+}
+.proposals-tab{
+  border:0;
+  min-height:44px;
+  padding:0 16px;
+  border-radius:15px;
+  background:transparent;
+  color:#475467;
+  font-weight:950;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  transition:background .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.proposals-tab:hover{
+  color:#0f172a;
+  background:#f8fafc;
+}
+.proposals-tab.is-active{
+  background:#0b1220;
+  color:#fff;
+  box-shadow:0 15px 28px rgba(15,23,42,.18);
+}
+.proposals-tab svg{ width:17px; height:17px; }
+.proposals-panel{
+  padding-top:18px;
+}
+.proposals-section-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:0 0 18px;
+  border-bottom:1px solid rgba(15,23,42,.08);
+}
+.proposals-section-toolbar h3{
+  margin:0;
+  color:#0f172a;
+  font-size:1.45rem;
+  font-weight:950;
+  letter-spacing:-.04em;
+}
+.proposals-section-toolbar p{
+  margin:6px 0 0;
+  color:#667085;
+  font-weight:750;
+}
+.proposals-two-tools{
+  grid-template-columns:1fr 1fr;
+}
+.proposals-one-tool{
+  grid-template-columns:minmax(0, 1fr);
+}
+.proposals-kit-grid{
+  grid-template-columns:minmax(0, 1fr) auto;
+}
+.proposals-page .products-proposal-folder__icon small{
+  width:30px;
+  height:30px;
+  font-size:.7rem;
+}
+.proposals-page .products-proposals-list{
+  min-height:210px;
+}
+@media (max-width: 900px){
+  .proposals-main-head,
+  .proposals-section-toolbar{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .proposals-tabs{
+    width:100%;
+  }
+  .proposals-tab{
+    flex:1 1 0;
+  }
+  .proposals-two-tools,
+  .proposals-kit-grid{
+    grid-template-columns:1fr;
+  }
+}
