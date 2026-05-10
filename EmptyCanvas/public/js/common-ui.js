@@ -1145,6 +1145,10 @@ if (document.querySelector('.sidebar')) {
     'kits': 'a[href="/proposals"]',
     'saved quotations': 'a[href="/proposals"]',
     'tasks': 'a[href="/tasks"]',
+    'messages': 'a[href="/messages"]',
+    'emails': 'a[href="/messages"]',
+    'email': 'a[href="/messages"]',
+    'mail': 'a[href="/messages"]',
 
     'requested orders': 'a[href="/orders/requested"]',
     'schools requested orders': 'a[href="/orders/requested"]',
@@ -1257,6 +1261,12 @@ if (document.querySelector('.sidebar')) {
       if (proposals && (allowedSet.has('products') || allowedSet.has('/products') || allowedSet.has('proposals') || allowedSet.has('/proposals'))) {
         showEl(proposals.closest('li') || proposals);
       }
+    } catch {}
+
+    // Emails is an authenticated internal inbox; each thread is still filtered by backend permissions.
+    try {
+      const emails = document.querySelector('a[href="/messages"]');
+      if (emails) showEl(emails.closest('li') || emails);
     } catch {}
 
     // User Access & Data must be visible from the sidebar on every authenticated page.
@@ -1380,6 +1390,16 @@ if (document.querySelector('.sidebar')) {
 
   // Rename sidebar labels (display-only) without changing routes
   function renameSidebarLabels(){
+    // Emails (was Messages)
+    document
+      .querySelectorAll('a.nav-item[href="/messages"], a.nav-link[href="/messages"]')
+      .forEach((a) => {
+        const lbl = a.querySelector('.nav-label');
+        if (lbl) lbl.textContent = 'Emails';
+        const icon = a.querySelector('i[data-feather]');
+        if (icon) icon.setAttribute('data-feather', 'mail');
+      });
+
     // Operations Orders (was: Operations Requested Orders)
     document
       .querySelectorAll('a.nav-item[href^="/orders/requested"], a.nav-link[href^="/orders/requested"]')
@@ -1646,6 +1666,7 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
   ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
   ensureLink({ href: '/proposals', label: 'Proposals', icon: 'file-text', beforeHref: '/orders/sv-orders' });
+  ensureLink({ href: '/messages', label: 'Emails', icon: 'mail', beforeHref: '/proposals' });
   ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
   ensureLink({ href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' });
@@ -2527,7 +2548,7 @@ function initFloatingSearchWidget() {
 // --------------------------------------------
 
 // --------------------------------------------
-// Messages shortcut (icon next to notifications)
+// Emails shortcut (icon next to notifications)
 // --------------------------------------------
 function initMessagesShortcutWidget() {
   if (document.getElementById('messagesShortcutBtn')) return;
@@ -2545,9 +2566,9 @@ function initMessagesShortcutWidget() {
   btn.id = 'messagesShortcutBtn';
   btn.className = 'header-message-btn';
   btn.href = '/messages';
-  btn.setAttribute('aria-label', 'Messages');
-  btn.setAttribute('title', 'Messages');
-  btn.innerHTML = `<i data-feather="message-circle"></i>`;
+  btn.setAttribute('aria-label', 'Emails');
+  btn.setAttribute('title', 'Emails');
+  btn.innerHTML = `<i data-feather="mail"></i>`;
 
   const searchBtn = mount.querySelector('#searchIconBtn, #headerSearchBtn, .search-icon-btn');
   const notifWrap = mount.querySelector('.notif-wrap');

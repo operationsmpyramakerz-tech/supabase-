@@ -160,7 +160,7 @@
   function readStateKey() {
     const email = normalizeSearch(state.currentUser?.email);
     const name = normalizeSearch(state.currentUser?.name);
-    return `operationsHub.messages.readState.${email || name || 'anonymous'}`;
+    return `operationsHub.emails.readState.${email || name || 'anonymous'}`;
   }
 
   function loadReadState() {
@@ -786,7 +786,7 @@
         }
       }
     } catch (error) {
-      if (!silent) renderError(error.message || 'Failed to load messages.');
+      if (!silent) renderError(error.message || 'Failed to load emails.');
     } finally {
       state.loading = false;
       refreshBtn?.classList.remove('is-loading');
@@ -800,12 +800,12 @@
     if (people && !state.members.length) {
       people.innerHTML = `
         ${newButtonMarkup()}
-        <div class="msg-strip-loading">Loading users...</div>
+        <div class="msg-strip-loading">Loading recipients...</div>
       `;
       bindNewMenu();
     }
     if (list && !state.chats.length) {
-      list.innerHTML = `<div class="msg-list-loading"><span></span> Loading chats...</div>`;
+      list.innerHTML = `<div class="msg-list-loading"><span></span> Loading inbox...</div>`;
     }
   }
 
@@ -814,7 +814,7 @@
     const count = $('#msgChatsCount');
     if (count) count.textContent = '0';
     if (list) {
-      list.innerHTML = `<div class="msg-empty-list">${escapeHtml(message || 'Could not load messages.')}</div>`;
+      list.innerHTML = `<div class="msg-empty-list">${escapeHtml(message || 'Could not load emails.')}</div>`;
     }
   }
 
@@ -826,13 +826,13 @@
           <span>New</span>
         </button>
         <div class="msg-new-menu" id="msgNewMenu" ${state.newMenuOpen ? '' : 'hidden'}>
-          <button type="button" class="msg-new-choice" id="msgOpenNewChat" aria-label="New chat">
-            <span><i data-feather="message-circle"></i></span>
-            <strong>New Chat</strong>
+          <button type="button" class="msg-new-choice" id="msgOpenNewChat" aria-label="New email">
+            <span><i data-feather="mail"></i></span>
+            <strong>New Email</strong>
           </button>
-          <button type="button" class="msg-new-choice" id="msgOpenNewGroup" aria-label="New group">
+          <button type="button" class="msg-new-choice" id="msgOpenNewGroup" aria-label="New team thread">
             <span><i data-feather="users"></i></span>
-            <strong>New Group</strong>
+            <strong>Team Thread</strong>
           </button>
         </div>
       </div>
@@ -892,7 +892,7 @@
 
     el.innerHTML = `
       ${newButtonMarkup()}
-      ${rows || '<div class="msg-strip-loading">No users found</div>'}
+      ${rows || '<div class="msg-strip-loading">No recipients found</div>'}
     `;
 
     bindNewMenu();
@@ -913,11 +913,11 @@
 
     const chats = filteredChats();
     const labels = {
-      all: 'Recent chats',
-      unread: 'Unread chats',
-      groups: 'Group rooms',
-      archived: 'Archived chats',
-      closed: 'Closed chats',
+      all: 'Inbox',
+      unread: 'Unread emails',
+      groups: 'Team threads',
+      archived: 'Archived emails',
+      closed: 'Closed emails',
     };
 
     if (title) title.textContent = labels[state.activeFilter] || 'Recent chats';
@@ -926,11 +926,11 @@
 
     if (!chats.length) {
       const emptyMessages = {
-        all: 'No chats found.',
-        unread: 'No unread chats.',
-        groups: 'No group chats yet.',
-        archived: 'No archived chats.',
-        closed: 'No closed chats.',
+        all: 'No emails found.',
+        unread: 'No unread emails.',
+        groups: 'No team threads yet.',
+        archived: 'No archived emails.',
+        closed: 'No closed emails.',
       };
       el.innerHTML = `<div class="msg-empty-list">${escapeHtml(emptyMessages[state.activeFilter] || 'No chats found.')}</div>`;
       return;
@@ -952,9 +952,9 @@
           </span>
           <span class="msg-chat-main">
             <span class="msg-chat-title-wrap">
-              <span class="msg-chat-title">${escapeHtml(chat.title || 'Chat')}</span>
+              <span class="msg-chat-title">${escapeHtml(chat.title || 'Email')}</span>
             </span>
-            <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No messages yet')}</span>
+            <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No replies yet')}</span>
             ${badges ? `<span class="msg-chat-badges">${badges}</span>` : ''}
           </span>
           <span class="msg-chat-meta">${escapeHtml(chat.lastMessageTimeText || chat.lastEditedTimeText || '')}</span>
@@ -988,7 +988,7 @@
       sendPresence({ isTyping: false });
       loadPresence();
     } catch (error) {
-      if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load messages.')}</div>`;
+      if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load emails.')}</div>`;
     }
   }
 
@@ -1021,14 +1021,14 @@
     shell?.classList.add('is-chat-open');
 
     const chat = state.selectedChat || {};
-    const title = chat.title || 'Chat';
+    const title = chat.title || 'Email';
     const titleEl = $('#msgConvTitle');
     const subEl = $('#msgConvSubtitle');
     const avEl = $('#msgConvAvatar');
     const notionLink = $('#msgOpenNotion');
     const participants = String(chat.participantNames || '').trim();
     if (titleEl) titleEl.textContent = title;
-    if (subEl) subEl.textContent = participants || `${Number(chat.commentsCount || 0)} message${Number(chat.commentsCount || 0) === 1 ? '' : 's'}`;
+    if (subEl) subEl.textContent = participants || `${Number(chat.commentsCount || 0)} repl${Number(chat.commentsCount || 0) === 1 ? 'y' : 'ies'}`;
     if (avEl) {
       avEl.textContent = initials(title);
       avEl.classList.toggle('is-online', selectedChatHasOnlineParticipant());
@@ -1051,7 +1051,7 @@
     state.commentsSignature = commentsSignature(state.comments);
     state.visibleTimes = new Set(Array.from(state.visibleTimes || []).filter((id) => (state.comments || []).some((c) => String(c.id || '') === String(id))));
     if (!state.comments.length) {
-      el.innerHTML = `<div class="msg-empty-list">No messages yet.</div>`;
+      el.innerHTML = `<div class="msg-empty-list">No replies yet.</div>`;
       return;
     }
 
@@ -1252,7 +1252,7 @@
 
   async function prepareAttachmentFile(file) {
     if (!state.selectedChatId) {
-      toast('Please select a chat first.', 'error');
+      toast('Please select an email thread first.', 'error');
       return;
     }
     if (!file) return;
@@ -1278,7 +1278,7 @@
       state.pendingAttachment.dataUrl = dataUrl;
       state.pendingAttachment.status = 'ready';
       renderAttachmentDraft();
-      toast('Attachment selected. Press Send to upload it.', 'success');
+      toast('Attachment selected. Press Send to attach it to the reply.', 'success');
     } catch (error) {
       clearPendingAttachment();
       toast(error.message || 'Failed to read attachment.', 'error');
@@ -1305,7 +1305,7 @@
 
   async function startVoiceRecording() {
     if (!state.selectedChatId) {
-      toast('Please select a chat first.', 'error');
+      toast('Please select an email thread first.', 'error');
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -1325,7 +1325,7 @@
       state.isRecording = true;
       state.recordStartedAt = Date.now();
       updateVoiceButton();
-      toast('Recording voice message...', 'info');
+      toast('Recording voice note...', 'info');
       recorder.addEventListener('dataavailable', (event) => {
         if (event.data && event.data.size > 0) state.voiceChunks.push(event.data);
       });
@@ -1361,7 +1361,7 @@
           state.pendingAttachment.dataUrl = await readFileAsDataUrl(blob);
           state.pendingAttachment.status = 'ready';
           renderAttachmentDraft();
-          toast('Voice message ready. Press Send to upload it.', 'success');
+          toast('Voice note ready. Press Send to attach it to the reply.', 'success');
         } catch (error) {
           clearPendingAttachment();
           toast(error.message || 'Failed to prepare voice message.', 'error');
@@ -1481,12 +1481,12 @@
     const groupField = $('#msgGroupMembersField');
     const submitLabel = $('#msgNewChatCreate span');
     if (modeInput) modeInput.value = state.createMode;
-    if (title) title.textContent = isGroup ? 'New Group' : 'New Chat';
-    if (subtitle) subtitle.textContent = isGroup ? 'Choose a subject and the people for this group room.' : 'Choose a subject and the team member for this chat room.';
-    if (icon) icon.innerHTML = `<i data-feather="${isGroup ? 'users' : 'message-circle'}"></i>`;
+    if (title) title.textContent = isGroup ? 'New Team Thread' : 'New Email';
+    if (subtitle) subtitle.textContent = isGroup ? 'Choose a subject and the recipients for this team email thread.' : 'Choose a subject and the recipient for this internal email.';
+    if (icon) icon.innerHTML = `<i data-feather="${isGroup ? 'users' : 'mail'}"></i>`;
     if (singleField) singleField.hidden = isGroup;
     if (groupField) groupField.hidden = !isGroup;
-    if (submitLabel) submitLabel.textContent = isGroup ? 'Create Group' : 'Create Chat';
+    if (submitLabel) submitLabel.textContent = isGroup ? 'Create Thread' : 'Send Email';
     populateNewChatMembers(member?.id || '');
     renderGroupMemberPicker(member ? [member.id] : []);
   }
@@ -1549,14 +1549,14 @@
     if (mode === 'group') {
       const ids = selectedGroupMemberIds();
       if (!ids.length) {
-        if (err) err.textContent = 'Please select at least one person.';
+        if (err) err.textContent = 'Please select at least one recipient.';
         return;
       }
       body = { ...body, type: 'group', targetUserIds: ids };
     } else {
       const member = state.members.find((m) => m.id === select?.value) || null;
       if (!member) {
-        if (err) err.textContent = 'Please select a team member.';
+        if (err) err.textContent = 'Please select a recipient.';
         return;
       }
       body = { ...body, type: 'chat', targetUserId: member.id, targetName: member.name || '' };
@@ -1575,7 +1575,7 @@
         await selectCreatedChat(data.chat, data.comments || []);
       }
     } catch (error) {
-      if (err) err.textContent = error.message || 'Failed to create chat.';
+      if (err) err.textContent = error.message || 'Failed to create email thread.';
     } finally {
       setBusy(createBtn, false);
     }
