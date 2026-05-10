@@ -15,7 +15,7 @@
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
   <link href="/css/products.css?v=proposals-page-v1" rel="stylesheet" />
-  <link href="/css/proposals.css?v=proposals-page-v1" rel="stylesheet" />
+  <link href="/css/proposals.css?v=proposals-modern-select-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page proposals-page">
@@ -88,12 +88,7 @@
 
       <main class="products-shell proposals-shell">
         <section class="products-proposals-view proposals-workspace" aria-live="polite">
-          <header class="products-proposals-head proposals-main-head">
-            <div>
-              <span class="products-proposals-kicker">Quotation workspace</span>
-              <h2>Proposals</h2>
-              <p>Save component lists once, then reuse ready kits while preparing quotations.</p>
-            </div>
+          <header class="products-proposals-head proposals-main-head proposals-tabs-head">
             <div class="proposals-tabs" role="tablist" aria-label="Proposal sections">
               <button type="button" class="proposals-tab is-active" id="proposalsTabBtn" data-tab="proposals" role="tab" aria-selected="true">
                 <i data-feather="file-text"></i><span>Proposals</span>
@@ -105,11 +100,8 @@
           </header>
 
           <section class="proposals-panel" id="proposalsPanel" role="tabpanel">
-            <div class="proposals-section-toolbar">
-              <div>
-                <h3>Saved proposals</h3>
-                <p>Create reusable component lists for quotation preparation.</p>
-              </div>
+            <div class="proposals-section-toolbar proposals-create-row">
+              <span aria-hidden="true"></span>
               <button type="button" class="products-add-btn" id="createProposalBtn">
                 <i data-feather="folder-plus"></i><span>Create New Proposal</span>
               </button>
@@ -119,11 +111,8 @@
           </section>
 
           <section class="proposals-panel" id="kitsPanel" role="tabpanel" hidden>
-            <div class="proposals-section-toolbar">
-              <div>
-                <h3>Saved kits</h3>
-                <p>Create one kit once, then add it to any proposal with one click.</p>
-              </div>
+            <div class="proposals-section-toolbar proposals-create-row">
+              <span aria-hidden="true"></span>
               <button type="button" class="products-add-btn" id="createKitBtn">
                 <i data-feather="folder-plus"></i><span>Create New Kit</span>
               </button>
@@ -185,6 +174,6 @@
   </div>
 
   <script src="/js/common-ui.js"></script>
-  <script src="/js/proposals.js?v=proposals-page-v1"></script>
+  <script src="/js/proposals.js?v=proposals-modern-select-v2"></script>
 </body>
 </html>
