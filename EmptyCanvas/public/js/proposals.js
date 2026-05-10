@@ -21,6 +21,10 @@
     kitAdminPassword: '',
     pendingOrderProposalId: '',
     teamMembers: [],
+    proposalNameMode: 'create',
+    kitNameMode: 'create',
+    copyProposalTarget: null,
+    copyKitTarget: null,
   };
 
   const els = {};
@@ -206,9 +210,10 @@
     const badge = kind === 'kit' ? 'KIT' : 'Q';
     return `
       <article class="products-proposal-folder" data-folder-kind="${escapeHTML(kind)}" data-id="${escapeHTML(id)}" data-can-edit="${canEditItem(item) ? '1' : '0'}" data-name="${escapeHTML(name)}">
-        <button type="button" class="proposal-folder-menu-btn" data-action="toggle-${kind}-menu" data-id="${escapeHTML(id)}" aria-label="Actions for ${escapeHTML(name)}"><i data-feather="more-horizontal"></i></button>
+        <button type="button" class="proposal-folder-menu-btn" data-action="toggle-${kind}-menu" data-id="${escapeHTML(id)}" aria-label="Actions for ${escapeHTML(name)}"><span class="proposal-menu-dots" aria-hidden="true">•••</span></button>
         <div class="proposal-folder-menu" hidden>
           <button type="button" data-action="edit-${kind}" data-id="${escapeHTML(id)}"><i data-feather="edit-3"></i><span>Edit</span></button>
+          <button type="button" data-action="copy-${kind}" data-id="${escapeHTML(id)}"><i data-feather="copy"></i><span>Make a copy</span></button>
           <button type="button" class="is-danger" data-action="delete-${kind}" data-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
         </div>
         <button type="button" class="products-proposal-folder__main" data-action="open-${kind}" data-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(name)}">
@@ -334,6 +339,23 @@
     `;
   }
 
+
+  function editNameBlockHTML(kind, currentName) {
+    const isKit = kind === 'kit';
+    const inputId = isKit ? 'kitEditNameInput' : 'proposalEditNameInput';
+    const action = isKit ? 'save-kit-name' : 'save-proposal-name';
+    const label = isKit ? 'Kit name' : 'Proposal name';
+    return `
+      <div class="proposal-name-edit-block">
+        <label class="products-field products-field--wide">
+          <span>${label}</span>
+          <input id="${inputId}" type="text" value="${escapeHTML(currentName || '')}" autocomplete="off" />
+        </label>
+        <button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>
+      </div>
+    `;
+  }
+
   function proposalDetailHTML() {
     const proposal = state.activeProposal;
     const count = state.proposalItems.length;
@@ -347,6 +369,7 @@
         </div>
         <button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>
       </header>
+      ${editable ? editNameBlockHTML('proposal', proposal?.name || 'Proposal') : ''}
       ${editable ? `
       <div class="products-proposal-tools proposals-two-tools">
         <div class="products-proposal-tool-card">
@@ -394,6 +417,7 @@
           <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
         </div>
       </header>
+      ${editable ? editNameBlockHTML('kit', kit?.name || 'Kit') : ''}
       ${editable ? `
       <div class="products-proposal-tools proposals-one-tool">
         <div class="products-proposal-tool-card">
@@ -548,13 +572,35 @@
     renderKitFolders();
   }
 
-  function openModal(kind) {
+  function openModal(kind, mode = 'create', copyTarget = null) {
     const isKit = kind === 'kit';
     const modal = isKit ? els.kitNameModal : els.proposalNameModal;
     const input = isKit ? els.kitNameInput : els.proposalNameInput;
     const error = isKit ? els.kitNameError : els.proposalNameError;
+    const titleEl = document.getElementById(isKit ? 'kitNameModalTitle' : 'proposalNameModalTitle');
+    const saveBtn = document.getElementById(isKit ? 'kitNameSave' : 'proposalNameSave');
+    const headerText = modal?.querySelector('.products-modal__header p');
+    const cleanMode = mode === 'copy' ? 'copy' : 'create';
+    if (isKit) {
+      state.kitNameMode = cleanMode;
+      state.copyKitTarget = cleanMode === 'copy' ? copyTarget : null;
+    } else {
+      state.proposalNameMode = cleanMode;
+      state.copyProposalTarget = cleanMode === 'copy' ? copyTarget : null;
+    }
+    const defaultName = cleanMode === 'copy'
+      ? `${String(copyTarget?.name || (isKit ? 'Kit' : 'Proposal')).trim() || (isKit ? 'Kit' : 'Proposal')} copy`
+      : '';
+    if (titleEl) titleEl.textContent = cleanMode === 'copy' ? `Make a ${isKit ? 'kit' : 'proposal'} copy` : `Create New ${isKit ? 'Kit' : 'Proposal'}`;
+    if (headerText) headerText.textContent = cleanMode === 'copy'
+      ? `Write a name for your private ${isKit ? 'kit' : 'proposal'} copy.`
+      : (isKit ? 'Name the kit, then add its reusable components and quantities.' : 'Name the proposal folder so you can return to it later.');
+    if (saveBtn) {
+      const span = saveBtn.querySelector('span');
+      if (span) span.textContent = cleanMode === 'copy' ? 'Create Copy' : `Create ${isKit ? 'Kit' : 'Proposal'}`;
+    }
     if (error) error.textContent = '';
-    if (input) input.value = '';
+    if (input) input.value = defaultName;
     if (modal) {
       modal.hidden = false;
       modal.setAttribute('aria-hidden', 'false');
@@ -570,6 +616,8 @@
       modal.hidden = true;
       modal.setAttribute('aria-hidden', 'true');
     }
+    if (kind === 'kit') { state.kitNameMode = 'create'; state.copyKitTarget = null; }
+    else { state.proposalNameMode = 'create'; state.copyProposalTarget = null; }
     document.body.classList.remove('products-modal-open');
   }
 
@@ -581,6 +629,14 @@
       return;
     }
     try {
+      if (state.proposalNameMode === 'copy' && state.copyProposalTarget?.id) {
+        const data = await api(`/api/products/proposals/${encodeURIComponent(state.copyProposalTarget.id)}/copy`, { method: 'POST', body: JSON.stringify({ name }) });
+        closeModal('proposal');
+        await loadProposals();
+        if (data?.proposal?.id) openProposalDetail(data.proposal.id, { edit: true });
+        toast('success', 'Proposals', 'Private copy created.');
+        return;
+      }
       const data = await api('/api/products/proposals', { method: 'POST', body: JSON.stringify({ name }) });
       closeModal('proposal');
       await loadProposals();
@@ -600,6 +656,14 @@
       return;
     }
     try {
+      if (state.kitNameMode === 'copy' && state.copyKitTarget?.id) {
+        const data = await api(`/api/products/kits/${encodeURIComponent(state.copyKitTarget.id)}/copy`, { method: 'POST', body: JSON.stringify({ name }) });
+        closeModal('kit');
+        await loadKits();
+        if (data?.kit?.id) openKitDetail(data.kit.id, { edit: true });
+        toast('success', 'Kits', 'Private copy created.');
+        return;
+      }
       const data = await api('/api/products/kits', { method: 'POST', body: JSON.stringify({ name }) });
       closeModal('kit');
       await loadKits();
@@ -703,6 +767,37 @@
     } catch (error) { toast('error', isKit ? 'Kits' : 'Proposals', error?.message || 'Failed to remove component.'); }
   }
 
+
+  async function saveActiveName(kind) {
+    const isKit = kind === 'kit';
+    const parent = isKit ? state.activeKit : state.activeProposal;
+    const id = String(parent?.id || '').trim();
+    const input = document.getElementById(isKit ? 'kitEditNameInput' : 'proposalEditNameInput');
+    const name = String(input?.value || '').trim();
+    if (!id || !name) return toast('error', isKit ? 'Kits' : 'Proposals', isKit ? 'Kit name is required.' : 'Proposal name is required.');
+    const url = isKit ? `/api/products/kits/${encodeURIComponent(id)}` : `/api/products/proposals/${encodeURIComponent(id)}`;
+    try {
+      const data = await api(url, { method: 'PATCH', body: JSON.stringify({ name, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
+      if (isKit) {
+        state.activeKit = data.kit || { ...state.activeKit, name };
+        await loadKits();
+        renderKitDetail();
+      } else {
+        state.activeProposal = data.proposal || { ...state.activeProposal, name };
+        await loadProposals();
+        renderProposalDetail();
+      }
+      toast('success', isKit ? 'Kits' : 'Proposals', 'Name updated.');
+    } catch (error) {
+      toast('error', isKit ? 'Kits' : 'Proposals', error?.message || 'Failed to update name.');
+    }
+  }
+
+  function copyFolder(kind, folder) {
+    closeAllFolderMenus();
+    openModal(kind, 'copy', folder || null);
+  }
+
   function closeAllFolderMenus(except = null) {
     document.querySelectorAll('.proposal-folder-menu').forEach((menu) => {
       if (except && menu === except) return;
@@ -776,6 +871,8 @@
       els.makeOrderModal.setAttribute('aria-hidden', 'true');
     }
     state.pendingOrderProposalId = '';
+    if (kind === 'kit') { state.kitNameMode = 'create'; state.copyKitTarget = null; }
+    else { state.proposalNameMode = 'create'; state.copyProposalTarget = null; }
     document.body.classList.remove('products-modal-open');
   }
 
@@ -889,6 +986,7 @@
         closeAllFolderMenus();
         return openProposalDetail(folder.id, { edit: true, adminPassword });
       }
+      if (action === 'copy-proposal') { closeAllFolderMenus(); return copyFolder('proposal', folder); }
       if (action === 'delete-proposal') { closeAllFolderMenus(); return deleteFolder('proposal', folder); }
     });
     if (els.kitsList) els.kitsList.addEventListener('click', (event) => {
@@ -909,6 +1007,7 @@
         closeAllFolderMenus();
         return openKitDetail(folder.id, { edit: true, adminPassword });
       }
+      if (action === 'copy-kit') { closeAllFolderMenus(); return copyFolder('kit', folder); }
       if (action === 'delete-kit') { closeAllFolderMenus(); return deleteFolder('kit', folder); }
     });
     if (els.proposalDetail) els.proposalDetail.addEventListener('click', (event) => {
@@ -916,6 +1015,7 @@
       if (!action) return;
       if (action === 'back-proposals') return backToProposals();
       if (action === 'open-make-order') return openMakeOrderModal();
+      if (action === 'save-proposal-name') return saveActiveName('proposal');
       if (action === 'add-proposal-product') return addProposalProduct();
       if (action === 'add-proposal-kit') return addProposalKit();
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
@@ -931,6 +1031,7 @@
       const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
       if (!action) return;
       if (action === 'back-kits') return backToKits();
+      if (action === 'save-kit-name') return saveActiveName('kit');
       if (action === 'add-kit-product') return addKitProduct();
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
       if (action === 'delete-kit-item') return deleteItem('kit', itemId);
