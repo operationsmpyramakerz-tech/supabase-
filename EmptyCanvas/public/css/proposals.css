@@ -313,3 +313,99 @@
   }
   .proposal-search-select__options{ max-height:calc(60vh - 76px); }
 }
+
+/* 2026-05-10: proposal detail cleanup, kit quantity multiplier, and pricing table */
+.proposals-page .products-proposals-kicker{
+  display:none !important;
+}
+.proposals-page .products-proposal-tool-title svg{
+  color:#e45512 !important;
+  stroke:#e45512 !important;
+}
+.proposals-page .proposal-search-select__button{
+  color:#f8fafc !important;
+}
+.proposals-page .proposal-search-select__value{
+  color:#f8fafc !important;
+  opacity:.96;
+}
+.proposals-page .proposal-search-select__button[aria-expanded="false"] .proposal-search-select__value{
+  color:#e5e7eb !important;
+}
+.proposals-page .proposal-search-select__button svg{
+  color:#fed7aa !important;
+}
+.proposals-page .proposals-kit-grid{
+  grid-template-columns:minmax(0, 1fr) 100px auto;
+}
+.proposals-page .products-proposal-table{
+  min-width:920px;
+}
+.proposals-page .products-proposal-table th:nth-child(2),
+.proposals-page .products-proposal-table td:nth-child(2){
+  width:120px;
+}
+.proposals-page .products-proposal-table th:nth-child(3),
+.proposals-page .products-proposal-table th:nth-child(4),
+.proposals-page .products-proposal-table td:nth-child(3),
+.proposals-page .products-proposal-table td:nth-child(4){
+  width:150px;
+  text-align:left;
+}
+.proposals-page .products-proposal-table th:nth-child(5),
+.proposals-page .products-proposal-table td:nth-child(5){
+  width:86px;
+  text-align:center;
+}
+.proposals-page .proposal-price-cell{
+  font-weight:950;
+  color:#475467;
+  white-space:nowrap;
+}
+.proposals-page .proposal-price-cell--total{
+  color:#0f172a;
+}
+.proposals-page .proposal-row-link{
+  width:38px;
+  height:38px;
+  border-radius:13px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(15,23,42,.09);
+  background:#fff7ed;
+  color:#e45512;
+  text-decoration:none;
+  box-shadow:0 8px 18px rgba(15,23,42,.07);
+}
+.proposals-page .proposal-row-link svg{
+  width:16px;
+  height:16px;
+}
+.proposals-page .proposal-row-link--disabled{
+  background:#f8fafc;
+  color:#98a2b3;
+  box-shadow:none;
+  cursor:not-allowed;
+}
+.proposals-page .proposal-row-actions{
+  justify-content:flex-end;
+}
+.proposals-page .proposal-row-delete{
+  min-width:88px;
+}
+.proposals-page .products-proposal-table input.proposal-item-qty{
+  transition:border-color .18s ease, box-shadow .18s ease;
+}
+.proposals-page .products-proposal-table input.proposal-item-qty:focus{
+  border-color:rgba(228,85,18,.55);
+  box-shadow:0 0 0 4px rgba(228,85,18,.10);
+}
+@media (max-width: 900px){
+  .proposals-page .proposals-kit-grid{
+    grid-template-columns:1fr;
+  }
+  .proposals-page .products-proposal-table{
+    min-width:860px;
+  }
+}
