@@ -15,6 +15,12 @@
     loadingKits: true,
     loadingDetail: false,
     saving: false,
+    proposalEditMode: false,
+    kitEditMode: false,
+    proposalAdminPassword: '',
+    kitAdminPassword: '',
+    pendingOrderProposalId: '',
+    teamMembers: [],
   };
 
   const els = {};
@@ -53,6 +59,25 @@
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) return fallback;
     return Math.max(1, Math.round(n));
+  }
+
+  function currentUsername() {
+    try { return String(localStorage.getItem('username') || window.__opsUserInfo?.name || '').trim(); } catch { return ''; }
+  }
+
+  function isItemOwner(item = {}) {
+    const me = currentUsername().toLowerCase();
+    const by = String(item?.createdBy || item?.created_by || '').trim().toLowerCase();
+    return !!me && !!by && me === by;
+  }
+
+  function canEditItem(item = {}) {
+    return !!item?.canEdit || isItemOwner(item);
+  }
+
+  function adminPasswordPrompt(message) {
+    const value = window.prompt(message || 'Enter Admin password');
+    return value === null ? null : String(value || '').trim();
   }
 
   async function api(path, options = {}) {
@@ -180,12 +205,19 @@
     const createdBy = String(item?.createdBy || '').trim();
     const badge = kind === 'kit' ? 'KIT' : 'Q';
     return `
-      <button type="button" class="products-proposal-folder" data-action="open-${kind}" data-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(name)}">
-        <span class="products-proposal-folder__icon"><i data-feather="folder"></i><small>${escapeHTML(badge)}</small></span>
-        <strong>${escapeHTML(name)}</strong>
-        <span>${formatNumber(count)} component${count === 1 ? '' : 's'}</span>
-        ${createdBy ? `<em>Created by ${escapeHTML(createdBy)}</em>` : ''}
-      </button>
+      <article class="products-proposal-folder" data-folder-kind="${escapeHTML(kind)}" data-id="${escapeHTML(id)}" data-can-edit="${canEditItem(item) ? '1' : '0'}" data-name="${escapeHTML(name)}">
+        <button type="button" class="proposal-folder-menu-btn" data-action="toggle-${kind}-menu" data-id="${escapeHTML(id)}" aria-label="Actions for ${escapeHTML(name)}"><i data-feather="more-horizontal"></i></button>
+        <div class="proposal-folder-menu" hidden>
+          <button type="button" data-action="edit-${kind}" data-id="${escapeHTML(id)}"><i data-feather="edit-3"></i><span>Edit</span></button>
+          <button type="button" class="is-danger" data-action="delete-${kind}" data-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
+        </div>
+        <button type="button" class="products-proposal-folder__main" data-action="open-${kind}" data-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(name)}">
+          <span class="products-proposal-folder__icon"><i data-feather="folder"></i><small>${escapeHTML(badge)}</small></span>
+          <strong>${escapeHTML(name)}</strong>
+          <span>${formatNumber(count)} component${count === 1 ? '' : 's'}</span>
+          ${createdBy ? `<em>Created by ${escapeHTML(createdBy)}</em>` : ''}
+        </button>
+      </article>
     `;
   }
 
@@ -241,10 +273,26 @@
     hydrateIcons(els.kitsList);
   }
 
+  function totalsForItems(items = []) {
+    return (Array.isArray(items) ? items : []).reduce((acc, item) => {
+      const qty = Number(item?.quantity || 0) || 0;
+      const unit = itemUnitPrice(item);
+      acc.items += 1;
+      acc.qty += qty;
+      if (unit !== null) acc.total += unit * qty;
+      return acc;
+    }, { items: 0, qty: 0, total: 0 });
+  }
+
+  function isEditingKind(kind) {
+    return kind === 'kit' ? !!state.kitEditMode : !!state.proposalEditMode;
+  }
+
   function renderItemRows(items, kind) {
     const actionPrefix = kind === 'kit' ? 'kit' : 'proposal';
+    const editable = isEditingKind(kind);
     if (!items.length) {
-      return `<tr><td colspan="6"><div class="products-table-empty">No components yet. Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.</div></td></tr>`;
+      return `<tr><td colspan="6"><div class="products-table-empty">No components yet. ${editable ? `Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.` : 'Open Edit from the folder menu to add components.'}</div></td></tr>`;
     }
     return items.map((item) => {
       const id = String(item?.id || '').trim();
@@ -256,34 +304,50 @@
       const linkHTML = url
         ? `<a class="proposal-row-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open product link for ${escapeHTML(name)}"><i data-feather="external-link"></i></a>`
         : `<span class="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><i data-feather="minus"></i></span>`;
+      const qtyHTML = editable
+        ? `<input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" />`
+        : `<strong>${escapeHTML(qty)}</strong>`;
+      const actionHTML = editable
+        ? `<button type="button" class="proposal-row-delete proposal-row-delete--icon" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}" aria-label="Delete ${escapeHTML(name)}" title="Delete"><i data-feather="trash-2"></i></button>`
+        : '';
       return `
         <tr data-item-id="${escapeHTML(id)}">
           <td class="proposal-component-name"><strong>${escapeHTML(name)}</strong></td>
-          <td><input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" /></td>
+          <td>${qtyHTML}</td>
           <td class="proposal-price-cell">${escapeHTML(formatCurrency(unitPrice))}</td>
           <td class="proposal-price-cell proposal-price-cell--total">${escapeHTML(formatCurrency(totalPrice))}</td>
           <td class="proposal-link-cell">${linkHTML}</td>
-          <td>
-            <div class="proposal-row-actions">
-              <button type="button" class="proposal-row-delete proposal-row-delete--icon" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}" aria-label="Delete ${escapeHTML(name)}" title="Delete"><i data-feather="trash-2"></i></button>
-            </div>
-          </td>
+          <td><div class="proposal-row-actions">${actionHTML}</div></td>
         </tr>
       `;
     }).join('');
   }
 
+  function totalBlockHTML(items = []) {
+    const total = totalsForItems(items);
+    return `
+      <div class="proposal-total-block">
+        <div><span>Total requested items</span><strong>${formatNumber(total.items)} item${total.items === 1 ? '' : 's'}</strong></div>
+        <div><span>Total quantity</span><strong>${formatNumber(total.qty)}</strong></div>
+        <div><span>Total cost</span><strong>${escapeHTML(formatCurrency(total.total))}</strong></div>
+      </div>
+    `;
+  }
+
   function proposalDetailHTML() {
     const proposal = state.activeProposal;
     const count = state.proposalItems.length;
+    const editable = !!state.proposalEditMode;
     return `
       <header class="products-proposal-detail__head">
         <button type="button" class="products-back-btn" data-action="back-proposals"><i data-feather="arrow-left"></i><span>All Proposals</span></button>
-        <div>
+        <div class="proposal-detail-title-block">
           <h2>${escapeHTML(proposal?.name || 'Proposal')}</h2>
-          <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}</p>
+          <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
         </div>
+        <button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>
       </header>
+      ${editable ? `
       <div class="products-proposal-tools proposals-two-tools">
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add one component</span></div>
@@ -301,7 +365,7 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-proposal-kit"><i data-feather="plus"></i><span>Add Kit</span></button>
           </div>
         </div>
-      </div>
+      </div>` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`}
       <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Components table</h3><p>Saved products and quantities for this proposal.</p></div>
@@ -313,6 +377,7 @@
             <tbody>${renderItemRows(state.proposalItems, 'proposal')}</tbody>
           </table>
         </div>
+        ${totalBlockHTML(state.proposalItems)}
       </div>
     `;
   }
@@ -320,14 +385,16 @@
   function kitDetailHTML() {
     const kit = state.activeKit;
     const count = state.kitItems.length;
+    const editable = !!state.kitEditMode;
     return `
       <header class="products-proposal-detail__head">
         <button type="button" class="products-back-btn" data-action="back-kits"><i data-feather="arrow-left"></i><span>All Kits</span></button>
         <div>
           <h2>${escapeHTML(kit?.name || 'Kit')}</h2>
-          <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}</p>
+          <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
         </div>
       </header>
+      ${editable ? `
       <div class="products-proposal-tools proposals-one-tool">
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add kit component</span></div>
@@ -337,7 +404,7 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-kit-product"><i data-feather="plus"></i><span>Add</span></button>
           </div>
         </div>
-      </div>
+      </div>` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
       <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
@@ -349,6 +416,7 @@
             <tbody>${renderItemRows(state.kitItems, 'kit')}</tbody>
           </table>
         </div>
+        ${totalBlockHTML(state.kitItems)}
       </div>
     `;
   }
@@ -420,7 +488,7 @@
     }
   }
 
-  async function openProposalDetail(id) {
+  async function openProposalDetail(id, options = {}) {
     const proposalId = String(id || '').trim();
     if (!proposalId) return;
     if (els.proposalsList) els.proposalsList.hidden = true;
@@ -429,6 +497,8 @@
       els.proposalDetail.innerHTML = loadingCard('proposal');
     }
     try {
+      state.proposalEditMode = !!options.edit;
+      state.proposalAdminPassword = String(options.adminPassword || '');
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}?_ts=${Date.now()}`);
       state.activeProposal = data.proposal || null;
       state.proposalItems = Array.isArray(data.items) ? data.items : [];
@@ -438,7 +508,7 @@
     }
   }
 
-  async function openKitDetail(id) {
+  async function openKitDetail(id, options = {}) {
     const kitId = String(id || '').trim();
     if (!kitId) return;
     if (els.kitsList) els.kitsList.hidden = true;
@@ -447,6 +517,8 @@
       els.kitDetail.innerHTML = loadingCard('kit');
     }
     try {
+      state.kitEditMode = !!options.edit;
+      state.kitAdminPassword = String(options.adminPassword || '');
       const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
       state.activeKit = data.kit || null;
       state.kitItems = Array.isArray(data.items) ? data.items : [];
@@ -459,6 +531,8 @@
   function backToProposals() {
     state.activeProposal = null;
     state.proposalItems = [];
+    state.proposalEditMode = false;
+    state.proposalAdminPassword = '';
     if (els.proposalDetail) els.proposalDetail.hidden = true;
     if (els.proposalsList) els.proposalsList.hidden = false;
     renderProposalFolders();
@@ -467,6 +541,8 @@
   function backToKits() {
     state.activeKit = null;
     state.kitItems = [];
+    state.kitEditMode = false;
+    state.kitAdminPassword = '';
     if (els.kitDetail) els.kitDetail.hidden = true;
     if (els.kitsList) els.kitsList.hidden = false;
     renderKitFolders();
@@ -508,7 +584,7 @@
       const data = await api('/api/products/proposals', { method: 'POST', body: JSON.stringify({ name }) });
       closeModal('proposal');
       await loadProposals();
-      if (data?.proposal?.id) openProposalDetail(data.proposal.id);
+      if (data?.proposal?.id) openProposalDetail(data.proposal.id, { edit: true });
       toast('success', 'Proposals', 'Proposal folder created.');
     } catch (error) {
       if (els.proposalNameError) els.proposalNameError.textContent = error?.message || 'Failed to create proposal.';
@@ -527,7 +603,7 @@
       const data = await api('/api/products/kits', { method: 'POST', body: JSON.stringify({ name }) });
       closeModal('kit');
       await loadKits();
-      if (data?.kit?.id) openKitDetail(data.kit.id);
+      if (data?.kit?.id) openKitDetail(data.kit.id, { edit: true });
       toast('success', 'Kits', 'Kit folder created.');
     } catch (error) {
       if (els.kitNameError) els.kitNameError.textContent = error?.message || 'Failed to create kit.';
@@ -541,7 +617,7 @@
     const quantity = numericInputValue(document.getElementById('proposalProductQty'), 1);
     if (!proposalId || !productId) return toast('error', 'Proposals', 'Select a product first.');
     try {
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity }) });
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -556,7 +632,7 @@
     const quantity = numericInputValue(document.getElementById('proposalKitQty'), 1);
     if (!proposalId || !kitId) return toast('error', 'Proposals', 'Select a kit first.');
     try {
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity }) });
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -571,7 +647,7 @@
     const quantity = numericInputValue(document.getElementById('kitProductQty'), 1);
     if (!kitId || !productId) return toast('error', 'Kits', 'Select a product first.');
     try {
-      const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity }) });
+      const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, adminPassword: state.kitAdminPassword }) });
       state.activeKit = data.kit || state.activeKit;
       state.kitItems = Array.isArray(data.items) ? data.items : state.kitItems;
       renderKitDetail();
@@ -589,7 +665,7 @@
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
       : `/api/products/proposals/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`;
     try {
-      const data = await api(url, { method: 'PATCH', body: JSON.stringify({ quantity }) });
+      const data = await api(url, { method: 'PATCH', body: JSON.stringify({ quantity, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
       if (isKit) {
         state.activeKit = data.kit || state.activeKit;
         state.kitItems = Array.isArray(data.items) ? data.items : state.kitItems;
@@ -611,7 +687,7 @@
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
       : `/api/products/proposals/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`;
     try {
-      const data = await api(url, { method: 'DELETE' });
+      const data = await api(url, { method: 'DELETE', body: JSON.stringify({ adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
       if (isKit) {
         state.activeKit = data.kit || state.activeKit;
         state.kitItems = Array.isArray(data.items) ? data.items : state.kitItems;
@@ -625,6 +701,101 @@
       }
       toast('success', isKit ? 'Kits' : 'Proposals', 'Component removed.');
     } catch (error) { toast('error', isKit ? 'Kits' : 'Proposals', error?.message || 'Failed to remove component.'); }
+  }
+
+  function closeAllFolderMenus(except = null) {
+    document.querySelectorAll('.proposal-folder-menu').forEach((menu) => {
+      if (except && menu === except) return;
+      menu.hidden = true;
+    });
+  }
+
+  function folderDataFromButton(btn) {
+    const card = btn?.closest('.products-proposal-folder');
+    return {
+      id: btn?.getAttribute('data-id') || card?.getAttribute('data-id') || '',
+      name: card?.getAttribute('data-name') || '',
+      canEdit: card?.getAttribute('data-can-edit') === '1',
+    };
+  }
+
+  function requestAdminIfNeeded(folder, actionLabel) {
+    if (folder.canEdit) return '';
+    const pwd = adminPasswordPrompt(`Enter Admin password to ${actionLabel || 'edit'} "${folder.name || 'this folder'}"`);
+    if (!pwd) return null;
+    return pwd;
+  }
+
+  async function deleteFolder(kind, folder) {
+    const adminPassword = requestAdminIfNeeded(folder, 'delete');
+    if (adminPassword === null) return;
+    const label = kind === 'kit' ? 'kit' : 'proposal';
+    const ok = window.confirm(`Delete ${folder.name || label}? This action cannot be undone.`);
+    if (!ok) return;
+    const url = kind === 'kit'
+      ? `/api/products/kits/${encodeURIComponent(folder.id)}`
+      : `/api/products/proposals/${encodeURIComponent(folder.id)}`;
+    try {
+      await api(url, { method: 'DELETE', body: JSON.stringify({ adminPassword }) });
+      if (kind === 'kit') await loadKits(); else await loadProposals();
+      toast('success', kind === 'kit' ? 'Kits' : 'Proposals', `${label[0].toUpperCase() + label.slice(1)} deleted.`);
+    } catch (error) {
+      toast('error', kind === 'kit' ? 'Kits' : 'Proposals', error?.message || `Failed to delete ${label}.`);
+    }
+  }
+
+  async function loadTeamMembersForOrder() {
+    if (state.teamMembers.length) return state.teamMembers;
+    const data = await api(`/api/products/proposals/team-members?_ts=${Date.now()}`);
+    state.teamMembers = Array.isArray(data.members) ? data.members : [];
+    return state.teamMembers;
+  }
+
+  async function openMakeOrderModal() {
+    const proposalId = String(state.activeProposal?.id || '').trim();
+    if (!proposalId) return;
+    state.pendingOrderProposalId = proposalId;
+    try { await loadTeamMembersForOrder(); } catch (error) { return toast('error', 'Make order', error?.message || 'Failed to load team members.'); }
+    const select = els.makeOrderMember;
+    if (select) {
+      select.innerHTML = `<option value="">Select team member</option>` + state.teamMembers.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(m.name)}${m.department ? ` — ${escapeHTML(m.department)}` : ''}</option>`).join('');
+    }
+    if (els.makeOrderPassword) els.makeOrderPassword.value = '';
+    if (els.makeOrderError) els.makeOrderError.textContent = '';
+    if (els.makeOrderModal) {
+      els.makeOrderModal.hidden = false;
+      els.makeOrderModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('products-modal-open');
+      hydrateIcons(els.makeOrderModal);
+    }
+  }
+
+  function closeMakeOrderModal() {
+    if (els.makeOrderModal) {
+      els.makeOrderModal.hidden = true;
+      els.makeOrderModal.setAttribute('aria-hidden', 'true');
+    }
+    state.pendingOrderProposalId = '';
+    document.body.classList.remove('products-modal-open');
+  }
+
+  async function submitMakeOrder(event) {
+    event.preventDefault();
+    const proposalId = String(state.pendingOrderProposalId || state.activeProposal?.id || '').trim();
+    const teamMemberId = String(els.makeOrderMember?.value || '').trim();
+    const password = String(els.makeOrderPassword?.value || '').trim();
+    if (!proposalId || !teamMemberId || !password) {
+      if (els.makeOrderError) els.makeOrderError.textContent = 'Select a team member and enter the password.';
+      return;
+    }
+    try {
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/make-order`, { method: 'POST', body: JSON.stringify({ teamMemberId, password }) });
+      closeMakeOrderModal();
+      toast('success', 'Make order', `Created ${data.orderId || 'order'} with ${formatNumber(data.count || 0)} item(s).`);
+    } catch (error) {
+      if (els.makeOrderError) els.makeOrderError.textContent = error?.message || 'Failed to create order.';
+      toast('error', 'Make order', error?.message || 'Failed to create order.');
+    }
   }
 
   function closeAllSearchSelects(exceptRoot = null) {
@@ -701,17 +872,50 @@
     if (els.createKitBtn) els.createKitBtn.addEventListener('click', () => openModal('kit'));
 
     if (els.proposalsList) els.proposalsList.addEventListener('click', (event) => {
-      const btn = event.target.closest('[data-action="open-proposal"]');
-      if (btn) openProposalDetail(btn.getAttribute('data-id'));
+      const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
+      if (!action) return;
+      const btn = event.target.closest('[data-action]');
+      const folder = folderDataFromButton(btn);
+      if (action === 'toggle-proposal-menu') {
+        event.preventDefault(); event.stopPropagation();
+        const menu = btn.closest('.products-proposal-folder')?.querySelector('.proposal-folder-menu');
+        if (menu) { const open = menu.hidden; closeAllFolderMenus(menu); menu.hidden = !open; }
+        return;
+      }
+      if (action === 'open-proposal') return openProposalDetail(folder.id, { edit: false });
+      if (action === 'edit-proposal') {
+        const adminPassword = requestAdminIfNeeded(folder, 'edit');
+        if (adminPassword === null) return;
+        closeAllFolderMenus();
+        return openProposalDetail(folder.id, { edit: true, adminPassword });
+      }
+      if (action === 'delete-proposal') { closeAllFolderMenus(); return deleteFolder('proposal', folder); }
     });
     if (els.kitsList) els.kitsList.addEventListener('click', (event) => {
-      const btn = event.target.closest('[data-action="open-kit"]');
-      if (btn) openKitDetail(btn.getAttribute('data-id'));
+      const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
+      if (!action) return;
+      const btn = event.target.closest('[data-action]');
+      const folder = folderDataFromButton(btn);
+      if (action === 'toggle-kit-menu') {
+        event.preventDefault(); event.stopPropagation();
+        const menu = btn.closest('.products-proposal-folder')?.querySelector('.proposal-folder-menu');
+        if (menu) { const open = menu.hidden; closeAllFolderMenus(menu); menu.hidden = !open; }
+        return;
+      }
+      if (action === 'open-kit') return openKitDetail(folder.id, { edit: false });
+      if (action === 'edit-kit') {
+        const adminPassword = requestAdminIfNeeded(folder, 'edit');
+        if (adminPassword === null) return;
+        closeAllFolderMenus();
+        return openKitDetail(folder.id, { edit: true, adminPassword });
+      }
+      if (action === 'delete-kit') { closeAllFolderMenus(); return deleteFolder('kit', folder); }
     });
     if (els.proposalDetail) els.proposalDetail.addEventListener('click', (event) => {
       const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
       if (!action) return;
       if (action === 'back-proposals') return backToProposals();
+      if (action === 'open-make-order') return openMakeOrderModal();
       if (action === 'add-proposal-product') return addProposalProduct();
       if (action === 'add-proposal-kit') return addProposalKit();
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
@@ -746,10 +950,15 @@
     if (els.kitNameCancel) els.kitNameCancel.addEventListener('click', () => closeModal('kit'));
     if (els.proposalNameModal) els.proposalNameModal.addEventListener('click', (event) => { if (event.target === els.proposalNameModal) closeModal('proposal'); });
     if (els.kitNameModal) els.kitNameModal.addEventListener('click', (event) => { if (event.target === els.kitNameModal) closeModal('kit'); });
+    if (els.makeOrderForm) els.makeOrderForm.addEventListener('submit', submitMakeOrder);
+    if (els.makeOrderClose) els.makeOrderClose.addEventListener('click', closeMakeOrderModal);
+    if (els.makeOrderCancel) els.makeOrderCancel.addEventListener('click', closeMakeOrderModal);
+    if (els.makeOrderModal) els.makeOrderModal.addEventListener('click', (event) => { if (event.target === els.makeOrderModal) closeMakeOrderModal(); });
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
       if (els.proposalNameModal && !els.proposalNameModal.hidden) closeModal('proposal');
       if (els.kitNameModal && !els.kitNameModal.hidden) closeModal('kit');
+      if (els.makeOrderModal && !els.makeOrderModal.hidden) closeMakeOrderModal();
     });
   }
 
@@ -774,6 +983,13 @@
     els.kitNameError = $('kitNameError');
     els.kitNameClose = $('kitNameClose');
     els.kitNameCancel = $('kitNameCancel');
+    els.makeOrderModal = $('makeOrderModal');
+    els.makeOrderForm = $('makeOrderForm');
+    els.makeOrderClose = $('makeOrderClose');
+    els.makeOrderCancel = $('makeOrderCancel');
+    els.makeOrderMember = $('makeOrderMember');
+    els.makeOrderPassword = $('makeOrderPassword');
+    els.makeOrderError = $('makeOrderError');
   }
 
   async function init() {
