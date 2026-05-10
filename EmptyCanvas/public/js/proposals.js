@@ -145,6 +145,34 @@
     return String(document.getElementById(id)?.value || '').trim();
   }
 
+  function productForItem(item = {}) {
+    const productId = String(item?.productId || item?.product_id || '').trim();
+    const product = (Array.isArray(state.products) ? state.products : []).find((entry) => String(entry?.id || '').trim() === productId);
+    return product || item || {};
+  }
+
+  function itemUnitPrice(item = {}) {
+    const product = productForItem(item);
+    const raw = product?.unitPrice ?? product?.unit_price ?? item?.unitPrice ?? item?.unit_price ?? null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function itemProductUrl(item = {}) {
+    const product = productForItem(item);
+    return String(product?.url || product?.productUrl || item?.url || item?.productUrl || item?.product_url || '').trim();
+  }
+
+  function formatCurrency(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    try {
+      return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 2 }).format(n);
+    } catch {
+      return `£${n.toFixed(2)}`;
+    }
+  }
+
   function folderCard(item, kind) {
     const id = String(item?.id || '').trim();
     const name = String(item?.name || (kind === 'kit' ? 'Untitled Kit' : 'Untitled Proposal')).trim();
@@ -216,19 +244,27 @@
   function renderItemRows(items, kind) {
     const actionPrefix = kind === 'kit' ? 'kit' : 'proposal';
     if (!items.length) {
-      return `<tr><td colspan="3"><div class="products-table-empty">No components yet. Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.</div></td></tr>`;
+      return `<tr><td colspan="6"><div class="products-table-empty">No components yet. Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.</div></td></tr>`;
     }
     return items.map((item) => {
       const id = String(item?.id || '').trim();
       const name = String(item?.productName || item?.product_name || 'Untitled Product').trim();
       const qty = Number(item?.quantity || 0) || 1;
+      const unitPrice = itemUnitPrice(item);
+      const totalPrice = unitPrice === null ? null : unitPrice * qty;
+      const url = itemProductUrl(item);
+      const linkHTML = url
+        ? `<a class="proposal-row-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open product link for ${escapeHTML(name)}"><i data-feather="external-link"></i></a>`
+        : `<span class="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><i data-feather="minus"></i></span>`;
       return `
         <tr data-item-id="${escapeHTML(id)}">
-          <td><strong>${escapeHTML(name)}</strong></td>
+          <td class="proposal-component-name"><strong>${escapeHTML(name)}</strong></td>
           <td><input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" /></td>
+          <td class="proposal-price-cell">${escapeHTML(formatCurrency(unitPrice))}</td>
+          <td class="proposal-price-cell proposal-price-cell--total">${escapeHTML(formatCurrency(totalPrice))}</td>
+          <td class="proposal-link-cell">${linkHTML}</td>
           <td>
             <div class="proposal-row-actions">
-              <button type="button" class="proposal-row-save" data-action="save-${actionPrefix}-item" data-item-id="${escapeHTML(id)}"><i data-feather="save"></i><span>Save</span></button>
               <button type="button" class="proposal-row-delete" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
             </div>
           </td>
@@ -244,7 +280,6 @@
       <header class="products-proposal-detail__head">
         <button type="button" class="products-back-btn" data-action="back-proposals"><i data-feather="arrow-left"></i><span>All Proposals</span></button>
         <div>
-          <span class="products-proposals-kicker">Proposal folder</span>
           <h2>${escapeHTML(proposal?.name || 'Proposal')}</h2>
           <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}</p>
         </div>
@@ -262,6 +297,7 @@
           <div class="products-proposal-tool-title"><i data-feather="box"></i><span>Add saved kit</span></div>
           <div class="products-proposal-control-grid proposals-kit-grid">
             ${kitSelectHTML('proposalKitSelect')}
+            <label class="products-field products-field--qty"><span>Qty</span><input id="proposalKitQty" type="number" min="1" step="1" value="1" inputmode="numeric" /></label>
             <button type="button" class="products-btn products-btn--dark" data-action="add-proposal-kit"><i data-feather="plus"></i><span>Add Kit</span></button>
           </div>
         </div>
@@ -273,7 +309,7 @@
         </div>
         <div class="products-proposal-table-wrap">
           <table class="products-proposal-table">
-            <thead><tr><th>Component name</th><th>Quantity</th><th></th></tr></thead>
+            <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th></th></tr></thead>
             <tbody>${renderItemRows(state.proposalItems, 'proposal')}</tbody>
           </table>
         </div>
@@ -288,7 +324,6 @@
       <header class="products-proposal-detail__head">
         <button type="button" class="products-back-btn" data-action="back-kits"><i data-feather="arrow-left"></i><span>All Kits</span></button>
         <div>
-          <span class="products-proposals-kicker">Reusable kit</span>
           <h2>${escapeHTML(kit?.name || 'Kit')}</h2>
           <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}</p>
         </div>
@@ -310,7 +345,7 @@
         </div>
         <div class="products-proposal-table-wrap">
           <table class="products-proposal-table">
-            <thead><tr><th>Component name</th><th>Quantity</th><th></th></tr></thead>
+            <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th></th></tr></thead>
             <tbody>${renderItemRows(state.kitItems, 'kit')}</tbody>
           </table>
         </div>
@@ -518,9 +553,10 @@
   async function addProposalKit() {
     const proposalId = String(state.activeProposal?.id || '').trim();
     const kitId = selectedValue('proposalKitSelect');
+    const quantity = numericInputValue(document.getElementById('proposalKitQty'), 1);
     if (!proposalId || !kitId) return toast('error', 'Proposals', 'Select a kit first.');
     try {
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId }) });
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -678,20 +714,28 @@
       if (action === 'back-proposals') return backToProposals();
       if (action === 'add-proposal-product') return addProposalProduct();
       if (action === 'add-proposal-kit') return addProposalKit();
-      const row = event.target.closest('tr');
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
-      if (action === 'save-proposal-item') return saveItem('proposal', itemId, row);
       if (action === 'delete-proposal-item') return deleteItem('proposal', itemId);
+    });
+    if (els.proposalDetail) els.proposalDetail.addEventListener('change', (event) => {
+      if (!event.target.matches('.proposal-item-qty')) return;
+      const row = event.target.closest('tr');
+      const itemId = row?.getAttribute('data-item-id');
+      return saveItem('proposal', itemId, row);
     });
     if (els.kitDetail) els.kitDetail.addEventListener('click', (event) => {
       const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
       if (!action) return;
       if (action === 'back-kits') return backToKits();
       if (action === 'add-kit-product') return addKitProduct();
-      const row = event.target.closest('tr');
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
-      if (action === 'save-kit-item') return saveItem('kit', itemId, row);
       if (action === 'delete-kit-item') return deleteItem('kit', itemId);
+    });
+    if (els.kitDetail) els.kitDetail.addEventListener('change', (event) => {
+      if (!event.target.matches('.proposal-item-qty')) return;
+      const row = event.target.closest('tr');
+      const itemId = row?.getAttribute('data-item-id');
+      return saveItem('kit', itemId, row);
     });
 
     if (els.proposalNameForm) els.proposalNameForm.addEventListener('submit', createProposal);
