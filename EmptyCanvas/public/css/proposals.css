@@ -409,3 +409,219 @@
     min-width:860px;
   }
 }
+
+/* 2026-05-10: proposal/kits final polish, kit multiplier safety, mobile-first detail layout */
+.proposals-page .proposal-row-delete.proposal-row-delete--icon{
+  width:42px;
+  min-width:42px;
+  height:42px;
+  min-height:42px;
+  padding:0;
+  justify-content:center;
+  border-radius:14px;
+}
+.proposals-page .proposal-row-delete.proposal-row-delete--icon svg{
+  width:17px;
+  height:17px;
+}
+
+@media (max-width: 1100px){
+  .proposals-page{
+    overflow-x:hidden;
+  }
+  .proposals-page .main-content{
+    overflow-x:hidden !important;
+  }
+  .proposals-page .products-shell.proposals-shell{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:0 18px calc(132px + env(safe-area-inset-bottom, 0px)) !important;
+    box-sizing:border-box;
+    overflow-x:hidden;
+  }
+  .proposals-page .products-proposals-view,
+  .proposals-page .products-proposal-detail,
+  .proposals-page .proposals-panel{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    overflow-x:hidden;
+    box-sizing:border-box;
+  }
+  .proposals-page .proposals-tabs{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:8px;
+    padding:7px;
+    border-radius:20px;
+  }
+  .proposals-page .proposals-tab{
+    min-width:0 !important;
+    min-height:52px;
+    padding:0 10px;
+  }
+  .proposals-page .proposals-section-toolbar.proposals-create-row{
+    justify-content:stretch;
+  }
+  .proposals-page .proposals-create-row .products-add-btn{
+    width:100%;
+    justify-content:center;
+  }
+  .proposals-page .products-proposal-detail__head{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:14px;
+    align-items:start;
+    margin-top:10px;
+  }
+  .proposals-page .products-back-btn{
+    width:max-content;
+    max-width:100%;
+  }
+  .proposals-page .products-proposal-detail__head h2{
+    font-size:clamp(1.8rem, 8vw, 2.55rem);
+    line-height:1.05;
+    overflow-wrap:anywhere;
+  }
+  .proposals-page .products-proposal-tools,
+  .proposals-page .proposals-two-tools,
+  .proposals-page .proposals-one-tool,
+  .proposals-page .proposals-kit-grid{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+  .proposals-page .products-proposal-tool-card{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    box-sizing:border-box;
+    padding:18px;
+    border-radius:24px;
+  }
+  .proposals-page .products-proposal-control-grid{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    gap:14px;
+    width:100%;
+    max-width:100%;
+  }
+  .proposals-page .products-proposal-control-grid .products-btn,
+  .proposals-page .products-proposal-control-grid .products-field,
+  .proposals-page .products-proposal-control-grid .proposal-search-select,
+  .proposals-page .proposal-search-select__button{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+  .proposals-page .products-proposal-tool-card .products-field--qty input{
+    width:100% !important;
+    min-height:56px;
+  }
+  .proposals-page .products-proposal-table-card{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    overflow:hidden;
+    border-radius:24px;
+  }
+  .proposals-page .products-proposal-table-head{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .proposals-page .products-proposal-table-wrap{
+    width:100%;
+    max-width:100%;
+    overflow-x:hidden;
+  }
+  .proposals-page .products-proposal-table{
+    width:100% !important;
+    min-width:0 !important;
+    display:block;
+  }
+  .proposals-page .products-proposal-table thead{
+    display:none;
+  }
+  .proposals-page .products-proposal-table tbody,
+  .proposals-page .products-proposal-table tr,
+  .proposals-page .products-proposal-table td{
+    display:block;
+    width:100% !important;
+    box-sizing:border-box;
+  }
+  .proposals-page .products-proposal-table tr{
+    padding:16px;
+    border-bottom:1px solid rgba(15,23,42,.08);
+    background:#fff;
+  }
+  .proposals-page .products-proposal-table td{
+    border:0;
+    padding:8px 0;
+    text-align:left !important;
+  }
+  .proposals-page .products-proposal-table td:not(.proposal-component-name){
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+  }
+  .proposals-page .products-proposal-table td.proposal-component-name{
+    padding:0 0 12px;
+  }
+  .proposals-page .products-proposal-table td.proposal-component-name strong{
+    display:block;
+    font-size:1.05rem;
+    line-height:1.35;
+    overflow-wrap:anywhere;
+  }
+  .proposals-page .products-proposal-table td:nth-child(2)::before{ content:'Quantity'; }
+  .proposals-page .products-proposal-table td:nth-child(3)::before{ content:'Unity Price'; }
+  .proposals-page .products-proposal-table td:nth-child(4)::before{ content:'Total Price'; }
+  .proposals-page .products-proposal-table td:nth-child(5)::before{ content:'Link'; }
+  .proposals-page .products-proposal-table td:nth-child(6)::before{ content:'Actions'; }
+  .proposals-page .products-proposal-table td::before{
+    color:#667085;
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    font-weight:950;
+  }
+  .proposals-page .products-proposal-table input.proposal-item-qty{
+    width:112px;
+    min-height:46px;
+  }
+  .proposals-page .proposal-link-cell,
+  .proposals-page .proposal-row-actions{
+    justify-content:flex-end !important;
+  }
+  .proposals-page .proposal-row-delete.proposal-row-delete--icon{
+    width:42px;
+    min-width:42px;
+  }
+}
+
+@media (max-width: 520px){
+  .proposals-page .products-shell.proposals-shell{
+    padding-left:12px !important;
+    padding-right:12px !important;
+  }
+  .proposals-page .proposals-tabs{
+    grid-template-columns:1fr !important;
+  }
+  .proposals-page .products-proposal-tool-card{
+    padding:16px;
+    border-radius:22px;
+  }
+  .proposals-page .products-proposal-table-head{
+    padding:16px;
+  }
+  .proposals-page .products-proposal-table tr{
+    padding:14px;
+  }
+}
