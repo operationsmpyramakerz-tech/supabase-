@@ -4330,17 +4330,44 @@ function _sbProposalMissingTableError(error) {
   return error;
 }
 
-function _sbSerializeProductProposal(row = {}, itemsCount = 0) {
+function _sbProposalOwnerInfo(row = {}) {
+  return {
+    createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
+    createdById: _sbProposalText(_sbGet(row, ["created_by_id", "createdById", "Created By ID"])) || null,
+  };
+}
+
+function _sbProposalCurrentUserOwns(row = {}, req = null) {
+  const owner = _sbProposalOwnerInfo(row);
+  const sessionId = String(req?.session?.userSupabaseId || "").trim();
+  const sessionName = String(req?.session?.username || "").trim();
+  if (owner.createdById && sessionId && String(owner.createdById) === sessionId) return true;
+  if (owner.createdBy && sessionName && norm(owner.createdBy) === norm(sessionName)) return true;
+  return false;
+}
+
+async function _sbAssertProposalOwnerOrAdmin(row = {}, req = null, body = {}) {
+  if (_sbProposalCurrentUserOwns(row, req)) return true;
+  const adminPassword = String(body?.adminPassword || body?.admin_password || req?.query?.adminPassword || "").trim();
+  if (adminPassword && await verifyAdminPassword(adminPassword)) return true;
+  const err = new Error("Admin password is required to modify a folder created by another user.");
+  err.status = 403;
+  throw err;
+}
+
+function _sbSerializeProductProposal(row = {}, itemsCount = 0, req = null) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbProposalText(_sbGet(row, ["name", "Name", "proposal_name", "Proposal Name"])) || "Untitled Proposal";
+  const owner = _sbProposalOwnerInfo(row);
   return {
     id,
     name,
-    createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
-    createdById: _sbProposalText(_sbGet(row, ["created_by_id", "createdById", "Created By ID"])) || null,
+    createdBy: owner.createdBy,
+    createdById: owner.createdById,
     createdAt: _sbProposalText(_sbGet(row, ["created_at", "createdAt", "Created At"])) || null,
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
     itemsCount: Number(itemsCount) || 0,
+    canEdit: req ? _sbProposalCurrentUserOwns(row, req) : false,
   };
 }
 
@@ -4379,24 +4406,24 @@ async function _sbProposalItemRows(proposalId = null) {
   }
 }
 
-async function _sbProductsProposalsList() {
+async function _sbProductsProposalsList(req = null) {
   const [proposals, items] = await Promise.all([_sbProposalRows(), _sbProposalItemRows(null)]);
   const counts = new Map();
   for (const item of items || []) {
     const pid = String(_sbGet(item, ["proposal_id", "proposalId", "Proposal ID"]) ?? "").trim();
     if (pid) counts.set(pid, (counts.get(pid) || 0) + 1);
   }
-  return (proposals || []).map((row) => _sbSerializeProductProposal(row, counts.get(String(_sbGet(row, ["id", "ID"]) ?? "").trim()) || 0));
+  return (proposals || []).map((row) => _sbSerializeProductProposal(row, counts.get(String(_sbGet(row, ["id", "ID"]) ?? "").trim()) || 0, req));
 }
 
-async function _sbProductProposalById(proposalId) {
+async function _sbProductProposalById(proposalId, req = null) {
   const id = String(proposalId || "").trim();
   if (!id) return null;
   try {
     const row = await supabaseDb.selectById(_sbProductProposalsTable(), id);
     if (!row) return null;
     const items = (await _sbProposalItemRows(id)).map(_sbSerializeProductProposalItem).filter((item) => item.id);
-    return { proposal: _sbSerializeProductProposal(row, items.length), items };
+    return { proposal: _sbSerializeProductProposal(row, items.length, req), items };
   } catch (error) {
     throw _sbProposalMissingTableError(error);
   }
@@ -4431,6 +4458,59 @@ async function _sbCreateProductProposal(body = {}, req = null) {
   } catch (error) {
     throw _sbProposalMissingTableError(error);
   }
+}
+
+async function _sbUpdateProductProposal(proposalId, body = {}, req = null) {
+  const id = String(proposalId || "").trim();
+  const name = _sbProposalText(body?.name || body?.proposalName || body?.title);
+  if (!id || !name) {
+    const err = new Error("Proposal name is required.");
+    err.status = 400;
+    throw err;
+  }
+  const row = await supabaseDb.selectById(_sbProductProposalsTable(), id);
+  if (!row) {
+    const err = new Error("Proposal not found.");
+    err.status = 404;
+    throw err;
+  }
+  await _sbAssertProposalOwnerOrAdmin(row, req, body);
+  await supabaseDb.updateById(_sbProductProposalsTable(), id, { name, updated_at: new Date().toISOString() });
+  return (await _sbProductProposalById(id, req)).proposal;
+}
+
+async function _sbDeleteProductProposal(proposalId, body = {}, req = null) {
+  const id = String(proposalId || "").trim();
+  if (!id) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  const row = await supabaseDb.selectById(_sbProductProposalsTable(), id);
+  if (!row) {
+    const err = new Error("Proposal not found.");
+    err.status = 404;
+    throw err;
+  }
+  await _sbAssertProposalOwnerOrAdmin(row, req, body);
+  const items = await _sbProposalItemRows(id);
+  for (const item of items || []) {
+    const itemId = String(_sbGet(item, ["id", "ID"]) ?? "").trim();
+    if (itemId) await supabaseDb.deleteById(_sbProductProposalItemsTable(), itemId);
+  }
+  await supabaseDb.deleteById(_sbProductProposalsTable(), id);
+  return { deleted: true, id };
+}
+
+async function _sbRequireEditableProductProposal(proposalId, req = null, body = {}) {
+  const row = await supabaseDb.selectById(_sbProductProposalsTable(), String(proposalId || "").trim());
+  if (!row) {
+    const err = new Error("Proposal not found.");
+    err.status = 404;
+    throw err;
+  }
+  await _sbAssertProposalOwnerOrAdmin(row, req, body);
+  return row;
 }
 
 async function _sbUpsertProductProposalItem(proposalId, product, quantity) {
@@ -4470,7 +4550,7 @@ async function _sbUpsertProductProposalItem(proposalId, product, quantity) {
   return _sbSerializeProductProposalItem(created || row);
 }
 
-async function _sbAddProductProposalItem(proposalId, body = {}) {
+async function _sbAddProductProposalItem(proposalId, body = {}, req = null) {
   const productId = String(body?.productId || body?.product_id || body?.id || "").trim();
   const product = await _sbProductById(productId);
   if (!product) {
@@ -4478,18 +4558,20 @@ async function _sbAddProductProposalItem(proposalId, body = {}) {
     err.status = 404;
     throw err;
   }
+  await _sbRequireEditableProductProposal(proposalId, req, body);
   await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1);
   await _sbTouchProductProposal(proposalId);
-  return await _sbProductProposalById(proposalId);
+  return await _sbProductProposalById(proposalId, req);
 }
 
-async function _sbAddProductProposalItemsByTag(proposalId, body = {}) {
+async function _sbAddProductProposalItemsByTag(proposalId, body = {}, req = null) {
   const tag = _sbProposalText(body?.tag || body?.tags || body?.name);
   if (!tag) {
     const err = new Error("Tag is required.");
     err.status = 400;
     throw err;
   }
+  await _sbRequireEditableProductProposal(proposalId, req, body);
   const products = (await _sbProductsList()).filter((product) => firstProductTagForServer(product) === tag);
   if (!products.length) {
     const err = new Error("No products were found under this tag.");
@@ -4500,11 +4582,11 @@ async function _sbAddProductProposalItemsByTag(proposalId, body = {}) {
     await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1);
   }
   await _sbTouchProductProposal(proposalId);
-  const detail = await _sbProductProposalById(proposalId);
+  const detail = await _sbProductProposalById(proposalId, req);
   return { ...detail, addedCount: products.length };
 }
 
-async function _sbUpdateProductProposalItem(proposalId, itemId, body = {}) {
+async function _sbUpdateProductProposalItem(proposalId, itemId, body = {}, req = null) {
   const pid = String(proposalId || "").trim();
   const iid = String(itemId || "").trim();
   if (!pid || !iid) {
@@ -4512,6 +4594,7 @@ async function _sbUpdateProductProposalItem(proposalId, itemId, body = {}) {
     err.status = 400;
     throw err;
   }
+  await _sbRequireEditableProductProposal(pid, req, body);
   const current = (await _sbProposalItemRows(pid)).find((item) => String(_sbGet(item, ["id", "ID"]) ?? "").trim() === iid);
   if (!current) {
     const err = new Error("Proposal item not found.");
@@ -4523,10 +4606,10 @@ async function _sbUpdateProductProposalItem(proposalId, itemId, body = {}) {
     updated_at: new Date().toISOString(),
   });
   await _sbTouchProductProposal(pid);
-  return await _sbProductProposalById(pid);
+  return await _sbProductProposalById(pid, req);
 }
 
-async function _sbDeleteProductProposalItem(proposalId, itemId) {
+async function _sbDeleteProductProposalItem(proposalId, itemId, body = {}, req = null) {
   const pid = String(proposalId || "").trim();
   const iid = String(itemId || "").trim();
   if (!pid || !iid) {
@@ -4534,9 +4617,10 @@ async function _sbDeleteProductProposalItem(proposalId, itemId) {
     err.status = 400;
     throw err;
   }
+  await _sbRequireEditableProductProposal(pid, req, body);
   await supabaseDb.deleteById(_sbProductProposalItemsTable(), iid);
   await _sbTouchProductProposal(pid);
-  return await _sbProductProposalById(pid);
+  return await _sbProductProposalById(pid, req);
 }
 
 
@@ -4557,17 +4641,19 @@ function _sbKitMissingTableError(error) {
   return error;
 }
 
-function _sbSerializeProductKit(row = {}, itemsCount = 0) {
+function _sbSerializeProductKit(row = {}, itemsCount = 0, req = null) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbProposalText(_sbGet(row, ["name", "Name", "kit_name", "Kit Name"])) || "Untitled Kit";
+  const owner = _sbProposalOwnerInfo(row);
   return {
     id,
     name,
-    createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
-    createdById: _sbProposalText(_sbGet(row, ["created_by_id", "createdById", "Created By ID"])) || null,
+    createdBy: owner.createdBy,
+    createdById: owner.createdById,
     createdAt: _sbProposalText(_sbGet(row, ["created_at", "createdAt", "Created At"])) || null,
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
     itemsCount: Number(itemsCount) || 0,
+    canEdit: req ? _sbProposalCurrentUserOwns(row, req) : false,
   };
 }
 
@@ -4606,24 +4692,24 @@ async function _sbKitItemRows(kitId = null) {
   }
 }
 
-async function _sbProductsKitsList() {
+async function _sbProductsKitsList(req = null) {
   const [kits, items] = await Promise.all([_sbKitRows(), _sbKitItemRows(null)]);
   const counts = new Map();
   for (const item of items || []) {
     const kid = String(_sbGet(item, ["kit_id", "kitId", "Kit ID"]) ?? "").trim();
     if (kid) counts.set(kid, (counts.get(kid) || 0) + 1);
   }
-  return (kits || []).map((row) => _sbSerializeProductKit(row, counts.get(String(_sbGet(row, ["id", "ID"]) ?? "").trim()) || 0));
+  return (kits || []).map((row) => _sbSerializeProductKit(row, counts.get(String(_sbGet(row, ["id", "ID"]) ?? "").trim()) || 0, req));
 }
 
-async function _sbProductKitById(kitId) {
+async function _sbProductKitById(kitId, req = null) {
   const id = String(kitId || "").trim();
   if (!id) return null;
   try {
     const row = await supabaseDb.selectById(_sbProductKitsTable(), id);
     if (!row) return null;
     const items = (await _sbKitItemRows(id)).map(_sbSerializeProductKitItem).filter((item) => item.id);
-    return { kit: _sbSerializeProductKit(row, items.length), items };
+    return { kit: _sbSerializeProductKit(row, items.length, req), items };
   } catch (error) {
     throw _sbKitMissingTableError(error);
   }
@@ -4658,6 +4744,47 @@ async function _sbCreateProductKit(body = {}, req = null) {
   } catch (error) {
     throw _sbKitMissingTableError(error);
   }
+}
+
+async function _sbRequireEditableProductKit(kitId, req = null, body = {}) {
+  const row = await supabaseDb.selectById(_sbProductKitsTable(), String(kitId || "").trim());
+  if (!row) {
+    const err = new Error("Kit not found.");
+    err.status = 404;
+    throw err;
+  }
+  await _sbAssertProposalOwnerOrAdmin(row, req, body);
+  return row;
+}
+
+async function _sbUpdateProductKit(kitId, body = {}, req = null) {
+  const id = String(kitId || "").trim();
+  const name = _sbProposalText(body?.name || body?.kitName || body?.title);
+  if (!id || !name) {
+    const err = new Error("Kit name is required.");
+    err.status = 400;
+    throw err;
+  }
+  await _sbRequireEditableProductKit(id, req, body);
+  await supabaseDb.updateById(_sbProductKitsTable(), id, { name, updated_at: new Date().toISOString() });
+  return (await _sbProductKitById(id, req)).kit;
+}
+
+async function _sbDeleteProductKit(kitId, body = {}, req = null) {
+  const id = String(kitId || "").trim();
+  if (!id) {
+    const err = new Error("Kit ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  await _sbRequireEditableProductKit(id, req, body);
+  const items = await _sbKitItemRows(id);
+  for (const item of items || []) {
+    const itemId = String(_sbGet(item, ["id", "ID"]) ?? "").trim();
+    if (itemId) await supabaseDb.deleteById(_sbProductKitItemsTable(), itemId);
+  }
+  await supabaseDb.deleteById(_sbProductKitsTable(), id);
+  return { deleted: true, id };
 }
 
 async function _sbUpsertProductKitItem(kitId, product, quantity) {
@@ -4697,7 +4824,7 @@ async function _sbUpsertProductKitItem(kitId, product, quantity) {
   return _sbSerializeProductKitItem(created || row);
 }
 
-async function _sbAddProductKitItem(kitId, body = {}) {
+async function _sbAddProductKitItem(kitId, body = {}, req = null) {
   const productId = String(body?.productId || body?.product_id || body?.id || "").trim();
   const product = await _sbProductById(productId);
   if (!product) {
@@ -4705,12 +4832,13 @@ async function _sbAddProductKitItem(kitId, body = {}) {
     err.status = 404;
     throw err;
   }
+  await _sbRequireEditableProductKit(kitId, req, body);
   await _sbUpsertProductKitItem(kitId, product, body?.quantity || body?.qty || 1);
   await _sbTouchProductKit(kitId);
-  return await _sbProductKitById(kitId);
+  return await _sbProductKitById(kitId, req);
 }
 
-async function _sbUpdateProductKitItem(kitId, itemId, body = {}) {
+async function _sbUpdateProductKitItem(kitId, itemId, body = {}, req = null) {
   const kid = String(kitId || "").trim();
   const iid = String(itemId || "").trim();
   if (!kid || !iid) {
@@ -4718,6 +4846,7 @@ async function _sbUpdateProductKitItem(kitId, itemId, body = {}) {
     err.status = 400;
     throw err;
   }
+  await _sbRequireEditableProductKit(kid, req, body);
   const current = (await _sbKitItemRows(kid)).find((item) => String(_sbGet(item, ["id", "ID"]) ?? "").trim() === iid);
   if (!current) {
     const err = new Error("Kit item not found.");
@@ -4729,10 +4858,10 @@ async function _sbUpdateProductKitItem(kitId, itemId, body = {}) {
     updated_at: new Date().toISOString(),
   });
   await _sbTouchProductKit(kid);
-  return await _sbProductKitById(kid);
+  return await _sbProductKitById(kid, req);
 }
 
-async function _sbDeleteProductKitItem(kitId, itemId) {
+async function _sbDeleteProductKitItem(kitId, itemId, body = {}, req = null) {
   const kid = String(kitId || "").trim();
   const iid = String(itemId || "").trim();
   if (!kid || !iid) {
@@ -4740,19 +4869,21 @@ async function _sbDeleteProductKitItem(kitId, itemId) {
     err.status = 400;
     throw err;
   }
+  await _sbRequireEditableProductKit(kid, req, body);
   await supabaseDb.deleteById(_sbProductKitItemsTable(), iid);
   await _sbTouchProductKit(kid);
-  return await _sbProductKitById(kid);
+  return await _sbProductKitById(kid, req);
 }
 
-async function _sbAddProductProposalItemsByKit(proposalId, body = {}) {
+async function _sbAddProductProposalItemsByKit(proposalId, body = {}, req = null) {
   const kitId = String(body?.kitId || body?.kit_id || body?.id || "").trim();
   if (!kitId) {
     const err = new Error("Kit is required.");
     err.status = 400;
     throw err;
   }
-  const detail = await _sbProductKitById(kitId);
+  await _sbRequireEditableProductProposal(proposalId, req, body);
+  const detail = await _sbProductKitById(kitId, req);
   if (!detail?.kit) {
     const err = new Error("Kit not found.");
     err.status = 404;
@@ -4776,8 +4907,100 @@ async function _sbAddProductProposalItemsByKit(proposalId, body = {}) {
     addedCount += 1;
   }
   await _sbTouchProductProposal(proposalId);
-  const proposal = await _sbProductProposalById(proposalId);
+  const proposal = await _sbProductProposalById(proposalId, req);
   return { ...proposal, addedCount, kit: detail.kit };
+}
+
+function _sbSerializeProposalTeamMember(row = {}) {
+  const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+  const name = _sbString(_sbValueForLabel(row, "Name")) || _sbProposalText(_sbGet(row, ["name", "Name"])) || "Unnamed";
+  return {
+    id,
+    name,
+    position: _sbString(_sbValueForLabel(row, "Position")) || "",
+    department: _sbString(_sbValueForLabel(row, "Department")) || "",
+  };
+}
+
+async function _sbProposalTeamMembersList() {
+  const rows = await _sbSelectTeamMembersRows();
+  return (rows || []).map(_sbSerializeProposalTeamMember).filter((m) => m.id && m.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+async function _sbVerifyTeamMemberPassword(memberId, password) {
+  const row = await _sbFindTeamMemberById(memberId);
+  if (!row) return { ok: false, error: "Team member not found." };
+  const stored = _sbString(_sbValueForLabel(row, "Password"));
+  if (!stored) return { ok: false, error: "This team member does not have a saved password." };
+  if (String(stored) !== String(password || "")) return { ok: false, error: "Invalid password." };
+  return { ok: true, member: _sbSerializeProposalTeamMember(row), row };
+}
+
+async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
+  const pid = String(proposalId || "").trim();
+  const teamMemberId = String(body?.teamMemberId || body?.team_member_id || "").trim();
+  const password = String(body?.password || "").trim();
+  if (!pid) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!teamMemberId || !password) {
+    const err = new Error("Team member and password are required.");
+    err.status = 400;
+    throw err;
+  }
+  const verified = await _sbVerifyTeamMemberPassword(teamMemberId, password);
+  if (!verified.ok) {
+    const err = new Error(verified.error || "Invalid password.");
+    err.status = verified.error === "Team member not found." ? 404 : 401;
+    throw err;
+  }
+  const detail = await _sbProductProposalById(pid, req);
+  if (!detail?.proposal) {
+    const err = new Error("Proposal not found.");
+    err.status = 404;
+    throw err;
+  }
+  const items = Array.isArray(detail.items) ? detail.items : [];
+  if (!items.length) {
+    const err = new Error("This proposal has no components yet.");
+    err.status = 400;
+    throw err;
+  }
+  const productMap = await _sbProductsMapById();
+  const orderNumber = await _sbNextOrderNumber();
+  const now = new Date().toISOString();
+  const created = [];
+  for (const item of items) {
+    const product = productMap.get(String(item.productId || "")) || {};
+    const qty = _sbProposalQuantity(item.quantity || 1);
+    const row = {
+      reason: detail.proposal.name || "Proposal",
+      order_number: orderNumber,
+      order_type: _canonicalOrderTypeLabel("Request Products") || "Request Products",
+      notion_created_time: now,
+      product_name: product.name || item.productName || "Unknown Product",
+      product_url: product.url || null,
+      unit_price: Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "Order Placed",
+      sv_approval: null,
+      team_member_id: verified.member.id || null,
+      team_member_name: verified.member.name || null,
+      issue_description: `Created from proposal: ${detail.proposal.name || "Proposal"}`,
+      supervisor: null,
+      person_received_by_operations: null,
+      created_by_name: String(req?.session?.username || "").trim() || null,
+      created_by_id: String(req?.session?.userSupabaseId || "").trim() || null,
+    };
+    created.push(await supabaseDb.insert(_sbOrdersTable(), row));
+  }
+  await _sbInvalidateOrdersCaches();
+  return { orderNumber, orderId: `ORD-${orderNumber}`, count: created.length, member: verified.member };
 }
 
 async function _sbProductsMapById() {
@@ -19477,7 +19700,7 @@ app.get(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const proposals = await _sbProductsProposalsList();
+      const proposals = await _sbProductsProposalsList(req);
       return res.json({ ok: true, source: "supabase", proposals });
     } catch (error) {
       console.error("GET /api/products/proposals error:", error?.details || error);
@@ -19504,6 +19727,23 @@ app.post(
 );
 
 app.get(
+  "/api/products/proposals/team-members",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled()) return res.status(500).json({ ok: false, error: "Supabase Team Members table is not configured." });
+      const members = await _sbProposalTeamMembersList();
+      return res.json({ ok: true, source: "supabase", members });
+    } catch (error) {
+      console.error("GET /api/products/proposals/team-members error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load team members." });
+    }
+  },
+);
+
+app.patch(
   "/api/products/proposals/:proposalId",
   requireAuth,
   requirePage(["Proposals", "Products"]),
@@ -19511,7 +19751,58 @@ app.get(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbProductProposalById(req.params.proposalId);
+      const proposal = await _sbUpdateProductProposal(req.params.proposalId, req.body || {}, req);
+      return res.json({ ok: true, source: "supabase", proposal });
+    } catch (error) {
+      console.error("PATCH /api/products/proposals/:proposalId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update product proposal." });
+    }
+  },
+);
+
+app.delete(
+  "/api/products/proposals/:proposalId",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const result = await _sbDeleteProductProposal(req.params.proposalId, req.body || {}, req);
+      return res.json({ ok: true, source: "supabase", ...result });
+    } catch (error) {
+      console.error("DELETE /api/products/proposals/:proposalId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete product proposal." });
+    }
+  },
+);
+
+app.post(
+  "/api/products/proposals/:proposalId/make-order",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbOrdersEnabled()) return res.status(500).json({ ok: false, error: "Supabase Orders table is not configured." });
+      const result = await _sbCreateOrderFromProposal(req.params.proposalId, req.body || {}, req);
+      return res.status(201).json({ ok: true, source: "supabase", ...result });
+    } catch (error) {
+      console.error("POST /api/products/proposals/:proposalId/make-order error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create order from proposal." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/proposals/:proposalId",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const detail = await _sbProductProposalById(req.params.proposalId, req);
       if (!detail?.proposal) return res.status(404).json({ ok: false, error: "Proposal not found." });
       return res.json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
@@ -19529,7 +19820,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbAddProductProposalItem(req.params.proposalId, req.body || {});
+      const detail = await _sbAddProductProposalItem(req.params.proposalId, req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("POST /api/products/proposals/:proposalId/items error:", error?.details || error);
@@ -19546,7 +19837,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbAddProductProposalItemsByTag(req.params.proposalId, req.body || {});
+      const detail = await _sbAddProductProposalItemsByTag(req.params.proposalId, req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("POST /api/products/proposals/:proposalId/items/by-tag error:", error?.details || error);
@@ -19563,7 +19854,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbAddProductProposalItemsByKit(req.params.proposalId, req.body || {});
+      const detail = await _sbAddProductProposalItemsByKit(req.params.proposalId, req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("POST /api/products/proposals/:proposalId/items/by-kit error:", error?.details || error);
@@ -19580,7 +19871,7 @@ app.patch(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbUpdateProductProposalItem(req.params.proposalId, req.params.itemId, req.body || {});
+      const detail = await _sbUpdateProductProposalItem(req.params.proposalId, req.params.itemId, req.body || {}, req);
       return res.json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("PATCH /api/products/proposals/:proposalId/items/:itemId error:", error?.details || error);
@@ -19597,7 +19888,7 @@ app.delete(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbDeleteProductProposalItem(req.params.proposalId, req.params.itemId);
+      const detail = await _sbDeleteProductProposalItem(req.params.proposalId, req.params.itemId, req.body || {}, req);
       return res.json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("DELETE /api/products/proposals/:proposalId/items/:itemId error:", error?.details || error);
@@ -19615,7 +19906,7 @@ app.get(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const kits = await _sbProductsKitsList();
+      const kits = await _sbProductsKitsList(req);
       return res.json({ ok: true, source: "supabase", kits });
     } catch (error) {
       console.error("GET /api/products/kits error:", error?.details || error);
@@ -19641,6 +19932,40 @@ app.post(
   },
 );
 
+app.patch(
+  "/api/products/kits/:kitId",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const kit = await _sbUpdateProductKit(req.params.kitId, req.body || {}, req);
+      return res.json({ ok: true, source: "supabase", kit });
+    } catch (error) {
+      console.error("PATCH /api/products/kits/:kitId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update product kit." });
+    }
+  },
+);
+
+app.delete(
+  "/api/products/kits/:kitId",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const result = await _sbDeleteProductKit(req.params.kitId, req.body || {}, req);
+      return res.json({ ok: true, source: "supabase", ...result });
+    } catch (error) {
+      console.error("DELETE /api/products/kits/:kitId error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete product kit." });
+    }
+  },
+);
+
 app.get(
   "/api/products/kits/:kitId",
   requireAuth,
@@ -19649,7 +19974,7 @@ app.get(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbProductKitById(req.params.kitId);
+      const detail = await _sbProductKitById(req.params.kitId, req);
       if (!detail?.kit) return res.status(404).json({ ok: false, error: "Kit not found." });
       return res.json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
@@ -19667,7 +19992,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbAddProductKitItem(req.params.kitId, req.body || {});
+      const detail = await _sbAddProductKitItem(req.params.kitId, req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("POST /api/products/kits/:kitId/items error:", error?.details || error);
@@ -19684,7 +20009,7 @@ app.patch(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbUpdateProductKitItem(req.params.kitId, req.params.itemId, req.body || {});
+      const detail = await _sbUpdateProductKitItem(req.params.kitId, req.params.itemId, req.body || {}, req);
       return res.json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("PATCH /api/products/kits/:kitId/items/:itemId error:", error?.details || error);
@@ -19701,7 +20026,7 @@ app.delete(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbDeleteProductKitItem(req.params.kitId, req.params.itemId);
+      const detail = await _sbDeleteProductKitItem(req.params.kitId, req.params.itemId, req.body || {}, req);
       return res.json({ ok: true, source: "supabase", ...detail });
     } catch (error) {
       console.error("DELETE /api/products/kits/:kitId/items/:itemId error:", error?.details || error);
