@@ -166,15 +166,13 @@
 
     <!-- Tracking progress (same UI as Current Orders) -->
     <div class="co-track-pill" id="reqTrackPill" role="img" aria-label="Order progress">
-      <div class="co-track-step" id="reqStep1" title="Order Placed"><i data-feather="package"></i></div>
+      <div class="co-track-step" id="reqStep1" title="Under Supervision"><i data-feather="eye"></i></div>
       <div class="co-track-conn" id="reqConn1"></div>
-      <div class="co-track-step" id="reqStep2" title="Under Supervision"><i data-feather="eye"></i></div>
+      <div class="co-track-step" id="reqStep2" title="In progress"><i data-feather="activity"></i></div>
       <div class="co-track-conn" id="reqConn2"></div>
-      <div class="co-track-step" id="reqStep3" title="In progress"><i data-feather="activity"></i></div>
+      <div class="co-track-step" id="reqStep3" title="Shipped"><i data-feather="truck"></i></div>
       <div class="co-track-conn" id="reqConn3"></div>
-      <div class="co-track-step" id="reqStep4" title="Shipped"><i data-feather="truck"></i></div>
-      <div class="co-track-conn" id="reqConn4"></div>
-      <div class="co-track-step" id="reqStep5" title="Arrived"><i data-feather="home"></i></div>
+      <div class="co-track-step" id="reqStep4" title="Arrived"><i data-feather="home"></i></div>
     </div>
 
     <div class="co-modal-body">
@@ -471,6 +469,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js"></script>
-<script src="/js/requested-orders.js?v=receipt-photos-click-v1"></script>
+<script src="/js/requested-orders.js?v=orders-status-qty-edit-v2"></script>
 </body>
 </html>

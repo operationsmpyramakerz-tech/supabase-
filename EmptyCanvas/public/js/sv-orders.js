@@ -684,7 +684,6 @@
 
   // ===== Tracking progress (same flow as Current Orders) =====
   const STATUS_FLOW = [
-    { label: "Order Placed", sub: "Your order has been placed." },
     { label: "Under Supervision", sub: "Your order is under supervision." },
     { label: "In progress", sub: "We are preparing your order." },
     { label: "Shipped", sub: "Your cargo is on delivery." },
@@ -693,11 +692,10 @@
 
   function statusToIndex(status) {
     const s = norm(status).replace(/[_-]+/g, " ");
-    if (/(arrived|delivered|received)/.test(s)) return 5;
-    if (/(shipped|on the way|delivering|prepared)/.test(s)) return 4;
-    if (/(in progress|inprogress|progress)/.test(s)) return 3;
-    if (/(under supervision|supervision|review)/.test(s)) return 2;
-    if (/(order placed|placed|pending|order received)/.test(s)) return 1;
+    if (/(arrived|delivered|received)/.test(s)) return 4;
+    if (/(shipped|on the way|delivering|prepared)/.test(s)) return 3;
+    if (/(in progress|inprogress|progress)/.test(s)) return 2;
+    if (/(under supervision|supervision|review|order placed|placed|pending|order received)/.test(s)) return 1;
     return 1;
   }
 
@@ -706,22 +704,22 @@
       1,
       ...(items || []).map((x) => statusToIndex(x?.status)),
     );
-    const safe = Math.min(5, Math.max(1, idx));
+    const safe = Math.min(4, Math.max(1, idx));
     const meta = STATUS_FLOW[safe - 1] || STATUS_FLOW[0];
     return { idx: safe, label: meta.label, sub: meta.sub };
   }
 
   function setSVProgress(idx) {
-    const safe = Math.min(5, Math.max(1, Number(idx) || 1));
+    const safe = Math.min(4, Math.max(1, Number(idx) || 1));
 
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 4; i++) {
       const stepEl = document.getElementById(`svStep${i}`);
       if (!stepEl) continue;
       stepEl.classList.toggle("is-active", i <= safe);
       stepEl.classList.toggle("is-current", i === safe);
     }
 
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 3; i++) {
       const connEl = document.getElementById(`svConn${i}`);
       if (!connEl) continue;
       connEl.classList.toggle("is-active", i < safe);
@@ -1150,9 +1148,6 @@
       : null;
     const requestedQty = it ? roundQty(Number(it.quantity) || 0) : 0;
     const currentVal = edited !== null ? edited : requestedQty;
-    const minAllowed = Math.min(requestedQty, 0);
-    const maxAllowed = Math.max(requestedQty, 0);
-
     popEl = document.createElement("div");
     popEl.className = "sv-qty-popover";
     popEl.innerHTML = `
@@ -1160,7 +1155,7 @@
       <div class="sv-qty-popover__body">
         <div class="sv-qty-row">
           <button class="sv-qty-btn sv-qty-dec" type="button" aria-label="Decrease">−</button>
-          <input class="sv-qty-input" type="number" min="${escapeHTML(String(minAllowed))}" max="${escapeHTML(String(maxAllowed))}" step="any" value="${escapeHTML(fmtQty(currentVal))}" />
+          <input class="sv-qty-input" type="number" step="any" value="${escapeHTML(fmtQty(currentVal))}" />
           <button class="sv-qty-btn sv-qty-inc" type="button" aria-label="Increase">+</button>
         </div>
         <div class="sv-qty-actions">
@@ -1182,10 +1177,7 @@
 
     const clamp = (n) => {
       const raw = Number(n);
-      const v = Number.isFinite(raw) ? roundQty(raw) : 0;
-      if (v < minAllowed) return roundQty(minAllowed);
-      if (v > maxAllowed) return roundQty(maxAllowed);
-      return v;
+      return Number.isFinite(raw) ? roundQty(raw) : 0;
     };
 
     decBtn.addEventListener("click", () => { input.value = fmtQty(clamp((Number(input.value) || 0) - 1)); });

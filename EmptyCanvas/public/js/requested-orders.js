@@ -83,13 +83,11 @@ document.addEventListener("DOMContentLoaded", () => {
     2: document.getElementById("reqStep2"),
     3: document.getElementById("reqStep3"),
     4: document.getElementById("reqStep4"),
-    5: document.getElementById("reqStep5"),
   };
   const connEls = {
     1: document.getElementById("reqConn1"),
     2: document.getElementById("reqConn2"),
     3: document.getElementById("reqConn3"),
-    4: document.getElementById("reqConn4"),
   };
 
   // Receipt sub-modal
@@ -1700,7 +1698,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------- Status / Tabs ----------
   // NOTE: "Delivered" tab maps to Arrived/Delivered/Received.
   const STATUS_FLOW = [
-    { key: "placed", label: "Order Placed", sub: "We received your order." },
     { key: "supervision", label: "Under Supervision", sub: "Your order is under supervision." },
     { key: "progress", label: "In progress", sub: "We are preparing your order." },
     { key: "shipped", label: "Shipped", sub: "Your order is on the way." },
@@ -1710,11 +1707,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function statusToIndex(status) {
     const s = norm(status);
-    if (/archive|archived/.test(s)) return 6;
-    if (/(arrived|delivered|received)/.test(s)) return 5;
-    if (/shipped/.test(s)) return 4;
-    if (/(in\s*progress|preparing|processing)/.test(s)) return 3;
-    if (/under\s*supervision/.test(s)) return 2;
+    if (/archive|archived/.test(s)) return 5;
+    if (/(arrived|delivered|received)/.test(s)) return 4;
+    if (/shipped/.test(s)) return 3;
+    if (/(in\s*progress|preparing|processing)/.test(s)) return 2;
+    if (/(under\s*supervision|order\s*placed|placed|pending|order\s*received)/.test(s)) return 1;
     return 1;
   }
 
@@ -1738,9 +1735,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function tabFromStageIdx(idx) {
-    if (idx >= 6) return "archive";
-    if (idx >= 5) return "delivered";
-    if (idx >= 4) return "received";
+    if (idx >= 5) return "archive";
+    if (idx >= 4) return "delivered";
+    if (idx >= 3) return "received";
     return "not-started";
   }
 
@@ -1788,9 +1785,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // - Received: shipped and fully received
   function tabForGroup(g) {
     const idx = g?.stage?.idx || 1;
-    if (idx >= 6) return "archive";
-    if (idx >= 5) return "delivered";
-    if (idx >= 4) return g?.hasRemaining ? "remaining" : "received";
+    if (idx >= 5) return "archive";
+    if (idx >= 4) return "delivered";
+    if (idx >= 3) return g?.hasRemaining ? "remaining" : "received";
     return "not-started";
   }
 
@@ -1809,14 +1806,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setActiveStep(step) {
-    const safe = Math.min(5, Math.max(1, Number(step) || 1));
-    for (let i = 1; i <= 5; i++) {
+    const safe = Math.min(4, Math.max(1, Number(step) || 1));
+    for (let i = 1; i <= 4; i++) {
       const el = stepEls[i];
       if (!el) continue;
       el.classList.toggle("is-active", i <= safe);
       el.classList.toggle("is-current", i === safe);
     }
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 3; i++) {
       const el = connEls[i];
       if (!el) continue;
       el.classList.toggle("is-active", i < safe);

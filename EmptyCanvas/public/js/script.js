@@ -396,7 +396,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ===== Order status flow (as requested) =====
   const STATUS_FLOW = [
-    { label: 'Order Placed', sub: 'Your order has been placed.' },
     { label: 'Under Supervision', sub: 'Your order is under supervision.' },
     { label: 'In progress', sub: 'We are preparing your order.' },
     { label: 'Shipped', sub: 'Your cargo is on delivery.' },
@@ -407,11 +406,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = norm(status).replace(/[_-]+/g, ' ');
 
     // Most advanced statuses first
-    if (/(arrived|delivered|received)/.test(s)) return 5;
-    if (/(shipped|on the way|delivering|prepared)/.test(s)) return 4;
-    if (/(in progress|inprogress|progress)/.test(s)) return 3;
-    if (/(under supervision|supervision|review)/.test(s)) return 2;
-    if (/(order placed|placed|pending|order received)/.test(s)) return 1;
+    if (/(arrived|delivered|received)/.test(s)) return 4;
+    if (/(shipped|on the way|delivering|prepared)/.test(s)) return 3;
+    if (/(in progress|inprogress|progress)/.test(s)) return 2;
+    if (/(under supervision|supervision|review|order placed|placed|pending|order received)/.test(s)) return 1;
     return 1;
   }
 
@@ -428,20 +426,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    const safe = Math.min(5, Math.max(1, bestIdx));
+    const safe = Math.min(4, Math.max(1, bestIdx));
     const meta = STATUS_FLOW[safe - 1] || STATUS_FLOW[0];
     return { idx: safe, label: meta.label, sub: meta.sub, color: bestColor };
   }
 
   function setProgress(idx) {
-    const safe = Math.min(5, Math.max(1, Number(idx) || 1));
-    for (let i = 1; i <= 5; i++) {
+    const safe = Math.min(4, Math.max(1, Number(idx) || 1));
+    for (let i = 1; i <= 4; i++) {
       const stepEl = document.getElementById(`coStep${i}`);
       if (!stepEl) continue;
       stepEl.classList.toggle('is-active', i <= safe);
       stepEl.classList.toggle('is-current', i === safe);
     }
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 3; i++) {
       const connEl = document.getElementById(`coConn${i}`);
       if (!connEl) continue;
       connEl.classList.toggle('is-active', i < safe);
@@ -474,17 +472,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In Current Orders we show Qty based on:
     // - Quantity Requested (original request)
-    // - Quantity Progress (current progress)
-    // If Quantity Requested === Quantity Progress -> show requested normally
-    // If different -> strike requested and show progress next to it
+    // - Quantity Edited by supervisor (if present)
+    // The old Quantity Progress formula is no longer the source of truth.
     const effectiveQty = (x) => {
       const requested =
         asFiniteNumber(x?.quantityRequested) ??
         asFiniteNumber(x?.quantity) ??
         0;
 
-      const progress = asFiniteNumber(x?.quantityProgress);
-      return progress !== null && progress !== undefined ? progress : requested;
+      const edited = asFiniteNumber(x?.quantityEditedBySupervisor) ?? asFiniteNumber(x?.quantityProgress);
+      return edited !== null && edited !== undefined ? edited : requested;
     };
 
     // Meta
@@ -516,16 +513,15 @@ document.addEventListener('DOMContentLoaded', () => {
             asFiniteNumber(it?.quantity) ??
             0;
 
-          const qtyProgress = asFiniteNumber(it?.quantityProgress);
+          const qtyEdited = asFiniteNumber(it?.quantityEditedBySupervisor) ?? asFiniteNumber(it?.quantityProgress);
 
-          const qty = qtyProgress !== null && qtyProgress !== undefined ? qtyProgress : qtyRequested;
+          const qty = qtyEdited !== null && qtyEdited !== undefined ? qtyEdited : qtyRequested;
           const unit = Number(it.unitPrice) || 0;
           const lineTotal = qty * unit;
 
-          // If Quantity Progress differs from Quantity Requested, strike requested and show progress next to it
-          const showDiff = qtyProgress !== null && qtyProgress !== undefined && qtyProgress !== qtyRequested;
+          const showDiff = qtyEdited !== null && qtyEdited !== undefined && qtyEdited !== qtyRequested;
           const qtyHTML = showDiff
-            ? `<span class="sv-qty-diff"><span class="sv-qty-old">${escapeHTML(String(qtyRequested))}</span><strong class="sv-qty-new">${escapeHTML(String(qtyProgress))}</strong></span>`
+            ? `<span class="sv-qty-diff"><span class="sv-qty-old">${escapeHTML(String(qtyRequested))}</span><strong class="sv-qty-new">${escapeHTML(String(qtyEdited))}</strong></span>`
             : `<strong>${escapeHTML(String(qtyRequested))}</strong>`;
 
           const safeUrl = safeHttpUrl(it.productUrl);
@@ -1214,15 +1210,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const itemsCount = items.length;
 
-    // Use the same "effective" quantity logic as the modal (Quantity Progress overrides).
+    // Use the same effective quantity logic as the modal (supervisor edit overrides).
     const effectiveQty = (x) => {
       const requested =
         asFiniteNumber(x?.quantityRequested) ??
         asFiniteNumber(x?.quantity) ??
         0;
 
-      const progress = asFiniteNumber(x?.quantityProgress);
-      return progress !== null && progress !== undefined ? progress : requested;
+      const edited = asFiniteNumber(x?.quantityEditedBySupervisor) ?? asFiniteNumber(x?.quantityProgress);
+      return edited !== null && edited !== undefined ? edited : requested;
     };
 
     // "Components price" = total cost of all items (qty * unitPrice)

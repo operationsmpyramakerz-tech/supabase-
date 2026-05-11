@@ -3510,10 +3510,11 @@ function _sbSerializeOrderRow(row = {}) {
   const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
   const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
   const qtyEditedBySupervisor = _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor", "Quantity Edited by Supervisor", "quantity_edited", "edited_quantity"]));
-  const qtyOriginalBase = roundOrderQty(qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0));
-  // Supabase does not have the old Notion formula that made Quantity Progress follow
-  // the supervisor edit automatically. Treat the supervisor-edited value as the
-  // effective order quantity everywhere Current / Operations / Review pages render it.
+  // Supabase replacement for the old Notion formula:
+  // the original quantity is always Quantity Requested. If the supervisor writes
+  // Quantity Edited by supervisor, that edited value becomes the effective qty.
+  // The legacy Quantity Progress column is kept only as a fallback for old rows.
+  const qtyOriginalBase = roundOrderQty(qtyRequested !== null ? qtyRequested : (qtyProgress !== null ? qtyProgress : 0));
   const qtyBase = roundOrderQty(qtyEditedBySupervisor !== null ? qtyEditedBySupervisor : qtyOriginalBase);
   const qtyReceivedRaw = _sbOrderNum(_sbOrderGet(row, [
     "quantity_received_by_operations",
@@ -3600,7 +3601,7 @@ function _sbSerializeOrderRow(row = {}) {
     productImage: null,
     unitPrice: _sbOrderNum(_sbOrderGet(row, ["unit_price", "Unit price", "Unity Price", "Price"])),
     quantityRequested: qtyRequested !== null ? qtyRequested : qtyBase,
-    quantityProgress: qtyProgress,
+    quantityProgress: qtyEditedBySupervisor,
     quantityEditedBySupervisor: qtyEditedBySupervisor,
     quantityReceived: qtyReceived,
     quantityRemaining: qtyRemaining,
@@ -3866,7 +3867,7 @@ async function _sbCreateRepeatOrderFromDeliveredRows(orderIds = [], {
       quantity_progress: qty,
       quantity_received_by_operations: 0,
       quantity_remaining: qty,
-      status: "Order Placed",
+      status: "Under Supervision",
       sv_approval: "Approved",
       team_member_name: teamMemberName || null,
       issue_description: item.issueDescription || _sbOrderText(_sbOrderGet(sourceRow, ["issue_description", "Issue Description"])) || null,
@@ -5290,7 +5291,7 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
       quantity_progress: qty,
       quantity_received_by_operations: 0,
       quantity_remaining: qty,
-      status: "Order Placed",
+      status: "Under Supervision",
       sv_approval: null,
       team_member_id: verified.member.id || null,
       team_member_name: verified.member.name || null,
@@ -5342,7 +5343,7 @@ async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") 
       quantity_progress: qty,
       quantity_received_by_operations: 0,
       quantity_remaining: qty,
-      status: "Order Placed",
+      status: "Under Supervision",
       sv_approval: null,
       team_member_name: createdByName,
       issue_description: String(product.issueDescription || "").trim() || null,
@@ -18099,7 +18100,7 @@ app.post(
         orderGroupIdNumber = await allocateNextOrderGroupIdNumber(orderGroupIdProp);
       }
 
-      const statusPlacedValue = makeOptionValue(statusProp, "Order Placed", "select");
+      const statusPlacedValue = makeOptionValue(statusProp, "Under Supervision", "select");
       const withdrawOrderTypeValue = makeOptionValue(orderTypeProp, "Withdraw Products", "select");
       const approvalApprovedValue = makeOptionValue(approvalProp, "Approved", "select");
 
@@ -18300,7 +18301,7 @@ app.post(
         orderGroupIdNumber = await allocateNextOrderGroupIdNumber(orderGroupIdProp);
       }
 
-      const statusPlacedValue = makeOptionValue(statusProp, "Order Placed", "select");
+      const statusPlacedValue = makeOptionValue(statusProp, "Under Supervision", "select");
       const deliveryOrderTypeValue = makeOptionValue(orderTypeProp, "Request Products", "select");
       const approvalApprovedValue = makeOptionValue(approvalProp, "Approved", "select");
 
@@ -21467,7 +21468,7 @@ if (_sbOrdersEnabled() && _sbProductsEnabled() && !req.session.editingOrder) {
       reason: item.reason,
       productName: item.productName,
       quantity: item.quantity,
-      status: item.status || "Order Placed",
+      status: item.status || "Under Supervision",
       createdTime: item.createdTime || new Date().toISOString(),
       orderId: item.orderId || null,
       orderIdPrefix: item.orderIdPrefix || "ORD",
@@ -21635,8 +21636,8 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
         const statusPropType = dbProps?.[statusPropName]?.type || "select";
         const statusPlaced =
           statusPropType === "status"
-            ? { status: { name: "Order Placed" } }
-            : { select: { name: "Order Placed" } };
+            ? { status: { name: "Under Supervision" } }
+            : { select: { name: "Under Supervision" } };
 
         const receivedProp = await (async () => {
           if (dbProps?.[REC_PROP_HARDBIND] && dbProps[REC_PROP_HARDBIND].type === "number") return REC_PROP_HARDBIND;
@@ -21712,7 +21713,7 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
           };
 
           if (t.repurpose) {
-            // Change product relation + reset status to Order Placed
+            // Change product relation + reset status to Under Supervision
             props.Product = { relation: [{ id: t.prod.id }] };
 
             if (statusPropName) {
@@ -21796,7 +21797,7 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
               ...(_issueDescPropValueFor(product.issueDescription) || {}),
               ...maintenanceProps,
               Product: { relation: [{ id: product.id }] },
-              "Status": { select: { name: "Order Placed" } },
+              "Status": { select: { name: "Under Supervision" } },
               "Teams Members": { relation: [{ id: userId }] },
               ...(orderTypePropName && orderTypePropValue
                 ? { [orderTypePropName]: orderTypePropValue }
@@ -21837,7 +21838,7 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
           reason: c.reason,
           productName: c.productName,
           quantity: c.quantity,
-          status: "Order Placed",
+          status: "Under Supervision",
           createdTime: c.createdTime,
           orderId: hasN ? `ORD-${n}` : null,
           orderIdPrefix: hasN ? "ORD" : null,
@@ -26288,7 +26289,9 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
       const requestedRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
       const progressRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
       const requested = roundOrderQty(requestedRaw !== null ? requestedRaw : (progressRaw !== null ? progressRaw : 0));
-      const newVal = clampOrderQtyToBase(requested, value);
+      // Do not clamp to the requested quantity. The supervisor edit is an override
+      // and may be higher/lower than the original request.
+      const newVal = roundOrderQty(value);
       const editedVal = (Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested)) ? null : newVal;
 
       const receivedRaw = _sbOrderNum(_sbOrderGet(row, [
@@ -26303,9 +26306,8 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
 
       await supabaseDb.updateById(_sbOrdersTable(), pageId, {
         quantity_edited_by_supervisor: editedVal,
-        // Replace the old Notion formula behavior for Supabase rows: Quantity Progress
-        // and Quantity Remaining must follow the supervisor's edited quantity.
-        quantity_progress: newVal,
+        // Quantity Progress is no longer used as the source of truth.
+        // Keep only the effective remaining value in sync for Operations.
         quantity_remaining: nextRemaining,
       });
       await clearSVOrdersRouteCaches(req);
@@ -26351,7 +26353,7 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
     };
 
     const requested = roundQty(Number(pg?.properties?.[reqQtyProp]?.number ?? 0));
-    const newVal = clampOrderQtyToBase(requested, value);
+    const newVal = roundQty(value);
     const editedVal = (Number.isFinite(requested) && roundQty(newVal) === roundQty(requested)) ? null : newVal;
 
     await notion.pages.update({
@@ -26653,7 +26655,7 @@ app.post(
         const patch = { sv_approval: decision };
         // Supabase replacement for the old Notion automation:
         // once the supervisor approves/rejects a component, the operational Status
-        // must move from Under Supervision / Order Placed to In progress.
+        // must move from Under Supervision to In progress.
         if (nextStatus) patch.status = nextStatus;
 
         await supabaseDb.updateById(_sbOrdersTable(), pageId, patch);
