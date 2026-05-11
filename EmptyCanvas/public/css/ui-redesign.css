@@ -2638,20 +2638,25 @@ body.ops-hard-refresh-active{
 }
 
 /* =========================================================
-   Mobile dock transparent background fix
-   - The dock is fixed and already has its own black frames.
-   - Do not reserve a large white padding shelf behind it.
-   - Keep scroll-padding so focused/anchored content still respects the dock.
+   Mobile dock transparent background + safe content clearance
+   - The dock keeps only its own black frames; no fixed white shelf behind it.
+   - The scrollable page still reserves enough bottom space so the final card,
+     button, input, or list item can be scrolled above the floating dock.
    ========================================================= */
 @media (max-width: 768px){
+  :root{
+    --mobile-content-dock-clearance: calc(136px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-focus-clearance: calc(158px + env(safe-area-inset-bottom, 0px));
+  }
+
   .main-content > main,
   .main-content > main.container,
   .main-content > main.container-full-width,
   body.shell-embedded .main-content > main,
   body.shell-embedded .main-content > main.tasks-v2-main,
   body.shell-embedded .main-content > main.container-full-width{
-    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important;
-    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: var(--mobile-content-dock-clearance) !important;
+    scroll-padding-bottom: var(--mobile-content-focus-clearance) !important;
   }
 
   .sidebar,
