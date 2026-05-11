@@ -2927,3 +2927,157 @@ body.emails-page.email-inbox-redesign .msg-floating-new-menu svg {
     width: 100% !important;
   }
 }
+
+/* =========================================================
+   Email inbox full-page mobile refinement
+   ========================================================= */
+@media (max-width: 980px) {
+  body.emails-page.email-inbox-redesign .main-content > main.messages-body {
+    --email-mobile-header-space: 116px;
+    width: 100% !important;
+    height: calc(100dvh - var(--email-mobile-header-space)) !important;
+    max-height: calc(100dvh - var(--email-mobile-header-space)) !important;
+    padding: 0 18px 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    overflow: hidden !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-left-panel {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    gap: 18px !important;
+    box-sizing: border-box !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chats-list {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding: 0 4px 168px 0 !important;
+    gap: 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-row {
+    position: relative !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 98px !important;
+    grid-template-columns: 64px minmax(0, 1fr) !important;
+    gap: 14px !important;
+    align-items: center !important;
+    padding: 14px 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 18px !important;
+    font-size: 17px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-main {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding-right: 118px !important;
+    box-sizing: border-box !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-title,
+  body.emails-page.email-inbox-redesign .msg-chat-preview {
+    max-width: 100% !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-meta {
+    position: absolute !important;
+    top: 18px !important;
+    right: 0 !important;
+    max-width: 112px !important;
+    padding-top: 0 !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar-wrap {
+    width: 56px !important;
+    height: 56px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar-wrap .msg-unread-dot {
+    top: -2px !important;
+    right: -2px !important;
+    left: auto !important;
+  }
+}
+
+@media (max-width: 540px) {
+  body.emails-page.email-inbox-redesign .main-content > main.messages-body {
+    --email-mobile-header-space: 116px;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-mobile-inbox-title {
+    font-size: clamp(46px, 14vw, 60px) !important;
+    line-height: .92 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-label-tabs {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip {
+    min-height: 58px !important;
+    padding: 0 18px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-row {
+    min-height: 102px !important;
+    grid-template-columns: 68px minmax(0, 1fr) !important;
+    gap: 14px !important;
+    padding: 15px 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar-wrap,
+  body.emails-page.email-inbox-redesign .msg-chat-avatar {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-main {
+    padding-right: 100px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-title {
+    font-size: 19px !important;
+    line-height: 1.12 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-preview {
+    font-size: 15px !important;
+    line-height: 1.22 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-meta {
+    max-width: 92px !important;
+    font-size: 11px !important;
+  }
+}
