@@ -3628,3 +3628,68 @@ body.emails-page.email-inbox-redesign .msg-custom-label-chip svg {
     border-radius: 28px;
   }
 }
+
+
+/* =========================================================
+   Email label color slider track polish v2
+   - paint the actual range tracks, not only the input surface
+   ========================================================= */
+.msg-label-hue-slider::-webkit-slider-runnable-track {
+  height: 18px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg,
+    #ef4444 0%,
+    #f97316 12%,
+    #facc15 24%,
+    #22c55e 38%,
+    #06b6d4 52%,
+    #2563eb 66%,
+    #7c3aed 82%,
+    #ec4899 100%
+  ) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32), 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+.msg-label-hue-slider::-moz-range-track {
+  height: 18px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg,
+    #ef4444 0%,
+    #f97316 12%,
+    #facc15 24%,
+    #22c55e 38%,
+    #06b6d4 52%,
+    #2563eb 66%,
+    #7c3aed 82%,
+    #ec4899 100%
+  ) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32), 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+.msg-label-saturation-slider::-webkit-slider-runnable-track {
+  height: 18px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg,
+    hsl(var(--msg-label-hue) 6% 88%) 0%,
+    hsl(var(--msg-label-hue) 42% 66%) 45%,
+    hsl(var(--msg-label-hue) 100% 52%) 100%
+  ) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36), 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+.msg-label-saturation-slider::-moz-range-track {
+  height: 18px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg,
+    hsl(var(--msg-label-hue) 6% 88%) 0%,
+    hsl(var(--msg-label-hue) 42% 66%) 45%,
+    hsl(var(--msg-label-hue) 100% 52%) 100%
+  ) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36), 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+.msg-label-slider-group input[type="range"]::-moz-range-progress {
+  height: 18px !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+}
