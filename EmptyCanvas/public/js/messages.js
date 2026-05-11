@@ -39,6 +39,8 @@
     voiceChunks: [],
     isRecording: false,
     recordStartedAt: 0,
+    customLabels: [],
+    floatingNewMenuOpen: false,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -280,15 +282,68 @@
       .filter((c) => !q || [c.title, c.preview, c.participantNames].some((x) => String(x || '').toLowerCase().includes(q)));
   }
 
+  function labelsStorageKey() {
+    const email = normalizeSearch(state.currentUser?.email);
+    const name = normalizeSearch(state.currentUser?.name);
+    return `operationsHub.emails.customLabels.${email || name || 'anonymous'}`;
+  }
+
+  function loadCustomLabels() {
+    try {
+      const raw = localStorage.getItem(labelsStorageKey());
+      const parsed = JSON.parse(raw || '[]');
+      state.customLabels = Array.isArray(parsed)
+        ? parsed.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12)
+        : [];
+    } catch {
+      state.customLabels = [];
+    }
+  }
+
+  function saveCustomLabels() {
+    try { localStorage.setItem(labelsStorageKey(), JSON.stringify(state.customLabels || [])); } catch {}
+  }
+
+  function ensureCustomLabelChips() {
+    const tabs = $('#msgFilterTabs');
+    const addBtn = $('#msgAddLabelBtn');
+    if (!tabs || !addBtn) return;
+    $$('.msg-custom-label-chip', tabs).forEach((chip) => chip.remove());
+    (state.customLabels || []).forEach((label) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'msg-filter-chip msg-custom-label-chip';
+      chip.setAttribute('aria-label', `Email label ${label}`);
+      chip.innerHTML = `<i data-feather="tag"></i><span class="msg-filter-text">${escapeHtml(label)}</span>`;
+      tabs.insertBefore(chip, addBtn);
+    });
+    hydrateIcons();
+  }
+
+  function addCustomLabel() {
+    const name = String(window.prompt('Label name') || '').trim();
+    if (!name) return;
+    const exists = (state.customLabels || []).some((x) => normalizeSearch(x) === normalizeSearch(name));
+    if (exists) {
+      toast('This label already exists.', 'info');
+      return;
+    }
+    state.customLabels = [...(state.customLabels || []), name].slice(0, 12);
+    saveCustomLabels();
+    ensureCustomLabelChips();
+    toast('Label added.', 'success');
+  }
+
   function renderFilterTabs() {
     const tabs = $('#msgFilterTabs');
     if (!tabs) return;
+    ensureCustomLabelChips();
     const filters = ['all', 'unread', 'groups', 'archived', 'closed'];
     const counts = Object.fromEntries(filters.map((f) => [f, state.chats.filter((chat) => chatMatchesFilter(chat, f)).length]));
     $$('[data-filter]', tabs).forEach((btn) => {
       const filter = btn.dataset.filter || 'all';
       btn.classList.toggle('is-active', filter === state.activeFilter);
-      const badge = btn.querySelector('span');
+      const badge = btn.querySelector('.msg-filter-count') || btn.querySelector('span:last-child');
       if (badge) badge.textContent = String(counts[filter] || 0);
     });
   }
@@ -864,6 +919,63 @@
       setNewMenu(false);
       openNewChatModal('group');
     });
+  }
+
+  function setFloatingNewMenu(open) {
+    state.floatingNewMenuOpen = !!open;
+    const menu = $('#msgFloatingNewMenu');
+    const btn = $('#msgFloatingNewBtn');
+    const wrap = $('#msgFloatingNewWrap');
+    if (menu) menu.hidden = !state.floatingNewMenuOpen;
+    if (btn) btn.setAttribute('aria-expanded', state.floatingNewMenuOpen ? 'true' : 'false');
+    if (wrap) wrap.classList.toggle('is-open', state.floatingNewMenuOpen);
+    hydrateIcons();
+  }
+
+  function bindFloatingNewMenu() {
+    $('#msgFloatingNewBtn')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setFloatingNewMenu(!state.floatingNewMenuOpen);
+    });
+    $('#msgFloatingOpenNewChat')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setFloatingNewMenu(false);
+      openNewChatModal('chat');
+    });
+    $('#msgFloatingOpenNewGroup')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setFloatingNewMenu(false);
+      openNewChatModal('group');
+    });
+  }
+
+  function transformEmailShortcutToHome() {
+    const btn = document.getElementById('messagesShortcutBtn');
+    if (!btn) return false;
+    btn.href = '/home';
+    btn.hidden = false;
+    try { btn.style.removeProperty('display'); } catch {}
+    btn.classList.remove('is-active', 'has-unread');
+    btn.classList.add('is-email-home-btn');
+    btn.removeAttribute('data-unread-count');
+    btn.setAttribute('aria-label', 'Home');
+    btn.setAttribute('title', 'Home');
+    if (btn.dataset.emailHomeMode !== '1') {
+      btn.dataset.emailHomeMode = '1';
+      btn.innerHTML = '<i data-feather="home"></i>';
+      hydrateIcons();
+    }
+    return true;
+  }
+
+  function initEmailPageChrome() {
+    transformEmailShortcutToHome();
+    [50, 200, 600, 1200].forEach((delay) => window.setTimeout(transformEmailShortcutToHome, delay));
+    try {
+      const observer = new MutationObserver(() => transformEmailShortcutToHome());
+      observer.observe(document.body, { childList: true, subtree: true });
+      window.setTimeout(() => observer.disconnect(), 5000);
+    } catch {}
   }
 
   function renderPeopleStrip() {
@@ -1599,6 +1711,8 @@
     $('#msgComposerInput')?.addEventListener('keydown', handleMentionKeydown);
     $('#msgComposerInput')?.addEventListener('blur', () => setTimeout(closeMentionMenu, 160));
     $('#msgBackMobile')?.addEventListener('click', closeActiveChat);
+    $('#msgAddLabelBtn')?.addEventListener('click', addCustomLabel);
+    bindFloatingNewMenu();
 
     $('#msgFilterTabs')?.addEventListener('click', (event) => {
       const btn = event.target.closest('[data-filter]');
@@ -1612,14 +1726,15 @@
       if (e.target === $('#msgNewChatModal')) closeNewChatModal();
     });
     document.addEventListener('click', (e) => {
-      if (!state.newMenuOpen) return;
-      if (!e.target.closest('.msg-new-menu-wrap')) setNewMenu(false);
+      if (state.newMenuOpen && !e.target.closest('.msg-new-menu-wrap')) setNewMenu(false);
+      if (state.floatingNewMenuOpen && !e.target.closest('#msgFloatingNewWrap')) setFloatingNewMenu(false);
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (!$('#msgNewChatModal')?.hidden) closeNewChatModal();
         closeMentionMenu();
         setNewMenu(false);
+        setFloatingNewMenu(false);
       }
     });
     window.addEventListener('beforeunload', () => {
@@ -1633,8 +1748,11 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
+    initEmailPageChrome();
     bindEvents();
     await refreshAll({ keepSelection: false });
+    loadCustomLabels();
+    renderFilterTabs();
     startRealtimeLoops();
   });
 })();

@@ -2451,3 +2451,479 @@
     width: min(250px, 100%) !important;
   }
 }
+
+/* =========================================================
+   Email inbox redesign v1
+   - compact Inbox-first mobile layout
+   - hidden sidebar on the Emails page
+   - label chips + floating compose action
+   ========================================================= */
+body.emails-page.email-inbox-redesign .sidebar {
+  display: none !important;
+}
+
+body.emails-page.email-inbox-redesign .app-container {
+  background: #ffffff !important;
+}
+
+body.emails-page.email-inbox-redesign .main-content {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+body.emails-page.email-inbox-redesign .main-header {
+  margin-left: 0 !important;
+}
+
+body.emails-page.email-inbox-redesign .header-message-btn.is-email-home-btn .header-message-unread-dot,
+body.emails-page.email-inbox-redesign .header-message-btn.is-email-home-btn::after {
+  display: none !important;
+  content: none !important;
+}
+
+body.emails-page.email-inbox-redesign .messages-body {
+  padding: 0 26px 26px !important;
+  min-height: calc(100vh - 124px) !important;
+  overflow: hidden !important;
+}
+
+body.emails-page.email-inbox-redesign .messages-shell {
+  position: relative !important;
+  min-height: calc(100vh - 152px) !important;
+  height: calc(100vh - 152px) !important;
+  max-height: calc(100vh - 152px) !important;
+  grid-template-columns: minmax(360px, 430px) minmax(0, 1fr) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+body.emails-page.email-inbox-redesign .messages-left-panel {
+  gap: 16px !important;
+  padding: 24px 22px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-inbox-top {
+  display: block !important;
+  flex: 0 0 auto !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-mobile-inbox-title {
+  margin: 0 !important;
+  color: #050816 !important;
+  font-size: clamp(34px, 5vw, 48px) !important;
+  line-height: .98 !important;
+  letter-spacing: -0.065em !important;
+  font-weight: 950 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-people-strip {
+  display: none !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-list-head {
+  display: none !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-label-tabs {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding: 0 2px 10px !important;
+  margin: 0 !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07) !important;
+  scroll-snap-type: x proximity !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-label-tabs::-webkit-scrollbar {
+  height: 5px !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-label-tabs::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.36) !important;
+  border-radius: 999px !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-filter-chip {
+  flex: 0 0 auto !important;
+  min-height: 50px !important;
+  border-radius: 18px !important;
+  padding: 0 16px !important;
+  gap: 8px !important;
+  background: #f0f2f5 !important;
+  border: 0 !important;
+  color: #6b7280 !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.02em !important;
+  scroll-snap-align: start !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-filter-chip svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 3 !important;
+  flex: 0 0 auto !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-filter-chip .msg-filter-text {
+  white-space: nowrap !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-filter-chip .msg-filter-count {
+  min-width: 28px !important;
+  height: 28px !important;
+  padding: 0 8px !important;
+  margin-left: 2px !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  color: currentColor !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-filter-chip.is-active {
+  background: #0a84ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 30px rgba(10, 132, 255, 0.23) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-filter-chip.is-active .msg-filter-count {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-label-add-btn {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px dashed rgba(15, 23, 42, 0.18) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-custom-label-chip {
+  background: #ffffff !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  color: #334155 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chats-list {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  gap: 0 !important;
+  padding: 0 2px 90px 0 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-row {
+  min-height: 82px !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07) !important;
+  border-radius: 0 !important;
+  padding: 12px 2px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  grid-template-columns: 54px minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-row:hover,
+body.emails-page.email-inbox-redesign .msg-chat-row.is-active {
+  transform: none !important;
+  background: rgba(10, 132, 255, 0.045) !important;
+  border-color: rgba(15, 23, 42, 0.07) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-avatar {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 16px !important;
+  font-size: 14px !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-title {
+  font-size: 17px !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.025em !important;
+  font-weight: 950 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-preview {
+  margin-top: 4px !important;
+  color: #6b7280 !important;
+  font-size: 13px !important;
+  line-height: 1.28 !important;
+  font-weight: 750 !important;
+  white-space: normal !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-meta {
+  align-self: start !important;
+  padding-top: 6px !important;
+  color: #9ca3af !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-badges {
+  margin-top: 5px !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-badge {
+  padding: 3px 8px !important;
+  border-radius: 999px !important;
+  background: #fff2e8 !important;
+  color: #c2410c !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-unread-dot {
+  width: 11px !important;
+  height: 11px !important;
+  background: #0a84ff !important;
+  box-shadow: 0 0 0 5px rgba(10,132,255,.13) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-wrap {
+  position: absolute !important;
+  right: 28px !important;
+  bottom: 24px !important;
+  z-index: 90 !important;
+}
+
+body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-floating-new-wrap {
+  display: none !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-btn {
+  width: 62px !important;
+  height: 62px !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  background: #0b1020 !important;
+  color: #ffffff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  box-shadow: 0 22px 45px rgba(15, 23, 42, 0.28) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-btn svg {
+  width: 28px !important;
+  height: 28px !important;
+  stroke-width: 2.8 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-menu {
+  position: absolute !important;
+  right: 0 !important;
+  bottom: calc(100% + 12px) !important;
+  width: 190px !important;
+  display: grid !important;
+  gap: 8px !important;
+  padding: 10px !important;
+  border-radius: 22px !important;
+  background: rgba(255, 255, 255, .96) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 24px 65px rgba(15, 23, 42, 0.2) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-menu[hidden] {
+  display: none !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-menu button {
+  min-height: 46px !important;
+  border: 0 !important;
+  border-radius: 15px !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  cursor: pointer !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-menu button:hover {
+  background: #eef6ff !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-floating-new-menu svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+@media (max-width: 980px) {
+  body.emails-page.email-inbox-redesign .main-content > main.messages-body {
+    --email-mobile-header-space: 126px;
+    height: calc(100dvh - var(--email-mobile-header-space)) !important;
+    max-height: calc(100dvh - var(--email-mobile-header-space)) !important;
+    min-height: 0 !important;
+    padding: 0 16px 18px !important;
+    overflow: hidden !important;
+  }
+
+  body.emails-page.email-inbox-redesign .main-content.mobile-header-hidden > main.messages-body {
+    --email-mobile-header-space: 0px;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    grid-template-columns: 1fr !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-left-panel {
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 0 0 88px !important;
+    border-right: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-mobile-inbox-title {
+    font-size: 44px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-label-tabs {
+    margin-top: 2px !important;
+    padding-bottom: 12px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip {
+    min-height: 56px !important;
+    border-radius: 18px !important;
+    font-size: 14px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chats-list {
+    padding-bottom: 98px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-row {
+    min-height: 86px !important;
+    padding: 13px 2px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-title {
+    font-size: 18px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-preview {
+    font-size: 14px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-floating-new-wrap {
+    position: fixed !important;
+    right: 20px !important;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (max-width: 540px) {
+  body.emails-page.email-inbox-redesign .main-header {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .main-content > main.messages-body {
+    --email-mobile-header-space: 128px;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-bottom: 16px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-mobile-inbox-title {
+    font-size: 42px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip {
+    min-height: 54px !important;
+    padding: 0 15px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip .msg-filter-text {
+    max-width: 92px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-row {
+    grid-template-columns: 50px minmax(0, 1fr) auto !important;
+    gap: 10px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar {
+    width: 46px !important;
+    height: 46px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-title {
+    font-size: 17px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-meta {
+    font-size: 11px !important;
+    max-width: 78px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-floating-new-btn {
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 22px !important;
+  }
+}
+
+@media (min-width: 981px) {
+  body.emails-page.email-inbox-redesign .messages-shell:not(.is-chat-open) {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell:not(.is-chat-open) .messages-chat-panel {
+    display: none !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell:not(.is-chat-open) .messages-left-panel {
+    border-right: 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell:not(.is-chat-open) .msg-chats-list {
+    max-width: 980px !important;
+    width: 100% !important;
+  }
+}
