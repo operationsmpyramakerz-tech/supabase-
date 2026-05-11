@@ -2293,7 +2293,7 @@ async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []
       };
     }
     if (canon === "svschools") {
-      return { ...field, type: "ua_multi_select", options: svOptions, allowCustom: false };
+      return { ...field, type: "ua_sv_access_manager", options: svOptions, allowCustom: false };
     }
     if (canon === "profilepicture") {
       return { ...field, type: "ua_profile_upload" };
@@ -2375,6 +2375,183 @@ function _uaAttachSvSchoolLinkColumns(writeRow = {}, keys = [], fields = {}, row
   if (nameKey) writeRow[nameKey] = resolved.names.join(", ") || null;
   if (unmatchedKey) writeRow[unmatchedKey] = resolved.unmatched.join(", ") || null;
   return writeRow;
+}
+
+
+function _sbTeamMemberSvSchoolsTable() {
+  return String(process.env.SUPABASE_TEAM_MEMBER_SV_SCHOOLS_TABLE || "team_member_sv_schools").trim() || "team_member_sv_schools";
+}
+
+function _uaIsMissingSvSchoolsTableError(error) {
+  const msg = String(error?.message || error?.details?.message || error?.details || "");
+  return /team_member_sv_schools|schema cache|Could not find the table|relation .* does not exist|42P01|PGRST205/i.test(msg);
+}
+
+function _sbSerializeSvAccessMember(row = {}, enabled = false) {
+  const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+  const name = _sbString(_sbValueForLabel(row, "Name")) || "Unnamed";
+  return {
+    memberId: id,
+    name,
+    department: _sbString(_sbValueForLabel(row, "Department")) || "No Department",
+    position: _sbString(_sbValueForLabel(row, "Position")) || "Team Member",
+    email: _sbString(_sbValueForLabel(row, "Email")) || "",
+    photoUrl: _sbExtractUrl(_sbValueForLabel(row, "Profile picture")) || "",
+    isEnabled: !!enabled,
+  };
+}
+
+function _sbSvAccessEnabledSetsFromRows(rows = []) {
+  const ids = new Set();
+  const names = new Set();
+  for (const row of rows || []) {
+    const id = String(_sbGet(row, ["visible_team_member_id", "visibleTeamMemberId", "member_id", "id"]) ?? "").trim();
+    const name = _sbString(_sbGet(row, ["visible_team_member_name", "visibleTeamMemberName", "member_name", "name"]));
+    if (id) ids.add(id);
+    if (name) names.add(norm(name));
+  }
+  return { ids, names };
+}
+
+async function _sbSelectSvAccessRowsForMember(memberId = "") {
+  const id = String(memberId || "").trim();
+  if (!id) return [];
+  try {
+    const rows = await supabaseDb.select(_sbTeamMemberSvSchoolsTable(), {
+      select: "*",
+      team_member_id: `eq.${id}`,
+      limit: 5000,
+    });
+    return Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    if (_uaIsMissingSvSchoolsTableError(error)) return [];
+    throw error;
+  }
+}
+
+function _sbLegacySvAccessSets(member = {}) {
+  const idValues = _sbSVIds(_sbGet(member, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
+  const nameValues = _sbSVArray(_sbGet(member, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
+  return {
+    ids: new Set(idValues.map((x) => String(x || "").trim()).filter(Boolean)),
+    names: new Set(nameValues.map((x) => norm(x)).filter(Boolean)),
+  };
+}
+
+async function _sbSvAccessPayloadForMember(memberId = "") {
+  const id = String(memberId || "").trim();
+  if (!id) {
+    const err = new Error("Missing team member ID.");
+    err.status = 400;
+    throw err;
+  }
+  const rows = await _sbSelectTeamMembersRows();
+  const target = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === id) || null;
+  if (!target) {
+    const err = new Error("Team member was not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const relRows = await _sbSelectSvAccessRowsForMember(id).catch((error) => {
+    console.warn("[user-access] failed to load S.V access rows:", error?.message || error);
+    return [];
+  });
+  const fromTable = _sbSvAccessEnabledSetsFromRows(relRows);
+  const legacy = _sbLegacySvAccessSets(target);
+  const enabledIds = new Set([...fromTable.ids, ...legacy.ids]);
+  const enabledNames = new Set([...fromTable.names, ...legacy.names]);
+
+  const members = (rows || [])
+    .filter((row) => String(_sbGet(row, ["id", "ID"]) ?? "") && String(_sbGet(row, ["id", "ID"]) ?? "") !== id)
+    .map((row) => {
+      const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+      const name = _sbString(_sbValueForLabel(row, "Name"));
+      const enabled = enabledIds.has(rowId) || (!!name && enabledNames.has(norm(name)));
+      return _sbSerializeSvAccessMember(row, enabled);
+    })
+    .filter((row) => row.memberId)
+    .sort((a, b) => (Number(b.isEnabled) - Number(a.isEnabled)) || String(a.name || "").localeCompare(String(b.name || "")));
+
+  const enabledCount = members.filter((member) => member.isEnabled).length;
+  return { memberId: id, memberName: _sbString(_sbValueForLabel(target, "Name")) || "", members, summary: { enabledCount } };
+}
+
+async function _sbSaveSvAccessForMember(memberId = "", members = []) {
+  const id = String(memberId || "").trim();
+  if (!id) {
+    const err = new Error("Missing team member ID.");
+    err.status = 400;
+    throw err;
+  }
+  const rows = await _sbSelectTeamMembersRows();
+  const target = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === id) || null;
+  if (!target) {
+    const err = new Error("Team member was not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const requestedIds = new Set((Array.isArray(members) ? members : [])
+    .map((member) => String(member?.memberId || member?.id || member?.visible_team_member_id || "").trim())
+    .filter(Boolean));
+  const enabledRows = (rows || [])
+    .filter((row) => {
+      const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+      return rowId && rowId !== id && requestedIds.has(rowId);
+    });
+
+  try {
+    await supabaseDb.request(`/${encodeURIComponent(_sbTeamMemberSvSchoolsTable())}?team_member_id=eq.${_sbRestFilterValue(id)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=representation" },
+    });
+
+    if (enabledRows.length) {
+      const body = enabledRows.map((row) => ({
+        team_member_id: id,
+        visible_team_member_id: String(_sbGet(row, ["id", "ID"]) ?? "").trim(),
+        visible_team_member_name: _sbString(_sbValueForLabel(row, "Name")) || null,
+      }));
+      await supabaseDb.request(`/${encodeURIComponent(_sbTeamMemberSvSchoolsTable())}`, {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body,
+      });
+    }
+  } catch (error) {
+    if (_uaIsMissingSvSchoolsTableError(error)) {
+      const err = new Error("S.V Schools table is not installed. Run supabase_team_member_sv_schools.sql once, then try again.");
+      err.status = 500;
+      throw err;
+    }
+    throw error;
+  }
+
+  const keys = _sbAllColumnKeys(rows || []);
+  const idKey = _sbFindKey(keys, ["sv_school_member_ids", "sv school member ids"]);
+  const nameKey = _sbFindKey(keys, ["sv_school_member_names", "sv school member names"]);
+  const svKey = _sbFindKey(keys, ["sv_schools", "S.V Schools", "SV Schools"]);
+  const unmatchedKey = _sbFindKey(keys, ["sv_schools_unmatched", "sv schools unmatched"]);
+  const updatedAtKey = _sbFindKey(keys, ["updated_at", "Updated time"]);
+  const legacyPatch = {};
+  const enabledIds = enabledRows.map((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim()).filter(Boolean);
+  const enabledNames = enabledRows.map((row) => _sbString(_sbValueForLabel(row, "Name"))).filter(Boolean);
+  if (idKey) legacyPatch[idKey] = enabledIds.join(", ") || null;
+  if (nameKey) legacyPatch[nameKey] = enabledNames.join(", ") || null;
+  if (svKey) legacyPatch[svKey] = enabledNames.join(", ") || null;
+  if (unmatchedKey) legacyPatch[unmatchedKey] = null;
+  if (updatedAtKey) legacyPatch[updatedAtKey] = new Date().toISOString();
+  if (Object.keys(legacyPatch).length) {
+    await supabaseDb.updateById(_sbTeamMembersTable(), id, legacyPatch).catch((error) => {
+      console.warn("[user-access] failed to update legacy S.V columns:", error?.message || error);
+      return null;
+    });
+  }
+
+  await _uaClearUserAccessCaches();
+  await clearSVOrdersRouteCaches({ session: { username: _sbString(_sbValueForLabel(target, "Name")) } }).catch(() => {});
+  return _sbSvAccessPayloadForMember(id);
 }
 
 function _sbValueForLabel(row, label) {
@@ -2496,6 +2673,7 @@ function _sbBuildWriteRowFromFields(fields = {}, rows = []) {
   const row = {};
   for (const [incomingName, rawValue] of Object.entries(fields || {})) {
     if (_sbCanon(incomingName) === "allowedpages") continue;
+    if (_sbCanon(incomingName) === "svschools") continue;
     const actual = _sbColumnForIncomingField(keys, incomingName);
     if (!actual) continue;
     const value = String(rawValue ?? "").trim();
@@ -15410,6 +15588,51 @@ app.patch(
     } catch (error) {
       console.error("PATCH /api/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save page access." });
+    }
+  },
+);
+
+// User Access & Data — Read one member's S.V Schools / Orders Review visibility
+app.get(
+  "/api/user-access/team-members/:id/sv-access",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase is required for S.V Schools management." });
+      }
+      const memberId = String(req.params?.id || "").trim();
+      if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
+      const payload = await _sbSvAccessPayloadForMember(memberId);
+      return res.json({ ok: true, source: "supabase", ...payload });
+    } catch (error) {
+      console.error("GET /api/user-access/team-members/:id/sv-access error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load S.V Schools." });
+    }
+  },
+);
+
+// User Access & Data — Save one member's S.V Schools / Orders Review visibility
+app.patch(
+  "/api/user-access/team-members/:id/sv-access",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_uaAdminVerified(req)) {
+        return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password again." });
+      }
+      if (!_sbTeamMembersEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase is required for S.V Schools management." });
+      }
+      const memberId = String(req.params?.id || "").trim();
+      if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
+      const payload = await _sbSaveSvAccessForMember(memberId, req.body?.members || req.body?.rows || []);
+      return res.json({ ok: true, source: "supabase", ...payload });
+    } catch (error) {
+      console.error("PATCH /api/user-access/team-members/:id/sv-access error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save S.V Schools." });
     }
   },
 );

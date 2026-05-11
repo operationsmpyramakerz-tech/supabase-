@@ -21,6 +21,11 @@
     pageAccessModalMemberId: '',
     pageAccessModalLoading: false,
     pageAccessSaving: false,
+    svAccessCache: new Map(),
+    svAccessModalRows: [],
+    svAccessModalMemberId: '',
+    svAccessModalLoading: false,
+    svAccessSaving: false,
     departmentModalMode: 'create',
     departmentTargetId: '',
     moveMemberId: '',
@@ -384,6 +389,11 @@
     return canonFieldName(name) === 'allowedpages';
   }
 
+  function isSvSchoolsField(fieldOrName) {
+    const name = typeof fieldOrName === 'string' ? fieldOrName : fieldOrName?.name;
+    return canonFieldName(name) === 'svschools';
+  }
+
   function normalizeAccessRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((row) => ({
@@ -449,6 +459,64 @@
         </div>
       </div>
     `;
+  }
+
+  function svAccessSummaryText(member = null) {
+    const memberId = String(member?.id || state.formMemberId || '').trim();
+    let count = 0;
+    if (memberId && state.svAccessCache.has(memberId)) {
+      count = normalizeSvAccessRows(state.svAccessCache.get(memberId)).filter((row) => row.isEnabled).length;
+    } else if (member?.svAccessSummary) {
+      count = Number(member.svAccessSummary.enabledCount || member.svAccessSummary.accessCount || 0);
+    } else {
+      const fallback = splitCsvValues(fieldValueFromMember(member, 'S.V Schools'));
+      count = fallback.length;
+    }
+    if (!memberId && state.formMode === 'create') return 'Create the member first, then enable visible team members for Orders Review.';
+    if (!count) return 'No team members enabled yet. Orders Review will not show orders for this user.';
+    return `${count} visible team member${count === 1 ? '' : 's'} for Orders Review`;
+  }
+
+  function updateSvAccessSummaryText() {
+    const summary = els.formBody?.querySelector('[data-sv-access-summary]');
+    if (summary) summary.textContent = svAccessSummaryText(state.formMemberSnapshot);
+  }
+
+  function svAccessManagerHTML(field, value) {
+    const name = String(field?.name || 'S.V Schools');
+    const label = escapeHTML(name);
+    const summary = escapeHTML(svAccessSummaryText(state.formMemberSnapshot));
+    const disabled = state.formMode === 'create' ? 'disabled aria-disabled="true" title="Create the member first, then configure visible team members."' : '';
+    return `
+      <div class="ua-form-field ua-form-field--wide ua-sv-access-field">
+        <span>${label}</span>
+        <div class="ua-page-access-card ua-sv-access-card">
+          <div>
+            <strong>Orders Review visibility</strong>
+            <small data-sv-access-summary>${summary}</small>
+          </div>
+          <button type="button" class="ua-page-access-open" data-sv-access-open ${disabled}>
+            <i data-feather="users"></i>
+            <span>Manage Users</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function normalizeSvAccessRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        memberId: String(row?.memberId || row?.member_id || row?.visibleTeamMemberId || row?.visible_team_member_id || row?.id || '').trim(),
+        name: String(row?.name || row?.memberName || row?.member_name || row?.visibleTeamMemberName || row?.visible_team_member_name || 'User').trim() || 'User',
+        department: String(row?.department || '').trim(),
+        position: String(row?.position || '').trim(),
+        email: String(row?.email || '').trim(),
+        photoUrl: String(row?.photoUrl || row?.photo_url || '').trim(),
+        isEnabled: !!(row?.isEnabled ?? row?.is_enabled ?? row?.enabled),
+      }))
+      .filter((row) => row.memberId)
+      .sort((a, b) => (Number(b.isEnabled) - Number(a.isEnabled)) || a.name.localeCompare(b.name));
   }
 
   function multiSelectHTML(field, value) {
@@ -569,6 +637,7 @@
     const commonAttrs = `data-field-name="${label}" data-field-type="${escapeHTML(type)}" ${required}`;
 
     if (isAllowedPagesField(field) || type === 'ua_page_access_manager') return pageAccessManagerHTML(field, value);
+    if (isSvSchoolsField(field) || type === 'ua_sv_access_manager') return svAccessManagerHTML(field, value);
     if (type === 'school_select' || canon === 'school') return schoolSelectHTML(field, value);
     if (type === 'ua_multi_select' || type === 'multi_select') return multiSelectHTML(field, value);
     if (type === 'ua_profile_upload' || canon === 'profilepicture') return profileUploadHTML(field, value);
@@ -1480,6 +1549,227 @@
     }
   }
 
+  function ensureSvAccessModal() {
+    if (els.svAccessModal) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ua-modal-overlay';
+    wrapper.id = 'uaSvAccessModal';
+    wrapper.hidden = true;
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.innerHTML = `
+      <form class="ua-modal ua-modal--sv-access" id="uaSvAccessForm" role="dialog" aria-modal="true" aria-labelledby="uaSvAccessTitle">
+        <button type="button" class="ua-modal__close" id="uaSvAccessClose" aria-label="Close S.V Schools window">
+          <i data-feather="x"></i>
+        </button>
+        <div class="ua-modal__header ua-modal__header--compact">
+          <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="users"></i></div>
+          <div>
+            <h2 id="uaSvAccessTitle">S.V Schools</h2>
+            <p id="uaSvAccessSubtitle">Enable the team members whose orders should appear in Orders Review.</p>
+          </div>
+        </div>
+        <div class="ua-modal__body ua-sv-access-body">
+          <div class="ua-sv-access-tools">
+            <div class="ua-sv-search">
+              <i data-feather="search"></i>
+              <input type="search" id="uaSvAccessSearch" placeholder="Search team members..." autocomplete="off">
+            </div>
+            <button type="button" class="ua-mini-btn" id="uaSvAccessSelectAll">Enable all visible</button>
+          </div>
+          <div class="ua-sv-access-list" id="uaSvAccessList"></div>
+        </div>
+        <div class="ua-modal__actions">
+          <button type="button" class="ua-btn ua-btn--light" id="uaSvAccessCancel">Cancel</button>
+          <button type="submit" class="ua-btn ua-btn--dark" id="uaSvAccessSave">
+            <i data-feather="save"></i>
+            <span>Save Users</span>
+          </button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(wrapper);
+
+    els.svAccessModal = wrapper;
+    els.svAccessForm = wrapper.querySelector('#uaSvAccessForm');
+    els.svAccessList = wrapper.querySelector('#uaSvAccessList');
+    els.svAccessTitle = wrapper.querySelector('#uaSvAccessTitle');
+    els.svAccessSubtitle = wrapper.querySelector('#uaSvAccessSubtitle');
+    els.svAccessSearch = wrapper.querySelector('#uaSvAccessSearch');
+    els.svAccessSaveBtn = wrapper.querySelector('#uaSvAccessSave');
+    els.svAccessCancelBtn = wrapper.querySelector('#uaSvAccessCancel');
+    els.svAccessClose = wrapper.querySelector('#uaSvAccessClose');
+    els.svAccessSelectAll = wrapper.querySelector('#uaSvAccessSelectAll');
+
+    els.svAccessForm?.addEventListener('submit', submitSvAccessForm);
+    els.svAccessCancelBtn?.addEventListener('click', closeSvAccessModal);
+    els.svAccessClose?.addEventListener('click', closeSvAccessModal);
+    els.svAccessModal?.addEventListener('click', (event) => {
+      if (event.target === els.svAccessModal) closeSvAccessModal();
+    });
+    els.svAccessSearch?.addEventListener('input', renderSvAccessList);
+    els.svAccessSelectAll?.addEventListener('click', () => {
+      const q = normalizeText(els.svAccessSearch?.value || '');
+      state.svAccessModalRows = normalizeSvAccessRows(state.svAccessModalRows).map((row) => {
+        const haystack = `${row.name} ${row.department} ${row.position} ${row.email}`.toLowerCase();
+        return !q || haystack.includes(q) ? { ...row, isEnabled: true } : row;
+      });
+      renderSvAccessList();
+    });
+    els.svAccessList?.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-sv-enabled][data-member-id]');
+      if (!input) return;
+      const id = input.getAttribute('data-member-id') || '';
+      state.svAccessModalRows = normalizeSvAccessRows(state.svAccessModalRows).map((row) => (row.memberId === id ? { ...row, isEnabled: !!input.checked } : row));
+      const rowEl = input.closest('.ua-sv-access-row');
+      if (rowEl) rowEl.classList.toggle('is-enabled', !!input.checked);
+    });
+    hydrateIcons(wrapper);
+  }
+
+  function setSvAccessSaving(saving) {
+    state.svAccessSaving = saving;
+    if (els.svAccessSaveBtn) {
+      els.svAccessSaveBtn.disabled = saving || state.svAccessModalLoading;
+      els.svAccessSaveBtn.classList.toggle('is-loading', saving);
+    }
+    if (els.svAccessCancelBtn) els.svAccessCancelBtn.disabled = saving;
+  }
+
+  function renderSvAccessList() {
+    if (!els.svAccessList) return;
+    if (state.svAccessModalLoading) {
+      els.svAccessList.innerHTML = '<div class="ua-page-access-loading"><span></span> Loading team members...</div>';
+      if (els.svAccessSaveBtn) els.svAccessSaveBtn.disabled = true;
+      return;
+    }
+    if (els.svAccessSaveBtn) els.svAccessSaveBtn.disabled = state.svAccessSaving;
+    const rows = normalizeSvAccessRows(state.svAccessModalRows);
+    state.svAccessModalRows = rows;
+    const q = normalizeText(els.svAccessSearch?.value || '');
+    const filtered = q
+      ? rows.filter((row) => `${row.name} ${row.department} ${row.position} ${row.email}`.toLowerCase().includes(q))
+      : rows;
+    if (!filtered.length) {
+      els.svAccessList.innerHTML = '<div class="ua-empty">No team members found.</div>';
+      return;
+    }
+    els.svAccessList.innerHTML = filtered.map((row) => `
+      <div class="ua-sv-access-row ${row.isEnabled ? 'is-enabled' : ''}" data-member-id="${escapeHTML(row.memberId)}">
+        <div class="ua-sv-access-person">
+          <div class="ua-avatar ua-avatar--small">${row.photoUrl ? `<img src="${escapeHTML(row.photoUrl)}" alt="${escapeHTML(row.name)}" loading="lazy">` : escapeHTML(initials(row.name))}</div>
+          <div>
+            <strong>${escapeHTML(row.name)}</strong>
+            <small>${escapeHTML([row.department, row.position].filter(Boolean).join(' • ') || row.email || 'Team member')}</small>
+          </div>
+        </div>
+        <label class="ua-switch" title="Enable ${escapeHTML(row.name)}">
+          <input type="checkbox" data-sv-enabled data-member-id="${escapeHTML(row.memberId)}" ${row.isEnabled ? 'checked' : ''}>
+          <span></span>
+        </label>
+      </div>
+    `).join('');
+  }
+
+  async function loadSvAccessRowsForCurrentForm() {
+    const memberId = String(state.formMemberId || '').trim();
+    if (!memberId) throw new Error('Create the team member first, then configure S.V Schools.');
+    if (state.svAccessCache.has(memberId)) return normalizeSvAccessRows(state.svAccessCache.get(memberId));
+    const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/sv-access`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load S.V Schools.');
+    const rows = normalizeSvAccessRows(data.members || data.rows || []);
+    state.svAccessCache.set(memberId, rows);
+    const member = state.membersById.get(memberId);
+    if (member && data.summary) member.svAccessSummary = data.summary;
+    return rows;
+  }
+
+  async function openSvAccessModal() {
+    ensureSvAccessModal();
+    const memberId = String(state.formMemberId || '').trim();
+    if (!memberId) return toast('warning', 'Save first', 'Create the team member first, then configure S.V Schools.');
+    state.svAccessModalMemberId = memberId;
+    state.svAccessModalLoading = true;
+    state.svAccessModalRows = [];
+    if (els.svAccessSearch) els.svAccessSearch.value = '';
+    if (els.svAccessTitle) els.svAccessTitle.textContent = 'S.V Schools';
+    if (els.svAccessSubtitle) {
+      els.svAccessSubtitle.textContent = `Enable team members whose orders should be visible to ${state.formMemberSnapshot?.name || 'this user'} in Orders Review.`;
+    }
+    els.svAccessModal.hidden = false;
+    els.svAccessModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    renderSvAccessList();
+    try {
+      state.svAccessModalRows = await loadSvAccessRowsForCurrentForm();
+    } catch (error) {
+      console.error(error);
+      toast('error', 'Load failed', error?.message || 'Failed to load S.V Schools.');
+      if (els.svAccessList) els.svAccessList.innerHTML = `<div class="ua-error">${escapeHTML(error?.message || 'Failed to load S.V Schools.')}</div>`;
+    } finally {
+      state.svAccessModalLoading = false;
+      renderSvAccessList();
+      hydrateIcons(els.svAccessModal);
+      setTimeout(() => els.svAccessSearch?.focus(), 60);
+    }
+  }
+
+  function closeSvAccessModal() {
+    if (!els.svAccessModal) return;
+    els.svAccessModal.hidden = true;
+    els.svAccessModal.setAttribute('aria-hidden', 'true');
+    if (!els.formModal || els.formModal.hidden) document.body.classList.remove('ua-modal-open');
+    state.svAccessModalRows = [];
+    state.svAccessModalMemberId = '';
+  }
+
+  function collectSvAccessRowsFromModal() {
+    return normalizeSvAccessRows(state.svAccessModalRows);
+  }
+
+  async function saveSvAccessForMember(memberId, rows) {
+    const enabled = normalizeSvAccessRows(rows).filter((row) => row.isEnabled);
+    const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/sv-access`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ members: enabled }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save S.V Schools.');
+    const normalized = normalizeSvAccessRows(data.members || rows);
+    state.svAccessCache.set(String(memberId), normalized);
+    const member = state.membersById.get(String(memberId));
+    if (member) {
+      member.svAccessSummary = data.summary || { enabledCount: normalized.filter((row) => row.isEnabled).length };
+      state.formMemberSnapshot = member;
+    }
+    return { data, rows: normalized };
+  }
+
+  async function submitSvAccessForm(event) {
+    event?.preventDefault?.();
+    if (state.svAccessSaving || state.svAccessModalLoading) return;
+    const memberId = String(state.formMemberId || '').trim();
+    if (!memberId) return;
+    setSvAccessSaving(true);
+    try {
+      await saveSvAccessForMember(memberId, collectSvAccessRowsFromModal());
+      updateSvAccessSummaryText();
+      closeSvAccessModal();
+      toast('success', 'S.V Schools updated', 'Orders Review visibility was saved.');
+      await loadMembers({ force: true, keepDepartment: true });
+    } catch (error) {
+      console.error(error);
+      toast('error', 'Save failed', error?.message || 'Failed to save S.V Schools.');
+    } finally {
+      setSvAccessSaving(false);
+    }
+  }
+
   async function handleSchoolAdd(button) {
     const field = button.closest('.ua-form-field--school');
     const input = field?.querySelector('[data-school-column-name]');
@@ -1565,6 +1855,9 @@
   function handleFormBodyClick(event) {
     const pageAccessOpen = event.target.closest('[data-page-access-open]');
     if (pageAccessOpen) return openPageAccessModal();
+
+    const svAccessOpen = event.target.closest('[data-sv-access-open]');
+    if (svAccessOpen && !svAccessOpen.disabled) return openSvAccessModal();
 
     const msAdd = event.target.closest('[data-ms-add]');
     if (msAdd) {
@@ -1704,6 +1997,7 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
+      if (els.svAccessModal && !els.svAccessModal.hidden) return closeSvAccessModal();
       if (els.pageAccessModal && !els.pageAccessModal.hidden) return closePageAccessModal();
       if (els.departmentModal && !els.departmentModal.hidden) return closeDepartmentModal();
       if (els.moveMemberModal && !els.moveMemberModal.hidden) return closeMoveMemberModal();

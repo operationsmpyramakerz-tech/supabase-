@@ -1710,3 +1710,138 @@
     width: 100%;
   }
 }
+
+/* S.V Schools / Orders Review visibility manager */
+.ua-sv-access-card .ua-page-access-open:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ua-modal--sv-access {
+  width: min(760px, 94vw);
+}
+
+.ua-sv-access-body {
+  display: grid;
+  gap: 12px;
+}
+
+.ua-sv-access-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ua-sv-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fbfcfe;
+  border-radius: 18px;
+  padding: 0 14px;
+  min-height: 46px;
+}
+
+.ua-sv-search svg {
+  width: 17px;
+  height: 17px;
+  color: #6b7280;
+  flex: 0 0 auto;
+}
+
+.ua-sv-search input {
+  border: 0;
+  background: transparent;
+  outline: 0;
+  width: 100%;
+  min-width: 0;
+  color: #0b1220;
+  font: inherit;
+  font-weight: 850;
+}
+
+.ua-sv-access-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(430px, 56vh);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.ua-sv-access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  padding: 12px;
+  background: #ffffff;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.ua-sv-access-row.is-enabled {
+  border-color: rgba(228, 101, 32, 0.28);
+  background: linear-gradient(135deg, rgba(255, 243, 234, 0.82), rgba(255, 255, 255, 0.96));
+}
+
+.ua-sv-access-person {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ua-avatar--small {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.ua-sv-access-person strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 950;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ua-sv-access-person small {
+  display: block;
+  color: #8b95a6;
+  font-size: 11px;
+  font-weight: 850;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+@media (max-width: 700px) {
+  .ua-sv-access-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ua-sv-access-tools .ua-mini-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .ua-sv-access-row {
+    align-items: center;
+  }
+
+  .ua-sv-access-person small {
+    max-width: 190px;
+  }
+}
