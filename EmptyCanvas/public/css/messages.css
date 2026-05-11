@@ -3373,3 +3373,165 @@ body.shell-embedded.emails-page.email-inbox-redesign .messages-shell {
   }
 }
 
+
+/* =========================================================
+   Email labels + mobile composer polish v1
+   - modern create-label modal with color picker
+   - fixed reply bar directly above the mobile dock
+   ========================================================= */
+.msg-label-modal {
+  width: min(520px, calc(100vw - 28px));
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top left, rgba(29, 155, 240, 0.10), transparent 34%),
+    #ffffff;
+  box-shadow: 0 34px 90px rgba(15, 23, 42, 0.24);
+}
+
+.msg-label-modal-icon {
+  background: linear-gradient(135deg, #1d9bf0, #0f172a) !important;
+  color: #ffffff !important;
+}
+
+.msg-label-color-field {
+  gap: 10px;
+}
+
+.msg-label-color-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 22px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.msg-label-color-preview {
+  min-height: 50px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 950;
+  color: var(--msg-label-preview-fg, #ffffff);
+  background: var(--msg-label-preview-bg, #1d9bf0);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.msg-label-color-card input[type="color"] {
+  width: 54px;
+  height: 50px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.msg-label-color-card input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.msg-label-color-card input[type="color"]::-webkit-color-swatch {
+  border: 4px solid #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+}
+
+.msg-label-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.msg-label-swatches button {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 4px solid #ffffff;
+  background: var(--label-swatch, #1d9bf0);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  position: relative;
+}
+
+.msg-label-swatches button.is-active::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  border: 2px solid rgba(15, 23, 42, 0.26);
+}
+
+body.emails-page.email-inbox-redesign .msg-custom-label-chip {
+  background: var(--msg-label-bg, #1d9bf0) !important;
+  color: var(--msg-label-fg, #ffffff) !important;
+  border-color: color-mix(in srgb, var(--msg-label-bg, #1d9bf0) 72%, #ffffff) !important;
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--msg-label-bg, #1d9bf0) 18%, transparent) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-custom-label-chip .msg-filter-text,
+body.emails-page.email-inbox-redesign .msg-custom-label-chip svg {
+  color: currentColor !important;
+}
+
+@media (max-width: 980px) {
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-composer {
+    position: fixed !important;
+    left: 18px !important;
+    right: 18px !important;
+    bottom: calc(98px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto !important;
+    z-index: 230 !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    grid-template-columns: 48px minmax(0, 1fr) 56px !important;
+    gap: 8px !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    border-radius: 24px !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 -10px 34px rgba(15, 23, 42, 0.10) !important;
+    backdrop-filter: blur(16px) !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-composer .msg-composer-btn {
+    min-height: 48px !important;
+    height: 48px !important;
+    border-radius: 18px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-input-wrap input {
+    height: 48px !important;
+    min-height: 48px !important;
+    border-radius: 18px !important;
+    font-size: 13px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-comments {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .messages-chat-panel,
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-conversation {
+    padding-bottom: 0 !important;
+  }
+}
+
+@media (max-width: 540px) {
+  body.emails-page.email-inbox-redesign .messages-shell.is-chat-open .msg-composer {
+    left: 14px !important;
+    right: 14px !important;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .msg-label-modal-overlay {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .msg-label-modal {
+    width: 100%;
+    border-radius: 28px;
+  }
+}

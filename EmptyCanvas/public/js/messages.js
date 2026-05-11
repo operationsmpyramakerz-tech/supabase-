@@ -288,15 +288,59 @@
     return `operationsHub.emails.customLabels.${email || name || 'anonymous'}`;
   }
 
-  function loadCustomLabels() {
+  function sanitizeLabelColor(value) {
+    const raw = String(value || '').trim();
+    if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+    return '#1d9bf0';
+  }
+
+  function labelTextColor(bg) {
+    const hex = sanitizeLabelColor(bg).replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.66 ? '#0f172a' : '#ffffff';
+  }
+
+  function normalizeCustomLabels(labels) {
+    return (Array.isArray(labels) ? labels : [])
+      .map((item, index) => {
+        if (typeof item === 'string') {
+          const name = item.trim();
+          return name ? { id: `local-${index}-${name}`, name, color: '#1d9bf0' } : null;
+        }
+        const name = String(item?.name || item?.label_name || '').trim();
+        if (!name) return null;
+        return {
+          id: String(item?.id || item?.labelId || `local-${index}-${name}`).trim(),
+          name,
+          color: sanitizeLabelColor(item?.color || item?.background_color || '#1d9bf0'),
+          sortOrder: Number(item?.sort_order ?? item?.sortOrder ?? index) || index,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (Number(a.sortOrder || 0) - Number(b.sortOrder || 0)) || a.name.localeCompare(b.name))
+      .slice(0, 24);
+  }
+
+  function loadCustomLabelsFromLocalStorage() {
     try {
       const raw = localStorage.getItem(labelsStorageKey());
-      const parsed = JSON.parse(raw || '[]');
-      state.customLabels = Array.isArray(parsed)
-        ? parsed.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12)
-        : [];
+      state.customLabels = normalizeCustomLabels(JSON.parse(raw || '[]'));
     } catch {
       state.customLabels = [];
+    }
+  }
+
+  async function loadCustomLabels() {
+    try {
+      const data = await apiJson('/api/messages/labels');
+      state.customLabels = normalizeCustomLabels(data?.labels || []);
+      saveCustomLabels();
+    } catch (error) {
+      loadCustomLabelsFromLocalStorage();
+      if (state.customLabels.length) ensureCustomLabelChips();
     }
   }
 
@@ -311,27 +355,100 @@
     $$('.msg-custom-label-chip', tabs).forEach((chip) => chip.remove());
     (state.customLabels || []).forEach((label) => {
       const chip = document.createElement('button');
+      const bg = sanitizeLabelColor(label.color);
       chip.type = 'button';
       chip.className = 'msg-filter-chip msg-custom-label-chip';
-      chip.setAttribute('aria-label', `Email label ${label}`);
-      chip.innerHTML = `<i data-feather="tag"></i><span class="msg-filter-text">${escapeHtml(label)}</span>`;
+      chip.setAttribute('aria-label', `Email label ${label.name}`);
+      chip.dataset.labelId = String(label.id || '');
+      chip.style.setProperty('--msg-label-bg', bg);
+      chip.style.setProperty('--msg-label-fg', labelTextColor(bg));
+      chip.innerHTML = `<i data-feather="tag"></i><span class="msg-filter-text">${escapeHtml(label.name)}</span>`;
       tabs.insertBefore(chip, addBtn);
     });
     hydrateIcons();
   }
 
-  function addCustomLabel() {
-    const name = String(window.prompt('Label name') || '').trim();
-    if (!name) return;
-    const exists = (state.customLabels || []).some((x) => normalizeSearch(x) === normalizeSearch(name));
-    if (exists) {
-      toast('This label already exists.', 'info');
+  function setLabelModalColor(color) {
+    const clean = sanitizeLabelColor(color);
+    const input = $('#msgLabelColor');
+    const preview = $('#msgLabelColorPreview');
+    if (input) input.value = clean;
+    if (preview) {
+      const name = String($('#msgLabelName')?.value || '').trim() || 'Label';
+      preview.textContent = name.slice(0, 24);
+      preview.style.setProperty('--msg-label-preview-bg', clean);
+      preview.style.setProperty('--msg-label-preview-fg', labelTextColor(clean));
+    }
+    $$('#msgLabelSwatches [data-color]').forEach((btn) => {
+      btn.classList.toggle('is-active', sanitizeLabelColor(btn.dataset.color) === clean);
+    });
+  }
+
+  function openLabelModal() {
+    const overlay = $('#msgLabelModal');
+    if (!overlay) return;
+    const input = $('#msgLabelName');
+    const err = $('#msgLabelError');
+    if (input) input.value = '';
+    if (err) err.textContent = '';
+    setLabelModalColor('#1d9bf0');
+    overlay.hidden = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    setTimeout(() => input?.focus(), 80);
+    hydrateIcons();
+  }
+
+  function closeLabelModal() {
+    const overlay = $('#msgLabelModal');
+    if (!overlay) return;
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+  }
+
+  async function submitCustomLabel(event) {
+    event.preventDefault();
+    const nameInput = $('#msgLabelName');
+    const colorInput = $('#msgLabelColor');
+    const createBtn = $('#msgLabelCreate');
+    const err = $('#msgLabelError');
+    const name = String(nameInput?.value || '').trim();
+    const color = sanitizeLabelColor(colorInput?.value || '#1d9bf0');
+
+    if (!name) {
+      if (err) err.textContent = 'Please enter the label name.';
+      nameInput?.focus();
       return;
     }
-    state.customLabels = [...(state.customLabels || []), name].slice(0, 12);
-    saveCustomLabels();
-    ensureCustomLabelChips();
-    toast('Label added.', 'success');
+    const exists = (state.customLabels || []).some((x) => normalizeSearch(x.name) === normalizeSearch(name));
+    if (exists) {
+      if (err) err.textContent = 'This label already exists.';
+      return;
+    }
+
+    setBusy(createBtn, true, 'Creating...');
+    if (err) err.textContent = '';
+    try {
+      let created = null;
+      try {
+        const data = await apiJson('/api/messages/labels', {
+          method: 'POST',
+          body: { name, color },
+        });
+        created = data?.label || null;
+      } catch (apiError) {
+        if (/exists/i.test(String(apiError?.message || ''))) throw apiError;
+        created = { id: `local-${Date.now()}`, name, color, sortOrder: state.customLabels.length };
+      }
+      state.customLabels = normalizeCustomLabels([...(state.customLabels || []), created]);
+      saveCustomLabels();
+      ensureCustomLabelChips();
+      closeLabelModal();
+      toast('Label added.', 'success');
+    } catch (error) {
+      if (err) err.textContent = error.message || 'Failed to create label.';
+    } finally {
+      setBusy(createBtn, false);
+    }
   }
 
   function renderFilterTabs() {
@@ -1692,7 +1809,19 @@
     $('#msgComposerInput')?.addEventListener('keydown', handleMentionKeydown);
     $('#msgComposerInput')?.addEventListener('blur', () => setTimeout(closeMentionMenu, 160));
     $('#msgBackMobile')?.addEventListener('click', closeActiveChat);
-    $('#msgAddLabelBtn')?.addEventListener('click', addCustomLabel);
+    $('#msgAddLabelBtn')?.addEventListener('click', openLabelModal);
+    $('#msgLabelForm')?.addEventListener('submit', submitCustomLabel);
+    $('#msgLabelClose')?.addEventListener('click', closeLabelModal);
+    $('#msgLabelCancel')?.addEventListener('click', closeLabelModal);
+    $('#msgLabelModal')?.addEventListener('click', (e) => {
+      if (e.target === $('#msgLabelModal')) closeLabelModal();
+    });
+    $('#msgLabelColor')?.addEventListener('input', (e) => setLabelModalColor(e.target?.value));
+    $('#msgLabelName')?.addEventListener('input', () => setLabelModalColor($('#msgLabelColor')?.value));
+    $('#msgLabelSwatches')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-color]');
+      if (btn) setLabelModalColor(btn.dataset.color);
+    });
     bindFloatingNewMenu();
 
     $('#msgFilterTabs')?.addEventListener('click', (event) => {
@@ -1732,7 +1861,7 @@
     initEmailPageChrome();
     bindEvents();
     await refreshAll({ keepSelection: false });
-    loadCustomLabels();
+    await loadCustomLabels();
     renderFilterTabs();
     startRealtimeLoops();
   });

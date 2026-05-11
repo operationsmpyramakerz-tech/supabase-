@@ -17,7 +17,7 @@
   </style>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/messages.css?v=email-shell-embed-fix-v4" rel="stylesheet" />
+  <link href="/css/messages.css?v=email-labels-composer-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading messages-page emails-page email-inbox-redesign">
@@ -230,8 +230,52 @@
     </form>
   </div>
 
+  <div class="msg-modal-overlay msg-label-modal-overlay" id="msgLabelModal" hidden aria-hidden="true">
+    <form class="msg-modal msg-label-modal" id="msgLabelForm" role="dialog" aria-modal="true" aria-labelledby="msgLabelTitle">
+      <button type="button" class="msg-modal-close" id="msgLabelClose" aria-label="Close label window">
+        <i data-feather="x"></i>
+      </button>
+      <div class="msg-modal-head">
+        <div class="msg-modal-icon msg-label-modal-icon"><i data-feather="tag"></i></div>
+        <div>
+          <h2 id="msgLabelTitle">Create label</h2>
+          <p>Give the label a name and choose the background color used in your inbox.</p>
+        </div>
+      </div>
+      <div class="msg-modal-body">
+        <label class="msg-field">
+          <span>Label name <b>*</b></span>
+          <input id="msgLabelName" type="text" maxlength="64" required placeholder="Example: Finance, Important, Follow up..." />
+        </label>
+        <div class="msg-field msg-label-color-field">
+          <span>Background color <b>*</b></span>
+          <div class="msg-label-color-card">
+            <div class="msg-label-color-preview" id="msgLabelColorPreview">Label</div>
+            <input id="msgLabelColor" type="color" value="#1d9bf0" aria-label="Choose label background color" />
+          </div>
+          <div class="msg-label-swatches" id="msgLabelSwatches" aria-label="Quick color choices">
+            <button type="button" class="is-active" data-color="#1d9bf0" style="--label-swatch:#1d9bf0" aria-label="Blue label color"></button>
+            <button type="button" data-color="#0f172a" style="--label-swatch:#0f172a" aria-label="Dark label color"></button>
+            <button type="button" data-color="#ea580c" style="--label-swatch:#ea580c" aria-label="Orange label color"></button>
+            <button type="button" data-color="#16a34a" style="--label-swatch:#16a34a" aria-label="Green label color"></button>
+            <button type="button" data-color="#7c3aed" style="--label-swatch:#7c3aed" aria-label="Purple label color"></button>
+            <button type="button" data-color="#dc2626" style="--label-swatch:#dc2626" aria-label="Red label color"></button>
+          </div>
+        </div>
+        <div class="msg-form-error" id="msgLabelError" aria-live="polite"></div>
+      </div>
+      <div class="msg-modal-actions">
+        <button type="button" class="msg-btn msg-btn--light" id="msgLabelCancel">Cancel</button>
+        <button type="submit" class="msg-btn msg-btn--dark" id="msgLabelCreate">
+          <i data-feather="plus-circle"></i>
+          <span>Create label</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=mail-access-v2"></script>
-  <script src="/js/messages.js?v=email-shell-embed-fix-v4"></script>
+  <script src="/js/messages.js?v=email-labels-composer-v1"></script>
 </body>
 </html>

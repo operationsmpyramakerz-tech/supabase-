@@ -14053,6 +14053,72 @@ function _sbMessagesTable() {
   return String(cfg.messagesTable || process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
 }
 
+function _sbMessagesLabelsTable() {
+  return String(process.env.SUPABASE_MESSAGES_LABELS_TABLE || 'messages_labels').trim() || 'messages_labels';
+}
+
+function _messagesLabelUserKey(req) {
+  const id = String(req?.session?.userSupabaseId || '').trim();
+  const identity = _messagesCurrentIdentity(req);
+  const key = id || identity.emailKey || identity.nameKey || String(req?.sessionID || 'anonymous').trim();
+  return String(key || 'anonymous').replace(/[^a-zA-Z0-9._@:-]+/g, '_').slice(0, 180) || 'anonymous';
+}
+
+function _messagesCleanLabelColor(value) {
+  const raw = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(raw) ? raw.toLowerCase() : '#1d9bf0';
+}
+
+function _messagesCleanLabelName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 64);
+}
+
+function _sbSerializeMessageLabel(row) {
+  return {
+    id: String(_sbGet(row, ['id', 'ID']) ?? ''),
+    name: _sbString(_sbGet(row, ['name', 'label_name', 'title'])) || '',
+    color: _messagesCleanLabelColor(_sbGet(row, ['color', 'background_color'])),
+    sortOrder: Number(_sbGet(row, ['sort_order', 'sortOrder']) || 0) || 0,
+    createdAt: _uaSafeDate(_sbGet(row, ['created_at', 'createdAt'])) || '',
+    updatedAt: _uaSafeDate(_sbGet(row, ['updated_at', 'updatedAt'])) || '',
+  };
+}
+
+async function _sbMessageLabelsList(req) {
+  const userKey = _messagesLabelUserKey(req);
+  const rows = await supabaseDb.request(`/${encodeURIComponent(_sbMessagesLabelsTable())}?select=*&user_key=eq.${_sbRestFilterValue(userKey)}&order=sort_order.asc,name.asc&limit=200`);
+  return (Array.isArray(rows) ? rows : []).map(_sbSerializeMessageLabel).filter((label) => label.name);
+}
+
+async function _sbCreateMessageLabel(req, payload = {}) {
+  const name = _messagesCleanLabelName(payload.name || payload.labelName || payload.label);
+  if (!name) {
+    const err = new Error('Label name is required.');
+    err.status = 400;
+    throw err;
+  }
+  const color = _messagesCleanLabelColor(payload.color || payload.backgroundColor);
+  const identity = _messagesCurrentIdentity(req);
+  const userKey = _messagesLabelUserKey(req);
+
+  const existing = await _sbMessageLabelsList(req);
+  if (existing.some((label) => String(label.name || '').trim().toLowerCase() === name.toLowerCase())) {
+    const err = new Error('This label already exists.');
+    err.status = 409;
+    throw err;
+  }
+
+  const row = await supabaseDb.insert(_sbMessagesLabelsTable(), {
+    user_key: userKey,
+    user_id: String(req?.session?.userSupabaseId || '').trim() || null,
+    user_email: identity.email || null,
+    name,
+    color,
+    sort_order: existing.length,
+  });
+  return _sbSerializeMessageLabel(row);
+}
+
 function _sbMessageChatId(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
@@ -14626,6 +14692,32 @@ app.get('/api/messages/presence', requireAuth, requirePage(["Mail", "Messages", 
   } catch (error) {
     console.error('GET /api/messages/presence error:', error?.details || error);
     return res.status(500).json({ ok: false, error: 'Failed to load presence.' });
+  }
+});
+
+app.get('/api/messages/labels', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbMessagesEnabled()) return res.json({ ok: true, source: 'local', labels: [] });
+    const labels = await _sbMessageLabelsList(req);
+    return res.json({ ok: true, source: 'supabase', labels });
+  } catch (error) {
+    console.error('GET /api/messages/labels error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Failed to load email labels.' });
+  }
+});
+
+app.post('/api/messages/labels', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbMessagesEnabled()) {
+      return res.status(500).json({ ok: false, error: 'Supabase messages are not configured.' });
+    }
+    const label = await _sbCreateMessageLabel(req, req.body || {});
+    return res.json({ ok: true, source: 'supabase', label });
+  } catch (error) {
+    console.error('POST /api/messages/labels error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to create email label.' });
   }
 });
 
