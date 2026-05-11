@@ -14250,16 +14250,22 @@ async function _sbAssertMessageChatVisible(req, chatId) {
 async function _sbSetMessageChatStatus(req, chatId, status) {
   const id = String(chatId || '').trim();
   await _sbAssertMessageChatVisible(req, id);
-  const cleanStatus = String(status || '').trim().toLowerCase();
+  const requestedStatus = String(status || '').trim().toLowerCase();
+  const cleanStatus = ['unarchive', 'unarchived', 'inbox', 'open'].includes(requestedStatus) ? 'active' : requestedStatus;
   const now = new Date().toISOString();
   const patch = { status: cleanStatus, updated_at: now };
+
+  // These columns exist in the email actions migration. Keep the patch limited to
+  // that migration so older databases can still fall back safely.
   if (cleanStatus === 'archived') patch.archived = true;
+  if (cleanStatus === 'active' || cleanStatus === 'closed') patch.archived = false;
   if (cleanStatus === 'deleted') patch.deleted_at = now;
+
   try {
     const row = await supabaseDb.updateById(_sbMessagesChatsTable(), id, patch);
-    return _sbSerializeMessageChatRow(row || { id, status: cleanStatus });
+    return _sbSerializeMessageChatRow(row || { id, status: cleanStatus, archived: patch.archived });
   } catch (error) {
-    // Some older databases may not have the optional boolean/timestamp fields yet.
+    // Some older databases may not have the optional archive/delete columns yet.
     const fallback = { status: cleanStatus, updated_at: now };
     const row = await supabaseDb.updateById(_sbMessagesChatsTable(), id, fallback);
     return _sbSerializeMessageChatRow(row || { id, status: cleanStatus });
@@ -14313,6 +14319,14 @@ async function _sbMessagesBulkAction(req, payload = {}) {
   if (action === 'archive') {
     for (const id of ids) await _sbSetMessageChatStatus(req, id, 'archived');
     return { action, updatedCount: ids.length };
+  }
+  if (action === 'unarchive') {
+    for (const id of ids) await _sbSetMessageChatStatus(req, id, 'active');
+    return { action, updatedCount: ids.length };
+  }
+  if (action === 'closed' || action === 'close') {
+    for (const id of ids) await _sbSetMessageChatStatus(req, id, 'closed');
+    return { action: 'closed', updatedCount: ids.length };
   }
   if (action === 'delete') {
     for (const id of ids) await _sbSetMessageChatStatus(req, id, 'deleted');
@@ -15080,6 +15094,8 @@ app.patch('/api/messages/chats/:id', requireAuth, requirePage(["Mail", "Messages
     const action = String(req.body?.action || '').trim().toLowerCase();
     let chat = null;
     if (action === 'archive') chat = await _sbSetMessageChatStatus(req, req.params?.id, 'archived');
+    else if (action === 'unarchive') chat = await _sbSetMessageChatStatus(req, req.params?.id, 'active');
+    else if (action === 'closed' || action === 'close') chat = await _sbSetMessageChatStatus(req, req.params?.id, 'closed');
     else if (action === 'delete') chat = await _sbSetMessageChatStatus(req, req.params?.id, 'deleted');
     else {
       return res.status(400).json({ ok: false, error: 'Unsupported email action.' });

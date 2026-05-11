@@ -4045,3 +4045,42 @@ body.emails-page.email-inbox-redesign .msg-inbox-title-row > .msg-inbox-actions-
     min-width: 188px !important;
   }
 }
+
+/* Inbox actions final fixes: visible dots, archived swipe text, and danger delete action */
+body.emails-page.email-inbox-redesign .msg-inbox-more-btn .msg-inbox-more-dots {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: currentColor !important;
+  font-size: 22px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  letter-spacing: 1px !important;
+  transform: translateY(-1px) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-inbox-more-btn:empty::before {
+  content: '•••' !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: currentColor !important;
+  font-size: 22px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  letter-spacing: 1px !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button.is-danger,
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button[data-msg-action="delete-selected"] {
+  color: #dc2626 !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button.is-danger:hover,
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button[data-msg-action="delete-selected"]:hover {
+  background: rgba(239, 68, 68, 0.10) !important;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-swipe-shell.is-archived-chat .msg-swipe-action--archive {
+  background: linear-gradient(90deg, #0f172a, #334155) !important;
+}

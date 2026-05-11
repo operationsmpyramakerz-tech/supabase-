@@ -644,11 +644,12 @@
 
     if (state.selectionMode && selectedCount > 0) {
       menu.innerHTML = `
-        <button type="button" data-msg-action="delete-selected"><i data-feather="trash-2"></i><span>Delete</span></button>
         <button type="button" data-msg-action="label-selected"><i data-feather="tag"></i><span>Label as</span></button>
         <button type="button" data-msg-action="mark-selected-read"><i data-feather="check-circle"></i><span>Mark as Read</span></button>
+        <button type="button" data-msg-action="mark-selected-closed"><i data-feather="check-square"></i><span>Mark as Closed</span></button>
         <hr />
         <button type="button" data-msg-action="cancel-select"><i data-feather="x-circle"></i><span>Cancel Select</span></button>
+        <button type="button" class="is-danger" data-msg-action="delete-selected"><i data-feather="trash-2"></i><span>Delete</span></button>
       `;
     } else {
       menu.innerHTML = `
@@ -681,19 +682,20 @@
     const id = String(chatId || '').trim();
     if (!id) return;
     const chat = state.chats.find((item) => String(item.id) === id);
+    const shouldUnarchive = !!chat && (isArchivedChat(chat) || String(state.activeFilter || '') === 'archived');
     if (chat) {
-      chat.status = 'archived';
-      chat.archived = true;
+      chat.status = shouldUnarchive ? 'active' : 'archived';
+      chat.archived = !shouldUnarchive;
     }
     renderChatsList();
     try {
       await apiJson(`/api/messages/chats/${encodeURIComponent(id)}`, {
         method: 'PATCH',
-        body: { action: 'archive' },
+        body: { action: shouldUnarchive ? 'unarchive' : 'archive' },
       });
-      toast('Email moved to Archive.', 'success');
+      toast(shouldUnarchive ? 'Email moved back to Inbox.' : 'Email moved to Archive.', 'success');
     } catch (error) {
-      toast(error.message || 'Failed to archive email.', 'error');
+      toast(error.message || (shouldUnarchive ? 'Failed to unarchive email.' : 'Failed to archive email.'), 'error');
       await refreshAll({ keepSelection: true, silent: true });
     }
   }
@@ -730,6 +732,28 @@
     });
     setSelectionMode(false);
     toast('Selected emails marked as read.', 'success');
+  }
+
+  async function markSelectedAsClosed() {
+    const ids = selectedChatIds();
+    if (!ids.length) return;
+    try {
+      await runBulkChatAction('closed', ids);
+      const set = new Set(ids);
+      state.chats.forEach((chat) => {
+        if (set.has(String(chat.id || ''))) {
+          chat.status = 'closed';
+          chat.closed = true;
+          chat.archived = false;
+        }
+      });
+      setSelectionMode(false);
+      renderFilterTabs();
+      renderChatsList();
+      toast('Selected emails marked as closed.', 'success');
+    } catch (error) {
+      toast(error.message || 'Failed to mark selected emails as closed.', 'error');
+    }
   }
 
   function renderLabelPickerList() {
@@ -949,6 +973,10 @@
       case 'mark-selected-read':
         setInboxMenu(false);
         markSelectedAsRead();
+        break;
+      case 'mark-selected-closed':
+        setInboxMenu(false);
+        markSelectedAsClosed();
         break;
       case 'cancel-select':
         setSelectionMode(false);
@@ -1727,9 +1755,11 @@
         labelBadges,
       ].filter(Boolean).join('');
       const checked = state.selectedChatIds.has(id);
+      const archiveActionLabel = isArchivedChat(chat) ? 'Unarchive' : 'Archive';
+      const archiveActionIcon = isArchivedChat(chat) ? 'inbox' : 'archive';
       return `
-        <div class="msg-chat-swipe-shell ${checked ? 'is-selected' : ''}" data-chat-id="${escapeHtml(id)}">
-          <div class="msg-swipe-action msg-swipe-action--archive"><i data-feather="archive"></i><span>Archive</span></div>
+        <div class="msg-chat-swipe-shell ${checked ? 'is-selected' : ''} ${isArchivedChat(chat) ? 'is-archived-chat' : ''}" data-chat-id="${escapeHtml(id)}">
+          <div class="msg-swipe-action msg-swipe-action--archive"><i data-feather="${archiveActionIcon}"></i><span>${archiveActionLabel}</span></div>
           <div class="msg-swipe-action msg-swipe-action--label"><span>Label</span><i data-feather="tag"></i></div>
           <div class="msg-chat-swipe-stage">
             ${state.selectionMode ? `
