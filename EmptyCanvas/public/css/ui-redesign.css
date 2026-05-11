@@ -2638,15 +2638,17 @@ body.ops-hard-refresh-active{
 }
 
 /* =========================================================
-   Mobile dock transparent background + safe content clearance
-   - The dock keeps only its own black frames; no fixed white shelf behind it.
-   - The scrollable page still reserves enough bottom space so the final card,
-     button, input, or list item can be scrolled above the floating dock.
+   Mobile dock transparent clearance
+   - Keep the dock floating with only its black frames.
+   - Do not create a white painted shelf behind the dock.
+   - Keep enough scroll/focus clearance by extending the final content block
+     instead of padding the whole white main surface.
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    --mobile-content-dock-clearance: calc(136px + env(safe-area-inset-bottom, 0px));
-    --mobile-content-focus-clearance: calc(158px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-dock-clearance: calc(118px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-focus-clearance: calc(150px + env(safe-area-inset-bottom, 0px));
+    --mobile-main-bottom-space: max(14px, env(safe-area-inset-bottom, 0px));
   }
 
   .main-content > main,
@@ -2655,14 +2657,37 @@ body.ops-hard-refresh-active{
   body.shell-embedded .main-content > main,
   body.shell-embedded .main-content > main.tasks-v2-main,
   body.shell-embedded .main-content > main.container-full-width{
-    padding-bottom: var(--mobile-content-dock-clearance) !important;
+    padding-bottom: var(--mobile-main-bottom-space) !important;
     scroll-padding-bottom: var(--mobile-content-focus-clearance) !important;
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
+  .main-content > main > :last-child{
+    scroll-margin-bottom: var(--mobile-content-focus-clearance) !important;
+  }
+
+  /* Home ends with a navy scope card inside .home-grid.
+     Add the scroll-safe space inside that final card, so the dock area is not
+     painted as a separate white frame. */
+  .main-content > main.container-full-width > .home-grid::after{
+    content: none !important;
+    display: none !important;
+  }
+
+  .main-content > main.container-full-width > .home-grid > :last-child::after{
+    content: "";
+    display: block;
+    height: var(--mobile-content-dock-clearance);
+    pointer-events: none;
+    background: transparent !important;
   }
 
   .sidebar,
   body.sidebar-collapsed .sidebar,
   .sidebar.mobile-dock-structured-host{
     background: transparent !important;
+    background-color: transparent !important;
     box-shadow: none !important;
   }
 
