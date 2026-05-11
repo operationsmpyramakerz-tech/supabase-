@@ -17,7 +17,7 @@
   </style>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/messages.css?v=email-labels-composer-v1" rel="stylesheet" />
+  <link href="/css/messages.css?v=email-label-slider-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading messages-page emails-page email-inbox-redesign">
@@ -249,17 +249,22 @@
         </label>
         <div class="msg-field msg-label-color-field">
           <span>Background color <b>*</b></span>
-          <div class="msg-label-color-card">
+          <div class="msg-label-color-slider-card" id="msgLabelColorSliderCard">
             <div class="msg-label-color-preview" id="msgLabelColorPreview">Label</div>
-            <input id="msgLabelColor" type="color" value="#1d9bf0" aria-label="Choose label background color" />
-          </div>
-          <div class="msg-label-swatches" id="msgLabelSwatches" aria-label="Quick color choices">
-            <button type="button" class="is-active" data-color="#1d9bf0" style="--label-swatch:#1d9bf0" aria-label="Blue label color"></button>
-            <button type="button" data-color="#0f172a" style="--label-swatch:#0f172a" aria-label="Dark label color"></button>
-            <button type="button" data-color="#ea580c" style="--label-swatch:#ea580c" aria-label="Orange label color"></button>
-            <button type="button" data-color="#16a34a" style="--label-swatch:#16a34a" aria-label="Green label color"></button>
-            <button type="button" data-color="#7c3aed" style="--label-swatch:#7c3aed" aria-label="Purple label color"></button>
-            <button type="button" data-color="#dc2626" style="--label-swatch:#dc2626" aria-label="Red label color"></button>
+            <label class="msg-label-slider-group">
+              <span>Color</span>
+              <input id="msgLabelHue" class="msg-label-hue-slider" type="range" min="0" max="360" step="1" value="204" aria-label="Choose label color hue" />
+            </label>
+            <label class="msg-label-slider-group">
+              <span>Saturation</span>
+              <input id="msgLabelSaturation" class="msg-label-saturation-slider" type="range" min="0" max="100" step="1" value="88" aria-label="Choose label color saturation" />
+            </label>
+            <div class="msg-label-hex-row">
+              <span class="msg-label-format-chip">HEX <b>↕</b></span>
+              <input id="msgLabelHex" class="msg-label-hex-input" type="text" inputmode="text" maxlength="7" autocomplete="off" spellcheck="false" value="#1d9bf0" aria-label="Label color hex value" />
+              <span class="msg-label-hex-swatch" id="msgLabelHexSwatch" aria-hidden="true"></span>
+              <input id="msgLabelColor" type="hidden" value="#1d9bf0" />
+            </div>
           </div>
         </div>
         <div class="msg-form-error" id="msgLabelError" aria-live="polite"></div>
@@ -276,6 +281,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=email-hard-refresh-fix-v1"></script>
-  <script src="/js/messages.js?v=email-labels-composer-v1"></script>
+  <script src="/js/messages.js?v=email-label-slider-v1"></script>
 </body>
 </html>

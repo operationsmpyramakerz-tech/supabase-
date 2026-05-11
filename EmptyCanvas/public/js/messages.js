@@ -294,6 +294,73 @@
     return '#1d9bf0';
   }
 
+  function clampNumber(value, min, max) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return min;
+    return Math.max(min, Math.min(max, numeric));
+  }
+
+  function normalizeHexDraft(value) {
+    const raw = String(value || '').trim().replace(/[^0-9a-f#]/gi, '');
+    const withoutHash = raw.replace(/^#/, '').slice(0, 6);
+    return withoutHash ? `#${withoutHash}` : '#';
+  }
+
+  function hslToHex(hue, saturation, lightness = 53) {
+    const h = ((clampNumber(hue, 0, 360) % 360) + 360) % 360;
+    const s = clampNumber(saturation, 0, 100) / 100;
+    const l = clampNumber(lightness, 0, 100) / 100;
+    const c = (1 - Math.abs((2 * l) - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - (c / 2);
+    let r1 = 0;
+    let g1 = 0;
+    let b1 = 0;
+    if (h < 60) [r1, g1, b1] = [c, x, 0];
+    else if (h < 120) [r1, g1, b1] = [x, c, 0];
+    else if (h < 180) [r1, g1, b1] = [0, c, x];
+    else if (h < 240) [r1, g1, b1] = [0, x, c];
+    else if (h < 300) [r1, g1, b1] = [x, 0, c];
+    else [r1, g1, b1] = [c, 0, x];
+    return [r1, g1, b1]
+      .map((channel) => Math.round((channel + m) * 255).toString(16).padStart(2, '0'))
+      .join('')
+      .replace(/^/, '#');
+  }
+
+  function hexToHsl(color) {
+    const hex = sanitizeLabelColor(color).replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16) / 255;
+    const g = parseInt(hex.slice(2, 4), 16) / 255;
+    const b = parseInt(hex.slice(4, 6), 16) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0;
+    let sValue = 0;
+    if (max !== min) {
+      const d = max - min;
+      sValue = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r:
+          h = ((g - b) / d) + (g < b ? 6 : 0);
+          break;
+        case g:
+          h = ((b - r) / d) + 2;
+          break;
+        default:
+          h = ((r - g) / d) + 4;
+          break;
+      }
+      h *= 60;
+    }
+    return {
+      h: Math.round(h),
+      s: Math.round(sValue * 100),
+      l: Math.round(l * 100),
+    };
+  }
+
   function labelTextColor(bg) {
     const hex = sanitizeLabelColor(bg).replace('#', '');
     const r = parseInt(hex.slice(0, 2), 16);
@@ -368,20 +435,60 @@
     hydrateIcons();
   }
 
-  function setLabelModalColor(color) {
+  function setLabelModalColor(color, options = {}) {
     const clean = sanitizeLabelColor(color);
     const input = $('#msgLabelColor');
     const preview = $('#msgLabelColorPreview');
+    const hexInput = $('#msgLabelHex');
+    const hexSwatch = $('#msgLabelHexSwatch');
+    const hueSlider = $('#msgLabelHue');
+    const saturationSlider = $('#msgLabelSaturation');
+    const sliderCard = $('#msgLabelColorSliderCard');
+    const hsl = hexToHsl(clean);
+
     if (input) input.value = clean;
+    if (hexInput && options.syncHex !== false) hexInput.value = clean.toUpperCase();
+    if (hueSlider && options.syncSliders !== false) hueSlider.value = String(hsl.h);
+    if (saturationSlider && options.syncSliders !== false) saturationSlider.value = String(hsl.s);
+
+    const activeHue = Number(hueSlider?.value || hsl.h);
+    const activeSaturation = Number(saturationSlider?.value || hsl.s);
+    const activeColor = clean;
+    const name = String($('#msgLabelName')?.value || '').trim() || 'Label';
+
     if (preview) {
-      const name = String($('#msgLabelName')?.value || '').trim() || 'Label';
       preview.textContent = name.slice(0, 24);
-      preview.style.setProperty('--msg-label-preview-bg', clean);
-      preview.style.setProperty('--msg-label-preview-fg', labelTextColor(clean));
+      preview.style.setProperty('--msg-label-preview-bg', activeColor);
+      preview.style.setProperty('--msg-label-preview-fg', labelTextColor(activeColor));
     }
-    $$('#msgLabelSwatches [data-color]').forEach((btn) => {
-      btn.classList.toggle('is-active', sanitizeLabelColor(btn.dataset.color) === clean);
+    if (hexSwatch) hexSwatch.style.setProperty('--msg-label-preview-bg', activeColor);
+
+    [hueSlider, saturationSlider, sliderCard].filter(Boolean).forEach((el) => {
+      el.style.setProperty('--msg-label-hue', String(Math.round(activeHue)));
+      el.style.setProperty('--msg-label-saturation', `${Math.round(activeSaturation)}%`);
+      el.style.setProperty('--msg-label-current', activeColor);
     });
+  }
+
+  function updateLabelColorFromSliders() {
+    const hue = clampNumber($('#msgLabelHue')?.value, 0, 360);
+    const saturation = clampNumber($('#msgLabelSaturation')?.value, 0, 100);
+    setLabelModalColor(hslToHex(hue, saturation, 53), { syncSliders: false });
+  }
+
+  function updateLabelColorFromHexInput(event) {
+    const input = event?.target || $('#msgLabelHex');
+    if (!input) return;
+    const draft = normalizeHexDraft(input.value);
+    input.value = draft.toUpperCase();
+    if (/^#[0-9a-f]{6}$/i.test(draft)) {
+      setLabelModalColor(draft);
+    }
+  }
+
+  function resetInvalidLabelHex() {
+    const color = sanitizeLabelColor($('#msgLabelColor')?.value || '#1d9bf0');
+    setLabelModalColor(color);
   }
 
   function openLabelModal() {
@@ -1816,12 +1923,11 @@
     $('#msgLabelModal')?.addEventListener('click', (e) => {
       if (e.target === $('#msgLabelModal')) closeLabelModal();
     });
-    $('#msgLabelColor')?.addEventListener('input', (e) => setLabelModalColor(e.target?.value));
-    $('#msgLabelName')?.addEventListener('input', () => setLabelModalColor($('#msgLabelColor')?.value));
-    $('#msgLabelSwatches')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-color]');
-      if (btn) setLabelModalColor(btn.dataset.color);
-    });
+    $('#msgLabelHue')?.addEventListener('input', updateLabelColorFromSliders);
+    $('#msgLabelSaturation')?.addEventListener('input', updateLabelColorFromSliders);
+    $('#msgLabelHex')?.addEventListener('input', updateLabelColorFromHexInput);
+    $('#msgLabelHex')?.addEventListener('blur', resetInvalidLabelHex);
+    $('#msgLabelName')?.addEventListener('input', () => setLabelModalColor($('#msgLabelColor')?.value, { syncSliders: false, syncHex: false }));
     bindFloatingNewMenu();
 
     $('#msgFilterTabs')?.addEventListener('click', (event) => {

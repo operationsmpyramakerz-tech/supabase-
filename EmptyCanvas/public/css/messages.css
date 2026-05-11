@@ -3394,74 +3394,167 @@ body.shell-embedded.emails-page.email-inbox-redesign .messages-shell {
 }
 
 .msg-label-color-field {
-  gap: 10px;
+  gap: 12px;
 }
 
-.msg-label-color-card {
+.msg-label-color-slider-card {
+  --msg-label-hue: 204;
+  --msg-label-saturation: 88%;
+  --msg-label-current: #1d9bf0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border-radius: 22px;
-  background: #f8fafc;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96));
   border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 18px 40px rgba(15, 23, 42, 0.08);
 }
 
 .msg-label-color-preview {
-  min-height: 50px;
-  border-radius: 18px;
+  min-height: 56px;
+  border-radius: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 16px;
-  font-size: 15px;
+  padding: 0 18px;
+  font-size: 16px;
   font-weight: 950;
   color: var(--msg-label-preview-fg, #ffffff);
   background: var(--msg-label-preview-bg, #1d9bf0);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 12px 28px rgba(15, 23, 42, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    0 16px 32px color-mix(in srgb, var(--msg-label-preview-bg, #1d9bf0) 22%, transparent);
 }
 
-.msg-label-color-card input[type="color"] {
-  width: 54px;
-  height: 50px;
-  padding: 0;
+.msg-label-slider-group {
+  display: grid;
+  gap: 8px;
+}
+
+.msg-label-slider-group span {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.msg-label-slider-group input[type="range"] {
+  width: 100%;
+  height: 18px;
+  margin: 0;
   border: 0;
-  border-radius: 18px;
-  background: transparent;
+  border-radius: 999px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
 }
 
-.msg-label-color-card input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-.msg-label-color-card input[type="color"]::-webkit-color-swatch {
-  border: 4px solid #ffffff;
-  border-radius: 18px;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+.msg-label-hue-slider {
+  background: linear-gradient(90deg,
+    #ef4444 0%,
+    #f59e0b 14%,
+    #eab308 28%,
+    #22c55e 42%,
+    #06b6d4 56%,
+    #2563eb 70%,
+    #7c3aed 84%,
+    #ec4899 100%
+  );
 }
 
-.msg-label-swatches {
-  display: flex;
-  flex-wrap: wrap;
+.msg-label-saturation-slider {
+  background: linear-gradient(90deg,
+    hsl(var(--msg-label-hue) 8% 84%) 0%,
+    hsl(var(--msg-label-hue) 55% 62%) 48%,
+    hsl(var(--msg-label-hue) 100% 52%) 100%
+  );
+}
+
+.msg-label-slider-group input[type="range"]::-webkit-slider-runnable-track {
+  height: 18px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.msg-label-slider-group input[type="range"]::-moz-range-track {
+  height: 18px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.msg-label-slider-group input[type="range"]::-webkit-slider-thumb {
+  width: 32px;
+  height: 32px;
+  margin-top: -7px;
+  border-radius: 999px;
+  border: 5px solid #ffffff;
+  background: var(--msg-label-current, #1d9bf0);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.28);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.msg-label-slider-group input[type="range"]::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 5px solid #ffffff;
+  background: var(--msg-label-current, #1d9bf0);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.28);
+}
+
+.msg-label-hex-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 44px;
+  align-items: center;
   gap: 10px;
 }
 
-.msg-label-swatches button {
-  width: 38px;
-  height: 38px;
-  border-radius: 999px;
-  border: 4px solid #ffffff;
-  background: var(--label-swatch, #1d9bf0);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
-  cursor: pointer;
-  position: relative;
+.msg-label-format-chip {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 16px;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  font-size: 13px;
+  font-weight: 950;
 }
 
-.msg-label-swatches button.is-active::after {
-  content: "";
-  position: absolute;
-  inset: -7px;
-  border-radius: inherit;
-  border: 2px solid rgba(15, 23, 42, 0.26);
+.msg-label-format-chip b {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.msg-label-hex-input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.msg-label-hex-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  background: var(--msg-label-preview-bg, #1d9bf0);
+  border: 4px solid #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
 }
 
 body.emails-page.email-inbox-redesign .msg-custom-label-chip {
