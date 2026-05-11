@@ -950,32 +950,13 @@
   }
 
   function transformEmailShortcutToHome() {
-    const btn = document.getElementById('messagesShortcutBtn');
-    if (!btn) return false;
-    btn.href = '/home';
-    btn.hidden = false;
-    try { btn.style.removeProperty('display'); } catch {}
-    btn.classList.remove('is-active', 'has-unread');
-    btn.classList.add('is-email-home-btn');
-    btn.removeAttribute('data-unread-count');
-    btn.setAttribute('aria-label', 'Home');
-    btn.setAttribute('title', 'Home');
-    if (btn.dataset.emailHomeMode !== '1') {
-      btn.dataset.emailHomeMode = '1';
-      btn.innerHTML = '<i data-feather="home"></i>';
-      hydrateIcons();
-    }
-    return true;
+    // Keep the normal Emails shortcut on the Emails page.
+    // Older redesign iterations converted it into Home and hid the sidebar; this is intentionally disabled.
+    return false;
   }
 
   function initEmailPageChrome() {
-    transformEmailShortcutToHome();
-    [50, 200, 600, 1200].forEach((delay) => window.setTimeout(transformEmailShortcutToHome, delay));
-    try {
-      const observer = new MutationObserver(() => transformEmailShortcutToHome());
-      observer.observe(document.body, { childList: true, subtree: true });
-      window.setTimeout(() => observer.disconnect(), 5000);
-    } catch {}
+    return false;
   }
 
   function renderPeopleStrip() {

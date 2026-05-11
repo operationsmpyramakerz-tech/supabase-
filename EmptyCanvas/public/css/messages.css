@@ -3081,3 +3081,208 @@ body.emails-page.email-inbox-redesign .msg-floating-new-menu svg {
     font-size: 11px !important;
   }
 }
+
+
+/* =========================================================
+   Email inbox correction v3
+   - restore the sidebar and normal Emails shortcut behavior
+   - remove the internal mobile inbox scrollbar
+   - bring the mobile inbox scale back down while using the full page width
+   ========================================================= */
+body.emails-page.email-inbox-redesign .sidebar {
+  display: flex !important;
+}
+
+body.emails-page.email-inbox-redesign .main-content {
+  margin-left: calc(88px + 18px) !important;
+  padding-left: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+body.emails-page.email-inbox-redesign .main-header {
+  margin-left: 0 !important;
+}
+
+body.emails-page.email-inbox-redesign .header-message-btn.is-email-home-btn .header-message-unread-dot,
+body.emails-page.email-inbox-redesign .header-message-btn.is-email-home-btn::after {
+  display: block !important;
+}
+
+@media (max-width: 900px) {
+  body.emails-page.email-inbox-redesign .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 980px) {
+  body.emails-page.email-inbox-redesign .main-content > main.messages-body {
+    --email-mobile-header-space: 0px;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    padding: 0 18px calc(104px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-shell {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-left-panel {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    gap: 12px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chats-list {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 0 10px 0 !important;
+    scrollbar-width: none !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chats-list::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-mobile-inbox-title {
+    font-size: clamp(38px, 10.8vw, 48px) !important;
+    line-height: .96 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-label-tabs {
+    gap: 10px !important;
+    padding-bottom: 9px !important;
+    margin-top: 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip {
+    min-height: 48px !important;
+    border-radius: 16px !important;
+    padding: 0 14px !important;
+    font-size: 13px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-filter-chip .msg-filter-count {
+    min-width: 26px !important;
+    height: 26px !important;
+    font-size: 11px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-row {
+    min-height: 80px !important;
+    grid-template-columns: 54px minmax(0, 1fr) !important;
+    gap: 12px !important;
+    padding: 11px 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar-wrap,
+  body.emails-page.email-inbox-redesign .msg-chat-avatar {
+    width: 50px !important;
+    height: 50px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar {
+    border-radius: 16px !important;
+    font-size: 15px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-main {
+    padding-right: 88px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-title {
+    font-size: 16px !important;
+    line-height: 1.14 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-preview {
+    margin-top: 3px !important;
+    font-size: 13px !important;
+    line-height: 1.22 !important;
+    -webkit-line-clamp: 1 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-badges {
+    margin-top: 4px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-meta {
+    top: 14px !important;
+    right: 0 !important;
+    max-width: 86px !important;
+    font-size: 10px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-floating-new-wrap {
+    position: fixed !important;
+    right: 22px !important;
+    bottom: calc(106px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-floating-new-btn {
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 20px !important;
+  }
+}
+
+@media (max-width: 540px) {
+  body.emails-page.email-inbox-redesign .main-content > main.messages-body {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.emails-page.email-inbox-redesign .messages-left-panel {
+    gap: 11px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-row {
+    min-height: 78px !important;
+    grid-template-columns: 54px minmax(0, 1fr) !important;
+    gap: 11px !important;
+    padding: 10px 0 !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-avatar-wrap,
+  body.emails-page.email-inbox-redesign .msg-chat-avatar {
+    width: 50px !important;
+    height: 50px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-main {
+    padding-right: 82px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-title {
+    font-size: 16px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-preview {
+    font-size: 12px !important;
+  }
+
+  body.emails-page.email-inbox-redesign .msg-chat-meta {
+    max-width: 80px !important;
+    font-size: 10px !important;
+  }
+}
