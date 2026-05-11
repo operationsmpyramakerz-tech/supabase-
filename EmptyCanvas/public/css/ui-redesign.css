@@ -2636,3 +2636,34 @@ body.ops-hard-refresh-active{
   opacity: 1;
   transform: scale(1);
 }
+
+/* =========================================================
+   Mobile dock transparent background fix
+   - The dock is fixed and already has its own black frames.
+   - Do not reserve a large white padding shelf behind it.
+   - Keep scroll-padding so focused/anchored content still respects the dock.
+   ========================================================= */
+@media (max-width: 768px){
+  .main-content > main,
+  .main-content > main.container,
+  .main-content > main.container-full-width,
+  body.shell-embedded .main-content > main,
+  body.shell-embedded .main-content > main.tasks-v2-main,
+  body.shell-embedded .main-content > main.container-full-width{
+    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .sidebar,
+  body.sidebar-collapsed .sidebar,
+  .sidebar.mobile-dock-structured-host{
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sidebar.mobile-dock-structured-host .sidebar-nav,
+  .sidebar.mobile-dock-structured-host .mobile-dock-home-rail,
+  .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip{
+    background-clip: padding-box !important;
+  }
+}
