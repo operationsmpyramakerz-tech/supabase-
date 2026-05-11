@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-static-vv56-emails-redesign-v1";
+const CACHE_NAME = "ops-static-vv57-mail-access-ui";
 
 const PRECACHE_URLS = [
   "/pwa-start",

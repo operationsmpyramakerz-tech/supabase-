@@ -174,6 +174,7 @@
 
   function saveReadState() {
     try { localStorage.setItem(readStateKey(), JSON.stringify(state.readState || {})); } catch {}
+    try { window.__opsRefreshMailUnread?.(); } catch {}
   }
 
   function markChatRead(chat) {
@@ -592,6 +593,7 @@
   async function loadChats() {
     const data = await apiJson('/api/messages/chats?limit=80');
     state.chats = Array.isArray(data.chats) ? data.chats : [];
+    try { window.__opsRefreshMailUnread?.(); } catch {}
   }
 
   function presenceNameKey(value) {

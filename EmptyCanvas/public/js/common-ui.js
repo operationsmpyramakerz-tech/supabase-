@@ -1263,10 +1263,14 @@ if (document.querySelector('.sidebar')) {
       }
     } catch {}
 
-    // Emails is an authenticated internal inbox; each thread is still filtered by backend permissions.
+    // Emails are exposed from the header shortcut only, not from the sidebar.
     try {
-      const emails = document.querySelector('a[href="/messages"]');
-      if (emails) showEl(emails.closest('li') || emails);
+      document.querySelectorAll('a[href="/messages"], a[href="/emails"]').forEach((link) => {
+        const li = link.closest('li');
+        if (li && li.closest('.sidebar')) {
+          try { li.remove(); } catch { hideEl(li); }
+        }
+      });
     } catch {}
 
     // User Access & Data must be visible from the sidebar on every authenticated page.
@@ -1321,6 +1325,16 @@ if (document.querySelector('.sidebar')) {
       hydratePendingFeatherIcons();
     }
 
+
+  function removeSidebarMailLinks(){
+    try {
+      document.querySelectorAll('.sidebar a[href="/messages"], .sidebar a[href="/emails"]').forEach((link) => {
+        const li = link.closest('li');
+        if (li) li.remove();
+        else link.remove();
+      });
+    } catch {}
+  }
 
   function syncMobileDockStructure(){
     const sidebar = document.querySelector('.sidebar');
@@ -1390,15 +1404,8 @@ if (document.querySelector('.sidebar')) {
 
   // Rename sidebar labels (display-only) without changing routes
   function renameSidebarLabels(){
-    // Emails (was Messages)
-    document
-      .querySelectorAll('a.nav-item[href="/messages"], a.nav-link[href="/messages"]')
-      .forEach((a) => {
-        const lbl = a.querySelector('.nav-label');
-        if (lbl) lbl.textContent = 'Emails';
-        const icon = a.querySelector('i[data-feather]');
-        if (icon) icon.setAttribute('data-feather', 'mail');
-      });
+    // Emails are intentionally not displayed in the sidebar.
+    try { removeSidebarMailLinks(); } catch {}
 
     // Operations Orders (was: Operations Requested Orders)
     document
@@ -1459,7 +1466,8 @@ if (document.querySelector('.sidebar')) {
           name: name || cached || 'User',
           position: data.position || '',
           department: data.department || '',
-          photoUrl: data.photoUrl || ''
+          photoUrl: data.photoUrl || '',
+          email: data.email || ''
         };
 
         // Notify other widgets that user info changed
@@ -1478,6 +1486,8 @@ if (document.querySelector('.sidebar')) {
         // Prime the app data in the background once per session/tab so page transitions
         // feel instant after the first load.
         schedulePrefetchForAllowedPages(data.allowedPages);
+
+        try { window.__opsApplyMailAccess?.(data.allowedPages, data); } catch {}
 
         // ✅ بعد ما طبقنا الصلاحيات، نكشف اللي مسموح بس (بدون فلاش)
         document.body.classList.remove('permissions-loading');
@@ -1666,7 +1676,7 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
   ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
   ensureLink({ href: '/proposals', label: 'Proposals', icon: 'file-text', beforeHref: '/orders/sv-orders' });
-  ensureLink({ href: '/messages', label: 'Emails', icon: 'mail', beforeHref: '/proposals' });
+  removeSidebarMailLinks();
   ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
   ensureLink({ href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' });
@@ -2550,6 +2560,92 @@ function initFloatingSearchWidget() {
 // --------------------------------------------
 // Emails shortcut (icon next to notifications)
 // --------------------------------------------
+
+const OPS_MAIL_ALLOWED_ALIASES = new Set(['mail', 'email', 'emails', 'messages', 'message', 'massage', '/messages', '/emails', 'messages chats', 'team email']);
+function opsNormalizeAllowedPagesForMail(allowed) {
+  const values = Array.isArray(allowed) ? allowed : [];
+  const set = new Set();
+  values.forEach((value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    set.add(lower);
+    set.add(lower.replace(/\/+$/, ''));
+    if (!lower.startsWith('/')) set.add('/' + lower.replace(/^\/+/, ''));
+    set.add(lower.replace(/[^a-z0-9]/g, ''));
+  });
+  return set;
+}
+function opsUserHasMailAccess(allowed) {
+  const set = opsNormalizeAllowedPagesForMail(allowed);
+  return Array.from(OPS_MAIL_ALLOWED_ALIASES).some((key) => set.has(key) || set.has(String(key).replace(/[^a-z0-9]/g, '')));
+}
+function opsReadMailAllowedFromCache() {
+  try {
+    const raw = sessionStorage.getItem('allowedPages');
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function opsReadEmailReadStateKey(account = null) {
+  const source = account || window.__opsUserInfo || {};
+  const email = String(source.email || '').trim().toLowerCase();
+  const name = String(source.name || localStorage.getItem('username') || '').trim().toLowerCase();
+  return `operationsHub.emails.readState.${email || name || 'anonymous'}`;
+}
+function opsChatTimeValue(value) {
+  const time = Date.parse(value || '');
+  return Number.isFinite(time) ? time : 0;
+}
+async function opsUpdateMailUnreadDot() {
+  const btn = document.getElementById('messagesShortcutBtn');
+  if (!btn || btn.hidden || btn.style.display === 'none') return;
+  try {
+    const response = await fetch('/api/messages/chats?limit=80', { credentials: 'include', cache: 'no-store' });
+    if (!response.ok) throw new Error('mail unread fetch failed');
+    const data = await response.json().catch(() => ({}));
+    const chats = Array.isArray(data.chats) ? data.chats : [];
+    let readState = {};
+    try { readState = JSON.parse(localStorage.getItem(opsReadEmailReadStateKey()) || '{}') || {}; } catch { readState = {}; }
+    const unread = chats.filter((chat) => {
+      const id = String(chat?.id || '');
+      if (!id) return false;
+      const count = Number(chat?.commentsCount || 0);
+      if (!count) return false;
+      const last = opsChatTimeValue(chat?.lastMessageTime || chat?.lastEditedTime || chat?.createdTime);
+      const read = opsChatTimeValue(readState[id]);
+      return last > read;
+    }).length;
+    btn.classList.toggle('has-unread', unread > 0);
+    btn.setAttribute('data-unread-count', unread > 99 ? '99+' : String(unread || ''));
+    btn.setAttribute('aria-label', unread > 0 ? `Emails, ${unread} unread` : 'Emails');
+  } catch {
+    btn.classList.remove('has-unread');
+    btn.removeAttribute('data-unread-count');
+  }
+}
+function opsApplyMailShortcutAccess(allowed, account = null) {
+  const btn = document.getElementById('messagesShortcutBtn');
+  if (!btn) return;
+  if (account && typeof account === 'object') {
+    try { window.__opsUserInfo = Object.assign({}, window.__opsUserInfo || {}, { email: account.email || '', name: account.name || account.username || window.__opsUserInfo?.name || '' }); } catch {}
+  }
+  const ok = opsUserHasMailAccess(allowed);
+  btn.hidden = !ok;
+  if (ok) {
+    btn.style.removeProperty('display');
+    opsUpdateMailUnreadDot();
+    if (!window.__opsMailUnreadTimer) {
+      window.__opsMailUnreadTimer = window.setInterval(opsUpdateMailUnreadDot, 30000);
+    }
+  } else {
+    btn.style.setProperty('display', 'none', 'important');
+    btn.classList.remove('has-unread');
+  }
+}
+window.__opsApplyMailAccess = opsApplyMailShortcutAccess;
+window.__opsRefreshMailUnread = opsUpdateMailUnreadDot;
+
 function initMessagesShortcutWidget() {
   if (document.getElementById('messagesShortcutBtn')) return;
 
@@ -2566,9 +2662,10 @@ function initMessagesShortcutWidget() {
   btn.id = 'messagesShortcutBtn';
   btn.className = 'header-message-btn';
   btn.href = '/messages';
+  btn.hidden = true;
   btn.setAttribute('aria-label', 'Emails');
   btn.setAttribute('title', 'Emails');
-  btn.innerHTML = `<i data-feather="mail"></i>`;
+  btn.innerHTML = `<i data-feather="mail"></i><span class="header-message-unread-dot" aria-hidden="true"></span>`;
 
   const searchBtn = mount.querySelector('#searchIconBtn, #headerSearchBtn, .search-icon-btn');
   const notifWrap = mount.querySelector('.notif-wrap');
@@ -2593,6 +2690,8 @@ function initMessagesShortcutWidget() {
   if (window.feather) {
     try { window.feather.replace(); } catch {}
   }
+
+  try { opsApplyMailShortcutAccess(opsReadMailAllowedFromCache(), window.__opsUserInfo || null); } catch {}
 }
 
 function initUserMenuWidget() {

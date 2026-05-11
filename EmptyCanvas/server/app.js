@@ -1675,6 +1675,7 @@ const ALL_PAGES = [
   "Products",
   "Proposals",
   "Tasks",
+  "Mail",
   "B2B",
   "Expenses",
   "Expenses Users",
@@ -1704,6 +1705,7 @@ function normalizePages(names = []) {
   if (set.has("products") || set.has("product") || set.has("components") || set.has("inventory products")) out.push("Products");
   if (set.has("proposals") || set.has("quotation proposals") || set.has("saved quotations") || set.has("kits")) out.push("Proposals");
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
+  if (set.has("mail") || set.has("email") || set.has("emails") || set.has("messages") || set.has("message") || set.has("massage")) out.push("Mail");
   if (set.has("b2b")) out.push("B2B");
   if (set.has("expenses")) out.push("Expenses");
   if (
@@ -2526,12 +2528,22 @@ function _sbRestStringList(values = []) {
 
 function _sbSerializeAppPage(row = {}) {
   const id = _sbGet(row, ["id", "page_id", "ID"]);
+  const pageKeyRaw = _sbString(_sbGet(row, ["page_key", "pageKey"])) || "";
+  const pageNameRaw = _sbString(_sbGet(row, ["page_name", "pageName", "name"])) || "";
+  const routePathRaw = _sbString(_sbGet(row, ["route_path", "routePath"])) || "";
+  const mailKey = norm(pageKeyRaw);
+  const mailName = norm(pageNameRaw);
+  const mailRoute = norm(routePathRaw);
+  const isMailPage =
+    ["messages", "message", "emails", "email", "mail", "massage"].includes(mailKey) ||
+    ["messages", "message", "emails", "email", "mail", "massage"].includes(mailName) ||
+    mailRoute === "/messages" || mailRoute === "/emails";
   return {
     id: String(id ?? ""),
     pageId: String(id ?? ""),
-    pageKey: _sbString(_sbGet(row, ["page_key", "pageKey"])) || "",
-    pageName: _sbString(_sbGet(row, ["page_name", "pageName", "name"])) || "",
-    routePath: _sbString(_sbGet(row, ["route_path", "routePath"])) || "",
+    pageKey: pageKeyRaw,
+    pageName: isMailPage ? "Mail" : pageNameRaw,
+    routePath: routePathRaw,
     routePattern: _sbString(_sbGet(row, ["route_pattern", "routePattern"])) || "",
     moduleName: _sbString(_sbGet(row, ["module_name", "moduleName"])) || "General",
     parentPageKey: _sbString(_sbGet(row, ["parent_page_key", "parentPageKey"])) || "",
@@ -2568,6 +2580,12 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     "expenses-users": "Expenses Users",
     b2b: "B2B",
     tasks: "Tasks",
+    messages: "Mail",
+    message: "Mail",
+    emails: "Mail",
+    email: "Mail",
+    mail: "Mail",
+    massage: "Mail",
     "user-access-data": USER_ACCESS_PAGE_NAME,
   };
   const mapped = map[key];
@@ -5189,6 +5207,14 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
+  if (set.has("Mail") || set.has("Messages") || set.has("Emails")) {
+    set.add("Mail");
+    set.add("Email");
+    set.add("Emails");
+    set.add("Messages");
+    set.add("/messages");
+    set.add("/emails");
+  }
   if (set.has(USER_ACCESS_PAGE_NAME)) {
     set.add(USER_ACCESS_PAGE_NAME);
     set.add("User Access");
@@ -5238,6 +5264,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Products")) return "/products";
   if (list.includes("Proposals")) return "/proposals";
   if (list.includes("Tasks")) return "/tasks";
+  if (list.includes("Mail") || list.includes("Messages") || list.includes("Emails")) return "/messages";
   if (list.includes("B2B")) return "/b2b";
   if (list.includes("Expenses Users")) return "/expenses/users";
   if (list.includes("Expenses")) return "/expenses";
@@ -6149,7 +6176,7 @@ app.get("/user-access", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "user-access.html"));
 });
 
-app.get(["/messages", "/emails"], requireAuth, (req, res) => {
+app.get(["/messages", "/emails"], requireAuth, requirePage(["Mail", "Messages", "Emails"]), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "messages.html"));
 });
 
@@ -14457,7 +14484,7 @@ async function _messagesSetReaction(req, { messageId, chatId, emoji } = {}) {
   return _messagesAggregateReactionRows(_messagesMemoryReactionRows([cleanMessageId]), req);
 }
 
-app.get('/api/messages/reactions', requireAuth, async (req, res) => {
+app.get('/api/messages/reactions', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const ids = String(req.query?.messageIds || req.query?.message_ids || '')
@@ -14474,7 +14501,7 @@ app.get('/api/messages/reactions', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/messages/reactions', requireAuth, async (req, res) => {
+app.post('/api/messages/reactions', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const reactions = await _messagesSetReaction(req, req.body || {});
@@ -14574,7 +14601,7 @@ async function _messagesPresenceList() {
   }
 }
 
-app.post('/api/messages/presence', requireAuth, async (req, res) => {
+app.post('/api/messages/presence', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const entry = await _messagesPresenceUpsert(req, req.body || {});
@@ -14585,7 +14612,7 @@ app.post('/api/messages/presence', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/messages/presence', requireAuth, async (req, res) => {
+app.get('/api/messages/presence', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const entries = await _messagesPresenceList();
@@ -14602,7 +14629,7 @@ app.get('/api/messages/presence', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/messages/team-members', requireAuth, async (req, res) => {
+app.get('/api/messages/team-members', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const members = await _messagesQueryTeamMembers();
@@ -14613,7 +14640,7 @@ app.get('/api/messages/team-members', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/messages/chats', requireAuth, async (req, res) => {
+app.get('/api/messages/chats', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const limit = Math.max(1, Math.min(80, Number(req.query?.limit || 40)));
@@ -14649,7 +14676,7 @@ app.get('/api/messages/chats', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/messages/chats', requireAuth, async (req, res) => {
+app.post('/api/messages/chats', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (_sbMessagesEnabled()) {
@@ -14686,7 +14713,7 @@ app.post('/api/messages/chats', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
+app.get('/api/messages/chats/:id/comments', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();
@@ -14710,7 +14737,7 @@ app.get('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
 });
 
 
-app.post('/api/messages/chats/:id/attachments', requireAuth, async (req, res) => {
+app.post('/api/messages/chats/:id/attachments', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();
@@ -14759,7 +14786,7 @@ app.post('/api/messages/chats/:id/attachments', requireAuth, async (req, res) =>
   }
 });
 
-app.post('/api/messages/chats/:id/comments', requireAuth, async (req, res) => {
+app.post('/api/messages/chats/:id/comments', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const pageId = String(req.params?.id || '').trim();

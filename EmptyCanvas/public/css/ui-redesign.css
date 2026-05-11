@@ -2587,3 +2587,52 @@ body.ops-hard-refresh-active{
   background: rgba(255,251,235,0.96);
   color: #92400E;
 }
+
+/* Mail shortcut is header-only; match the other circular topbar controls. */
+.header-message-btn{
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(15,23,42,0.08) !important;
+  background: #0b1020 !important;
+  color: #fff !important;
+  box-shadow: 0 16px 36px rgba(15,23,42,0.16) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+}
+.header-message-btn[hidden],
+.header-message-btn[style*="display: none"]{
+  display: none !important;
+}
+.header-message-btn svg,
+.header-message-btn i{
+  width: 20px !important;
+  height: 20px !important;
+  color: currentColor !important;
+}
+.header-message-btn.is-active{
+  background: #0b1020 !important;
+  color: #fff !important;
+}
+.header-message-unread-dot{
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+  opacity: 0;
+  transform: scale(.7);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.header-message-btn.has-unread .header-message-unread-dot{
+  opacity: 1;
+  transform: scale(1);
+}
