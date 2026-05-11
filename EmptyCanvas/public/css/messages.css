@@ -1979,3 +1979,288 @@
     max-height: calc(100dvh - 118px) !important;
   }
 }
+
+/* Mail page layout repair: fill the available app area and keep the composer visible */
+.emails-page .messages-body {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: hidden !important;
+  padding: 14px 18px 18px !important;
+}
+
+.emails-page .messages-shell {
+  flex: 1 1 auto !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  grid-template-columns: clamp(340px, 31vw, 430px) minmax(0, 1fr) !important;
+}
+
+.emails-page .messages-left-panel,
+.emails-page .messages-chat-panel,
+.emails-page .msg-conversation {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.emails-page .messages-left-panel,
+.emails-page .msg-conversation {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.emails-page .msg-inbox-top,
+.emails-page .msg-people-strip,
+.emails-page .msg-filter-tabs,
+.emails-page .msg-list-head,
+.emails-page .msg-conv-head,
+.emails-page .msg-typing-indicator,
+.emails-page .msg-composer {
+  flex: 0 0 auto !important;
+}
+
+.emails-page .msg-chats-list,
+.emails-page .msg-comments {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.emails-page .msg-chats-list {
+  padding: 2px 4px 10px 2px !important;
+}
+
+.emails-page .msg-chat-row {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.emails-page .msg-chat-main,
+.emails-page .msg-chat-title-wrap,
+.emails-page .msg-chat-title,
+.emails-page .msg-chat-preview {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.emails-page .msg-chat-title,
+.emails-page .msg-chat-preview {
+  display: block !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+}
+
+.emails-page .msg-chat-meta {
+  justify-self: end !important;
+  max-width: 118px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.emails-page .msg-comments {
+  padding: 16px 18px 14px !important;
+  gap: 8px !important;
+}
+
+.emails-page .msg-composer {
+  position: relative !important;
+  bottom: auto !important;
+  z-index: 10 !important;
+  grid-template-columns: 52px minmax(0, 1fr) 52px 58px !important;
+  gap: 10px !important;
+  align-items: center !important;
+  padding: 12px 14px !important;
+  width: 100% !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+}
+
+.emails-page .msg-composer .msg-composer-btn {
+  min-height: 46px !important;
+  height: 46px !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+}
+
+.emails-page .msg-composer .msg-composer-btn span {
+  display: none !important;
+}
+
+.emails-page .msg-composer .msg-composer-btn svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.emails-page .msg-input-wrap input {
+  height: 46px !important;
+  min-height: 46px !important;
+  border-radius: 16px !important;
+  padding: 0 14px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+/* Mail message bubbles: compact and aligned like a chat */
+.emails-page .msg-bubble-row,
+.emails-page .msg-bubble-row.is-mine {
+  width: 100% !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  margin: 5px 0 !important;
+}
+
+.emails-page .msg-bubble-row:not(.is-mine) {
+  justify-content: flex-start !important;
+}
+
+.emails-page .msg-bubble-row.is-mine {
+  justify-content: flex-end !important;
+}
+
+.emails-page .msg-bubble,
+.emails-page .msg-bubble-row.is-mine .msg-bubble,
+.emails-page .msg-bubble-row:not(.is-mine) .msg-bubble {
+  width: auto !important;
+  max-width: min(520px, 72%) !important;
+  min-width: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 18px 18px 18px 7px !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
+}
+
+.emails-page .msg-bubble-row.is-mine .msg-bubble {
+  border-radius: 18px 18px 7px 18px !important;
+}
+
+.emails-page .msg-bubble.has-attachment,
+.emails-page .msg-bubble-row.is-mine .msg-bubble.has-attachment,
+.emails-page .msg-bubble-row:not(.is-mine) .msg-bubble.has-attachment {
+  max-width: min(640px, 82%) !important;
+}
+
+.emails-page .msg-bubble-sender,
+.emails-page .msg-bubble-row.is-mine .msg-bubble-sender {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  margin-bottom: 5px !important;
+}
+
+.emails-page .msg-bubble-body,
+.emails-page .msg-bubble-row.is-mine .msg-bubble-body,
+.emails-page .msg-bubble-row:not(.is-mine) .msg-bubble-body {
+  font-size: 13px !important;
+  line-height: 1.42 !important;
+  font-weight: 750 !important;
+}
+
+.emails-page .msg-bubble-time,
+.emails-page .msg-bubble-row.is-mine .msg-bubble-time {
+  font-size: 9px !important;
+  line-height: 1.2 !important;
+  margin-top: 5px !important;
+}
+
+@media (max-width: 980px) {
+  .emails-page .messages-body {
+    padding: 8px 8px calc(118px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .emails-page .messages-shell {
+    grid-template-columns: 1fr !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    border-radius: 24px !important;
+  }
+
+  .emails-page .messages-left-panel,
+  .emails-page .messages-chat-panel {
+    min-height: 0 !important;
+  }
+
+  .emails-page .messages-shell.is-chat-open .messages-left-panel {
+    display: none !important;
+  }
+
+  .emails-page .messages-shell.is-chat-open .messages-chat-panel {
+    display: flex !important;
+  }
+
+  .emails-page .msg-comments {
+    padding: 12px 12px 10px !important;
+  }
+
+  .emails-page .msg-composer {
+    grid-template-columns: 48px minmax(0, 1fr) 48px 54px !important;
+    gap: 8px !important;
+    padding: 10px !important;
+  }
+
+  .emails-page .msg-bubble,
+  .emails-page .msg-bubble-row.is-mine .msg-bubble,
+  .emails-page .msg-bubble-row:not(.is-mine) .msg-bubble {
+    max-width: 82% !important;
+  }
+
+  .emails-page .msg-bubble.has-attachment,
+  .emails-page .msg-bubble-row.is-mine .msg-bubble.has-attachment,
+  .emails-page .msg-bubble-row:not(.is-mine) .msg-bubble.has-attachment {
+    max-width: 92% !important;
+  }
+}
+
+@media (max-width: 540px) {
+  .emails-page .messages-body {
+    padding: 6px 6px calc(114px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .emails-page .messages-left-panel {
+    padding: 14px 10px !important;
+    gap: 12px !important;
+  }
+
+  .emails-page .msg-conv-head {
+    min-height: 66px !important;
+    padding: 10px !important;
+    gap: 10px !important;
+  }
+
+  .emails-page .msg-conv-avatar {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 16px !important;
+  }
+
+  .emails-page .msg-conv-title-wrap h3 {
+    font-size: 17px !important;
+  }
+
+  .emails-page .msg-composer {
+    grid-template-columns: 46px minmax(0, 1fr) 46px 52px !important;
+    gap: 7px !important;
+    padding: 9px !important;
+  }
+
+  .emails-page .msg-composer .msg-composer-btn,
+  .emails-page .msg-input-wrap input {
+    min-height: 44px !important;
+    height: 44px !important;
+    border-radius: 15px !important;
+  }
+
+  .emails-page .msg-input-wrap input {
+    font-size: 12px !important;
+    padding: 0 12px !important;
+  }
+
+  .emails-page .msg-bubble,
+  .emails-page .msg-bubble-row.is-mine .msg-bubble,
+  .emails-page .msg-bubble-row:not(.is-mine) .msg-bubble {
+    max-width: 84% !important;
+    padding: 9px 11px !important;
+  }
+}
