@@ -3509,7 +3509,12 @@ function _sbSerializeOrderRow(row = {}) {
   const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
   const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
   const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
-  const qtyBase = roundOrderQty(qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0));
+  const qtyEditedBySupervisor = _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor", "Quantity Edited by Supervisor", "quantity_edited", "edited_quantity"]));
+  const qtyOriginalBase = roundOrderQty(qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0));
+  // Supabase does not have the old Notion formula that made Quantity Progress follow
+  // the supervisor edit automatically. Treat the supervisor-edited value as the
+  // effective order quantity everywhere Current / Operations / Review pages render it.
+  const qtyBase = roundOrderQty(qtyEditedBySupervisor !== null ? qtyEditedBySupervisor : qtyOriginalBase);
   const qtyReceivedRaw = _sbOrderNum(_sbOrderGet(row, [
     "quantity_received_by_operations",
     "Quantity Received by operations",
@@ -3531,14 +3536,18 @@ function _sbSerializeOrderRow(row = {}) {
   const receivedIsZero = qtyReceivedRaw !== null && Math.abs(Number(qtyReceivedRaw) || 0) < 1e-9;
   const remainingIsZero = qtyRemainingRaw !== null && Math.abs(Number(qtyRemainingRaw) || 0) < 1e-9;
   const remainingEqualsBase = qtyRemainingRaw !== null && Math.abs(roundOrderQty(Number(qtyRemainingRaw) - Number(qtyBase))) < 1e-9;
+  const remainingEqualsOriginalBase = qtyRemainingRaw !== null && Math.abs(roundOrderQty(Number(qtyRemainingRaw) - Number(qtyOriginalBase))) < 1e-9;
+  const supervisorEditActive = qtyEditedBySupervisor !== null && Math.abs(roundOrderQty(Number(qtyEditedBySupervisor) - Number(qtyOriginalBase))) > 1e-9;
+  const noMeaningfulReceivedYet = qtyReceivedRaw === null || Math.abs(Number(qtyReceivedRaw) || 0) < 1e-9;
   const zeroZeroPlaceholder = hasBaseQty && receivedIsZero && remainingIsZero && !isFinalReceivedStatus;
   const zeroReceivedWithBaseRemaining = hasBaseQty && receivedIsZero && remainingEqualsBase;
+  const supervisorEditedBeforeOps = supervisorEditActive && noMeaningfulReceivedYet && remainingEqualsOriginalBase;
 
   let qtyReceived = qtyReceivedRaw;
   let qtyRemaining;
   let quantityReceivedEdited = false;
 
-  if (zeroZeroPlaceholder || zeroReceivedWithBaseRemaining) {
+  if (zeroZeroPlaceholder || zeroReceivedWithBaseRemaining || supervisorEditedBeforeOps) {
     qtyReceived = null;
     qtyRemaining = qtyBase;
   } else if (qtyRemainingRaw !== null) {
@@ -3592,7 +3601,7 @@ function _sbSerializeOrderRow(row = {}) {
     unitPrice: _sbOrderNum(_sbOrderGet(row, ["unit_price", "Unit price", "Unity Price", "Price"])),
     quantityRequested: qtyRequested !== null ? qtyRequested : qtyBase,
     quantityProgress: qtyProgress,
-    quantityEditedBySupervisor: _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor"])),
+    quantityEditedBySupervisor: qtyEditedBySupervisor,
     quantityReceived: qtyReceived,
     quantityRemaining: qtyRemaining,
     quantityReceivedEdited,
@@ -3740,11 +3749,15 @@ async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {},
   return out;
 }
 
-async function _sbInvalidateOrdersCaches() {
-  await Promise.all([
-    cacheDel("cache:api:orders:requested:supabase:v1"),
-    cacheDel("cache:api:orders:current:supabase:v1"),
-  ]);
+async function _sbInvalidateOrdersCaches(req = null) {
+  const keys = [
+    "cache:api:orders:requested:supabase:v1",
+    "cache:api:orders:current:supabase:v1",
+    "cache:api:orders:current:supabase:v1:all",
+  ];
+  const username = String(req?.session?.username || "").trim();
+  if (username) keys.push(`cache:api:orders:current:supabase:v1:${normKey(username)}`);
+  await Promise.all(Array.from(new Set(keys)).map((key) => cacheDel(key)));
 }
 
 
@@ -26135,7 +26148,9 @@ function _sbSerializeSVOrderRow(row = {}) {
   const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
   const qtyProgress = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress"]));
   const qtyRequested = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "quantity", "Quantity"]));
-  const qtyBase = qtyProgress !== null ? qtyProgress : (qtyRequested !== null ? qtyRequested : 0);
+  // Orders Review must keep the original requested quantity as the base value.
+  // The supervisor override is exposed separately as quantityEdited.
+  const qtyBase = qtyRequested !== null ? qtyRequested : (qtyProgress !== null ? qtyProgress : 0);
   const qtyEdited = _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor", "quantity_edited", "edited_quantity"]));
   const approval = _sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]));
   const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
@@ -26270,17 +26285,32 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
       if (!row) return res.status(404).json({ error: "Order not found" });
       if (!allowed) return res.status(403).json({ error: "Not allowed" });
 
-      const serialized = _sbSerializeSVOrderRow(row);
-      const requested = roundOrderQty(Number(serialized.quantity) || 0);
+      const requestedRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
+      const progressRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
+      const requested = roundOrderQty(requestedRaw !== null ? requestedRaw : (progressRaw !== null ? progressRaw : 0));
       const newVal = clampOrderQtyToBase(requested, value);
       const editedVal = (Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested)) ? null : newVal;
 
+      const receivedRaw = _sbOrderNum(_sbOrderGet(row, [
+        "quantity_received_by_operations",
+        "Quantity Received by operations",
+        "Quantity Received by Operations",
+        "received_quantity",
+        "quantity_received",
+      ]));
+      const received = Number.isFinite(Number(receivedRaw)) ? Number(receivedRaw) : 0;
+      const nextRemaining = roundOrderQty(newVal - received);
+
       await supabaseDb.updateById(_sbOrdersTable(), pageId, {
         quantity_edited_by_supervisor: editedVal,
+        // Replace the old Notion formula behavior for Supabase rows: Quantity Progress
+        // and Quantity Remaining must follow the supervisor's edited quantity.
+        quantity_progress: newVal,
+        quantity_remaining: nextRemaining,
       });
       await clearSVOrdersRouteCaches(req);
-      await _sbInvalidateOrdersCaches().catch(() => {});
-      return res.json({ ok: true, value: newVal, cleared: editedVal === null, source: "supabase" });
+      await _sbInvalidateOrdersCaches(req).catch(() => {});
+      return res.json({ ok: true, value: newVal, remaining: nextRemaining, cleared: editedVal === null, source: "supabase" });
     }
 
     // Security: allow editing ONLY for orders created by members listed in
@@ -26619,10 +26649,24 @@ app.post(
         if (!row) return res.status(404).json({ ok:false, error: "Order not found" });
         if (!allowed) return res.status(403).json({ ok:false, error: "Not allowed" });
 
-        await supabaseDb.updateById(_sbOrdersTable(), pageId, { sv_approval: decision });
+        const nextStatus = (decision === "Approved" || decision === "Rejected") ? "In progress" : null;
+        const patch = { sv_approval: decision };
+        // Supabase replacement for the old Notion automation:
+        // once the supervisor approves/rejects a component, the operational Status
+        // must move from Under Supervision / Order Placed to In progress.
+        if (nextStatus) patch.status = nextStatus;
+
+        await supabaseDb.updateById(_sbOrdersTable(), pageId, patch);
         await clearSVOrdersRouteCaches(req);
-        await _sbInvalidateOrdersCaches().catch(() => {});
-        return res.json({ ok:true, id: pageId, decision, source: "supabase" });
+        await _sbInvalidateOrdersCaches(req).catch(() => {});
+        return res.json({
+          ok:true,
+          id: pageId,
+          decision,
+          status: nextStatus || _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "",
+          statusColor: nextStatus ? _sbOrderStatusColor(nextStatus) : _sbOrderStatusColor(_sbOrderGet(row, ["status", "Status"])),
+          source: "supabase",
+        });
       }
 
       // Security: allow approval ONLY for orders created by members listed in
@@ -26652,15 +26696,24 @@ app.post(
       const approvalProp = await detectSVApprovalPropName();
       const ordersProps  = await getOrdersDBProps();
       const type         = ordersProps[approvalProp]?.type || "select";
+      const nextStatus = (decision === "Approved" || decision === "Rejected") ? "In progress" : null;
 
       const properties = type === "status"
         ? { [approvalProp]: { status: { name: decision } } }
         : { [approvalProp]: { select: { name: decision } } };
 
+      if (nextStatus) {
+        const statusProp = await detectStatusPropName();
+        const statusType = ordersProps?.[statusProp]?.type || "select";
+        properties[statusProp] = statusType === "status"
+          ? { status: { name: nextStatus } }
+          : { select: { name: nextStatus } };
+      }
+
       await notion.pages.update({ page_id: pageId, properties });
       await clearSVOrdersRouteCaches(req);
 
-      return res.json({ ok:true, id: pageId, decision });
+      return res.json({ ok:true, id: pageId, decision, status: nextStatus || "" });
     } catch (e) {
       console.error("POST /api/sv-orders/:id/approval error:", e?.body || e);
       return res.status(500).json({ ok:false, error: "Failed to update S.V Approval", details: e?.body || String(e) });

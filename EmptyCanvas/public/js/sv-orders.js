@@ -1483,10 +1483,14 @@
   async function setApproval(id, decision) {
     try {
       const normalized = normalizeApproval(decision);
-      await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
+      const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
 
       const idx = allItems.findIndex((x) => String(x.id) === String(id));
-      if (idx >= 0) allItems[idx].approval = normalized;
+      if (idx >= 0) {
+        allItems[idx].approval = normalized;
+        if (data?.status) allItems[idx].status = data.status;
+        if (data?.statusColor) allItems[idx].statusColor = data.statusColor;
+      }
       clearSvCache();
 
       toastOK(`Marked as ${normalized}.`);
@@ -1533,10 +1537,14 @@
         while (cursor < toUpdate.length) {
           const id = toUpdate[cursor++];
           try {
-            await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
+            const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
 
             const idx = allItems.findIndex((x) => String(x.id) === String(id));
-            if (idx >= 0) allItems[idx].approval = normalized;
+            if (idx >= 0) {
+              allItems[idx].approval = normalized;
+              if (data?.status) allItems[idx].status = data.status;
+              if (data?.statusColor) allItems[idx].statusColor = data.statusColor;
+            }
             ok += 1;
           } catch (e) {
             console.error(e);
