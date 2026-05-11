@@ -4039,9 +4039,37 @@ function bindOpsShellFrameNavigation(frameDoc) {
   }, true);
 }
 
+function shouldSkipOpsPersistentShellHostForCurrentPage() {
+  try {
+    const pathname = new URL(window.location.href).pathname.replace(/\/+$/, '') || '/';
+    if (pathname === '/messages' || pathname === '/emails') return true;
+  } catch {}
+
+  try {
+    const body = document.body;
+    if (body?.classList?.contains('emails-page') || body?.classList?.contains('email-inbox-redesign')) return true;
+  } catch {}
+
+  return false;
+}
+
 function initOpsPersistentShellHost() {
   if (window.__opsShellHostInitialized) return;
   if (isOpsShellEmbeddedMode()) return;
+
+  // The Emails page already has its own full layout and mobile dock.
+  // Creating a persistent iframe shell on a direct /messages refresh makes
+  // the page render inside itself, so we intentionally keep /messages as a
+  // normal page host and only use shell-embedded mode when another page loads it.
+  if (shouldSkipOpsPersistentShellHostForCurrentPage()) {
+    try {
+      document.body.classList.remove('page-shell-host');
+      document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
+      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => el.removeAttribute('data-ops-shell-legacy'));
+    } catch {}
+    return;
+  }
+
   if (!document.querySelector('.sidebar') || !document.querySelector('.main-content')) return;
 
   const mainContent = document.querySelector('.main-content');
