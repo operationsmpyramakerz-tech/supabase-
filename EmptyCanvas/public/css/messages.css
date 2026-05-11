@@ -3693,3 +3693,274 @@ body.emails-page.email-inbox-redesign .msg-custom-label-chip svg {
   border-radius: 999px !important;
   background: transparent !important;
 }
+
+/* Email inbox actions: three-dot menu, selection, swipe actions, label picker/editor */
+body.emails-page.email-inbox-redesign .msg-list-head {
+  position: relative;
+}
+
+body.emails-page.email-inbox-redesign .msg-list-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+body.emails-page.email-inbox-redesign .msg-inbox-more-btn {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #0b1020;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+body.emails-page.email-inbox-redesign .msg-inbox-more-btn svg { width: 20px; height: 20px; stroke-width: 3; }
+body.emails-page.email-inbox-redesign .msg-inbox-more-btn.is-active,
+body.emails-page.email-inbox-redesign .msg-inbox-more-btn:hover {
+  background: #0b1020;
+  color: #fff;
+}
+
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 35;
+  min-width: 190px;
+  padding: 8px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.20);
+  backdrop-filter: blur(18px);
+}
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu[hidden] { display: none !important; }
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 15px;
+  background: transparent;
+  color: #0f172a;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 0 12px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button:hover { background: #f1f5f9; }
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button svg { width: 18px; height: 18px; stroke-width: 2.7; }
+body.emails-page.email-inbox-redesign .msg-inbox-actions-menu hr {
+  border: 0;
+  border-top: 1px solid rgba(15,23,42,.08);
+  margin: 6px 8px;
+}
+
+body.emails-page.email-inbox-redesign .msg-chat-swipe-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0;
+  touch-action: pan-y;
+}
+body.emails-page.email-inbox-redesign .msg-chat-swipe-stage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  background: #fff;
+  transition: transform .18s ease;
+  will-change: transform;
+}
+body.emails-page.email-inbox-redesign .msg-chat-swipe-shell.is-swiping .msg-chat-swipe-stage { transition: none; }
+body.emails-page.email-inbox-redesign .msg-swipe-action {
+  position: absolute;
+  inset-block: 0;
+  width: 112px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 950;
+  opacity: 0;
+  transition: opacity .14s ease;
+}
+body.emails-page.email-inbox-redesign .msg-swipe-action svg { width: 19px; height: 19px; stroke-width: 2.8; }
+body.emails-page.email-inbox-redesign .msg-swipe-action--archive {
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 16px;
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+body.emails-page.email-inbox-redesign .msg-swipe-action--label {
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 16px;
+  background: linear-gradient(270deg, #2563eb, #60a5fa);
+}
+body.emails-page.email-inbox-redesign .msg-chat-swipe-shell.is-swipe-right .msg-swipe-action--archive,
+body.emails-page.email-inbox-redesign .msg-chat-swipe-shell.is-swipe-left .msg-swipe-action--label { opacity: 1; }
+
+body.emails-page.email-inbox-redesign .msg-selection-mode .msg-chat-swipe-stage,
+body.emails-page.email-inbox-redesign .msg-chat-swipe-stage:has(.msg-select-chat-check) {
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+body.emails-page.email-inbox-redesign .msg-select-chat-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  cursor: pointer;
+}
+body.emails-page.email-inbox-redesign .msg-select-chat-check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+body.emails-page.email-inbox-redesign .msg-select-chat-check span {
+  width: 24px;
+  height: 24px;
+  border-radius: 9px;
+  border: 2px solid rgba(100, 116, 139, .35);
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .08);
+}
+body.emails-page.email-inbox-redesign .msg-select-chat-check input:checked + span {
+  border-color: #1d9bf0;
+  background: #1d9bf0;
+  box-shadow: inset 0 0 0 5px #fff, 0 10px 22px rgba(29, 155, 240, .22);
+}
+body.emails-page.email-inbox-redesign .msg-chat-swipe-shell.is-selected .msg-chat-row {
+  background: rgba(29, 155, 240, .07);
+}
+body.emails-page.email-inbox-redesign .msg-chat-badge--label {
+  background: var(--msg-label-bg, #1d9bf0) !important;
+  color: var(--msg-label-fg, #fff) !important;
+}
+
+.msg-label-picker-modal,
+.msg-label-editor-modal {
+  max-width: 520px;
+}
+.msg-label-picker-list,
+.msg-label-editor-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(52vh, 440px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.msg-label-picker-option {
+  width: 100%;
+  min-height: 58px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 19px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  text-align: left;
+  cursor: pointer;
+  color: #0f172a;
+  font-weight: 950;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .06);
+}
+.msg-label-picker-option:hover { transform: translateY(-1px); border-color: rgba(29, 155, 240, .22); }
+.msg-label-picker-swatch {
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  background: var(--msg-label-bg, #1d9bf0);
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.75), 0 10px 20px rgba(15,23,42,.12);
+}
+.msg-label-picker-option svg { color: #94a3b8; width: 18px; height: 18px; }
+.msg-label-empty-box {
+  min-height: 132px;
+  border: 1px dashed rgba(15, 23, 42, .18);
+  border-radius: 24px;
+  background: rgba(248, 250, 252, .88);
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  padding: 18px;
+  text-align: center;
+  color: #64748b;
+}
+.msg-label-empty-box strong { color: #0f172a; font-size: 17px; font-weight: 950; }
+.msg-label-editor-item {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 22px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, .08);
+}
+.msg-label-editor-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--msg-label-bg, #1d9bf0);
+  color: var(--msg-label-fg, #fff);
+  font-size: 13px;
+  font-weight: 950;
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.65);
+}
+.msg-label-editor-name {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 16px;
+  padding: 0 14px;
+  background: #fff;
+  color: #0f172a;
+  font-weight: 900;
+  outline: none;
+}
+.msg-label-editor-name:focus { border-color: rgba(29, 155, 240, .35); box-shadow: 0 0 0 4px rgba(29, 155, 240, .10); }
+.msg-label-editor-color {
+  width: 54px;
+  height: 48px;
+  border: 0;
+  border-radius: 16px;
+  padding: 4px;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,.08);
+}
+
+@media (max-width: 640px) {
+  body.emails-page.email-inbox-redesign .msg-inbox-actions-menu {
+    min-width: 180px;
+    left: 4px;
+  }
+  body.emails-page.email-inbox-redesign .msg-swipe-action {
+    width: 96px;
+    font-size: 11px;
+  }
+  .msg-label-picker-modal,
+  .msg-label-editor-modal {
+    width: min(94vw, 520px);
+  }
+  .msg-label-editor-item {
+    grid-template-columns: 44px minmax(0, 1fr) 50px;
+    padding: 8px;
+  }
+}

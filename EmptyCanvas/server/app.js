@@ -14119,6 +14119,214 @@ async function _sbCreateMessageLabel(req, payload = {}) {
   return _sbSerializeMessageLabel(row);
 }
 
+
+function _sbMessagesChatLabelsTable() {
+  return String(process.env.SUPABASE_MESSAGES_CHAT_LABELS_TABLE || 'messages_chat_labels').trim() || 'messages_chat_labels';
+}
+
+async function _sbMessageLabelById(req, labelId) {
+  const id = String(labelId || '').trim();
+  if (!id) return null;
+  const labels = await _sbMessageLabelsList(req);
+  return labels.find((label) => String(label.id || '') === id) || null;
+}
+
+async function _sbUpdateMessageLabel(req, labelId, payload = {}) {
+  const id = String(labelId || '').trim();
+  if (!id) {
+    const err = new Error('Label ID is required.');
+    err.status = 400;
+    throw err;
+  }
+  const existingLabel = await _sbMessageLabelById(req, id);
+  if (!existingLabel) {
+    const err = new Error('Label not found.');
+    err.status = 404;
+    throw err;
+  }
+  const name = _messagesCleanLabelName(payload.name || payload.labelName || payload.label || existingLabel.name);
+  const color = _messagesCleanLabelColor(payload.color || payload.backgroundColor || existingLabel.color);
+  if (!name) {
+    const err = new Error('Label name is required.');
+    err.status = 400;
+    throw err;
+  }
+  const labels = await _sbMessageLabelsList(req);
+  if (labels.some((label) => String(label.id || '') !== id && String(label.name || '').trim().toLowerCase() === name.toLowerCase())) {
+    const err = new Error('This label already exists.');
+    err.status = 409;
+    throw err;
+  }
+  const row = await supabaseDb.updateById(_sbMessagesLabelsTable(), id, {
+    name,
+    color,
+    updated_at: new Date().toISOString(),
+  });
+  const label = _sbSerializeMessageLabel(row || { ...existingLabel, name, color });
+  try {
+    const userKey = _messagesLabelUserKey(req);
+    await supabaseDb.request(`/${encodeURIComponent(_sbMessagesChatLabelsTable())}?user_key=eq.${_sbRestFilterValue(userKey)}&label_id=eq.${_sbRestFilterValue(id)}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: { label_name: label.name, label_color: label.color, updated_at: new Date().toISOString() },
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') console.warn('[messages label mapping] refresh skipped:', error?.message || error);
+  }
+  return label;
+}
+
+async function _sbDeleteMessageLabel(req, labelId) {
+  const id = String(labelId || '').trim();
+  if (!id) {
+    const err = new Error('Label ID is required.');
+    err.status = 400;
+    throw err;
+  }
+  const label = await _sbMessageLabelById(req, id);
+  if (!label) {
+    const err = new Error('Label not found.');
+    err.status = 404;
+    throw err;
+  }
+  const userKey = _messagesLabelUserKey(req);
+  await supabaseDb.request(`/${encodeURIComponent(_sbMessagesChatLabelsTable())}?user_key=eq.${_sbRestFilterValue(userKey)}&label_id=eq.${_sbRestFilterValue(id)}`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' },
+  }).catch(() => null);
+  await supabaseDb.deleteById(_sbMessagesLabelsTable(), id);
+  return label;
+}
+
+async function _sbMessageChatLabelMap(req, chatIds = []) {
+  const cleanIds = (Array.isArray(chatIds) ? chatIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  const map = new Map();
+  if (!cleanIds.length) return map;
+  const userKey = _messagesLabelUserKey(req);
+  const inList = _sbRestStringList(cleanIds);
+  const rows = await supabaseDb.request(`/${encodeURIComponent(_sbMessagesChatLabelsTable())}?select=*&user_key=eq.${_sbRestFilterValue(userKey)}&chat_id=in.(${inList})&order=created_at.asc`).catch((error) => {
+    if (process.env.NODE_ENV !== 'production') console.warn('[messages chat labels] list skipped:', error?.message || error);
+    return [];
+  });
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const chatId = String(_sbGet(row, ['chat_id', 'chatId']) || '').trim();
+    if (!chatId) continue;
+    const label = {
+      id: String(_sbGet(row, ['label_id', 'labelId']) || '').trim(),
+      name: _sbString(_sbGet(row, ['label_name', 'labelName', 'name'])) || 'Label',
+      color: _messagesCleanLabelColor(_sbGet(row, ['label_color', 'labelColor', 'color'])),
+    };
+    if (!label.id) continue;
+    const arr = map.get(chatId) || [];
+    arr.push(label);
+    map.set(chatId, arr);
+  }
+  return map;
+}
+
+async function _sbAssertMessageChatVisible(req, chatId) {
+  const id = String(chatId || '').trim();
+  if (!id) {
+    const err = new Error('Chat ID is required.');
+    err.status = 400;
+    throw err;
+  }
+  const row = await supabaseDb.selectById(_sbMessagesChatsTable(), id).catch(() => null);
+  if (!row) {
+    const err = new Error('Chat not found.');
+    err.status = 404;
+    throw err;
+  }
+  if (!_messagesRowVisibleToCurrentUser(row, req)) {
+    const err = new Error('You do not have access to this chat.');
+    err.status = 403;
+    throw err;
+  }
+  return row;
+}
+
+async function _sbSetMessageChatStatus(req, chatId, status) {
+  const id = String(chatId || '').trim();
+  await _sbAssertMessageChatVisible(req, id);
+  const cleanStatus = String(status || '').trim().toLowerCase();
+  const now = new Date().toISOString();
+  const patch = { status: cleanStatus, updated_at: now };
+  if (cleanStatus === 'archived') patch.archived = true;
+  if (cleanStatus === 'deleted') patch.deleted_at = now;
+  try {
+    const row = await supabaseDb.updateById(_sbMessagesChatsTable(), id, patch);
+    return _sbSerializeMessageChatRow(row || { id, status: cleanStatus });
+  } catch (error) {
+    // Some older databases may not have the optional boolean/timestamp fields yet.
+    const fallback = { status: cleanStatus, updated_at: now };
+    const row = await supabaseDb.updateById(_sbMessagesChatsTable(), id, fallback);
+    return _sbSerializeMessageChatRow(row || { id, status: cleanStatus });
+  }
+}
+
+async function _sbApplyMessageLabelToChats(req, chatIds = [], labelId = '') {
+  const ids = (Array.isArray(chatIds) ? chatIds : [chatIds]).map((id) => String(id || '').trim()).filter(Boolean);
+  if (!ids.length) return { updatedCount: 0, label: null };
+  const label = await _sbMessageLabelById(req, labelId);
+  if (!label) {
+    const err = new Error('Label not found.');
+    err.status = 404;
+    throw err;
+  }
+  const userKey = _messagesLabelUserKey(req);
+  const now = new Date().toISOString();
+  let updatedCount = 0;
+  for (const id of ids) {
+    await _sbAssertMessageChatVisible(req, id);
+    // Move to a single user label: remove any previous label assignment for this email and add the selected label.
+    await supabaseDb.request(`/${encodeURIComponent(_sbMessagesChatLabelsTable())}?user_key=eq.${_sbRestFilterValue(userKey)}&chat_id=eq.${_sbRestFilterValue(id)}`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' },
+    }).catch(() => null);
+    await supabaseDb.insert(_sbMessagesChatLabelsTable(), {
+      user_key: userKey,
+      chat_id: id,
+      label_id: String(label.id),
+      label_name: label.name,
+      label_color: label.color,
+      created_at: now,
+      updated_at: now,
+    });
+    updatedCount += 1;
+  }
+  return { updatedCount, label };
+}
+
+async function _sbMessagesBulkAction(req, payload = {}) {
+  const action = String(payload.action || '').trim().toLowerCase();
+  const ids = (Array.isArray(payload.chatIds) ? payload.chatIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+    .slice(0, 100);
+  if (!ids.length) {
+    const err = new Error('Please select at least one email.');
+    err.status = 400;
+    throw err;
+  }
+  if (action === 'archive') {
+    for (const id of ids) await _sbSetMessageChatStatus(req, id, 'archived');
+    return { action, updatedCount: ids.length };
+  }
+  if (action === 'delete') {
+    for (const id of ids) await _sbSetMessageChatStatus(req, id, 'deleted');
+    return { action, updatedCount: ids.length };
+  }
+  if (action === 'label') {
+    const result = await _sbApplyMessageLabelToChats(req, ids, payload.labelId || payload.label_id);
+    return { action, ...result };
+  }
+  const err = new Error('Unsupported email action.');
+  err.status = 400;
+  throw err;
+}
+
 function _sbMessageChatId(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
@@ -14251,6 +14459,9 @@ function _sbSerializeMessageChatRow(row, messages = []) {
     status: _sbString(_sbGet(row, ['status', 'state', 'chat_status'])) || '',
     archived: _sbBool(_sbGet(row, ['archived', 'is_archived'])) || false,
     closed: _sbBool(_sbGet(row, ['closed', 'is_closed'])) || false,
+    deleted: _sbBool(_sbGet(row, ['deleted', 'is_deleted'])) || false,
+    labels: [],
+    labelIds: [],
     source: 'supabase',
   };
 }
@@ -14298,7 +14509,11 @@ async function _sbMessagesChatsList({ limit = 60, includeCounts = true, req = nu
     order: 'updated_at.desc,id.desc',
   });
   const visibleRows = (Array.isArray(rows) ? rows : [])
-    .filter((row) => _messagesRowVisibleToCurrentUser(row, req));
+    .filter((row) => _messagesRowVisibleToCurrentUser(row, req))
+    .filter((row) => {
+      const status = _sbString(_sbGet(row, ['status', 'state', 'chat_status'])).toLowerCase();
+      return status !== 'deleted' && status !== 'trash' && !_sbBool(_sbGet(row, ['deleted', 'is_deleted']));
+    });
   let meta = new Map();
   if (includeCounts && visibleRows.length) {
     meta = await _sbMessagesCountsAndLast(visibleRows.map((row) => _sbGet(row, ['id', 'ID'])));
@@ -14312,7 +14527,14 @@ async function _sbMessagesChatsList({ limit = 60, includeCounts = true, req = nu
     return chat;
   });
   chats.sort((a, b) => new Date(b.lastMessageTime || b.lastEditedTime || 0) - new Date(a.lastMessageTime || a.lastEditedTime || 0));
-  return chats.slice(0, requestedLimit);
+  const visibleChats = chats.slice(0, requestedLimit);
+  const labelMap = await _sbMessageChatLabelMap(req, visibleChats.map((chat) => chat.id)).catch(() => new Map());
+  for (const chat of visibleChats) {
+    const labels = labelMap.get(String(chat.id || '')) || [];
+    chat.labels = labels;
+    chat.labelIds = labels.map((label) => String(label.id || '')).filter(Boolean);
+  }
+  return visibleChats;
 }
 
 async function _sbMessageMemberInfo(memberId) {
@@ -14721,6 +14943,35 @@ app.post('/api/messages/labels', requireAuth, requirePage(["Mail", "Messages", "
   }
 });
 
+
+app.patch('/api/messages/labels/:id', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbMessagesEnabled()) {
+      return res.status(500).json({ ok: false, error: 'Supabase messages are not configured.' });
+    }
+    const label = await _sbUpdateMessageLabel(req, req.params?.id, req.body || {});
+    return res.json({ ok: true, source: 'supabase', label });
+  } catch (error) {
+    console.error('PATCH /api/messages/labels/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to update email label.' });
+  }
+});
+
+app.delete('/api/messages/labels/:id', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbMessagesEnabled()) {
+      return res.status(500).json({ ok: false, error: 'Supabase messages are not configured.' });
+    }
+    const label = await _sbDeleteMessageLabel(req, req.params?.id);
+    return res.json({ ok: true, source: 'supabase', label });
+  } catch (error) {
+    console.error('DELETE /api/messages/labels/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to delete email label.' });
+  }
+});
+
 app.get('/api/messages/team-members', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -14802,6 +15053,41 @@ app.post('/api/messages/chats', requireAuth, requirePage(["Mail", "Messages", "E
   } catch (error) {
     console.error('POST /api/messages/chats error:', error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: 'Failed to create chat.' });
+  }
+});
+
+
+app.post('/api/messages/chats/bulk-action', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbMessagesEnabled()) {
+      return res.status(500).json({ ok: false, error: 'Supabase messages are not configured.' });
+    }
+    const result = await _sbMessagesBulkAction(req, req.body || {});
+    return res.json({ ok: true, source: 'supabase', ...result });
+  } catch (error) {
+    console.error('POST /api/messages/chats/bulk-action error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to update selected emails.' });
+  }
+});
+
+app.patch('/api/messages/chats/:id', requireAuth, requirePage(["Mail", "Messages", "Emails"]), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbMessagesEnabled()) {
+      return res.status(500).json({ ok: false, error: 'Supabase messages are not configured.' });
+    }
+    const action = String(req.body?.action || '').trim().toLowerCase();
+    let chat = null;
+    if (action === 'archive') chat = await _sbSetMessageChatStatus(req, req.params?.id, 'archived');
+    else if (action === 'delete') chat = await _sbSetMessageChatStatus(req, req.params?.id, 'deleted');
+    else {
+      return res.status(400).json({ ok: false, error: 'Unsupported email action.' });
+    }
+    return res.json({ ok: true, source: 'supabase', chat });
+  } catch (error) {
+    console.error('PATCH /api/messages/chats/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to update email.' });
   }
 });
 

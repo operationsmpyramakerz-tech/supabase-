@@ -41,6 +41,12 @@
     recordStartedAt: 0,
     customLabels: [],
     floatingNewMenuOpen: false,
+    selectionMode: false,
+    selectedChatIds: new Set(),
+    inboxMenuOpen: false,
+    labelPickerChatIds: [],
+    labelPickerMode: 'move',
+    swipeActive: null,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -264,8 +270,25 @@
     return !!chat?.closed || status === 'closed' || status === 'done';
   }
 
+  function isDeletedChat(chat) {
+    const status = chatStatus(chat);
+    return !!chat?.deleted || status === 'deleted' || status === 'trash' || status === 'removed';
+  }
+
+  function chatLabelIds(chat) {
+    const direct = Array.isArray(chat?.labelIds) ? chat.labelIds : [];
+    const fromLabels = Array.isArray(chat?.labels) ? chat.labels.map((label) => label?.id) : [];
+    return Array.from(new Set([...direct, ...fromLabels].map((id) => String(id || '').trim()).filter(Boolean)));
+  }
+
   function chatMatchesFilter(chat, filter = state.activeFilter) {
-    switch (filter) {
+    if (isDeletedChat(chat)) return false;
+    const active = String(filter || 'all');
+    if (active.startsWith('label:')) {
+      const labelId = active.slice(6);
+      return !isArchivedChat(chat) && !isClosedChat(chat) && chatLabelIds(chat).includes(labelId);
+    }
+    switch (active) {
       case 'unread': return isChatUnread(chat);
       case 'groups': return isGroupChat(chat);
       case 'archived': return isArchivedChat(chat);
@@ -426,10 +449,12 @@
       chip.type = 'button';
       chip.className = 'msg-filter-chip msg-custom-label-chip';
       chip.setAttribute('aria-label', `Email label ${label.name}`);
-      chip.dataset.labelId = String(label.id || '');
+      const labelId = String(label.id || '');
+      chip.dataset.labelId = labelId;
+      chip.dataset.filter = `label:${labelId}`;
       chip.style.setProperty('--msg-label-bg', bg);
       chip.style.setProperty('--msg-label-fg', labelTextColor(bg));
-      chip.innerHTML = `<i data-feather="tag"></i><span class="msg-filter-text">${escapeHtml(label.name)}</span>`;
+      chip.innerHTML = `<i data-feather="tag"></i><span class="msg-filter-text">${escapeHtml(label.name)}</span><span class="msg-filter-count">0</span>`;
       tabs.insertBefore(chip, addBtn);
     });
     hydrateIcons();
@@ -558,22 +583,452 @@
     }
   }
 
+  function isKnownFilter(filter) {
+    const active = String(filter || 'all');
+    if (['all', 'unread', 'groups', 'archived', 'closed'].includes(active)) return true;
+    if (active.startsWith('label:')) {
+      const id = active.slice(6);
+      return (state.customLabels || []).some((label) => String(label.id || '') === id);
+    }
+    return false;
+  }
+
+
+  function getCustomLabel(labelId) {
+    const id = String(labelId || '').trim();
+    return (state.customLabels || []).find((label) => String(label.id || '') === id) || null;
+  }
+
+  function decorateChatWithLabel(chat, label) {
+    if (!chat || !label) return chat;
+    const id = String(label.id || '').trim();
+    if (!id) return chat;
+    const labels = Array.isArray(chat.labels) ? chat.labels.slice() : [];
+    const filtered = labels.filter((item) => String(item?.id || '') !== id);
+    filtered.push({ id, name: label.name, color: sanitizeLabelColor(label.color) });
+    chat.labels = filtered;
+    chat.labelIds = Array.from(new Set(filtered.map((item) => String(item?.id || '')).filter(Boolean)));
+    return chat;
+  }
+
+  function clearCustomLabelsFromChat(chat) {
+    if (!chat) return chat;
+    chat.labels = [];
+    chat.labelIds = [];
+    return chat;
+  }
+
+  function selectedChatIds() {
+    return Array.from(state.selectedChatIds || []).map((id) => String(id || '').trim()).filter(Boolean);
+  }
+
+  function setInboxMenu(open) {
+    state.inboxMenuOpen = !!open;
+    updateInboxActionsMenu();
+  }
+
+  function updateInboxActionsMenu() {
+    const menu = $('#msgInboxActionsMenu');
+    const btn = $('#msgInboxMenuBtn');
+    if (!menu || !btn) return;
+    const selectedCount = selectedChatIds().length;
+    btn.classList.toggle('is-active', state.inboxMenuOpen || state.selectionMode);
+    btn.setAttribute('aria-expanded', state.inboxMenuOpen ? 'true' : 'false');
+
+    if (!state.inboxMenuOpen) {
+      menu.hidden = true;
+      return;
+    }
+
+    if (state.selectionMode && selectedCount > 0) {
+      menu.innerHTML = `
+        <button type="button" data-msg-action="delete-selected"><i data-feather="trash-2"></i><span>Delete</span></button>
+        <button type="button" data-msg-action="label-selected"><i data-feather="tag"></i><span>Label as</span></button>
+        <button type="button" data-msg-action="mark-selected-read"><i data-feather="check-circle"></i><span>Mark as Read</span></button>
+        <hr />
+        <button type="button" data-msg-action="cancel-select"><i data-feather="x-circle"></i><span>Cancel Select</span></button>
+      `;
+    } else {
+      menu.innerHTML = `
+        <button type="button" data-msg-action="select"><i data-feather="check-square"></i><span>${state.selectionMode ? 'Cancel Select' : 'Select'}</span></button>
+        <button type="button" data-msg-action="edit-labels"><i data-feather="edit-3"></i><span>Edit Labels</span></button>
+      `;
+    }
+    menu.hidden = false;
+    hydrateIcons();
+  }
+
+  function setSelectionMode(on) {
+    state.selectionMode = !!on;
+    state.selectedChatIds.clear();
+    document.body.classList.toggle('msg-selection-mode', state.selectionMode);
+    state.inboxMenuOpen = false;
+    renderChatsList();
+  }
+
+  function toggleChatSelected(chatId, checked = null) {
+    const id = String(chatId || '').trim();
+    if (!id) return;
+    const next = checked === null ? !state.selectedChatIds.has(id) : !!checked;
+    if (next) state.selectedChatIds.add(id);
+    else state.selectedChatIds.delete(id);
+    renderChatsList();
+  }
+
+  async function archiveChat(chatId) {
+    const id = String(chatId || '').trim();
+    if (!id) return;
+    const chat = state.chats.find((item) => String(item.id) === id);
+    if (chat) {
+      chat.status = 'archived';
+      chat.archived = true;
+    }
+    renderChatsList();
+    try {
+      await apiJson(`/api/messages/chats/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: { action: 'archive' },
+      });
+      toast('Email moved to Archive.', 'success');
+    } catch (error) {
+      toast(error.message || 'Failed to archive email.', 'error');
+      await refreshAll({ keepSelection: true, silent: true });
+    }
+  }
+
+  async function runBulkChatAction(action, chatIds, extra = {}) {
+    const ids = (Array.isArray(chatIds) ? chatIds : [chatIds]).map((id) => String(id || '').trim()).filter(Boolean);
+    if (!ids.length) return null;
+    return await apiJson('/api/messages/chats/bulk-action', {
+      method: 'POST',
+      body: { action, chatIds: ids, ...extra },
+    });
+  }
+
+  async function deleteSelectedChats() {
+    const ids = selectedChatIds();
+    if (!ids.length) return;
+    try {
+      await runBulkChatAction('delete', ids);
+      const set = new Set(ids);
+      state.chats = state.chats.filter((chat) => !set.has(String(chat.id || '')));
+      if (set.has(String(state.selectedChatId || ''))) closeActiveChat();
+      setSelectionMode(false);
+      toast('Selected emails deleted.', 'success');
+    } catch (error) {
+      toast(error.message || 'Failed to delete selected emails.', 'error');
+    }
+  }
+
+  function markSelectedAsRead() {
+    const ids = selectedChatIds();
+    ids.forEach((id) => {
+      const chat = state.chats.find((item) => String(item.id || '') === id);
+      if (chat) markChatRead(chat);
+    });
+    setSelectionMode(false);
+    toast('Selected emails marked as read.', 'success');
+  }
+
+  function renderLabelPickerList() {
+    const el = $('#msgLabelPickerList');
+    const err = $('#msgLabelPickerError');
+    if (err) err.textContent = '';
+    if (!el) return;
+    const labels = state.customLabels || [];
+    if (!labels.length) {
+      el.innerHTML = `
+        <div class="msg-label-empty-box">
+          <strong>No labels yet</strong>
+          <span>Create a label first, then move emails to it.</span>
+          <button type="button" class="msg-btn msg-btn--dark" id="msgLabelPickerCreateFirst"><i data-feather="plus"></i><span>Create label</span></button>
+        </div>
+      `;
+      $('#msgLabelPickerCreateFirst')?.addEventListener('click', () => {
+        closeLabelPickerModal();
+        openLabelModal();
+      });
+      hydrateIcons();
+      return;
+    }
+    el.innerHTML = labels.map((label) => {
+      const bg = sanitizeLabelColor(label.color);
+      return `
+        <button type="button" class="msg-label-picker-option" data-label-pick-id="${escapeHtml(label.id)}" style="--msg-label-bg:${bg};--msg-label-fg:${labelTextColor(bg)}">
+          <span class="msg-label-picker-swatch"></span>
+          <span>${escapeHtml(label.name)}</span>
+          <i data-feather="chevron-right"></i>
+        </button>
+      `;
+    }).join('');
+    $$('[data-label-pick-id]', el).forEach((btn) => {
+      btn.addEventListener('click', () => applyLabelToChats(btn.dataset.labelPickId));
+    });
+    hydrateIcons();
+  }
+
+  function openLabelPickerModal(chatIds, { mode = 'move' } = {}) {
+    const ids = (Array.isArray(chatIds) ? chatIds : [chatIds]).map((id) => String(id || '').trim()).filter(Boolean);
+    if (!ids.length) return;
+    state.labelPickerChatIds = ids;
+    state.labelPickerMode = mode;
+    const overlay = $('#msgLabelPickerModal');
+    const title = $('#msgLabelPickerTitle');
+    if (title) title.textContent = mode === 'label' ? 'Label as' : 'Move to label';
+    if (!overlay) return;
+    renderLabelPickerList();
+    overlay.hidden = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    hydrateIcons();
+  }
+
+  function closeLabelPickerModal() {
+    const overlay = $('#msgLabelPickerModal');
+    if (!overlay) return;
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+    state.labelPickerChatIds = [];
+  }
+
+  async function applyLabelToChats(labelId) {
+    const label = getCustomLabel(labelId);
+    const ids = (state.labelPickerChatIds || []).slice();
+    if (!label || !ids.length) return;
+    const err = $('#msgLabelPickerError');
+    if (err) err.textContent = '';
+    try {
+      await runBulkChatAction('label', ids, { labelId: String(label.id) });
+      const set = new Set(ids);
+      state.chats.forEach((chat) => {
+        if (set.has(String(chat.id || ''))) {
+          clearCustomLabelsFromChat(chat);
+          decorateChatWithLabel(chat, label);
+        }
+      });
+      closeLabelPickerModal();
+      setSelectionMode(false);
+      renderFilterTabs();
+      renderChatsList();
+      toast('Email label updated.', 'success');
+    } catch (error) {
+      if (err) err.textContent = error.message || 'Failed to move email to label.';
+    }
+  }
+
+  function renderLabelEditorList() {
+    const el = $('#msgLabelEditorList');
+    const err = $('#msgLabelEditorError');
+    if (err) err.textContent = '';
+    if (!el) return;
+    const labels = state.customLabels || [];
+    if (!labels.length) {
+      el.innerHTML = `<div class="msg-label-empty-box"><strong>No labels yet</strong><span>Create labels from the Add label button.</span></div>`;
+      return;
+    }
+    el.innerHTML = labels.map((label) => {
+      const color = sanitizeLabelColor(label.color);
+      return `
+        <div class="msg-label-editor-item" data-label-edit-id="${escapeHtml(label.id)}">
+          <span class="msg-label-editor-preview" style="--msg-label-bg:${color};--msg-label-fg:${labelTextColor(color)}">${escapeHtml(label.name.slice(0, 2).toUpperCase())}</span>
+          <input class="msg-label-editor-name" type="text" maxlength="64" value="${escapeHtml(label.name)}" aria-label="Label name" />
+          <input class="msg-label-editor-color" type="color" value="${escapeHtml(color)}" aria-label="Label color" />
+        </div>
+      `;
+    }).join('');
+    $$('.msg-label-editor-item', el).forEach((row) => {
+      const preview = row.querySelector('.msg-label-editor-preview');
+      const nameInput = row.querySelector('.msg-label-editor-name');
+      const colorInput = row.querySelector('.msg-label-editor-color');
+      const refresh = () => {
+        const color = sanitizeLabelColor(colorInput?.value || '#1d9bf0');
+        const name = String(nameInput?.value || 'LB').trim();
+        preview.style.setProperty('--msg-label-bg', color);
+        preview.style.setProperty('--msg-label-fg', labelTextColor(color));
+        preview.textContent = (name || 'LB').slice(0, 2).toUpperCase();
+      };
+      nameInput?.addEventListener('input', refresh);
+      colorInput?.addEventListener('input', refresh);
+    });
+  }
+
+  function openLabelEditorModal() {
+    const overlay = $('#msgLabelEditorModal');
+    if (!overlay) return;
+    renderLabelEditorList();
+    overlay.hidden = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    hydrateIcons();
+  }
+
+  function closeLabelEditorModal() {
+    const overlay = $('#msgLabelEditorModal');
+    if (!overlay) return;
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+  }
+
+  async function saveEditedLabels() {
+    const rows = $$('.msg-label-editor-item');
+    const err = $('#msgLabelEditorError');
+    const saveBtn = $('#msgLabelEditorSave');
+    if (err) err.textContent = '';
+    const updates = rows.map((row) => ({
+      id: String(row.dataset.labelEditId || '').trim(),
+      name: String(row.querySelector('.msg-label-editor-name')?.value || '').trim(),
+      color: sanitizeLabelColor(row.querySelector('.msg-label-editor-color')?.value || '#1d9bf0'),
+    })).filter((item) => item.id);
+    if (updates.some((item) => !item.name)) {
+      if (err) err.textContent = 'Every label must have a name.';
+      return;
+    }
+    const seen = new Set();
+    for (const item of updates) {
+      const key = normalizeSearch(item.name);
+      if (seen.has(key)) {
+        if (err) err.textContent = 'Label names must be unique.';
+        return;
+      }
+      seen.add(key);
+    }
+    setBusy(saveBtn, true, 'Saving...');
+    try {
+      const saved = [];
+      for (const item of updates) {
+        const isLocal = String(item.id).startsWith('local-');
+        if (isLocal) saved.push(item);
+        else {
+          const data = await apiJson(`/api/messages/labels/${encodeURIComponent(item.id)}`, {
+            method: 'PATCH',
+            body: { name: item.name, color: item.color },
+          });
+          saved.push(data?.label || item);
+        }
+      }
+      state.customLabels = normalizeCustomLabels(saved);
+      const labelById = new Map(state.customLabels.map((label) => [String(label.id || ''), label]));
+      state.chats.forEach((chat) => {
+        if (!Array.isArray(chat.labels)) return;
+        chat.labels = chat.labels.map((label) => {
+          const next = labelById.get(String(label.id || ''));
+          return next ? { id: next.id, name: next.name, color: next.color } : label;
+        });
+        chat.labelIds = chat.labels.map((label) => String(label.id || '')).filter(Boolean);
+      });
+      saveCustomLabels();
+      closeLabelEditorModal();
+      ensureCustomLabelChips();
+      renderFilterTabs();
+      renderChatsList();
+      toast('Labels updated.', 'success');
+    } catch (error) {
+      if (err) err.textContent = error.message || 'Failed to save labels.';
+    } finally {
+      setBusy(saveBtn, false);
+    }
+  }
+
+  function handleInboxAction(action) {
+    switch (action) {
+      case 'select':
+        setSelectionMode(!state.selectionMode);
+        break;
+      case 'edit-labels':
+        setInboxMenu(false);
+        openLabelEditorModal();
+        break;
+      case 'delete-selected':
+        setInboxMenu(false);
+        deleteSelectedChats();
+        break;
+      case 'label-selected':
+        setInboxMenu(false);
+        openLabelPickerModal(selectedChatIds(), { mode: 'label' });
+        break;
+      case 'mark-selected-read':
+        setInboxMenu(false);
+        markSelectedAsRead();
+        break;
+      case 'cancel-select':
+        setSelectionMode(false);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function resetSwipeStage(shell) {
+    if (!shell) return;
+    const stage = shell.querySelector('.msg-chat-swipe-stage');
+    if (stage) stage.style.transform = '';
+    shell.classList.remove('is-swiping', 'is-swipe-right', 'is-swipe-left');
+  }
+
+  function bindChatSwipe(shell) {
+    if (!shell || state.selectionMode) return;
+    const stage = shell.querySelector('.msg-chat-swipe-stage');
+    if (!stage) return;
+    let startX = 0;
+    let startY = 0;
+    let dx = 0;
+    let active = false;
+    let swiping = false;
+    shell.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || event.target.closest('input, a, .msg-select-chat-check')) return;
+      startX = event.clientX;
+      startY = event.clientY;
+      dx = 0;
+      active = true;
+      swiping = false;
+      shell.setPointerCapture?.(event.pointerId);
+    });
+    shell.addEventListener('pointermove', (event) => {
+      if (!active) return;
+      const moveX = event.clientX - startX;
+      const moveY = event.clientY - startY;
+      if (!swiping && Math.abs(moveX) < 10) return;
+      if (!swiping && Math.abs(moveY) > Math.abs(moveX)) return;
+      swiping = true;
+      dx = Math.max(-108, Math.min(108, moveX));
+      stage.style.transform = `translateX(${dx}px)`;
+      shell.classList.toggle('is-swiping', true);
+      shell.classList.toggle('is-swipe-right', dx > 24);
+      shell.classList.toggle('is-swipe-left', dx < -24);
+      event.preventDefault();
+    });
+    const end = (event) => {
+      if (!active) return;
+      active = false;
+      shell.releasePointerCapture?.(event.pointerId);
+      const chatId = shell.dataset.chatId;
+      if (swiping && Math.abs(dx) > 72) {
+        state.swipeActive = chatId;
+        if (dx > 0) archiveChat(chatId);
+        else openLabelPickerModal([chatId], { mode: 'move' });
+        setTimeout(() => resetSwipeStage(shell), 120);
+        return;
+      }
+      resetSwipeStage(shell);
+    };
+    shell.addEventListener('pointerup', end);
+    shell.addEventListener('pointercancel', end);
+  }
+
   function renderFilterTabs() {
     const tabs = $('#msgFilterTabs');
     if (!tabs) return;
     ensureCustomLabelChips();
-    const filters = ['all', 'unread', 'groups', 'archived', 'closed'];
-    const counts = Object.fromEntries(filters.map((f) => [f, state.chats.filter((chat) => chatMatchesFilter(chat, f)).length]));
     $$('[data-filter]', tabs).forEach((btn) => {
       const filter = btn.dataset.filter || 'all';
       btn.classList.toggle('is-active', filter === state.activeFilter);
       const badge = btn.querySelector('.msg-filter-count') || btn.querySelector('span:last-child');
-      if (badge) badge.textContent = String(counts[filter] || 0);
+      if (badge) badge.textContent = String(state.chats.filter((chat) => chatMatchesFilter(chat, filter)).length || 0);
     });
   }
 
   function setActiveFilter(filter) {
-    state.activeFilter = ['all', 'unread', 'groups', 'archived', 'closed'].includes(filter) ? filter : 'all';
+    state.activeFilter = isKnownFilter(filter) ? String(filter || 'all') : 'all';
+    state.selectionMode = false;
+    state.selectedChatIds.clear();
     renderFilterTabs();
     renderChatsList();
   }
@@ -1235,10 +1690,13 @@
       archived: 'Archived emails',
       closed: 'Closed emails',
     };
+    const active = String(state.activeFilter || 'all');
+    const activeLabel = active.startsWith('label:') ? getCustomLabel(active.slice(6)) : null;
 
-    if (title) title.textContent = labels[state.activeFilter] || 'Recent chats';
+    if (title) title.textContent = activeLabel?.name || labels[active] || 'Recent chats';
     if (count) count.textContent = String(chats.length);
     renderFilterTabs();
+    updateInboxActionsMenu();
 
     if (!chats.length) {
       const emptyMessages = {
@@ -1248,39 +1706,67 @@
         archived: 'No archived emails.',
         closed: 'No closed emails.',
       };
-      el.innerHTML = `<div class="msg-empty-list">${escapeHtml(emptyMessages[state.activeFilter] || 'No chats found.')}</div>`;
+      el.innerHTML = `<div class="msg-empty-list">${escapeHtml(activeLabel ? `No emails under ${activeLabel.name}.` : (emptyMessages[active] || 'No chats found.'))}</div>`;
       return;
     }
 
     el.innerHTML = chats.map((chat) => {
+      const id = String(chat.id || '');
       const search = [chat.title, chat.preview, chat.participantNames].filter(Boolean).join(' ');
       const unread = isChatUnread(chat);
+      const labelBadges = (Array.isArray(chat.labels) ? chat.labels : []).map((label) => {
+        const bg = sanitizeLabelColor(label.color);
+        return `<span class="msg-chat-badge msg-chat-badge--label" style="--msg-label-bg:${bg};--msg-label-fg:${labelTextColor(bg)}">${escapeHtml(label.name)}</span>`;
+      }).join('');
       const badges = [
         isGroupChat(chat) ? '<span class="msg-chat-badge">Group</span>' : '',
         isArchivedChat(chat) ? '<span class="msg-chat-badge">Archived</span>' : '',
         isClosedChat(chat) ? '<span class="msg-chat-badge">Closed</span>' : '',
+        labelBadges,
       ].filter(Boolean).join('');
+      const checked = state.selectedChatIds.has(id);
       return `
-        <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''} ${unread ? 'is-unread' : ''}" data-chat-id="${escapeHtml(chat.id)}" data-search="${escapeHtml(search)}">
-          <span class="msg-chat-avatar-wrap">
-            <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
-            ${unread ? '<span class="msg-unread-dot" aria-label="Unread"></span>' : ''}
-          </span>
-          <span class="msg-chat-main">
-            <span class="msg-chat-title-wrap">
-              <span class="msg-chat-title">${escapeHtml(chat.title || 'Email')}</span>
-            </span>
-            <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No replies yet')}</span>
-            ${badges ? `<span class="msg-chat-badges">${badges}</span>` : ''}
-          </span>
-          <span class="msg-chat-meta">${escapeHtml(chat.lastMessageTimeText || chat.lastEditedTimeText || '')}</span>
-        </button>
+        <div class="msg-chat-swipe-shell ${checked ? 'is-selected' : ''}" data-chat-id="${escapeHtml(id)}">
+          <div class="msg-swipe-action msg-swipe-action--archive"><i data-feather="archive"></i><span>Archive</span></div>
+          <div class="msg-swipe-action msg-swipe-action--label"><span>Label</span><i data-feather="tag"></i></div>
+          <div class="msg-chat-swipe-stage">
+            ${state.selectionMode ? `
+              <label class="msg-select-chat-check" aria-label="Select ${escapeHtml(chat.title || 'email')}">
+                <input type="checkbox" data-select-chat-id="${escapeHtml(id)}" ${checked ? 'checked' : ''} />
+                <span></span>
+              </label>
+            ` : ''}
+            <button type="button" class="msg-chat-row ${chat.id === state.selectedChatId ? 'is-active' : ''} ${unread ? 'is-unread' : ''}" data-chat-id="${escapeHtml(id)}" data-search="${escapeHtml(search)}">
+              <span class="msg-chat-avatar-wrap">
+                <span class="msg-chat-avatar">${escapeHtml(initials(chat.title))}</span>
+                ${unread ? '<span class="msg-unread-dot" aria-label="Unread"></span>' : ''}
+              </span>
+              <span class="msg-chat-main">
+                <span class="msg-chat-title-wrap">
+                  <span class="msg-chat-title">${escapeHtml(chat.title || 'Email')}</span>
+                </span>
+                <span class="msg-chat-preview">${escapeHtml(chat.preview || 'No replies yet')}</span>
+                ${badges ? `<span class="msg-chat-badges">${badges}</span>` : ''}
+              </span>
+              <span class="msg-chat-meta">${escapeHtml(chat.lastMessageTimeText || chat.lastEditedTimeText || '')}</span>
+            </button>
+          </div>
+        </div>
       `;
     }).join('');
 
-    $$('[data-chat-id]', el).forEach((row) => {
-      row.addEventListener('click', () => selectChat(row.dataset.chatId));
+    $$('[data-select-chat-id]', el).forEach((box) => {
+      box.addEventListener('click', (event) => event.stopPropagation());
+      box.addEventListener('change', (event) => toggleChatSelected(event.currentTarget.dataset.selectChatId, event.currentTarget.checked));
     });
+    $$('.msg-chat-row[data-chat-id]', el).forEach((row) => {
+      row.addEventListener('click', () => {
+        if (state.selectionMode) toggleChatSelected(row.dataset.chatId);
+        else selectChat(row.dataset.chatId);
+      });
+    });
+    $$('.msg-chat-swipe-shell', el).forEach(bindChatSwipe);
+    hydrateIcons();
   }
 
   async function selectChat(chatId) {
@@ -1916,6 +2402,16 @@
     $('#msgComposerInput')?.addEventListener('keydown', handleMentionKeydown);
     $('#msgComposerInput')?.addEventListener('blur', () => setTimeout(closeMentionMenu, 160));
     $('#msgBackMobile')?.addEventListener('click', closeActiveChat);
+    $('#msgInboxMenuBtn')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setInboxMenu(!state.inboxMenuOpen);
+    });
+    $('#msgInboxActionsMenu')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-msg-action]');
+      if (!btn) return;
+      event.stopPropagation();
+      handleInboxAction(btn.dataset.msgAction || '');
+    });
     $('#msgAddLabelBtn')?.addEventListener('click', openLabelModal);
     $('#msgLabelForm')?.addEventListener('submit', submitCustomLabel);
     $('#msgLabelClose')?.addEventListener('click', closeLabelModal);
@@ -1928,6 +2424,16 @@
     $('#msgLabelHex')?.addEventListener('input', updateLabelColorFromHexInput);
     $('#msgLabelHex')?.addEventListener('blur', resetInvalidLabelHex);
     $('#msgLabelName')?.addEventListener('input', () => setLabelModalColor($('#msgLabelColor')?.value, { syncSliders: false, syncHex: false }));
+    $('#msgLabelPickerClose')?.addEventListener('click', closeLabelPickerModal);
+    $('#msgLabelPickerModal')?.addEventListener('click', (e) => {
+      if (e.target === $('#msgLabelPickerModal')) closeLabelPickerModal();
+    });
+    $('#msgLabelEditorClose')?.addEventListener('click', closeLabelEditorModal);
+    $('#msgLabelEditorCancel')?.addEventListener('click', closeLabelEditorModal);
+    $('#msgLabelEditorSave')?.addEventListener('click', saveEditedLabels);
+    $('#msgLabelEditorModal')?.addEventListener('click', (e) => {
+      if (e.target === $('#msgLabelEditorModal')) closeLabelEditorModal();
+    });
     bindFloatingNewMenu();
 
     $('#msgFilterTabs')?.addEventListener('click', (event) => {
@@ -1944,13 +2450,17 @@
     document.addEventListener('click', (e) => {
       if (state.newMenuOpen && !e.target.closest('.msg-new-menu-wrap')) setNewMenu(false);
       if (state.floatingNewMenuOpen && !e.target.closest('#msgFloatingNewWrap')) setFloatingNewMenu(false);
+      if (state.inboxMenuOpen && !e.target.closest('.msg-list-head')) setInboxMenu(false);
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (!$('#msgNewChatModal')?.hidden) closeNewChatModal();
+        if (!$('#msgLabelPickerModal')?.hidden) closeLabelPickerModal();
+        if (!$('#msgLabelEditorModal')?.hidden) closeLabelEditorModal();
         closeMentionMenu();
         setNewMenu(false);
         setFloatingNewMenu(false);
+        setInboxMenu(false);
       }
     });
     window.addEventListener('beforeunload', () => {

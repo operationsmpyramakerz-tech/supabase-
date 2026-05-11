@@ -17,7 +17,7 @@
   </style>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/messages.css?v=email-label-slider-v2" rel="stylesheet" />
+  <link href="/css/messages.css?v=email-swipe-label-actions-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading messages-page emails-page email-inbox-redesign">
@@ -125,8 +125,14 @@
             </div>
 
             <div class="msg-list-head">
-              <h3 id="msgListTitle">Inbox</h3>
+              <div class="msg-list-title-row">
+                <h3 id="msgListTitle">Inbox</h3>
+                <button type="button" class="msg-inbox-more-btn" id="msgInboxMenuBtn" aria-label="Inbox actions" aria-haspopup="true" aria-expanded="false">
+                  <i data-feather="more-horizontal"></i>
+                </button>
+              </div>
               <span id="msgChatsCount">—</span>
+              <div class="msg-inbox-actions-menu" id="msgInboxActionsMenu" hidden></div>
             </div>
             <div class="msg-chats-list" id="msgChatsList" aria-live="polite">
               <div class="msg-list-loading"><span></span> Loading inbox...</div>
@@ -279,8 +285,55 @@
     </form>
   </div>
 
+
+
+  <div class="msg-modal-overlay msg-label-picker-overlay" id="msgLabelPickerModal" hidden aria-hidden="true">
+    <div class="msg-modal msg-label-picker-modal" role="dialog" aria-modal="true" aria-labelledby="msgLabelPickerTitle">
+      <button type="button" class="msg-modal-close" id="msgLabelPickerClose" aria-label="Close label picker">
+        <i data-feather="x"></i>
+      </button>
+      <div class="msg-modal-head">
+        <div class="msg-modal-icon msg-label-modal-icon"><i data-feather="tag"></i></div>
+        <div>
+          <h2 id="msgLabelPickerTitle">Move to label</h2>
+          <p>Select a label for the selected email.</p>
+        </div>
+      </div>
+      <div class="msg-modal-body">
+        <div class="msg-label-picker-list" id="msgLabelPickerList"></div>
+        <div class="msg-form-error" id="msgLabelPickerError" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="msg-modal-overlay msg-label-editor-overlay" id="msgLabelEditorModal" hidden aria-hidden="true">
+    <div class="msg-modal msg-label-editor-modal" role="dialog" aria-modal="true" aria-labelledby="msgLabelEditorTitle">
+      <button type="button" class="msg-modal-close" id="msgLabelEditorClose" aria-label="Close labels editor">
+        <i data-feather="x"></i>
+      </button>
+      <div class="msg-modal-head">
+        <div class="msg-modal-icon msg-label-modal-icon"><i data-feather="edit-3"></i></div>
+        <div>
+          <h2 id="msgLabelEditorTitle">Edit labels</h2>
+          <p>Update label names and background colors.</p>
+        </div>
+      </div>
+      <div class="msg-modal-body">
+        <div class="msg-label-editor-list" id="msgLabelEditorList"></div>
+        <div class="msg-form-error" id="msgLabelEditorError" aria-live="polite"></div>
+      </div>
+      <div class="msg-modal-actions">
+        <button type="button" class="msg-btn msg-btn--light" id="msgLabelEditorCancel">Close</button>
+        <button type="button" class="msg-btn msg-btn--dark" id="msgLabelEditorSave">
+          <i data-feather="save"></i>
+          <span>Save labels</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=email-hard-refresh-fix-v1"></script>
-  <script src="/js/messages.js?v=email-label-slider-v1"></script>
+  <script src="/js/messages.js?v=email-swipe-label-actions-v1"></script>
 </body>
 </html>
