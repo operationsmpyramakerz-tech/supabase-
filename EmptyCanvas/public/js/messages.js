@@ -320,17 +320,14 @@
     const url = escapeHtml(attachment.url);
     const isImage = attachmentIsImage(attachment);
     const isAudio = String(attachment?.mime || '').toLowerCase().startsWith('audio/');
-    const preview = isImage
-      ? `<span class="msg-attachment-image"><img src="${url}" alt="${name}" loading="lazy" /></span>`
-      : (isAudio ? `<span class="msg-attachment-audio"><audio src="${url}" controls preload="metadata"></audio></span>` : '');
+    const typeLabel = isImage ? 'Image attachment' : (isAudio ? 'Audio attachment' : 'File attachment');
     return `
-      <a class="msg-attachment-card ${isImage ? 'is-image' : ''} ${isAudio ? 'is-audio' : ''}" href="${url}" target="_blank" rel="noopener">
-        ${preview}
+      <a class="msg-attachment-card msg-attachment-card--compact ${isImage ? 'is-image' : ''} ${isAudio ? 'is-audio' : ''}" href="${url}" target="_blank" rel="noopener" title="Open ${name}">
         <span class="msg-attachment-file-row">
           <span class="msg-attachment-icon"><i data-feather="${isImage ? 'image' : (isAudio ? 'mic' : 'paperclip')}"></i></span>
           <span class="msg-attachment-info">
             <strong>${name}</strong>
-            <small>${escapeHtml(meta || 'Open attachment')}</small>
+            <small>${escapeHtml(meta || typeLabel)}</small>
           </span>
           <span class="msg-attachment-open"><i data-feather="external-link"></i></span>
         </span>
@@ -1085,11 +1082,13 @@
       const bodyHtml = attachment ? attachmentMarkup(attachment) : formatMessageText(c.body || c.rawText || '');
       const timeText = formatMessageTime(created) || c.createdTimeText || '';
       const showTime = state.visibleTimes.has(messageId);
+      const senderHtml = c.isMine ? '' : `<div class="msg-bubble-sender">${escapeHtml(c.sender || 'User')}</div>`;
+      const messageLabel = c.isMine ? 'you' : (c.sender || 'User');
       blocks.push(`
         <div class="msg-bubble-row ${c.isMine ? 'is-mine' : ''}" data-message-row-id="${escapeHtml(messageId)}">
-          <div class="msg-bubble ${attachment ? 'has-attachment' : ''} ${showTime ? 'is-time-visible' : ''}" data-message-id="${escapeHtml(messageId)}" tabindex="0" role="button" aria-label="Message from ${escapeHtml(c.sender || 'User')}">
+          <div class="msg-bubble ${attachment ? 'has-attachment' : ''} ${showTime ? 'is-time-visible' : ''}" data-message-id="${escapeHtml(messageId)}" tabindex="0" role="button" aria-label="Message from ${escapeHtml(messageLabel)}">
             ${reactionPickerMarkup(messageId)}
-            <div class="msg-bubble-sender">${escapeHtml(c.sender || 'User')}</div>
+            ${senderHtml}
             <div class="msg-bubble-body">${bodyHtml}</div>
             <div class="msg-bubble-time">${escapeHtml(timeText)}</div>
             ${reactionBadgesMarkup(messageId)}
@@ -1593,7 +1592,6 @@
     $('#msgComposer')?.addEventListener('submit', sendMessage);
     $('#msgAttachBtn')?.addEventListener('click', () => $('#msgAttachmentInput')?.click());
     $('#msgAttachmentInput')?.addEventListener('change', (event) => prepareAttachmentFile(event.target?.files?.[0] || null));
-    $('#msgVoiceBtn')?.addEventListener('click', toggleVoiceRecording);
     $('#msgComposerInput')?.addEventListener('input', (event) => {
       updateMentionSuggestions(event);
       notifyTyping();

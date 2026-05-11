@@ -2264,3 +2264,190 @@
     padding: 9px 11px !important;
   }
 }
+
+
+/* Mail mobile v4 fixes: fuller mobile inbox, no voice recorder, compact attachments */
+.emails-page .msg-voice-btn {
+  display: none !important;
+}
+
+.emails-page .msg-composer {
+  grid-template-columns: 52px minmax(0, 1fr) 58px !important;
+}
+
+.emails-page .msg-bubble-row.is-mine .msg-bubble-sender {
+  display: none !important;
+}
+
+.emails-page .msg-bubble.has-attachment,
+.emails-page .msg-bubble-row.is-mine .msg-bubble.has-attachment,
+.emails-page .msg-bubble-row:not(.is-mine) .msg-bubble.has-attachment {
+  max-width: min(360px, 76%) !important;
+}
+
+.emails-page .msg-attachment-image,
+.emails-page .msg-attachment-audio {
+  display: none !important;
+}
+
+.emails-page .msg-attachment-card,
+.emails-page .msg-bubble-row.is-mine .msg-attachment-card,
+.emails-page .msg-bubble-row:not(.is-mine) .msg-attachment-card,
+.emails-page .msg-attachment-card--compact {
+  width: min(280px, 100%) !important;
+  max-width: 100% !important;
+  min-height: 46px !important;
+  padding: 8px 9px !important;
+  border-radius: 14px !important;
+  display: block !important;
+  text-decoration: none !important;
+}
+
+.emails-page .msg-attachment-file-row {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) 30px !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.emails-page .msg-attachment-icon,
+.emails-page .msg-attachment-open {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 10px !important;
+}
+
+.emails-page .msg-attachment-icon svg,
+.emails-page .msg-attachment-open svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+.emails-page .msg-attachment-info strong {
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.emails-page .msg-attachment-info small {
+  font-size: 9px !important;
+  line-height: 1.25 !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@media (min-width: 981px) {
+  .emails-page .msg-composer {
+    grid-template-columns: 54px minmax(0, 1fr) 64px !important;
+  }
+}
+
+@media (max-width: 980px) {
+  body.emails-page .main-content > main.messages-body {
+    --email-mobile-header-space: 132px;
+    --email-mobile-dock-space: 94px;
+    height: calc(100dvh - var(--email-mobile-header-space)) !important;
+    max-height: calc(100dvh - var(--email-mobile-header-space)) !important;
+    min-height: 0 !important;
+    padding: 6px 6px calc(var(--email-mobile-dock-space) + env(safe-area-inset-bottom, 0px)) !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  body.emails-page .main-content.mobile-header-hidden > main.messages-body {
+    --email-mobile-header-space: 0px;
+  }
+
+  .emails-page .messages-shell {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    border-radius: 24px !important;
+  }
+
+  .emails-page .messages-left-panel,
+  .emails-page .messages-chat-panel,
+  .emails-page .msg-conversation {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  .emails-page .messages-left-panel {
+    padding: 14px 10px 10px !important;
+    gap: 12px !important;
+  }
+
+  .emails-page .msg-chats-list,
+  .emails-page .msg-comments {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  .emails-page .msg-composer {
+    grid-template-columns: 48px minmax(0, 1fr) 54px !important;
+    gap: 8px !important;
+    padding: 9px !important;
+  }
+
+  .emails-page .msg-bubble.has-attachment,
+  .emails-page .msg-bubble-row.is-mine .msg-bubble.has-attachment,
+  .emails-page .msg-bubble-row:not(.is-mine) .msg-bubble.has-attachment {
+    max-width: 82% !important;
+  }
+}
+
+@media (max-width: 540px) {
+  body.emails-page .main-content > main.messages-body {
+    --email-mobile-header-space: 138px;
+    --email-mobile-dock-space: 92px;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .emails-page .messages-shell {
+    border-radius: 24px 24px 26px 26px !important;
+  }
+
+  .emails-page .messages-left-panel {
+    padding: 14px 10px 10px !important;
+  }
+
+  .emails-page .msg-people-strip {
+    padding-bottom: 8px !important;
+  }
+
+  .emails-page .msg-filter-tabs {
+    padding-bottom: 0 !important;
+  }
+
+  .emails-page .msg-chat-row {
+    min-height: 72px !important;
+    padding: 10px !important;
+  }
+
+  .emails-page .msg-composer {
+    grid-template-columns: 46px minmax(0, 1fr) 52px !important;
+    padding: 8px !important;
+  }
+
+  .emails-page .msg-input-wrap input {
+    min-width: 0 !important;
+  }
+
+  .emails-page .msg-bubble.has-attachment,
+  .emails-page .msg-bubble-row.is-mine .msg-bubble.has-attachment,
+  .emails-page .msg-bubble-row:not(.is-mine) .msg-bubble.has-attachment {
+    max-width: 86% !important;
+  }
+
+  .emails-page .msg-attachment-card,
+  .emails-page .msg-attachment-card--compact {
+    width: min(250px, 100%) !important;
+  }
+}
