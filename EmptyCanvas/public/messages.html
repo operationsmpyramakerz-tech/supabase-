@@ -17,7 +17,7 @@
   </style>
   <link href="/css/style.css" rel="stylesheet" />
   <link href="/css/ui-redesign.css" rel="stylesheet" />
-  <link href="/css/messages.css?v=email-swipe-label-actions-v1" rel="stylesheet" />
+  <link href="/css/messages.css?v=email-inbox-menu-visible-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading messages-page emails-page email-inbox-redesign">
@@ -88,7 +88,13 @@
         <section class="messages-shell email-shell" aria-label="Emails">
           <div class="messages-left-panel">
             <div class="msg-inbox-top msg-inbox-top--compact">
-              <h2 class="msg-mobile-inbox-title">Inbox</h2>
+              <div class="msg-inbox-title-row">
+                <h2 class="msg-mobile-inbox-title">Inbox</h2>
+                <button type="button" class="msg-inbox-more-btn" id="msgInboxMenuBtn" aria-label="Inbox actions" aria-haspopup="true" aria-expanded="false">
+                  <i data-feather="more-horizontal"></i>
+                </button>
+                <div class="msg-inbox-actions-menu" id="msgInboxActionsMenu" hidden></div>
+              </div>
             </div>
 
             <input id="msgSearchInput" class="msg-hidden-search" type="search" autocomplete="off" placeholder="Search emails or team members..." aria-hidden="true" tabindex="-1" />
@@ -124,15 +130,11 @@
               </button>
             </div>
 
-            <div class="msg-list-head">
+            <div class="msg-list-head" aria-hidden="true">
               <div class="msg-list-title-row">
                 <h3 id="msgListTitle">Inbox</h3>
-                <button type="button" class="msg-inbox-more-btn" id="msgInboxMenuBtn" aria-label="Inbox actions" aria-haspopup="true" aria-expanded="false">
-                  <i data-feather="more-horizontal"></i>
-                </button>
               </div>
               <span id="msgChatsCount">—</span>
-              <div class="msg-inbox-actions-menu" id="msgInboxActionsMenu" hidden></div>
             </div>
             <div class="msg-chats-list" id="msgChatsList" aria-live="polite">
               <div class="msg-list-loading"><span></span> Loading inbox...</div>
@@ -334,6 +336,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=email-hard-refresh-fix-v1"></script>
-  <script src="/js/messages.js?v=email-swipe-label-actions-v1"></script>
+  <script src="/js/messages.js?v=email-inbox-menu-visible-v2"></script>
 </body>
 </html>

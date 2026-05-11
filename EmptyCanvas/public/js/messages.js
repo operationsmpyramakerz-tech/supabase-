@@ -634,6 +634,8 @@
     const selectedCount = selectedChatIds().length;
     btn.classList.toggle('is-active', state.inboxMenuOpen || state.selectionMode);
     btn.setAttribute('aria-expanded', state.inboxMenuOpen ? 'true' : 'false');
+    btn.dataset.selectedCount = String(selectedCount || 0);
+    btn.setAttribute('title', state.selectionMode && selectedCount > 0 ? `${selectedCount} selected` : 'Inbox actions');
 
     if (!state.inboxMenuOpen) {
       menu.hidden = true;
@@ -2450,7 +2452,7 @@
     document.addEventListener('click', (e) => {
       if (state.newMenuOpen && !e.target.closest('.msg-new-menu-wrap')) setNewMenu(false);
       if (state.floatingNewMenuOpen && !e.target.closest('#msgFloatingNewWrap')) setFloatingNewMenu(false);
-      if (state.inboxMenuOpen && !e.target.closest('.msg-list-head')) setInboxMenu(false);
+      if (state.inboxMenuOpen && !e.target.closest('.msg-inbox-title-row, .msg-list-head')) setInboxMenu(false);
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
