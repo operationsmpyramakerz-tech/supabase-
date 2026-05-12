@@ -394,6 +394,35 @@
     return canonFieldName(name) === 'svschools';
   }
 
+  const MEMBER_FORM_FIELD_ORDER = [
+    'profilepicture',
+    'employeecode',
+    'name',
+    'password',
+    'phone',
+    'email',
+    'filesmedia',
+    'svschools',
+    'allowedpages',
+  ];
+
+  function orderEditableFieldsForForm(fields = []) {
+    const list = Array.isArray(fields) ? fields.filter(Boolean) : [];
+    const picked = [];
+    const used = new Set();
+    for (const target of MEMBER_FORM_FIELD_ORDER) {
+      const found = list.find((field) => canonFieldName(field?.name) === target);
+      if (found && !used.has(found)) {
+        picked.push(found);
+        used.add(found);
+      }
+    }
+    for (const field of list) {
+      if (!used.has(field)) picked.push(field);
+    }
+    return picked;
+  }
+
   function normalizeAccessRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((row) => ({
@@ -519,6 +548,132 @@
       .sort((a, b) => (Number(b.isEnabled) - Number(a.isEnabled)) || a.name.localeCompare(b.name));
   }
 
+  function singleSelectHTML(field, value, options = [], config = {}) {
+    const name = String(field.name || 'Select');
+    const label = escapeHTML(name);
+    const type = String(field.type || 'select');
+    const placeholder = config.placeholder || field.placeholder || `Select ${name}`;
+    const selected = String(value || '').trim();
+    const values = uniqValues([selected, ...options].filter(Boolean));
+    const text = selected || placeholder;
+    const hiddenValue = escapeHTML(selected);
+    const optionHtml = values.length
+      ? values.map((option) => `
+        <button type="button" class="ua-modern-option ${option === selected ? 'is-selected' : ''}" data-modern-select-value="${escapeHTML(option)}">
+          <span>${escapeHTML(option)}</span>
+          ${option === selected ? '<i data-feather="check"></i>' : ''}
+        </button>
+      `).join('')
+      : '<div class="ua-modern-option-empty">No options available.</div>';
+    return `
+      <div class="ua-form-field ${config.wide === false ? '' : 'ua-form-field--wide'} ua-form-field--modern-select">
+        <span>${label}</span>
+        <div class="ua-modern-select" data-modern-select data-field-label="${label}">
+          <input type="hidden" data-field-name="${label}" data-field-type="${escapeHTML(type)}" value="${hiddenValue}">
+          <button type="button" class="ua-modern-select-button ${selected ? 'has-value' : ''}" data-modern-select-button aria-haspopup="listbox" aria-expanded="false">
+            <span data-modern-select-text>${escapeHTML(text)}</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+          <div class="ua-modern-select-menu" data-modern-select-menu role="listbox" hidden>
+            ${optionHtml}
+          </div>
+        </div>
+        ${config.footer || ''}
+      </div>
+    `;
+  }
+
+  function closeModernSelects(except = null) {
+    els.formBody?.querySelectorAll('[data-modern-select]').forEach((widget) => {
+      if (except && widget === except) return;
+      widget.classList.remove('is-open');
+      const menu = widget.querySelector('[data-modern-select-menu]');
+      const button = widget.querySelector('[data-modern-select-button]');
+      if (menu) menu.hidden = true;
+      if (button) button.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function setModernSelectValue(widget, value) {
+    if (!widget) return;
+    const clean = String(value || '').trim();
+    const hidden = widget.querySelector('input[type="hidden"][data-field-name]');
+    const text = widget.querySelector('[data-modern-select-text]');
+    const button = widget.querySelector('[data-modern-select-button]');
+    const placeholder = text?.textContent || 'Select';
+    if (hidden) hidden.value = clean;
+    if (text) text.textContent = clean || placeholder;
+    if (button) button.classList.toggle('has-value', !!clean);
+    widget.querySelectorAll('[data-modern-select-value]').forEach((option) => {
+      const selected = String(option.getAttribute('data-modern-select-value') || '') === clean;
+      option.classList.toggle('is-selected', selected);
+      const hasCheck = !!option.querySelector('[data-feather="check"]');
+      if (selected && !hasCheck) option.insertAdjacentHTML('beforeend', '<i data-feather="check"></i>');
+      if (!selected && hasCheck) option.querySelector('[data-feather="check"]')?.remove();
+    });
+    closeModernSelects();
+    hydrateIcons(widget);
+  }
+
+  function ensureModernSelectOption(widget, value) {
+    if (!widget) return;
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    const menu = widget.querySelector('[data-modern-select-menu]');
+    if (!menu) return;
+    const exists = Array.from(menu.querySelectorAll('[data-modern-select-value]')).some((option) => String(option.getAttribute('data-modern-select-value') || '').toLowerCase() === clean.toLowerCase());
+    if (exists) return;
+    const empty = menu.querySelector('.ua-modern-option-empty');
+    if (empty) empty.remove();
+    menu.insertAdjacentHTML('beforeend', `
+      <button type="button" class="ua-modern-option" data-modern-select-value="${escapeHTML(clean)}">
+        <span>${escapeHTML(clean)}</span>
+      </button>
+    `);
+  }
+
+  function fileLinksFromValue(value) {
+    return String(value || '')
+      .split(/\n+/)
+      .map((url) => url.trim())
+      .filter(Boolean);
+  }
+
+  function fileButtonLabel(url, index) {
+    let label = '';
+    try {
+      const parsed = new URL(url);
+      const last = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '');
+      label = last || parsed.hostname || '';
+    } catch {
+      label = String(url || '').split('/').filter(Boolean).pop() || '';
+    }
+    label = label.replace(/^\d+-[a-f0-9]+-/i, '').replace(/[_-]?image_?\d*/i, '').trim();
+    if (!label || label.length > 28) label = `File ${index + 1}`;
+    return label;
+  }
+
+  function renderMediaLinkButtons(value) {
+    const links = fileLinksFromValue(value);
+    if (!links.length) return '<div class="ua-file-chip-empty">No files or links yet.</div>';
+    return links.map((url, index) => `
+      <a class="ua-file-chip" href="${escapeHTML(url)}" target="_blank" rel="noopener" title="${escapeHTML(url)}">
+        <i data-feather="paperclip"></i>
+        <span>${escapeHTML(fileButtonLabel(url, index))}</span>
+      </a>
+    `).join('');
+  }
+
+  function refreshMediaLinksUI(widget) {
+    if (!widget) return;
+    const textarea = widget.querySelector('textarea[data-field-name]');
+    const list = widget.querySelector('[data-file-link-list]');
+    if (list) {
+      list.innerHTML = renderMediaLinkButtons(textarea?.value || '');
+      hydrateIcons(list);
+    }
+  }
+
   function multiSelectHTML(field, value) {
     const name = String(field.name || '');
     const type = String(field.type || 'ua_multi_select');
@@ -561,22 +716,19 @@
   function schoolSelectHTML(field, value) {
     const name = String(field.name || 'School');
     const options = uniqValues([String(value || '').trim(), ...fieldOptions(field)]).filter(Boolean);
-    const selected = String(value || '').trim();
-    const label = escapeHTML(name);
-    return `
-      <div class="ua-form-field ua-form-field--wide ua-form-field--school">
-        <span>${label}</span>
-        <select data-field-name="${label}" data-field-type="school_select">
-          <option value="">Select school / stocktaking column</option>
-          ${options.map((option) => `<option value="${escapeHTML(option)}" ${option === selected ? 'selected' : ''}>${escapeHTML(option)}</option>`).join('')}
-        </select>
-        <div class="ua-inline-add">
-          <input type="text" data-school-column-name placeholder="Add new Stocktaking column, e.g. New School Done">
-          <button type="button" class="ua-mini-btn" data-school-add>Add column</button>
-        </div>
-        <small>Adding a school creates a new column in the Supabase stocktaking table, then selects it here.</small>
+    const footer = `
+      <div class="ua-inline-add ua-modern-select-add">
+        <input type="text" data-school-column-name placeholder="Add new Stocktaking column, e.g. New School Done">
+        <button type="button" class="ua-mini-btn" data-school-add>Add column</button>
       </div>
+      <small>Adding a school creates a new column in the Supabase stocktaking table, then selects it here.</small>
     `;
+    return singleSelectHTML(
+      { ...field, name, type: 'school_select', placeholder: 'Select school / stocktaking column' },
+      value,
+      options,
+      { placeholder: 'Select school / stocktaking column', footer }
+    );
   }
 
   function profileUploadHTML(field, value) {
@@ -587,16 +739,14 @@
       <div class="ua-form-field ua-form-field--wide ua-upload-field" data-upload-widget="profile">
         <span>${label}</span>
         <input type="hidden" data-field-name="${label}" data-field-type="ua_profile_upload" value="${escapeHTML(url)}">
-        <div class="ua-profile-uploader">
+        <div class="ua-profile-uploader ua-profile-uploader--upload-only">
           <div class="ua-profile-preview" data-profile-preview>${url ? `<img src="${escapeHTML(url)}" alt="Profile picture">` : '<i data-feather="image"></i>'}</div>
-          <div class="ua-upload-actions">
-            <label class="ua-file-pick">
+          <div class="ua-upload-actions ua-upload-actions--profile-only">
+            <label class="ua-file-pick ua-profile-pick">
               <i data-feather="upload-cloud"></i>
               <span>${url ? 'Replace image' : 'Upload image'}</span>
               <input type="file" accept="image/*" data-profile-file>
             </label>
-            <input type="url" data-profile-url placeholder="Or paste image URL" value="${escapeHTML(url)}">
-            <button type="button" class="ua-mini-btn" data-profile-use-url>Use link</button>
           </div>
         </div>
         <small data-upload-status></small>
@@ -609,9 +759,12 @@
     const label = escapeHTML(name);
     const safeValue = escapeHTML(value || '');
     return `
-      <div class="ua-form-field ua-form-field--wide ua-upload-field" data-upload-widget="files">
+      <div class="ua-form-field ua-form-field--wide ua-upload-field ua-upload-field--files" data-upload-widget="files">
         <span>${label}</span>
-        <textarea rows="4" data-field-name="${label}" data-field-type="ua_file_links" placeholder="Uploaded or pasted links, one per line">${safeValue}</textarea>
+        <textarea class="ua-files-raw" rows="4" data-field-name="${label}" data-field-type="ua_file_links" aria-label="${label} raw links">${safeValue}</textarea>
+        <div class="ua-file-chip-list" data-file-link-list>
+          ${renderMediaLinkButtons(value || '')}
+        </div>
         <div class="ua-upload-row">
           <label class="ua-file-pick ua-file-pick--small">
             <i data-feather="paperclip"></i>
@@ -621,7 +774,7 @@
           <input type="url" data-media-link placeholder="Insert external link">
           <button type="button" class="ua-mini-btn" data-media-insert-link>Insert link</button>
         </div>
-        <small data-upload-status>Use upload for files, or paste a link manually.</small>
+        <small data-upload-status>Uploaded files and pasted links are saved as compact buttons.</small>
       </div>
     `;
   }
@@ -645,15 +798,12 @@
 
     if (type === 'checkbox') {
       const yes = /^(yes|true|1)$/i.test(String(value || ''));
-      return `
-        <label class="ua-form-field ua-form-field--compact">
-          <span>${label}</span>
-          <select ${commonAttrs}>
-            <option value="No" ${yes ? '' : 'selected'}>No</option>
-            <option value="Yes" ${yes ? 'selected' : ''}>Yes</option>
-          </select>
-        </label>
-      `;
+      return singleSelectHTML(
+        { ...field, type: 'checkbox', placeholder: `Select ${name}` },
+        yes ? 'Yes' : 'No',
+        ['No', 'Yes'],
+        { wide: false }
+      );
     }
 
     if (type === 'files') return fileLinksHTML(field, value);
@@ -672,15 +822,15 @@
       }
     }
 
+    if ((type === 'select' || type === 'status') && Array.isArray(field.options) && field.options.length) {
+      return singleSelectHTML(field, value, fieldOptions(field), { wide: false, placeholder: placeholder || `Select ${name}` });
+    }
+
     const inputType = type === 'email' ? 'email' : type === 'number' ? 'number' : type === 'phone_number' ? 'tel' : type === 'date' ? 'date' : 'text';
-    const listId = (type === 'select' || type === 'status') && Array.isArray(field.options) && field.options.length
-      ? `uaOptions_${String(field.name || '').replace(/[^a-z0-9]/gi, '_')}`
-      : '';
     return `
       <label class="ua-form-field">
         <span>${label}</span>
-        <input type="${inputType}" ${commonAttrs} value="${safeValue}" ${listId ? `list="${escapeHTML(listId)}"` : ''} placeholder="${escapeHTML(placeholder)}">
-        ${optionsDatalist(field)}
+        <input type="${inputType}" ${commonAttrs} value="${safeValue}" placeholder="${escapeHTML(placeholder)}">
       </label>
     `;
   }
@@ -693,7 +843,7 @@
     if (mode === 'create') state.pageAccessDraft = [];
 
     const dept = activeDepartment();
-    const fields = schemaFields();
+    const fields = orderEditableFieldsForForm(schemaFields());
     const body = fields.map((field) => {
       let value = mode === 'edit' ? fieldValueFromMember(member, field.name) : '';
       if (mode === 'create' && String(field.name || '').toLowerCase() === 'department') value = dept?.name || '';
@@ -1771,9 +1921,10 @@
   }
 
   async function handleSchoolAdd(button) {
-    const field = button.closest('.ua-form-field--school');
+    const field = button.closest('.ua-form-field--school, .ua-form-field--modern-select');
     const input = field?.querySelector('[data-school-column-name]');
     const select = field?.querySelector('select[data-field-name]');
+    const modernSelect = field?.querySelector('[data-modern-select]');
     const name = String(input?.value || '').trim();
     if (!name) return toast('warning', 'Missing school', 'Enter the new school / column name first.');
     button.disabled = true;
@@ -1793,6 +1944,10 @@
         select.add(opt, 1);
       }
       if (select) select.value = label;
+      if (modernSelect) {
+        ensureModernSelectOption(modernSelect, label);
+        setModernSelectValue(modernSelect, label);
+      }
       if (input) input.value = '';
       toast('success', 'School added', `${label} was added to Stocktaking.`);
     } catch (error) {
@@ -1813,8 +1968,6 @@
     try {
       const data = await uploadUserAccessFile(file, 'profile-picture');
       if (hidden) hidden.value = data.url || '';
-      const urlInput = widget?.querySelector('[data-profile-url]');
-      if (urlInput) urlInput.value = data.url || '';
       if (preview) preview.innerHTML = `<img src="${escapeHTML(data.url || '')}" alt="Profile picture">`;
       setUploadStatus(widget, 'Profile picture uploaded. Save changes to apply it.');
       toast('success', 'Uploaded', 'Profile picture uploaded.');
@@ -1841,6 +1994,7 @@
       if (textarea && urls.length) {
         const existing = String(textarea.value || '').trim();
         textarea.value = [existing, ...urls].filter(Boolean).join('\n');
+        refreshMediaLinksUI(widget);
       }
       setUploadStatus(widget, `${urls.length} file${urls.length === 1 ? '' : 's'} uploaded. Save changes to apply.`);
       toast('success', 'Uploaded', `${urls.length} file${urls.length === 1 ? '' : 's'} uploaded.`);
@@ -1853,6 +2007,26 @@
   }
 
   function handleFormBodyClick(event) {
+    const selectButton = event.target.closest('[data-modern-select-button]');
+    if (selectButton) {
+      const widget = selectButton.closest('[data-modern-select]');
+      const menu = widget?.querySelector('[data-modern-select-menu]');
+      const isOpen = !!widget?.classList.contains('is-open');
+      closeModernSelects(widget);
+      if (widget && menu) {
+        widget.classList.toggle('is-open', !isOpen);
+        menu.hidden = isOpen;
+        selectButton.setAttribute('aria-expanded', String(!isOpen));
+      }
+      return;
+    }
+
+    const selectOption = event.target.closest('[data-modern-select-value]');
+    if (selectOption) {
+      setModernSelectValue(selectOption.closest('[data-modern-select]'), selectOption.getAttribute('data-modern-select-value') || '');
+      return;
+    }
+
     const pageAccessOpen = event.target.closest('[data-page-access-open]');
     if (pageAccessOpen) return openPageAccessModal();
 
@@ -1873,20 +2047,6 @@
     const schoolAdd = event.target.closest('[data-school-add]');
     if (schoolAdd) return handleSchoolAdd(schoolAdd);
 
-    const useProfileUrl = event.target.closest('[data-profile-use-url]');
-    if (useProfileUrl) {
-      const widget = useProfileUrl.closest('[data-upload-widget="profile"]');
-      const input = widget?.querySelector('[data-profile-url]');
-      const hidden = widget?.querySelector('input[type="hidden"][data-field-name]');
-      const preview = widget?.querySelector('[data-profile-preview]');
-      const url = String(input?.value || '').trim();
-      if (!url) return;
-      if (hidden) hidden.value = url;
-      if (preview) preview.innerHTML = `<img src="${escapeHTML(url)}" alt="Profile picture">`;
-      setUploadStatus(widget, 'Image link inserted. Save changes to apply it.');
-      return;
-    }
-
     const mediaInsert = event.target.closest('[data-media-insert-link]');
     if (mediaInsert) {
       const widget = mediaInsert.closest('[data-upload-widget="files"]');
@@ -1895,7 +2055,10 @@
       const url = String(input?.value || '').trim();
       if (!url) return;
       const existing = String(textarea?.value || '').trim();
-      if (textarea) textarea.value = [existing, url].filter(Boolean).join('\n');
+      if (textarea) {
+        textarea.value = [existing, url].filter(Boolean).join('\n');
+        refreshMediaLinksUI(widget);
+      }
       if (input) input.value = '';
       setUploadStatus(widget, 'Link inserted. Save changes to apply it.');
     }
@@ -1989,6 +2152,9 @@
     els.form?.addEventListener('submit', submitMemberForm);
     els.formBody?.addEventListener('click', handleFormBodyClick);
     els.formBody?.addEventListener('change', handleFormBodyChange);
+    document.addEventListener('click', (event) => {
+      if (!els.formBody || !els.formBody.contains(event.target)) closeModernSelects();
+    });
     els.formCancelBtn?.addEventListener('click', closeFormModal);
     els.formClose?.addEventListener('click', closeFormModal);
     els.formModal?.addEventListener('click', (event) => {

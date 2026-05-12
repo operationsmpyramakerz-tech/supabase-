@@ -1845,3 +1845,230 @@
     max-width: 190px;
   }
 }
+
+
+/* Edit Team Member — refined field order, upload controls and modern dropdowns */
+.ua-profile-uploader--upload-only {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.ua-upload-actions--profile-only {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.ua-profile-pick {
+  min-width: 180px;
+  min-height: 52px;
+}
+
+.ua-files-raw {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.ua-file-chip-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 54px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  background: #fbfcfe;
+}
+
+.ua-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 210px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: #0b1220;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ua-file-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.10);
+}
+
+.ua-file-chip svg {
+  width: 15px;
+  height: 15px;
+  color: #e46520;
+  flex: 0 0 auto;
+}
+
+.ua-file-chip span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #0b1220;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ua-file-chip-empty {
+  color: #98a2b3;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.ua-form-field--modern-select {
+  position: relative;
+  align-content: start;
+}
+
+.ua-modern-select {
+  position: relative;
+  min-width: 0;
+}
+
+.ua-modern-select-button {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  color: #0b1220;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  padding: 0 14px 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.ua-modern-select-button:hover,
+.ua-modern-select.is-open .ua-modern-select-button {
+  border-color: rgba(228, 101, 32, 0.38);
+  box-shadow: 0 0 0 4px rgba(228, 101, 32, 0.10), 0 16px 28px rgba(15, 23, 42, 0.08);
+}
+
+.ua-modern-select-button svg {
+  width: 18px;
+  height: 18px;
+  color: #7b8494;
+  flex: 0 0 auto;
+  transition: transform 0.16s ease;
+}
+
+.ua-modern-select.is-open .ua-modern-select-button svg {
+  transform: rotate(180deg);
+}
+
+.ua-modern-select-button span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #7b8494;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ua-modern-select-button.has-value span {
+  color: #0b1220;
+}
+
+.ua-modern-select-menu {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 42px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(14px);
+}
+
+.ua-modern-option {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 13px;
+  padding: 0 11px;
+  background: transparent;
+  color: #0b1220;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ua-modern-option:hover,
+.ua-modern-option.is-selected {
+  background: #fff3ea;
+  color: #bf4a12;
+}
+
+.ua-modern-option span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ua-modern-option svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.ua-modern-option-empty {
+  color: #98a2b3;
+  font-size: 13px;
+  font-weight: 850;
+  padding: 10px;
+}
+
+.ua-modern-select-add {
+  margin-top: 10px;
+}
+
+@media (max-width: 780px) {
+  .ua-profile-uploader--upload-only {
+    grid-template-columns: 1fr;
+  }
+
+  .ua-upload-actions--profile-only,
+  .ua-profile-pick {
+    width: 100%;
+  }
+}

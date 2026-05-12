@@ -1304,18 +1304,18 @@ async function serializeTeamMemberPublicProfile(page) {
 const USER_ACCESS_PAGE_NAME = "User Access & Data";
 const USER_ACCESS_CACHE_KEY = "cache:api:user-access:team-members:v2";
 const USER_ACCESS_FIELD_ORDER = [
-  "Department",
-  "Name",
-  "Phone",
-  "School",
-  "Password",
-  "Allowed Pages",
-  "S.V Schools",
-  "Position",
   "Profile picture",
-  "Files & media",
   "Employee Code",
+  "Name",
+  "Password",
+  "Phone",
   "Email",
+  "Files & media",
+  "S.V Schools",
+  "Allowed Pages",
+  "Department",
+  "Position",
+  "School",
 ];
 
 function _uaFindPropName(props = {}, aliases = []) {
