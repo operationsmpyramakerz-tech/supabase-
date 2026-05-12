@@ -1304,7 +1304,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (event.key === 'Escape') closeCreatorProfilePopover();
       });
       window.addEventListener('resize', closeCreatorProfilePopover);
-      window.addEventListener('scroll', closeCreatorProfilePopover, true);
+      // Keep the Created By profile open while users scroll or interact with Files & Media.
+      // It still closes with the X button, Escape, or outside pointer/tap. 
     }
 
     return creatorProfilePopover;
