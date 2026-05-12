@@ -1561,7 +1561,7 @@
     if (!allowed) {
       openInfoDialog({
         title: 'No Email Access',
-        message: 'أنت لا تملك اكسيس على صفحة ال Email، يرجى الرجوع إلى admin.',
+        message: 'You do not have access on the email page, please refer to admin.',
         buttonLabel: 'OK',
       });
       return;
