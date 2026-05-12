@@ -605,7 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
     groupsEl.innerHTML = '';
 
     if (!Array.isArray(rows) || rows.length === 0) {
-      groupsEl.innerHTML = `<div class="empty-block">No stock data found.</div>`;
+      groupsEl.innerHTML = window.OpsNoData?.html() || `<div class="empty-block">Sorry, No data available</div>`;
       updateStockSummary([]);
       return;
     }

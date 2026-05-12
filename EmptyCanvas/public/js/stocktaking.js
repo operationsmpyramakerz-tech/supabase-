@@ -84,8 +84,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (!visibleRows || visibleRows.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'empty-block';
-      empty.textContent = 'No results found.';
+      empty.className = 'empty-block empty-block--no-data';
+      empty.innerHTML = window.OpsNoData?.html() || 'Sorry, No data available';
       groupsContainer.appendChild(empty);
       return;
     }

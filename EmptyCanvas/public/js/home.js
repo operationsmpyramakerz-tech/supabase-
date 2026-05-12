@@ -357,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== Rendering =====
   function renderEmpty(container, msg) {
     if (!container) return;
-    container.innerHTML = `<div class="home-empty">${safeText(msg || 'No data')}</div>`;
+    container.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="home-empty">Sorry, No data available</div>`;
   }
 
   function chipToneByPriority(priority) {

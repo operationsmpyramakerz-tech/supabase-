@@ -268,12 +268,7 @@
     renderProductSelect();
 
     if (!filtered.length) {
-      els.results.innerHTML = `
-        <div class="products-empty">
-          <span class="products-group__icon"><i data-feather="search"></i></span>
-          <div><strong>No products found</strong><span>Try another search term or select a different tag.</span></div>
-        </div>
-      `;
+      els.results.innerHTML = window.OpsNoData?.html() || `<div class="products-empty">Sorry, No data available</div>`;
       hydrateIcons(els.results);
       return;
     }
@@ -628,12 +623,7 @@
     }
     const proposals = Array.isArray(state.proposals) ? state.proposals : [];
     if (!proposals.length) {
-      els.proposalsList.innerHTML = `
-        <div class="products-proposals-empty">
-          <span class="products-group__icon"><i data-feather="folder-plus"></i></span>
-          <div><strong>No proposals yet</strong><span>Click Create New Proposal to save your first quotation component list.</span></div>
-        </div>
-      `;
+      els.proposalsList.innerHTML = window.OpsNoData?.html() || `<div class="products-proposals-empty">Sorry, No data available</div>`;
       hydrateIcons(els.proposalsList);
       return;
     }

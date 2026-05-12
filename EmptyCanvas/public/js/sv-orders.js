@@ -1367,11 +1367,7 @@
     }
 
     if (!filteredGroups.length) {
-      listDiv.innerHTML = `<div class="empty-state">
-        <i data-feather="inbox"></i>
-        <div>No orders to review</div>
-        <small class="muted">Linked to you via “S.V Schools”.</small>
-      </div>`;
+      listDiv.innerHTML = window.OpsNoData?.html() || `<div class="empty-state">Sorry, No data available</div>`;
       if (window.feather) window.feather.replace();
       return;
     }

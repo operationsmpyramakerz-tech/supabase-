@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
     grid.innerHTML = '';
 
     if (!Array.isArray(rows) || rows.length === 0) {
-      grid.innerHTML = '<div class="empty-block">No schools found.</div>';
+      grid.innerHTML = window.OpsNoData?.html() || '<div class="empty-block">Sorry, No data available</div>';
       return;
     }
 

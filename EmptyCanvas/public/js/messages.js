@@ -1577,7 +1577,7 @@
     const count = $('#msgChatsCount');
     if (count) count.textContent = '0';
     if (list) {
-      list.innerHTML = `<div class="msg-empty-list">${escapeHtml(message || 'Could not load emails.')}</div>`;
+      list.innerHTML = window.OpsNoData?.html() || `<div class="msg-empty-list">Sorry, No data available</div>`;
     }
   }
 
@@ -1736,7 +1736,7 @@
         archived: 'No archived emails.',
         closed: 'No closed emails.',
       };
-      el.innerHTML = `<div class="msg-empty-list">${escapeHtml(activeLabel ? `No emails under ${activeLabel.name}.` : (emptyMessages[active] || 'No chats found.'))}</div>`;
+      el.innerHTML = window.OpsNoData?.html() || `<div class="msg-empty-list">Sorry, No data available</div>`;
       return;
     }
 
@@ -1822,7 +1822,7 @@
       sendPresence({ isTyping: false });
       loadPresence();
     } catch (error) {
-      if (commentsEl) commentsEl.innerHTML = `<div class="msg-empty-list">${escapeHtml(error.message || 'Could not load emails.')}</div>`;
+      if (commentsEl) commentsEl.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="msg-empty-list">Sorry, No data available</div>`;
     }
   }
 
@@ -1885,7 +1885,7 @@
     state.commentsSignature = commentsSignature(state.comments);
     state.visibleTimes = new Set(Array.from(state.visibleTimes || []).filter((id) => (state.comments || []).some((c) => String(c.id || '') === String(id))));
     if (!state.comments.length) {
-      el.innerHTML = `<div class="msg-empty-list">No replies yet.</div>`;
+      el.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="msg-empty-list">Sorry, No data available</div>`;
       return;
     }
 
@@ -2286,7 +2286,7 @@
     const selected = new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => String(id)));
     const members = selectableMembers();
     if (!members.length) {
-      box.innerHTML = '<div class="msg-empty-list">No team members available.</div>';
+      box.innerHTML = window.OpsNoData?.html({ compact: true }) || '<div class="msg-empty-list">Sorry, No data available</div>';
       return;
     }
     box.innerHTML = members.map((m) => {

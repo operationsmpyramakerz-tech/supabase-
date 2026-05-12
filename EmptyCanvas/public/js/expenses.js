@@ -769,7 +769,7 @@ function buildExpenseTicketHtml(group, { compact = false } = {}) {
 function buildExpensesTicketsHtml(items, { emptyMessage = "No expenses yet.", compact = false } = {}) {
   const groups = buildGroupedExpenseCollections(items);
   if (!groups.length) {
-    return `<div class="expenses-empty">${escapeHtml(emptyMessage)}</div>`;
+    return window.OpsNoData?.html({ compact }) || `<div class="expenses-empty">Sorry, No data available</div>`;
   }
   return groups.map((group) => buildExpenseTicketHtml(group, { compact })).join("");
 }
@@ -785,9 +785,9 @@ function renderAllExpensesModalList(listEl) {
   // Empty states
   if (recent.length === 0) {
     if (past.length > 0 && !VIEW_ALL_SHOW_PAST) {
-      html += `<div class="expenses-empty">No expenses since your last settlement.</div>`;
+      html += window.OpsNoData?.html({ compact: true }) || `<div class="expenses-empty">Sorry, No data available</div>`;
     } else if (past.length === 0) {
-      html += `<div class="expenses-empty">No expenses yet.</div>`;
+      html += window.OpsNoData?.html({ compact: true }) || `<div class="expenses-empty">Sorry, No data available</div>`;
     }
   }
 

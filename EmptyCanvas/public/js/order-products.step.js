@@ -1015,10 +1015,9 @@
     const withdraw = isWithdrawType();
     const maintenance = isMaintenanceType();
     const btnLabel = withdraw ? 'Update Withdraw Cart' : 'Update Cart';
-    cartItemsEl.innerHTML = `
+    cartItemsEl.innerHTML = window.OpsNoData?.html() || `
       <div class="cart-empty">
-        <strong>${withdraw ? 'Your withdrawal cart is empty' : maintenance ? 'Your maintenance cart is empty' : 'Your cart is empty'}</strong>
-        <div>Click <b>${escapeHtml(btnLabel)}</b> to add a ${maintenance ? 'machine' : 'component'}.</div>
+        <strong>Sorry, No data available</strong>
       </div>
     `;
   }

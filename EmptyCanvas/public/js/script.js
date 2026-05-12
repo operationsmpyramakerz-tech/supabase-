@@ -1192,7 +1192,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ordersListDiv.innerHTML = '';
     if (!visibleGroups.length) {
-      ordersListDiv.innerHTML = '<p>No orders found.</p>';
+      ordersListDiv.innerHTML = window.OpsNoData?.html() || '<p>Sorry, No data available</p>';
       if (window.feather) window.feather.replace();
       return;
     }
@@ -1309,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const groups = buildGroups(list);
     groupsById = new Map((groups || []).map((g) => [g.groupId, g]));
     if (!groups || groups.length === 0) {
-      ordersListDiv.innerHTML = '<p>No orders found.</p>';
+      ordersListDiv.innerHTML = window.OpsNoData?.html() || '<p>Sorry, No data available</p>';
       return;
     }
 

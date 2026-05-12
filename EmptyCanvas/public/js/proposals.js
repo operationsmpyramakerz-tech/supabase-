@@ -236,12 +236,7 @@
   }
 
   function emptyCard(title, text) {
-    return `
-      <div class="products-proposals-empty">
-        <span class="products-group__icon"><i data-feather="folder-plus"></i></span>
-        <div><strong>${escapeHTML(title)}</strong><span>${escapeHTML(text)}</span></div>
-      </div>
-    `;
+    return window.OpsNoData?.html() || `<div class="products-proposals-empty">Sorry, No data available</div>`;
   }
 
   function renderProposalFolders() {

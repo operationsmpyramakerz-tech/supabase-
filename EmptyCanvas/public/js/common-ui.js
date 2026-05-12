@@ -1,3 +1,38 @@
+// Shared no-data empty state helper used by all pages.
+(function initOpsNoDataHelper() {
+  const DEFAULT_TEXT = 'Sorry, No data available';
+  const IMAGE_SRC = '/images/no-data-illustration.png';
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function html(options = {}) {
+    const text = options.text || DEFAULT_TEXT;
+    const compact = options.compact ? ' ops-no-data-state--compact' : '';
+    const className = options.className ? ` ${String(options.className).trim()}` : '';
+    return `
+      <div class="ops-no-data-state${compact}${className}" role="status" aria-live="polite">
+        <img class="ops-no-data-state__image" src="${IMAGE_SRC}" alt="" loading="lazy">
+        <div class="ops-no-data-state__text">${escapeHtml(text)}</div>
+      </div>
+    `;
+  }
+
+  function set(target, options = {}) {
+    const el = typeof target === 'string' ? document.querySelector(target) : target;
+    if (!el) return;
+    el.innerHTML = html(options);
+  }
+
+  window.OpsNoData = { html, set, DEFAULT_TEXT, IMAGE_SRC };
+})();
+
 // public/js/common-ui.js
 document.addEventListener('DOMContentLoaded', () => {
   // 🔒 مهم: نخفي روابط السايدبار من البداية لتجنب "فلاش" كل الصفحات
@@ -3423,7 +3458,7 @@ function renderNotificationsList(listEl, items) {
     : [];
 
   if (!scoped.length) {
-    listEl.innerHTML = `<div class="notif-empty">No notifications</div>`;
+    listEl.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="notif-empty">Sorry, No data available</div>`;
     return;
   }
 

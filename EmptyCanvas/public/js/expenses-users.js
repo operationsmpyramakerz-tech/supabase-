@@ -619,7 +619,7 @@ async function loadExpenseUsers() {
     tabsEl.innerHTML = "";
 
     if (users.length === 0) {
-      infoEl.textContent = "No expenses found for any user.";
+      infoEl.innerHTML = window.OpsNoData?.html() || "Sorry, No data available";
       return;
     }
 
@@ -1122,7 +1122,7 @@ function buildUserExpenseTicketHtml(group, { compact = false } = {}) {
 function buildUserExpensesTicketsHtml(items, { emptyMessage = "No expenses yet.", compact = false } = {}) {
   const groups = buildGroupedExpenseCollections(items);
   if (!groups.length) {
-    return `<div class="expenses-empty">${escapeHtml(emptyMessage)}</div>`;
+    return window.OpsNoData?.html({ compact }) || `<div class="expenses-empty">Sorry, No data available</div>`;
   }
   return groups.map((group) => buildUserExpenseTicketHtml(group, { compact })).join("");
 }
@@ -1161,14 +1161,14 @@ function renderUserExpensesGrouped(recentItems, pastItems, totalEl, listEl) {
   if (dateFilterActive) {
     html += filteredPeriodItems.length
       ? buildUserExpensesTicketsHtml(filteredPeriodItems)
-      : '<div class="expenses-empty">No expenses found for the selected period.</div>';
+      : (window.OpsNoData?.html({ compact: true }) || '<div class="expenses-empty">Sorry, No data available</div>');
   } else {
     if (recent.length > 0) {
       html += buildUserExpensesTicketsHtml(recent);
     } else if (PAST_USER_ITEMS.length > 0) {
-      html += '<div class="expenses-empty">No expenses since the last settlement.</div>';
+      html += window.OpsNoData?.html({ compact: true }) || '<div class="expenses-empty">Sorry, No data available</div>';
     } else {
-      html += '<div class="expenses-empty">No expenses for this user.</div>';
+      html += window.OpsNoData?.html({ compact: true }) || '<div class="expenses-empty">Sorry, No data available</div>';
     }
 
     if (SHOW_PAST_EXPENSES && past.length > 0) {

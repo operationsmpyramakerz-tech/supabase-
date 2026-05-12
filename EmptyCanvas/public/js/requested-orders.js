@@ -2461,7 +2461,7 @@ document.addEventListener("DOMContentLoaded", () => {
     listDiv.innerHTML = "";
 
     if (!filtered.length) {
-      listDiv.innerHTML = `<p>No orders found.</p>`;
+      listDiv.innerHTML = window.OpsNoData?.html() || `<p>Sorry, No data available</p>`;
       if (window.feather) window.feather.replace();
       return;
     }

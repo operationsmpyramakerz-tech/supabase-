@@ -146,7 +146,7 @@
 
   function showListEmpty(gridEl, msg) {
     if (!gridEl) return;
-    gridEl.innerHTML = `<div class="tv2-empty">${escapeHtml(msg || "No tasks")}</div>`;
+    gridEl.innerHTML = window.OpsNoData?.html() || `<div class="tv2-empty">Sorry, No data available</div>`;
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -1152,7 +1152,7 @@ const toolbarHTML = `
 
 
       if (!visible.length) {
-        gridEl.innerHTML = toolbarHTML + `<div class="tv2-empty">No tasks</div>`;
+        gridEl.innerHTML = toolbarHTML + (window.OpsNoData?.html() || `<div class="tv2-empty">Sorry, No data available</div>`);
         wireListActions();
         if (window.feather) window.feather.replace();
         return;
@@ -2423,7 +2423,7 @@ const toolbarHTML = `
       if (!tv2DelegatedListEl) return;
 
       if (!todos.length) {
-        tv2DelegatedListEl.innerHTML = `<div class="tv2-empty">No delegated checkpoints yet</div>`;
+        tv2DelegatedListEl.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="tv2-empty">Sorry, No data available</div>`;
         if (window.feather) window.feather.replace();
         return;
       }
@@ -3311,7 +3311,7 @@ const toolbarHTML = `
       if (!tv2PointsListEl) return;
 
       if (!todos.length) {
-        tv2PointsListEl.innerHTML = `<div class="tv2-empty">No task points</div>`;
+        tv2PointsListEl.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="tv2-empty">Sorry, No data available</div>`;
         return;
       }
 

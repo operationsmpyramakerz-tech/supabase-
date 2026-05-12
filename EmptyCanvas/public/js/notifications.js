@@ -95,7 +95,7 @@
     const shown = showAll ? items : items.slice(0, 3);
 
     if (!shown.length) {
-      listEl.innerHTML = `<div class="notif-center-empty">No notifications</div>`;
+      listEl.innerHTML = window.OpsNoData?.html() || `<div class="notif-center-empty">Sorry, No data available</div>`;
       return;
     }
 

@@ -179,12 +179,12 @@
     }
 
     if (!state.departments.length) {
-      els.folders.innerHTML = '<div class="ua-empty">No departments found in the Team Members database.</div>';
+      els.folders.innerHTML = window.OpsNoData?.html() || '<div class="ua-empty">Sorry, No data available</div>';
       return;
     }
 
     if (!departments.length) {
-      els.folders.innerHTML = '<div class="ua-empty">No departments match your search.</div>';
+      els.folders.innerHTML = window.OpsNoData?.html() || '<div class="ua-empty">Sorry, No data available</div>';
       return;
     }
 
@@ -250,8 +250,8 @@
 
     if (!members.length) {
       els.membersGrid.innerHTML = state.search
-        ? '<div class="ua-empty">No users match your search inside this department.</div>'
-        : '<div class="ua-empty">No users found inside this department.</div>';
+        ? (window.OpsNoData?.html() || '<div class="ua-empty">Sorry, No data available</div>')
+        : (window.OpsNoData?.html() || '<div class="ua-empty">Sorry, No data available</div>');
       return;
     }
 
@@ -1829,7 +1829,7 @@
     const rows = normalizeAccessRows(state.pageAccessModalRows);
     state.pageAccessModalRows = rows;
     if (!rows.length) {
-      els.pageAccessList.innerHTML = '<div class="ua-empty">No pages were found in the Supabase app_pages table.</div>';
+      els.pageAccessList.innerHTML = window.OpsNoData?.html({ compact: true }) || '<div class="ua-empty">Sorry, No data available</div>';
       return;
     }
     els.pageAccessList.innerHTML = rows.map((row) => {
@@ -2079,7 +2079,7 @@
       ? rows.filter((row) => `${row.name} ${row.department} ${row.position} ${row.email}`.toLowerCase().includes(q))
       : rows;
     if (!filtered.length) {
-      els.svAccessList.innerHTML = '<div class="ua-empty">No team members found.</div>';
+      els.svAccessList.innerHTML = window.OpsNoData?.html({ compact: true }) || '<div class="ua-empty">Sorry, No data available</div>';
       return;
     }
     els.svAccessList.innerHTML = filtered.map((row) => `
