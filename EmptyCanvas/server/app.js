@@ -15724,6 +15724,9 @@ app.patch(
     if (!_sbTeamMembersEnabled()) {
       return res.status(500).json({ ok: false, error: "Supabase Team Members source is required to manage departments." });
     }
+    if (!_uaAdminVerified(req)) {
+      return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password first." });
+    }
     res.set("Cache-Control", "no-store");
     try {
       const department = await _sbRenameUserAccessDepartment(req.params?.id || "", req.body?.name || "");

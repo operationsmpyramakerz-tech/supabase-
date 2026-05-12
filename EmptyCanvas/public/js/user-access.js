@@ -257,8 +257,9 @@
 
     els.membersGrid.innerHTML = members.map((member) => {
       const role = member.position || 'Team Member';
-      const email = member.email || 'No email';
+      const employeeCode = member.employeeCode || 'No employee code';
       const phone = member.phone || 'No phone';
+      const email = member.email || 'No email';
       return `
         <article class="ua-member-card" data-member-id="${escapeHTML(member.id)}">
           <div class="ua-member-card__top">
@@ -284,9 +285,9 @@
             </div>
           </div>
           <div class="ua-member-card__meta">
-            <div class="ua-meta-line" title="${escapeHTML(email)}"><i data-feather="mail"></i><span>${escapeHTML(email)}</span></div>
+            <div class="ua-meta-line" title="${escapeHTML(employeeCode)}"><i data-feather="hash"></i><span>${escapeHTML(employeeCode)}</span></div>
             <div class="ua-meta-line" title="${escapeHTML(phone)}"><i data-feather="phone"></i><span>${escapeHTML(phone)}</span></div>
-            <div class="ua-meta-line" title="${escapeHTML(member.department || 'No Department')}"><i data-feather="briefcase"></i><span>${escapeHTML(member.department || 'No Department')}</span></div>
+            <div class="ua-meta-line" title="${escapeHTML(email)}"><i data-feather="mail"></i><span>${escapeHTML(email)}</span></div>
           </div>
           <div class="ua-member-card__actions">
             <button type="button" class="ua-btn ua-btn--light" data-action="message" data-member-id="${escapeHTML(member.id)}">
@@ -1431,7 +1432,7 @@
 
   function openPasswordModal(memberId, action = 'edit') {
     if (!els.passwordModal) return;
-    const allowedActions = new Set(['edit', 'create', 'create-department', 'move', 'delete-member', 'delete-department']);
+    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department']);
     state.pendingEditMemberId = String(memberId || '');
     state.pendingPasswordAction = allowedActions.has(action) ? action : 'edit';
     if (els.passwordInput) els.passwordInput.value = '';
@@ -1496,6 +1497,9 @@
         openFormModal('create');
       } else if (action === 'create-department') {
         openDepartmentModal('create');
+      } else if (action === 'edit-department') {
+        const department = departmentById(targetId);
+        if (department && canEditDepartment(department)) openDepartmentModal('edit', department);
       } else if (action === 'edit' && member) {
         openFormModal('edit', member);
       } else if (action === 'move' && member) {
@@ -2378,7 +2382,7 @@
         event.stopPropagation();
         if (editBtn.disabled) return;
         const department = departmentById(editBtn.getAttribute('data-dept-id') || '');
-        if (department && canEditDepartment(department)) openDepartmentModal('edit', department);
+        if (department && canEditDepartment(department)) openPasswordModal(department.id, 'edit-department');
         return;
       }
       const deleteBtn = event.target.closest('[data-action="delete-department"][data-dept-id]');
