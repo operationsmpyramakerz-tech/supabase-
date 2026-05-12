@@ -289,8 +289,8 @@
           </div>
           <div class="ua-member-card__actions">
             <button type="button" class="ua-btn ua-btn--light" data-action="message" data-member-id="${escapeHTML(member.id)}">
-              <i data-feather="message-circle"></i>
-              <span>Message</span>
+              <i data-feather="mail"></i>
+              <span>Email</span>
             </button>
             <button type="button" class="ua-btn ua-btn--dark" data-action="edit" data-member-id="${escapeHTML(member.id)}">
               <i data-feather="edit-3"></i>
@@ -1066,9 +1066,8 @@
     const isEdit = state.departmentModalMode === 'edit';
     if (els.departmentTitle) els.departmentTitle.textContent = isEdit ? 'Edit Department' : 'New Department';
     if (els.departmentSubtitle) {
-      els.departmentSubtitle.textContent = isEdit
-        ? 'Rename this department for all assigned team members.'
-        : 'Create an empty department folder, then assign members to it later.';
+      els.departmentSubtitle.textContent = isEdit ? 'Rename this department for all assigned team members.' : '';
+      els.departmentSubtitle.hidden = !isEdit;
     }
     if (els.departmentSaveLabel) els.departmentSaveLabel.textContent = isEdit ? 'Save Department' : 'Create Department';
     if (els.departmentError) els.departmentError.textContent = '';
@@ -1269,11 +1268,54 @@
     }
   }
 
+  function openConfirmDialog(options = {}) {
+    return new Promise((resolve) => {
+      const overlay = els.confirmModal;
+      if (!overlay) {
+        resolve(window.confirm(options.message || 'Are you sure?'));
+        return;
+      }
+      const cleanup = (answer) => {
+        overlay.hidden = true;
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('ua-modal-open');
+        els.confirmOk?.removeEventListener('click', onOk);
+        els.confirmCancel?.removeEventListener('click', onCancel);
+        els.confirmClose?.removeEventListener('click', onCancel);
+        overlay.removeEventListener('click', onBackdrop);
+        resolve(!!answer);
+      };
+      const onOk = () => cleanup(true);
+      const onCancel = () => cleanup(false);
+      const onBackdrop = (event) => {
+        if (event.target === overlay) cleanup(false);
+      };
+      if (els.confirmTitle) els.confirmTitle.textContent = options.title || 'Confirm action';
+      if (els.confirmMessage) els.confirmMessage.textContent = options.message || 'Are you sure?';
+      if (els.confirmOkLabel) els.confirmOkLabel.textContent = options.confirmLabel || 'Confirm';
+      els.confirmOk?.classList.toggle('ua-btn--danger', !!options.danger);
+      overlay.hidden = false;
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ua-modal-open');
+      hydrateIcons(overlay);
+      els.confirmOk?.addEventListener('click', onOk);
+      els.confirmCancel?.addEventListener('click', onCancel);
+      els.confirmClose?.addEventListener('click', onCancel);
+      overlay.addEventListener('click', onBackdrop);
+      setTimeout(() => els.confirmCancel?.focus(), 40);
+    });
+  }
+
   async function deleteMember(memberId) {
     const id = String(memberId || '').trim();
     const member = state.membersById.get(id);
     if (!id || !member) return;
-    const ok = window.confirm(`Delete ${member.name || 'this user'} permanently from Team Members?`);
+    const ok = await openConfirmDialog({
+      title: 'Delete Team Member',
+      message: `Delete ${member.name || 'this user'} permanently from Team Members? This action cannot be undone.`,
+      confirmLabel: 'Delete Member',
+      danger: true,
+    });
     if (!ok) return;
     try {
       const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(id)}`, {
@@ -1314,7 +1356,7 @@
 
   function openPasswordModal(memberId, action = 'edit') {
     if (!els.passwordModal) return;
-    const allowedActions = new Set(['edit', 'create', 'move', 'delete-member', 'delete-department']);
+    const allowedActions = new Set(['edit', 'create', 'create-department', 'move', 'delete-member', 'delete-department']);
     state.pendingEditMemberId = String(memberId || '');
     state.pendingPasswordAction = allowedActions.has(action) ? action : 'edit';
     if (els.passwordInput) els.passwordInput.value = '';
@@ -1377,6 +1419,8 @@
       closePasswordModal();
       if (action === 'create') {
         openFormModal('create');
+      } else if (action === 'create-department') {
+        openDepartmentModal('create');
       } else if (action === 'edit' && member) {
         openFormModal('edit', member);
       } else if (action === 'move' && member) {
@@ -1408,9 +1452,45 @@
     setTimeout(() => els.foldersPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 20);
   }
 
-  function handleMessage(memberId) {
-    const member = state.membersById.get(memberId);
-    toast('info', 'Message', `${member?.name || 'This user'} messaging will be connected later.`);
+  function readAllowedPagesFromCache() {
+    try {
+      const raw = sessionStorage.getItem('allowedPages') || sessionStorage.getItem('ops.orders.allowedPages') || '[]';
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function currentUserHasMailAccess() {
+    const canCheck = typeof window.opsUserHasMailAccess === 'function';
+    const cached = readAllowedPagesFromCache();
+    if (cached.length) return canCheck ? window.opsUserHasMailAccess(cached) : cached.some((p) => /^(mail|email|emails|messages)$/i.test(String(p || '').trim()));
+    try {
+      const res = await fetch('/api/account', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      const allowed = Array.isArray(data?.allowedPages) ? data.allowedPages : [];
+      if (allowed.length) {
+        try { sessionStorage.setItem('allowedPages', JSON.stringify(allowed)); } catch {}
+      }
+      return canCheck ? window.opsUserHasMailAccess(allowed) : allowed.some((p) => /^(mail|email|emails|messages)$/i.test(String(p || '').trim()));
+    } catch {
+      return false;
+    }
+  }
+
+  async function handleMessage(memberId) {
+    const id = String(memberId || '').trim();
+    const member = state.membersById.get(id);
+    const allowed = await currentUserHasMailAccess();
+    if (!allowed) {
+      toast('info', 'No Mail access', 'أنت لا تملك اكسيس على هذه الصفحة، يرجى الرجوع إلى admin.');
+      return;
+    }
+    const url = new URL('/messages', window.location.origin);
+    if (id) url.searchParams.set('compose', id);
+    if (member?.name) url.searchParams.set('toName', member.name);
+    window.location.href = url.toString();
   }
 
   async function loadMembers({ force = false, keepDepartment = false } = {}) {
@@ -2243,7 +2323,7 @@
     els.refreshBtn?.addEventListener('click', () => loadMembers({ force: true, keepDepartment: true }));
     els.backBtn?.addEventListener('click', () => backToDepartments());
     els.addMemberBtn?.addEventListener('click', () => openPasswordModal('', 'create'));
-    els.addDepartmentBtn?.addEventListener('click', () => openDepartmentModal('create'));
+    els.addDepartmentBtn?.addEventListener('click', () => openPasswordModal('', 'create-department'));
     els.departmentForm?.addEventListener('submit', submitDepartmentForm);
     els.departmentCancelBtn?.addEventListener('click', closeDepartmentModal);
     els.departmentClose?.addEventListener('click', closeDepartmentModal);
@@ -2331,6 +2411,14 @@
     els.passwordConfirmBtn = $('uaAdminPasswordConfirm');
     els.passwordCancelBtn = $('uaAdminPasswordCancel');
     els.passwordClose = $('uaAdminPasswordClose');
+
+    els.confirmModal = $('uaConfirmModal');
+    els.confirmTitle = $('uaConfirmTitle');
+    els.confirmMessage = $('uaConfirmMessage');
+    els.confirmOk = $('uaConfirmOk');
+    els.confirmOkLabel = $('uaConfirmOkLabel');
+    els.confirmCancel = $('uaConfirmCancel');
+    els.confirmClose = $('uaConfirmClose');
 
     els.formModal = $('uaMemberFormModal');
     els.form = $('uaMemberForm');

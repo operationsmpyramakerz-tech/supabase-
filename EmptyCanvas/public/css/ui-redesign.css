@@ -2742,3 +2742,15 @@ body.ops-hard-refresh-active{
   line-height: 1 !important;
   letter-spacing: 1px !important;
 }
+
+/* Compact user card 3-dot override */
+.ua-member-menu-btn {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  min-height: 20px !important;
+}
+.ua-member-menu-dots {
+  font-size: 15px !important;
+  letter-spacing: 0.6px !important;
+}

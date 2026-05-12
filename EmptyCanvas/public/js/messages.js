@@ -2417,6 +2417,27 @@
     }
   }
 
+
+  function openComposeFromUrl() {
+    let targetId = '';
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      targetId = String(params.get('compose') || params.get('to') || params.get('memberId') || params.get('recipient') || '').trim();
+    } catch {}
+    if (!targetId) return;
+    const member = state.members.find((m) => String(m.id) === targetId) || null;
+    if (!member) {
+      toast('Recipient was not found in team members.', 'warning');
+      return;
+    }
+    openNewChatModal('chat', member);
+    try {
+      const url = new URL(window.location.href);
+      ['compose', 'to', 'memberId', 'recipient', 'toName'].forEach((key) => url.searchParams.delete(key));
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }
+
   function bindEvents() {
     $('#msgRefreshBtn')?.addEventListener('click', () => refreshAll({ keepSelection: true }));
     $('#msgSearchInput')?.addEventListener('input', (e) => {
@@ -2511,6 +2532,7 @@
     await refreshAll({ keepSelection: false });
     await loadCustomLabels();
     renderFilterTabs();
+    openComposeFromUrl();
     startRealtimeLoops();
   });
 })();
