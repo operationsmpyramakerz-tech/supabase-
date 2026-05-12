@@ -26,6 +26,7 @@
     svAccessModalMemberId: '',
     svAccessModalLoading: false,
     svAccessSaving: false,
+    svAccessDraft: [],
     departmentModalMode: 'create',
     departmentTargetId: '',
     moveMemberId: '',
@@ -580,7 +581,9 @@
       const fallback = splitCsvValues(fieldValueFromMember(member, 'S.V Schools'));
       count = fallback.length;
     }
-    if (!memberId && state.formMode === 'create') return 'Create the member first, then enable visible team members for Orders Review.';
+    if (state.formMode === 'create' && state.svAccessDraft.length) {
+      count = normalizeSvAccessRows(state.svAccessDraft).filter((row) => row.isEnabled).length;
+    }
     if (!count) return 'No team members enabled yet. Orders Review will not show orders for this user.';
     return `${count} visible team member${count === 1 ? '' : 's'} for Orders Review`;
   }
@@ -593,7 +596,6 @@
   function svAccessManagerHTML(field, value) {
     const label = 'Orders Supervision';
     const summary = escapeHTML(svAccessSummaryText(state.formMemberSnapshot));
-    const disabled = state.formMode === 'create' ? 'disabled aria-disabled="true" title="Create the member first, then configure visible team members."' : '';
     return `
       <div class="ua-form-field ua-form-field--wide ua-sv-access-field" ${conditionalAttrsForPage('Orders Review')}>
         <span>${label}</span>
@@ -602,7 +604,7 @@
             <strong>Orders Supervision</strong>
             <small data-sv-access-summary>${summary}</small>
           </div>
-          <button type="button" class="ua-page-access-open" data-sv-access-open ${disabled}>
+          <button type="button" class="ua-page-access-open" data-sv-access-open>
             <i data-feather="users"></i>
             <span>Manage Users</span>
           </button>
@@ -957,7 +959,10 @@
     state.formMode = mode;
     state.formMemberId = mode === 'edit' ? String(member?.id || '') : '';
     state.formMemberSnapshot = mode === 'edit' ? member : null;
-    if (mode === 'create') state.pageAccessDraft = [];
+    if (mode === 'create') {
+      state.pageAccessDraft = [];
+      state.svAccessDraft = [];
+    }
 
     const dept = activeDepartment();
     const fields = orderEditableFieldsForForm(schemaFields());
@@ -993,6 +998,7 @@
     state.formMode = 'create';
     state.formMemberId = '';
     state.formMemberSnapshot = null;
+    state.svAccessDraft = [];
   }
 
   function collectFormFields() {
@@ -1045,6 +1051,10 @@
       if (mode === 'create' && Array.isArray(state.pageAccessDraft) && state.pageAccessDraft.length && data?.member?.id) {
         await savePageAccessForMember(String(data.member.id), state.pageAccessDraft);
         state.pageAccessDraft = [];
+      }
+      if (mode === 'create' && formMemberHasPage('Orders Review') && Array.isArray(state.svAccessDraft) && state.svAccessDraft.length && data?.member?.id) {
+        await saveSvAccessForMember(String(data.member.id), state.svAccessDraft);
+        state.svAccessDraft = [];
       }
 
       toast('success', mode === 'edit' ? 'Updated' : 'Created', mode === 'edit' ? 'Team member data updated.' : 'New team member added.');
@@ -1306,6 +1316,65 @@
     });
   }
 
+  function ensureInfoDialog() {
+    if (els.infoModal) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'ua-modal-overlay';
+    overlay.id = 'uaInfoModal';
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = `
+      <div class="ua-modal ua-modal--small ua-info-modal" role="dialog" aria-modal="true" aria-labelledby="uaInfoTitle">
+        <button type="button" class="ua-modal__close" id="uaInfoClose" aria-label="Close info window">
+          <i data-feather="x"></i>
+        </button>
+        <div class="ua-modal__header ua-modal__header--compact">
+          <div class="ua-modal__avatar ua-modal__avatar--icon ua-modal__avatar--info"><i data-feather="info"></i></div>
+          <div>
+            <h2 id="uaInfoTitle">Info</h2>
+            <p id="uaInfoMessage">Information message.</p>
+          </div>
+        </div>
+        <div class="ua-modal__actions">
+          <button type="button" class="ua-btn ua-btn--dark" id="uaInfoOk">OK</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    els.infoModal = overlay;
+    els.infoTitle = overlay.querySelector('#uaInfoTitle');
+    els.infoMessage = overlay.querySelector('#uaInfoMessage');
+    els.infoOk = overlay.querySelector('#uaInfoOk');
+    els.infoClose = overlay.querySelector('#uaInfoClose');
+    const close = () => closeInfoDialog();
+    els.infoOk?.addEventListener('click', close);
+    els.infoClose?.addEventListener('click', close);
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) closeInfoDialog();
+    });
+    hydrateIcons(overlay);
+  }
+
+  function openInfoDialog(options = {}) {
+    ensureInfoDialog();
+    if (!els.infoModal) return toast('info', options.title || 'Info', options.message || '');
+    if (els.infoTitle) els.infoTitle.textContent = options.title || 'Info';
+    if (els.infoMessage) els.infoMessage.textContent = options.message || '';
+    if (els.infoOk) els.infoOk.textContent = options.buttonLabel || 'OK';
+    els.infoModal.hidden = false;
+    els.infoModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    hydrateIcons(els.infoModal);
+    setTimeout(() => els.infoOk?.focus(), 40);
+  }
+
+  function closeInfoDialog() {
+    if (!els.infoModal) return;
+    els.infoModal.hidden = true;
+    els.infoModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('ua-modal-open');
+  }
+
   async function deleteMember(memberId) {
     const id = String(memberId || '').trim();
     const member = state.membersById.get(id);
@@ -1338,7 +1407,13 @@
     const message = count
       ? `Delete ${departmentName(department)} department? ${count} user${count === 1 ? '' : 's'} will be moved to No Department.`
       : `Delete ${departmentName(department)} department?`;
-    if (!window.confirm(message)) return;
+    const ok = await openConfirmDialog({
+      title: 'Delete Department',
+      message,
+      confirmLabel: 'Delete Department',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/user-access/departments/${encodeURIComponent(department.id)}`, {
         method: 'DELETE',
@@ -1484,7 +1559,11 @@
     const member = state.membersById.get(id);
     const allowed = await currentUserHasMailAccess();
     if (!allowed) {
-      toast('info', 'No Mail access', 'أنت لا تملك اكسيس على هذه الصفحة، يرجى الرجوع إلى admin.');
+      openInfoDialog({
+        title: 'No Email Access',
+        message: 'أنت لا تملك اكسيس على صفحة ال Email، يرجى الرجوع إلى admin.',
+        buttonLabel: 'OK',
+      });
       return;
     }
     const url = new URL('/messages', window.location.origin);
@@ -2016,9 +2095,24 @@
     `).join('');
   }
 
+  function buildDraftSvAccessRows() {
+    const existingDraft = normalizeSvAccessRows(state.svAccessDraft);
+    if (existingDraft.length) return existingDraft;
+    return normalizeSvAccessRows(allMembers().map((member) => ({
+      memberId: member.id,
+      name: member.name,
+      department: member.department,
+      position: member.position,
+      email: member.email,
+      photoUrl: member.photoUrl,
+      isEnabled: false,
+    })));
+  }
+
   async function loadSvAccessRowsForCurrentForm() {
     const memberId = String(state.formMemberId || '').trim();
-    if (!memberId) throw new Error('Create the team member first, then configure Orders Supervision.');
+    if (state.formMode === 'create') return buildDraftSvAccessRows();
+    if (!memberId) throw new Error('Missing team member ID.');
     if (state.svAccessCache.has(memberId)) return normalizeSvAccessRows(state.svAccessCache.get(memberId));
     const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/sv-access`, {
       credentials: 'same-origin',
@@ -2036,14 +2130,15 @@
   async function openSvAccessModal() {
     ensureSvAccessModal();
     const memberId = String(state.formMemberId || '').trim();
-    if (!memberId) return toast('warning', 'Save first', 'Create the team member first, then configure Orders Supervision.');
+    if (!memberId && state.formMode !== 'create') return toast('warning', 'Missing member', 'Open a team member first, then configure Orders Supervision.');
     state.svAccessModalMemberId = memberId;
     state.svAccessModalLoading = true;
     state.svAccessModalRows = [];
     if (els.svAccessSearch) els.svAccessSearch.value = '';
     if (els.svAccessTitle) els.svAccessTitle.textContent = 'Orders Supervision';
     if (els.svAccessSubtitle) {
-      els.svAccessSubtitle.textContent = `Enable team members whose orders should be visible to ${state.formMemberSnapshot?.name || 'this user'} in Orders Review.`;
+      const targetLabel = state.formMode === 'create' ? 'the new user' : (state.formMemberSnapshot?.name || 'this user');
+      els.svAccessSubtitle.textContent = `Enable team members whose orders should be visible to ${targetLabel} in Orders Review.`;
     }
     els.svAccessModal.hidden = false;
     els.svAccessModal.setAttribute('aria-hidden', 'false');
@@ -2100,10 +2195,18 @@
     event?.preventDefault?.();
     if (state.svAccessSaving || state.svAccessModalLoading) return;
     const memberId = String(state.formMemberId || '').trim();
-    if (!memberId) return;
+    const rows = collectSvAccessRowsFromModal();
     setSvAccessSaving(true);
     try {
-      await saveSvAccessForMember(memberId, collectSvAccessRowsFromModal());
+      if (state.formMode === 'create') {
+        state.svAccessDraft = normalizeSvAccessRows(rows);
+        updateSvAccessSummaryText();
+        closeSvAccessModal();
+        toast('success', 'Orders Supervision prepared', 'Orders Review visibility will be saved after creating the member.');
+        return;
+      }
+      if (!memberId) throw new Error('Missing team member ID.');
+      await saveSvAccessForMember(memberId, rows);
       updateSvAccessSummaryText();
       closeSvAccessModal();
       toast('success', 'Orders Supervision updated', 'Orders Review visibility was saved.');

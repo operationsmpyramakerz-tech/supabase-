@@ -362,7 +362,7 @@
     const editable = !!state.proposalEditMode;
     return `
       <header class="products-proposal-detail__head">
-        <button type="button" class="products-back-btn" data-action="back-proposals"><i data-feather="arrow-left"></i><span>All Proposals</span></button>
+        <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
         <div class="proposal-detail-title-block">
           <h2>${escapeHTML(proposal?.name || 'Proposal')}</h2>
           <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
@@ -411,7 +411,7 @@
     const editable = !!state.kitEditMode;
     return `
       <header class="products-proposal-detail__head">
-        <button type="button" class="products-back-btn" data-action="back-kits"><i data-feather="arrow-left"></i><span>All Kits</span></button>
+        <button type="button" class="products-back-btn" data-action="back-kits" aria-label="Back to kits"><i data-feather="arrow-left"></i></button>
         <div>
           <h2>${escapeHTML(kit?.name || 'Kit')}</h2>
           <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>

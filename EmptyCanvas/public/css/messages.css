@@ -4084,3 +4084,24 @@ body.emails-page.email-inbox-redesign .msg-inbox-actions-menu button[data-msg-ac
 body.emails-page.email-inbox-redesign .msg-chat-swipe-shell.is-archived-chat .msg-swipe-action--archive {
   background: linear-gradient(90deg, #0f172a, #334155) !important;
 }
+
+
+/* Global back button polish override */
+.messages-page .msg-back-mobile {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #0b1220 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08) !important;
+}
+.messages-page .msg-back-mobile span { display: none !important; }
+.messages-page .msg-back-mobile svg { width: 19px !important; height: 19px !important; stroke-width: 3 !important; }

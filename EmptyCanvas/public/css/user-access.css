@@ -2199,3 +2199,26 @@
   letter-spacing: 0.6px !important;
   transform: translateY(-1px) !important;
 }
+
+/* Info modal + final action refinements */
+.ua-info-modal .ua-modal__avatar--info {
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1d4ed8;
+}
+.ua-info-modal .ua-modal__actions {
+  justify-content: flex-end;
+}
+.ua-member-menu-wrap {
+  top: 7px !important;
+  right: 10px !important;
+}
+.ua-member-menu-btn {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+}
+.ua-member-menu-dots {
+  font-size: 13px !important;
+  letter-spacing: 0.35px !important;
+}
