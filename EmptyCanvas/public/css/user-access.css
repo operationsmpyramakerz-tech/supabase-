@@ -473,23 +473,27 @@
 
 .ua-modal__close {
   position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 46px;
-  height: 46px;
+  top: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
   border: 0;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
   background: #f3f4f6;
   color: #0b1220;
   cursor: pointer;
 }
 
 .ua-modal__close svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   stroke-width: 3;
+  display: block;
 }
 
 .ua-modal__header {
@@ -2049,6 +2053,19 @@
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
+}
+
+.ua-form-field[hidden],
+.ua-form-field--modern-select[hidden] {
+  display: none !important;
+}
+
+.ua-modern-option [data-modern-check],
+.ua-modern-option svg[data-modern-check] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke-width: 3;
 }
 
 .ua-modern-option-empty {

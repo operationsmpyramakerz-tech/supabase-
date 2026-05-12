@@ -401,9 +401,12 @@
     'password',
     'phone',
     'email',
+    'department',
+    'position',
     'filesmedia',
     'svschools',
     'allowedpages',
+    'school',
   ];
 
   function orderEditableFieldsForForm(fields = []) {
@@ -442,7 +445,8 @@
   function pageAccessSummaryFromRows(rows) {
     const enabled = (rows || []).filter((row) => !!row.isEnabled);
     const admins = enabled.filter((row) => row.accessLevel === 'admin');
-    return { enabledCount: enabled.length, adminCount: admins.length };
+    const allowedPages = uniqValues(enabled.map((row) => row.pageName || row.pageKey || row.routePath).filter(Boolean));
+    return { enabledCount: enabled.length, accessCount: enabled.length, adminCount: admins.length, allowedPages };
   }
 
   function pageAccessSummaryText(member = null) {
@@ -467,6 +471,59 @@
   function updatePageAccessSummaryText() {
     const summary = els.formBody?.querySelector('[data-page-access-summary]');
     if (summary) summary.textContent = pageAccessSummaryText(state.formMemberSnapshot);
+  }
+
+  function pageToken(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function accessRowMatchesPage(row, pageName) {
+    const wanted = pageToken(pageName);
+    const candidates = [
+      row?.pageName,
+      row?.pageKey,
+      row?.routePath,
+      row?.moduleName,
+    ].map(pageToken).filter(Boolean);
+    if (wanted === 'ordersreview') {
+      candidates.push(...[row?.pageName, row?.pageKey, row?.routePath].map((value) => String(value || '').toLowerCase()).filter(Boolean));
+      return candidates.some((value) => ['ordersreview', 'svorders', '/orders/svorders', 'orderssvorders'].includes(pageToken(value)) || String(value).includes('orders-review') || String(value).includes('sv-orders'));
+    }
+    if (wanted === 'stocktaking') {
+      return candidates.some((value) => value === 'stocktaking' || value.includes('stocktaking'));
+    }
+    return candidates.includes(wanted);
+  }
+
+  function formMemberHasPage(pageName) {
+    const member = state.formMemberSnapshot || null;
+    const memberId = String(member?.id || state.formMemberId || '').trim();
+    let rows = [];
+    if (memberId && state.pageAccessCache.has(memberId)) rows = normalizeAccessRows(state.pageAccessCache.get(memberId));
+    else if (state.formMode === 'create' && state.pageAccessDraft.length) rows = normalizeAccessRows(state.pageAccessDraft);
+
+    if (rows.length) {
+      return rows.some((row) => row.isEnabled && accessRowMatchesPage(row, pageName));
+    }
+
+    const allowedFromSummary = Array.isArray(member?.pageAccessSummary?.allowedPages)
+      ? member.pageAccessSummary.allowedPages
+      : [];
+    const allowedFromField = splitCsvValues(fieldValueFromMember(member, 'Allowed Pages'));
+    const allowed = uniqValues([...allowedFromSummary, ...allowedFromField]);
+    return allowed.some((value) => pageToken(value) === pageToken(pageName));
+  }
+
+  function conditionalAttrsForPage(pageName) {
+    const hidden = formMemberHasPage(pageName) ? '' : ' hidden';
+    return `data-conditional-page="${escapeHTML(pageName)}"${hidden}`;
+  }
+
+  function refreshConditionalAccessFields() {
+    els.formBody?.querySelectorAll('[data-conditional-page]').forEach((field) => {
+      const pageName = field.getAttribute('data-conditional-page') || '';
+      field.hidden = !formMemberHasPage(pageName);
+    });
   }
 
   function pageAccessManagerHTML(field, value) {
@@ -512,16 +569,15 @@
   }
 
   function svAccessManagerHTML(field, value) {
-    const name = String(field?.name || 'S.V Schools');
-    const label = escapeHTML(name);
+    const label = 'Orders Supervision';
     const summary = escapeHTML(svAccessSummaryText(state.formMemberSnapshot));
     const disabled = state.formMode === 'create' ? 'disabled aria-disabled="true" title="Create the member first, then configure visible team members."' : '';
     return `
-      <div class="ua-form-field ua-form-field--wide ua-sv-access-field">
+      <div class="ua-form-field ua-form-field--wide ua-sv-access-field" ${conditionalAttrsForPage('Orders Review')}>
         <span>${label}</span>
         <div class="ua-page-access-card ua-sv-access-card">
           <div>
-            <strong>Orders Review visibility</strong>
+            <strong>Orders Supervision</strong>
             <small data-sv-access-summary>${summary}</small>
           </div>
           <button type="button" class="ua-page-access-open" data-sv-access-open ${disabled}>
@@ -550,9 +606,11 @@
 
   function singleSelectHTML(field, value, options = [], config = {}) {
     const name = String(field.name || 'Select');
-    const label = escapeHTML(name);
+    const displayName = String(config.displayLabel || name);
+    const label = escapeHTML(displayName);
+    const fieldName = escapeHTML(String(config.fieldName || name));
     const type = String(field.type || 'select');
-    const placeholder = config.placeholder || field.placeholder || `Select ${name}`;
+    const placeholder = config.placeholder || field.placeholder || `Select ${displayName}`;
     const selected = String(value || '').trim();
     const values = uniqValues([selected, ...options].filter(Boolean));
     const text = selected || placeholder;
@@ -561,15 +619,17 @@
       ? values.map((option) => `
         <button type="button" class="ua-modern-option ${option === selected ? 'is-selected' : ''}" data-modern-select-value="${escapeHTML(option)}">
           <span>${escapeHTML(option)}</span>
-          ${option === selected ? '<i data-feather="check"></i>' : ''}
+          ${option === selected ? '<i data-modern-check data-feather="check"></i>' : ''}
         </button>
       `).join('')
       : '<div class="ua-modern-option-empty">No options available.</div>';
+    const extraClass = config.extraClass ? ` ${escapeHTML(config.extraClass)}` : '';
+    const extraAttrs = config.extraAttrs ? ` ${config.extraAttrs}` : '';
     return `
-      <div class="ua-form-field ${config.wide === false ? '' : 'ua-form-field--wide'} ua-form-field--modern-select">
+      <div class="ua-form-field ${config.wide === false ? '' : 'ua-form-field--wide'} ua-form-field--modern-select${extraClass}"${extraAttrs}>
         <span>${label}</span>
         <div class="ua-modern-select" data-modern-select data-field-label="${label}">
-          <input type="hidden" data-field-name="${label}" data-field-type="${escapeHTML(type)}" value="${hiddenValue}">
+          <input type="hidden" data-field-name="${fieldName}" data-field-type="${escapeHTML(type)}" value="${hiddenValue}">
           <button type="button" class="ua-modern-select-button ${selected ? 'has-value' : ''}" data-modern-select-button aria-haspopup="listbox" aria-expanded="false">
             <span data-modern-select-text>${escapeHTML(text)}</span>
             <i data-feather="chevron-down"></i>
@@ -607,9 +667,8 @@
     widget.querySelectorAll('[data-modern-select-value]').forEach((option) => {
       const selected = String(option.getAttribute('data-modern-select-value') || '') === clean;
       option.classList.toggle('is-selected', selected);
-      const hasCheck = !!option.querySelector('[data-feather="check"]');
-      if (selected && !hasCheck) option.insertAdjacentHTML('beforeend', '<i data-feather="check"></i>');
-      if (!selected && hasCheck) option.querySelector('[data-feather="check"]')?.remove();
+      option.querySelectorAll('[data-modern-check], [data-feather="check"], svg').forEach((icon) => icon.remove());
+      if (selected) option.insertAdjacentHTML('beforeend', '<i data-modern-check data-feather="check"></i>');
     });
     closeModernSelects();
     hydrateIcons(widget);
@@ -713,21 +772,46 @@
     `;
   }
 
+  function stocktakingOptionMatchesMember(option, memberName) {
+    const optionText = String(option || '').trim().toLowerCase();
+    const fullName = String(memberName || '').trim().toLowerCase();
+    if (!optionText || !fullName) return true;
+    const firstToken = fullName.split(/\s+/).filter(Boolean)[0] || '';
+    const firstLetter = fullName.charAt(0);
+    if (optionText.startsWith(fullName)) return true;
+    if (firstToken && optionText.startsWith(firstToken)) return true;
+    return !!firstLetter && optionText.startsWith(firstLetter);
+  }
+
+  function stocktakingOptionsForCurrentMember(field, value) {
+    const selected = String(value || '').trim();
+    const memberName = String(state.formMemberSnapshot?.name || '').trim();
+    const allOptions = uniqValues(fieldOptions(field));
+    const matched = allOptions.filter((option) => stocktakingOptionMatchesMember(option, memberName));
+    return uniqValues([selected, ...(matched.length ? matched : allOptions)].filter(Boolean));
+  }
+
   function schoolSelectHTML(field, value) {
-    const name = String(field.name || 'School');
-    const options = uniqValues([String(value || '').trim(), ...fieldOptions(field)]).filter(Boolean);
+    const options = stocktakingOptionsForCurrentMember(field, value);
+    const memberName = String(state.formMemberSnapshot?.name || '').trim();
     const footer = `
       <div class="ua-inline-add ua-modern-select-add">
-        <input type="text" data-school-column-name placeholder="Add new Stocktaking column, e.g. New School Done">
+        <input type="text" data-school-column-name placeholder="Add new Stocktaking column, e.g. ${memberName ? `${escapeHTML(memberName)} Done` : 'New School Done'}">
         <button type="button" class="ua-mini-btn" data-school-add>Add column</button>
       </div>
-      <small>Adding a school creates a new column in the Supabase stocktaking table, then selects it here.</small>
+      <small>Only Stocktaking columns that start with this user name are shown here.</small>
     `;
     return singleSelectHTML(
-      { ...field, name, type: 'school_select', placeholder: 'Select school / stocktaking column' },
+      { ...field, name: 'School', type: 'school_select', placeholder: 'Select stocktaking column' },
       value,
       options,
-      { placeholder: 'Select school / stocktaking column', footer }
+      {
+        displayLabel: 'Stocktaking',
+        fieldName: 'School',
+        placeholder: 'Select stocktaking column',
+        footer,
+        extraAttrs: conditionalAttrsForPage('Stocktaking'),
+      }
     );
   }
 
@@ -863,7 +947,8 @@
     els.formModal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('ua-modal-open');
     hydrateIcons(els.formModal);
-    const first = els.formBody.querySelector('[data-field-name="Name"], input, textarea, select');
+    refreshConditionalAccessFields();
+    const first = els.formBody.querySelector('[data-field-name="Name"], input:not([type="hidden"]), textarea, select');
     setTimeout(() => first?.focus(), 50);
   }
 
@@ -1205,14 +1290,10 @@
       const title = document.getElementById('uaAdminPasswordTitle');
       const subtitle = els.passwordModal.querySelector('.ua-modal__header p');
       if (title) title.textContent = 'Admin Verification';
-      const copy = {
-        create: 'Enter the Admin user password to add a new member.',
-        edit: 'Enter the Admin user password to open the edit page.',
-        move: 'Enter the Admin user password to move this member.',
-        'delete-member': 'Enter the Admin user password to delete this member.',
-        'delete-department': 'Enter the Admin user password to delete this department.',
-      };
-      if (subtitle) subtitle.textContent = copy[state.pendingPasswordAction] || copy.edit;
+      if (subtitle) {
+        subtitle.textContent = '';
+        subtitle.hidden = true;
+      }
     } catch {}
     els.passwordModal.hidden = false;
     els.passwordModal.setAttribute('aria-hidden', 'false');
@@ -1602,7 +1683,7 @@
     const rows = normalizeAccessRows(data.pages || []);
     state.pageAccessCache.set(memberId, rows);
     const member = state.membersById.get(memberId);
-    if (member && data.summary) member.pageAccessSummary = { accessCount: data.summary.accessCount || 0, adminCount: data.summary.adminCount || 0 };
+    if (member) member.pageAccessSummary = data.summary || pageAccessSummaryFromRows(rows);
     return rows;
   }
 
@@ -1681,6 +1762,7 @@
       if (state.formMode === 'create') {
         state.pageAccessDraft = normalizeAccessRows(rows);
         updatePageAccessSummaryText();
+        refreshConditionalAccessFields();
         closePageAccessModal();
         toast('success', 'Access prepared', 'Page access will be saved after creating the member.');
         return;
@@ -1689,6 +1771,7 @@
       if (!memberId) throw new Error('Missing team member ID.');
       await savePageAccessForMember(memberId, rows);
       updatePageAccessSummaryText();
+      refreshConditionalAccessFields();
       closePageAccessModal();
       toast('success', 'Access updated', 'Page permissions were saved.');
     } catch (error) {
@@ -1708,13 +1791,13 @@
     wrapper.setAttribute('aria-hidden', 'true');
     wrapper.innerHTML = `
       <form class="ua-modal ua-modal--sv-access" id="uaSvAccessForm" role="dialog" aria-modal="true" aria-labelledby="uaSvAccessTitle">
-        <button type="button" class="ua-modal__close" id="uaSvAccessClose" aria-label="Close S.V Schools window">
+        <button type="button" class="ua-modal__close" id="uaSvAccessClose" aria-label="Close Orders Supervision window">
           <i data-feather="x"></i>
         </button>
         <div class="ua-modal__header ua-modal__header--compact">
           <div class="ua-modal__avatar ua-modal__avatar--icon"><i data-feather="users"></i></div>
           <div>
-            <h2 id="uaSvAccessTitle">S.V Schools</h2>
+            <h2 id="uaSvAccessTitle">Orders Supervision</h2>
             <p id="uaSvAccessSubtitle">Enable the team members whose orders should appear in Orders Review.</p>
           </div>
         </div>
@@ -1822,14 +1905,14 @@
 
   async function loadSvAccessRowsForCurrentForm() {
     const memberId = String(state.formMemberId || '').trim();
-    if (!memberId) throw new Error('Create the team member first, then configure S.V Schools.');
+    if (!memberId) throw new Error('Create the team member first, then configure Orders Supervision.');
     if (state.svAccessCache.has(memberId)) return normalizeSvAccessRows(state.svAccessCache.get(memberId));
     const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/sv-access`, {
       credentials: 'same-origin',
       cache: 'no-store',
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load S.V Schools.');
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load Orders Supervision.');
     const rows = normalizeSvAccessRows(data.members || data.rows || []);
     state.svAccessCache.set(memberId, rows);
     const member = state.membersById.get(memberId);
@@ -1840,12 +1923,12 @@
   async function openSvAccessModal() {
     ensureSvAccessModal();
     const memberId = String(state.formMemberId || '').trim();
-    if (!memberId) return toast('warning', 'Save first', 'Create the team member first, then configure S.V Schools.');
+    if (!memberId) return toast('warning', 'Save first', 'Create the team member first, then configure Orders Supervision.');
     state.svAccessModalMemberId = memberId;
     state.svAccessModalLoading = true;
     state.svAccessModalRows = [];
     if (els.svAccessSearch) els.svAccessSearch.value = '';
-    if (els.svAccessTitle) els.svAccessTitle.textContent = 'S.V Schools';
+    if (els.svAccessTitle) els.svAccessTitle.textContent = 'Orders Supervision';
     if (els.svAccessSubtitle) {
       els.svAccessSubtitle.textContent = `Enable team members whose orders should be visible to ${state.formMemberSnapshot?.name || 'this user'} in Orders Review.`;
     }
@@ -1857,8 +1940,8 @@
       state.svAccessModalRows = await loadSvAccessRowsForCurrentForm();
     } catch (error) {
       console.error(error);
-      toast('error', 'Load failed', error?.message || 'Failed to load S.V Schools.');
-      if (els.svAccessList) els.svAccessList.innerHTML = `<div class="ua-error">${escapeHTML(error?.message || 'Failed to load S.V Schools.')}</div>`;
+      toast('error', 'Load failed', error?.message || 'Failed to load Orders Supervision.');
+      if (els.svAccessList) els.svAccessList.innerHTML = `<div class="ua-error">${escapeHTML(error?.message || 'Failed to load Orders Supervision.')}</div>`;
     } finally {
       state.svAccessModalLoading = false;
       renderSvAccessList();
@@ -1889,7 +1972,7 @@
       body: JSON.stringify({ members: enabled }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save S.V Schools.');
+    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save Orders Supervision.');
     const normalized = normalizeSvAccessRows(data.members || rows);
     state.svAccessCache.set(String(memberId), normalized);
     const member = state.membersById.get(String(memberId));
@@ -1910,11 +1993,11 @@
       await saveSvAccessForMember(memberId, collectSvAccessRowsFromModal());
       updateSvAccessSummaryText();
       closeSvAccessModal();
-      toast('success', 'S.V Schools updated', 'Orders Review visibility was saved.');
+      toast('success', 'Orders Supervision updated', 'Orders Review visibility was saved.');
       await loadMembers({ force: true, keepDepartment: true });
     } catch (error) {
       console.error(error);
-      toast('error', 'Save failed', error?.message || 'Failed to save S.V Schools.');
+      toast('error', 'Save failed', error?.message || 'Failed to save Orders Supervision.');
     } finally {
       setSvAccessSaving(false);
     }

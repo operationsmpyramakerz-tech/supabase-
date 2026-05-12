@@ -1310,11 +1310,11 @@ const USER_ACCESS_FIELD_ORDER = [
   "Password",
   "Phone",
   "Email",
+  "Department",
+  "Position",
   "Files & media",
   "S.V Schools",
   "Allowed Pages",
-  "Department",
-  "Position",
   "School",
 ];
 
@@ -1881,6 +1881,7 @@ function _sbFieldTypeFromLabel(label) {
   if (canon === "profilepicture") return "ua_profile_upload";
   if (canon === "filesmedia") return "ua_file_links";
   if (canon === "employeecode") return "text";
+  if (canon === "position") return "select";
   return "rich_text";
 }
 
@@ -2272,6 +2273,11 @@ async function _sbDeleteUserAccessDepartment(departmentId = "") {
 async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []) {
   const schoolOptions = await _uaStocktakingSchoolOptions();
   const departmentOptions = await _uaDepartmentOptionsForSupabase(rows);
+  const positionOptions = Array.from(new Set((rows || [])
+    .map((row) => _sbString(_sbValueForLabel(row, "Position")))
+    .map((value) => value.trim())
+    .filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b));
   const appPages = await _sbSelectAppPages({ assignableOnly: true }).catch(() => []);
   const allowedOptions = appPages.length ? _uaAllowedPageOptionsFromAppPages(appPages) : _uaAllowedPageOptionsFromRows(rows);
   const svOptions = _uaSvSchoolNameOptionsFromRows(rows);
@@ -2279,6 +2285,9 @@ async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []
     const canon = _sbCanon(field?.name || "");
     if (canon === "department") {
       return { ...field, type: "select", options: departmentOptions };
+    }
+    if (canon === "position") {
+      return { ...field, type: "select", options: positionOptions };
     }
     if (canon === "school") {
       return { ...field, type: "school_select", options: schoolOptions.map((x) => x.value), optionMeta: schoolOptions };
