@@ -3604,8 +3604,9 @@ function _sbSerializeOrderRow(row = {}) {
     quantityReceivedEdited = qtyReceivedRaw !== null && Math.abs(Number(qtyReceivedRaw) || 0) > 1e-9;
   }
   const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
-  const createdByName =
+  const createdByName = _sbOrderOwnerName(row) ||
     _sbOrderText(_sbOrderGet(row, ["team_member_name", "Teams Members", "teams_members", "Supervisor", "supervisor"])) || "";
+  const createdById = _sbOrderOwnerId(row);
   const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
   const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
   const orderReceiptRaw = _sbOrderText(_sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]));
@@ -3680,7 +3681,7 @@ function _sbSerializeOrderRow(row = {}) {
     operationsByName,
     receiptNumber: _sbOrderText(_sbOrderGet(row, ["receipt_number", "Receipt Number", "Store Receipt Number"])) || null,
     createdTime,
-    createdById: createdByName,
+    createdById: createdById || createdByName,
     createdByName,
     assignedToIds: [],
     assignedToNames: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) ? [_sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"]))] : [],
@@ -7117,18 +7118,105 @@ app.get("/api/account", requireAuth, async (req, res) => {
 
 
 
+function _sbPublicProfileFilesFromValue(value) {
+  const entries = _sbParseScreenshotEntries(value)
+    .map((entry, index) => ({
+      name: String(entry?.name || `File ${index + 1}`).trim() || `File ${index + 1}`,
+      url: String(entry?.url || '').trim(),
+    }))
+    .filter((entry) => entry.name || entry.url);
+  return entries;
+}
+
+function _sbSerializeTeamMemberPublicProfile(row = {}) {
+  const base = _sbSerializeTeamMemberRow(row);
+  const publicProfileDisplayOrder = [
+    'Name',
+    'Department',
+    'Position',
+    'Phone',
+    'Email',
+    'Employee Code',
+  ];
+
+  const fields = publicProfileDisplayOrder
+    .map((label) => ({
+      label,
+      value: _sbString(_sbValueForLabel(row, label)),
+      type: label === 'Email' ? 'email' : (label === 'Phone' ? 'phone_number' : 'text'),
+      files: [],
+    }))
+    .filter((field) => String(field.value || '').trim());
+
+  const filesMedia = _sbPublicProfileFilesFromValue(_sbValueForLabel(row, 'Files & media'));
+
+  return {
+    id: base.id,
+    name: base.name,
+    username: base.name,
+    department: base.department,
+    position: base.position,
+    phone: base.phone,
+    email: base.email,
+    employeeCode: base.employeeCode,
+    photoUrl: base.photoUrl,
+    filesMedia,
+    fields,
+    source: 'supabase',
+  };
+}
+
+async function _sbFindTeamMemberForPublicProfile(rawId = '') {
+  const raw = String(rawId || '').trim();
+  if (!raw || !_sbTeamMembersEnabled()) return null;
+
+  const byId = await _sbFindTeamMemberById(raw).catch(() => null);
+  if (byId) return byId;
+
+  const target = norm(raw);
+  if (!target) return null;
+  const rows = await _sbSelectTeamMembersRows();
+  return (rows || []).find((row) => {
+    const id = norm(_sbGet(row, ['id', 'ID']));
+    const name = norm(_sbValueForLabel(row, 'Name'));
+    const code = norm(_sbValueForLabel(row, 'Employee Code'));
+    const email = norm(_sbValueForLabel(row, 'Email'));
+    return (id && id === target) ||
+      (name && (name === target || name.includes(target) || target.includes(name))) ||
+      (code && code === target) ||
+      (email && email === target);
+  }) || null;
+}
+
+
+
 
 
 app.get("/api/team-members/:id/public", requireAuth, async (req, res) => {
-  if (!teamMembersDatabaseId) {
-    return res.status(500).json({ error: "Team_Members database ID is not configured." });
-  }
-
   try {
     const rawId = String(req.params?.id || "").trim();
     if (!rawId) return res.status(400).json({ error: "Team member ID is required." });
 
     res.set("Cache-Control", "no-store");
+
+    if (_sbTeamMembersEnabled()) {
+      const cacheKey = `cache:api:team-member-public:supabase:${cacheKeySafe(rawId)}:v1`;
+      const profile = await cacheGetOrSet(cacheKey, 2 * 60, async () => {
+        const row = await _sbFindTeamMemberForPublicProfile(rawId);
+        if (!row) {
+          const err = new Error("Team member not found.");
+          err.statusCode = 404;
+          throw err;
+        }
+        return _sbSerializeTeamMemberPublicProfile(row);
+      });
+      return res.json(profile);
+    }
+
+    if (!teamMembersDatabaseId) {
+      return res.status(500).json({ error: "Team_Members database ID is not configured." });
+    }
+
     const cacheKey = `cache:api:team-member-public:${normalizeNotionId(rawId)}:v2`;
     const profile = await cacheGetOrSet(cacheKey, 5 * 60, async () => {
       const page = await notion.pages.retrieve({ page_id: rawId });
@@ -26086,6 +26174,8 @@ async function clearSVOrdersRouteCaches(req) {
       cacheDel(`cache:api:sv-orders:${usernameKey}:not-started:v2`),
       cacheDel(`cache:api:sv-orders:${usernameKey}:approved:v2`),
       cacheDel(`cache:api:sv-orders:${usernameKey}:rejected:v2`),
+      cacheDel(`cache:api:sv-orders:${usernameKey}:archive:v2`),
+      cacheDel(`cache:api:sv-orders:${usernameKey}:all:v2`),
     ]);
   } catch (e) {
     console.warn("clearSVOrdersRouteCaches failed:", e?.message || e);
@@ -26300,9 +26390,14 @@ async function _sbSVOrdersList(req, label = "Not Started") {
   if (!visible.ids.length && !visible.names.length) return [];
 
   const rows = await _sbSelectOrdersRows({ approvedOnly: false });
-  const wanted = label ? norm(label) : "";
+  const archiveOnly = String(label || "") === "__archive__";
+  const wanted = label && !archiveOnly ? norm(label) : "";
   const filtered = (rows || []).filter((row) => {
     if (!_sbOrderVisibleToSV(row, visible)) return false;
+    const statusKey = norm(_sbOrderGet(row, ["status", "Status"]));
+    const isArchived = /archive|archived/.test(statusKey);
+    if (archiveOnly) return isArchived;
+    if (isArchived) return false;
     if (!wanted) return true;
     return norm(_sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]))) === wanted;
   });
@@ -26426,15 +26521,16 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
     // Map ?tab to S.V Approval label
     // - tab=not-started | approved | rejected → server-side filter
     // - tab=all → returns all items (client can group/filter)
-    const tab = String(req.query.tab || "").toLowerCase();
+    const tab = String(req.query.tab || "").toLowerCase().trim().replace(/[\s_]+/g, "-");
     let label = "Not Started";
     if (tab === "all") label = null;
+    else if (tab === "archive" || tab === "archived") label = "__archive__";
     else if (tab === "approved") label = "Approved";
     else if (tab === "rejected") label = "Rejected";
     else if (tab === "not-started" || tab === "not started") label = "Not Started";
     else if (!tab) label = "Not Started"; // backward compatible default
 
-    const cacheTabKey = label ? String(label).toLowerCase().replace(/\s+/g, "-") : "all";
+    const cacheTabKey = label === "__archive__" ? "archive" : (label ? String(label).toLowerCase().replace(/\s+/g, "-") : "all");
     const usernameKey = cacheKeySafe(req?.session?.username || "");
     const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v2`;
 

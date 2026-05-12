@@ -21,7 +21,7 @@
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
   <link rel="stylesheet" href="/css/style.css"/>
-  <link href="/css/ui-redesign.css?v=no-data-empty-v1" rel="stylesheet"/>
+  <link href="/css/ui-redesign.css?v=orders-tabs-archive-v1" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading order-modal-fit-screen">
@@ -114,6 +114,11 @@
                 <span class="order-status-tab__icon"><i data-feather="x-circle"></i></span>
                 <span class="order-status-tab__label">Rejected</span>
               </a>
+              <a class="tab-portfolio order-status-tab" data-tab="archive" role="tab" aria-selected="false"
+                 href="/orders/sv-orders?tab=archive">
+                <span class="order-status-tab__icon"><i data-feather="archive"></i></span>
+                <span class="order-status-tab__label">Archive</span>
+              </a>
             </div>
           </div>
 
@@ -184,7 +189,7 @@
 </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=no-data-empty-v1"></script>
+  <script src="/js/common-ui.js?v=orders-tabs-archive-v1"></script>
   <script>
     // Activate the current tab visually
     (function(){
@@ -202,6 +207,6 @@
     })();
   </script>
   <!-- Controller -->
-  <script src="/js/sv-orders.js?v=no-data-empty-v1"></script>
+  <script src="/js/sv-orders.js?v=orders-tabs-archive-v1"></script>
 </body>
 </html>

@@ -117,12 +117,13 @@
 
   // ===== Page cache (speed) =====
   // Keep a small per-tab cache so opening Orders Review does not always need a full refetch.
-  const SV_CACHE_PREFIX = "cache:svOrders:v3:";
+  const SV_CACHE_PREFIX = "cache:svOrders:v4:";
   const SV_CACHE_TTL_MS = 45 * 1000; // 45s
 
   function normalizeSvTab(tab) {
-    const raw = String(tab || "").toLowerCase().trim();
+    const raw = String(tab || "").toLowerCase().trim().replace(/[_\s]+/g, "-");
     if (raw === "all") return "all";
+    if (raw === "archive" || raw === "archived") return "archive";
     return approvalKey(raw);
   }
 
@@ -661,10 +662,15 @@
   }
 
   function approvalKey(label) {
-    const s = norm(label);
+    const s = norm(label).replace(/[_\s]+/g, "-");
+    if (s === "archive" || s === "archived") return "archive";
     if (s === "approved") return "approved";
     if (s === "rejected") return "rejected";
     return "not-started";
+  }
+
+  function isArchiveStatus(status) {
+    return /archive|archived/.test(norm(status));
   }
 
   function approvalSubtitle(label) {
@@ -692,6 +698,7 @@
 
   function statusToIndex(status) {
     const s = norm(status).replace(/[_-]+/g, " ");
+    if (/(archive|archived)/.test(s)) return 5;
     if (/(arrived|delivered|received)/.test(s)) return 4;
     if (/(shipped|on the way|delivering|prepared)/.test(s)) return 3;
     if (/(in progress|inprogress|progress)/.test(s)) return 2;
@@ -704,8 +711,10 @@
       1,
       ...(items || []).map((x) => statusToIndex(x?.status)),
     );
-    const safe = Math.min(4, Math.max(1, idx));
-    const meta = STATUS_FLOW[safe - 1] || STATUS_FLOW[0];
+    const safe = Math.min(5, Math.max(1, idx));
+    const meta = safe >= 5
+      ? { label: "Archive", sub: "This order is archived." }
+      : (STATUS_FLOW[safe - 1] || STATUS_FLOW[0]);
     return { idx: safe, label: meta.label, sub: meta.sub };
   }
 
@@ -863,9 +872,10 @@
       g.orderIdRange = computeOrderIdRange(g.products);
 
       g.approval = computeGroupApproval(g.products);
+      g.isArchived = g.products.some((x) => isArchiveStatus(x?.status));
 
       // Notion color of the S.V approval label (used to color the status pill)
-      g.approvalColor = (g.products[0] && g.products[0].approvalColor) ? g.products[0].approvalColor : null;
+      g.approvalColor = g.isArchived ? 'purple' : ((g.products[0] && g.products[0].approvalColor) ? g.products[0].approvalColor : null);
 
       const totalQty = g.products.reduce((sum, x) => {
         const q0 = Number(x.quantity) || 0;
@@ -905,7 +915,10 @@
     const creatorName = String(group.createdByName || first.createdByName || '').trim() || '—';
     const creatorId = String(group.createdById || first.createdById || first.teamMemberId || '').trim();
 
-    const statusVars = notionColorVars(group.approvalColor);
+    const statusVars = group.isArchived
+      ? { bg: '#F3E8FF', fg: '#6B21A8', bd: '#E9D5FF' }
+      : notionColorVars(group.approvalColor);
+    const displayStatus = group.isArchived ? 'Archive' : (group.approval || 'Not Started');
 
     const thumbHTML = orderTypeThumbMarkup(
       group.orderType || first.orderType,
@@ -940,7 +953,7 @@
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};">${escapeHTML(group.approval || "Not Started")}</span>
+          <span class="co-status-btn" style="--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};">${escapeHTML(displayStatus)}</span>
           ${creatorButtonMarkup(creatorId, creatorName)}
         </div>
       </div>
@@ -1389,7 +1402,13 @@
     // IMPORTANT: groups are built from items matching the current tab only.
     // This allows per-component decisions (reject one item moves it to Rejected tab)
     // while keeping the rest of the order in Not Started until bulk decision.
-    const itemsForTab = (allItems || []).filter((x) => approvalKey(normalizeApproval(x?.approval)) === TAB);
+    // Archive is based on the operational Status, not the S.V Approval column.
+    const itemsForTab = (allItems || []).filter((x) => {
+      const archived = isArchiveStatus(x?.status);
+      if (TAB === 'archive') return archived;
+      if (archived) return false;
+      return approvalKey(normalizeApproval(x?.approval)) === TAB;
+    });
     allGroups = buildGroups(itemsForTab);
     groupsById = new Map(allGroups.map((g) => [g.groupId, g]));
 

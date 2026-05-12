@@ -276,8 +276,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function normalizeCurrentStatusTab(value) {
-    const raw = norm(String(value || '').replace(/_/g, '-'));
-    return new Set(['all', 'active', 'shipped', 'arrived']).has(raw) ? raw : 'all';
+    let raw = norm(String(value || '').replace(/_/g, '-'));
+    if (raw === 'active' || raw === 'progress' || raw === 'inprogress') raw = 'in-progress';
+    if (raw === 'under-supervision' || raw === 'supervision' || raw === 'underreview') raw = 'under-supervision';
+    return new Set(['all', 'under-supervision', 'in-progress', 'shipped', 'arrived', 'archive']).has(raw) ? raw : 'all';
   }
 
   function readStatusTabFromUrl() {
@@ -400,12 +402,14 @@ document.addEventListener('DOMContentLoaded', () => {
     { label: 'In progress', sub: 'We are preparing your order.' },
     { label: 'Shipped', sub: 'Your cargo is on delivery.' },
     { label: 'Arrived', sub: 'Your order has arrived.' },
+    { label: 'Archive', sub: 'This order is archived.' },
   ];
 
   function statusToIndex(status) {
     const s = norm(status).replace(/[_-]+/g, ' ');
 
     // Most advanced statuses first
+    if (/(archive|archived)/.test(s)) return 5;
     if (/(arrived|delivered|received)/.test(s)) return 4;
     if (/(shipped|on the way|delivering|prepared)/.test(s)) return 3;
     if (/(in progress|inprogress|progress)/.test(s)) return 2;
@@ -426,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    const safe = Math.min(4, Math.max(1, bestIdx));
+    const safe = Math.min(5, Math.max(1, bestIdx));
     const meta = STATUS_FLOW[safe - 1] || STATUS_FLOW[0];
     return { idx: safe, label: meta.label, sub: meta.sub, color: bestColor };
   }
@@ -1031,9 +1035,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function statusTabForGroup(group) {
     const stage = group?.stage || computeStage(group?.products || []);
     const idx = Number(stage?.idx) || 1;
-    if (idx >= 5) return 'arrived';
-    if (idx >= 4) return 'shipped';
-    return 'active';
+    if (idx >= 5 || norm(stage?.label) === 'archive') return 'archive';
+    if (idx >= 4) return 'arrived';
+    if (idx >= 3) return 'shipped';
+    if (idx >= 2) return 'in-progress';
+    return 'under-supervision';
   }
 
   function groupTypeKey(group) {
@@ -1042,8 +1048,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function groupMatchesCurrentStatus(group) {
-    if (currentStatusTab === 'all') return true;
-    return statusTabForGroup(group) === currentStatusTab;
+    const tab = statusTabForGroup(group);
+    if (currentStatusTab === 'all') return tab !== 'archive';
+    return tab === currentStatusTab;
   }
 
   function groupMatchesCurrentType(group) {
