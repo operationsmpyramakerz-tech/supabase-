@@ -2094,3 +2094,60 @@
     width: 100%;
   }
 }
+
+/* Final 3-dot buttons polish + Position text field */
+.ua-member-menu-wrap {
+  top: 6px;
+  right: 8px;
+}
+
+.ua-member-card__top {
+  padding-right: 28px;
+}
+
+.ua-member-menu-btn {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #0b1220 !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+.ua-member-menu-btn:hover,
+.ua-member-menu-btn[aria-expanded="true"] {
+  background: rgba(15, 23, 42, 0.06) !important;
+  color: #0b1220 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.ua-member-menu-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 3.4 !important;
+  display: block !important;
+}
+
+.ua-form-field--position-text input {
+  width: 100%;
+}
+.ua-member-menu-dots {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #0b1220 !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  letter-spacing: 1px !important;
+  transform: translateY(-1px);
+}

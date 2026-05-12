@@ -268,7 +268,7 @@
             </div>
             <div class="ua-member-menu-wrap">
               <button type="button" class="ua-member-menu-btn" data-action="toggle-member-menu" data-member-id="${escapeHTML(member.id)}" aria-label="More actions for ${escapeHTML(member.name || 'user')}">
-                <i data-feather="more-vertical"></i>
+                <span class="ua-member-menu-dots" aria-hidden="true">•••</span>
               </button>
               <div class="ua-member-menu" data-member-menu="${escapeHTML(member.id)}" hidden>
                 <button type="button" data-action="move-member" data-member-id="${escapeHTML(member.id)}">
@@ -338,7 +338,7 @@
       { name: 'Password', type: 'rich_text' },
       { name: 'Allowed Pages', type: 'multi_select' },
       { name: 'S.V Schools', type: 'relation' },
-      { name: 'Position', type: 'select' },
+      { name: 'Position', type: 'text' },
       { name: 'Profile picture', type: 'files' },
       { name: 'Files & media', type: 'files' },
       { name: 'Employee Code', type: 'number' },
@@ -917,6 +917,15 @@
     if (type === 'files') return fileLinksHTML(field, value);
 
     if (type === 'relation') return multiSelectHTML({ ...field, type: 'ua_multi_select', allowCustom: false }, value);
+
+    if (canon === 'position') {
+      return `
+        <label class="ua-form-field ua-form-field--position-text">
+          <span>${label}</span>
+          <input type="text" data-field-name="${label}" data-field-type="text" value="${safeValue}" placeholder="${escapeHTML(placeholder || 'Enter position')}">
+        </label>
+      `;
+    }
 
     if (type === 'rich_text' || type === 'text') {
       const isLong = String(value || '').length > 90 || /notes?|comment|address|description/i.test(name);

@@ -1881,7 +1881,7 @@ function _sbFieldTypeFromLabel(label) {
   if (canon === "profilepicture") return "ua_profile_upload";
   if (canon === "filesmedia") return "ua_file_links";
   if (canon === "employeecode") return "text";
-  if (canon === "position") return "select";
+  if (canon === "position") return "text";
   return "rich_text";
 }
 
@@ -2322,7 +2322,7 @@ async function _uaEnrichEditableFieldsForSupabase(editableFields = [], rows = []
       return { ...field, type: "select", options: departmentOptions };
     }
     if (canon === "position") {
-      return { ...field, type: "select", options: positionOptions };
+      return { ...field, type: "text", options: positionOptions };
     }
     if (canon === "school") {
       return { ...field, type: "school_select", options: schoolOptions.map((x) => x.value), optionMeta: schoolOptions };
