@@ -1590,7 +1590,7 @@
 
 .ua-member-card__top {
   position: relative;
-  padding-right: 46px;
+  padding-right: 38px;
 }
 
 .ua-member-menu-wrap {
@@ -1598,15 +1598,19 @@
   top: 0;
   right: 0;
   z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ua-member-menu-btn {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border: 1px solid rgba(15, 23, 42, 0.10);
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #fff;
   color: #0b1220;
   cursor: pointer;
@@ -1623,14 +1627,15 @@
 }
 
 .ua-member-menu-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   stroke-width: 3;
+  display: block;
 }
 
 .ua-member-menu {
   position: absolute;
-  top: 46px;
+  top: 40px;
   right: 0;
   min-width: 150px;
   display: grid;

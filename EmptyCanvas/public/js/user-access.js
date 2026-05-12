@@ -479,18 +479,25 @@
 
   function accessRowMatchesPage(row, pageName) {
     const wanted = pageToken(pageName);
-    const candidates = [
-      row?.pageName,
-      row?.pageKey,
-      row?.routePath,
-      row?.moduleName,
-    ].map(pageToken).filter(Boolean);
+    const rawCandidates = [row?.pageName, row?.pageKey, row?.routePath, row?.moduleName]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    const candidates = rawCandidates.map(pageToken).filter(Boolean);
+    const rawLower = rawCandidates.map((value) => value.toLowerCase());
     if (wanted === 'ordersreview') {
-      candidates.push(...[row?.pageName, row?.pageKey, row?.routePath].map((value) => String(value || '').toLowerCase()).filter(Boolean));
-      return candidates.some((value) => ['ordersreview', 'svorders', '/orders/svorders', 'orderssvorders'].includes(pageToken(value)) || String(value).includes('orders-review') || String(value).includes('sv-orders'));
+      return candidates.some((value) => ['ordersreview', 'svorders', 'orderssvorders'].includes(value))
+        || rawLower.some((value) => value.includes('orders-review') || value.includes('sv-orders'));
     }
     if (wanted === 'stocktaking') {
       return candidates.some((value) => value === 'stocktaking' || value.includes('stocktaking'));
+    }
+    if (wanted === 'currentorders') {
+      return candidates.some((value) => value === 'currentorders' || value.includes('currentorders'))
+        || rawLower.some((value) => value.includes('current-orders'));
+    }
+    if (wanted === 'shoppingcart') {
+      return candidates.some((value) => ['shoppingcart', 'cart'].includes(value) || value.includes('shoppingcart'))
+        || rawLower.some((value) => value.includes('shopping-cart') || value.endsWith('/cart'));
     }
     return candidates.includes(wanted);
   }
@@ -514,15 +521,30 @@
     return allowed.some((value) => pageToken(value) === pageToken(pageName));
   }
 
+  function formMemberHasAnyPage(pageNames = []) {
+    const names = Array.isArray(pageNames) ? pageNames : [pageNames];
+    return names.some((pageName) => formMemberHasPage(pageName));
+  }
+
   function conditionalAttrsForPage(pageName) {
     const hidden = formMemberHasPage(pageName) ? '' : ' hidden';
     return `data-conditional-page="${escapeHTML(pageName)}"${hidden}`;
+  }
+
+  function conditionalAttrsForPages(pageNames = []) {
+    const names = (Array.isArray(pageNames) ? pageNames : [pageNames]).map((name) => String(name || '').trim()).filter(Boolean);
+    const hidden = formMemberHasAnyPage(names) ? '' : ' hidden';
+    return `data-conditional-pages="${escapeHTML(names.join('|'))}"${hidden}`;
   }
 
   function refreshConditionalAccessFields() {
     els.formBody?.querySelectorAll('[data-conditional-page]').forEach((field) => {
       const pageName = field.getAttribute('data-conditional-page') || '';
       field.hidden = !formMemberHasPage(pageName);
+    });
+    els.formBody?.querySelectorAll('[data-conditional-pages]').forEach((field) => {
+      const names = String(field.getAttribute('data-conditional-pages') || '').split('|').map((name) => name.trim()).filter(Boolean);
+      field.hidden = !formMemberHasAnyPage(names);
     });
   }
 
@@ -773,14 +795,16 @@
   }
 
   function stocktakingOptionMatchesMember(option, memberName) {
-    const optionText = String(option || '').trim().toLowerCase();
-    const fullName = String(memberName || '').trim().toLowerCase();
-    if (!optionText || !fullName) return true;
+    const normalize = (value) => String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+    const optionText = normalize(option);
+    const fullName = normalize(memberName);
+    if (!optionText || !fullName) return false;
     const firstToken = fullName.split(/\s+/).filter(Boolean)[0] || '';
-    const firstLetter = fullName.charAt(0);
-    if (optionText.startsWith(fullName)) return true;
-    if (firstToken && optionText.startsWith(firstToken)) return true;
-    return !!firstLetter && optionText.startsWith(firstLetter);
+    return optionText.startsWith(fullName) || (!!firstToken && optionText.startsWith(firstToken));
   }
 
   function stocktakingOptionsForCurrentMember(field, value) {
@@ -788,7 +812,7 @@
     const memberName = String(state.formMemberSnapshot?.name || '').trim();
     const allOptions = uniqValues(fieldOptions(field));
     const matched = allOptions.filter((option) => stocktakingOptionMatchesMember(option, memberName));
-    return uniqValues([selected, ...(matched.length ? matched : allOptions)].filter(Boolean));
+    return uniqValues([selected, ...matched].filter(Boolean));
   }
 
   function schoolSelectHTML(field, value) {
@@ -810,7 +834,7 @@
         fieldName: 'School',
         placeholder: 'Select stocktaking column',
         footer,
-        extraAttrs: conditionalAttrsForPage('Stocktaking'),
+        extraAttrs: conditionalAttrsForPages(['Stocktaking', 'Current Orders', 'Shopping Cart']),
       }
     );
   }

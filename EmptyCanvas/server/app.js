@@ -1930,12 +1930,47 @@ function _uaIsUsefulStocktakingSchoolColumn(key = "") {
   return true;
 }
 
+function _uaColumnKeysFromOpenApiSchema(openApi = {}, tableName = "") {
+  const table = String(tableName || "").trim();
+  if (!table) return [];
+  const schemas = openApi?.definitions || openApi?.components?.schemas || {};
+  const normalizeSchemaName = (value) => _sbCanon(String(value || "").replace(/^public[._-]/i, ""));
+  const wanted = normalizeSchemaName(table);
+  for (const [schemaName, schema] of Object.entries(schemas || {})) {
+    const normalized = normalizeSchemaName(schemaName);
+    if (normalized !== wanted && !normalized.endsWith(wanted)) continue;
+    const props = schema?.properties || schema?.items?.properties || {};
+    const keys = Object.keys(props || {}).filter(Boolean);
+    if (keys.length) return keys;
+  }
+  return [];
+}
+
+async function _uaStocktakingColumnKeysFromOpenApi() {
+  try {
+    const openApi = await supabaseDb.request("/", {
+      headers: { Accept: "application/openapi+json" },
+    });
+    return _uaColumnKeysFromOpenApiSchema(openApi, _sbStocktakingTable());
+  } catch (error) {
+    console.warn("[user-access] failed to inspect stocktaking schema:", error?.message || error);
+    return [];
+  }
+}
+
 async function _uaStocktakingSchoolOptions() {
   if (!_sbStocktakingEnabled()) return [];
   try {
-    const rows = await supabaseDb.selectAll(_sbStocktakingTable(), { limit: 1 });
-    const row = Array.isArray(rows) ? rows[0] || {} : {};
-    return Object.keys(row || {})
+    let keys = [];
+    try {
+      const rows = await supabaseDb.selectAll(_sbStocktakingTable(), { limit: 1 });
+      const row = Array.isArray(rows) ? rows[0] || {} : {};
+      keys = Object.keys(row || {});
+    } catch (rowError) {
+      console.warn("[user-access] failed to sample stocktaking row:", rowError?.message || rowError);
+    }
+    if (!keys.length) keys = await _uaStocktakingColumnKeysFromOpenApi();
+    return Array.from(new Set(keys || []))
       .filter(_uaIsUsefulStocktakingSchoolColumn)
       .map((key) => ({ value: _uaTitleCaseLabel(key), column: key }))
       .sort((a, b) => String(a.value || "").localeCompare(String(b.value || "")));
