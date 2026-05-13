@@ -4087,7 +4087,8 @@ async function _sbInitOrderEditFromRows(req, orderIds = []) {
     else editOrderType = "Request Products";
   }
 
-  _setOrderDraftForType(req.session, editOrderType, { products: draft });
+  const editReason = String(draft.find((item) => String(item?.reason || "").trim())?.reason || "").trim();
+  _setOrderDraftForType(req.session, editOrderType, { products: draft, reason: editReason });
 
   const ADMIN_UNLOCK_TTL_MS = 10 * 60 * 1000;
   req.session.adminCreateOrderUnlockUntil = Date.now() + ADMIN_UNLOCK_TTL_MS;
@@ -4099,11 +4100,12 @@ async function _sbInitOrderEditFromRows(req, orderIds = []) {
     items: editItems,
     orderIdNumber: Number.isFinite(Number(orderGroupIdNumber)) ? Number(orderGroupIdNumber) : null,
     orderType: editOrderType || null,
+    reason: editReason || null,
   };
 
   await _saveSessionNow(req);
 
-  return { ok: true, count: draft.length, orderType: editOrderType || null, products: draft, source: "supabase" };
+  return { ok: true, count: draft.length, orderType: editOrderType || null, reason: editReason, products: draft, source: "supabase" };
 }
 
 async function _sbApplyOrderEditFromSession(req, cleanedProducts = [], orderType = "", qtySign = 1) {
@@ -13642,16 +13644,9 @@ app.get(
   (req, res) => {
     res.set("Cache-Control", "no-store");
     const orderType = String(req.query?.orderType || "").trim();
-    const requestedDraft = _getOrderDraftForType(req.session, orderType);
-    if (requestedDraft && Array.isArray(requestedDraft.products) && requestedDraft.products.length) {
-      return res.json(requestedDraft);
-    }
 
-    // Edit flow safety net:
-    // If the Operations Orders page initialized an edit session but the cart page
-    // requests a slightly different/missing orderType, return the active edit
-    // draft instead of an empty cart. This mirrors the old Current Orders edit
-    // behavior and avoids opening Shopping Cart with no products.
+    // Edit flow must win over any older normal cart draft with the same order type.
+    // Otherwise Shopping Cart can show stale products or lose the original Reason.
     const editCtx = req.session?.editingOrder;
     const editActive = editCtx &&
       typeof editCtx.expiresAt === "number" &&
@@ -13660,14 +13655,29 @@ app.get(
     if (editActive) {
       const editDraft = _getOrderDraftForType(req.session, editCtx.orderType);
       if (editDraft && Array.isArray(editDraft.products) && editDraft.products.length) {
-        return res.json(editDraft);
+        const reason = String(editDraft.reason || editCtx.reason || editDraft.products.find((p) => String(p?.reason || "").trim())?.reason || "").trim();
+        const products = reason
+          ? editDraft.products.map((p) => ({ ...p, reason: String(p?.reason || "").trim() || reason }))
+          : editDraft.products;
+        return res.json({ ...editDraft, products, reason });
       }
 
       const store = _getOrderDraftStore(req.session, editCtx.orderType);
       const firstDraft = Object.values(store || {}).find((draft) =>
         draft && Array.isArray(draft.products) && draft.products.length
       );
-      if (firstDraft) return res.json(firstDraft);
+      if (firstDraft) {
+        const reason = String(firstDraft.reason || editCtx.reason || firstDraft.products.find((p) => String(p?.reason || "").trim())?.reason || "").trim();
+        const products = reason
+          ? firstDraft.products.map((p) => ({ ...p, reason: String(p?.reason || "").trim() || reason }))
+          : firstDraft.products;
+        return res.json({ ...firstDraft, products, reason });
+      }
+    }
+
+    const requestedDraft = _getOrderDraftForType(req.session, orderType);
+    if (requestedDraft && Array.isArray(requestedDraft.products) && requestedDraft.products.length) {
+      return res.json(requestedDraft);
     }
 
     return res.json(requestedDraft || {});
@@ -13727,6 +13737,25 @@ app.post(
     return res.json({ ok: true, count: clean.length });
   },
 );
+app.post(
+  "/api/order-edit/cancel",
+  requireAuth,
+  requirePage("Create New Order"),
+  async (req, res) => {
+    try {
+      const editCtx = req.session?.editingOrder;
+      const orderType = String(req.body?.orderType || editCtx?.orderType || "").trim();
+      if (orderType) _clearOrderDraftForType(req.session, orderType);
+      delete req.session.editingOrder;
+      await _saveSessionNow(req);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("Failed to cancel order edit:", err?.message || err);
+      return res.status(500).json({ error: "Failed to cancel edit mode." });
+    }
+  },
+);
+
 app.delete(
   "/api/order-draft",
   requireAuth,
