@@ -13430,9 +13430,6 @@ app.post(
     }
 
     if (isRequestMaintenance) {
-      if (clean.length > 1) {
-        return res.status(400).json({ error: "Request Maintenance allows one machine only." });
-      }
       if (clean.some((p) => !p.schoolId)) {
         const resolvedSchool = await _resolveCurrentUserMaintenanceSchool(req);
         const fallbackSchoolId = String(resolvedSchool?.schoolId || "").trim();
@@ -13446,7 +13443,7 @@ app.post(
       // block Request Maintenance checkout because the UI does not ask the user
       // to choose a school on this page.
       if (clean.some((p) => !p.issueDescription)) {
-        return res.status(400).json({ error: "Each machine must include an Issue Description." });
+        return res.status(400).json({ error: "Each product must include an Issue Description." });
       }
     }
 
@@ -21558,9 +21555,6 @@ if (cleanedProducts.length === 0) {
 
 // Request Maintenance: Qty is not used; require Issue Description instead.
 if (_isRequestMaintenance) {
-  if (cleanedProducts.length > 1) {
-    return res.status(400).json({ success: false, message: "Request Maintenance allows one machine only." });
-  }
   if (cleanedProducts.some(p => !p.schoolId)) {
     const resolvedSchool = await _resolveCurrentUserMaintenanceSchool(req);
     const fallbackSchoolId = String(resolvedSchool?.schoolId || "").trim();
@@ -21578,7 +21572,7 @@ if (_isRequestMaintenance) {
   }
 
   // Normalize for Notion:
-  // - always store Qty as 1
+  // - always store Qty as 1 per selected product
   // - auto-fill Reason (page title) if missing
   for (const p of cleanedProducts) {
     p.quantity = 1;

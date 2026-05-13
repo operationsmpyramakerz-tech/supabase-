@@ -16,7 +16,7 @@
    * - Reason is collected ONCE per order (in the Order Summary card)
    * - The backend still expects `reason` on each item, so we copy the global reason
    *   into every cart item before saving/submitting.
-   * - Request Maintenance replaces Qty with Issue Description (saved per item).
+   * - Request Maintenance replaces Qty with Issue Description (saved per product).
    */
 
   // ---------------------------- DOM ----------------------------
@@ -79,8 +79,7 @@
   const WITHDRAW_PRODUCTS_KEY = normKey('Withdraw Products');
   const REQUEST_MAINTENANCE_KEY = normKey('Request Maintenance');
 
-  // Notion Products DB tag value to show in Request Maintenance
-  const MAINTENANCE_TAG_KEY = normKey('4/ Machines');
+  // Products used in Request Maintenance are now loaded from the full products catalog.
   const SPARE_PARTS_TAG_KEY = normKey('Spare parts');
 
   const ORDER_TYPE_META = {
@@ -100,7 +99,7 @@
     },
     [REQUEST_MAINTENANCE_KEY]: {
       icon: 'tool',
-      description: 'Report issues for machines and create a maintenance request quickly.',
+      description: 'Report issues for products and create a maintenance request quickly.',
       headingTitle: 'Request Maintenance',
       headingIcon: 'tool',
       themeClass: 'theme-request-maintenance',
@@ -189,7 +188,7 @@
     try {
       if (cartHeadEl) {
         cartHeadEl.innerHTML = maintenance
-          ? '<div>Machine</div><div>Issue Description</div><div>Action</div>'
+          ? '<div>Product</div><div>Issue Description</div><div>Action</div>'
           : '<div>Product</div><div>URL</div><div>Quantity</div><div>Total</div><div>Action</div>';
       }
     } catch {}
@@ -203,8 +202,8 @@
       if (expectedSpareFieldEl) expectedSpareFieldEl.style.display = 'none';
       if (componentLabelEl) {
         componentLabelEl.innerHTML = maintenance
-          ? 'Machine <span class="req-star">*</span>'
-          : 'Component <span class="req-star">*</span>';
+          ? 'Product <span class="req-star">*</span>'
+          : 'Product <span class="req-star">*</span>';
       }
     } catch {}
 
@@ -672,10 +671,7 @@
   }
 
   function getComponentsForSelect(type = selectedOrderType) {
-    // Request Maintenance should only show products tagged "4/ Machines".
-    if (isMaintenanceType(type)) {
-      return (Array.isArray(components) ? components : []).filter((c) => hasTag(c, MAINTENANCE_TAG_KEY));
-    }
+    // All order types, including Request Maintenance, use the full products catalog.
     return Array.isArray(components) ? components : [];
   }
 
@@ -963,7 +959,7 @@
     if (!activeType) return false;
 
     if (showLoader) {
-      renderLoadingState(isMaintenanceType(activeType) ? 'Loading machines...' : 'Loading components...');
+      renderLoadingState('Loading products...');
     }
 
     const ok = isMaintenanceType(activeType)
@@ -974,8 +970,8 @@
         'error',
         'Error',
         isMaintenanceType(activeType)
-          ? 'Failed to load maintenance lists. Please reload the page.'
-          : 'Failed to load components list. Please reload the page.',
+          ? 'Failed to load products list. Please reload the page.'
+          : 'Failed to load products list. Please reload the page.',
       );
       return false;
     }
@@ -1022,7 +1018,7 @@
     `;
   }
 
-  function renderLoadingState(text = isMaintenanceType() ? 'Loading machines...' : 'Loading components...') {
+  function renderLoadingState(text = 'Loading products...') {
     if (!cartItemsEl) return;
     cartItemsEl.innerHTML = `
       <div class="cart-loading" role="status" aria-live="polite">
@@ -1035,10 +1031,10 @@
   function syncUpdateCartButtonVisibility() {
     if (!updateCartBtn) return;
     const footerEl = updateCartBtn.closest('.cart-footer');
-    const hideForMaintenance = isMaintenanceType() && Array.isArray(cart) && cart.length > 0;
-    updateCartBtn.hidden = hideForMaintenance;
-    updateCartBtn.setAttribute('aria-hidden', hideForMaintenance ? 'true' : 'false');
-    if (footerEl) footerEl.style.display = hideForMaintenance ? 'none' : '';
+    const hideForMaintenance = false;
+    updateCartBtn.hidden = false;
+    updateCartBtn.setAttribute('aria-hidden', 'false');
+    if (footerEl) footerEl.style.display = '';
   }
 
   function createCardOpenAction(url) {
@@ -1114,7 +1110,7 @@
 
     cart.forEach((p, idx) => {
       const c = byId.get(String(p.id)) || null;
-      const name = c?.name || 'Unknown component';
+      const name = c?.name || 'Unknown product';
       const schoolName = schoolsById.get(String(p.schoolId || ''))?.name || '';
       const qty = normalizeQty(Number(p.quantity), MIN_QTY);
       const total = itemTotal({ id: p.id, quantity: qty });
@@ -1405,7 +1401,7 @@
     const r = maintenance ? deriveMaintenanceReason(issue) : String(globalReason || '').trim();
 
     if (!cleanId) {
-      toast('error', 'Missing field', maintenance ? 'Please choose a machine.' : 'Please choose a component.');
+      toast('error', 'Missing field', 'Please choose a product.');
       return false;
     }
 
@@ -1422,10 +1418,6 @@
       }
     }
 
-    if (maintenance && idx === -1 && Array.isArray(cart) && cart.length >= 1) {
-      toast('error', 'One machine only', 'Request Maintenance allows one machine only. Edit or remove the current machine first.');
-      return false;
-    }
     if (idx >= 0) {
       cart[idx].quantity = cleanQty;
       // Only overwrite the stored reason if the user already entered one.
@@ -1461,7 +1453,7 @@
     setModalOpen(false);
   }
 
-  function setModalLoading(loading, text = isMaintenanceType() ? 'Loading machines...' : 'Loading components...') {
+  function setModalLoading(loading, text = 'Loading products...') {
     const isOn = !!loading;
     try {
       if (qtyInputEl) qtyInputEl.disabled = isOn;
@@ -1494,11 +1486,6 @@
     if (addToCartBtn) addToCartBtn.textContent = 'Add';
 
     const maintenance = isMaintenanceType();
-    if (maintenance && Array.isArray(cart) && cart.length >= 1) {
-      toast('error', 'One machine only', 'Request Maintenance allows one machine only. Edit or remove the current machine first.');
-      return;
-    }
-
     if (qtyInputEl) qtyInputEl.value = '1';
     if (issueDescInputEl) issueDescInputEl.value = '';
     clearSelectValue(schoolSelectEl);
@@ -1540,7 +1527,7 @@
 
     readyPromise.then((ok) => {
       if (!ok) {
-        toast('error', 'Error', maintenance ? 'Failed to load maintenance lists. Please reload the page.' : 'Failed to load components list. Please reload the page.');
+        toast('error', 'Error', maintenance ? 'Failed to load products list. Please reload the page.' : 'Failed to load products list. Please reload the page.');
         closeModal();
         return;
       }
@@ -1607,7 +1594,7 @@
 
     readyPromise.then((ok) => {
       if (!ok) {
-        toast('error', 'Error', maintenance ? 'Failed to load maintenance lists. Please reload the page.' : 'Failed to load components list. Please reload the page.');
+        toast('error', 'Error', maintenance ? 'Failed to load products list. Please reload the page.' : 'Failed to load products list. Please reload the page.');
         closeModal();
         return;
       }
@@ -1703,8 +1690,8 @@
   function initComponentChoices() {
     return initChoicesSelect(componentSelectEl, {
       items: getComponentsForSelect(),
-      placeholderText: isMaintenanceType() ? 'Select machine...' : 'Select component...',
-      emptyText: isMaintenanceType() ? 'No machines available' : 'No components available',
+      placeholderText: 'Select product...',
+      emptyText: 'No products available',
     });
   }
 
@@ -1863,8 +1850,8 @@
         withdraw
           ? 'Please add at least one component to withdraw.'
           : maintenance
-            ? 'Please add at least one machine.'
-            : 'Please add at least one component.',
+            ? 'Please add at least one product.'
+            : 'Please add at least one product.',
       );
       return;
     }
@@ -1881,7 +1868,7 @@
       // Maintenance requires Issue Description per item
       const missing = cart.find((p) => !String(p.issueDescription || '').trim());
       if (missing) {
-        toast('error', 'Issue Description required', 'Please add an Issue Description for every machine in the cart.');
+        toast('error', 'Issue Description required', 'Please add an Issue Description for every product in the cart.');
         try { openModalForEdit(missing.id); } catch {}
         return;
       }
@@ -2068,7 +2055,7 @@
         ? await ensureMaintenanceModalReady()
         : await ensureComponentsReady();
       if (!ok) {
-        toast('error', 'Error', isMaintenanceType() ? 'Failed to load maintenance lists. Please reload the page.' : 'Failed to load components list. Please reload the page.');
+        toast('error', 'Error', isMaintenanceType() ? 'Failed to load products list. Please reload the page.' : 'Failed to load products list. Please reload the page.');
         return;
       }
 
@@ -2093,7 +2080,7 @@
       ? await ensureMaintenanceModalReady()
       : await ensureComponentsReady();
     if (!ok) {
-      toast('error', 'Error', isMaintenanceType() ? 'Failed to load maintenance lists. Please reload the page.' : 'Failed to load components list. Please reload the page.');
+      toast('error', 'Error', isMaintenanceType() ? 'Failed to load products list. Please reload the page.' : 'Failed to load products list. Please reload the page.');
       return;
     }
 

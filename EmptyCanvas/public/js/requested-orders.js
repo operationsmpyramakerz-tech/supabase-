@@ -2644,7 +2644,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       for (const it of items) {
-        const product = escapeHTML(it.productName || "Component");
+        const product = escapeHTML(it.productName || "Product");
         const qtyBase = baseQty(it);
 
         // For Not Started, we only display a received override if it was edited.

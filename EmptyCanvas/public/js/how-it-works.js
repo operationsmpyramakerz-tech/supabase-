@@ -428,8 +428,8 @@
           "note": "Switch the form into maintenance mode first."
         },
         {
-          "label": "Select the school and machine",
-          "note": "Maintenance requests allow one machine only in the cart."
+          "label": "Select the product",
+          "note": "Maintenance requests can include multiple products in the cart."
         },
         {
           "label": "Write the issue description",
@@ -1173,7 +1173,7 @@
         {
           title: 'Respect the maintenance limitation',
           body:
-            'Maintenance requests allow one machine only in the cart. Edit or remove the current item before adding another one.',
+            'Maintenance requests can include multiple products in the cart. Edit or remove the current item before adding another one.',
         },
         {
           title: 'Submit through the protected checkout',
@@ -1188,11 +1188,11 @@
       ],
       rules: [
         'Password is required at checkout for product requests and withdrawals.',
-        'Request Maintenance requires a school, an issue description, and only one machine in the cart.',
+        'Request Maintenance requires at least one product and an issue description for every selected product.',
         'Use edit mode for corrections to an existing order instead of submitting a duplicate order.',
         'The app keeps draft data so users can continue safely, but drafts should not replace final review before checkout.',
       ],
-      controls: ['Order type selector', 'Component search', 'Draft autosave', 'Password checkout', 'Protected edit mode'],
+      controls: ['Order type selector', 'Product search', 'Draft autosave', 'Password checkout', 'Protected edit mode'],
       keywords: ['new order', 'cart', 'draft', 'maintenance request', 'withdraw products', 'request products'],
     },
     {
