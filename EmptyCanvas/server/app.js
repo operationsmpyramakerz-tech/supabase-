@@ -27412,6 +27412,196 @@ app.post(
     }
   }
 );
+
+function _normalizeSVOrderActionIds(orderIds = []) {
+  return (Array.isArray(orderIds) ? orderIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
+}
+
+async function _verifySVOrderActionPassword(req, res) {
+  const pwd = String(req.body?.adminPassword || "").trim();
+  if (!pwd) {
+    res.status(400).json({ error: "adminPassword required" });
+    return false;
+  }
+  const ok = await verifyAdminPassword(pwd);
+  if (!ok) {
+    res.status(401).json({ error: "Invalid admin password" });
+    return false;
+  }
+  return true;
+}
+
+async function _invalidateSVOrderActionCaches(req = null) {
+  await clearSVOrdersRouteCaches(req).catch(() => {});
+  await _sbInvalidateOrdersCaches(req).catch(() => {});
+  await cacheDel("cache:api:orders:requested:v7").catch(() => {});
+}
+
+function _svRestoreStatusForApproval(approval) {
+  const label = String(_sbSVApprovalLabel ? _sbSVApprovalLabel(approval) : approval || "").trim().toLowerCase();
+  return label === "approved" || label === "rejected" ? "In progress" : "Under Supervision";
+}
+
+async function _sbGetAllowedSVActionRows(req, ids = []) {
+  const rows = [];
+  for (const id of ids) {
+    const { row, allowed } = await _sbSVOrderRowIfAllowed(req, id);
+    if (!row) {
+      const err = new Error("Order not found");
+      err.status = 404;
+      throw err;
+    }
+    if (!allowed) {
+      const err = new Error("Not allowed");
+      err.status = 403;
+      throw err;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function _notionGetAllowedSVActionPages(req, ids = []) {
+  const visibleIds = await getVisibleTeamMemberIdsForSV(req);
+  if (!visibleIds.length) {
+    const err = new Error("Not allowed");
+    err.status = 403;
+    throw err;
+  }
+
+  const teamsProp = await detectOrderTeamsMembersPropName();
+  const pages = await mapWithConcurrency(ids, 3, async (id) => notion.pages.retrieve({ page_id: id }));
+  const visibleSet = new Set(visibleIds.map((id) => String(id || "").replace(/-/g, "")));
+
+  for (const page of pages) {
+    if (!page) {
+      const err = new Error("Order not found");
+      err.status = 404;
+      throw err;
+    }
+    const rel = Array.isArray(page?.properties?.[teamsProp]?.relation) ? page.properties[teamsProp].relation : [];
+    const allowed = rel.some((r) => visibleSet.has(String(r?.id || "").replace(/-/g, "")));
+    if (!allowed) {
+      const err = new Error("Not allowed");
+      err.status = 403;
+      throw err;
+    }
+  }
+  return pages;
+}
+
+function _notionOptionValueForMeta(meta, desired) {
+  const type = meta?.type === "status" ? "status" : "select";
+  const options = type === "status" ? (meta?.status?.options || []) : (meta?.select?.options || []);
+  const wanted = String(desired || "").trim();
+  const exact = (Array.isArray(options) ? options : []).find((o) => norm(o?.name) === norm(wanted));
+  const partial = (Array.isArray(options) ? options : []).find((o) => norm(o?.name).includes(norm(wanted)) || norm(wanted).includes(norm(o?.name)));
+  const name = exact?.name || partial?.name || wanted;
+  return type === "status" ? { status: { name } } : { select: { name } };
+}
+
+async function _notionUpdateSVActionPages(pages = [], action = "archive") {
+  const dbProps = await getOrdersDBProps();
+  const statusProp = await detectStatusPropName();
+  const approvalProp = await detectSVApprovalPropName();
+  const statusMeta = dbProps?.[statusProp] || null;
+  const approvalMeta = dbProps?.[approvalProp] || null;
+
+  await Promise.all((pages || []).map(async (page) => {
+    const props = page?.properties || {};
+    const patch = {};
+
+    if (action === "archive") {
+      patch[statusProp] = _notionOptionValueForMeta(statusMeta || props?.[statusProp], "Archive");
+    } else if (action === "unarchive") {
+      const approvalObj = props?.[approvalProp]?.select || props?.[approvalProp]?.status || null;
+      const approval = approvalObj?.name || "Not Started";
+      patch[statusProp] = _notionOptionValueForMeta(statusMeta || props?.[statusProp], _svRestoreStatusForApproval(approval));
+    } else if (action === "edit") {
+      patch[approvalProp] = _notionOptionValueForMeta(approvalMeta || props?.[approvalProp], "Not Started");
+      patch[statusProp] = _notionOptionValueForMeta(statusMeta || props?.[statusProp], "Under Supervision");
+    }
+
+    return notion.pages.update({ page_id: page.id, archived: false, properties: patch });
+  }));
+}
+
+app.post("/api/sv-orders/actions/archive", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const ids = _normalizeSVOrderActionIds(req.body?.orderIds);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!await _verifySVOrderActionPassword(req, res)) return;
+
+    if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+      await _sbGetAllowedSVActionRows(req, ids);
+      await _sbUpdateOrdersByIds(ids, { status: "Archive" });
+      await _invalidateSVOrderActionCaches(req);
+      return res.json({ ok: true, action: "archive", status: "Archive", source: "supabase" });
+    }
+
+    const pages = await _notionGetAllowedSVActionPages(req, ids);
+    await _notionUpdateSVActionPages(pages, "archive");
+    await _invalidateSVOrderActionCaches(req);
+    return res.json({ ok: true, action: "archive" });
+  } catch (e) {
+    console.error("SV archive action error:", e?.body || e);
+    return res.status(e?.status || 500).json({ error: e?.message || "Failed to archive order" });
+  }
+});
+
+app.post("/api/sv-orders/actions/unarchive", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const ids = _normalizeSVOrderActionIds(req.body?.orderIds);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!await _verifySVOrderActionPassword(req, res)) return;
+
+    if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+      const rows = await _sbGetAllowedSVActionRows(req, ids);
+      await Promise.all(rows.map((row) => {
+        const id = String(_sbGet(row, ["id", "ID"]) || "").trim();
+        const approval = _sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]);
+        return supabaseDb.updateById(_sbOrdersTable(), id, { status: _svRestoreStatusForApproval(approval) });
+      }));
+      await _invalidateSVOrderActionCaches(req);
+      return res.json({ ok: true, action: "unarchive", source: "supabase" });
+    }
+
+    const pages = await _notionGetAllowedSVActionPages(req, ids);
+    await _notionUpdateSVActionPages(pages, "unarchive");
+    await _invalidateSVOrderActionCaches(req);
+    return res.json({ ok: true, action: "unarchive" });
+  } catch (e) {
+    console.error("SV unarchive action error:", e?.body || e);
+    return res.status(e?.status || 500).json({ error: e?.message || "Failed to unarchive order" });
+  }
+});
+
+app.post("/api/sv-orders/actions/edit", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const ids = _normalizeSVOrderActionIds(req.body?.orderIds);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!await _verifySVOrderActionPassword(req, res)) return;
+
+    if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+      await _sbGetAllowedSVActionRows(req, ids);
+      await _sbUpdateOrdersByIds(ids, { sv_approval: "Not Started", status: "Under Supervision" });
+      await _invalidateSVOrderActionCaches(req);
+      return res.json({ ok: true, action: "edit", approval: "Not Started", status: "Under Supervision", source: "supabase" });
+    }
+
+    const pages = await _notionGetAllowedSVActionPages(req, ids);
+    await _notionUpdateSVActionPages(pages, "edit");
+    await _invalidateSVOrderActionCaches(req);
+    return res.json({ ok: true, action: "edit", approval: "Not Started", status: "Under Supervision" });
+  } catch (e) {
+    console.error("SV edit action error:", e?.body || e);
+    return res.status(e?.status || 500).json({ error: e?.message || "Failed to return order to Not Started" });
+  }
+});
+
 const generateExpensePDF = require("./pdfGenerator");
 
 app.post("/api/expenses/export/pdf", async (req, res) => {
