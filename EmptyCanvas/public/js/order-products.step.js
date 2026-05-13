@@ -284,6 +284,19 @@
     } catch {}
   }
 
+  function goToCurrentOrdersFromEdit() {
+    cancelEditModeOnLeave();
+    try {
+      const u = new URL('/orders', window.location.origin);
+      u.searchParams.set('tab', 'all');
+      u.searchParams.set('_fresh', '1');
+      u.searchParams.set('_refresh', String(Date.now()));
+      window.location.href = u.toString();
+    } catch {
+      window.location.href = `/orders?tab=all&_fresh=1&_refresh=${Date.now()}`;
+    }
+  }
+
   // ---------------------------- Order Type (tabs) ----------------------------
   const ORDER_TYPE_STORAGE_KEY = 'shopping_cart:last_order_type:v1';
   const ORDER_TYPE_STORAGE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -588,8 +601,8 @@
     // Apply UI copy for this order type
     applyOrderTypeUi(v);
 
-    // In edit mode, we don't want a back button to the order type step.
-    if (cartBackBtn) cartBackBtn.style.display = isEditMode ? 'none' : '';
+    // In edit mode, the back button returns to Current Orders instead of the order type step.
+    if (cartBackBtn) cartBackBtn.style.display = '';
     if (window.feather) feather.replace();
   }
 
@@ -2331,6 +2344,10 @@
     checkoutBtn?.addEventListener('click', checkout);
 
     if (isEditMode) {
+      cartBackBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        goToCurrentOrdersFromEdit();
+      });
       window.addEventListener('pagehide', cancelEditModeOnLeave);
       window.addEventListener('beforeunload', cancelEditModeOnLeave);
     }
