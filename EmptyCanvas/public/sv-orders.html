@@ -153,6 +153,26 @@
   <!-- ===================== S.V ORDER DETAILS MODAL ===================== -->
 <div id="svOrderModal" class="co-modal-overlay" aria-hidden="true">
   <div class="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="svModalTitle">
+    <div class="co-modal-more" id="svModalMoreWrap" hidden>
+      <button type="button" class="co-modal-more-btn" id="svModalMoreBtn" aria-label="Order review actions" aria-haspopup="menu" aria-expanded="false">
+        <span class="co-modal-more-dots" aria-hidden="true">⋮</span>
+      </button>
+      <div class="co-modal-more-panel" id="svModalMorePanel" role="menu" aria-label="Order review actions" hidden>
+        <button type="button" class="co-modal-more-item" id="svModalActionEdit" role="menuitem" data-sv-order-action="edit" hidden>
+          <i data-feather="edit-2"></i>
+          <span>Edit</span>
+        </button>
+        <button type="button" class="co-modal-more-item" id="svModalActionArchive" role="menuitem" data-sv-order-action="archive" hidden>
+          <i data-feather="archive"></i>
+          <span>Archive</span>
+        </button>
+        <button type="button" class="co-modal-more-item" id="svModalActionUnarchive" role="menuitem" data-sv-order-action="unarchive" hidden>
+          <i data-feather="rotate-ccw"></i>
+          <span>UnArchive</span>
+        </button>
+      </div>
+    </div>
+
     <button type="button" class="co-modal-close" id="svModalClose" aria-label="Close order details">
       <i data-feather="x"></i>
     </button>
@@ -186,6 +206,41 @@
   </div>
 </div>
 
+<!-- ===================== ORDERS REVIEW ADMIN PASSWORD (SUB-MODAL) ===================== -->
+<div id="svAdminPwdModal" class="co-submodal-overlay req-edit-modal" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="svAdminPwdTitle" aria-describedby="svAdminPwdSub">
+    <button type="button" class="co-submodal-close" id="svAdminPwdClose" aria-label="Close admin password dialog">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header req-edit-header">
+      <div class="req-edit-icon" id="svAdminPwdIcon" aria-hidden="true"><i data-feather="shield"></i></div>
+      <div>
+        <div class="co-submodal-title" id="svAdminPwdTitle">Admin password</div>
+        <div class="co-submodal-sub" id="svAdminPwdSub">Enter admin password to continue.</div>
+      </div>
+    </div>
+
+    <div class="co-submodal-body">
+      <label class="co-submodal-label" for="svAdminPwdInput">Admin password</label>
+      <input
+        class="co-submodal-input"
+        id="svAdminPwdInput"
+        type="password"
+        inputmode="text"
+        autocomplete="current-password"
+        placeholder="••••••••"
+      />
+      <div class="co-submodal-error" id="svAdminPwdError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="svAdminPwdCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="svAdminPwdConfirm">Continue</button>
+    </div>
+  </div>
+</div>
+
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=bidi-mixed-v1"></script>
   <script>
@@ -205,6 +260,6 @@
     })();
   </script>
   <!-- Controller -->
-  <script src="/js/sv-orders.js?v=maintenance-issue-ui-v1"></script>
+  <script src="/js/sv-orders.js?v=review-actions-menu-v1"></script>
 </body>
 </html>
