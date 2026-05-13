@@ -109,6 +109,26 @@
     }
   }
 
+  function clearAllEditTransfer() {
+    for (const storage of editStorageAreas()) {
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < storage.length; i += 1) {
+          const key = storage.key(i) || '';
+          if (
+            key === 'shopping_cart:edit_pending:v2' ||
+            key === 'shopping_cart:edit_target_type:v1' ||
+            key.startsWith('shopping_cart:edit_payload:v2:') ||
+            key.startsWith('shopping_cart:edit_fallback:v1:')
+          ) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((key) => storage.removeItem(key));
+      } catch {}
+    }
+  }
+
   function hasFreshEditTransfer() {
     const editKey = readUrlParam('editKey');
     if (editKey) {
@@ -237,6 +257,32 @@
   }
 
   const isEditMode = readUrlParam('edit') === '1' || hasFreshEditTransfer();
+  let editCheckoutCommitted = false;
+  let editCancelSent = false;
+
+  function cancelEditModeOnLeave() {
+    if (!isEditMode || editCheckoutCommitted || editCancelSent) return;
+    editCancelSent = true;
+    clearAllEditTransfer();
+
+    const payload = JSON.stringify({ orderType: selectedOrderType || readOrderTypeFromEditTransfer() || readOrderTypeFromUrl() || null });
+    try {
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/order-edit/cancel', blob);
+        return;
+      }
+    } catch {}
+
+    try {
+      fetch('/api/order-edit/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  }
 
   // ---------------------------- Order Type (tabs) ----------------------------
   const ORDER_TYPE_STORAGE_KEY = 'shopping_cart:last_order_type:v1';
@@ -1010,7 +1056,11 @@
       const res = await fetch(buildDraftUrl(orderType));
       if (!res.ok) return { cart: fallbackCart };
       const d = await res.json();
-      const serverCart = normalizeDraftItems(d?.products);
+      const serverReason = meaningfulEditReason(d?.reason);
+      const serverCart = normalizeDraftItems(d?.products).map((item) => ({
+        ...item,
+        reason: meaningfulEditReason(item.reason) || serverReason,
+      }));
       return {
         cart: serverCart.length ? mergeMissingReasonsFromEditTransfer(serverCart, fallbackCart) : fallbackCart,
       };
@@ -2182,6 +2232,9 @@
         throw new Error(data?.message || 'Failed to submit order.');
       }
 
+      editCheckoutCommitted = true;
+      clearAllEditTransfer();
+
       toast(
         'success',
         isEditMode
@@ -2273,6 +2326,11 @@
     });
 
     checkoutBtn?.addEventListener('click', checkout);
+
+    if (isEditMode) {
+      window.addEventListener('pagehide', cancelEditModeOnLeave);
+      window.addEventListener('beforeunload', cancelEditModeOnLeave);
+    }
 
     // Pressing Enter in password triggers checkout
     passwordInput?.addEventListener('keydown', (e) => {
