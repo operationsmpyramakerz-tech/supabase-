@@ -22,6 +22,23 @@
   // Modal
   const modalOverlay = document.getElementById("svOrderModal");
   const modalCloseBtn = document.getElementById("svModalClose");
+  const modalMoreWrap = document.getElementById("svModalMoreWrap");
+  const modalMoreBtn = document.getElementById("svModalMoreBtn");
+  const modalMorePanel = document.getElementById("svModalMorePanel");
+  const modalActionEditBtn = document.getElementById("svModalActionEdit");
+  const modalActionArchiveBtn = document.getElementById("svModalActionArchive");
+  const modalActionUnarchiveBtn = document.getElementById("svModalActionUnarchive");
+
+  const adminPwdModal = document.getElementById("svAdminPwdModal");
+  const adminPwdCloseBtn = document.getElementById("svAdminPwdClose");
+  const adminPwdCancelBtn = document.getElementById("svAdminPwdCancel");
+  const adminPwdConfirmBtn = document.getElementById("svAdminPwdConfirm");
+  const adminPwdInput = document.getElementById("svAdminPwdInput");
+  const adminPwdError = document.getElementById("svAdminPwdError");
+  const adminPwdTitle = document.getElementById("svAdminPwdTitle");
+  const adminPwdSub = document.getElementById("svAdminPwdSub");
+  const adminPwdIcon = document.getElementById("svAdminPwdIcon");
+
   const modalEls = {
     title: document.getElementById("svModalTitle"),
     sub: document.getElementById("svModalSub"),
@@ -39,6 +56,11 @@
     totalPrice: modalEls.totalPrice?.closest?.('.co-meta-row') || null,
   };
   const modalReasonLabel = modalRows.reason?.querySelector?.('span') || null;
+
+  let activeGroup = null;
+  let adminPwdLastFocusEl = null;
+  let pendingSvAction = null;
+  let pendingSvActionIds = [];
 
   // ===== Helpers =====
   const qs = new URLSearchParams(location.search);
@@ -138,7 +160,7 @@
         sessionStorage.removeItem(getSvCacheKey(tab));
         return;
       }
-      ["not-started", "approved", "rejected", "all"].forEach((key) => {
+      ["not-started", "approved", "rejected", "archive", "all"].forEach((key) => {
         sessionStorage.removeItem(getSvCacheKey(key));
       });
     } catch {}
@@ -668,6 +690,253 @@
   const toastOK  = (m) => (window.toast ? window.toast.success(m) : console.log("[OK]", m));
   const toastERR = (m) => (window.toast ? window.toast.error(m)   : console.error("[ERR]", m));
 
+  const SV_ORDER_ACTION_CONFIG = {
+    edit: {
+      title: "Edit review decision",
+      sub: "Enter admin password to return this order to Not Started.",
+      confirm: "Return to Not Started",
+      loading: "Updating...",
+      icon: "edit-2",
+      endpoint: "/api/sv-orders/actions/edit",
+      success: "Order returned to Not Started.",
+    },
+    archive: {
+      title: "Archive order",
+      sub: "Enter admin password to move this order to Archive.",
+      confirm: "Archive",
+      loading: "Archiving...",
+      icon: "archive",
+      endpoint: "/api/sv-orders/actions/archive",
+      success: "Order moved to Archive.",
+    },
+    unarchive: {
+      title: "UnArchive order",
+      sub: "Enter admin password to restore this order from Archive.",
+      confirm: "UnArchive",
+      loading: "Restoring...",
+      icon: "rotate-ccw",
+      endpoint: "/api/sv-orders/actions/unarchive",
+      success: "Order restored from Archive.",
+    },
+  };
+
+  function svActionConfig(action) {
+    return SV_ORDER_ACTION_CONFIG[action] || SV_ORDER_ACTION_CONFIG.archive;
+  }
+
+  function groupOrderIds(group) {
+    const ids = (group?.products || []).map((item) => item?.id).filter(Boolean);
+    return Array.from(new Set(ids.map((id) => String(id || "").trim()).filter(Boolean)));
+  }
+
+  function setAdminPwdError(message) {
+    if (!adminPwdError) return;
+    adminPwdError.textContent = String(message || "");
+  }
+
+  function isAdminPwdOpen() {
+    return !!(adminPwdModal && adminPwdModal.classList.contains("is-open"));
+  }
+
+  function closeSvMoreMenu() {
+    if (!modalMorePanel) return;
+    modalMorePanel.hidden = true;
+    if (modalMoreBtn) modalMoreBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function openSvMoreMenu() {
+    if (!modalMorePanel) return;
+    modalMorePanel.hidden = false;
+    if (modalMoreBtn) modalMoreBtn.setAttribute("aria-expanded", "true");
+    if (window.feather) window.feather.replace();
+  }
+
+  function toggleSvMoreMenu() {
+    if (!modalMorePanel) return;
+    if (modalMorePanel.hidden) openSvMoreMenu();
+    else closeSvMoreMenu();
+  }
+
+  function updateSvActionsMenu(group = activeGroup) {
+    if (!modalMoreWrap) return;
+    const archived = TAB === "archive" || !!group?.isArchived || (group?.products || []).some((item) => isArchiveStatus(item?.status));
+    const approval = approvalKey(group?.approval || "Not Started");
+
+    const showEdit = !archived && (approval === "approved" || approval === "rejected" || TAB === "approved" || TAB === "rejected");
+    const showArchive = !archived && (TAB === "not-started" || TAB === "approved" || TAB === "rejected");
+    const showUnarchive = archived || TAB === "archive";
+    const hasAny = showEdit || showArchive || showUnarchive;
+
+    modalMoreWrap.hidden = !hasAny;
+    if (!hasAny) closeSvMoreMenu();
+    if (modalActionEditBtn) modalActionEditBtn.hidden = !showEdit;
+    if (modalActionArchiveBtn) modalActionArchiveBtn.hidden = !showArchive;
+    if (modalActionUnarchiveBtn) modalActionUnarchiveBtn.hidden = !showUnarchive;
+  }
+
+  function setAdminPwdModalForAction(action) {
+    const cfg = svActionConfig(action);
+    if (adminPwdTitle) adminPwdTitle.textContent = cfg.title;
+    if (adminPwdSub) adminPwdSub.textContent = cfg.sub;
+    if (adminPwdConfirmBtn) {
+      adminPwdConfirmBtn.textContent = cfg.confirm;
+      adminPwdConfirmBtn.classList.toggle("ro-action-btn--danger", action === "archive");
+      adminPwdConfirmBtn.classList.toggle("ro-action-btn--dark", action !== "archive");
+    }
+    if (adminPwdIcon) {
+      adminPwdIcon.classList.toggle("req-edit-icon--danger", action === "archive");
+      adminPwdIcon.innerHTML = `<i data-feather="${escapeHTML(cfg.icon)}"></i>`;
+    }
+    if (window.feather) window.feather.replace();
+  }
+
+  function openAdminPasswordModal(action, orderIds) {
+    const cleanIds = (Array.isArray(orderIds) ? orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    if (!cleanIds.length) return false;
+
+    pendingSvAction = SV_ORDER_ACTION_CONFIG[action] ? action : "archive";
+    pendingSvActionIds = cleanIds;
+
+    if (!adminPwdModal || !adminPwdInput || !adminPwdConfirmBtn || !adminPwdCancelBtn) {
+      const cfg = svActionConfig(pendingSvAction);
+      const password = window.prompt(`${cfg.title}\nEnter admin password:`);
+      if (password === null) return false;
+      runSvAdminAction(pendingSvAction, cleanIds, String(password || "").trim());
+      return true;
+    }
+
+    setAdminPwdError("");
+    setAdminPwdModalForAction(pendingSvAction);
+    adminPwdInput.value = "";
+    adminPwdConfirmBtn.disabled = false;
+    adminPwdCancelBtn.disabled = false;
+    if (adminPwdCloseBtn) adminPwdCloseBtn.disabled = false;
+
+    adminPwdLastFocusEl = document.activeElement;
+    adminPwdModal.hidden = false;
+    adminPwdModal.classList.add("is-open");
+    adminPwdModal.setAttribute("aria-hidden", "false");
+
+    window.requestAnimationFrame(() => {
+      try { adminPwdInput.focus(); } catch {}
+    });
+    return true;
+  }
+
+  function closeAdminPasswordModal(opts = {}) {
+    const { restoreFocus = true } = opts || {};
+    if (!adminPwdModal || !isAdminPwdOpen()) return;
+    adminPwdModal.classList.remove("is-open");
+    adminPwdModal.setAttribute("aria-hidden", "true");
+    adminPwdModal.hidden = true;
+    pendingSvAction = null;
+    pendingSvActionIds = [];
+    setAdminPwdError("");
+
+    if (restoreFocus && adminPwdLastFocusEl && typeof adminPwdLastFocusEl.focus === "function") {
+      try { adminPwdLastFocusEl.focus(); } catch {}
+    }
+  }
+
+  async function runSvAdminAction(action, orderIds, adminPassword) {
+    const cfg = svActionConfig(action);
+    const pwd = String(adminPassword || "").trim();
+    if (!pwd) throw new Error("Password is required.");
+
+    const res = await fetch(cfg.endpoint, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderIds, adminPassword: pwd }),
+    });
+
+    if (res.status === 401) {
+      const err = new Error("Wrong password. Please try again.");
+      err.status = 401;
+      throw err;
+    }
+    if (res.status === 403) {
+      const data = await res.json().catch(() => ({}));
+      const err = new Error(data?.error || "You are not allowed to perform this action.");
+      err.status = 403;
+      throw err;
+    }
+    if (res.status === 404) {
+      const err = new Error("Order not found.");
+      err.status = 404;
+      throw err;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const err = new Error(data?.error || `Failed to ${action} order.`);
+      err.status = res.status;
+      throw err;
+    }
+    return await res.json().catch(() => ({}));
+  }
+
+  async function submitAdminPasswordAction() {
+    const action = SV_ORDER_ACTION_CONFIG[pendingSvAction] ? pendingSvAction : "archive";
+    const cfg = svActionConfig(action);
+    const ids = pendingSvActionIds.slice();
+    if (!ids.length) {
+      closeAdminPasswordModal();
+      return;
+    }
+
+    const pwd = String(adminPwdInput?.value || "").trim();
+    if (!pwd) {
+      setAdminPwdError("Password is required.");
+      try { adminPwdInput?.focus(); } catch {}
+      return;
+    }
+
+    setAdminPwdError("");
+    if (adminPwdConfirmBtn) {
+      adminPwdConfirmBtn.disabled = true;
+      adminPwdConfirmBtn.dataset.prevText = adminPwdConfirmBtn.textContent || "";
+      adminPwdConfirmBtn.textContent = cfg.loading || "Working...";
+    }
+    if (adminPwdCancelBtn) adminPwdCancelBtn.disabled = true;
+    if (adminPwdCloseBtn) adminPwdCloseBtn.disabled = true;
+
+    try {
+      await runSvAdminAction(action, ids, pwd);
+      clearSvCache();
+      destroyPopover();
+      closeSvMoreMenu();
+      closeAdminPasswordModal({ restoreFocus: false });
+      closeModal();
+      toastOK(cfg.success);
+
+      if (action === "edit") {
+        TAB = "not-started";
+        setActiveTab();
+        updateSvToolbarUrl();
+        await loadList({ tab: TAB, force: true });
+      } else {
+        await loadList({ tab: TAB, force: true });
+      }
+    } catch (err) {
+      console.error(err);
+      setAdminPwdError(err?.message || `Failed to ${action} order.`);
+      if (err?.status === 401 && adminPwdInput) {
+        adminPwdInput.value = "";
+        try { adminPwdInput.focus(); } catch {}
+      }
+    } finally {
+      if (adminPwdConfirmBtn) {
+        adminPwdConfirmBtn.disabled = false;
+        adminPwdConfirmBtn.textContent = cfg.confirm || "Continue";
+      }
+      if (adminPwdCancelBtn) adminPwdCancelBtn.disabled = false;
+      if (adminPwdCloseBtn) adminPwdCloseBtn.disabled = false;
+      setAdminPwdModalForAction(action);
+    }
+  }
+
   function normalizeApproval(raw) {
     const s = norm(raw).replace(/[_]+/g, " ");
     if (s === "approved") return "Approved";
@@ -1000,16 +1269,19 @@
 
   function closeModal() {
     if (!modalOverlay) return;
+    closeSvMoreMenu();
     modalOverlay.classList.remove("is-open");
     modalOverlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("co-modal-open");
     modalOverlay.removeAttribute("data-group-id");
+    activeGroup = null;
     if (lastFocusEl && typeof lastFocusEl.focus === "function") lastFocusEl.focus();
   }
 
   function renderModal(group) {
     if (!modalOverlay || !group) return;
 
+    activeGroup = group;
     modalOverlay.dataset.groupId = group.groupId;
 
     const approval = group.approval || "Not Started";
@@ -1121,6 +1393,7 @@
       }
     }
 
+    updateSvActionsMenu(group);
     if (window.feather) window.feather.replace();
   }
 
@@ -1665,6 +1938,49 @@ if (tabsWrap) {
 
     if (modalCloseBtn) modalCloseBtn.addEventListener("click", closeModal);
 
+    modalMoreBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSvMoreMenu();
+    });
+
+    modalMorePanel?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-sv-order-action]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const action = String(btn.getAttribute("data-sv-order-action") || "").trim();
+      const ids = groupOrderIds(activeGroup);
+      if (!SV_ORDER_ACTION_CONFIG[action] || !ids.length) return;
+      closeSvMoreMenu();
+      openAdminPasswordModal(action, ids);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!modalMoreWrap || !modalMorePanel || modalMorePanel.hidden) return;
+      if (modalMoreWrap.contains(e.target)) return;
+      closeSvMoreMenu();
+    });
+
+    adminPwdConfirmBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      submitAdminPasswordAction();
+    });
+    adminPwdCancelBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeAdminPasswordModal();
+    });
+    adminPwdCloseBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeAdminPasswordModal();
+    });
+    adminPwdInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitAdminPasswordAction();
+      }
+    });
+
     if (modalOverlay) {
       // Click outside to close
       modalOverlay.addEventListener("click", (e) => {
@@ -1706,6 +2022,16 @@ if (tabsWrap) {
     // Escape closes open overlays
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (isAdminPwdOpen()) {
+        e.preventDefault();
+        closeAdminPasswordModal();
+        return;
+      }
+      if (modalMorePanel && !modalMorePanel.hidden) {
+        e.preventDefault();
+        closeSvMoreMenu();
+        return;
+      }
       if (typeFilterPanel && !typeFilterPanel.hidden) {
         closeTypeFilterMenu();
         return;
