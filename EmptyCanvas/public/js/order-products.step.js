@@ -752,16 +752,35 @@
       .filter((p) => p.id);
   }
 
+  function loadEditFallbackDraft(orderType = selectedOrderType) {
+    try {
+      if (!isEditMode) return [];
+      const keyType = String(orderType || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'default';
+      const raw = sessionStorage.getItem(`shopping_cart:edit_fallback:v1:${keyType}`);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      const ts = Number(parsed?.ts || 0);
+      if (ts && Date.now() - ts > 30 * 60 * 1000) {
+        sessionStorage.removeItem(`shopping_cart:edit_fallback:v1:${keyType}`);
+        return [];
+      }
+      return normalizeDraftItems(parsed?.products);
+    } catch {
+      return [];
+    }
+  }
+
   async function loadDraft(orderType = selectedOrderType) {
     try {
       const res = await fetch(buildDraftUrl(orderType));
-      if (!res.ok) return { cart: [] };
+      if (!res.ok) return { cart: loadEditFallbackDraft(orderType) };
       const d = await res.json();
+      const serverCart = normalizeDraftItems(d?.products);
       return {
-        cart: normalizeDraftItems(d?.products),
+        cart: serverCart.length ? serverCart : loadEditFallbackDraft(orderType),
       };
     } catch {
-      return { cart: [] }; // ignore
+      return { cart: loadEditFallbackDraft(orderType) }; // ignore
     }
   }
 

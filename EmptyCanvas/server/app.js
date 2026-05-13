@@ -4089,7 +4089,9 @@ async function _sbInitOrderEditFromRows(req, orderIds = []) {
     orderType: editOrderType || null,
   };
 
-  return { ok: true, count: draft.length, orderType: editOrderType || null, source: "supabase" };
+  await _saveSessionNow(req);
+
+  return { ok: true, count: draft.length, orderType: editOrderType || null, products: draft, source: "supabase" };
 }
 
 async function _sbApplyOrderEditFromSession(req, cleanedProducts = [], orderType = "", qtySign = 1) {
@@ -6080,6 +6082,13 @@ function _getOrderDraftStore(session, preferredOrderType = "") {
   session.orderDrafts = store;
   if (legacyDraft) delete session.orderDraft;
   return store;
+}
+
+function _saveSessionNow(req) {
+  return new Promise((resolve, reject) => {
+    if (!req || !req.session || typeof req.session.save !== "function") return resolve();
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
 }
 
 function _getOrderDraftForType(session, orderType = "") {
@@ -17439,10 +17448,14 @@ app.post(
   requirePage("Requested Orders"),
   async (req, res) => {
     try {
-      const { orderIds } = req.body || {};
+      const { orderIds, adminPassword } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+      const adminOk = await verifyAdminPassword(pwd);
+      if (!adminOk) return res.status(401).json({ error: "Invalid admin password" });
 
       const ids = orderIds
         .map((x) => String(x || "").trim())
@@ -22455,7 +22468,8 @@ app.post(
         orderType: editOrderType || null,
       };
 
-      return res.json({ ok: true, count: draft.length, orderType: editOrderType || null });
+      await _saveSessionNow(req);
+      return res.json({ ok: true, count: draft.length, orderType: editOrderType || null, products: draft });
     } catch (e) {
       console.error("edit init error:", e?.body || e);
       return res.status(500).json({ error: "Failed to init edit" });

@@ -7093,7 +7093,6 @@ body.sidebar-mini .sidebar-footer .account-mini .label{
 }
 
 /* Current Orders compact cards: the order reason stays inside the detail modal only. */
-.co-card .co-createdby{ display:none !important; }
 .co-card .co-thumb--order-type svg{ width:26px; height:26px; }
 @media (max-width: 520px){
   .co-card .co-thumb--order-type svg{ width:24px; height:24px; }
@@ -7197,4 +7196,76 @@ body:not(.order-modal-fit-screen) .co-item-status{
   body.order-modal-fit-screen .co-modal-dialog.has-edit-action .co-modal-status{
     padding-right:230px;
   }
+}
+
+/* Operations Orders modal: compact actions menu */
+.co-modal-more{
+  position:absolute;
+  top:14px;
+  right:76px;
+  z-index:8;
+}
+.co-modal-more-btn{
+  width:44px;
+  height:44px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:18px;
+  background:#fff;
+  color:#071022;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  box-shadow:0 18px 36px rgba(15,23,42,.10);
+}
+.co-modal-more-btn svg{
+  width:20px;
+  height:20px;
+  stroke-width:2.5;
+}
+.co-modal-more-panel{
+  position:absolute;
+  top:52px;
+  right:0;
+  min-width:178px;
+  padding:8px;
+  border-radius:18px;
+  border:1px solid rgba(15,23,42,.08);
+  background:#fff;
+  box-shadow:0 22px 46px rgba(15,23,42,.16);
+  z-index:20;
+}
+.co-modal-more-panel[hidden]{ display:none !important; }
+.co-modal-more-item{
+  width:100%;
+  min-height:42px;
+  border:0;
+  border-radius:14px;
+  background:transparent;
+  color:#071022;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 12px;
+  font-weight:900;
+  font-size:13px;
+  cursor:pointer;
+  text-align:left;
+}
+.co-modal-more-item:hover,
+.co-modal-more-item:focus-visible{
+  background:#f6f7fb;
+  outline:0;
+}
+.co-modal-more-item svg{
+  width:17px;
+  height:17px;
+  stroke-width:2.35;
+}
+.co-modal-more-item[hidden]{ display:none !important; }
+.co-modal-more-item:disabled{ opacity:.55; cursor:not-allowed; }
+
+/* Re-enable Created By text in Operations Orders and Orders Review cards. */
+.co-card .co-createdby{
+  display:block !important;
 }

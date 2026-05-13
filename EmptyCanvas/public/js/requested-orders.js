@@ -20,6 +20,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Modal
   const orderModal = document.getElementById("reqOrderModal");
   const modalClose = document.getElementById("reqModalClose");
+  const modalMoreWrap = document.getElementById("reqModalMoreWrap");
+  const modalMoreBtn = document.getElementById("reqModalMoreBtn");
+  const modalMorePanel = document.getElementById("reqModalMorePanel");
   const archiveBtn = document.getElementById("reqModalArchive");
   const editOrderBtn = document.getElementById("reqModalEdit");
   const statusConfirmModal = document.getElementById("reqOrderStatusConfirmModal");
@@ -108,6 +111,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const editPwdConfirmBtn = document.getElementById("reqEditPwdConfirm");
   const editPwdInput = document.getElementById("reqEditPwdInput");
   const editPwdError = document.getElementById("reqEditPwdError");
+
+  const archivePwdModal = document.getElementById("reqArchivePwdModal");
+  const archivePwdCloseBtn = document.getElementById("reqArchivePwdClose");
+  const archivePwdCancelBtn = document.getElementById("reqArchivePwdCancel");
+  const archivePwdConfirmBtn = document.getElementById("reqArchivePwdConfirm");
+  const archivePwdInput = document.getElementById("reqArchivePwdInput");
+  const archivePwdError = document.getElementById("reqArchivePwdError");
 
   // Request technical visit sub-modal
   const techVisitModal = document.getElementById("reqTechVisitModal");
@@ -1650,6 +1660,33 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function closeModalMoreMenu() {
+    if (!modalMorePanel || !modalMoreBtn) return;
+    modalMorePanel.hidden = true;
+    modalMoreBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function openModalMoreMenu() {
+    if (!modalMorePanel || !modalMoreBtn) return;
+    modalMorePanel.hidden = false;
+    modalMoreBtn.setAttribute("aria-expanded", "true");
+    if (window.feather) window.feather.replace();
+  }
+
+  function toggleModalMoreMenu(force) {
+    if (!modalMorePanel) return;
+    const shouldOpen = typeof force === "boolean" ? force : modalMorePanel.hidden;
+    if (shouldOpen) openModalMoreMenu();
+    else closeModalMoreMenu();
+  }
+
+  function syncModalMoreVisibility() {
+    if (!modalMoreWrap) return;
+    const hasVisibleAction = Boolean((editOrderBtn && !editOrderBtn.hidden) || (archiveBtn && !archiveBtn.hidden));
+    modalMoreWrap.hidden = !hasVisibleAction;
+    if (!hasVisibleAction) closeModalMoreMenu();
+  }
+
   function setEditPwdError(message) {
     if (!editPwdError) return;
     editPwdError.textContent = String(message || "");
@@ -1764,6 +1801,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const editUrl = new URL("/orders/new/products", window.location.origin);
       editUrl.searchParams.set("edit", "1");
       if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
+      try {
+        if (Array.isArray(data?.products) && data.products.length) {
+          const keyType = String(data.orderType || "").toLowerCase().replace(/[^a-z0-9]/g, "") || "default";
+          sessionStorage.setItem(`shopping_cart:edit_fallback:v1:${keyType}`, JSON.stringify({ products: data.products, ts: Date.now() }));
+        }
+      } catch {}
       closeEditPasswordModal({ restoreFocus: false });
       closeOrderModal({ restoreFocus: false });
       window.location.href = `${editUrl.pathname}${editUrl.search}`;
@@ -1785,6 +1828,101 @@ document.addEventListener("DOMContentLoaded", () => {
         if (prev) editOrderBtn.innerHTML = prev;
         else editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
       }
+      if (window.feather) window.feather.replace();
+    }
+  }
+
+  let pendingArchiveOrderIds = [];
+  let archivePwdLastFocus = null;
+
+  function setArchivePwdError(message) {
+    if (archivePwdError) archivePwdError.textContent = String(message || "");
+  }
+
+  function isArchivePwdOpen() {
+    return !!archivePwdModal && archivePwdModal.classList.contains("is-open");
+  }
+
+  function openArchivePasswordModal(orderIds = []) {
+    const cleanIds = (Array.isArray(orderIds) ? orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    if (!cleanIds.length) return false;
+
+    pendingArchiveOrderIds = cleanIds;
+    archivePwdLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setArchivePwdError("");
+    if (archivePwdInput) archivePwdInput.value = "";
+
+    archivePwdModal.hidden = false;
+    archivePwdModal.setAttribute("aria-hidden", "false");
+    archivePwdModal.classList.add("is-open");
+    if (window.feather) window.feather.replace();
+
+    setTimeout(() => {
+      try { archivePwdInput?.focus?.({ preventScroll: true }); } catch {}
+    }, 0);
+    return true;
+  }
+
+  function closeArchivePasswordModal({ restoreFocus = true } = {}) {
+    if (!archivePwdModal || !isArchivePwdOpen()) return;
+    archivePwdModal.classList.remove("is-open");
+    archivePwdModal.setAttribute("aria-hidden", "true");
+    archivePwdModal.hidden = true;
+    pendingArchiveOrderIds = [];
+    setArchivePwdError("");
+    if (archivePwdInput) archivePwdInput.value = "";
+    if (restoreFocus && archivePwdLastFocus && typeof archivePwdLastFocus.focus === "function") {
+      try { archivePwdLastFocus.focus({ preventScroll: true }); } catch {}
+    }
+    archivePwdLastFocus = null;
+  }
+
+  async function submitArchivePassword() {
+    const cleanIds = (Array.isArray(pendingArchiveOrderIds) ? pendingArchiveOrderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    const pwd = String(archivePwdInput?.value || "").trim();
+
+    if (!cleanIds.length) {
+      closeArchivePasswordModal();
+      return;
+    }
+    if (!pwd) {
+      setArchivePwdError("Password is required.");
+      try { archivePwdInput?.focus?.(); } catch {}
+      return;
+    }
+
+    setArchivePwdError("");
+    if (archivePwdConfirmBtn) {
+      archivePwdConfirmBtn.disabled = true;
+      archivePwdConfirmBtn.dataset.prevHtml = archivePwdConfirmBtn.innerHTML;
+      archivePwdConfirmBtn.textContent = "Checking...";
+    }
+    if (archivePwdCancelBtn) archivePwdCancelBtn.disabled = true;
+    if (archivePwdCloseBtn) archivePwdCloseBtn.disabled = true;
+
+    try {
+      await archiveOrderGroup(activeGroup, { adminPassword: pwd, skipPassword: true });
+      closeArchivePasswordModal({ restoreFocus: false });
+    } catch (err) {
+      const msg = String(err?.message || "Failed to archive order.");
+      setArchivePwdError(msg);
+      if (/password|invalid|unauthorized/i.test(msg) && archivePwdInput) {
+        archivePwdInput.value = "";
+        try { archivePwdInput.focus(); } catch {}
+      }
+    } finally {
+      if (archivePwdConfirmBtn) {
+        archivePwdConfirmBtn.disabled = false;
+        const prev = archivePwdConfirmBtn.dataset.prevHtml;
+        if (prev) archivePwdConfirmBtn.innerHTML = prev;
+        else archivePwdConfirmBtn.textContent = "Archive";
+      }
+      if (archivePwdCancelBtn) archivePwdCancelBtn.disabled = false;
+      if (archivePwdCloseBtn) archivePwdCloseBtn.disabled = false;
       if (window.feather) window.feather.replace();
     }
   }
@@ -2647,6 +2785,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Reset any open UI inside the modal
     closeDownloadMenu();
+    closeModalMoreMenu();
     closeReceiptModal({ restoreFocus: false });
     closeTechVisitModal({ restoreFocus: false });
     closeMaintenanceLogModal({ restoreFocus: false });
@@ -2779,6 +2918,7 @@ document.addEventListener("DOMContentLoaded", () => {
       editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
       orderModal?.querySelector?.(".co-modal-dialog")?.classList.toggle("has-edit-action", showEdit);
     }
+    syncModalMoreVisibility();
     if (logMaintenanceBtn) {
       const stageIdx = stage?.idx || 1;
       const canLogMaintenance = isMaintenanceOrder && (
@@ -4139,11 +4279,16 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     }
   }
 
-  async function archiveOrderGroup(g) {
+  async function archiveOrderGroup(g, options = {}) {
     if (!g || !g.orderIds?.length) return;
 
-    const ok = await openOrderStatusConfirm({ action: "archive" });
-    if (!ok) return;
+    if (!options.skipPassword) {
+      openArchivePasswordModal(g.orderIds);
+      return;
+    }
+
+    const adminPassword = String(options.adminPassword || "").trim();
+    if (!adminPassword) throw new Error("Admin password is required.");
 
     if (archiveBtn) {
       archiveBtn.disabled = true;
@@ -4155,6 +4300,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     try {
       const data = await postJson("/api/orders/requested/archive", {
         orderIds: g.orderIds,
+        adminPassword,
       });
 
       const idSet = new Set(g.orderIds);
@@ -4174,6 +4320,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       toast("success", "Archived", "Order moved to Archive.");
     } catch (e) {
       console.error(e);
+      if (options.skipPassword) throw e;
       alert(e.message || "Failed to archive order.");
     } finally {
       if (archiveBtn) {
@@ -4431,9 +4578,25 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   });
 
   modalClose?.addEventListener("click", closeOrderModal);
+  modalMoreBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleModalMoreMenu();
+  });
+  document.addEventListener("click", (e) => {
+    if (!modalMoreWrap || !modalMorePanel || modalMorePanel.hidden) return;
+    if (modalMoreWrap.contains(e.target)) return;
+    closeModalMoreMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modalMorePanel && !modalMorePanel.hidden) {
+      closeModalMoreMenu();
+    }
+  });
   archiveBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    closeModalMoreMenu();
     const action = archiveBtn.dataset.action || "archive";
     if (action === "unarchive") unarchiveOrderGroup(activeGroup);
     else archiveOrderGroup(activeGroup);
@@ -4791,6 +4954,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   editOrderBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    closeModalMoreMenu();
     if (!activeGroup || !Array.isArray(activeGroup.orderIds) || !activeGroup.orderIds.length) {
       toast("error", "Missing order", "Could not find this order items.");
       return;
@@ -4822,6 +4986,32 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   });
   editPwdModal?.addEventListener("click", (e) => {
     if (e.target === editPwdModal) closeEditPasswordModal();
+  });
+
+  archivePwdCloseBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeArchivePasswordModal();
+  });
+  archivePwdCancelBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeArchivePasswordModal();
+  });
+  archivePwdConfirmBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    submitArchivePassword();
+  });
+  archivePwdInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitArchivePassword();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeArchivePasswordModal();
+    }
+  });
+  archivePwdModal?.addEventListener("click", (e) => {
+    if (e.target === archivePwdModal) closeArchivePasswordModal();
   });
 
   receiptCloseBtn?.addEventListener("click", (e) => {
