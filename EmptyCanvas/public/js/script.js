@@ -259,6 +259,17 @@ document.addEventListener('DOMContentLoaded', () => {
     return map[key] || map.default;
   }
 
+  function approvalLabelColorVars(label, fallbackColor) {
+    const key = norm(label).replace(/[\s_-]+/g, '');
+    if (key === 'approved') {
+      return { bg: '#D1FAE5', fg: '#065F46', bd: '#A7F3D0' };
+    }
+    if (key === 'rejected') {
+      return { bg: '#FEE2E2', fg: '#B91C1C', bd: '#FECACA' };
+    }
+    return notionColorVars(fallbackColor);
+  }
+
   function orderTypeMeta(type, notionColor) {
     const key = String(type || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     if (key === 'requestproducts') {
@@ -576,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const approvalLabel = it.svApproval || it.status || '—';
           const approvalColor = it.svApprovalColor || it.statusColor;
-          const sVars = notionColorVars(approvalColor);
+          const sVars = approvalLabelColorVars(approvalLabel, approvalColor);
           const sStyle = `--tag-bg:${sVars.bg};--tag-fg:${sVars.fg};--tag-border:${sVars.bd};`;
 
           const row = document.createElement('div');
