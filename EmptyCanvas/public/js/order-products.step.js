@@ -67,8 +67,94 @@
   const savingOverlayEl = document.getElementById('cartSavingOverlay');
   const savingTextEl = document.getElementById('cartSavingText');
 
-  // When opened from Current Orders -> Edit, we add ?edit=1
-  const isEditMode = new URLSearchParams(window.location.search).get('edit') === '1';
+  // When opened from Current/Operations Orders -> Edit, we add ?edit=1.
+  // Some mobile browsers / app-shell navigations can drop query params or server
+  // draft visibility for one navigation. Keep a short local/session transfer as a
+  // second source of truth so the Shopping Cart never opens empty after Edit.
+  const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
+
+  function readUrlParam(name) {
+    try { return String(new URLSearchParams(window.location.search).get(name) || '').trim(); } catch { return ''; }
+  }
+
+  function editStorageAreas() {
+    const stores = [];
+    try { if (window.sessionStorage) stores.push(window.sessionStorage); } catch {}
+    try { if (window.localStorage) stores.push(window.localStorage); } catch {}
+    return stores;
+  }
+
+  function safeParseStorageJson(raw) {
+    try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+  }
+
+  function isFreshEditPayload(value) {
+    const ts = Number(value?.ts || 0);
+    return Boolean(ts && Date.now() - ts <= EDIT_TRANSFER_TTL_MS);
+  }
+
+  function readPendingEditTransfer() {
+    for (const storage of editStorageAreas()) {
+      try {
+        const parsed = safeParseStorageJson(storage.getItem('shopping_cart:edit_pending:v2'));
+        if (isFreshEditPayload(parsed)) return parsed;
+      } catch {}
+    }
+    return null;
+  }
+
+  function clearPendingEditTransfer() {
+    for (const storage of editStorageAreas()) {
+      try { storage.removeItem('shopping_cart:edit_pending:v2'); } catch {}
+    }
+  }
+
+  function hasFreshEditTransfer() {
+    const editKey = readUrlParam('editKey');
+    if (editKey) {
+      for (const storage of editStorageAreas()) {
+        try {
+          const parsed = safeParseStorageJson(storage.getItem(`shopping_cart:edit_payload:v2:${editKey}`));
+          if (isFreshEditPayload(parsed) && Array.isArray(parsed.products) && parsed.products.length) return true;
+        } catch {}
+      }
+    }
+
+    const pending = readPendingEditTransfer();
+    if (pending?.key) {
+      for (const storage of editStorageAreas()) {
+        try {
+          const parsed = safeParseStorageJson(storage.getItem(`shopping_cart:edit_payload:v2:${pending.key}`));
+          if (isFreshEditPayload(parsed) && Array.isArray(parsed.products) && parsed.products.length) return true;
+        } catch {}
+      }
+    }
+
+    return false;
+  }
+
+  function readOrderTypeFromEditTransfer() {
+    const editKey = readUrlParam('editKey') || readPendingEditTransfer()?.key || '';
+    if (editKey) {
+      for (const storage of editStorageAreas()) {
+        try {
+          const parsed = safeParseStorageJson(storage.getItem(`shopping_cart:edit_payload:v2:${editKey}`));
+          if (isFreshEditPayload(parsed) && parsed?.orderType) return String(parsed.orderType).trim();
+        } catch {}
+      }
+    }
+    const pending = readPendingEditTransfer();
+    if (pending?.orderType) return String(pending.orderType).trim();
+    for (const storage of editStorageAreas()) {
+      try {
+        const target = String(storage.getItem('shopping_cart:edit_target_type:v1') || '').trim();
+        if (target) return target;
+      } catch {}
+    }
+    return '';
+  }
+
+  const isEditMode = readUrlParam('edit') === '1' || hasFreshEditTransfer();
 
   // ---------------------------- Order Type (tabs) ----------------------------
   const ORDER_TYPE_STORAGE_KEY = 'shopping_cart:last_order_type:v1';
@@ -234,11 +320,7 @@
   }
 
   function readOrderTypeFromUrl() {
-    try {
-      return String(new URLSearchParams(window.location.search).get('type') || '').trim();
-    } catch {
-      return '';
-    }
+    return readUrlParam('type');
   }
 
   function storeOrderType(type) {
@@ -461,7 +543,7 @@
   async function initOrderTypeFlow() {
     // Edit mode should open the cart directly (no order type step)
     if (isEditMode) {
-      selectedOrderType = readOrderTypeFromUrl() || loadStoredOrderType() || '';
+      selectedOrderType = readOrderTypeFromUrl() || readOrderTypeFromEditTransfer() || loadStoredOrderType() || '';
       if (selectedOrderType) setCartTypePill(selectedOrderType);
       else updatePageHeading('');
       showOnly('cart');
@@ -754,51 +836,80 @@
 
   function loadEditFallbackDraft(orderType = selectedOrderType) {
     try {
-      if (!isEditMode) return [];
+      if (!isEditMode && !hasFreshEditTransfer()) return [];
 
-      const ttlMs = 30 * 60 * 1000;
       const normalizedKeys = [];
       const pushKey = (value) => {
         const keyType = String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'default';
         if (!normalizedKeys.includes(keyType)) normalizedKeys.push(keyType);
       };
 
-      pushKey(orderType);
-      try { pushKey(new URLSearchParams(window.location.search).get('type') || ''); } catch {}
-      try { pushKey(loadStoredOrderType()); } catch {}
-      try {
-        const targetType = sessionStorage.getItem('shopping_cart:edit_target_type:v1') || '';
-        pushKey(targetType);
-      } catch {}
+      const payloadKeys = [];
+      const pushPayloadKey = (value) => {
+        const key = String(value || '').trim();
+        if (key && !payloadKeys.includes(key)) payloadKeys.push(key);
+      };
 
-      // Generic fallback is written by Operations Orders before redirecting.
+      pushPayloadKey(readUrlParam('editKey'));
+      const pending = readPendingEditTransfer();
+      pushPayloadKey(pending?.key);
+
+      pushKey(orderType);
+      pushKey(readOrderTypeFromUrl());
+      pushKey(readOrderTypeFromEditTransfer());
+      pushKey(loadStoredOrderType());
+
+      // Generic fallback is written before redirecting from Operations Orders.
       pushKey('default');
       pushKey('Request Products');
       pushKey('Request Maintenance');
       pushKey('Withdraw Products');
 
-      try {
-        for (let i = 0; i < sessionStorage.length; i += 1) {
-          const key = sessionStorage.key(i) || '';
-          if (key.startsWith('shopping_cart:edit_fallback:v1:')) {
-            const suffix = key.slice('shopping_cart:edit_fallback:v1:'.length);
-            if (suffix && !normalizedKeys.includes(suffix)) normalizedKeys.push(suffix);
-          }
-        }
-      } catch {}
-
-      for (const keyType of normalizedKeys) {
-        const storageKey = `shopping_cart:edit_fallback:v1:${keyType}`;
-        const raw = sessionStorage.getItem(storageKey);
-        if (!raw) continue;
-        const parsed = JSON.parse(raw);
-        const ts = Number(parsed?.ts || 0);
-        if (ts && Date.now() - ts > ttlMs) {
-          sessionStorage.removeItem(storageKey);
-          continue;
+      const tryPayload = (parsed, storage, storageKey) => {
+        if (!isFreshEditPayload(parsed)) {
+          try { if (storage && storageKey) storage.removeItem(storageKey); } catch {}
+          return [];
         }
         const items = normalizeDraftItems(parsed?.products);
-        if (items.length) return items;
+        return items;
+      };
+
+      for (const storage of editStorageAreas()) {
+        for (const key of payloadKeys) {
+          try {
+            const storageKey = `shopping_cart:edit_payload:v2:${key}`;
+            const items = tryPayload(safeParseStorageJson(storage.getItem(storageKey)), storage, storageKey);
+            if (items.length) {
+              clearPendingEditTransfer();
+              return items;
+            }
+          } catch {}
+        }
+      }
+
+      for (const storage of editStorageAreas()) {
+        try {
+          for (let i = 0; i < storage.length; i += 1) {
+            const key = storage.key(i) || '';
+            if (key.startsWith('shopping_cart:edit_fallback:v1:')) {
+              const suffix = key.slice('shopping_cart:edit_fallback:v1:'.length);
+              if (suffix && !normalizedKeys.includes(suffix)) normalizedKeys.push(suffix);
+            }
+          }
+        } catch {}
+      }
+
+      for (const keyType of normalizedKeys) {
+        for (const storage of editStorageAreas()) {
+          try {
+            const storageKey = `shopping_cart:edit_fallback:v1:${keyType}`;
+            const items = tryPayload(safeParseStorageJson(storage.getItem(storageKey)), storage, storageKey);
+            if (items.length) {
+              clearPendingEditTransfer();
+              return items;
+            }
+          } catch {}
+        }
       }
       return [];
     } catch {
