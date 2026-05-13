@@ -26713,14 +26713,13 @@ async function getVisibleTeamMemberIdsForSV(req) {
 async function clearSVOrdersRouteCaches(req) {
   try {
     const usernameKey = cacheKeySafe(req?.session?.username || "");
-    await Promise.all([
-      cacheDel(`cache:api:sv-orders:${usernameKey}:all:v2`),
-      cacheDel(`cache:api:sv-orders:${usernameKey}:not-started:v2`),
-      cacheDel(`cache:api:sv-orders:${usernameKey}:approved:v2`),
-      cacheDel(`cache:api:sv-orders:${usernameKey}:rejected:v2`),
-      cacheDel(`cache:api:sv-orders:${usernameKey}:archive:v2`),
-      cacheDel(`cache:api:sv-orders:${usernameKey}:all:v2`),
-    ]);
+    const keys = [];
+    for (const version of ["v2", "v3"]) {
+      for (const tab of ["all", "not-started", "approved", "rejected", "archive"]) {
+        keys.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:${version}`));
+      }
+    }
+    await Promise.all(keys);
   } catch (e) {
     console.warn("clearSVOrdersRouteCaches failed:", e?.message || e);
   }
@@ -27076,7 +27075,7 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
 
     const cacheTabKey = label === "__archive__" ? "archive" : (label ? String(label).toLowerCase().replace(/\s+/g, "-") : "all");
     const usernameKey = cacheKeySafe(req?.session?.username || "");
-    const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v2`;
+    const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v3`;
 
     const items = await cacheGetOrSet(cacheKey, 30, async () => {
       // Supabase mode: use the normalized team_members.sv_school_member_ids
@@ -27196,7 +27195,16 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
         orOwners.length === 1 ? orOwners[0] : { or: orOwners },
       ];
 
-      if (label) {
+      const archiveOnly = label === "__archive__";
+      const statusType = ordersProps?.[statusProp]?.type || "select";
+
+      if (archiveOnly) {
+        if (statusType === "status") {
+          andFilter.push({ property: statusProp, status: { equals: "Archive" } });
+        } else {
+          andFilter.push({ property: statusProp, select: { equals: "Archive" } });
+        }
+      } else if (label) {
         if (approvalType === "status") {
           andFilter.push({ property: approvalProp, status: { equals: label } });
         } else {
