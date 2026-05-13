@@ -1814,13 +1814,32 @@
 }
 
 .ua-sv-access-person strong {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   color: #111827;
   font-size: 14px;
   font-weight: 950;
   white-space: nowrap;
+}
+
+.ua-sv-access-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ua-sv-self-badge {
+  flex: 0 0 auto;
+  border: 1px solid rgba(228, 101, 32, 0.26);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(255, 243, 234, 0.95);
+  color: #c4571c;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1.2;
 }
 
 .ua-sv-access-person small {
