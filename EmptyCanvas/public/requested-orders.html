@@ -20,7 +20,7 @@
 <style>
   body.permissions-loading .sidebar li { display: none !important; }
 </style>
-<link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet"/>
+<link href="/css/style.css?v=ops-edit-modal-v1" rel="stylesheet"/>
 <link href="/css/ui-redesign.css?v=bidi-mixed-v1" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -149,6 +149,10 @@
 <!-- ===================== REQUESTED ORDER DETAILS MODAL ===================== -->
 <div id="reqOrderModal" class="co-modal-overlay" aria-hidden="true">
   <div class="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqModalTitle">
+    <button type="button" class="co-modal-edit" id="reqModalEdit" aria-label="Edit order">
+      <i data-feather="edit-2"></i>
+      <span>Edit</span>
+    </button>
     <button type="button" class="co-modal-archive" id="reqModalArchive" aria-label="Archive order">
       <i data-feather="archive"></i>
       <span>Archive</span>
@@ -265,6 +269,41 @@
 
     <div class="co-submodal-actions req-receipt-photos-actions">
       <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceiptPhotosDone">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== EDIT ORDER PASSWORD MODAL ===================== -->
+<div id="reqEditPwdModal" class="co-submodal-overlay req-edit-modal" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="reqEditPwdTitle" aria-describedby="reqEditPwdSub">
+    <button type="button" class="co-submodal-close" id="reqEditPwdClose" aria-label="Close edit order dialog">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header req-edit-header">
+      <div class="req-edit-icon" aria-hidden="true"><i data-feather="edit-2"></i></div>
+      <div>
+        <div class="co-submodal-title" id="reqEditPwdTitle">Edit order</div>
+        <div class="co-submodal-sub" id="reqEditPwdSub">Enter admin password to continue.</div>
+      </div>
+    </div>
+
+    <div class="co-submodal-body">
+      <label class="co-submodal-label" for="reqEditPwdInput">Admin password</label>
+      <input
+        class="co-submodal-input"
+        id="reqEditPwdInput"
+        type="password"
+        inputmode="text"
+        autocomplete="current-password"
+        placeholder="••••••••"
+      />
+      <div class="co-submodal-error" id="reqEditPwdError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="reqEditPwdCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqEditPwdConfirm">Continue</button>
     </div>
   </div>
 </div>
@@ -469,6 +508,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=bidi-mixed-v1"></script>
-<script src="/js/requested-orders.js?v=maintenance-issue-ui-v1"></script>
+<script src="/js/requested-orders.js?v=ops-edit-modal-v1"></script>
 </body>
 </html>

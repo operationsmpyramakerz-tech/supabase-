@@ -7098,3 +7098,103 @@ body.sidebar-mini .sidebar-footer .account-mini .label{
 @media (max-width: 520px){
   .co-card .co-thumb--order-type svg{ width:24px; height:24px; }
 }
+
+/* Operations Orders — compact modal edit action */
+.co-modal-edit{
+  position: absolute;
+  top: 14px;
+  right: 182px;
+  min-width: 92px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #111827;
+  background: #111827;
+  color: #FFFFFF;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+}
+.co-modal-edit:hover{ background:#0B1220; }
+.co-modal-edit:disabled{ opacity:.65; cursor:not-allowed; box-shadow:none; }
+.co-modal-edit svg{ width:17px; height:17px; }
+.co-modal-edit[hidden]{ display:none !important; }
+.co-modal-dialog.has-edit-action .co-modal-status{ padding-right: 310px; }
+
+.req-edit-header{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding-right:48px;
+}
+.req-edit-icon{
+  width:54px;
+  height:54px;
+  border-radius:20px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#EA580C;
+  background:linear-gradient(135deg,#FFF7ED,#FFFFFF);
+  border:1px solid #FED7AA;
+  box-shadow:0 14px 30px rgba(234,88,12,.12);
+  flex-shrink:0;
+}
+.req-edit-icon svg{ width:24px; height:24px; }
+.req-edit-header .co-submodal-title{ padding-right:0; line-height:1; }
+.req-edit-dialog .co-submodal-input{
+  min-height:52px;
+  border-radius:16px;
+  background:#FFFFFF;
+  border-color:#E5E7EB;
+}
+.req-edit-dialog .co-submodal-input:focus{
+  border-color:#111827;
+  box-shadow:0 0 0 4px rgba(17,24,39,.10);
+}
+
+/* Slightly smaller order item rows inside Operations Orders modals */
+body:not(.order-modal-fit-screen) .co-item{
+  padding:10px 12px;
+  gap:10px;
+}
+body:not(.order-modal-fit-screen) .co-item-name{
+  font-size:15px;
+}
+body:not(.order-modal-fit-screen) .co-item-sub,
+body:not(.order-modal-fit-screen) .co-item-issue-desc{
+  font-size:12.5px;
+}
+body:not(.order-modal-fit-screen) .co-item-status{
+  font-size:11px;
+  padding:3px 9px;
+}
+
+@media (max-width: 768px){
+  body.order-modal-fit-screen .co-modal-edit{
+    top:12px;
+    right:154px;
+    min-width:80px;
+    height:40px;
+    padding:0 10px;
+    font-size:13px;
+  }
+  body.order-modal-fit-screen .co-modal-dialog.has-edit-action .co-modal-status{
+    padding-right:250px;
+  }
+}
+
+@media (max-width: 420px){
+  body.order-modal-fit-screen .co-modal-edit{
+    right:150px;
+  }
+  body.order-modal-fit-screen .co-modal-dialog.has-edit-action .co-modal-status{
+    padding-right:230px;
+  }
+}

@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const orderModal = document.getElementById("reqOrderModal");
   const modalClose = document.getElementById("reqModalClose");
   const archiveBtn = document.getElementById("reqModalArchive");
+  const editOrderBtn = document.getElementById("reqModalEdit");
   const statusConfirmModal = document.getElementById("reqOrderStatusConfirmModal");
   const statusConfirmIcon = document.getElementById("reqOrderStatusConfirmIcon");
   const statusConfirmTitle = document.getElementById("reqOrderStatusConfirmTitle");
@@ -99,6 +100,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const addReceiptBtn = document.getElementById("reqAddReceiptBtn");
   const receiptInput = document.getElementById("reqReceiptInput");
   const receiptError = document.getElementById("reqReceiptError");
+
+  // Edit order sub-modal
+  const editPwdModal = document.getElementById("reqEditPwdModal");
+  const editPwdCloseBtn = document.getElementById("reqEditPwdClose");
+  const editPwdCancelBtn = document.getElementById("reqEditPwdCancel");
+  const editPwdConfirmBtn = document.getElementById("reqEditPwdConfirm");
+  const editPwdInput = document.getElementById("reqEditPwdInput");
+  const editPwdError = document.getElementById("reqEditPwdError");
 
   // Request technical visit sub-modal
   const techVisitModal = document.getElementById("reqTechVisitModal");
@@ -1641,6 +1650,145 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function setEditPwdError(message) {
+    if (!editPwdError) return;
+    editPwdError.textContent = String(message || "");
+  }
+
+  function isEditPwdOpen() {
+    return !!editPwdModal && editPwdModal.classList.contains("is-open");
+  }
+
+  function openEditPasswordModal(orderIds = []) {
+    const cleanIds = (Array.isArray(orderIds) ? orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    if (!cleanIds.length) return false;
+
+    if (!editPwdModal || !editPwdInput || !editPwdConfirmBtn || !editPwdCancelBtn) {
+      const adminPassword = window.prompt("Enter admin password to edit this order:");
+      if (adminPassword === null) return false;
+      submitEditOrder(cleanIds, adminPassword);
+      return true;
+    }
+
+    pendingEditOrderIds = cleanIds;
+    setEditPwdError("");
+    editPwdInput.value = "";
+    editPwdConfirmBtn.disabled = false;
+    editPwdCancelBtn.disabled = false;
+    if (editPwdCloseBtn) editPwdCloseBtn.disabled = false;
+
+    editPwdLastFocus = document.activeElement;
+    editPwdModal.hidden = false;
+    editPwdModal.classList.add("is-open");
+    editPwdModal.setAttribute("aria-hidden", "false");
+
+    window.requestAnimationFrame(() => {
+      try { editPwdInput.focus(); } catch {}
+    });
+    if (window.feather) window.feather.replace();
+    return true;
+  }
+
+  function closeEditPasswordModal({ restoreFocus = true } = {}) {
+    if (!editPwdModal || !isEditPwdOpen()) return;
+    editPwdModal.classList.remove("is-open");
+    editPwdModal.setAttribute("aria-hidden", "true");
+    editPwdModal.hidden = true;
+    pendingEditOrderIds = [];
+    setEditPwdError("");
+    if (restoreFocus && editPwdLastFocus && typeof editPwdLastFocus.focus === "function") {
+      try { editPwdLastFocus.focus({ preventScroll: true }); } catch {}
+    }
+    editPwdLastFocus = null;
+  }
+
+  async function submitEditOrder(orderIds = [], adminPassword = "") {
+    const cleanIds = (Array.isArray(orderIds) ? orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    const pwd = String(adminPassword || editPwdInput?.value || "").trim();
+
+    if (!cleanIds.length) {
+      closeEditPasswordModal();
+      return;
+    }
+    if (!pwd) {
+      setEditPwdError("Password is required.");
+      try { editPwdInput?.focus(); } catch {}
+      return;
+    }
+
+    setEditPwdError("");
+    if (editPwdConfirmBtn) {
+      editPwdConfirmBtn.disabled = true;
+      editPwdConfirmBtn.dataset.prevHtml = editPwdConfirmBtn.innerHTML;
+      editPwdConfirmBtn.textContent = "Checking...";
+    }
+    if (editPwdCancelBtn) editPwdCancelBtn.disabled = true;
+    if (editPwdCloseBtn) editPwdCloseBtn.disabled = true;
+    if (editOrderBtn) {
+      editOrderBtn.disabled = true;
+      editOrderBtn.dataset.prevHtml = editOrderBtn.innerHTML;
+      editOrderBtn.textContent = "Checking...";
+    }
+
+    try {
+      const res = await fetch("/api/orders/operations/edit/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ orderIds: cleanIds, adminPassword: pwd }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setEditPwdError("Wrong password. Please try again.");
+        if (editPwdInput) editPwdInput.value = "";
+        try { editPwdInput?.focus(); } catch {}
+        return;
+      }
+      if (res.status === 403) {
+        toast("error", "Not allowed", data?.error || "You are not allowed to edit this order.");
+        closeEditPasswordModal();
+        return;
+      }
+      if (res.status === 404) {
+        toast("error", "Not found", data?.error || "Order not found.");
+        closeEditPasswordModal();
+        return;
+      }
+      if (!res.ok) throw new Error(data?.error || "Failed to init edit");
+
+      const editUrl = new URL("/orders/new/products", window.location.origin);
+      editUrl.searchParams.set("edit", "1");
+      if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
+      closeEditPasswordModal({ restoreFocus: false });
+      closeOrderModal({ restoreFocus: false });
+      window.location.href = `${editUrl.pathname}${editUrl.search}`;
+    } catch (err) {
+      console.error(err);
+      setEditPwdError(err?.message || "Failed to start editing.");
+    } finally {
+      if (editPwdConfirmBtn) {
+        editPwdConfirmBtn.disabled = false;
+        const prev = editPwdConfirmBtn.dataset.prevHtml;
+        if (prev) editPwdConfirmBtn.innerHTML = prev;
+        else editPwdConfirmBtn.textContent = "Continue";
+      }
+      if (editPwdCancelBtn) editPwdCancelBtn.disabled = false;
+      if (editPwdCloseBtn) editPwdCloseBtn.disabled = false;
+      if (editOrderBtn) {
+        editOrderBtn.disabled = false;
+        const prev = editOrderBtn.dataset.prevHtml;
+        if (prev) editOrderBtn.innerHTML = prev;
+        else editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
+      }
+      if (window.feather) window.feather.replace();
+    }
+  }
+
   let statusConfirmResolver = null;
   let statusConfirmLastFocus = null;
 
@@ -2095,6 +2243,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentTypeFilter = "all";
   let activeGroup = null;
   let lastFocus = null;
+  let editPwdLastFocus = null;
+  let pendingEditOrderIds = [];
   let requestedDataLoading = false;
   let requestedDataLoaded = false;
 
@@ -2621,6 +2771,14 @@ document.addEventListener("DOMContentLoaded", () => {
         ? '<i data-feather="rotate-ccw"></i><span>UnArchive</span>'
         : '<i data-feather="archive"></i><span>Archive</span>';
     }
+    if (editOrderBtn) {
+      const isArchived = (stage?.idx || 1) >= 6 || norm(stage?.key) === "archive";
+      const showEdit = !isMaintenancePage && !isArchived;
+      editOrderBtn.hidden = !showEdit;
+      editOrderBtn.disabled = false;
+      editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
+      orderModal?.querySelector?.(".co-modal-dialog")?.classList.toggle("has-edit-action", showEdit);
+    }
     if (logMaintenanceBtn) {
       const stageIdx = stage?.idx || 1;
       const canLogMaintenance = isMaintenanceOrder && (
@@ -2772,6 +2930,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeMaintenanceLogModal({ restoreFocus: false });
     closeMaintenanceReceiptModal({ restoreFocus: false });
     closeReceiptPhotosModal({ restoreFocus: false });
+    closeEditPasswordModal({ restoreFocus: false });
     closeDownloadMenu();
 
     orderModal.classList.remove("is-open");
@@ -4627,6 +4786,42 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       if (maintenanceReceiptChooseBtn) maintenanceReceiptChooseBtn.disabled = false;
       if (maintenanceAddReceiptBtn) maintenanceAddReceiptBtn.disabled = false;
     }
+  });
+
+  editOrderBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeGroup || !Array.isArray(activeGroup.orderIds) || !activeGroup.orderIds.length) {
+      toast("error", "Missing order", "Could not find this order items.");
+      return;
+    }
+    openEditPasswordModal(activeGroup.orderIds);
+  });
+
+  editPwdCloseBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeEditPasswordModal();
+  });
+  editPwdCancelBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeEditPasswordModal();
+  });
+  editPwdConfirmBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    submitEditOrder(pendingEditOrderIds, editPwdInput?.value || "");
+  });
+  editPwdInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitEditOrder(pendingEditOrderIds, editPwdInput.value || "");
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeEditPasswordModal();
+    }
+  });
+  editPwdModal?.addEventListener("click", (e) => {
+    if (e.target === editPwdModal) closeEditPasswordModal();
   });
 
   receiptCloseBtn?.addEventListener("click", (e) => {

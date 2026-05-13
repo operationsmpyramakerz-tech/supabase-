@@ -3971,6 +3971,232 @@ async function _sbOrderRowsByIds(ids = []) {
   return cleanIds.map((id) => byId.get(String(id))).filter(Boolean);
 }
 
+async function _sbUpdateOrderRowSafe(id, row = {}) {
+  let payload = { ...(row || {}) };
+  const removed = [];
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      return await supabaseDb.updateById(_sbOrdersTable(), id, payload);
+    } catch (error) {
+      const message = String(error?.message || error?.details?.message || error?.details || error?.hint || "");
+      const missingColumn =
+        (message.match(/Could not find the ['"]([^'"]+)['"] column/i) || [])[1] ||
+        (message.match(/column ['"]([^'"]+)['"]/i) || [])[1] ||
+        "";
+      if (!missingColumn || !Object.prototype.hasOwnProperty.call(payload, missingColumn)) throw error;
+      delete payload[missingColumn];
+      removed.push(missingColumn);
+    }
+  }
+  const err = new Error(`Failed to update order after removing unsupported column(s): ${removed.join(", ")}`);
+  err.status = 500;
+  throw err;
+}
+
+async function _sbBuildProductLookupsForOrderEdit() {
+  const products = await _sbProductsList().catch(() => []);
+  const byId = new Map();
+  const byName = new Map();
+  const byUrl = new Map();
+  for (const product of products || []) {
+    const id = String(product?.id || "").trim();
+    if (id) byId.set(id, product);
+    const nameKey = normKey(product?.name || "");
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+    const url = String(product?.url || "").trim();
+    if (url && !byUrl.has(url)) byUrl.set(url, product);
+  }
+  return { byId, byName, byUrl, products };
+}
+
+function _sbResolveOrderRowProduct(row = {}, lookups = {}) {
+  const directId = _sbOrderText(_sbOrderGet(row, ["product_id", "productId", "product_page_id", "productPageId"]));
+  if (directId && lookups.byId?.has(directId)) return lookups.byId.get(directId);
+
+  const productUrl = _sbExtractUrl(_sbOrderGet(row, ["product_url", "Product URL", "url", "URL"]));
+  if (productUrl && lookups.byUrl?.has(productUrl)) return lookups.byUrl.get(productUrl);
+
+  const productName = _sbOrderText(_sbOrderGet(row, ["product_name", "Product Name", "product", "Product"]));
+  const nameKey = normKey(productName || "");
+  if (nameKey && lookups.byName?.has(nameKey)) return lookups.byName.get(nameKey);
+
+  return null;
+}
+
+async function _sbInitOrderEditFromRows(req, orderIds = []) {
+  const rows = await _sbOrderRowsByIds(orderIds);
+  if (!rows.length) {
+    const err = new Error("Orders not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const lookups = await _sbBuildProductLookupsForOrderEdit();
+  const draft = [];
+  const editItems = [];
+  let editOrderType = null;
+  let orderGroupIdNumber = null;
+
+  for (const row of rows) {
+    const serialized = _sbSerializeOrderRow(row);
+    const product = _sbResolveOrderRowProduct(row, lookups);
+    if (!product?.id) continue;
+
+    if (!editOrderType && serialized.orderType) editOrderType = serialized.orderType;
+    const orderNum = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID", "order id"]));
+    if (!Number.isFinite(orderGroupIdNumber) && Number.isFinite(orderNum)) orderGroupIdNumber = orderNum;
+
+    const qtyCandidate = serialized.quantityRequested !== null && serialized.quantityRequested !== undefined
+      ? serialized.quantityRequested
+      : serialized.quantity;
+    const qty = Math.abs(Number(qtyCandidate) || 1) || 1;
+
+    draft.push({
+      id: String(product.id),
+      quantity: qty,
+      reason: String(serialized.reason || "").trim(),
+      issueDescription: String(serialized.issueDescription || "").trim(),
+      schoolId: "",
+      expectedSparePartId: "",
+    });
+
+    editItems.push({
+      orderPageId: String(row.id),
+      productId: String(product.id),
+      source: "supabase",
+    });
+  }
+
+  if (!draft.length || !editItems.length) {
+    const err = new Error("No editable products found for this order.");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!editOrderType) editOrderType = "Request Products";
+
+  _setOrderDraftForType(req.session, editOrderType, { products: draft });
+
+  const ADMIN_UNLOCK_TTL_MS = 10 * 60 * 1000;
+  req.session.adminCreateOrderUnlockUntil = Date.now() + ADMIN_UNLOCK_TTL_MS;
+
+  const EDIT_CTX_TTL_MS = 30 * 60 * 1000;
+  req.session.editingOrder = {
+    source: "supabase",
+    expiresAt: Date.now() + EDIT_CTX_TTL_MS,
+    items: editItems,
+    orderIdNumber: Number.isFinite(Number(orderGroupIdNumber)) ? Number(orderGroupIdNumber) : null,
+    orderType: editOrderType || null,
+  };
+
+  return { ok: true, count: draft.length, orderType: editOrderType || null, source: "supabase" };
+}
+
+async function _sbApplyOrderEditFromSession(req, cleanedProducts = [], orderType = "", qtySign = 1) {
+  const editCtx = req.session?.editingOrder;
+  const now = Date.now();
+  const editActive = editCtx &&
+    editCtx.source === "supabase" &&
+    typeof editCtx.expiresAt === "number" &&
+    now < editCtx.expiresAt &&
+    Array.isArray(editCtx.items) &&
+    editCtx.items.length > 0;
+  if (!editActive) {
+    const err = new Error("Edit session expired. Please reopen the order and try again.");
+    err.status = 400;
+    throw err;
+  }
+
+  const existingIds = editCtx.items.map((it) => String(it.orderPageId || "").trim()).filter(Boolean);
+  const existingRows = await _sbOrderRowsByIds(existingIds);
+  if (!existingRows.length) {
+    const err = new Error("Orders not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const lookups = await _sbBuildProductLookupsForOrderEdit();
+  const existingById = new Map(existingRows.map((row) => [String(row.id), row]));
+  const unused = (editCtx.items || [])
+    .map((it) => ({
+      rowId: String(it.orderPageId || "").trim(),
+      productId: String(it.productId || "").trim(),
+    }))
+    .filter((it) => it.rowId && existingById.has(it.rowId));
+
+  const currentStatus = _sbOrderText(_sbOrderGet(existingRows[0], ["status", "Status"])) || "Under Supervision";
+  const currentApproval = _sbOrderText(_sbOrderGet(existingRows[0], ["sv_approval", "S.V Approval", "SV Approval"])) || null;
+  const currentTeamMemberId = _sbOrderText(_sbOrderGet(existingRows[0], ["team_member_id", "team_members_id", "created_by_id", "owner_id"])) || null;
+  const currentTeamMemberName = _sbOrderOwnerName(existingRows[0]) || String(req.session?.username || "").trim() || null;
+  const orderNumber = Number.isFinite(Number(editCtx.orderIdNumber))
+    ? Number(editCtx.orderIdNumber)
+    : (_sbOrderNum(_sbOrderGet(existingRows[0], ["order_number", "Order - ID", "Order ID", "order id"])) || await _sbNextOrderNumber());
+  const createdTime = _sbOrderDate(_sbOrderGet(existingRows[0], ["notion_created_time", "created_time", "created_at", "Created time"])) || new Date().toISOString();
+  const finalOrderType = _canonicalOrderTypeLabel(orderType || editCtx.orderType) || orderType || editCtx.orderType || null;
+
+  const usedRowIds = new Set();
+  const updated = [];
+  const pickMatch = (productId) => {
+    const exactIndex = unused.findIndex((it) => String(it.productId) === String(productId) && !usedRowIds.has(it.rowId));
+    if (exactIndex >= 0) return unused.splice(exactIndex, 1)[0];
+    const anyIndex = unused.findIndex((it) => !usedRowIds.has(it.rowId));
+    if (anyIndex >= 0) return unused.splice(anyIndex, 1)[0];
+    return null;
+  };
+
+  for (const product of cleanedProducts || []) {
+    const productInfo = lookups.byId.get(String(product.id)) || {};
+    const qty = Number(product.quantity) * Number(qtySign || 1);
+    const safeQty = Number.isFinite(qty) ? qty : 0;
+    const match = pickMatch(product.id);
+    const patch = {
+      reason: String(product.reason || "").trim() || null,
+      order_number: orderNumber,
+      order_type: finalOrderType,
+      product_id: String(product.id || "").trim() || null,
+      product_name: productInfo.name || String(product.name || product.id || "Unknown Product"),
+      product_url: productInfo.url || null,
+      unit_price: Number.isFinite(Number(productInfo.unitPrice)) ? Number(productInfo.unitPrice) : null,
+      quantity_requested: safeQty,
+      quantity_progress: safeQty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: safeQty,
+      issue_description: String(product.issueDescription || "").trim() || null,
+      status: currentStatus,
+      sv_approval: currentApproval,
+      team_member_id: currentTeamMemberId,
+      team_member_name: currentTeamMemberName,
+    };
+
+    if (match?.rowId) {
+      usedRowIds.add(match.rowId);
+      updated.push(await _sbUpdateOrderRowSafe(match.rowId, patch));
+    } else {
+      updated.push(await _sbInsertOrderRowSafe({
+        ...patch,
+        notion_created_time: createdTime,
+        supervisor: null,
+        person_received_by_operations: null,
+      }));
+    }
+  }
+
+  // Archive any old rows that were removed from the edited order.
+  for (const leftover of unused) {
+    if (!leftover?.rowId || usedRowIds.has(leftover.rowId)) continue;
+    await _sbUpdateOrderRowSafe(leftover.rowId, { status: "Archive" }).catch((err) => {
+      console.warn("Failed to archive removed order item:", err?.message || err);
+    });
+  }
+
+  await _sbInvalidateOrdersCaches(req);
+  _clearOrderDraftForType(req.session, finalOrderType);
+  if (editCtx.orderType && editCtx.orderType !== finalOrderType) _clearOrderDraftForType(req.session, editCtx.orderType);
+  delete req.session.editingOrder;
+
+  return updated.map(_sbSerializeOrderRow);
+}
+
 function _sbComputeOrderIdRangeFromItems(items = []) {
   const nums = (items || [])
     .map((item) => Number(item?.orderIdNumber))
@@ -21623,6 +21849,29 @@ if (_sbOrdersEnabled() && _sbProductsEnabled() && !req.session.editingOrder) {
   }
 }
 
+if (_sbOrdersEnabled() && req.session?.editingOrder?.source === "supabase") {
+  try {
+    const signedProducts = cleanedProducts.map((p) => ({
+      ...p,
+      quantity: Number(p.quantity) * _qtySign,
+    }));
+    const updatedItems = await _sbApplyOrderEditFromSession(req, signedProducts, orderType, 1);
+    _clearOrderDraftForType(req.session, orderType);
+    return res.json({
+      success: true,
+      message: "Order updated in Supabase successfully!",
+      source: "supabase",
+      orderItems: (updatedItems || []).map((item) => ({ orderPageId: item.id, productId: item.productPageId || item.id })),
+    });
+  } catch (error) {
+    console.error("Error editing order in Supabase:", error?.details || error);
+    return res.status(error?.status || 500).json({
+      success: false,
+      message: error?.message || "Failed to update order in Supabase.",
+    });
+  }
+}
+
 if (!ordersDatabaseId || !teamMembersDatabaseId) {
   return res
     .status(500)
@@ -22058,10 +22307,6 @@ app.post(
   requirePage("Current Orders"),
   async (req, res) => {
     try {
-      if (!ordersDatabaseId || !teamMembersDatabaseId) {
-        return res.status(500).json({ error: "Database IDs are not configured." });
-      }
-
       const { orderIds, adminPassword } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
@@ -22074,6 +22319,23 @@ app.post(
 
       const ok = await verifyAdminPassword(pwd);
       if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+
+      if (_sbOrdersEnabled() && _sbProductsEnabled()) {
+        try {
+          const result = await _sbInitOrderEditFromRows(req, orderIds);
+          return res.json(result);
+        } catch (sbError) {
+          const status = Number(sbError?.status || 500);
+          if (status !== 500 || !ordersDatabaseId || !teamMembersDatabaseId) {
+            return res.status(status).json({ error: sbError?.message || "Failed to init edit" });
+          }
+          console.warn("Supabase edit init failed; trying Notion fallback:", sbError?.message || sbError);
+        }
+      }
+
+      if (!ordersDatabaseId || !teamMembersDatabaseId) {
+        return res.status(500).json({ error: "Database IDs are not configured." });
+      }
 
       const userId = await getSessionUserNotionId(req);
       if (!userId) return res.status(404).json({ error: "User not found." });
@@ -22197,6 +22459,37 @@ app.post(
     } catch (e) {
       console.error("edit init error:", e?.body || e);
       return res.status(500).json({ error: "Failed to init edit" });
+    }
+  },
+);
+
+// Init Edit Order (Operations Orders) — Supabase-first edit flow
+app.post(
+  "/api/orders/operations/edit/init",
+  requireAuth,
+  requirePage("Operations Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds, adminPassword } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+
+      const ok = await verifyAdminPassword(pwd);
+      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+
+      if (!_sbOrdersEnabled() || !_sbProductsEnabled()) {
+        return res.status(500).json({ error: "Supabase orders/products are not configured." });
+      }
+
+      const result = await _sbInitOrderEditFromRows(req, orderIds);
+      return res.json(result);
+    } catch (e) {
+      console.error("operations edit init error:", e?.details || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to init edit" });
     }
   },
 );
