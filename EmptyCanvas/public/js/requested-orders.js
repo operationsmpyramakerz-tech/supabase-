@@ -2941,12 +2941,12 @@ document.addEventListener("DOMContentLoaded", () => {
         : '<i data-feather="archive"></i><span>Archive</span>';
     }
     if (editOrderBtn) {
-      const isArchived = (stage?.idx || 1) >= 5 || norm(stage?.key) === "archive";
-      const showEdit = !isMaintenancePage && !isArchived;
-      editOrderBtn.hidden = !showEdit;
-      editOrderBtn.disabled = false;
+      // Operations Orders edit is intentionally disabled.
+      // Use the Edit action from Current Orders only, where the edit flow is stable.
+      editOrderBtn.hidden = true;
+      editOrderBtn.disabled = true;
       editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
-      orderModal?.querySelector?.(".co-modal-dialog")?.classList.toggle("has-edit-action", showEdit);
+      orderModal?.querySelector?.(".co-modal-dialog")?.classList.remove("has-edit-action");
     }
     syncModalMoreVisibility();
     if (logMaintenanceBtn) {
