@@ -140,7 +140,7 @@
 
   // ===== Page cache (speed) =====
   // Keep a small per-tab cache so opening Orders Review does not always need a full refetch.
-  const SV_CACHE_PREFIX = "cache:svOrders:v4:";
+  const SV_CACHE_PREFIX = "cache:svOrders:v5:";
   const SV_CACHE_TTL_MS = 45 * 1000; // 45s
 
   function normalizeSvTab(tab) {
@@ -1649,7 +1649,12 @@
   function applyFilter() {
     const q = norm(searchInput?.value);
     filteredGroups = allGroups.filter((g) => {
-      if (approvalKey(g.approval) !== TAB) return false;
+      if (TAB === "archive") {
+        const archived = !!g?.isArchived || (g?.products || []).some((item) => isArchiveStatus(item?.status));
+        if (!archived) return false;
+      } else if (approvalKey(g.approval) !== TAB) {
+        return false;
+      }
       if (!groupMatchesCurrentType(g)) return false;
       return groupMatchesSearch(g, q);
     });
