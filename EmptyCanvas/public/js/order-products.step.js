@@ -154,6 +154,88 @@
     return '';
   }
 
+  function meaningfulEditReason(value) {
+    const v = String(value || '').trim();
+    if (!v || v === '—' || /^no reason$/i.test(v)) return '';
+    return v;
+  }
+
+  function collectEditTransferPayloads() {
+    const payloads = [];
+    const seen = new Set();
+    const addPayload = (payload) => {
+      if (!isFreshEditPayload(payload)) return;
+      const key = JSON.stringify({
+        ts: payload?.ts || 0,
+        reason: payload?.reason || '',
+        orderType: payload?.orderType || '',
+        count: Array.isArray(payload?.products) ? payload.products.length : 0,
+      });
+      if (seen.has(key)) return;
+      seen.add(key);
+      payloads.push(payload);
+    };
+
+    const keys = [];
+    const pushKey = (value) => {
+      const key = String(value || '').trim();
+      if (key && !keys.includes(key)) keys.push(key);
+    };
+
+    pushKey(readUrlParam('editKey'));
+    const pending = readPendingEditTransfer();
+    pushKey(pending?.key);
+    if (pending?.reason || pending?.orderType) addPayload(pending);
+
+    for (const storage of editStorageAreas()) {
+      for (const key of keys) {
+        try {
+          addPayload(safeParseStorageJson(storage.getItem(`shopping_cart:edit_payload:v2:${key}`)));
+        } catch {}
+      }
+      try {
+        for (let i = 0; i < storage.length; i += 1) {
+          const storageKey = storage.key(i) || '';
+          if (storageKey.startsWith('shopping_cart:edit_fallback:v1:')) {
+            addPayload(safeParseStorageJson(storage.getItem(storageKey)));
+          }
+        }
+      } catch {}
+    }
+
+    return payloads;
+  }
+
+  function readReasonFromEditTransfer() {
+    for (const payload of collectEditTransferPayloads()) {
+      const directReason = meaningfulEditReason(payload?.reason);
+      if (directReason) return directReason;
+
+      const products = Array.isArray(payload?.products) ? payload.products : [];
+      for (const item of products) {
+        const itemReason = meaningfulEditReason(item?.reason);
+        if (itemReason) return itemReason;
+      }
+    }
+    return '';
+  }
+
+  function mergeMissingReasonsFromEditTransfer(items, fallbackItems = []) {
+    const cleanItems = normalizeDraftItems(items);
+    if (!cleanItems.length) return cleanItems;
+
+    const transferReason =
+      readReasonFromEditTransfer() ||
+      (normalizeDraftItems(fallbackItems).find((p) => meaningfulEditReason(p.reason))?.reason || '');
+    const fallbackReason = meaningfulEditReason(transferReason);
+    if (!fallbackReason) return cleanItems;
+
+    return cleanItems.map((item) => ({
+      ...item,
+      reason: meaningfulEditReason(item.reason) || fallbackReason,
+    }));
+  }
+
   const isEditMode = readUrlParam('edit') === '1' || hasFreshEditTransfer();
 
   // ---------------------------- Order Type (tabs) ----------------------------
@@ -871,7 +953,12 @@
           return [];
         }
         const items = normalizeDraftItems(parsed?.products);
-        return items;
+        const payloadReason = meaningfulEditReason(parsed?.reason);
+        if (!payloadReason) return items;
+        return items.map((item) => ({
+          ...item,
+          reason: meaningfulEditReason(item.reason) || payloadReason,
+        }));
       };
 
       for (const storage of editStorageAreas()) {
@@ -919,12 +1006,13 @@
 
   async function loadDraft(orderType = selectedOrderType) {
     try {
+      const fallbackCart = loadEditFallbackDraft(orderType);
       const res = await fetch(buildDraftUrl(orderType));
-      if (!res.ok) return { cart: loadEditFallbackDraft(orderType) };
+      if (!res.ok) return { cart: fallbackCart };
       const d = await res.json();
       const serverCart = normalizeDraftItems(d?.products);
       return {
-        cart: serverCart.length ? serverCart : loadEditFallbackDraft(orderType),
+        cart: serverCart.length ? mergeMissingReasonsFromEditTransfer(serverCart, fallbackCart) : fallbackCart,
       };
     } catch {
       return { cart: loadEditFallbackDraft(orderType) }; // ignore
@@ -1108,9 +1196,17 @@
 
   function syncDraftUi(type = selectedOrderType) {
     const maintenance = isMaintenanceType(type);
-    const firstReason = cart.find((p) => String(p.reason || '').trim())?.reason || '';
+    const firstReason = cart.find((p) => meaningfulEditReason(p.reason))?.reason || '';
+    const editFallbackReason = isEditMode ? readReasonFromEditTransfer() : '';
 
-    globalReason = maintenance ? '' : String(firstReason || '').trim();
+    globalReason = maintenance ? '' : String(meaningfulEditReason(firstReason) || meaningfulEditReason(editFallbackReason) || '').trim();
+
+    if (globalReason && !maintenance && Array.isArray(cart)) {
+      cart = cart.map((item) => ({
+        ...item,
+        reason: meaningfulEditReason(item.reason) || globalReason,
+      }));
+    }
 
     if (reasonInput) {
       reasonInput.value = maintenance ? '' : globalReason;

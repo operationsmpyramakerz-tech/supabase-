@@ -752,6 +752,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const editUrl = new URL('/orders/new/products', window.location.origin);
       editUrl.searchParams.set('edit', '1');
       if (data?.orderType) editUrl.searchParams.set('type', String(data.orderType));
+      const editKey = writeCurrentOrderEditTransfer(data, activeGroup);
+      if (editKey) editUrl.searchParams.set('editKey', editKey);
 
       // Success: close modals and go to edit page
       closeEditPasswordModal({ restoreFocus: false });
@@ -781,6 +783,73 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // fallback
     alert([title, message].filter(Boolean).join('\n'));
+  }
+
+  function meaningfulEditReason(value) {
+    const v = String(value || '').trim();
+    if (!v || v === '—' || /^no reason$/i.test(v)) return '';
+    return v;
+  }
+
+  function resolveEditReasonFallback(group = activeGroup) {
+    const candidates = [
+      group?.reason,
+      modalEls.reason?.textContent,
+      ...((group?.products || []).map((item) => item?.reason)),
+    ];
+
+    for (const candidate of candidates) {
+      const reason = meaningfulEditReason(candidate);
+      if (reason) return reason;
+    }
+    return '';
+  }
+
+  function writeCurrentOrderEditTransfer(data = {}, group = activeGroup) {
+    try {
+      const products = Array.isArray(data?.products) ? data.products : [];
+      if (!products.length) return '';
+
+      const fallbackReason = resolveEditReasonFallback(group);
+      const patchedProducts = products.map((item) => ({
+        ...item,
+        reason: meaningfulEditReason(item?.reason) || fallbackReason,
+      }));
+
+      const editKey = `current-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const orderType = String(data?.orderType || group?.orderType || '').trim();
+      const payloadObj = {
+        products: patchedProducts,
+        reason: fallbackReason,
+        orderType,
+        source: 'current-orders',
+        ts: Date.now(),
+      };
+      const payload = JSON.stringify(payloadObj);
+      const keyType = String(orderType || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'default';
+      const storageKeys = [
+        `shopping_cart:edit_payload:v2:${editKey}`,
+        `shopping_cart:edit_fallback:v1:${keyType}`,
+        'shopping_cart:edit_fallback:v1:default',
+      ];
+
+      for (const storage of [window.sessionStorage, window.localStorage]) {
+        try {
+          storageKeys.forEach((key) => storage.setItem(key, payload));
+          storage.setItem('shopping_cart:edit_pending:v2', JSON.stringify({
+            key: editKey,
+            orderType,
+            reason: fallbackReason,
+            ts: Date.now(),
+          }));
+          if (orderType) storage.setItem('shopping_cart:edit_target_type:v1', orderType);
+        } catch {}
+      }
+
+      return editKey;
+    } catch {
+      return '';
+    }
   }
 
   // ---------- Export (Excel / PDF) ----------
@@ -959,6 +1028,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const editUrl = new URL('/orders/new/products', window.location.origin);
       editUrl.searchParams.set('edit', '1');
       if (data?.orderType) editUrl.searchParams.set('type', String(data.orderType));
+      const editKey = writeCurrentOrderEditTransfer(data, g || activeGroup);
+      if (editKey) editUrl.searchParams.set('editKey', editKey);
 
       // Close modal and go to edit page
       closeOrderModal();
