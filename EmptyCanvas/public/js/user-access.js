@@ -624,9 +624,10 @@
         email: String(row?.email || '').trim(),
         photoUrl: String(row?.photoUrl || row?.photo_url || '').trim(),
         isEnabled: !!(row?.isEnabled ?? row?.is_enabled ?? row?.enabled),
+        isSelf: !!(row?.isSelf ?? row?.is_self),
       }))
       .filter((row) => row.memberId)
-      .sort((a, b) => (Number(b.isEnabled) - Number(a.isEnabled)) || a.name.localeCompare(b.name));
+      .sort((a, b) => (Number(b.isSelf) - Number(a.isSelf)) || (Number(b.isEnabled) - Number(a.isEnabled)) || a.name.localeCompare(b.name));
   }
 
   function singleSelectHTML(field, value, options = [], config = {}) {
@@ -2087,7 +2088,7 @@
         <div class="ua-sv-access-person">
           <div class="ua-avatar ua-avatar--small">${row.photoUrl ? `<img src="${escapeHTML(row.photoUrl)}" alt="${escapeHTML(row.name)}" loading="lazy">` : escapeHTML(initials(row.name))}</div>
           <div>
-            <strong>${escapeHTML(row.name)}</strong>
+            <strong><span class="ua-sv-access-name">${escapeHTML(row.name)}</span>${row.isSelf ? '<span class="ua-sv-self-badge">This user</span>' : ''}</strong>
             <small>${escapeHTML([row.department, row.position].filter(Boolean).join(' • ') || row.email || 'Team member')}</small>
           </div>
         </div>
