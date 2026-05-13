@@ -4073,7 +4073,19 @@ async function _sbInitOrderEditFromRows(req, orderIds = []) {
     throw err;
   }
 
-  if (!editOrderType) editOrderType = "Request Products";
+  if (!editOrderType) {
+    const hasIssueDescription = draft.some((item) => String(item?.issueDescription || "").trim());
+    const hasNegativeQty = rows.some((row) => {
+      const serialized = _sbSerializeOrderRow(row);
+      const qtyCandidate = serialized.quantityRequested !== null && serialized.quantityRequested !== undefined
+        ? serialized.quantityRequested
+        : serialized.quantity;
+      return Number(qtyCandidate) < 0;
+    });
+    if (hasIssueDescription) editOrderType = "Request Maintenance";
+    else if (hasNegativeQty) editOrderType = "Withdraw Products";
+    else editOrderType = "Request Products";
+  }
 
   _setOrderDraftForType(req.session, editOrderType, { products: draft });
 
