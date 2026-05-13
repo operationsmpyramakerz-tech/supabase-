@@ -1189,6 +1189,52 @@ body.co-modal-open{ overflow: hidden; }
 .co-meta-row span{ color: #6B7280; }
 .co-meta-row strong{ color: #000000; font-weight: 900; }
 
+/* Modern single Reason header used by Current Orders, Operations Orders, and Orders Review. */
+.co-meta-row--products{
+  display: none !important;
+}
+
+.co-meta-row--reason{
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 10px 8px 14px;
+  background: #FFFFFF;
+  border: 1.5px solid #111827;
+  border-radius: 999px;
+  box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+}
+
+.co-meta-row--reason span{
+  color: #111827;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.co-meta-row--reason strong{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  max-width: min(70%, 520px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #000000;
+  color: #FFFFFF !important;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
 /* Allow multiple receipt numbers (stored as Notion rich_text) to wrap on new lines */
 #reqModalReceiptNumber{ white-space: pre-line; text-align: right; }
 
@@ -2090,6 +2136,25 @@ body.co-modal-open{ overflow: hidden; }
     text-align: left;
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  body.order-modal-fit-screen .co-meta-row--reason{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    border-radius: 18px;
+    padding: 10px;
+  }
+
+  body.order-modal-fit-screen .co-meta-row--reason span{
+    padding-inline: 2px;
+  }
+
+  body.order-modal-fit-screen .co-meta-row--reason strong{
+    width: 100%;
+    max-width: 100%;
+    min-height: 34px;
+    text-align: center;
   }
 
   body.order-modal-fit-screen .ro-actions,
