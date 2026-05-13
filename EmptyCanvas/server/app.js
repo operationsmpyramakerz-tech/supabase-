@@ -22379,6 +22379,177 @@ app.post(
   },
 );
 
+
+function _normalizeCurrentOrderActionIds(orderIds = []) {
+  return (Array.isArray(orderIds) ? orderIds : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
+}
+
+async function _invalidateCurrentOrdersActionCaches(req = null) {
+  await _sbInvalidateOrdersCaches(req).catch(() => {});
+  try {
+    const userId = await getSessionUserNotionId(req);
+    if (userId) await cacheDel(`cache:api:orders:list:${userId}:v7`);
+  } catch {}
+  await cacheDel("cache:api:orders:requested:v7").catch(() => {});
+}
+
+async function _notionUpdateCurrentOrderStatus(ids = [], desired = "In progress") {
+  const statusProp = await detectStatusPropName();
+  const dbProps = await getOrdersDBProps();
+  const dbPropMeta = dbProps?.[statusProp] || null;
+
+  let statusType = dbPropMeta?.type;
+  if (!statusType && ids[0]) {
+    const sample = await notion.pages.retrieve({ page_id: ids[0] });
+    statusType = sample?.properties?.[statusProp]?.type;
+  }
+
+  let statusOptions = [];
+  try {
+    statusOptions =
+      statusType === "status"
+        ? (dbPropMeta?.status?.options || [])
+        : (dbPropMeta?.select?.options || []);
+    if (!Array.isArray(statusOptions)) statusOptions = [];
+  } catch {
+    statusOptions = [];
+  }
+
+  const exact = statusOptions.find((o) => norm(o?.name) === norm(desired));
+  const partial = statusOptions.find((o) => norm(o?.name).includes(norm(desired)) || norm(desired).includes(norm(o?.name)));
+  const targetName = exact?.name || partial?.name || desired;
+  const targetColor = (exact || partial)?.color || null;
+  const value =
+    statusType === "status"
+      ? { status: { name: targetName } }
+      : { select: { name: targetName } };
+
+  await Promise.all(
+    ids.map((id) =>
+      notion.pages.update({
+        page_id: id,
+        archived: false,
+        properties: { [statusProp]: value },
+      }),
+    ),
+  );
+
+  return { status: targetName, statusColor: targetColor };
+}
+
+async function _verifyCurrentOrderActionPassword(req, res) {
+  const pwd = String(req.body?.adminPassword || "").trim();
+  if (!pwd) {
+    res.status(400).json({ error: "adminPassword required" });
+    return false;
+  }
+  const ok = await verifyAdminPassword(pwd);
+  if (!ok) {
+    res.status(401).json({ error: "Invalid admin password" });
+    return false;
+  }
+  return true;
+}
+
+// Archive a Current Orders group (Status => "Archive") — requires admin password
+app.post(
+  "/api/orders/current/archive",
+  requireAuth,
+  requirePage("Current Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+      if (!await _verifyCurrentOrderActionPassword(req, res)) return;
+
+      const ids = _normalizeCurrentOrderActionIds(orderIds);
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await _sbUpdateOrdersByIds(ids, { status: "Archive" });
+        await _invalidateCurrentOrdersActionCaches(req);
+        return res.json({ success: true, status: "Archive", statusColor: "purple", source: "supabase" });
+      }
+
+      const result = await _notionUpdateCurrentOrderStatus(ids, "Archive");
+      await _invalidateCurrentOrdersActionCaches(req);
+      return res.json({ success: true, ...result });
+    } catch (e) {
+      console.error("archive current order error:", e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to archive order" });
+    }
+  },
+);
+
+// UnArchive a Current Orders group (Status => "In progress") — requires admin password
+app.post(
+  "/api/orders/current/unarchive",
+  requireAuth,
+  requirePage("Current Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+      if (!await _verifyCurrentOrderActionPassword(req, res)) return;
+
+      const ids = _normalizeCurrentOrderActionIds(orderIds);
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await _sbUpdateOrdersByIds(ids, { status: "In progress" });
+        await _invalidateCurrentOrdersActionCaches(req);
+        return res.json({ success: true, status: "In progress", statusColor: "yellow", source: "supabase" });
+      }
+
+      const result = await _notionUpdateCurrentOrderStatus(ids, "In progress");
+      await _invalidateCurrentOrdersActionCaches(req);
+      return res.json({ success: true, ...result });
+    } catch (e) {
+      console.error("unarchive current order error:", e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to unarchive order" });
+    }
+  },
+);
+
+// Delete a Current Orders group — requires admin password
+app.post(
+  "/api/orders/current/delete",
+  requireAuth,
+  requirePage("Current Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+      if (!await _verifyCurrentOrderActionPassword(req, res)) return;
+
+      const ids = _normalizeCurrentOrderActionIds(orderIds);
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const deleted = await supabaseDb.deleteByIds(_sbOrdersTable(), ids);
+        await _invalidateCurrentOrdersActionCaches(req);
+        return res.json({ success: true, deleted: Array.isArray(deleted) ? deleted.length : ids.length, source: "supabase" });
+      }
+
+      await Promise.all(ids.map((id) => notion.pages.update({ page_id: id, archived: true })));
+      await _invalidateCurrentOrdersActionCaches(req);
+      return res.json({ success: true, deleted: ids.length });
+    } catch (e) {
+      console.error("delete current order error:", e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to delete order" });
+    }
+  },
+);
+
 // Init Edit Order (Current Orders) — requires admin password
 // - Verifies admin password
 // - Loads the selected order items
