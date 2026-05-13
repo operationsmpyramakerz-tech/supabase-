@@ -7287,3 +7287,34 @@ body:not(.order-modal-fit-screen) .co-item-status{
 .co-card .co-createdby{
   display:block !important;
 }
+
+/* Current Orders modal 3-dot actions and protected danger action */
+.co-modal-more-item--danger{
+  color:#DC2626;
+}
+.co-modal-more-item--danger:hover,
+.co-modal-more-item--danger:focus-visible{
+  background:#FEF2F2;
+}
+.co-modal-more-item--danger svg{
+  color:#DC2626;
+}
+.ro-action-btn--danger{
+  border:1px solid rgba(220,38,38,.18);
+  background:linear-gradient(180deg,#EF4444 0%,#DC2626 100%);
+  color:#fff;
+  box-shadow:0 16px 34px rgba(220,38,38,.20);
+}
+.ro-action-btn--danger:hover{
+  box-shadow:0 20px 44px rgba(220,38,38,.24);
+  filter:brightness(1.03);
+}
+.ro-action-btn--danger:active{
+  box-shadow:0 14px 30px rgba(220,38,38,.20);
+}
+.req-edit-icon--danger{
+  color:#DC2626;
+  background:linear-gradient(135deg,#FEF2F2,#FFFFFF);
+  border-color:#FECACA;
+  box-shadow:0 14px 30px rgba(220,38,38,.12);
+}
