@@ -2431,7 +2431,7 @@ function _uaIsMissingSvSchoolsTableError(error) {
   return /team_member_sv_schools|schema cache|Could not find the table|relation .* does not exist|42P01|PGRST205/i.test(msg);
 }
 
-function _sbSerializeSvAccessMember(row = {}, enabled = false) {
+function _sbSerializeSvAccessMember(row = {}, enabled = false, options = {}) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbString(_sbValueForLabel(row, "Name")) || "Unnamed";
   return {
@@ -2442,6 +2442,7 @@ function _sbSerializeSvAccessMember(row = {}, enabled = false) {
     email: _sbString(_sbValueForLabel(row, "Email")) || "",
     photoUrl: _sbExtractUrl(_sbValueForLabel(row, "Profile picture")) || "",
     isEnabled: !!enabled,
+    isSelf: !!options.isSelf,
   };
 }
 
@@ -2507,15 +2508,16 @@ async function _sbSvAccessPayloadForMember(memberId = "") {
   const enabledNames = new Set([...fromTable.names, ...legacy.names]);
 
   const members = (rows || [])
-    .filter((row) => String(_sbGet(row, ["id", "ID"]) ?? "") && String(_sbGet(row, ["id", "ID"]) ?? "") !== id)
+    .filter((row) => String(_sbGet(row, ["id", "ID"]) ?? ""))
     .map((row) => {
       const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
       const name = _sbString(_sbValueForLabel(row, "Name"));
+      const isSelf = rowId === id;
       const enabled = enabledIds.has(rowId) || (!!name && enabledNames.has(norm(name)));
-      return _sbSerializeSvAccessMember(row, enabled);
+      return _sbSerializeSvAccessMember(row, enabled, { isSelf });
     })
     .filter((row) => row.memberId)
-    .sort((a, b) => (Number(b.isEnabled) - Number(a.isEnabled)) || String(a.name || "").localeCompare(String(b.name || "")));
+    .sort((a, b) => (Number(b.isSelf) - Number(a.isSelf)) || (Number(b.isEnabled) - Number(a.isEnabled)) || String(a.name || "").localeCompare(String(b.name || "")));
 
   const enabledCount = members.filter((member) => member.isEnabled).length;
   return { memberId: id, memberName: _sbString(_sbValueForLabel(target, "Name")) || "", members, summary: { enabledCount } };
@@ -2542,7 +2544,7 @@ async function _sbSaveSvAccessForMember(memberId = "", members = []) {
   const enabledRows = (rows || [])
     .filter((row) => {
       const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
-      return rowId && rowId !== id && requestedIds.has(rowId);
+      return rowId && requestedIds.has(rowId);
     });
 
   try {
