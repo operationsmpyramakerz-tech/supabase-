@@ -1280,9 +1280,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Under the title we show the date (per requested mapping)
     const sub = created ? escapeHTML(created) : '—';
 
-    // Keep total price for the Estimate section, but show the Reason under the date
+    // Keep total price for the Estimate section. The reason is intentionally hidden
+    // from the outer card to keep Current Orders compact; details remain inside the modal.
     const componentsPrice = fmtMoney(estimateTotal);
-    const createdBy = String(group.reason || '').trim();
 
     const thumbHTML = orderTypeThumbMarkup(
       group.orderType || first.orderType,
@@ -1302,7 +1302,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="co-main">
           <div class="co-title">${title}</div>
           <div class="co-sub">${sub}</div>
-          <div class="co-createdby">${escapeHTML(createdBy || '—')}</div>
         </div>
 
         <div class="co-qty">x${Number.isFinite(componentsCount) ? componentsCount : 0}</div>

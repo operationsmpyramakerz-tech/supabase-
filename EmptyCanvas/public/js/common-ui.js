@@ -33,6 +33,115 @@
   window.OpsNoData = { html, set, DEFAULT_TEXT, IMAGE_SRC };
 })();
 
+
+
+// Global Arabic/LTR auto-direction helper.
+// Text fields and generated text that starts with Arabic should align from the right;
+// English/Latin text remains left aligned. This keeps the UI LTR while making Arabic input natural.
+(function initOpsAutoDirectionHelper() {
+  const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  const STRONG_RTL_RE = /[\u0590-\u08FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+  const STRONG_LTR_RE = /[A-Za-z\u00C0-\u024F\u1E00-\u1EFF]/;
+
+  function firstStrongDirection(value) {
+    const text = String(value || '');
+    for (const ch of text) {
+      if (STRONG_RTL_RE.test(ch)) return 'rtl';
+      if (STRONG_LTR_RE.test(ch)) return 'ltr';
+    }
+    return ARABIC_RE.test(text) ? 'rtl' : 'ltr';
+  }
+
+  function shouldSkipField(el) {
+    if (!el || el.disabled || el.readOnly) return false;
+    const tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'textarea') return false;
+    if (el.isContentEditable) return false;
+    if (tag !== 'input') return true;
+    const type = String(el.getAttribute('type') || 'text').toLowerCase();
+    return !['text', 'search', 'tel', 'url'].includes(type);
+  }
+
+  function setDirection(el, text, options = {}) {
+    if (!el) return;
+    const raw = String(text ?? '');
+    const dir = raw.trim() ? firstStrongDirection(raw) : '';
+    if (!dir) {
+      el.removeAttribute('dir');
+      el.classList.remove('ops-auto-dir-rtl', 'ops-auto-dir-ltr');
+      return;
+    }
+    el.setAttribute('dir', dir);
+    el.classList.toggle('ops-auto-dir-rtl', dir === 'rtl');
+    el.classList.toggle('ops-auto-dir-ltr', dir !== 'rtl');
+    if (options.forceTextAlign !== false) {
+      el.style.textAlign = dir === 'rtl' ? 'right' : 'left';
+    }
+  }
+
+  function syncField(el) {
+    if (shouldSkipField(el)) return;
+    const value = el.isContentEditable ? el.textContent : el.value;
+    setDirection(el, value || '', { forceTextAlign: true });
+  }
+
+  function bindField(el) {
+    if (!el || el.__opsAutoDirBound || shouldSkipField(el)) return;
+    el.__opsAutoDirBound = true;
+    syncField(el);
+    el.addEventListener('input', () => syncField(el));
+    el.addEventListener('change', () => syncField(el));
+  }
+
+  const TEXT_BLOCK_SELECTOR = [
+    '.co-title', '.co-sub', '.co-modal-value', '.co-item-title', '.co-item-issue',
+    '.order-title', '.order-item__left .name', '.order-item__left .muted',
+    '.msg-title', '.msg-preview', '.chat-title', '.chat-preview',
+    '.expense-ticket__route-title', '.expense-ticket__route-endpoint',
+    '.product-card__title', '.product-card__meta', '.task-card__title', '.task-card__description',
+    '.ops-no-data-state__text'
+  ].join(',');
+
+  function syncTextBlock(el) {
+    if (!el || el.children?.length) return;
+    const text = String(el.textContent || '').trim();
+    if (!text) return;
+    setDirection(el, text, { forceTextAlign: true });
+  }
+
+  function apply(root = document) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('input, textarea, [contenteditable="true"]').forEach(bindField);
+    root.querySelectorAll(TEXT_BLOCK_SELECTOR).forEach(syncTextBlock);
+  }
+
+  function start() {
+    apply(document);
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes || []) {
+          if (node && node.nodeType === 1) {
+            if (node.matches?.('input, textarea, [contenteditable="true"]')) bindField(node);
+            if (node.matches?.(TEXT_BLOCK_SELECTOR)) syncTextBlock(node);
+            apply(node);
+          }
+        }
+        if (mutation.type === 'characterData') {
+          const parent = mutation.target?.parentElement;
+          if (parent?.matches?.(TEXT_BLOCK_SELECTOR)) syncTextBlock(parent);
+        }
+      }
+    });
+    observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: true });
+  }
+
+  window.OpsTextDirection = { firstStrongDirection, setDirection, syncField, apply };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
+})();
+
+
 // public/js/common-ui.js
 document.addEventListener('DOMContentLoaded', () => {
   // 🔒 مهم: نخفي روابط السايدبار من البداية لتجنب "فلاش" كل الصفحات

@@ -601,7 +601,19 @@ function shouldAutoRightAlign(raw, options) {
 
 function prepareArgsForArabicText(raw, args) {
   const meta = findOptionsArg(args);
-  if (!meta.options) return { args, options: null };
+
+  // When PDFKit text receives no options object, Arabic text previously kept the
+  // default left alignment. Add a lightweight options object so generated PDFs
+  // follow the same rule as the web UI: Arabic starts from the right, English
+  // stays from the left.
+  if (!meta.options) {
+    if (containsArabic(raw) && firstStrongDirection(raw) === "rtl") {
+      const nextArgs = Array.isArray(args) ? args.slice() : [];
+      nextArgs.push({ align: "right" });
+      return { args: nextArgs, options: nextArgs[nextArgs.length - 1] };
+    }
+    return { args, options: null };
+  }
 
   let options = meta.options;
   let nextArgs = args;

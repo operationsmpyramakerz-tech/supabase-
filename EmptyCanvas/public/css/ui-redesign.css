@@ -2853,3 +2853,21 @@ body.ops-hard-refresh-active{
     font-size:14px;
   }
 }
+
+
+/* Arabic/LTR auto-direction support for text input across the app */
+.ops-auto-dir-rtl{
+  direction: rtl !important;
+  text-align: right !important;
+  unicode-bidi: plaintext;
+}
+.ops-auto-dir-ltr{
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: plaintext;
+}
+textarea.ops-auto-dir-rtl,
+input.ops-auto-dir-rtl{
+  padding-inline-start: 16px;
+  padding-inline-end: 16px;
+}

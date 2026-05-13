@@ -503,7 +503,7 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
   background: #fff;
   border: 1px solid #E5E7EB;
   border-radius: 26px;
-  padding: 18px 18px;
+  padding: 14px 16px;
   box-shadow: 0 16px 36px rgba(0,0,0,.08);
   cursor: pointer;
   user-select: none;
@@ -520,14 +520,14 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 
 .co-top{
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: center;
+  gap: 14px;
 }
 
 .co-thumb{
-  width: 82px;
-  height: 82px;
-  border-radius: 22px;
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
   background: #F3F4F6;
   overflow: hidden;
   flex-shrink: 0;
@@ -564,7 +564,7 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 .co-main{ flex: 1; min-width: 0; }
 
 .co-title{
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 900;
   color: #000000;
   line-height: 1.2;
@@ -572,9 +572,9 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 }
 
 .co-sub{
-  font-size: 14px;
+  font-size: 13px;
   color: #9CA3AF;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 /* Replaces the big price line: show the creator name under the date */
@@ -607,7 +607,7 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 .co-divider{
   height: 1px;
   background: #E5E7EB;
-  margin: 18px 0;
+  margin: 12px 0;
 }
 
 .co-bottom{
@@ -1008,8 +1008,8 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 }
 
 @media (max-width: 520px){
-  .co-card{ padding: 14px 14px; border-radius: 22px; }
-  .co-thumb{ width: 72px; height: 72px; border-radius: 18px; }
+  .co-card{ padding: 12px 12px; border-radius: 22px; }
+  .co-thumb{ width: 56px; height: 56px; border-radius: 16px; }
   .co-title{ font-size: 18px; }
   .co-price{ font-size: 32px; }
   .co-est-value{ font-size: 24px; }
@@ -7087,4 +7087,11 @@ body.sidebar-mini .sidebar-footer .account-mini .label{
 #reqReceiptPhotosModal #reqReceiptPhotosDone{
   width: 100% !important;
   min-height: 48px !important;
+}
+
+/* Current Orders compact cards: the order reason stays inside the detail modal only. */
+.co-card .co-createdby{ display:none !important; }
+.co-card .co-thumb--order-type svg{ width:26px; height:26px; }
+@media (max-width: 520px){
+  .co-card .co-thumb--order-type svg{ width:24px; height:24px; }
 }
