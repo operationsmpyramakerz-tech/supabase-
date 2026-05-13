@@ -755,16 +755,52 @@
   function loadEditFallbackDraft(orderType = selectedOrderType) {
     try {
       if (!isEditMode) return [];
-      const keyType = String(orderType || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'default';
-      const raw = sessionStorage.getItem(`shopping_cart:edit_fallback:v1:${keyType}`);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      const ts = Number(parsed?.ts || 0);
-      if (ts && Date.now() - ts > 30 * 60 * 1000) {
-        sessionStorage.removeItem(`shopping_cart:edit_fallback:v1:${keyType}`);
-        return [];
+
+      const ttlMs = 30 * 60 * 1000;
+      const normalizedKeys = [];
+      const pushKey = (value) => {
+        const keyType = String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'default';
+        if (!normalizedKeys.includes(keyType)) normalizedKeys.push(keyType);
+      };
+
+      pushKey(orderType);
+      try { pushKey(new URLSearchParams(window.location.search).get('type') || ''); } catch {}
+      try { pushKey(loadStoredOrderType()); } catch {}
+      try {
+        const targetType = sessionStorage.getItem('shopping_cart:edit_target_type:v1') || '';
+        pushKey(targetType);
+      } catch {}
+
+      // Generic fallback is written by Operations Orders before redirecting.
+      pushKey('default');
+      pushKey('Request Products');
+      pushKey('Request Maintenance');
+      pushKey('Withdraw Products');
+
+      try {
+        for (let i = 0; i < sessionStorage.length; i += 1) {
+          const key = sessionStorage.key(i) || '';
+          if (key.startsWith('shopping_cart:edit_fallback:v1:')) {
+            const suffix = key.slice('shopping_cart:edit_fallback:v1:'.length);
+            if (suffix && !normalizedKeys.includes(suffix)) normalizedKeys.push(suffix);
+          }
+        }
+      } catch {}
+
+      for (const keyType of normalizedKeys) {
+        const storageKey = `shopping_cart:edit_fallback:v1:${keyType}`;
+        const raw = sessionStorage.getItem(storageKey);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const ts = Number(parsed?.ts || 0);
+        if (ts && Date.now() - ts > ttlMs) {
+          sessionStorage.removeItem(storageKey);
+          continue;
+        }
+        const items = normalizeDraftItems(parsed?.products);
+        if (items.length) return items;
       }
-      return normalizeDraftItems(parsed?.products);
+      return [];
     } catch {
       return [];
     }

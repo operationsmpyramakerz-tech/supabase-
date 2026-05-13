@@ -1803,8 +1803,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
       try {
         if (Array.isArray(data?.products) && data.products.length) {
+          const payload = JSON.stringify({ products: data.products, ts: Date.now() });
           const keyType = String(data.orderType || "").toLowerCase().replace(/[^a-z0-9]/g, "") || "default";
-          sessionStorage.setItem(`shopping_cart:edit_fallback:v1:${keyType}`, JSON.stringify({ products: data.products, ts: Date.now() }));
+          sessionStorage.setItem(`shopping_cart:edit_fallback:v1:${keyType}`, payload);
+          sessionStorage.setItem("shopping_cart:edit_fallback:v1:default", payload);
+          if (data?.orderType) sessionStorage.setItem("shopping_cart:edit_target_type:v1", String(data.orderType));
         }
       } catch {}
       closeEditPasswordModal({ restoreFocus: false });
