@@ -791,10 +791,13 @@
       );
     } catch {}
 
+    // For fields that are populated by our app (Reason in edit/draft mode),
+    // never attach delayed clearing timers. Those timers can delete the real
+    // server-loaded reason a few milliseconds after it appears on screen.
+    if (!clearNow) return;
+
     // Clear any values that were injected by the browser/password manager.
-    if (clearNow) {
-      try { el.value = ''; } catch {}
-    }
+    try { el.value = ''; } catch {}
 
     // If the browser tries to autofill later (often without user interaction),
     // clear it unless the user actually interacted with the field.
@@ -2344,7 +2347,7 @@
   // ---------------------------- Init ----------------------------
   async function initCart() {
     // Disable browser autofill on Reason + Password (user should type)
-    hardDisableAutofill(reasonInput, { clearNow: true });
+    hardDisableAutofill(reasonInput, { clearNow: false });
     hardDisableAutofill(passwordInput, { clearNow: true });
 
     bindEvents();
