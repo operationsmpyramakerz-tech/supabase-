@@ -62,18 +62,65 @@
     return !['text', 'search', 'tel', 'url'].includes(type);
   }
 
+  const BIDI_CONTROL_RE = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+  const LTR_TOKEN_RE = /[A-Za-z0-9£$€][A-Za-z0-9._%+@:;\/\\#&=,\-+()[\]{}£$€]*/g;
+  const RTL_TOKEN_RE = /[\u0590-\u08FF\uFB1D-\uFDFD\uFE70-\uFEFC]+/g;
+
+  function containsArabic(value) {
+    return ARABIC_RE.test(String(value || ''));
+  }
+
+  function containsLatin(value) {
+    return STRONG_LTR_RE.test(String(value || ''));
+  }
+
+  function stripBidiControls(value) {
+    return String(value ?? '').replace(BIDI_CONTROL_RE, '');
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatMixedBidiHtml(value) {
+    const raw = stripBidiControls(value);
+    if (!raw || !containsArabic(raw)) return escapeHtml(raw);
+
+    const dir = firstStrongDirection(raw);
+    const tokenRe = new RegExp(`${LTR_TOKEN_RE.source}|${RTL_TOKEN_RE.source}`, 'g');
+    let out = '';
+    let last = 0;
+    for (const match of raw.matchAll(tokenRe)) {
+      const idx = match.index ?? 0;
+      const token = match[0] || '';
+      if (idx > last) out += escapeHtml(raw.slice(last, idx));
+      const tokenDir = STRONG_LTR_RE.test(token) ? 'ltr' : (containsArabic(token) ? 'rtl' : 'auto');
+      out += `<bdi class="ops-bidi-run" dir="${tokenDir}">${escapeHtml(token)}</bdi>`;
+      last = idx + token.length;
+    }
+    if (last < raw.length) out += escapeHtml(raw.slice(last));
+    return `<bdi class="ops-bidi-wrap" dir="${dir}">${out}</bdi>`;
+  }
+
   function setDirection(el, text, options = {}) {
     if (!el) return;
-    const raw = String(text ?? '');
+    const raw = stripBidiControls(text ?? '');
     const dir = raw.trim() ? firstStrongDirection(raw) : '';
     if (!dir) {
       el.removeAttribute('dir');
-      el.classList.remove('ops-auto-dir-rtl', 'ops-auto-dir-ltr');
+      el.classList.remove('ops-auto-dir-rtl', 'ops-auto-dir-ltr', 'ops-bidi-text');
       return;
     }
     el.setAttribute('dir', dir);
     el.classList.toggle('ops-auto-dir-rtl', dir === 'rtl');
     el.classList.toggle('ops-auto-dir-ltr', dir !== 'rtl');
+    if (containsArabic(raw)) el.classList.add('ops-bidi-text');
+    else el.classList.remove('ops-bidi-text');
     if (options.forceTextAlign !== false) {
       el.style.textAlign = dir === 'rtl' ? 'right' : 'left';
     }
@@ -94,19 +141,35 @@
   }
 
   const TEXT_BLOCK_SELECTOR = [
-    '.co-title', '.co-sub', '.co-modal-value', '.co-item-title', '.co-item-issue',
-    '.order-title', '.order-item__left .name', '.order-item__left .muted',
-    '.msg-title', '.msg-preview', '.chat-title', '.chat-preview',
-    '.expense-ticket__route-title', '.expense-ticket__route-endpoint',
-    '.product-card__title', '.product-card__meta', '.task-card__title', '.task-card__description',
+    '[data-ops-bidi]', '[data-auto-dir]', '[dir="auto"]',
+    '.co-title', '.co-sub', '.co-createdby', '.co-modal-status', '.co-modal-status-sub',
+    '.co-modal-value', '.co-meta-row strong', '.co-item-title', '.co-item-name', '.co-item-sub',
+    '.co-item-issue', '.co-item-issue-desc', '.co-item-total', '.co-est-value',
+    '.order-title', '.order-card-title', '.order-card-subtitle', '.order-item__left .name', '.order-item__left .muted',
+    '.msg-title', '.msg-preview', '.chat-title', '.chat-preview', '.email-title', '.email-preview',
+    '.expense-ticket__route-title', '.expense-ticket__route-endpoint', '.expense-reason',
+    '.product-card__title', '.product-card__meta', '.proposal-title', '.proposal-meta',
+    '.task-card__title', '.task-card__description', '.task-title', '.task-desc',
+    '.stocktaking-cell', '.stock-card-title', '.stock-card-meta',
+    '.profile-popover__value', '.profile-popover__name', '.profile-popover__meta',
     '.ops-no-data-state__text'
   ].join(',');
 
+  function hasNonBidiChildren(el) {
+    return Array.from(el?.children || []).some((child) => {
+      return !child.classList?.contains('ops-bidi-wrap') && !child.classList?.contains('ops-bidi-run');
+    });
+  }
+
   function syncTextBlock(el) {
-    if (!el || el.children?.length) return;
-    const text = String(el.textContent || '').trim();
+    if (!el || hasNonBidiChildren(el)) return;
+    const text = stripBidiControls(String(el.textContent || '')).trim();
     if (!text) return;
     setDirection(el, text, { forceTextAlign: true });
+    if (containsArabic(text) && containsLatin(text)) {
+      const formatted = formatMixedBidiHtml(text);
+      if (el.innerHTML !== formatted) el.innerHTML = formatted;
+    }
   }
 
   function apply(root = document) {
@@ -135,7 +198,17 @@
     observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: true });
   }
 
-  window.OpsTextDirection = { firstStrongDirection, setDirection, syncField, apply };
+  window.OpsTextDirection = {
+    firstStrongDirection,
+    containsArabic,
+    containsLatin,
+    stripBidiControls,
+    formatMixedBidiHtml,
+    setDirection,
+    syncField,
+    syncTextBlock,
+    apply,
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();

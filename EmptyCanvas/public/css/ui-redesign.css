@@ -2871,3 +2871,14 @@ input.ops-auto-dir-rtl{
   padding-inline-start: 16px;
   padding-inline-end: 16px;
 }
+
+.ops-bidi-text{
+  unicode-bidi: plaintext;
+}
+.ops-bidi-wrap,
+.ops-bidi-run{
+  unicode-bidi: isolate;
+}
+.ops-bidi-wrap{
+  display: inline;
+}
