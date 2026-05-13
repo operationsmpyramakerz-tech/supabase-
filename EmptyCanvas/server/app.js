@@ -13640,8 +13640,37 @@ app.get(
   requireAuth,
   requirePage("Create New Order"),
   (req, res) => {
+    res.set("Cache-Control", "no-store");
     const orderType = String(req.query?.orderType || "").trim();
-    res.json(_getOrderDraftForType(req.session, orderType));
+    const requestedDraft = _getOrderDraftForType(req.session, orderType);
+    if (requestedDraft && Array.isArray(requestedDraft.products) && requestedDraft.products.length) {
+      return res.json(requestedDraft);
+    }
+
+    // Edit flow safety net:
+    // If the Operations Orders page initialized an edit session but the cart page
+    // requests a slightly different/missing orderType, return the active edit
+    // draft instead of an empty cart. This mirrors the old Current Orders edit
+    // behavior and avoids opening Shopping Cart with no products.
+    const editCtx = req.session?.editingOrder;
+    const editActive = editCtx &&
+      typeof editCtx.expiresAt === "number" &&
+      Date.now() < editCtx.expiresAt &&
+      editCtx.orderType;
+    if (editActive) {
+      const editDraft = _getOrderDraftForType(req.session, editCtx.orderType);
+      if (editDraft && Array.isArray(editDraft.products) && editDraft.products.length) {
+        return res.json(editDraft);
+      }
+
+      const store = _getOrderDraftStore(req.session, editCtx.orderType);
+      const firstDraft = Object.values(store || {}).find((draft) =>
+        draft && Array.isArray(draft.products) && draft.products.length
+      );
+      if (firstDraft) return res.json(firstDraft);
+    }
+
+    return res.json(requestedDraft || {});
   },
 );
 app.post(
