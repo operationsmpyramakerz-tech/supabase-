@@ -165,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const modalRows = {
+    meta: modalEls.reason?.closest?.('.co-modal-meta') || modalEls.components?.closest?.('.co-modal-meta') || null,
     reason: modalEls.reason?.closest?.('.co-meta-row') || null,
     components: modalEls.components?.closest?.('.co-meta-row') || null,
     totalPrice: modalEls.totalPrice?.closest?.('.co-meta-row') || null,
@@ -524,6 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setRowHidden(modalRows.reason, isMaintenanceOrder);
     setRowHidden(modalRows.components, isMaintenanceOrder);
     setRowHidden(modalRows.totalPrice, isMaintenanceOrder);
+    setRowHidden(modalRows.meta, isMaintenanceOrder);
     if (modalEls.reason) modalEls.reason.textContent = groupReason;
     if (modalEls.date) modalEls.date.textContent = fmtCreated(group.latestCreated) || '—';
     if (modalEls.components) modalEls.components.textContent = String(items.length);

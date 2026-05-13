@@ -32,6 +32,7 @@
     items: document.getElementById("svModalItems"),
   };
   const modalRows = {
+    meta: modalEls.reason?.closest?.('.co-modal-meta') || modalEls.components?.closest?.('.co-modal-meta') || null,
     reason: modalEls.reason?.closest?.('.co-meta-row') || null,
     date: modalEls.date?.closest?.('.co-meta-row') || null,
     components: modalEls.components?.closest?.('.co-meta-row') || null,
@@ -1033,6 +1034,7 @@
     setRowHidden(modalRows.reason, isMaintenanceOrder);
     setRowHidden(modalRows.components, isMaintenanceOrder);
     setRowHidden(modalRows.totalPrice, isMaintenanceOrder);
+    setRowHidden(modalRows.meta, isMaintenanceOrder);
     if (modalEls.reason) {
       modalEls.reason.textContent = isMaintenanceOrder
         ? summarizeIssueDescriptions(modalItemsList)

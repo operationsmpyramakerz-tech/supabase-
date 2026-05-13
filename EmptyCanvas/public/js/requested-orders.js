@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalDate = document.getElementById("reqModalDate");
   const modalComponents = document.getElementById("reqModalComponents");
   const modalTotalPrice = document.getElementById("reqModalTotalPrice");
+  const modalMeta = modalReason?.closest?.(".co-modal-meta") || modalComponents?.closest?.(".co-modal-meta") || null;
   const modalReasonRow = modalReason?.closest?.(".co-meta-row") || null;
   const modalDateRow = modalDate?.closest?.(".co-meta-row") || null;
   const modalComponentsRow = modalComponents?.closest?.(".co-meta-row") || null;
@@ -2890,6 +2891,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (receivedByRow) receivedByRow.hidden = !shouldShowExtras;
     if (modalOperationsBy) modalOperationsBy.textContent = receivedByVal || "—";
+
+    const hasVisibleMetaRow = [
+      modalReasonRow,
+      modalDateRow,
+      modalComponentsRow,
+      modalTotalPriceRow,
+      receiptRow,
+      receivedByRow,
+    ].some((row) => row && !row.hidden && row.style.display !== "none");
+    setRowHidden(modalMeta, !hasVisibleMetaRow);
 
     // Actions visibility
     // - Not Started: show "Received by operations" only before shipping
