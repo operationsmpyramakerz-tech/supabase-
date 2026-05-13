@@ -2099,9 +2099,13 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // Stage alone is not enough because we split "Shipped" into:
-  // - Remaining: shipped but not fully received (remaining qty > 0)
-  // - Received: shipped and fully received
+  // Stage alone is not enough because Operations Orders splits the
+  // post-review workflow into separate operational buckets:
+  // - Not Started: order is approved and ready for operations (In progress)
+  // - Remaining: shipped/received-by-operations but still has remaining qty
+  // - Received: shipped/received-by-operations and no remaining qty
+  // - Delivered: arrived/delivered/final status
+  // - Archive: archived orders
   function tabForGroup(g) {
     const idx = g?.stage?.idx || 1;
     if (idx >= 5) return "archive";
@@ -2523,7 +2527,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function groupMatchesCurrentTab(g) {
     const idx = g?.stage?.idx || 1;
-    const isArchived = idx >= 6 || norm(g?.stage?.key) === "archive";
+    const isArchived = idx >= 5 || norm(g?.stage?.key) === "archive";
     const first = (g.items || [])[0] || {};
     const isMaintenanceOrder = isMaintenanceOrderType(g.orderType || first.orderType);
 
@@ -2531,16 +2535,22 @@ document.addEventListener("DOMContentLoaded", () => {
       return !isMaintenancePage && currentTab === "archive";
     }
 
+    // Maintenance Orders page uses the same script but only needs received/delivered
+    // maintenance orders. Keep that page isolated from regular operations filtering.
     if (isMaintenancePage) {
       if (!isMaintenanceOrder) return false;
-      if (currentTab === "received") return idx === 4;
-      if (currentTab === "delivered") return idx >= 5 && idx < 6;
+      if (currentTab === "received") return idx === 3;
+      if (currentTab === "delivered") return idx === 4;
       return false;
     }
-    if (currentTab === "not-started") return idx < 4;
-    if (currentTab === "remaining") return !isMaintenanceOrder && idx === 4 && !!g?.hasRemaining;
-    if (currentTab === "received") return idx === 4 && (isMaintenanceOrder || !!g?.hasReceived);
-    if (currentTab === "delivered") return idx >= 5 && idx < 6;
+
+    // Operations Orders tabs must represent one workflow bucket only.
+    // The old Notion logic used formulas/filters; after Supabase migration the UI
+    // must do the same split locally instead of grouping several statuses together.
+    if (currentTab === "not-started") return idx < 3;
+    if (currentTab === "remaining") return !isMaintenanceOrder && idx === 3 && !!g?.hasRemaining;
+    if (currentTab === "received") return idx === 3 && (isMaintenanceOrder || !!g?.hasReceived);
+    if (currentTab === "delivered") return idx === 4;
     if (currentTab === "archive") return isArchived;
     return false;
   }
@@ -2871,7 +2881,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Extra fields: show for "Received" and later only
     // NOTE: User request: in "Not Started" tab hide Receipt/Received-by even if present.
-    const shouldShowExtras = !isMaintenanceOrder && currentTab !== "not-started" && (stage?.idx || 1) >= 4;
+    const shouldShowExtras = !isMaintenanceOrder && currentTab !== "not-started" && (stage?.idx || 1) >= 3;
     const receiptVal = g && (g.receiptNumber !== null && g.receiptNumber !== undefined) ? g.receiptNumber : null;
     const receivedByVal = String(g.operationsByName || "").trim();
 
@@ -2887,8 +2897,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (shippedBtn) {
       const showShippedBtn = !isMaintenancePage && (
         isMaintenanceOrder
-          ? currentTab === "not-started" && stage.idx < 4
-          : ((currentTab === "not-started" && stage.idx < 4) || currentTab === "remaining")
+          ? currentTab === "not-started" && stage.idx < 3
+          : ((currentTab === "not-started" && stage.idx < 3) || currentTab === "remaining")
       );
       shippedBtn.style.display = showShippedBtn ? "inline-flex" : "none";
       shippedBtn.dataset.mode = isMaintenanceOrder ? "maintenance" : "requested";
@@ -2899,14 +2909,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // "Mark as Delivered" button:
     // Show it in the "Received" tab when the order is in Shipped stage.
     if (arrivedBtn) {
-      arrivedBtn.style.display = currentTab === "received" && stage.idx === 4 ? "inline-flex" : "none";
+      arrivedBtn.style.display = currentTab === "received" && stage.idx === 3 ? "inline-flex" : "none";
     }
     if (createWithdrawalBtn) {
       const repeatAction = getDeliveredRepeatActionConfig(g, all[0]);
       const canCreateRepeatOrder =
         !isMaintenanceOrder &&
         currentTab === "delivered" &&
-        (stage?.idx || 1) >= 5 &&
+        (stage?.idx || 1) >= 4 &&
         !!repeatAction;
       createWithdrawalBtn.style.display = canCreateRepeatOrder ? "inline-flex" : "none";
       if (canCreateRepeatOrder && repeatAction) {
@@ -2919,7 +2929,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setReceiptPhotosButtonVisibility(g);
     if (archiveBtn) {
-      const isArchived = (stage?.idx || 1) >= 6 || norm(stage?.key) === "archive";
+      const isArchived = (stage?.idx || 1) >= 5 || norm(stage?.key) === "archive";
       const showUnarchive = !isMaintenancePage && currentTab === "archive" && isArchived;
       const showArchive = !isMaintenancePage && !isArchived;
       archiveBtn.hidden = !(showArchive || showUnarchive);
@@ -2931,7 +2941,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : '<i data-feather="archive"></i><span>Archive</span>';
     }
     if (editOrderBtn) {
-      const isArchived = (stage?.idx || 1) >= 6 || norm(stage?.key) === "archive";
+      const isArchived = (stage?.idx || 1) >= 5 || norm(stage?.key) === "archive";
       const showEdit = !isMaintenancePage && !isArchived;
       editOrderBtn.hidden = !showEdit;
       editOrderBtn.disabled = false;
