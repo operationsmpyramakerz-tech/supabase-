@@ -560,6 +560,18 @@
     return `${unique[0]} +${unique.length - 1}`;
   }
 
+
+  function maintenanceIssueText(item) {
+    const value = String(item?.issueDescription || item?.reason || '').trim();
+    return value || '—';
+  }
+
+  function setRowHidden(row, hidden) {
+    if (!row) return;
+    row.hidden = !!hidden;
+    row.style.display = hidden ? 'none' : '';
+  }
+
   function fmtMoney(value) {
     const n = Number(value);
     const safe = Number.isFinite(n) ? n : 0;
@@ -1018,8 +1030,9 @@
     setSVProgress(stage.idx);
 
     if (modalReasonLabel) modalReasonLabel.textContent = isMaintenanceOrder ? 'Issue Description' : 'Reason';
-    if (modalRows.components) modalRows.components.hidden = isMaintenanceOrder;
-    if (modalRows.totalPrice) modalRows.totalPrice.hidden = isMaintenanceOrder;
+    setRowHidden(modalRows.reason, isMaintenanceOrder);
+    setRowHidden(modalRows.components, isMaintenanceOrder);
+    setRowHidden(modalRows.totalPrice, isMaintenanceOrder);
     if (modalEls.reason) {
       modalEls.reason.textContent = isMaintenanceOrder
         ? summarizeIssueDescriptions(modalItemsList)
@@ -1095,7 +1108,9 @@
               </div>
 
               <div class="co-item-right">
-                <div class="co-item-total">Qty: ${qtyHTML}</div>
+                ${isMaintenanceOrder
+                  ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
+                  : `<div class="co-item-total">Qty: ${qtyHTML}</div>`}
                 ${actionButtons}
               </div>
             </div>

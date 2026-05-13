@@ -1587,6 +1587,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${unique[0]} +${unique.length - 1}`;
   }
 
+
+  function maintenanceIssueText(item) {
+    const value = String(item?.issueDescription || item?.reason || "").trim();
+    return value || "—";
+  }
+
+  function setRowHidden(row, hidden) {
+    if (!row) return;
+    row.hidden = !!hidden;
+    row.style.display = hidden ? "none" : "";
+  }
+
   function toDate(v) {
     if (!v) return null;
     try {
@@ -2522,14 +2534,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Meta (match Current Orders / Orders Review for Maintenance)
     if (modalReasonLabel) modalReasonLabel.textContent = isMaintenanceOrder ? "Issue Description" : "Reason";
+    setRowHidden(modalReasonRow, isMaintenanceOrder);
     if (modalReason) {
       modalReason.textContent = isMaintenanceOrder
         ? summarizeMaintenanceReasons(items)
         : (String(g.reason || "—").trim() || "—");
     }
     if (modalDate) modalDate.textContent = fmtDateTime(g.latestCreated) || "—";
-    if (modalComponentsRow) modalComponentsRow.hidden = !!isMaintenanceOrder;
-    if (modalTotalPriceRow) modalTotalPriceRow.hidden = !!isMaintenanceOrder;
+    setRowHidden(modalComponentsRow, isMaintenanceOrder);
+    setRowHidden(modalTotalPriceRow, isMaintenanceOrder);
     if (modalComponents) {
       const c = isRemainingTab
         ? (Number(g.remainingItemsCount) || items.length)
@@ -2725,7 +2738,9 @@ document.addEventListener("DOMContentLoaded", () => {
             ${subLine ? `<div class="co-item-sub">${subLine}</div>` : ''}
           </div>
           <div class="co-item-right">
-            <div class="co-item-total">${isRemainingTab ? "Qty remaining:" : "Qty:"} ${qtyHTML}</div>
+            ${isMaintenanceOrder
+              ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
+              : `<div class="co-item-total">${isRemainingTab ? "Qty remaining:" : "Qty:"} ${qtyHTML}</div>`}
             ${rightRowHtml}
           </div>
         `;

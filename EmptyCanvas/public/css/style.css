@@ -1242,6 +1242,16 @@ body.co-modal-open{ overflow: hidden; }
 
 .co-item-right{ text-align: right; flex-shrink: 0; }
 .co-item-total{ font-weight: 900; color: #000000; }
+.co-item-issue-desc{
+  max-width: 260px;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 .co-item-status{
   margin-top: 6px;
@@ -2147,10 +2157,16 @@ body.co-modal-open{ overflow: hidden; }
     gap: 10px;
   }
 
-  body.order-modal-fit-screen .co-item-total{
+  body.order-modal-fit-screen .co-item-total,
+  body.order-modal-fit-screen .co-item-issue-desc{
     min-width: 0;
+    max-width: 100%;
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  body.order-modal-fit-screen .co-item-issue-desc{
+    text-align: left;
   }
 
   body.order-modal-fit-screen .co-item-right-row{

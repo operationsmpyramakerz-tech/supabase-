@@ -164,6 +164,12 @@ document.addEventListener('DOMContentLoaded', () => {
     items: document.getElementById('coModalItems'),
   };
 
+  const modalRows = {
+    reason: modalEls.reason?.closest?.('.co-meta-row') || null,
+    components: modalEls.components?.closest?.('.co-meta-row') || null,
+    totalPrice: modalEls.totalPrice?.closest?.('.co-meta-row') || null,
+  };
+
   let lastFocusEl = null;
   let activeGroup = null; // currently opened order group in modal
   let editPwdLastFocusEl = null;
@@ -273,6 +279,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function orderTypeKey(type) {
     return String(type || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+
+  function isMaintenanceOrderType(type) {
+    return orderTypeKey(type) === 'requestmaintenance';
+  }
+
+  function maintenanceIssueText(item) {
+    const value = String(item?.issueDescription || item?.reason || '').trim();
+    return value || '—';
+  }
+
+  function setRowHidden(row, hidden) {
+    if (!row) return;
+    row.hidden = !!hidden;
+    row.style.display = hidden ? 'none' : '';
   }
 
   function normalizeCurrentStatusTab(value) {
@@ -462,6 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }),
     );
     const stage = computeStage(items);
+    const isMaintenanceOrder = isMaintenanceOrderType(group?.orderType || items?.[0]?.orderType);
 
     // Populate header
     if (modalEls.statusTitle) modalEls.statusTitle.textContent = stage.label;
@@ -498,6 +521,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reason is the group key (stable order grouping)
     const groupReason = String(group?.reason || items?.[0]?.reason || '—').trim() || '—';
 
+    setRowHidden(modalRows.reason, isMaintenanceOrder);
+    setRowHidden(modalRows.components, isMaintenanceOrder);
+    setRowHidden(modalRows.totalPrice, isMaintenanceOrder);
     if (modalEls.reason) modalEls.reason.textContent = groupReason;
     if (modalEls.date) modalEls.date.textContent = fmtCreated(group.latestCreated) || '—';
     if (modalEls.components) modalEls.components.textContent = String(items.length);
@@ -540,16 +566,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const row = document.createElement('div');
           row.className = 'co-item';
+          const subLine = isMaintenanceOrder
+            ? ''
+            : `Unit: ${escapeHTML(fmtMoney(unit))} · Total: ${escapeHTML(fmtMoney(lineTotal))}`;
+
           row.innerHTML = `
             <div class="co-item-left">
               <div class="co-item-title">
                 <div class="co-item-name">${escapeHTML(it.productName || 'Unknown Product')}</div>
                 ${linkHTML}
               </div>
-              <div class="co-item-sub">Unit: ${escapeHTML(fmtMoney(unit))} · Total: ${escapeHTML(fmtMoney(lineTotal))}</div>
+              ${subLine ? `<div class="co-item-sub">${subLine}</div>` : ''}
             </div>
             <div class="co-item-right">
-              <div class="co-item-total">Qty: ${qtyHTML}</div>
+              ${isMaintenanceOrder
+                ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
+                : `<div class="co-item-total">Qty: ${qtyHTML}</div>`}
               <div class="co-item-status" style="${sStyle}">${escapeHTML(approvalLabel)}</div>
             </div>
           `;
