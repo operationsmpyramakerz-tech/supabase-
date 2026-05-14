@@ -270,6 +270,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return values;
   }
 
+  function formatReceiptNumbersInline(receiptNumbers) {
+    const values = normalizeReceiptNumbers(receiptNumbers);
+    if (values.length) return values.join(" - ");
+    return String(receiptNumbers ?? "").trim();
+  }
+
   function collectReceiptNumbers() {
     const values = normalizeReceiptNumbers(
       getReceiptInputs()
@@ -2522,15 +2528,19 @@ document.addEventListener("DOMContentLoaded", () => {
       const stage = computeStage(itemsArr);
       const rs = summarizeReasons(itemsArr);
 
-      // Receipt number should be identical for all components in the same order.
-      // We pick the first non-null value; if multiple different values exist, show "Multiple".
+      // Receipt number can contain multiple values after Supabase migration.
+      // Keep the raw stored value when it is identical across rows, but avoid showing
+      // "Multiple" just because numbers are split across lines or different rows.
       const receiptVals = (itemsArr || [])
         .map((x) => (x && x.receiptNumber !== null && x.receiptNumber !== undefined ? x.receiptNumber : null))
         .filter((x) => x !== null && x !== undefined);
       let receiptNumber = null;
       if (receiptVals.length) {
-        const set = new Set(receiptVals.map((x) => String(x)));
-        receiptNumber = set.size === 1 ? receiptVals[0] : "Multiple";
+        const uniqueRaw = Array.from(new Set(receiptVals.map((x) => String(x))));
+        const mergedNumbers = normalizeReceiptNumbers(receiptVals);
+        receiptNumber = uniqueRaw.length === 1
+          ? receiptVals[0]
+          : (mergedNumbers.length ? mergedNumbers.join("\n") : "Multiple");
       }
 
       const receiptEntries = collectReceiptEntriesFromGroup({ items: itemsArr });
@@ -3055,7 +3065,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const receivedByVal = String(g.operationsByName || "").trim();
 
     if (receiptRow) receiptRow.hidden = !shouldShowExtras;
-    if (modalReceiptNumber) modalReceiptNumber.textContent = receiptVal !== null ? String(receiptVal) : "—";
+    if (modalReceiptNumber) {
+      const receiptDisplay = receiptVal !== null ? formatReceiptNumbersInline(receiptVal) : "";
+      modalReceiptNumber.textContent = receiptDisplay || "—";
+    }
 
     const receiptPhotoEntries = collectReceiptEntriesFromGroup(g || {});
     const shouldShowReceiptPhotosMeta = shouldShowExtras && ["received", "delivered"].includes(currentTab);

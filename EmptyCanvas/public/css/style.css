@@ -1307,8 +1307,8 @@ body.co-modal-open{ overflow: hidden; }
   margin-left: auto;
 }
 
-/* Allow multiple receipt numbers (stored as Notion rich_text) to wrap on new lines */
-#reqModalReceiptNumber{ white-space: pre-line; text-align: right; }
+/* Show multiple receipt numbers inline, separated by hyphens, to save modal space. */
+#reqModalReceiptNumber{ white-space: normal; text-align: right; }
 
 .co-modal-items{ display: grid; gap: 10px; }
 
