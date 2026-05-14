@@ -1216,31 +1216,31 @@ body.co-modal-open{ overflow: hidden; }
   content: "";
   position: absolute;
   top: -1px;
-  right: -1px;
+  left: -1px;
   width: 46px;
   height: 24px;
   background: #FFFFFF;
-  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
   pointer-events: none;
 }
 
 .co-meta-row--reason span{
   position: absolute;
   top: -11px;
-  left: 18px;
+  left: 22px;
   z-index: 1;
   display: inline-flex;
   align-items: center;
   min-height: 34px;
   padding: 7px 16px;
-  color: #D9F99D;
-  background: #020617;
+  color: #020617;
+  background: #D9F99D;
   border-radius: 16px 16px 10px 10px;
   font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.01em;
   line-height: 1.1;
-  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.12);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.18);
 }
 
 .co-meta-row--reason strong{
@@ -2173,7 +2173,7 @@ body.co-modal-open{ overflow: hidden; }
 
   body.order-modal-fit-screen .co-meta-row--reason span{
     top: -10px;
-    left: 14px;
+    left: 20px;
     min-height: 32px;
     padding: 7px 14px;
     border-radius: 15px 15px 9px 9px;
