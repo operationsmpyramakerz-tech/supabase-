@@ -4110,6 +4110,92 @@ async function _sbInitOrderEditFromRows(req, orderIds = []) {
   return { ok: true, count: draft.length, orderType: editOrderType || null, reason: editReason, products: draft, source: "supabase" };
 }
 
+async function _sbDeleteStocktakingRowsForOrderRows(orderRows = []) {
+  if (!_sbStocktakingEnabled()) return { deleted: 0, skipped: true, reason: "stocktaking-disabled" };
+
+  const sourceOrderIds = new Set(
+    (Array.isArray(orderRows) ? orderRows : [])
+      .map((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? row?.id ?? "").trim())
+      .filter(Boolean),
+  );
+  if (!sourceOrderIds.size) return { deleted: 0, skipped: true, reason: "missing-source-orders" };
+
+  try {
+    const stockRows = await _sbStocktakingRows();
+    const keys = _sbAllColumnKeys(stockRows || []);
+    const sourceOrderColumn = _sbFindStocktakingKey(keys, [
+      "source_order_id",
+      "Source Order ID",
+      "source_order",
+      "Source Order",
+      "order_row_id",
+      "Order Row ID",
+    ]);
+
+    if (!sourceOrderColumn) {
+      return { deleted: 0, skipped: true, reason: "source-order-column-missing" };
+    }
+
+    const rowsToDelete = (stockRows || []).filter((row) => {
+      const linkedOrderId = String(row?.[sourceOrderColumn] ?? "").trim();
+      return linkedOrderId && sourceOrderIds.has(linkedOrderId);
+    });
+
+    let deleted = 0;
+    for (const row of rowsToDelete) {
+      const stockRowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+      if (!stockRowId) continue;
+      await supabaseDb.deleteById(_sbStocktakingTable(), stockRowId);
+      deleted += 1;
+    }
+
+    return { deleted, skipped: false, sourceOrderColumn };
+  } catch (error) {
+    console.warn("[operations edit] failed to cleanup related stocktaking rows:", error?.message || error);
+    return { deleted: 0, skipped: true, error: String(error?.message || error) };
+  }
+}
+
+async function _sbResetOperationsOrdersToProgress(orderIds = []) {
+  const rowsBefore = await _sbOrderRowsByIds(orderIds);
+  if (!rowsBefore.length) {
+    const err = new Error("Orders not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const resetPatch = {
+    status: "In progress",
+    quantity_received_by_operations: null,
+    quantity_remaining: null,
+    person_received_by_operations: null,
+    receipt_number: null,
+    order_receipt: null,
+    maintenance_receipt: null,
+  };
+
+  const updatedRows = [];
+  for (const row of rowsBefore) {
+    const id = String(_sbOrderGet(row, ["id", "ID"]) ?? row?.id ?? "").trim();
+    if (!id) continue;
+    updatedRows.push(await _sbUpdateOrderRowSafe(id, resetPatch));
+  }
+
+  const stocktakingCleanup = await _sbDeleteStocktakingRowsForOrderRows(rowsBefore);
+  await _sbInvalidateOrdersCaches();
+  try { await cacheDel("cache:api:orders:requested:v7"); } catch {}
+  try { await cacheDel("cache:api:b2b:school-stock:supabase:v1"); } catch {}
+
+  return {
+    success: true,
+    source: "supabase",
+    status: "In progress",
+    statusColor: "yellow",
+    updatedCount: updatedRows.length,
+    stocktakingCleanup,
+  };
+}
+
 async function _sbApplyOrderEditFromSession(req, cleanedProducts = [], orderType = "", qtySign = 1) {
   const editCtx = req.session?.editingOrder;
   const now = Date.now();
@@ -22805,9 +22891,11 @@ app.post(
   },
 );
 
-// Return an Operations Orders group to the Not Started tab — requires admin password
+// Return an Operations Order to In progress — requires admin password.
+// Used by the 3-dot Edit action in Operations Orders. This does not open
+// the shopping cart; it only moves the order back to the Not Started bucket.
 app.post(
-  "/api/orders/operations/edit-to-not-started",
+  "/api/orders/operations/edit-to-progress",
   requireAuth,
   requirePage("Operations Orders"),
   async (req, res) => {
@@ -22831,56 +22919,34 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        await _sbUpdateOrdersByIds(ids, {
-          status: "In progress",
-          quantity_received_by_operations: 0,
-          quantity_remaining: 0,
-          receipt_number: null,
-          person_received_by_operations: null,
-          order_receipt: null,
-        });
+        const result = await _sbResetOperationsOrdersToProgress(ids);
+        if (req.session) {
+          delete req.session.editingOrder;
+          delete req.session.adminCreateOrderUnlockUntil;
+          await _saveSessionNow(req).catch(() => {});
+        }
+        return res.json(result);
+      }
 
-        await _sbDeleteStocktakingRowsForOrderIds(ids).catch((err) => {
-          console.warn("[operations edit-to-not-started] stocktaking cleanup skipped:", err?.message || err);
-        });
-
-        await _sbInvalidateOrdersCaches(req);
-        await cacheDel("cache:api:orders:requested:v7");
-        return res.json({ success: true, status: "In progress", statusColor: "yellow", source: "supabase" });
+      if (!ordersDatabaseId) {
+        return res.status(500).json({ error: "Supabase orders table is not configured." });
       }
 
       const statusProp = await detectStatusPropName();
       const dbProps = await getOrdersDBProps();
       const dbPropMeta = dbProps?.[statusProp] || null;
+      const sample = await notion.pages.retrieve({ page_id: ids[0] });
+      const statusType = dbPropMeta?.type || sample?.properties?.[statusProp]?.type || "select";
+      const opts = statusType === "status" ? dbPropMeta?.status?.options : dbPropMeta?.select?.options;
+      const picked = (Array.isArray(opts) ? opts : []).find((o) => norm(o?.name) === norm("In progress"))?.name || "In progress";
+      const value = statusType === "status" ? { status: { name: picked } } : { select: { name: picked } };
 
-      let statusType = dbPropMeta?.type;
-      if (!statusType) {
-        const sample = await notion.pages.retrieve({ page_id: ids[0] });
-        statusType = sample?.properties?.[statusProp]?.type;
-      }
-
-      const statusOptions = statusType === "status"
-        ? (dbPropMeta?.status?.options || [])
-        : (dbPropMeta?.select?.options || []);
-      const desired = "In progress";
-      const exact = (Array.isArray(statusOptions) ? statusOptions : []).find((o) => norm(o?.name) === norm(desired));
-      const partial = (Array.isArray(statusOptions) ? statusOptions : []).find((o) => norm(o?.name).includes(norm(desired)));
-      const targetName = exact?.name || partial?.name || desired;
-      const targetColor = (exact || partial)?.color || "yellow";
-      const statusValue = statusType === "status"
-        ? { status: { name: targetName } }
-        : { select: { name: targetName } };
-
-      await Promise.all(ids.map((id) => notion.pages.update({
-        page_id: id,
-        properties: { [statusProp]: statusValue },
-      })));
-
+      await Promise.all(ids.map((id) => notion.pages.update({ page_id: id, properties: { [statusProp]: value } })));
       await cacheDel("cache:api:orders:requested:v7");
-      return res.json({ success: true, status: targetName, statusColor: targetColor });
+      return res.json({ success: true, status: picked, statusColor: "yellow", source: "notion" });
     } catch (e) {
-      console.error("operations edit-to-not-started error:", e?.body || e);
-      return res.status(e?.status || 500).json({ error: e?.message || "Failed to return order to Not Started" });
+      console.error("operations edit-to-progress error:", e?.details || e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to return order to In progress" });
     }
   },
 );
@@ -23498,38 +23564,6 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
 
   const created = await _sbInsertStocktakingRowSafe(row, [payload.quantityColumn]);
   return { skipped: false, createdId: created?.id || null, quantityColumn: payload.quantityColumn, quantity: payload.quantity };
-}
-
-async function _sbDeleteStocktakingRowsForOrderIds(orderIds = []) {
-  const ids = (Array.isArray(orderIds) ? orderIds : [])
-    .map((id) => String(id || "").trim())
-    .filter(Boolean);
-  if (!ids.length || !_sbStocktakingEnabled()) return { deleted: 0, skipped: true };
-
-  const rows = await _sbStocktakingRows();
-  if (!Array.isArray(rows) || !rows.length) return { deleted: 0, skipped: true };
-
-  const keys = _sbAllColumnKeys(rows);
-  const sourceOrderColumn = _sbFindStocktakingKey(keys, [
-    "source_order_id",
-    "Source Order ID",
-    "source_order",
-    "Source Order",
-    "order_row_id",
-    "Order Row ID",
-  ]);
-  if (!sourceOrderColumn) return { deleted: 0, skipped: true, reason: "source-order-column-missing" };
-
-  const idSet = new Set(ids);
-  const rowsToDelete = rows.filter((row) => idSet.has(String(row?.[sourceOrderColumn] ?? "").trim()));
-  let deleted = 0;
-  for (const row of rowsToDelete) {
-    const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
-    if (!rowId) continue;
-    await supabaseDb.deleteById(_sbStocktakingTable(), rowId);
-    deleted += 1;
-  }
-  return { deleted, skipped: false };
 }
 
 function _sbDetectStocktakingQuantityColumn(row = {}, schoolName = "") {

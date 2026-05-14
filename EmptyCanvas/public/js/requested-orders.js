@@ -1711,7 +1711,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     pendingEditOrderIds = cleanIds;
-    pendingEditMode = String(editOrderBtn?.dataset?.editAction || "cart-edit");
     setEditPwdError("");
     editPwdInput.value = "";
     editPwdConfirmBtn.disabled = false;
@@ -1736,7 +1735,6 @@ document.addEventListener("DOMContentLoaded", () => {
     editPwdModal.setAttribute("aria-hidden", "true");
     editPwdModal.hidden = true;
     pendingEditOrderIds = [];
-    pendingEditMode = "cart-edit";
     setEditPwdError("");
     if (restoreFocus && editPwdLastFocus && typeof editPwdLastFocus.focus === "function") {
       try { editPwdLastFocus.focus({ preventScroll: true }); } catch {}
@@ -1744,7 +1742,8 @@ document.addEventListener("DOMContentLoaded", () => {
     editPwdLastFocus = null;
   }
 
-  async function submitEditOrder(orderIds = [], adminPassword = "") {
+  // Legacy Operations Orders shopping-cart edit flow kept intact for future use.
+  async function submitShoppingCartEditOrder(orderIds = [], adminPassword = "") {
     const cleanIds = (Array.isArray(orderIds) ? orderIds : [])
       .map((id) => String(id || "").trim())
       .filter(Boolean);
@@ -1775,46 +1774,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      if (pendingEditMode === "return-to-not-started") {
-        const res = await fetch("/api/orders/operations/edit-to-not-started", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ orderIds: cleanIds, adminPassword: pwd }),
-        });
-
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          setEditPwdError("Wrong password. Please try again.");
-          if (editPwdInput) editPwdInput.value = "";
-          try { editPwdInput?.focus(); } catch {}
-          return;
-        }
-        if (res.status === 403) {
-          toast("error", "Not allowed", data?.error || "You are not allowed to edit this order.");
-          closeEditPasswordModal();
-          return;
-        }
-        if (res.status === 404) {
-          toast("error", "Not found", data?.error || "Order not found.");
-          closeEditPasswordModal();
-          return;
-        }
-        if (!res.ok) throw new Error(data?.error || "Failed to return order to Not Started.");
-
-        closeEditPasswordModal({ restoreFocus: false });
-        closeOrderModal({ restoreFocus: false });
-        toast("success", "Returned", "Order moved back to Not Started.");
-
-        const nextUrl = new URL(window.location.href);
-        nextUrl.pathname = "/orders/requested";
-        nextUrl.searchParams.set("tab", "not-started");
-        nextUrl.searchParams.set("_fresh", "1");
-        nextUrl.searchParams.set("_refresh", String(Date.now()));
-        window.location.href = `${nextUrl.pathname}${nextUrl.search}`;
-        return;
-      }
-
       const res = await fetch("/api/orders/operations/edit/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1876,6 +1835,119 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       console.error(err);
       setEditPwdError(err?.message || "Failed to start editing.");
+    } finally {
+      if (editPwdConfirmBtn) {
+        editPwdConfirmBtn.disabled = false;
+        const prev = editPwdConfirmBtn.dataset.prevHtml;
+        if (prev) editPwdConfirmBtn.innerHTML = prev;
+        else editPwdConfirmBtn.textContent = "Continue";
+      }
+      if (editPwdCancelBtn) editPwdCancelBtn.disabled = false;
+      if (editPwdCloseBtn) editPwdCloseBtn.disabled = false;
+      if (editOrderBtn) {
+        editOrderBtn.disabled = false;
+        const prev = editOrderBtn.dataset.prevHtml;
+        if (prev) editOrderBtn.innerHTML = prev;
+        else editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
+      }
+      if (window.feather) window.feather.replace();
+    }
+  }
+
+  async function submitEditOrder(orderIds = [], adminPassword = "") {
+    const cleanIds = (Array.isArray(orderIds) ? orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    const pwd = String(adminPassword || editPwdInput?.value || "").trim();
+
+    if (!cleanIds.length) {
+      closeEditPasswordModal();
+      return;
+    }
+    if (!pwd) {
+      setEditPwdError("Password is required.");
+      try { editPwdInput?.focus(); } catch {}
+      return;
+    }
+
+    setEditPwdError("");
+    if (editPwdConfirmBtn) {
+      editPwdConfirmBtn.disabled = true;
+      editPwdConfirmBtn.dataset.prevHtml = editPwdConfirmBtn.innerHTML;
+      editPwdConfirmBtn.textContent = "Updating...";
+    }
+    if (editPwdCancelBtn) editPwdCancelBtn.disabled = true;
+    if (editPwdCloseBtn) editPwdCloseBtn.disabled = true;
+    if (editOrderBtn) {
+      editOrderBtn.disabled = true;
+      editOrderBtn.dataset.prevHtml = editOrderBtn.innerHTML;
+      editOrderBtn.textContent = "Updating...";
+    }
+
+    try {
+      const res = await fetch("/api/orders/operations/edit-to-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ orderIds: cleanIds, adminPassword: pwd }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setEditPwdError("Wrong password. Please try again.");
+        if (editPwdInput) editPwdInput.value = "";
+        try { editPwdInput?.focus(); } catch {}
+        return;
+      }
+      if (res.status === 403) {
+        toast("error", "Not allowed", data?.error || "You are not allowed to edit this order.");
+        closeEditPasswordModal();
+        return;
+      }
+      if (res.status === 404) {
+        toast("error", "Not found", data?.error || "Order not found.");
+        closeEditPasswordModal();
+        return;
+      }
+      if (!res.ok) throw new Error(data?.error || "Failed to update order");
+
+      const idSet = new Set(cleanIds.map((id) => String(id)));
+      allItems.forEach((it) => {
+        if (!idSet.has(String(it.id || ""))) return;
+        it.status = data?.status || "In progress";
+        it.statusColor = data?.statusColor || "yellow";
+        it.quantityReceived = null;
+        it.quantityRemaining = null;
+        it.quantityReceivedEdited = false;
+        it.operationsById = "";
+        it.operationsByIds = [];
+        it.operationsByName = "";
+        it.operationsByNames = [];
+        it.receiptNumber = null;
+        it.orderReceiptEntries = [];
+        it.orderReceiptNames = [];
+        it.orderReceiptUrls = [];
+        it.orderReceiptName = null;
+        it.orderReceiptUrl = null;
+        it.maintenanceReceiptEntries = [];
+        it.maintenanceReceiptNames = [];
+        it.maintenanceReceiptUrls = [];
+        it.maintenanceReceiptName = null;
+        it.maintenanceReceiptUrl = null;
+      });
+
+      writeRequestedCache(allItems);
+      groups = buildGroups(allItems);
+      currentTab = "not-started";
+      closeDownloadMenu();
+      closeEditPasswordModal({ restoreFocus: false });
+      closeOrderModal({ restoreFocus: false });
+      updateTabUI();
+      render();
+      toast("success", "Updated", "Order returned to In progress.");
+    } catch (err) {
+      console.error(err);
+      setEditPwdError(err?.message || "Failed to update order.");
     } finally {
       if (editPwdConfirmBtn) {
         editPwdConfirmBtn.disabled = false;
@@ -2450,7 +2522,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastFocus = null;
   let editPwdLastFocus = null;
   let pendingEditOrderIds = [];
-  let pendingEditMode = "cart-edit";
   let requestedDataLoading = false;
   let requestedDataLoaded = false;
 
@@ -2995,18 +3066,12 @@ document.addEventListener("DOMContentLoaded", () => {
         : '<i data-feather="archive"></i><span>Archive</span>';
     }
     if (editOrderBtn) {
-      const isArchivedForEdit = (stage?.idx || 1) >= 5 || norm(stage?.key) === "archive";
-      const canReturnToNotStarted =
-        !isMaintenancePage &&
-        !isMaintenanceOrder &&
-        !isArchivedForEdit &&
-        (currentTab === "remaining" || currentTab === "received" || currentTab === "delivered" || (stage?.idx || 1) >= 3);
-
-      editOrderBtn.hidden = !canReturnToNotStarted;
-      editOrderBtn.disabled = !canReturnToNotStarted;
-      editOrderBtn.dataset.editAction = canReturnToNotStarted ? "return-to-not-started" : "cart-edit";
+      const isArchived = (stage?.idx || 1) >= 5 || norm(stage?.key) === "archive";
+      const showEdit = !isMaintenancePage && !isArchived && currentTab !== "not-started";
+      editOrderBtn.hidden = !showEdit;
+      editOrderBtn.disabled = !showEdit;
       editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
-      orderModal?.querySelector?.(".co-modal-dialog")?.classList.toggle("has-edit-action", !!canReturnToNotStarted);
+      orderModal?.querySelector?.(".co-modal-dialog")?.classList.toggle("has-edit-action", showEdit);
     }
     syncModalMoreVisibility();
     if (logMaintenanceBtn) {
