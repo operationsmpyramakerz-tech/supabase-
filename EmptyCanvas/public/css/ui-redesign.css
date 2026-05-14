@@ -2945,3 +2945,44 @@ input.ops-auto-dir-rtl{
     animation: none !important;
   }
 }
+
+/* =========================================================
+   Mobile bottom dock safe scroll clearance
+   - Keep the final page content above the fixed mobile sidebar/dock.
+   - Proposals already owns its page-specific bottom clearance, so it is
+     excluded to avoid adding double empty space.
+   - Order detail modals also get internal scroll clearance so their last
+     rows/buttons can be scrolled above the dock.
+   ========================================================= */
+@media (max-width: 768px){
+  :root{
+    --mobile-dock-safe-clearance: calc(132px + env(safe-area-inset-bottom, 0px));
+    --mobile-dock-safe-focus-clearance: calc(164px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body:not(.proposals-page) .main-content > main,
+  body:not(.proposals-page) .main-content > main.container,
+  body:not(.proposals-page) .main-content > main.container-full-width,
+  body:not(.proposals-page).shell-embedded .main-content > main,
+  body:not(.proposals-page).shell-embedded .main-content > main.tasks-v2-main,
+  body:not(.proposals-page).shell-embedded .main-content > main.container-full-width{
+    padding-bottom: var(--mobile-dock-safe-clearance) !important;
+    scroll-padding-bottom: var(--mobile-dock-safe-focus-clearance) !important;
+  }
+
+  body:not(.proposals-page) .main-content > main > :last-child{
+    scroll-margin-bottom: var(--mobile-dock-safe-focus-clearance) !important;
+  }
+
+  body.order-modal-fit-screen .co-modal-dialog{
+    scroll-padding-bottom: var(--mobile-dock-safe-focus-clearance) !important;
+  }
+
+  body.order-modal-fit-screen .co-modal-dialog::after{
+    content: "";
+    display: block;
+    height: var(--mobile-dock-safe-clearance);
+    min-height: var(--mobile-dock-safe-clearance);
+    pointer-events: none;
+  }
+}
