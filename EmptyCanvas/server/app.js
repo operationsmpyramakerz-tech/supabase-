@@ -3881,6 +3881,64 @@ async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
 }
 
 
+function _splitReceiptNumbersText(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => _splitReceiptNumbersText(entry));
+  }
+
+  if (value === null || typeof value === "undefined") return [];
+
+  let raw = value;
+  if (typeof raw === "object") {
+    raw = raw?.receiptNumber ?? raw?.receipt_number ?? raw?.value ?? raw?.text ?? "";
+  }
+
+  return String(raw || "")
+    .replace(/\r\n/g, "\n")
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function _normalizeReceiptNumbersText(value, { separator = "\n" } = {}) {
+  const seen = new Set();
+  const values = [];
+
+  for (const entry of _splitReceiptNumbersText(value)) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(entry);
+  }
+
+  return values.join(separator).trim();
+}
+
+function _appendReceiptNumbersText(existing, next, { separator = "\n" } = {}) {
+  const seen = new Set();
+  const values = [];
+
+  for (const entry of _splitReceiptNumbersText(existing).concat(_splitReceiptNumbersText(next))) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(entry);
+  }
+
+  return values.join(separator).trim();
+}
+
+function _sbExistingOrderReceiptNumber(row = {}) {
+  return _sbOrderText(_sbOrderGet(row, [
+    "receipt_number",
+    "Receipt Number",
+    "Store Receipt Number",
+    "store_receipt_number",
+    "receiptNumber",
+  ])) || "";
+}
+
+
 async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {}, quantities = null) {
   const ids = (Array.isArray(orderIds) ? orderIds : [])
     .map((x) => String(x || "").trim())
@@ -3894,6 +3952,17 @@ async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {},
   for (const id of ids) {
     const patch = { ...basePatch };
     const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+
+    // If this update includes a receipt number, append it to the existing Supabase
+    // receipt_number value instead of overwriting it. This restores the old Notion
+    // behavior where the same order can hold multiple receipt numbers over time.
+    if (Object.prototype.hasOwnProperty.call(patch, "receipt_number")) {
+      const existingReceipt = row ? _sbExistingOrderReceiptNumber(row) : "";
+      const mergedReceipt = _appendReceiptNumbersText(existingReceipt, patch.receipt_number);
+      if (mergedReceipt) patch.receipt_number = mergedReceipt;
+      else delete patch.receipt_number;
+    }
+
     const serialized = row ? _sbSerializeOrderRow(row) : null;
     const base = serialized ? Number(serialized.quantity) || 0 : 0;
 
@@ -17347,14 +17416,20 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        const rnText = Array.isArray(receiptNumber) ? receiptNumber.filter(Boolean).join(", ") : String(receiptNumber || "").trim();
+        const rnText = _normalizeReceiptNumbersText(receiptNumber);
         const patch = {
           status: "Shipped",
           person_received_by_operations: req.session.username || null,
         };
         if (rnText) patch.receipt_number = rnText;
         if (issueDescription) patch.issue_description = String(issueDescription || "").trim();
-        await _sbUpdateOrdersByIdsWithQuantities(ids, patch, quantities || null);
+        const updatedRows = await _sbUpdateOrdersByIdsWithQuantities(ids, patch, quantities || null);
+        const returnedReceiptNumber =
+          updatedRows
+            .map((row) => _sbExistingOrderReceiptNumber(row))
+            .find(Boolean) ||
+          rnText ||
+          null;
         await _sbInvalidateOrdersCaches();
         return res.json({
           success: true,
@@ -17362,7 +17437,7 @@ app.post(
           statusColor: "blue",
           operationsByName: req.session.username || "",
           issueDescription: issueDescription || null,
-          receiptNumber: rnText || null,
+          receiptNumber: returnedReceiptNumber,
           source: "supabase",
         });
       }
@@ -18193,8 +18268,9 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        const rnList = Array.isArray(receiptNumbers) ? receiptNumbers : (receiptNumber ? [receiptNumber] : []);
-        const rnText = rnList.map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+        const rnText = _normalizeReceiptNumbersText(
+          Array.isArray(receiptNumbers) && receiptNumbers.length ? receiptNumbers : receiptNumber,
+        );
         const receiptNames = []
           .concat(Array.isArray(orderReceiptFilenames) ? orderReceiptFilenames : [])
           .concat(orderReceiptFilename ? [orderReceiptFilename] : [])
@@ -18242,19 +18318,36 @@ app.post(
           return res.status(404).json({ error: "Orders not found" });
         }
 
-        const patch = { status: "Arrived" };
-        if (rnText) patch.receipt_number = rnText;
-        if (receiptEntries.length) patch.order_receipt = JSON.stringify(receiptEntries);
-        const updatedRows = await _sbUpdateOrdersByIds(ids, patch);
+        const basePatch = { status: "Arrived" };
+        if (receiptEntries.length) basePatch.order_receipt = JSON.stringify(receiptEntries);
+
+        const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
+        const updatedRows = [];
+        for (const id of ids) {
+          const beforeRow = beforeById.get(String(id)) || null;
+          const rowPatch = { ...basePatch };
+          if (rnText) {
+            rowPatch.receipt_number = _appendReceiptNumbersText(
+              beforeRow ? _sbExistingOrderReceiptNumber(beforeRow) : "",
+              rnText,
+            );
+          }
+          updatedRows.push(await supabaseDb.updateById(_sbOrdersTable(), id, rowPatch));
+        }
 
         const updatedById = new Map((updatedRows || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
-        const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
+        const returnedReceiptNumber =
+          updatedRows
+            .map((row) => _sbExistingOrderReceiptNumber(row))
+            .find(Boolean) ||
+          rnText ||
+          null;
         const stocktakingSyncResults = [];
         const stocktakingSyncErrors = [];
 
         for (const id of ids) {
           const beforeRow = beforeById.get(String(id)) || null;
-          const updatedRow = updatedById.get(String(id)) || (beforeRow ? { ...beforeRow, ...patch } : null);
+          const updatedRow = updatedById.get(String(id)) || (beforeRow ? { ...beforeRow, ...basePatch } : null);
           if (!updatedRow) continue;
 
           try {
@@ -18279,7 +18372,7 @@ app.post(
             statusUpdated: true,
             status: "Arrived",
             statusColor: "green",
-            receiptNumber: rnText || null,
+            receiptNumber: returnedReceiptNumber,
             orderReceiptNames,
             orderReceiptName: orderReceiptNames[0] || null,
             orderReceiptUrls,
@@ -18298,7 +18391,7 @@ app.post(
           success: true,
           status: "Arrived",
           statusColor: "green",
-          receiptNumber: rnText || null,
+          receiptNumber: returnedReceiptNumber,
           orderReceiptNames,
           orderReceiptName: orderReceiptNames[0] || null,
           orderReceiptUrls,

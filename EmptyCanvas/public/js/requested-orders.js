@@ -198,10 +198,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const input = document.createElement("input");
     input.className = "co-submodal-input req-receipt-input";
     input.type = "text";
-    input.inputMode = "numeric";
-    input.pattern = "[0-9]*";
+    // Keep this as a normal text input because one field may contain multiple
+    // receipt numbers, for example: "1,2". Users can also add extra rows.
+    input.inputMode = "text";
     input.autocomplete = "off";
-    input.placeholder = "e.g. 12345";
+    input.placeholder = "e.g. 12345, 67890";
     input.value = String(value || "");
     return input;
   }
@@ -270,9 +271,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function collectReceiptNumbers() {
-    const values = getReceiptInputs()
-      .map((input) => String(input?.value || "").trim())
-      .filter(Boolean);
+    const values = normalizeReceiptNumbers(
+      getReceiptInputs()
+        .map((input) => String(input?.value || "").trim())
+        .filter(Boolean),
+    );
 
     if (!values.length) {
       return { error: "Store receipt number is required.", values: [] };
@@ -282,7 +285,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return { error: "Please enter valid store receipt numbers.", values: [] };
     }
 
-    return { error: "", values: normalizeReceiptNumbers(values) };
+    return { error: "", values };
   }
 
   const DELIVERY_RECEIPT_INPUT_SELECTOR = ".req-delivery-receipt-input";
@@ -306,10 +309,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const input = document.createElement("input");
     input.className = "co-submodal-input req-delivery-receipt-input";
     input.type = "text";
-    input.inputMode = "numeric";
-    input.pattern = "[0-9]*";
+    // Allow comma-separated receipt numbers in the same input as well as extra rows.
+    input.inputMode = "text";
     input.autocomplete = "off";
-    input.placeholder = "e.g. 12345";
+    input.placeholder = "e.g. 12345, 67890";
     input.value = String(value || "");
     return input;
   }
@@ -359,9 +362,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function collectDeliveryReceiptNumbers() {
-    const values = getDeliveryReceiptInputs()
-      .map((input) => String(input?.value || "").trim())
-      .filter(Boolean);
+    const values = normalizeReceiptNumbers(
+      getDeliveryReceiptInputs()
+        .map((input) => String(input?.value || "").trim())
+        .filter(Boolean),
+    );
 
     if (!values.length) {
       return { error: "Store receipt number is required.", values: [] };
@@ -371,7 +376,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return { error: "Please enter valid store receipt numbers.", values: [] };
     }
 
-    return { error: "", values: normalizeReceiptNumbers(values) };
+    return { error: "", values };
   }
 
   function removeExtraReceiptInput(removeBtn, { kind = "receipt" } = {}) {
