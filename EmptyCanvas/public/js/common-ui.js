@@ -2380,32 +2380,57 @@ function initNotificationsWidget() {
     try { window.feather.replace(); } catch {}
   }
 
+  function closeNotifPanel() {
+    if (panel.hidden) return;
+    btn.setAttribute("aria-expanded", "false");
+    panel.classList.remove("is-open");
+
+    const finish = () => {
+      panel.hidden = true;
+      panel.removeEventListener("transitionend", finish);
+    };
+
+    panel.addEventListener("transitionend", finish);
+    setTimeout(finish, 240);
+  }
+
+  async function openNotifPanel() {
+    if (!panel.hidden) return;
+    panel.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+
+    // Make sure we are positioned before rendering
+    requestNotifPanelPosition();
+    requestAnimationFrame(() => {
+      requestNotifPanelPosition();
+      panel.classList.add("is-open");
+    });
+
+    // Reset view each time we open
+    const st = getNotifState();
+    st.showAll = false;
+    st.activeTab = st.activeTab || 'today';
+    syncNotifTabs();
+    syncNotifSeeAll();
+    await refreshNotifications(true);
+
+    // Re-position after content renders (height may change)
+    requestNotifPanelPosition();
+  }
+
+  window.__opsCloseNotifications = closeNotifPanel;
+
   // Handlers
   btn.addEventListener("click", async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // If the user menu is open, close it first (matches the reference behavior).
+    // If another top-right panel is open, close it first (matches the reference behavior).
     try { window.__opsCloseUserMenu && window.__opsCloseUserMenu(); } catch {}
+    try { window.__opsCloseFloatingSearch && window.__opsCloseFloatingSearch(); } catch {}
 
-    const willOpen = panel.hidden;
-    panel.hidden = !willOpen;
-
-    if (willOpen) {
-      // Make sure we are positioned before rendering
-      requestNotifPanelPosition();
-
-      // Reset view each time we open
-      const st = getNotifState();
-      st.showAll = false;
-      st.activeTab = st.activeTab || 'today';
-      syncNotifTabs();
-      syncNotifSeeAll();
-      await refreshNotifications(true);
-
-      // Re-position after content renders (height may change)
-      requestNotifPanelPosition();
-    }
+    if (panel.hidden) await openNotifPanel();
+    else closeNotifPanel();
   });
 
   document.addEventListener("click", (e) => {
@@ -2413,12 +2438,12 @@ function initNotificationsWidget() {
     const target = e.target;
     if (!target) return;
     if (btn.contains(target) || panel.contains(target)) return;
-    panel.hidden = true;
+    closeNotifPanel();
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panel.hidden) {
-      panel.hidden = true;
+      closeNotifPanel();
     }
   });
 
@@ -2706,8 +2731,10 @@ function initFloatingSearchWidget() {
     };
 
     panel.addEventListener("transitionend", finish);
-    setTimeout(finish, 220);
+    setTimeout(finish, 240);
   }
+
+  window.__opsCloseFloatingSearch = closePanel;
 
   if (input && input.dataset.floatingSearchInputBound !== "1") {
     input.dataset.floatingSearchInputBound = "1";
@@ -2740,10 +2767,7 @@ function initFloatingSearchWidget() {
       e.stopPropagation();
 
       try { window.__opsCloseUserMenu && window.__opsCloseUserMenu(); } catch {}
-      try {
-        const notif = document.getElementById("notifPanel");
-        if (notif && !notif.hidden) notif.hidden = true;
-      } catch {}
+      try { window.__opsCloseNotifications && window.__opsCloseNotifications(); } catch {}
 
       if (panel.hidden) openPanel();
       else closePanel();
@@ -3095,25 +3119,31 @@ function initUserMenuWidget() {
   }
 
   function closeMenu() {
-    panel.hidden = true;
+    if (panel.hidden) return;
     trigger.setAttribute("aria-expanded", "false");
+    panel.classList.remove("is-open");
+
+    const finish = () => {
+      panel.hidden = true;
+      panel.removeEventListener("transitionend", finish);
+    };
+
+    panel.addEventListener("transitionend", finish);
+    setTimeout(finish, 240);
   }
 
   function openMenu() {
     // Close other top-right panels first
-    try {
-      const notif = document.getElementById("notifPanel");
-      if (notif && !notif.hidden) notif.hidden = true;
-    } catch {}
-    try {
-      const s = document.getElementById("floatingSearchPanel");
-      if (s && !s.hidden) s.hidden = true;
-    } catch {}
+    try { window.__opsCloseNotifications && window.__opsCloseNotifications(); } catch {}
+    try { window.__opsCloseFloatingSearch && window.__opsCloseFloatingSearch(); } catch {}
 
     panel.hidden = false;
     trigger.setAttribute("aria-expanded", "true");
     requestPosition();
-    requestPosition();
+    requestAnimationFrame(() => {
+      requestPosition();
+      panel.classList.add("is-open");
+    });
   }
 
   // Expose a global close helper so other widgets (search/bell) can close it.
