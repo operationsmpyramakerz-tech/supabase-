@@ -1172,10 +1172,10 @@ body.co-modal-open{ overflow: hidden; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 14px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 16px;
-  padding: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
 
 .co-meta-row{
@@ -1184,52 +1184,77 @@ body.co-modal-open{ overflow: hidden; }
   justify-content: space-between;
   gap: 12px;
   font-size: 14px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  padding: 12px 14px;
 }
 
 .co-meta-row span{ color: #6B7280; }
 .co-meta-row strong{ color: #000000; font-weight: 900; }
 
-/* Modern single Reason header used by Current Orders, Operations Orders, and Orders Review. */
+/* Modern attached Reason card used by Current Orders, Operations Orders, and Orders Review. */
 .co-meta-row--products{
   display: none !important;
 }
 
 .co-meta-row--reason{
   grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 46px;
-  padding: 8px 10px 8px 14px;
+  position: relative;
+  display: block;
+  min-height: 76px;
+  margin-top: 10px;
+  padding: 34px 18px 16px;
+  background: #020617;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 18px 38px rgba(2, 6, 23, 0.14);
+  overflow: visible;
+}
+
+.co-meta-row--reason::before{
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 46px;
+  height: 24px;
   background: #FFFFFF;
-  border: 1.5px solid #111827;
-  border-radius: 999px;
-  box-shadow: 0 10px 22px rgba(17, 24, 39, 0.06);
+  border-bottom-left-radius: 24px;
+  pointer-events: none;
 }
 
 .co-meta-row--reason span{
-  color: #111827;
+  position: absolute;
+  top: -11px;
+  left: 18px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 16px;
+  color: #D9F99D;
+  background: #020617;
+  border-radius: 16px 16px 10px 10px;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.01em;
-  line-height: 1.2;
+  line-height: 1.1;
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.12);
 }
 
 .co-meta-row--reason strong{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  max-width: min(70%, 520px);
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: #000000;
+  display: block;
+  width: 100%;
+  max-width: 100%;
   color: #FFFFFF !important;
-  font-size: 13px;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  font-size: 15px;
   font-weight: 900;
-  line-height: 1.25;
-  text-align: center;
+  line-height: 1.35;
+  text-align: left;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -2139,22 +2164,26 @@ body.co-modal-open{ overflow: hidden; }
   }
 
   body.order-modal-fit-screen .co-meta-row--reason{
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    border-radius: 18px;
-    padding: 10px;
+    display: block;
+    min-height: 70px;
+    margin-top: 10px;
+    border-radius: 20px;
+    padding: 32px 14px 14px;
   }
 
   body.order-modal-fit-screen .co-meta-row--reason span{
-    padding-inline: 2px;
+    top: -10px;
+    left: 14px;
+    min-height: 32px;
+    padding: 7px 14px;
+    border-radius: 15px 15px 9px 9px;
   }
 
   body.order-modal-fit-screen .co-meta-row--reason strong{
     width: 100%;
     max-width: 100%;
-    min-height: 34px;
-    text-align: center;
+    min-height: auto;
+    text-align: left;
   }
 
   body.order-modal-fit-screen .ro-actions,
