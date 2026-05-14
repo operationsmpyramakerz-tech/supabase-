@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const receivedByRow = document.getElementById("reqReceivedByRow");
   const modalReceiptNumber = document.getElementById("reqModalReceiptNumber");
   const modalOperationsBy = document.getElementById("reqModalOperationsBy");
+  const receiptPhotosMetaBtn = document.getElementById("reqModalReceiptPhotosMetaBtn");
 
   const modalItems = document.getElementById("reqModalItems");
 
@@ -3003,8 +3004,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (receiptRow) receiptRow.hidden = !shouldShowExtras;
     if (modalReceiptNumber) modalReceiptNumber.textContent = receiptVal !== null ? String(receiptVal) : "—";
 
-    if (receivedByRow) receivedByRow.hidden = !shouldShowExtras;
+    const receiptPhotoEntries = collectReceiptEntriesFromGroup(g || {});
+    const shouldShowReceiptPhotosMeta = shouldShowExtras && ["received", "delivered"].includes(currentTab);
+
+    if (receivedByRow) receivedByRow.hidden = !shouldShowReceiptPhotosMeta;
     if (modalOperationsBy) modalOperationsBy.textContent = receivedByVal || "—";
+    if (receiptPhotosMetaBtn) {
+      const count = receiptPhotoEntries.length;
+      receiptPhotosMetaBtn.disabled = count <= 0;
+      receiptPhotosMetaBtn.setAttribute("aria-label", count > 0 ? `Open ${count} receipt photo${count === 1 ? "" : "s"}` : "No receipt photos saved");
+      receiptPhotosMetaBtn.innerHTML = count > 0
+        ? `<i data-feather="image"></i><span>${count === 1 ? "View photo" : `View ${count} photos`}</span>`
+        : '<i data-feather="image"></i><span>No photos</span>';
+    }
 
     const hasVisibleMetaRow = [
       modalReasonRow,
@@ -4863,6 +4875,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   });
 
   receiptPhotosBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeDownloadMenu();
+    openReceiptPhotosModal(activeGroup);
+  });
+
+  receiptPhotosMetaBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     closeDownloadMenu();
     openReceiptPhotosModal(activeGroup);

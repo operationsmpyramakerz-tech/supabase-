@@ -1262,6 +1262,51 @@ body.co-modal-open{ overflow: hidden; }
 }
 
 
+
+.co-inline-receipt-photos-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  background: #FFFFFF;
+  color: #0B0F19;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+
+.co-inline-receipt-photos-btn:hover:not(:disabled){
+  transform: translateY(-1px);
+  background: #F9FAFB;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}
+
+.co-inline-receipt-photos-btn:active:not(:disabled){
+  transform: translateY(0);
+}
+
+.co-inline-receipt-photos-btn:disabled{
+  opacity: .58;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.co-inline-receipt-photos-btn svg{
+  width: 16px;
+  height: 16px;
+}
+
+.co-meta-row #reqModalReceiptPhotosMetaBtn{
+  margin-left: auto;
+}
+
 /* Allow multiple receipt numbers (stored as Notion rich_text) to wrap on new lines */
 #reqModalReceiptNumber{ white-space: pre-line; text-align: right; }
 
