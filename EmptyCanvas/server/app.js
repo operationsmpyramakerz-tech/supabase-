@@ -3147,6 +3147,165 @@ function _sbParseScreenshotEntries(value) {
   return out;
 }
 
+
+function _sbReceiptImageFileName(value, fallback = "Receipt photo") {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  try {
+    const parsed = new URL(raw);
+    const last = decodeURIComponent(String(parsed.pathname || "").split("/").filter(Boolean).pop() || "").trim();
+    return last || fallback;
+  } catch {}
+  const clean = raw.split(/[?#]/)[0].split(/[\\/]/).filter(Boolean).pop();
+  return String(clean || fallback).trim() || fallback;
+}
+
+function _sbReceiptPublicUrlFromStoredValue(value, bucketOverride = "") {
+  const raw = String(value || "").trim();
+  if (!raw || /^null$/i.test(raw)) return "";
+  if (/^(https?:|data:image\/)/i.test(raw)) return raw;
+
+  const cfg = supabaseDb?.getConfig ? supabaseDb.getConfig() : {};
+  const base = String(cfg?.url || process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/rest\/v1\/?$/i, "");
+  const bucket = String(bucketOverride || cfg?.storageBucket || process.env.SUPABASE_STORAGE_BUCKET || "")
+    .trim()
+    .replace(/^\/+|\/+$/g, "");
+
+  if (!base || !bucket) return "";
+
+  let pathValue = raw;
+  try {
+    const maybeUrl = new URL(raw, base);
+    const publicMarker = `/storage/v1/object/public/${bucket}/`;
+    const signMarker = `/storage/v1/object/sign/${bucket}/`;
+    if (maybeUrl.pathname.includes(publicMarker)) {
+      pathValue = maybeUrl.pathname.split(publicMarker)[1] || "";
+    } else if (maybeUrl.pathname.includes(signMarker)) {
+      pathValue = maybeUrl.pathname.split(signMarker)[1] || "";
+    }
+  } catch {}
+
+  pathValue = String(pathValue || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/^object\/public\//i, "")
+    .replace(/^storage\/v1\/object\/public\//i, "")
+    .split("?")[0];
+
+  if (pathValue.toLowerCase().startsWith(`${bucket.toLowerCase()}/`)) {
+    pathValue = pathValue.slice(bucket.length + 1);
+  }
+
+  if (!pathValue || /^https?:/i.test(pathValue)) return "";
+
+  const encodedPath = pathValue
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  return encodedPath
+    ? `${base}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`
+    : "";
+}
+
+function _sbNormalizeOrderReceiptEntries(rawValue, fallbackPrefix = "Receipt photo") {
+  const out = [];
+  const seen = new Set();
+
+  const add = (entry, index = 0) => {
+    if (entry === null || typeof entry === "undefined") return;
+
+    if (typeof entry === "string") {
+      const raw = String(entry || "").trim();
+      if (!raw || /^null$/i.test(raw)) return;
+      const url = _sbReceiptPublicUrlFromStoredValue(raw);
+      const name = _sbReceiptImageFileName(raw, `${fallbackPrefix} ${index + 1}`);
+      const key = `${url || raw}::${name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name, url: url || (/^(https?:|data:image\/)/i.test(raw) ? raw : ""), raw });
+      return;
+    }
+
+    if (Array.isArray(entry)) {
+      entry.forEach((item, itemIndex) => add(item, itemIndex));
+      return;
+    }
+
+    if (typeof entry === "object") {
+      const rawUrl = String(
+        entry.url ||
+        entry.href ||
+        entry.publicUrl ||
+        entry.public_url ||
+        entry.signedUrl ||
+        entry.signedURL ||
+        entry.downloadUrl ||
+        entry.downloadURL ||
+        entry.file?.url ||
+        entry.external?.url ||
+        entry.path ||
+        entry.fullPath ||
+        entry.full_path ||
+        entry.storagePath ||
+        entry.storage_path ||
+        entry.key ||
+        entry.Key ||
+        "",
+      ).trim();
+      const bucket = String(entry.bucket || entry.bucketName || entry.bucket_name || "").trim();
+      const url = _sbReceiptPublicUrlFromStoredValue(rawUrl, bucket);
+      const name = String(
+        entry.name ||
+        entry.filename ||
+        entry.fileName ||
+        entry.originalName ||
+        entry.original_name ||
+        "",
+      ).trim() || _sbReceiptImageFileName(rawUrl, `${fallbackPrefix} ${index + 1}`);
+      if (!name && !url && !rawUrl) return;
+      const key = `${url || rawUrl || "no-url"}::${name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name: name || `${fallbackPrefix} ${index + 1}`, url: url || (/^(https?:|data:image\/)/i.test(rawUrl) ? rawUrl : ""), raw: rawUrl });
+      return;
+    }
+  };
+
+  if (Array.isArray(rawValue)) {
+    rawValue.forEach((entry, index) => add(entry, index));
+    return out;
+  }
+
+  if (rawValue && typeof rawValue === "object") {
+    add(rawValue, 0);
+    return out;
+  }
+
+  const raw = String(rawValue || "").trim();
+  if (!raw || /^null$/i.test(raw)) return out;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) parsed.forEach((entry, index) => add(entry, index));
+    else add(parsed, 0);
+    if (out.length) return out;
+  } catch {}
+
+  const urlMatches = raw.match(/https?:\/\/[^\s,"'<>]+/gi) || [];
+  if (urlMatches.length) {
+    urlMatches.forEach((url, index) => add({ name: `${fallbackPrefix} ${index + 1}`, url }, index));
+    return out;
+  }
+
+  raw.split(/[\n,]+/).map((part) => part.trim()).filter(Boolean).forEach((part, index) => add(part, index));
+  return out;
+}
+
 function _sbExpenseOrders(row = {}) {
   const names = _sbSplitValues(_sbExpenseGet(row, ["orders_names", "Orders", "orders_raw"]));
   const urls = _sbSplitValues(_sbExpenseGet(row, ["orders_urls", "orders_url"]));
@@ -3611,19 +3770,10 @@ function _sbSerializeOrderRow(row = {}) {
   const createdById = _sbOrderOwnerId(row);
   const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
   const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
-  const orderReceiptRaw = _sbOrderText(_sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]));
-  const maintenanceReceiptRaw = _sbOrderText(_sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]));
-  const normalizeOrderReceiptEntries = (raw, fallbackPrefix = "Receipt") => {
-    return _sbParseScreenshotEntries(raw)
-      .map((entry, index) => {
-        const url = _sbExtractUrl(entry?.url || entry?.href || entry?.publicUrl || entry?.name || "");
-        const name = String(entry?.name || "").trim() || (url ? String(url).split(/[\/?#]/).filter(Boolean).pop() : `${fallbackPrefix} ${index + 1}`);
-        return { name: name || `${fallbackPrefix} ${index + 1}`, url: url || "" };
-      })
-      .filter((entry) => entry.name || entry.url);
-  };
-  const orderReceiptEntries = normalizeOrderReceiptEntries(orderReceiptRaw, "Receipt photo");
-  const maintenanceReceiptEntries = normalizeOrderReceiptEntries(maintenanceReceiptRaw || orderReceiptRaw, "Receipt photo");
+  const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
+  const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
+  const orderReceiptEntries = _sbNormalizeOrderReceiptEntries(orderReceiptRaw, "Receipt photo");
+  const maintenanceReceiptEntries = _sbNormalizeOrderReceiptEntries(maintenanceReceiptRaw || orderReceiptRaw, "Receipt photo");
   const orderReceiptNames = orderReceiptEntries.map((entry) => entry.name).filter(Boolean);
   const orderReceiptUrls = orderReceiptEntries.map((entry) => entry.url).filter(Boolean);
   const maintenanceReceiptNames = maintenanceReceiptEntries.map((entry) => entry.name).filter(Boolean);
@@ -18575,6 +18725,74 @@ app.post(
     } catch (e) {
       console.error("mark-arrived error:", e.body || e);
       return res.status(500).json({ error: "Failed to update status" });
+    }
+  },
+);
+
+
+app.get(
+  "/api/orders/requested/receipt-photos",
+  requireAuth,
+  requirePage(["Requested Orders", "Maintenance Orders"]),
+  async (req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+
+      const rawIds = []
+        .concat(String(req.query?.orderIds || "").split(/[|,]/))
+        .concat(String(req.query?.ids || "").split(/[|,]/))
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+        .map((id) => (looksLikeNotionId(id) ? toHyphenatedUUID(id) : id));
+      const ids = Array.from(new Set(rawIds));
+
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rows = await _sbOrderRowsByIds(ids);
+        const entries = [];
+
+        for (const row of rows || []) {
+          const orderReceiptRaw = _sbOrderGet(row, [
+            "order_receipt",
+            "Order Receipt",
+            "delivery_receipt",
+            "Delivery Receipt",
+            "receipt_photos",
+            "Receipt Photos",
+          ]);
+          const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
+          const rowEntries = _sbNormalizeOrderReceiptEntries(orderReceiptRaw || maintenanceReceiptRaw, "Receipt photo");
+          rowEntries.forEach((entry, index) => {
+            entries.push({
+              name: entry?.name || `Receipt photo ${index + 1}`,
+              url: entry?.url || "",
+              raw: entry?.raw || "",
+              orderId: String(row?.id || "").trim(),
+            });
+          });
+        }
+
+        const seen = new Set();
+        const cleanEntries = entries.filter((entry) => {
+          const key = `${entry.url || entry.raw || "no-url"}::${entry.name || "Receipt photo"}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return !!(entry.url || entry.raw || entry.name);
+        });
+
+        return res.json({
+          success: true,
+          source: "supabase",
+          count: cleanEntries.length,
+          entries: cleanEntries,
+        });
+      }
+
+      return res.json({ success: true, source: "notion", count: 0, entries: [] });
+    } catch (error) {
+      console.error("receipt-photos error:", error?.details || error?.body || error);
+      return res.status(500).json({ error: "Failed to load receipt photos." });
     }
   },
 );

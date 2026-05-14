@@ -3330,6 +3330,40 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function fetchReceiptPhotoEntriesForGroup(group = activeGroup) {
+    const localEntries = collectReceiptEntriesFromGroup(group || {});
+    const ids = (Array.isArray(group?.orderIds) ? group.orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+
+    if (!ids.length) return localEntries;
+
+    try {
+      const url = new URL("/api/orders/requested/receipt-photos", window.location.origin);
+      url.searchParams.set("orderIds", ids.join(","));
+      url.searchParams.set("_", String(Date.now()));
+
+      const res = await fetch(url.pathname + url.search, {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {
+          "Accept": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+        },
+      });
+
+      if (!res.ok) return localEntries;
+
+      const data = await res.json().catch(() => ({}));
+      const remoteEntries = normalizeReceiptEntries(data?.entries || []);
+      return remoteEntries.length ? remoteEntries : localEntries;
+    } catch (error) {
+      console.warn("Failed to load receipt photos from order_receipt.", error);
+      return localEntries;
+    }
+  }
+
   function renderReceiptPhotos(entries = []) {
     if (!receiptPhotosGrid) return;
     const cleanEntries = normalizeReceiptEntries(entries);
@@ -3379,7 +3413,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function openReceiptPhotosModal(group = activeGroup) {
     if (!receiptPhotosModal) return;
-    const entries = collectReceiptEntriesFromGroup(group || {});
+    const targetGroup = group || activeGroup || {};
+    const entries = collectReceiptEntriesFromGroup(targetGroup || {});
     if (receiptPhotosTitle) receiptPhotosTitle.textContent = "Receipt photos";
     if (receiptPhotosSub) {
       receiptPhotosSub.textContent = "";
@@ -3397,6 +3432,12 @@ document.addEventListener("DOMContentLoaded", () => {
       forceCompactReceiptPhotosViewer();
       try { receiptPhotosCloseBtn?.focus(); } catch {}
     }, 0);
+
+    fetchReceiptPhotoEntriesForGroup(targetGroup).then((freshEntries) => {
+      if (!isReceiptPhotosOpen()) return;
+      renderReceiptPhotos(freshEntries);
+      forceCompactReceiptPhotosViewer();
+    });
   }
 
   function closeReceiptPhotosModal({ restoreFocus = true } = {}) {
