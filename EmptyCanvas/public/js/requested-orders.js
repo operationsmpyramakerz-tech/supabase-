@@ -615,6 +615,39 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizeReceiptEntries(entries);
   }
 
+  function applyReceiptEntriesToItem(item = {}, entries = []) {
+    const cleanEntries = normalizeReceiptEntries(entries);
+    const names = cleanEntries.map((entry) => entry.name).filter(Boolean);
+    const urls = cleanEntries.map((entry) => entry.url || entry.rawUrl).filter(Boolean);
+    return {
+      ...item,
+      receiptEntries: cleanEntries,
+      orderReceiptEntries: cleanEntries,
+      orderReceiptNames: names,
+      orderReceiptUrls: urls,
+      orderReceiptName: names[0] || null,
+      orderReceiptUrl: urls[0] || null,
+      // Keep these in sync because older migrated rows/components may still expose
+      // receipt images through maintenance aliases. If we only clear orderReceiptEntries
+      // the modal/card can still count the old alias and show "View photos" again.
+      maintenanceReceiptEntries: cleanEntries,
+      maintenanceReceiptNames: names,
+      maintenanceReceiptUrls: urls,
+      maintenanceReceiptName: names[0] || null,
+      maintenanceReceiptUrl: urls[0] || null,
+    };
+  }
+
+  function replaceReceiptEntriesForItems(orderIds = [], entries = []) {
+    const idSet = new Set((Array.isArray(orderIds) ? orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean));
+    if (!idSet.size) return;
+    allItems = allItems.map((item) => (idSet.has(String(item?.id || ""))
+      ? applyReceiptEntriesToItem(item, entries)
+      : item));
+  }
+
   function getSelectSelectedValues(selectEl) {
     if (!selectEl) return [];
     if (selectEl.multiple) {
@@ -2134,9 +2167,6 @@ document.addEventListener("DOMContentLoaded", () => {
         allItems.forEach((item) => {
           if (!idSet.has(String(item.id || ""))) return;
           item.receiptNumber = receiptNumbers.join("\n");
-          item.orderReceiptEntries = keepEntries;
-          item.orderReceiptNames = keepEntries.map((entry) => entry.name).filter(Boolean);
-          item.orderReceiptUrls = keepEntries.map((entry) => entry.url || entry.rawUrl).filter(Boolean);
           if (Object.prototype.hasOwnProperty.call(quantities, String(item.id || ""))) {
             const base = baseQty(item);
             const q = roundQty(quantities[String(item.id || "")]);
@@ -2146,6 +2176,19 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
       }
+
+      const updatedResponseReceiptEntries = normalizeReceiptEntries(
+        updatedItems.flatMap((item) => collectReceiptEntriesFromItem(item || {})),
+      );
+      const nextReceiptEntries = files.length && updatedResponseReceiptEntries.length
+        ? updatedResponseReceiptEntries
+        : normalizeReceiptEntries(keepEntries);
+
+      // The details modal edits the receipt photo list as a replacement list.
+      // Apply that replacement directly to the in-memory rows before rebuilding groups.
+      // This prevents the order card from keeping stale "View X photos" counts after
+      // a user removes all photos and saves successfully.
+      replaceReceiptEntriesForItems(ids, nextReceiptEntries);
 
       writeRequestedCache(allItems);
       groups = buildGroups(allItems);
