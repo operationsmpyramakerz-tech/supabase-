@@ -1236,13 +1236,13 @@ body.co-modal-open{ overflow: hidden; }
   min-height: 31px;
   padding: 6px 0;
   color: #020617;
-  background: #D9F99D;
+  background: #FF7518;
   border-radius: 13px;
   font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.01em;
   line-height: 1.1;
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.10);
+  box-shadow: 0 8px 18px rgba(255, 117, 24, 0.22);
 }
 
 .co-meta-row--reason strong{
