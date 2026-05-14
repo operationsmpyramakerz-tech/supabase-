@@ -1830,15 +1830,35 @@ document.addEventListener("DOMContentLoaded", () => {
     return !!opsEditModal && opsEditModal.classList.contains("is-open");
   }
 
+  function buildOpsEditReceiptDisplayValues(values = []) {
+    const source = Array.isArray(values) ? values : [values];
+    const displayValues = [];
+
+    source.forEach((raw) => {
+      const text = String(raw ?? "").trim();
+      if (!text) {
+        displayValues.push("");
+        return;
+      }
+      const splitValues = normalizeReceiptNumbers(text);
+      if (splitValues.length) displayValues.push(...splitValues);
+      else displayValues.push(text);
+    });
+
+    return displayValues.length ? displayValues : [""];
+  }
+
   function renderOpsEditReceiptRows(values = []) {
     if (!opsEditReceiptList) return;
-    const clean = normalizeReceiptNumbers(values);
-    const displayValues = clean.length ? clean : [""];
+    const displayValues = buildOpsEditReceiptDisplayValues(values);
     opsEditReceiptList.innerHTML = displayValues.map((value, index) => `
       <div class="req-ops-edit-receipt-row">
-        <input class="co-submodal-input req-ops-edit-receipt-input" type="text" inputmode="text" autocomplete="off" placeholder="Receipt number" value="${escapeHTML(value)}" aria-label="Receipt number ${index + 1}" />
+        <div class="req-ops-edit-receipt-control">
+          <span class="req-ops-edit-control-icon" aria-hidden="true"><i data-feather="hash"></i></span>
+          <input class="co-submodal-input req-ops-edit-receipt-input" type="text" inputmode="text" autocomplete="off" placeholder="Receipt number" value="${escapeHTML(value)}" aria-label="Receipt number ${index + 1}" />
+        </div>
         <button type="button" class="req-ops-edit-mini-remove" data-ops-remove-receipt="${index}" aria-label="Remove receipt number">
-          <i data-feather="x"></i>
+          <span class="req-ops-edit-remove-glyph" aria-hidden="true">×</span>
         </button>
       </div>
     `.trim()).join("");
@@ -1884,8 +1904,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ${thumbnail}
           </button>
           <div class="req-ops-edit-photo-name">${escapeHTML(name)}</div>
-          <button type="button" class="req-ops-edit-mini-remove" data-ops-remove-photo="${originalIndex}" aria-label="Remove photo">
-            <i data-feather="x"></i>
+          <button type="button" class="req-ops-edit-mini-remove req-ops-edit-mini-remove--floating" data-ops-remove-photo="${originalIndex}" aria-label="Remove photo">
+            <span class="req-ops-edit-remove-glyph" aria-hidden="true">×</span>
           </button>
         </div>
       `.trim());
@@ -1897,8 +1917,8 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="req-ops-edit-photo-card req-ops-edit-photo-card--new" data-new-photo-index="${index}">
           <div class="req-ops-edit-photo-preview"><span class="req-ops-edit-photo-icon"><i data-feather="image-plus"></i></span></div>
           <div class="req-ops-edit-photo-name">${escapeHTML(name)}</div>
-          <button type="button" class="req-ops-edit-mini-remove" data-ops-remove-new-photo="${index}" aria-label="Remove new photo">
-            <i data-feather="x"></i>
+          <button type="button" class="req-ops-edit-mini-remove req-ops-edit-mini-remove--floating" data-ops-remove-new-photo="${index}" aria-label="Remove new photo">
+            <span class="req-ops-edit-remove-glyph" aria-hidden="true">×</span>
           </button>
         </div>
       `.trim());
