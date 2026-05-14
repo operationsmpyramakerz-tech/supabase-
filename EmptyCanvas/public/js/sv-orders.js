@@ -703,9 +703,9 @@
   const SV_ORDER_ACTION_CONFIG = {
     edit: {
       title: "Edit review decision",
-      sub: "Update the approval status for this order.",
-      confirm: "Save changes",
-      loading: "Saving...",
+      sub: "Verify admin password to update component approval statuses.",
+      confirm: "Confirm",
+      loading: "Checking...",
       icon: "edit-2",
       endpoint: "/api/sv-orders/actions/update-approval",
       success: "Review decision updated.",
@@ -777,6 +777,21 @@
     return !!reviewEditModal && reviewEditModal.classList.contains("is-open");
   }
 
+  function approvalEditClass(value) {
+    const key = approvalKey(normalizeApproval(value));
+    if (key === "approved") return "is-approved";
+    if (key === "rejected") return "is-rejected";
+    return "is-not-started";
+  }
+
+  function setReviewEditSelectState(select) {
+    if (!select) return;
+    select.classList.remove("is-not-started", "is-approved", "is-rejected");
+    const cls = approvalEditClass(select.value || "Not Started");
+    select.classList.add(cls);
+    select.dataset.approval = normalizeApproval(select.value || "Not Started");
+  }
+
   function renderReviewEditItems(group = activeGroup) {
     if (!reviewEditItems) return;
     const products = (group?.products || []).slice().sort((a, b) =>
@@ -793,12 +808,12 @@
       const id = String(item?.id || "").trim();
       const current = normalizeApproval(item?.approval || group?.approval || "Not Started");
       return `
-        <div class="sv-review-edit-item" data-id="${escapeHTML(id)}">
+        <div class="sv-review-edit-item ${escapeHTML(approvalEditClass(current))}" data-id="${escapeHTML(id)}" data-approval="${escapeHTML(current)}">
           <div class="sv-review-edit-item__info">
             <div class="sv-review-edit-item__name">${escapeHTML(item?.productName || "Component")}</div>
             <div class="sv-review-edit-item__sub">Qty: ${escapeHTML(fmtQty(item?.quantity || 0))}</div>
           </div>
-          <select class="co-submodal-select sv-review-edit-select" data-id="${escapeHTML(id)}" aria-label="Approval status for ${escapeHTML(item?.productName || "component")}">
+          <select class="co-submodal-select sv-review-edit-select ${escapeHTML(approvalEditClass(current))}" data-id="${escapeHTML(id)}" data-approval="${escapeHTML(current)}" aria-label="Approval status for ${escapeHTML(item?.productName || "component")}">
             <option value="Not Started" ${current === "Not Started" ? "selected" : ""}>Not Started</option>
             <option value="Approved" ${current === "Approved" ? "selected" : ""}>Approved</option>
             <option value="Rejected" ${current === "Rejected" ? "selected" : ""}>Rejected</option>
@@ -924,8 +939,8 @@
         });
       }
 
-      groups = buildGroups(allItems);
-      groupsById = new Map(groups.map((g) => [g.groupId, g]));
+      allGroups = buildGroups(allItems);
+      groupsById = new Map(allGroups.map((g) => [g.groupId, g]));
       clearSvCache();
       closeReviewEditModal({ restoreFocus: false });
       const refreshed = activeGroup?.groupId ? groupsById.get(activeGroup.groupId) : null;
@@ -938,7 +953,7 @@
     } finally {
       if (reviewEditConfirmBtn) {
         reviewEditConfirmBtn.disabled = false;
-        reviewEditConfirmBtn.textContent = reviewEditConfirmBtn.dataset.prevText || "Save changes";
+        reviewEditConfirmBtn.textContent = reviewEditConfirmBtn.dataset.prevText || "Confirm";
       }
       if (reviewEditCancelBtn) reviewEditCancelBtn.disabled = false;
       if (reviewEditCloseBtn) reviewEditCloseBtn.disabled = false;
@@ -2185,6 +2200,18 @@ if (tabsWrap) {
       e.preventDefault();
       closeReviewEditModal();
     });
+    reviewEditItems?.addEventListener("change", (e) => {
+      const select = e.target?.closest?.(".sv-review-edit-select");
+      if (!select) return;
+      setReviewEditSelectState(select);
+      const row = select.closest(".sv-review-edit-item");
+      if (row) {
+        row.classList.remove("is-not-started", "is-approved", "is-rejected");
+        row.classList.add(approvalEditClass(select.value || "Not Started"));
+        row.dataset.approval = normalizeApproval(select.value || "Not Started");
+      }
+    });
+
     reviewEditConfirmBtn?.addEventListener("click", (e) => {
       e.preventDefault();
       submitReviewEditDetails();
