@@ -335,25 +335,36 @@
 
     <div class="co-submodal-body">
       <div class="co-submodal-fields">
-        <div class="co-submodal-field">
+        <div class="co-submodal-field req-ops-edit-legacy-fields" hidden aria-hidden="true">
           <label class="co-submodal-label" for="reqOpsEditAdminPassword">Admin password</label>
-          <input class="co-submodal-input" id="reqOpsEditAdminPassword" type="password" autocomplete="current-password" placeholder="••••••••" />
-        </div>
-
-        <div class="co-submodal-field">
+          <input class="co-submodal-input" id="reqOpsEditAdminPassword" type="password" autocomplete="current-password" placeholder="••••••••" tabindex="-1" />
           <label class="co-submodal-label" for="reqOpsEditReceiptNumber">Receipt numbers</label>
-          <textarea class="co-submodal-textarea req-ops-edit-receipt-textarea" id="reqOpsEditReceiptNumber" rows="3" placeholder="e.g. 1,2 or one number per line"></textarea>
-        </div>
-
-        <div class="co-submodal-field">
-          <label class="co-submodal-label" for="reqOpsEditReceiptFiles">Receipt photos</label>
-          <input class="co-upload-field__input" id="reqOpsEditReceiptFiles" type="file" accept="image/*" multiple hidden />
-          <button type="button" class="co-upload-field" id="reqOpsEditChoosePhotos">
+          <textarea class="co-submodal-textarea req-ops-edit-receipt-textarea" id="reqOpsEditReceiptNumber" rows="3" placeholder="e.g. 1,2 or one number per line" tabindex="-1"></textarea>
+          <button type="button" class="co-upload-field" id="reqOpsEditChoosePhotos" tabindex="-1">
             <span class="co-upload-field__icon"><i data-feather="upload-cloud"></i></span>
             <span class="co-upload-field__content">
               <span class="co-upload-field__title" id="reqOpsEditPhotosName">Keep current photos</span>
               <span class="co-upload-field__meta" id="reqOpsEditPhotosMeta">Choose images only if you want to replace/add receipt photos</span>
             </span>
+          </button>
+        </div>
+
+        <div class="co-submodal-field">
+          <div class="co-submodal-label">Receipt numbers</div>
+          <div class="req-ops-edit-receipts-list" id="reqOpsEditReceiptList"></div>
+          <button type="button" class="ro-action-btn ro-action-btn--light req-ops-edit-add-btn" id="reqOpsEditAddReceipt">
+            <i data-feather="plus"></i>
+            <span>Add receipt number</span>
+          </button>
+        </div>
+
+        <div class="co-submodal-field">
+          <div class="co-submodal-label">Receipt photos</div>
+          <input class="co-upload-field__input" id="reqOpsEditReceiptFiles" type="file" accept="image/*" multiple hidden />
+          <div class="req-ops-edit-photos-list" id="reqOpsEditPhotosList"></div>
+          <button type="button" class="ro-action-btn ro-action-btn--light req-ops-edit-add-btn" id="reqOpsEditAddPhoto">
+            <i data-feather="image-plus"></i>
+            <span>Add new photo</span>
           </button>
         </div>
 

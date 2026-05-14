@@ -45,6 +45,7 @@
   const reviewEditConfirmBtn = document.getElementById("svReviewEditConfirm");
   const reviewEditAdminPassword = document.getElementById("svReviewEditAdminPassword");
   const reviewEditApproval = document.getElementById("svReviewEditApproval");
+  const reviewEditItems = document.getElementById("svReviewEditItems");
   const reviewEditError = document.getElementById("svReviewEditError");
 
   const modalEls = {
@@ -69,6 +70,7 @@
   let adminPwdLastFocusEl = null;
   let pendingSvAction = null;
   let pendingSvActionIds = [];
+  let reviewEditVerifiedAdminPassword = "";
 
   // ===== Helpers =====
   const qs = new URLSearchParams(location.search);
@@ -775,6 +777,47 @@
     return !!reviewEditModal && reviewEditModal.classList.contains("is-open");
   }
 
+  function renderReviewEditItems(group = activeGroup) {
+    if (!reviewEditItems) return;
+    const products = (group?.products || []).slice().sort((a, b) =>
+      String(a?.productName || "").localeCompare(String(b?.productName || ""), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      }),
+    );
+    if (!products.length) {
+      reviewEditItems.innerHTML = '<div class="req-ops-edit-empty">No components found.</div>';
+      return;
+    }
+    reviewEditItems.innerHTML = products.map((item) => {
+      const id = String(item?.id || "").trim();
+      const current = normalizeApproval(item?.approval || group?.approval || "Not Started");
+      return `
+        <div class="sv-review-edit-item" data-id="${escapeHTML(id)}">
+          <div class="sv-review-edit-item__info">
+            <div class="sv-review-edit-item__name">${escapeHTML(item?.productName || "Component")}</div>
+            <div class="sv-review-edit-item__sub">Qty: ${escapeHTML(fmtQty(item?.quantity || 0))}</div>
+          </div>
+          <select class="co-submodal-select sv-review-edit-select" data-id="${escapeHTML(id)}" aria-label="Approval status for ${escapeHTML(item?.productName || "component")}">
+            <option value="Not Started" ${current === "Not Started" ? "selected" : ""}>Not Started</option>
+            <option value="Approved" ${current === "Approved" ? "selected" : ""}>Approved</option>
+            <option value="Rejected" ${current === "Rejected" ? "selected" : ""}>Rejected</option>
+          </select>
+        </div>
+      `.trim();
+    }).join("");
+  }
+
+  function collectReviewEditApprovals() {
+    const approvals = {};
+    reviewEditItems?.querySelectorAll?.(".sv-review-edit-select[data-id]")?.forEach((select) => {
+      const id = String(select.getAttribute("data-id") || "").trim();
+      if (!id) return;
+      approvals[id] = normalizeApproval(select.value || "Not Started");
+    });
+    return approvals;
+  }
+
   function openReviewEditModal(group = activeGroup) {
     const ids = groupOrderIds(group);
     if (!ids.length) {
@@ -782,15 +825,19 @@
       return false;
     }
 
-    if (!reviewEditModal || !reviewEditAdminPassword || !reviewEditApproval || !reviewEditConfirmBtn) {
+    if (!reviewEditVerifiedAdminPassword) {
+      openAdminPasswordModal("edit", ids);
+      return true;
+    }
+
+    if (!reviewEditModal || !reviewEditConfirmBtn) {
       openAdminPasswordModal("edit", ids);
       return true;
     }
 
     reviewEditLastFocusEl = document.activeElement;
     setReviewEditError("");
-    reviewEditAdminPassword.value = "";
-    reviewEditApproval.value = normalizeApproval(group?.approval || "Not Started");
+    renderReviewEditItems(group);
     reviewEditConfirmBtn.disabled = false;
     if (reviewEditCancelBtn) reviewEditCancelBtn.disabled = false;
     if (reviewEditCloseBtn) reviewEditCloseBtn.disabled = false;
@@ -799,7 +846,7 @@
     reviewEditModal.classList.add("is-open");
     reviewEditModal.setAttribute("aria-hidden", "false");
     window.requestAnimationFrame(() => {
-      try { reviewEditAdminPassword.focus(); } catch {}
+      try { reviewEditItems?.querySelector?.("select")?.focus?.(); } catch {}
     });
     if (window.feather) window.feather.replace();
     return true;
@@ -812,6 +859,7 @@
     reviewEditModal.setAttribute("aria-hidden", "true");
     reviewEditModal.hidden = true;
     setReviewEditError("");
+    reviewEditVerifiedAdminPassword = "";
     if (restoreFocus && reviewEditLastFocusEl && typeof reviewEditLastFocusEl.focus === "function") {
       try { reviewEditLastFocusEl.focus({ preventScroll: true }); } catch {}
     }
@@ -820,16 +868,20 @@
 
   async function submitReviewEditDetails() {
     const ids = groupOrderIds(activeGroup);
-    const adminPassword = String(reviewEditAdminPassword?.value || "").trim();
-    const approvalStatus = normalizeApproval(reviewEditApproval?.value || "Not Started");
+    const adminPassword = String(reviewEditVerifiedAdminPassword || "").trim();
+    const approvals = collectReviewEditApprovals();
 
     if (!ids.length) {
       setReviewEditError("Order items are missing.");
       return;
     }
     if (!adminPassword) {
-      setReviewEditError("Admin password is required.");
-      try { reviewEditAdminPassword?.focus(); } catch {}
+      setReviewEditError("Please verify admin password first.");
+      openAdminPasswordModal("edit", ids);
+      return;
+    }
+    if (!Object.keys(approvals).length) {
+      setReviewEditError("No components found to update.");
       return;
     }
 
@@ -847,24 +899,37 @@
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: ids, adminPassword, approvalStatus }),
+        body: JSON.stringify({ orderIds: ids, adminPassword, approvals }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) {
         setReviewEditError("Wrong password. Please try again.");
-        if (reviewEditAdminPassword) reviewEditAdminPassword.value = "";
-        try { reviewEditAdminPassword?.focus(); } catch {}
+        reviewEditVerifiedAdminPassword = "";
         return;
       }
       if (!res.ok) throw new Error(data?.error || "Failed to update approval status.");
 
-      closeReviewEditModal({ restoreFocus: false });
-      closeSvMoreMenu();
-      closeModal();
+      const updatedItems = Array.isArray(data?.items) ? data.items : [];
+      if (updatedItems.length) {
+        const byId = new Map(updatedItems.map((item) => [String(item.id || ""), item]));
+        allItems = allItems.map((item) => {
+          const updated = byId.get(String(item.id || ""));
+          return updated ? { ...item, ...updated } : item;
+        });
+      } else {
+        allItems = allItems.map((item) => {
+          const id = String(item?.id || "").trim();
+          if (!Object.prototype.hasOwnProperty.call(approvals, id)) return item;
+          return { ...item, approval: approvals[id] };
+        });
+      }
+
+      groups = buildGroups(allItems);
+      groupsById = new Map(groups.map((g) => [g.groupId, g]));
       clearSvCache();
-      TAB = approvalKey(approvalStatus);
-      setActiveTab();
-      updateSvToolbarUrl();
+      closeReviewEditModal({ restoreFocus: false });
+      const refreshed = activeGroup?.groupId ? groupsById.get(activeGroup.groupId) : null;
+      if (refreshed && modalOverlay?.classList.contains("is-open")) renderModal(refreshed);
       await loadList({ tab: TAB, force: true });
       toastOK("Review decision updated.");
     } catch (err) {
@@ -1026,6 +1091,32 @@
     if (adminPwdCloseBtn) adminPwdCloseBtn.disabled = true;
 
     try {
+      if (action === "edit") {
+        const res = await fetch("/api/sv-orders/actions/verify-edit", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderIds: ids, adminPassword: pwd }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          const err = new Error("Wrong password. Please try again.");
+          err.status = 401;
+          throw err;
+        }
+        if (!res.ok) {
+          const err = new Error(data?.error || "Failed to verify admin password.");
+          err.status = res.status;
+          throw err;
+        }
+        reviewEditVerifiedAdminPassword = pwd;
+        destroyPopover();
+        closeSvMoreMenu();
+        closeAdminPasswordModal({ restoreFocus: false });
+        openReviewEditModal(activeGroup);
+        return;
+      }
+
       await runSvAdminAction(action, ids, pwd);
       clearSvCache();
       destroyPopover();
@@ -1033,15 +1124,7 @@
       closeAdminPasswordModal({ restoreFocus: false });
       closeModal();
       toastOK(cfg.success);
-
-      if (action === "edit") {
-        TAB = "not-started";
-        setActiveTab();
-        updateSvToolbarUrl();
-        await loadList({ tab: TAB, force: true });
-      } else {
-        await loadList({ tab: TAB, force: true });
-      }
+      await loadList({ tab: TAB, force: true });
     } catch (err) {
       console.error(err);
       setAdminPwdError(err?.message || `Failed to ${action} order.`);

@@ -23280,6 +23280,38 @@ app.post(
   },
 );
 
+// Verify admin password before opening the Operations Orders edit details modal.
+app.post(
+  "/api/orders/operations/verify-admin",
+  requireAuth,
+  requirePage("Operations Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds, adminPassword } = req.body || {};
+      const ids = (Array.isArray(orderIds) ? orderIds : [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+        .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+      const ok = await verifyAdminPassword(pwd);
+      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rows = await _sbOrderRowsByIds(ids);
+        if (!rows.length) return res.status(404).json({ error: "Orders not found" });
+      }
+
+      return res.json({ success: true });
+    } catch (e) {
+      console.error("operations verify admin error:", e?.details || e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to verify admin password" });
+    }
+  },
+);
+
 // Edit Operations Order details without moving the order back to the beginning.
 // Body: { orderIds, adminPassword, receiptNumbers, quantities: { [orderRowId]: number }, orderReceiptDataUrls, orderReceiptFilenames }
 app.post(
@@ -23294,6 +23326,7 @@ app.post(
         receiptNumber,
         receiptNumbers,
         quantities,
+        orderReceiptKeepEntries,
         orderReceiptDataUrls,
         orderReceiptFilenames,
       } = req.body || {};
@@ -23322,6 +23355,16 @@ app.post(
       const receiptText = _normalizeReceiptNumbersText(
         Array.isArray(receiptNumbers) && receiptNumbers.length ? receiptNumbers : receiptNumber,
       );
+
+      const keepReceiptEntriesProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "orderReceiptKeepEntries");
+      const keepReceiptEntries = (Array.isArray(orderReceiptKeepEntries) ? orderReceiptKeepEntries : [])
+        .map((entry, index) => {
+          const name = String(entry?.name || entry?.filename || `Receipt photo ${index + 1}`).trim() || `Receipt photo ${index + 1}`;
+          const url = String(entry?.url || entry?.publicUrl || entry?.public_url || entry?.rawUrl || entry?.raw || entry?.path || entry?.fullPath || "").trim();
+          if (!url) return null;
+          return { name, url };
+        })
+        .filter(Boolean);
 
       const photoDataUrls = (Array.isArray(orderReceiptDataUrls) ? orderReceiptDataUrls : [])
         .map((x) => String(x || "").trim())
@@ -23362,8 +23405,9 @@ app.post(
         if (receiptTextProvided) {
           patch.receipt_number = receiptText || null;
         }
-        if (uploadedReceiptFiles.length) {
-          patch.order_receipt = JSON.stringify(uploadedReceiptFiles);
+        if (keepReceiptEntriesProvided || uploadedReceiptFiles.length) {
+          const combinedReceiptFiles = [...keepReceiptEntries, ...uploadedReceiptFiles];
+          patch.order_receipt = combinedReceiptFiles.length ? JSON.stringify(combinedReceiptFiles) : null;
         }
 
         if (Object.prototype.hasOwnProperty.call(quantityMap, String(id))) {
@@ -28510,40 +28554,85 @@ app.post("/api/sv-orders/actions/unarchive", requireAuth, requirePage("Orders Re
   }
 });
 
+app.post("/api/sv-orders/actions/verify-edit", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const ids = _normalizeSVOrderActionIds(req.body?.orderIds);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!await _verifySVOrderActionPassword(req, res)) return;
+
+    if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+      await _sbGetAllowedSVActionRows(req, ids);
+      return res.json({ ok: true, action: "verify-edit", source: "supabase" });
+    }
+
+    await _notionGetAllowedSVActionPages(req, ids);
+    return res.json({ ok: true, action: "verify-edit" });
+  } catch (e) {
+    console.error("SV verify edit action error:", e?.body || e);
+    return res.status(e?.status || 500).json({ error: e?.message || "Failed to verify edit permission" });
+  }
+});
+
 app.post("/api/sv-orders/actions/update-approval", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
     const ids = _normalizeSVOrderActionIds(req.body?.orderIds);
     if (!ids.length) return res.status(400).json({ error: "orderIds required" });
     if (!await _verifySVOrderActionPassword(req, res)) return;
 
+    const normalizeActionApproval = (value) => {
+      const key = norm(String(value || "").trim()).replace(/[_\s-]+/g, " ");
+      if (key === "approved") return "Approved";
+      if (key === "rejected") return "Rejected";
+      return "Not Started";
+    };
+
+    const approvalsInput = req.body?.approvals && typeof req.body.approvals === "object" && !Array.isArray(req.body.approvals)
+      ? req.body.approvals
+      : null;
     const rawApproval = String(req.body?.approvalStatus || req.body?.approval || "").trim();
-    const approvalKey = norm(rawApproval).replace(/[_\s-]+/g, " ");
-    const approval = approvalKey === "approved"
-      ? "Approved"
-      : approvalKey === "rejected"
-        ? "Rejected"
-        : "Not Started";
+    const fallbackApproval = normalizeActionApproval(rawApproval);
+
+    const approvalById = new Map();
+    ids.forEach((id) => {
+      const supplied = approvalsInput && Object.prototype.hasOwnProperty.call(approvalsInput, String(id))
+        ? approvalsInput[String(id)]
+        : fallbackApproval;
+      approvalById.set(String(id), normalizeActionApproval(supplied));
+    });
 
     if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
       await _sbGetAllowedSVActionRows(req, ids);
-      await _sbUpdateOrdersByIds(ids, { sv_approval: approval });
+      const updatedRows = [];
+      for (const id of ids) {
+        const approval = approvalById.get(String(id)) || "Not Started";
+        const updated = await supabaseDb.updateById(_sbOrdersTable(), id, { sv_approval: approval });
+        updatedRows.push(updated);
+      }
       await _invalidateSVOrderActionCaches(req);
-      return res.json({ ok: true, action: "update-approval", approval, source: "supabase" });
+      return res.json({
+        ok: true,
+        action: "update-approval",
+        source: "supabase",
+        items: updatedRows.map((row) => _sbSerializeOrderRow(row)),
+      });
     }
 
     const pages = await _notionGetAllowedSVActionPages(req, ids);
     const dbProps = await getOrdersDBProps();
     const approvalProp = await detectSVApprovalPropName();
     const approvalMeta = dbProps?.[approvalProp] || null;
-    await Promise.all((pages || []).map((page) => notion.pages.update({
-      page_id: page.id,
-      archived: false,
-      properties: {
-        [approvalProp]: _notionOptionValueForMeta(approvalMeta || page?.properties?.[approvalProp], approval),
-      },
-    })));
+    await Promise.all((pages || []).map((page) => {
+      const approval = approvalById.get(String(page?.id || "")) || "Not Started";
+      return notion.pages.update({
+        page_id: page.id,
+        archived: false,
+        properties: {
+          [approvalProp]: _notionOptionValueForMeta(approvalMeta || page?.properties?.[approvalProp], approval),
+        },
+      });
+    }));
     await _invalidateSVOrderActionCaches(req);
-    return res.json({ ok: true, action: "update-approval", approval });
+    return res.json({ ok: true, action: "update-approval" });
   } catch (e) {
     console.error("SV update approval action error:", e?.body || e);
     return res.status(e?.status || 500).json({ error: e?.message || "Failed to update approval status" });

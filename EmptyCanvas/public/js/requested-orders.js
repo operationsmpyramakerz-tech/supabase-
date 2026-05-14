@@ -132,6 +132,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const opsEditChoosePhotos = document.getElementById("reqOpsEditChoosePhotos");
   const opsEditPhotosName = document.getElementById("reqOpsEditPhotosName");
   const opsEditPhotosMeta = document.getElementById("reqOpsEditPhotosMeta");
+  const opsEditReceiptList = document.getElementById("reqOpsEditReceiptList");
+  const opsEditAddReceiptBtn = document.getElementById("reqOpsEditAddReceipt");
+  const opsEditPhotosList = document.getElementById("reqOpsEditPhotosList");
+  const opsEditAddPhotoBtn = document.getElementById("reqOpsEditAddPhoto");
   const opsEditQtyList = document.getElementById("reqOpsEditQtyList");
   const opsEditError = document.getElementById("reqOpsEditError");
 
@@ -1826,26 +1830,103 @@ document.addEventListener("DOMContentLoaded", () => {
     return !!opsEditModal && opsEditModal.classList.contains("is-open");
   }
 
-  function updateOpsEditPhotosUi(files = []) {
-    const picked = Array.from(files || []).filter(Boolean);
-    if (opsEditPhotosName) {
-      if (!picked.length) opsEditPhotosName.textContent = "Keep current photos";
-      else if (picked.length === 1) opsEditPhotosName.textContent = picked[0].name || "1 image selected";
-      else opsEditPhotosName.textContent = `${picked.length} images selected`;
-    }
-    if (opsEditPhotosMeta) {
-      if (!picked.length) {
-        const count = collectReceiptEntriesFromGroup(activeGroup || {}).length;
-        opsEditPhotosMeta.textContent = count > 0
-          ? `${count} existing photo${count === 1 ? "" : "s"} will be kept unless you choose new images.`
-          : "Choose images to add receipt photos.";
-      } else {
-        const totalSize = picked.reduce((sum, file) => sum + (Number(file?.size) || 0), 0);
-        const labels = picked.slice(0, 2).map((file) => String(file?.name || "").trim()).filter(Boolean);
-        const more = picked.length > 2 ? `+${picked.length - 2} more` : "";
-        opsEditPhotosMeta.textContent = [labels.join(" • "), more, humanFileSize(totalSize)].filter(Boolean).join(" • ");
-      }
-    }
+  function renderOpsEditReceiptRows(values = []) {
+    if (!opsEditReceiptList) return;
+    const clean = normalizeReceiptNumbers(values);
+    const displayValues = clean.length ? clean : [""];
+    opsEditReceiptList.innerHTML = displayValues.map((value, index) => `
+      <div class="req-ops-edit-receipt-row">
+        <input class="co-submodal-input req-ops-edit-receipt-input" type="text" inputmode="text" autocomplete="off" placeholder="Receipt number" value="${escapeHTML(value)}" aria-label="Receipt number ${index + 1}" />
+        <button type="button" class="req-ops-edit-mini-remove" data-ops-remove-receipt="${index}" aria-label="Remove receipt number">
+          <i data-feather="x"></i>
+        </button>
+      </div>
+    `.trim()).join("");
+    if (window.feather) window.feather.replace();
+  }
+
+  function collectOpsEditReceiptNumbers({ allowEmpty = false } = {}) {
+    const inputValues = Array.from(opsEditReceiptList?.querySelectorAll?.(".req-ops-edit-receipt-input") || [])
+      .map((input) => String(input?.value || "").trim())
+      .filter(Boolean);
+    const values = normalizeReceiptNumbers(inputValues);
+    return allowEmpty ? values : values.filter(Boolean);
+  }
+
+  function addOpsEditReceiptRow(value = "") {
+    if (!opsEditReceiptList) return;
+    const rows = Array.from(opsEditReceiptList.querySelectorAll(".req-ops-edit-receipt-input"));
+    const current = rows.map((input) => String(input?.value || "").trim());
+    current.push(String(value || ""));
+    renderOpsEditReceiptRows(current);
+    window.requestAnimationFrame(() => {
+      const inputs = opsEditReceiptList.querySelectorAll(".req-ops-edit-receipt-input");
+      const input = inputs[inputs.length - 1];
+      try { input?.focus(); input?.select?.(); } catch {}
+    });
+  }
+
+  function renderOpsEditPhotos() {
+    if (!opsEditPhotosList) return;
+    const visibleExisting = opsEditPhotoEntries.filter((entry) => !entry.removed);
+    const parts = [];
+
+    visibleExisting.forEach((entry, visibleIndex) => {
+      const originalIndex = opsEditPhotoEntries.indexOf(entry);
+      const name = entry.name || `Receipt photo ${visibleIndex + 1}`;
+      const url = String(entry.url || entry.rawUrl || "").trim();
+      const thumbnail = isImageReceipt({ ...entry, url }) && url
+        ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" />`
+        : `<span class="req-ops-edit-photo-icon"><i data-feather="image"></i></span>`;
+      parts.push(`
+        <div class="req-ops-edit-photo-card" data-existing-photo-index="${originalIndex}">
+          <button type="button" class="req-ops-edit-photo-preview" data-ops-open-photo="${originalIndex}" title="Open photo">
+            ${thumbnail}
+          </button>
+          <div class="req-ops-edit-photo-name">${escapeHTML(name)}</div>
+          <button type="button" class="req-ops-edit-mini-remove" data-ops-remove-photo="${originalIndex}" aria-label="Remove photo">
+            <i data-feather="x"></i>
+          </button>
+        </div>
+      `.trim());
+    });
+
+    opsEditNewFiles.forEach((file, index) => {
+      const name = String(file?.name || `New photo ${index + 1}`).trim();
+      parts.push(`
+        <div class="req-ops-edit-photo-card req-ops-edit-photo-card--new" data-new-photo-index="${index}">
+          <div class="req-ops-edit-photo-preview"><span class="req-ops-edit-photo-icon"><i data-feather="image-plus"></i></span></div>
+          <div class="req-ops-edit-photo-name">${escapeHTML(name)}</div>
+          <button type="button" class="req-ops-edit-mini-remove" data-ops-remove-new-photo="${index}" aria-label="Remove new photo">
+            <i data-feather="x"></i>
+          </button>
+        </div>
+      `.trim());
+    });
+
+    opsEditPhotosList.innerHTML = parts.length
+      ? parts.join("")
+      : '<div class="req-ops-edit-empty">No receipt photos saved.</div>';
+    if (window.feather) window.feather.replace();
+  }
+
+  function resetOpsEditPhotos(group = activeGroup) {
+    opsEditPhotoEntries = collectReceiptEntriesFromGroup(group || {}).map((entry, index) => ({
+      name: entry.name || `Receipt photo ${index + 1}`,
+      url: String(entry.url || "").trim(),
+      rawUrl: String(entry.rawUrl || entry.raw || "").trim(),
+      removed: false,
+    }));
+    opsEditNewFiles = [];
+    if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
+    renderOpsEditPhotos();
+  }
+
+  function openOpsEditPhoto(originalIndex) {
+    const entry = opsEditPhotoEntries[Number(originalIndex)];
+    const url = String(entry?.url || entry?.rawUrl || "").trim();
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function renderOpsEditQtyRows(group = activeGroup) {
@@ -1876,29 +1957,33 @@ document.addEventListener("DOMContentLoaded", () => {
       toast("error", "Missing order", "Could not find this order items.");
       return false;
     }
-    if (!opsEditModal || !opsEditAdminPassword || !opsEditConfirmBtn) {
+    if (!opsEditModal || !opsEditConfirmBtn) {
+      openEditPasswordModal(group.orderIds);
+      return true;
+    }
+    if (!opsEditVerifiedAdminPassword) {
       openEditPasswordModal(group.orderIds);
       return true;
     }
 
     opsEditLastFocus = document.activeElement;
     setOpsEditError("");
-    opsEditAdminPassword.value = "";
-    if (opsEditReceiptNumber) opsEditReceiptNumber.value = formatReceiptNumbersInline(group.receiptNumber || "");
-    if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
-    updateOpsEditPhotosUi([]);
+    renderOpsEditReceiptRows(group.receiptNumber || "");
+    resetOpsEditPhotos(group);
     renderOpsEditQtyRows(group);
 
     opsEditConfirmBtn.disabled = false;
     if (opsEditCancelBtn) opsEditCancelBtn.disabled = false;
     if (opsEditCloseBtn) opsEditCloseBtn.disabled = false;
     if (opsEditChoosePhotos) opsEditChoosePhotos.disabled = false;
+    if (opsEditAddPhotoBtn) opsEditAddPhotoBtn.disabled = false;
+    if (opsEditAddReceiptBtn) opsEditAddReceiptBtn.disabled = false;
 
     opsEditModal.hidden = false;
     opsEditModal.classList.add("is-open");
     opsEditModal.setAttribute("aria-hidden", "false");
     window.requestAnimationFrame(() => {
-      try { opsEditAdminPassword.focus(); } catch {}
+      try { opsEditReceiptList?.querySelector?.(".req-ops-edit-receipt-input")?.focus?.(); } catch {}
     });
     if (window.feather) window.feather.replace();
     return true;
@@ -1910,6 +1995,10 @@ document.addEventListener("DOMContentLoaded", () => {
     opsEditModal.setAttribute("aria-hidden", "true");
     opsEditModal.hidden = true;
     setOpsEditError("");
+    opsEditVerifiedAdminPassword = "";
+    opsEditPhotoEntries = [];
+    opsEditNewFiles = [];
+    if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
     if (restoreFocus && opsEditLastFocus && typeof opsEditLastFocus.focus === "function") {
       try { opsEditLastFocus.focus({ preventScroll: true }); } catch {}
     }
@@ -1935,14 +2024,14 @@ document.addEventListener("DOMContentLoaded", () => {
   async function submitOpsEditDetails() {
     const group = activeGroup;
     const ids = (group?.orderIds || []).map((id) => String(id || "").trim()).filter(Boolean);
-    const adminPassword = String(opsEditAdminPassword?.value || "").trim();
+    const adminPassword = String(opsEditVerifiedAdminPassword || "").trim();
     if (!ids.length) {
       setOpsEditError("Order items are missing.");
       return;
     }
     if (!adminPassword) {
-      setOpsEditError("Admin password is required.");
-      try { opsEditAdminPassword?.focus(); } catch {}
+      setOpsEditError("Please verify admin password first.");
+      openEditPasswordModal(ids);
       return;
     }
 
@@ -1954,8 +2043,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const receiptNumbers = normalizeReceiptNumbers(opsEditReceiptNumber?.value || "");
-    const files = Array.from(opsEditReceiptFiles?.files || []).filter(Boolean);
+    const receiptNumbers = collectOpsEditReceiptNumbers();
+    const keepEntries = opsEditPhotoEntries
+      .filter((entry) => !entry.removed)
+      .map((entry) => ({
+        name: entry.name || "Receipt photo",
+        url: entry.url || "",
+        rawUrl: entry.rawUrl || "",
+      }));
+    const files = opsEditNewFiles.slice();
 
     setOpsEditError("");
     if (opsEditConfirmBtn) {
@@ -1966,6 +2062,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (opsEditCancelBtn) opsEditCancelBtn.disabled = true;
     if (opsEditCloseBtn) opsEditCloseBtn.disabled = true;
     if (opsEditChoosePhotos) opsEditChoosePhotos.disabled = true;
+    if (opsEditAddPhotoBtn) opsEditAddPhotoBtn.disabled = true;
+    if (opsEditAddReceiptBtn) opsEditAddReceiptBtn.disabled = true;
 
     try {
       const dataUrls = files.length ? await Promise.all(files.map((file) => fileToDataUrl(file))) : [];
@@ -1974,6 +2072,7 @@ document.addEventListener("DOMContentLoaded", () => {
         adminPassword,
         receiptNumbers,
         quantities,
+        orderReceiptKeepEntries: keepEntries,
         orderReceiptDataUrls: dataUrls.map((item) => String(item || "").trim()).filter(Boolean),
         orderReceiptFilenames: files.map((file) => file.name || "receipt.jpg"),
       });
@@ -1989,7 +2088,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const idSet = new Set(ids);
         allItems.forEach((item) => {
           if (!idSet.has(String(item.id || ""))) return;
-          if (receiptNumbers.length) item.receiptNumber = receiptNumbers.join("\n");
+          item.receiptNumber = receiptNumbers.join("\n");
+          item.orderReceiptEntries = keepEntries;
           if (Object.prototype.hasOwnProperty.call(quantities, String(item.id || ""))) {
             const base = baseQty(item);
             const q = roundQty(quantities[String(item.id || "")]);
@@ -2018,6 +2118,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (opsEditCancelBtn) opsEditCancelBtn.disabled = false;
       if (opsEditCloseBtn) opsEditCloseBtn.disabled = false;
       if (opsEditChoosePhotos) opsEditChoosePhotos.disabled = false;
+      if (opsEditAddPhotoBtn) opsEditAddPhotoBtn.disabled = false;
+      if (opsEditAddReceiptBtn) opsEditAddReceiptBtn.disabled = false;
       if (window.feather) window.feather.replace();
     }
   }
@@ -2154,18 +2256,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (editPwdConfirmBtn) {
       editPwdConfirmBtn.disabled = true;
       editPwdConfirmBtn.dataset.prevHtml = editPwdConfirmBtn.innerHTML;
-      editPwdConfirmBtn.textContent = "Updating...";
+      editPwdConfirmBtn.textContent = "Checking...";
     }
     if (editPwdCancelBtn) editPwdCancelBtn.disabled = true;
     if (editPwdCloseBtn) editPwdCloseBtn.disabled = true;
     if (editOrderBtn) {
       editOrderBtn.disabled = true;
       editOrderBtn.dataset.prevHtml = editOrderBtn.innerHTML;
-      editOrderBtn.textContent = "Updating...";
+      editOrderBtn.textContent = "Checking...";
     }
 
     try {
-      const res = await fetch("/api/orders/operations/edit-to-progress", {
+      const res = await fetch("/api/orders/operations/verify-admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -2189,45 +2291,14 @@ document.addEventListener("DOMContentLoaded", () => {
         closeEditPasswordModal();
         return;
       }
-      if (!res.ok) throw new Error(data?.error || "Failed to update order");
+      if (!res.ok) throw new Error(data?.error || "Failed to verify admin password");
 
-      const idSet = new Set(cleanIds.map((id) => String(id)));
-      allItems.forEach((it) => {
-        if (!idSet.has(String(it.id || ""))) return;
-        it.status = data?.status || "In progress";
-        it.statusColor = data?.statusColor || "yellow";
-        it.quantityReceived = null;
-        it.quantityRemaining = null;
-        it.quantityReceivedEdited = false;
-        it.operationsById = "";
-        it.operationsByIds = [];
-        it.operationsByName = "";
-        it.operationsByNames = [];
-        it.receiptNumber = null;
-        it.orderReceiptEntries = [];
-        it.orderReceiptNames = [];
-        it.orderReceiptUrls = [];
-        it.orderReceiptName = null;
-        it.orderReceiptUrl = null;
-        it.maintenanceReceiptEntries = [];
-        it.maintenanceReceiptNames = [];
-        it.maintenanceReceiptUrls = [];
-        it.maintenanceReceiptName = null;
-        it.maintenanceReceiptUrl = null;
-      });
-
-      writeRequestedCache(allItems);
-      groups = buildGroups(allItems);
-      currentTab = "not-started";
-      closeDownloadMenu();
+      opsEditVerifiedAdminPassword = pwd;
       closeEditPasswordModal({ restoreFocus: false });
-      closeOrderModal({ restoreFocus: false });
-      updateTabUI();
-      render();
-      toast("success", "Updated", "Order returned to In progress.");
+      openOpsEditDetailsModal(activeGroup);
     } catch (err) {
       console.error(err);
-      setEditPwdError(err?.message || "Failed to update order.");
+      setEditPwdError(err?.message || "Failed to verify admin password.");
     } finally {
       if (editPwdConfirmBtn) {
         editPwdConfirmBtn.disabled = false;
@@ -2246,7 +2317,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (window.feather) window.feather.replace();
     }
   }
-
   let pendingArchiveOrderIds = [];
   let archivePwdLastFocus = null;
 
@@ -2806,6 +2876,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastFocus = null;
   let editPwdLastFocus = null;
   let pendingEditOrderIds = [];
+  let opsEditVerifiedAdminPassword = "";
+  let opsEditPhotoEntries = [];
+  let opsEditNewFiles = [];
   let requestedDataLoading = false;
   let requestedDataLoaded = false;
 
@@ -5489,13 +5562,65 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     openOpsEditDetailsModal(activeGroup);
   });
 
+  opsEditAddReceiptBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    setOpsEditError("");
+    addOpsEditReceiptRow("");
+  });
+  opsEditReceiptList?.addEventListener("click", (e) => {
+    const removeBtn = e.target?.closest?.("[data-ops-remove-receipt]");
+    if (!removeBtn) return;
+    e.preventDefault();
+    const rows = Array.from(opsEditReceiptList.querySelectorAll(".req-ops-edit-receipt-row"));
+    const row = removeBtn.closest(".req-ops-edit-receipt-row");
+    if (row && rows.length > 1) row.remove();
+    else if (row) {
+      const input = row.querySelector(".req-ops-edit-receipt-input");
+      if (input) input.value = "";
+    }
+    setOpsEditError("");
+  });
+  opsEditAddPhotoBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    opsEditReceiptFiles?.click();
+  });
   opsEditChoosePhotos?.addEventListener("click", (e) => {
     e.preventDefault();
     opsEditReceiptFiles?.click();
   });
   opsEditReceiptFiles?.addEventListener("change", () => {
-    updateOpsEditPhotosUi(Array.from(opsEditReceiptFiles.files || []));
+    const picked = Array.from(opsEditReceiptFiles.files || []).filter(Boolean);
+    if (picked.length) opsEditNewFiles.push(...picked);
+    if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
+    renderOpsEditPhotos();
     if (opsEditError?.textContent) setOpsEditError("");
+  });
+  opsEditPhotosList?.addEventListener("click", (e) => {
+    const openBtn = e.target?.closest?.("[data-ops-open-photo]");
+    if (openBtn) {
+      e.preventDefault();
+      openOpsEditPhoto(openBtn.getAttribute("data-ops-open-photo"));
+      return;
+    }
+    const removeExisting = e.target?.closest?.("[data-ops-remove-photo]");
+    if (removeExisting) {
+      e.preventDefault();
+      const index = Number(removeExisting.getAttribute("data-ops-remove-photo"));
+      if (Number.isFinite(index) && opsEditPhotoEntries[index]) {
+        opsEditPhotoEntries[index].removed = true;
+        renderOpsEditPhotos();
+      }
+      return;
+    }
+    const removeNew = e.target?.closest?.("[data-ops-remove-new-photo]");
+    if (removeNew) {
+      e.preventDefault();
+      const index = Number(removeNew.getAttribute("data-ops-remove-new-photo"));
+      if (Number.isFinite(index)) {
+        opsEditNewFiles.splice(index, 1);
+        renderOpsEditPhotos();
+      }
+    }
   });
   opsEditCloseBtn?.addEventListener("click", (e) => {
     e.preventDefault();

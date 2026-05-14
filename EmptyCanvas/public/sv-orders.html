@@ -223,18 +223,20 @@
 
     <div class="co-submodal-body">
       <div class="co-submodal-fields">
-        <div class="co-submodal-field">
+        <div class="co-submodal-field sv-review-edit-legacy-fields" hidden aria-hidden="true">
           <label class="co-submodal-label" for="svReviewEditAdminPassword">Admin password</label>
-          <input class="co-submodal-input" id="svReviewEditAdminPassword" type="password" autocomplete="current-password" placeholder="••••••••" />
-        </div>
-
-        <div class="co-submodal-field">
+          <input class="co-submodal-input" id="svReviewEditAdminPassword" type="password" autocomplete="current-password" placeholder="••••••••" tabindex="-1" />
           <label class="co-submodal-label" for="svReviewEditApproval">Approval status</label>
-          <select class="co-submodal-select" id="svReviewEditApproval">
+          <select class="co-submodal-select" id="svReviewEditApproval" tabindex="-1">
             <option value="Not Started">Not Started</option>
             <option value="Approved">Approved</option>
             <option value="Rejected">Rejected</option>
           </select>
+        </div>
+
+        <div class="co-submodal-field">
+          <div class="co-submodal-label">Component approval status</div>
+          <div class="sv-review-edit-items" id="svReviewEditItems"></div>
         </div>
       </div>
 
