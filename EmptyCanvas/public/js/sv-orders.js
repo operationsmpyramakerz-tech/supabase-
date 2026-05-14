@@ -792,6 +792,56 @@
     select.dataset.approval = normalizeApproval(select.value || "Not Started");
   }
 
+  const REVIEW_APPROVAL_OPTIONS = ["Not Started", "Approved", "Rejected"];
+
+  function closeReviewStatusMenus(exceptPicker = null) {
+    reviewEditItems?.querySelectorAll?.(".sv-review-status-picker.is-open")?.forEach((picker) => {
+      if (exceptPicker && picker === exceptPicker) return;
+      picker.classList.remove("is-open");
+      const trigger = picker.querySelector(".sv-review-status-trigger");
+      const menu = picker.querySelector(".sv-review-status-menu");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+      if (menu) menu.hidden = true;
+    });
+  }
+
+  function setReviewStatusPickerValue(picker, value) {
+    if (!picker) return;
+    const current = normalizeApproval(value || "Not Started");
+    picker.dataset.value = current;
+    picker.dataset.approval = current;
+    picker.classList.remove("is-not-started", "is-approved", "is-rejected");
+    picker.classList.add(approvalEditClass(current));
+
+    const textEl = picker.querySelector(".sv-review-status-text");
+    if (textEl) textEl.textContent = current;
+
+    picker.querySelectorAll(".sv-review-status-option[data-value]").forEach((option) => {
+      const selected = normalizeApproval(option.getAttribute("data-value") || "") === current;
+      option.classList.toggle("is-selected", selected);
+      option.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+
+    const row = picker.closest(".sv-review-edit-item");
+    if (row) {
+      row.classList.remove("is-not-started", "is-approved", "is-rejected");
+      row.classList.add(approvalEditClass(current));
+      row.dataset.approval = current;
+    }
+  }
+
+  function toggleReviewStatusPicker(picker) {
+    if (!picker) return;
+    const menu = picker.querySelector(".sv-review-status-menu");
+    const trigger = picker.querySelector(".sv-review-status-trigger");
+    if (!menu || !trigger) return;
+    const shouldOpen = !picker.classList.contains("is-open");
+    closeReviewStatusMenus(picker);
+    picker.classList.toggle("is-open", shouldOpen);
+    menu.hidden = !shouldOpen;
+    trigger.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  }
+
   function renderReviewEditItems(group = activeGroup) {
     if (!reviewEditItems) return;
     const products = (group?.products || []).slice().sort((a, b) =>
@@ -813,11 +863,24 @@
             <div class="sv-review-edit-item__name">${escapeHTML(item?.productName || "Component")}</div>
             <div class="sv-review-edit-item__sub">Qty: ${escapeHTML(fmtQty(item?.quantity || 0))}</div>
           </div>
-          <select class="co-submodal-select sv-review-edit-select ${escapeHTML(approvalEditClass(current))}" data-id="${escapeHTML(id)}" data-approval="${escapeHTML(current)}" aria-label="Approval status for ${escapeHTML(item?.productName || "component")}">
-            <option value="Not Started" ${current === "Not Started" ? "selected" : ""}>Not Started</option>
-            <option value="Approved" ${current === "Approved" ? "selected" : ""}>Approved</option>
-            <option value="Rejected" ${current === "Rejected" ? "selected" : ""}>Rejected</option>
-          </select>
+          <div class="sv-review-status-picker ${escapeHTML(approvalEditClass(current))}" data-id="${escapeHTML(id)}" data-value="${escapeHTML(current)}" data-approval="${escapeHTML(current)}">
+            <button type="button" class="sv-review-status-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Approval status for ${escapeHTML(item?.productName || "component")}">
+              <span class="sv-review-status-dot" aria-hidden="true"></span>
+              <span class="sv-review-status-text">${escapeHTML(current)}</span>
+              <i data-feather="chevron-down" aria-hidden="true"></i>
+            </button>
+            <div class="sv-review-status-menu" role="listbox" hidden>
+              ${REVIEW_APPROVAL_OPTIONS.map((option) => {
+                const selected = option === current;
+                return `
+                  <button type="button" class="sv-review-status-option ${selected ? "is-selected" : ""}" role="option" aria-selected="${selected ? "true" : "false"}" data-value="${escapeHTML(option)}">
+                    <span class="sv-review-status-option-dot" aria-hidden="true"></span>
+                    <span>${escapeHTML(option)}</span>
+                  </button>
+                `.trim();
+              }).join("")}
+            </div>
+          </div>
         </div>
       `.trim();
     }).join("");
@@ -825,9 +888,14 @@
 
   function collectReviewEditApprovals() {
     const approvals = {};
+    reviewEditItems?.querySelectorAll?.(".sv-review-status-picker[data-id]")?.forEach((picker) => {
+      const id = String(picker.getAttribute("data-id") || "").trim();
+      if (!id) return;
+      approvals[id] = normalizeApproval(picker.getAttribute("data-value") || picker.dataset?.value || "Not Started");
+    });
     reviewEditItems?.querySelectorAll?.(".sv-review-edit-select[data-id]")?.forEach((select) => {
       const id = String(select.getAttribute("data-id") || "").trim();
-      if (!id) return;
+      if (!id || Object.prototype.hasOwnProperty.call(approvals, id)) return;
       approvals[id] = normalizeApproval(select.value || "Not Started");
     });
     return approvals;
@@ -861,7 +929,7 @@
     reviewEditModal.classList.add("is-open");
     reviewEditModal.setAttribute("aria-hidden", "false");
     window.requestAnimationFrame(() => {
-      try { reviewEditItems?.querySelector?.("select")?.focus?.(); } catch {}
+      try { reviewEditItems?.querySelector?.(".sv-review-status-trigger, select")?.focus?.(); } catch {}
     });
     if (window.feather) window.feather.replace();
     return true;
@@ -870,6 +938,7 @@
   function closeReviewEditModal(opts = {}) {
     const { restoreFocus = true } = opts || {};
     if (!reviewEditModal || !isReviewEditOpen()) return;
+    closeReviewStatusMenus();
     reviewEditModal.classList.remove("is-open");
     reviewEditModal.setAttribute("aria-hidden", "true");
     reviewEditModal.hidden = true;
@@ -2210,6 +2279,31 @@ if (tabsWrap) {
         row.classList.add(approvalEditClass(select.value || "Not Started"));
         row.dataset.approval = normalizeApproval(select.value || "Not Started");
       }
+    });
+
+    reviewEditItems?.addEventListener("click", (e) => {
+      const trigger = e.target?.closest?.(".sv-review-status-trigger");
+      if (trigger) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleReviewStatusPicker(trigger.closest(".sv-review-status-picker"));
+        return;
+      }
+
+      const option = e.target?.closest?.(".sv-review-status-option[data-value]");
+      if (option) {
+        e.preventDefault();
+        e.stopPropagation();
+        const picker = option.closest(".sv-review-status-picker");
+        setReviewStatusPickerValue(picker, option.getAttribute("data-value") || "Not Started");
+        closeReviewStatusMenus();
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!reviewEditModal || !isReviewEditOpen()) return;
+      if (e.target?.closest?.(".sv-review-status-picker")) return;
+      closeReviewStatusMenus();
     });
 
     reviewEditConfirmBtn?.addEventListener("click", (e) => {

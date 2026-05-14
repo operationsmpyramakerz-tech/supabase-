@@ -7867,3 +7867,130 @@ body:not(.order-modal-fit-screen) .co-item-status{
     width:100%;
   }
 }
+
+/* Orders Review — custom simple status dropdown (no native select colors) */
+.sv-review-status-picker{
+  --sv-status-bg:#FFFBEB;
+  --sv-status-border:#FDE68A;
+  --sv-status-text:#92400E;
+  --sv-status-dot:#F59E0B;
+  position:relative;
+  display:grid;
+  gap:8px;
+  width:100%;
+  min-width:0;
+}
+.sv-review-status-picker.is-approved{
+  --sv-status-bg:#ECFDF5;
+  --sv-status-border:#A7F3D0;
+  --sv-status-text:#065F46;
+  --sv-status-dot:#10B981;
+}
+.sv-review-status-picker.is-rejected{
+  --sv-status-bg:#FEF2F2;
+  --sv-status-border:#FECACA;
+  --sv-status-text:#991B1B;
+  --sv-status-dot:#EF4444;
+}
+.sv-review-status-trigger{
+  width:100%;
+  min-height:46px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:0 13px;
+  border:1px solid var(--sv-status-border);
+  border-radius:16px;
+  background:var(--sv-status-bg);
+  color:var(--sv-status-text);
+  font-size:14px;
+  font-weight:950;
+  letter-spacing:-.01em;
+  cursor:pointer;
+  box-shadow:0 10px 22px rgba(15,23,42,.06);
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.sv-review-status-trigger:hover{
+  transform:translateY(-1px);
+  box-shadow:0 14px 28px rgba(15,23,42,.10);
+}
+.sv-review-status-trigger:focus-visible{
+  outline:none;
+  border-color:#111827;
+  box-shadow:0 0 0 4px rgba(17,24,39,.10),0 14px 28px rgba(15,23,42,.10);
+}
+.sv-review-status-trigger svg{
+  width:17px;
+  height:17px;
+  flex:0 0 auto;
+  transition:transform .16s ease;
+}
+.sv-review-status-picker.is-open .sv-review-status-trigger svg{
+  transform:rotate(180deg);
+}
+.sv-review-status-dot,
+.sv-review-status-option-dot{
+  width:9px;
+  height:9px;
+  flex:0 0 auto;
+  border-radius:999px;
+  background:var(--sv-status-dot);
+  box-shadow:0 0 0 4px rgba(148,163,184,.18);
+}
+.sv-review-status-text{
+  flex:1 1 auto;
+  min-width:0;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  text-align:left;
+}
+.sv-review-status-menu[hidden]{
+  display:none !important;
+}
+.sv-review-status-menu{
+  display:grid;
+  gap:6px;
+  padding:8px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:18px;
+  background:#FFFFFF;
+  box-shadow:0 20px 44px rgba(15,23,42,.16);
+  z-index:40;
+}
+.sv-review-status-option{
+  width:100%;
+  min-height:40px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 11px;
+  border:1px solid transparent;
+  border-radius:14px;
+  background:#FFFFFF;
+  color:#111827;
+  font-size:14px;
+  font-weight:900;
+  text-align:left;
+  cursor:pointer;
+  transition:background .14s ease, border-color .14s ease, transform .14s ease;
+}
+.sv-review-status-option:hover{
+  background:#F8FAFC;
+  border-color:#E5E7EB;
+  transform:translateY(-1px);
+}
+.sv-review-status-option.is-selected{
+  background:#0B1220;
+  border-color:#0B1220;
+  color:#FFFFFF;
+}
+.sv-review-status-option[data-value="Approved"] .sv-review-status-option-dot{ background:#10B981; }
+.sv-review-status-option[data-value="Rejected"] .sv-review-status-option-dot{ background:#EF4444; }
+.sv-review-status-option[data-value="Not Started"] .sv-review-status-option-dot{ background:#F59E0B; }
+@media (max-width:560px){
+  .sv-review-status-trigger{
+    min-height:44px;
+  }
+}
