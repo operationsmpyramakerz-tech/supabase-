@@ -2606,7 +2606,7 @@ function _sbValueForLabel(row, label) {
   if (canon === "name") aliases.push("Name", "name", "full_name", "username");
   if (canon === "department") aliases.push("Department", "department");
   if (canon === "phone") aliases.push("Phone", "phone", "mobile");
-  if (canon === "school") aliases.push("School", "school");
+  if (canon === "school") aliases.push("School", "school", "school_name", "School Name", "stocktaking_column", "Stocktaking Column", "done_column", "Done Column");
   if (canon === "password") aliases.push("Password", "password", "passcode", "pin");
   if (canon === "allowedpages") aliases.push("Allowed Pages", "allowed_pages", "Pages", "pages", "access_pages");
   if (canon === "svschools") aliases.push("S.V Schools", "sv_schools", "SV Schools", "schools");
@@ -18001,11 +18001,63 @@ app.post(
         const orderReceiptNames = receiptEntries.map((file) => file.name).filter(Boolean);
         const orderReceiptUrls = receiptEntries.map((file) => file.url).filter(Boolean);
 
+        const rowsBeforeUpdate = await _sbOrderRowsByIds(ids);
+        if (!rowsBeforeUpdate.length) {
+          return res.status(404).json({ error: "Orders not found" });
+        }
+
         const patch = { status: "Arrived" };
         if (rnText) patch.receipt_number = rnText;
         if (receiptEntries.length) patch.order_receipt = JSON.stringify(receiptEntries);
-        await _sbUpdateOrdersByIds(ids, patch);
+        const updatedRows = await _sbUpdateOrdersByIds(ids, patch);
+
+        const updatedById = new Map((updatedRows || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
+        const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
+        const stocktakingSyncResults = [];
+        const stocktakingSyncErrors = [];
+
+        for (const id of ids) {
+          const beforeRow = beforeById.get(String(id)) || null;
+          const updatedRow = updatedById.get(String(id)) || (beforeRow ? { ...beforeRow, ...patch } : null);
+          if (!updatedRow) continue;
+
+          try {
+            const result = await _sbSyncArrivedOrderToStocktaking(updatedRow, {
+              wasArrivedLike: beforeRow ? _sbOrderFinalStatusName(_sbSerializeOrderRow(beforeRow)?.status) : false,
+            });
+            stocktakingSyncResults.push({ orderId: id, ...result });
+          } catch (syncErr) {
+            stocktakingSyncErrors.push({
+              orderId: id,
+              message: String(syncErr?.message || "Failed to sync Stocktaking row.").trim(),
+            });
+          }
+        }
+
         await _sbInvalidateOrdersCaches();
+        try { await cacheDel(`cache:api:b2b:school-stock:supabase:*`); } catch {}
+
+        if (stocktakingSyncErrors.length) {
+          return res.status(500).json({
+            error: "Status updated but failed to sync some Stocktaking rows.",
+            statusUpdated: true,
+            status: "Arrived",
+            statusColor: "green",
+            receiptNumber: rnText || null,
+            orderReceiptNames,
+            orderReceiptName: orderReceiptNames[0] || null,
+            orderReceiptUrls,
+            orderReceiptUrl: orderReceiptUrls[0] || null,
+            maintenanceReceiptNames: orderReceiptNames,
+            maintenanceReceiptName: orderReceiptNames[0] || null,
+            maintenanceReceiptUrls: orderReceiptUrls,
+            maintenanceReceiptUrl: orderReceiptUrls[0] || null,
+            primaryReceiptPageId: ids[0] || null,
+            stocktakingSyncErrors,
+            source: "supabase",
+          });
+        }
+
         return res.json({
           success: true,
           status: "Arrived",
@@ -18020,6 +18072,8 @@ app.post(
           maintenanceReceiptUrls: orderReceiptUrls,
           maintenanceReceiptUrl: orderReceiptUrls[0] || null,
           primaryReceiptPageId: ids[0] || null,
+          stocktakingSyncedCount: stocktakingSyncResults.filter((item) => item && item.skipped === false).length,
+          stocktakingSkippedCount: stocktakingSyncResults.filter((item) => item && item.skipped === true).length,
           source: "supabase",
         });
       }
@@ -23124,6 +23178,246 @@ function _sbStocktakingColumnKey(label = "") {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
+}
+
+
+function _sbFindStocktakingKey(keysOrRows = [], aliases = []) {
+  const keys = Array.isArray(keysOrRows)
+    ? (keysOrRows.length && typeof keysOrRows[0] === "object" ? _sbAllColumnKeys(keysOrRows) : keysOrRows)
+    : Object.keys(keysOrRows || {});
+  return _sbFindKey(keys, aliases);
+}
+
+function _sbDetectStocktakingQuantityColumnFromKeys(keys = [], schoolName = "") {
+  const keyList = Array.isArray(keys) ? keys : [];
+  if (!keyList.length) return "";
+  const base = _sbStocktakingColumnKey(schoolName);
+  const aliases = [];
+  if (schoolName) aliases.push(schoolName);
+  if (base) {
+    aliases.push(base, `${base}_done`, `${base}_2nd_term`);
+    if (base.endsWith("_done")) aliases.push(base.replace(/_done$/, ""));
+  }
+  aliases.push("total_quantity", "all_schools_stock", "all_done", "all_2nd_term", "quantity", "stock");
+  const direct = _sbFindKey(keyList, aliases);
+  if (direct) return direct;
+
+  if (base) {
+    const fuzzy = keyList.find((key) => {
+      const k = _sbStocktakingColumnKey(key);
+      return k === base || k === `${base}_done` || k === `${base}_2nd_term` || (k.includes(base) && /(done|stock|quantity|2nd_term)/i.test(k));
+    });
+    if (fuzzy) return fuzzy;
+  }
+  return "";
+}
+
+async function _sbResolveOrderOwnerTeamRow(orderRow = {}) {
+  const ownerId = _sbOrderOwnerId(orderRow);
+  if (ownerId) {
+    const byId = await _sbFindTeamMemberById(ownerId).catch(() => null);
+    if (byId) return byId;
+  }
+
+  const ownerName =
+    _sbOrderOwnerName(orderRow) ||
+    _sbOrderText(_sbOrderGet(orderRow, ["team_member_name", "Teams Members", "teams_members", "created_by_name", "created_by", "Created By", "Supervisor", "supervisor"]));
+  if (ownerName) {
+    const byName = await _sbFindTeamMemberByName(ownerName).catch(() => null);
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
+function _sbStocktakingMissingColumnName(error) {
+  const text = String(
+    error?.message ||
+    error?.details?.message ||
+    error?.details?.details ||
+    error?.hint ||
+    error?.details ||
+    "",
+  );
+  return (
+    (text.match(/Could not find the ['\"]([^'\"]+)['\"] column/i) || [])[1] ||
+    (text.match(/['\"]([^'\"]+)['\"] column of ['\"][^'\"]+['\"]/i) || [])[1] ||
+    (text.match(/column ['\"]([^'\"]+)['\"]/i) || [])[1] ||
+    ""
+  );
+}
+
+async function _sbInsertStocktakingRowSafe(row = {}, requiredColumns = []) {
+  let payload = _sbCleanInsertRow(row);
+  const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
+  const removed = [];
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      return await supabaseDb.insert(_sbStocktakingTable(), payload);
+    } catch (error) {
+      const missingColumn = _sbStocktakingMissingColumnName(error);
+      if (!missingColumn || !Object.prototype.hasOwnProperty.call(payload, missingColumn)) throw error;
+      if (required.has(missingColumn)) {
+        const err = new Error(`Missing required Stocktaking column: ${missingColumn}.`);
+        err.status = 400;
+        err.cause = error;
+        throw err;
+      }
+      delete payload[missingColumn];
+      removed.push(missingColumn);
+    }
+  }
+
+  const err = new Error(`Failed to insert Stocktaking row after removing unsupported column(s): ${removed.join(", ")}`);
+  err.status = 500;
+  throw err;
+}
+
+function _sbStocktakingRowsMatchOrderPayload(row = {}, payload = {}) {
+  const qtyColumn = String(payload?.quantityColumn || "").trim();
+  if (!qtyColumn || !Object.prototype.hasOwnProperty.call(row || {}, qtyColumn)) return false;
+
+  const rowQty = Number(_sbStocktakingNum(row?.[qtyColumn]));
+  const wantedQty = Number(payload?.quantity || 0);
+  if (Math.abs(roundOrderQty(rowQty - wantedQty)) > 1e-9) return false;
+
+  const rowProduct = _sbStocktakingText(_sbGet(row, ["product_name", "Product Name", "product", "Product", "name", "Name", "component", "Component"]));
+  if (payload?.productName && rowProduct && normKey(rowProduct) !== normKey(payload.productName)) return false;
+
+  const rowTag = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags", "order_type", "Order Type", "type", "Type"]));
+  if (payload?.orderType && rowTag && _normKeyOrderType(rowTag) !== _normKeyOrderType(payload.orderType)) return false;
+
+  const rowReceipt = _normalizeMultilineText(
+    _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])),
+  );
+  const wantedReceipt = _normalizeMultilineText(payload?.receiptText || "");
+  if (rowReceipt || wantedReceipt) return rowReceipt === wantedReceipt;
+
+  return true;
+}
+
+async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
+  const item = _sbSerializeOrderRow(orderRow);
+  const orderType = _canonicalOrderTypeLabel(item?.orderType || "");
+  const orderTypeKey = _normKeyOrderType(orderType);
+  if (
+    orderTypeKey !== _normKeyOrderType("Request Products") &&
+    orderTypeKey !== _normKeyOrderType("Withdraw Products")
+  ) {
+    return null;
+  }
+
+  const ownerRow = await _sbResolveOrderOwnerTeamRow(orderRow);
+  const schoolName = String(_sbString(_sbValueForLabel(ownerRow || {}, "School")) || "").trim();
+  if (!schoolName) {
+    throw new Error("Could not determine the requester school/stocktaking column.");
+  }
+
+  const rows = await _sbStocktakingRows();
+  const keys = _sbAllColumnKeys(rows || []);
+  const quantityColumn =
+    _sbDetectStocktakingQuantityColumnFromKeys(keys, schoolName) ||
+    _sbStocktakingColumnKey(schoolName);
+
+  if (!quantityColumn) {
+    throw new Error(`Could not determine the Stocktaking quantity column for ${schoolName}.`);
+  }
+
+  const qtyCandidates = [item.quantityReceived, item.quantityProgress, item.quantityRequested, item.quantity];
+  let quantity = 0;
+  for (const candidate of qtyCandidates) {
+    const n = Number(candidate);
+    if (Number.isFinite(n) && hasNonZeroOrderQty(n)) {
+      quantity = roundOrderQty(n);
+      break;
+    }
+  }
+  if (!hasNonZeroOrderQty(quantity)) {
+    throw new Error("No delivered quantity was found for Stocktaking sync.");
+  }
+
+  if (orderTypeKey === _normKeyOrderType("Withdraw Products")) {
+    quantity = -Math.abs(quantity);
+  } else if (orderTypeKey === _normKeyOrderType("Request Products")) {
+    quantity = Math.abs(quantity);
+  }
+
+  const productName =
+    String(item.productName || "").trim() ||
+    _sbOrderText(_sbOrderGet(orderRow, ["product_name", "Product Name", "product", "Product"])) ||
+    "Untitled Product";
+
+  const orderReceiptEntries = _sbParseScreenshotEntries(_sbOrderGet(orderRow, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]));
+  const receiptText = _normalizeMultilineText(
+    item.receiptNumber ||
+    _sbOrderText(_sbOrderGet(orderRow, ["receipt_number", "Receipt Number", "Store Receipt Number"])) ||
+    orderReceiptEntries.map((entry) => entry.name || entry.url).filter(Boolean).join("\n") ||
+    "",
+  );
+
+  return {
+    rows,
+    keys,
+    quantityColumn,
+    quantity,
+    orderType,
+    productName,
+    productUrl: item.productUrl || _sbExtractUrl(_sbOrderGet(orderRow, ["product_url", "Product URL", "url", "URL"])) || "",
+    unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
+    receiptText,
+    orderId: String(_sbOrderGet(orderRow, ["id", "ID"]) ?? "").trim(),
+    orderNumber: item.orderId || null,
+    ownerName: item.createdByName || _sbOrderOwnerName(orderRow) || "",
+    ownerSchool: schoolName,
+  };
+}
+
+async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
+  const payload = await _sbBuildArrivedOrderStocktakingPayload(orderRow);
+  if (!payload) return { skipped: true, reason: "unsupported-order-type" };
+
+  const keys = payload.keys || [];
+  const sourceOrderColumn = _sbFindStocktakingKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
+  const sourceOrderNumberColumn = _sbFindStocktakingKey(keys, ["order_id", "Order ID", "order_number", "Order Number"]);
+
+  const existingRows = Array.isArray(payload.rows) ? payload.rows : [];
+  if (sourceOrderColumn && payload.orderId) {
+    const existingBySource = existingRows.find((row) => String(row?.[sourceOrderColumn] ?? "").trim() === payload.orderId);
+    if (existingBySource) return { skipped: true, reason: "already-synced", existingId: existingBySource?.id || null };
+  }
+  if (existingRows.some((row) => _sbStocktakingRowsMatchOrderPayload(row, payload))) {
+    return { skipped: true, reason: "already-synced" };
+  }
+
+  const row = {};
+  const setFirstExisting = (aliases, value, fallbackKey = "") => {
+    if (value === null || typeof value === "undefined") return "";
+    const key = _sbFindStocktakingKey(keys, aliases) || (!keys.length ? fallbackKey : "");
+    if (!key) return "";
+    row[key] = value;
+    return key;
+  };
+
+  const nameKey = setFirstExisting(["name", "Name", "component", "Component"], payload.productName, "name");
+  const productKey = setFirstExisting(["product_name", "Product Name", "product", "Product", "products", "Products"], payload.productName, nameKey ? "" : "product_name");
+  if (!nameKey && !productKey && !keys.length) row.name = payload.productName;
+
+  setFirstExisting(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], payload.productUrl || null, "product_url");
+  setFirstExisting(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], payload.unitPrice, "unit_price");
+  setFirstExisting(["tag", "Tag", "tags", "Tags", "order_type", "Order Type", "type", "Type"], payload.orderType, "tag");
+  setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"], payload.receiptText || null, "receipt_number");
+  if (sourceOrderColumn) row[sourceOrderColumn] = payload.orderId;
+  else if (!keys.length && payload.orderId) row.source_order_id = payload.orderId;
+  if (sourceOrderNumberColumn && payload.orderNumber) row[sourceOrderNumberColumn] = payload.orderNumber;
+  setFirstExisting(["team_member_name", "Team Member", "requester", "Requester", "created_by", "Created By"], payload.ownerName || null, "team_member_name");
+  setFirstExisting(["school", "School", "stocktaking_column", "Stocktaking Column"], payload.ownerSchool || null, "school");
+  setFirstExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
+
+  row[payload.quantityColumn] = payload.quantity;
+
+  const created = await _sbInsertStocktakingRowSafe(row, [payload.quantityColumn]);
+  return { skipped: false, createdId: created?.id || null, quantityColumn: payload.quantityColumn, quantity: payload.quantity };
 }
 
 function _sbDetectStocktakingQuantityColumn(row = {}, schoolName = "") {
