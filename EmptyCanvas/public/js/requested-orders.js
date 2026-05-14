@@ -487,22 +487,70 @@ document.addEventListener("DOMContentLoaded", () => {
   function normalizeReceiptEntries(entries = []) {
     const out = [];
     const seen = new Set();
+
+    const unpack = (entry) => {
+      if (entry === null || entry === undefined) return;
+
+      if (Array.isArray(entry)) {
+        entry.forEach((child) => unpack(child));
+        return;
+      }
+
+      if (typeof entry === "string") {
+        const raw = String(entry || "").trim();
+        if (!raw || /^null$/i.test(raw)) return;
+        if (/^[\[{]/.test(raw)) {
+          try {
+            unpack(JSON.parse(raw));
+            return;
+          } catch {}
+        }
+        push({ name: receiptFileNameFromUrl(raw, "Receipt photo"), url: raw, raw });
+        return;
+      }
+
+      push(entry);
+    };
+
     const push = (entry = {}) => {
-      const rawName = String(entry.name || entry.filename || "").trim();
-      const rawUrl = String(entry.url || entry.href || entry.publicUrl || "").trim();
+      if (!entry) return;
+      const rawName = String(
+        entry.name ||
+        entry.filename ||
+        entry.fileName ||
+        entry.originalName ||
+        entry.original_name ||
+        "",
+      ).trim();
+      const rawUrl = String(
+        entry.url ||
+        entry.href ||
+        entry.publicUrl ||
+        entry.public_url ||
+        entry.signedUrl ||
+        entry.signedURL ||
+        entry.downloadUrl ||
+        entry.downloadURL ||
+        entry.raw ||
+        entry.path ||
+        entry.fullPath ||
+        entry.full_path ||
+        entry.storagePath ||
+        entry.storage_path ||
+        entry.file?.url ||
+        entry.external?.url ||
+        "",
+      ).trim();
       const url = isPublicReceiptUrl(rawUrl) ? rawUrl : "";
       const name = rawName || receiptFileNameFromUrl(url || rawUrl, "Receipt photo");
-      if (!name && !url) return;
-      const key = `${url || "no-url"}::${name}`;
+      if (!name && !url && !rawUrl) return;
+      const key = `${url || rawUrl || "no-url"}::${name}`;
       if (seen.has(key)) return;
       seen.add(key);
       out.push({ name: name || "Receipt photo", url, rawUrl });
     };
-    for (const entry of entries || []) {
-      if (!entry) continue;
-      if (typeof entry === "string") push({ name: receiptFileNameFromUrl(entry, entry), url: entry });
-      else push(entry);
-    }
+
+    unpack(entries);
     return out;
   }
 
@@ -3367,17 +3415,37 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderReceiptPhotos(entries = []) {
     if (!receiptPhotosGrid) return;
     const cleanEntries = normalizeReceiptEntries(entries);
+
+    receiptPhotosGrid.hidden = false;
+    receiptPhotosGrid.style.display = "grid";
+    receiptPhotosGrid.style.gridTemplateColumns = "1fr";
+    receiptPhotosGrid.style.gap = "10px";
+    receiptPhotosGrid.style.width = "100%";
+    receiptPhotosGrid.style.maxWidth = "100%";
+
+    const body = receiptPhotosModal?.querySelector?.(".co-submodal-body");
+    if (body) {
+      body.hidden = false;
+      body.style.display = "block";
+      body.style.minHeight = cleanEntries.length ? "150px" : "120px";
+      body.style.maxHeight = "min(46vh, 360px)";
+      body.style.overflowY = "auto";
+      body.style.overflowX = "hidden";
+    }
+
     if (receiptPhotosCount) {
-      receiptPhotosCount.textContent = "";
-      receiptPhotosCount.hidden = true;
+      receiptPhotosCount.textContent = cleanEntries.length
+        ? `${cleanEntries.length} photo${cleanEntries.length === 1 ? "" : "s"}`
+        : "";
+      receiptPhotosCount.hidden = cleanEntries.length <= 0;
     }
 
     if (!cleanEntries.length) {
       receiptPhotosGrid.innerHTML = `
-        <div class="req-receipt-photos-empty">
+        <div class="req-receipt-photos-empty" style="min-height:120px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;text-align:center;border:1px dashed rgba(209,213,219,.95);border-radius:18px;padding:16px;background:#f9fafb;color:#6b7280;">
           <i data-feather="image"></i>
-          <strong>No receipt photos found</strong>
-          <span>This order does not have any saved delivery receipt photos yet.</span>
+          <strong style="display:block;color:#111827;font-size:14px;">No receipt photos found</strong>
+          <span style="display:block;font-size:12px;">This order does not have any saved receipt photos yet.</span>
         </div>
       `;
       if (window.feather) window.feather.replace();
@@ -3386,21 +3454,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     receiptPhotosGrid.innerHTML = cleanEntries.map((entry, index) => {
       const name = entry.name || `Receipt ${index + 1}`;
-      const url = String(entry.url || "").trim();
+      const url = String(entry.url || entry.rawUrl || "").trim();
       const canOpen = isPublicReceiptUrl(url);
-      const image = canOpen && isImageReceipt(entry);
-      const media = image
-        ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;max-width:100%;max-height:170px;object-fit:contain;object-position:center center;border-radius:12px;" />`
-        : `<div class="req-receipt-photos-file"><i data-feather="file"></i></div>`;
-      const openAttr = canOpen ? ` data-receipt-open-url="${escapeHTML(url)}"` : "";
-      const buttonLabel = canOpen ? "Open receipt photo" : "Receipt photo preview";
+      const isImage = canOpen && isImageReceipt({ ...entry, url });
+      const media = isImage
+        ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" style="display:block;width:100%;height:100%;max-width:100%;max-height:260px;object-fit:contain;object-position:center center;border-radius:14px;background:#f8fafc;" />`
+        : `<div style="width:100%;min-height:130px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:#111827;background:#f8fafc;border-radius:14px;"><i data-feather="file"></i><span style="font-size:12px;font-weight:850;max-width:220px;overflow-wrap:anywhere;text-align:center;">${escapeHTML(name)}</span></div>`;
+      const openLine = canOpen
+        ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;color:#111827;font-size:12px;font-weight:900;text-decoration:none;"><i data-feather="external-link"></i><span>Open full photo</span></a>`
+        : `<div style="margin-top:8px;color:#6b7280;font-size:12px;font-weight:800;overflow-wrap:anywhere;">No public image URL found</div>`;
 
       return `
-        <button type="button" class="req-receipt-photo-card"${openAttr} aria-label="${escapeHTML(buttonLabel)}" style="width:100%;max-width:100%;overflow:hidden;border-radius:16px;cursor:${canOpen ? 'pointer' : 'default'};">
-          <span class="req-receipt-photo-card__media" style="width:100%;height:170px;max-height:170px;min-height:120px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+        <div class="req-receipt-photo-preview-card" style="width:100%;max-width:100%;overflow:hidden;border:1px solid rgba(229,231,235,.95);border-radius:18px;background:#fff;padding:8px;box-sizing:border-box;box-shadow:0 12px 26px rgba(15,23,42,.10);">
+          <div style="width:100%;height:min(34vh,260px);min-height:150px;max-height:260px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:14px;background:#f8fafc;">
             ${media}
-          </span>
-        </button>
+          </div>
+          <div style="padding:8px 2px 0;">
+            <div style="color:#111827;font-size:12px;font-weight:950;line-height:1.25;overflow-wrap:anywhere;">${escapeHTML(name)}</div>
+            ${openLine}
+          </div>
+        </div>
       `;
     }).join("");
 

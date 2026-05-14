@@ -18743,13 +18743,31 @@ app.get(
         .concat(String(req.query?.ids || "").split(/[|,]/))
         .map((id) => String(id || "").trim())
         .filter(Boolean)
-        .map((id) => (looksLikeNotionId(id) ? toHyphenatedUUID(id) : id));
+        .map((id) => (looksLikeNotionId(id) ? toHyphenatedUUID(id) : id))
+        .map((id) => String(id || "").trim().replace(/^ORD[-\s]*/i, ""))
+        .filter(Boolean);
       const ids = Array.from(new Set(rawIds));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        const rows = await _sbOrderRowsByIds(ids);
+        // The modal may pass either Supabase row ids or visible order numbers (ORD-1 => 1).
+        // Read both safely and let the receipt parser keep only rows that actually have photos.
+        const byRowId = await _sbOrderRowsByIds(ids);
+        const byOrderNumberNested = await Promise.all(
+          ids.map((id) => supabaseDb.select(_sbOrdersTable(), {
+            select: "*",
+            order_number: `eq.${id}`,
+            limit: 100,
+          }).catch(() => [])),
+        );
+        const rowMap = new Map();
+        [...(byRowId || []), ...byOrderNumberNested.flat()].forEach((row) => {
+          if (!row) return;
+          const key = String(row.id || `${row.order_number || "order"}:${row.product_name || ""}`);
+          if (!rowMap.has(key)) rowMap.set(key, row);
+        });
+        const rows = Array.from(rowMap.values());
         const entries = [];
 
         for (const row of rows || []) {
