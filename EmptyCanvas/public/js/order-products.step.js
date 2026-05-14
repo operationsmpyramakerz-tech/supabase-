@@ -718,13 +718,16 @@
       if (exists) chooseOrderType(initial);
     }
 
-    // Back button (from placeholder)
-    const goBackToOrderTypes = async () => {
+    // Back button (from placeholder/cart)
+    // Keep the return instant: do not block the UI on the draft save request.
+    const goBackToOrderTypes = () => {
       const prevType = String(selectedOrderType || '').trim();
+
       if (cartBooted && prevType) {
         cancelScheduledDraftSave();
         syncReasonFromInput();
-        await persistDraft({ silent: true, orderType: prevType });
+        Promise.resolve(persistDraft({ silent: true, orderType: prevType }))
+          .catch((err) => console.warn('Failed to save draft before going back:', err));
       }
 
       selectedOrderType = '';
@@ -736,7 +739,7 @@
       setCartTypePill('');
       showOnly('types');
       renderOrderTypeTabs(safeOptions, '');
-      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+      try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
     };
 
     // Back button (from placeholder)
