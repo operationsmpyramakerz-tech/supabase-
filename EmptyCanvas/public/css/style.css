@@ -8358,3 +8358,113 @@ body:not(.order-modal-fit-screen) .co-item-status{
     grid-template-columns:1fr;
   }
 }
+
+
+/* Operations Orders edit details — compact spacing + reliable visual delete state */
+.req-ops-edit-modal .co-submodal-dialog.req-ops-edit-dialog{
+  width:min(500px, 92vw);
+}
+.req-ops-edit-modal .co-submodal-fields{
+  gap:12px;
+}
+.req-ops-edit-modal .co-submodal-label{
+  margin-bottom:5px;
+}
+.req-ops-edit-receipts-list{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:6px;
+}
+.req-ops-edit-receipt-row{
+  display:inline-grid;
+  grid-template-columns:minmax(0, 220px) 30px;
+  align-items:center;
+  gap:7px;
+  max-width:100%;
+}
+.req-ops-edit-receipt-control{
+  min-height:36px;
+  grid-template-columns:25px minmax(0, 1fr);
+  padding:2px 6px;
+  border-radius:13px;
+}
+.req-ops-edit-receipt-input,
+.req-ops-edit-receipt-control .co-submodal-input{
+  min-height:28px !important;
+  height:28px !important;
+}
+.req-ops-edit-mini-remove{
+  width:30px;
+  min-width:30px;
+  height:30px;
+  border-radius:11px;
+}
+.req-ops-edit-remove-glyph{
+  font-size:17px;
+}
+.req-ops-edit-add-btn{
+  min-height:36px;
+  padding:.52rem .78rem;
+  margin-top:6px;
+}
+.req-ops-edit-photos-list{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  gap:8px;
+}
+.req-ops-edit-photo-card{
+  width:150px;
+  max-width:calc(50% - 4px);
+  min-height:50px;
+  grid-template-columns:36px minmax(0, 1fr);
+  gap:7px;
+  padding:7px 32px 7px 7px;
+  border-radius:15px;
+}
+.req-ops-edit-photo-preview{
+  width:36px;
+  height:36px;
+  border-radius:12px;
+}
+.req-ops-edit-photo-name{
+  font-size:12px;
+  max-width:66px;
+}
+.req-ops-edit-mini-remove--floating,
+.req-ops-edit-photo-card .req-ops-edit-mini-remove{
+  top:6px;
+  right:6px;
+  width:26px;
+  min-width:26px;
+  height:26px;
+  border-radius:10px;
+}
+.req-ops-edit-mini-remove--floating .req-ops-edit-remove-glyph,
+.req-ops-edit-photo-card .req-ops-edit-remove-glyph{
+  font-size:16px;
+}
+.req-ops-edit-qty-row{
+  grid-template-columns:minmax(0, 1fr) 92px;
+  padding:9px;
+}
+.req-ops-edit-qty-input{
+  min-height:36px !important;
+  height:36px !important;
+}
+@media (max-width:560px){
+  .req-ops-edit-receipt-row{
+    grid-template-columns:minmax(0, 1fr) 30px;
+    width:100%;
+  }
+  .req-ops-edit-photo-card{
+    width:calc(50% - 4px);
+  }
+}
+@media (max-width:430px){
+  .req-ops-edit-photo-card{
+    width:100%;
+    max-width:100%;
+  }
+}

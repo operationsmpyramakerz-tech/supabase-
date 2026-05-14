@@ -1892,6 +1892,19 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${url.toLowerCase()}::${name.toLowerCase()}`;
   }
 
+  function opsEditPhotoIdentity(entry = {}) {
+    const url = String(entry?.url || entry?.rawUrl || entry?.raw || "").trim();
+    const name = String(entry?.name || entry?.filename || entry?.fileName || "Receipt photo").trim() || "Receipt photo";
+    return { name, url, rawUrl: String(entry?.rawUrl || entry?.raw || "").trim() };
+  }
+
+  function getVisibleOpsEditPhotoEntries() {
+    return opsEditPhotoEntries
+      .filter((entry) => !entry.removed)
+      .map((entry) => opsEditPhotoIdentity(entry))
+      .filter((entry) => entry.url || entry.rawUrl);
+  }
+
   function renderOpsEditPhotos() {
     if (!opsEditPhotosList) return;
     const visibleExisting = opsEditPhotoEntries.filter((entry) => !entry.removed);
@@ -2074,14 +2087,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const receiptNumbers = collectOpsEditReceiptNumbers();
-    const keepEntries = opsEditPhotoEntries
-      .filter((entry) => !entry.removed)
-      .map((entry) => ({
-        name: entry.name || "Receipt photo",
-        url: entry.url || "",
-        rawUrl: entry.rawUrl || "",
-      }));
+    const keepEntries = getVisibleOpsEditPhotoEntries();
     const removedPhotoKeys = Array.from(opsEditRemovedPhotoKeys || []);
+    const removedPhotoUrls = opsEditPhotoEntries
+      .filter((entry) => entry.removed)
+      .map((entry) => String(entry?.url || entry?.rawUrl || "").trim())
+      .filter(Boolean);
     const files = opsEditNewFiles.slice();
 
     setOpsEditError("");
@@ -2103,8 +2114,10 @@ document.addEventListener("DOMContentLoaded", () => {
         adminPassword,
         receiptNumbers,
         quantities,
+        orderReceiptReplace: true,
         orderReceiptKeepEntries: keepEntries,
         orderReceiptRemovedKeys: removedPhotoKeys,
+        orderReceiptRemovedUrls: removedPhotoUrls,
         orderReceiptDataUrls: dataUrls.map((item) => String(item || "").trim()).filter(Boolean),
         orderReceiptFilenames: files.map((file) => file.name || "receipt.jpg"),
       });
@@ -2138,6 +2151,7 @@ document.addEventListener("DOMContentLoaded", () => {
       groups = buildGroups(allItems);
       render();
       const updatedGroup = groups.find((x) => x.groupId === group.groupId);
+      if (updatedGroup) activeGroup = updatedGroup;
       closeOpsEditDetailsModal({ restoreFocus: false });
       if (updatedGroup && orderModal?.classList.contains("is-open")) openOrderModal(updatedGroup);
       toast("success", "Saved", "Order details updated.");

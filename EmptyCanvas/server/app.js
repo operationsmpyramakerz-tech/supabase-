@@ -23326,8 +23326,10 @@ app.post(
         receiptNumber,
         receiptNumbers,
         quantities,
+        orderReceiptReplace,
         orderReceiptKeepEntries,
         orderReceiptRemovedKeys,
+        orderReceiptRemovedUrls,
         orderReceiptDataUrls,
         orderReceiptFilenames,
       } = req.body || {};
@@ -23378,6 +23380,11 @@ app.post(
           .map((key) => String(key || "").trim().toLowerCase())
           .filter(Boolean),
       );
+      const removedPhotoUrls = new Set(
+        (Array.isArray(orderReceiptRemovedUrls) ? orderReceiptRemovedUrls : [])
+          .map((url) => String(url || "").trim().toLowerCase())
+          .filter(Boolean),
+      );
       const keepReceiptEntries = (Array.isArray(orderReceiptKeepEntries) ? orderReceiptKeepEntries : [])
         .map((entry, index) => {
           const name = String(entry?.name || entry?.filename || `Receipt photo ${index + 1}`).trim() || `Receipt photo ${index + 1}`;
@@ -23385,7 +23392,9 @@ app.post(
           if (!url) return null;
           const normalized = { name, url };
           const key = normalizeReceiptEditPhotoKey({ ...entry, ...normalized });
+          const normalizedUrl = String(url || "").trim().toLowerCase();
           if (key && removedPhotoKeys.has(key)) return null;
+          if (normalizedUrl && removedPhotoUrls.has(normalizedUrl)) return null;
           return normalized;
         })
         .filter(Boolean);
@@ -23417,6 +23426,13 @@ app.post(
         }
       }
 
+      const shouldReplaceReceiptPhotos =
+        !!orderReceiptReplace ||
+        keepReceiptEntriesProvided ||
+        uploadedReceiptFiles.length > 0 ||
+        removedPhotoKeys.size > 0 ||
+        removedPhotoUrls.size > 0;
+
       const quantityMap = quantities && typeof quantities === "object" ? quantities : {};
       const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
       const updatedRows = [];
@@ -23429,9 +23445,15 @@ app.post(
         if (receiptTextProvided) {
           patch.receipt_number = receiptText || null;
         }
-        if (keepReceiptEntriesProvided || uploadedReceiptFiles.length) {
+        if (shouldReplaceReceiptPhotos) {
           const combinedReceiptFiles = [...keepReceiptEntries, ...uploadedReceiptFiles];
-          patch.order_receipt = combinedReceiptFiles.length ? JSON.stringify(combinedReceiptFiles) : null;
+          const receiptPhotosValue = combinedReceiptFiles.length ? JSON.stringify(combinedReceiptFiles) : null;
+          // Always replace the operation receipt photos with exactly the list saved from the edit modal.
+          // Clearing these alias columns prevents old imported/legacy receipt photos from reappearing in the UI.
+          patch.order_receipt = receiptPhotosValue;
+          patch.delivery_receipt = receiptPhotosValue;
+          patch.receipt_photos = receiptPhotosValue;
+          patch.maintenance_receipt = receiptPhotosValue;
         }
 
         if (Object.prototype.hasOwnProperty.call(quantityMap, String(id))) {
