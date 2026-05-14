@@ -2986,3 +2986,101 @@ input.ops-auto-dir-rtl{
     pointer-events: none;
   }
 }
+
+/* =========================================================
+   Mobile floating windows safe clearance
+   - Keep small overlays above the fixed mobile bottom dock.
+   - Covers Expenses View All, Cash Out expense dialogs,
+     Expenses by User details sheet, and Add Team Member form.
+   ========================================================= */
+@media (max-width: 768px){
+  :root{
+    --ops-mobile-overlay-top-gap: calc(env(safe-area-inset-top, 0px) + 10px);
+    --ops-mobile-overlay-dock-gap: calc(128px + env(safe-area-inset-bottom, 0px));
+    --ops-mobile-floating-window-height: calc(100dvh - var(--ops-mobile-overlay-top-gap) - var(--ops-mobile-overlay-dock-gap) - 12px);
+  }
+
+  /* Center floating windows inside the safe viewport, not behind the dock. */
+  #allExpenses.ios-modal,
+  #cashOutOrderModal.ex-modal,
+  #cashOutModal.ex-modal,
+  #userExpensesModal.ios-modal,
+  .user-access-page #uaMemberFormModal.ua-modal-overlay{
+    align-items: center !important;
+    justify-content: center !important;
+    padding: var(--ops-mobile-overlay-top-gap) 14px var(--ops-mobile-overlay-dock-gap) !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  /* Give the sheets/cards a compact centered size that cannot exceed the dock. */
+  #allExpenses .ios-sheet,
+  #userExpensesModal .ios-sheet,
+  #cashOutOrderModal .ex-modal-box,
+  #cashOutModal .ex-modal-box,
+  .user-access-page #uaMemberFormModal .ua-modal{
+    width: min(100%, 560px) !important;
+    max-width: calc(100vw - 28px) !important;
+    max-height: var(--ops-mobile-floating-window-height) !important;
+    border-radius: 28px !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    box-shadow: 0 30px 90px rgba(15, 23, 42, 0.28) !important;
+  }
+
+  /* View All + Expenses by User sheets keep their content scrollable internally. */
+  #allExpenses .ios-sheet,
+  #userExpensesModal .ios-sheet{
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    padding: 18px 16px 16px !important;
+  }
+
+  #allExpensesList,
+  #userExpensesScroll.sheet-scroll{
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 14px !important;
+  }
+
+  /* Cash Out windows scroll inside the safe card instead of under the dock. */
+  #cashOutOrderModal .ex-modal-box,
+  #cashOutModal .ex-modal-box{
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 18px 16px 16px !important;
+  }
+
+  #cashOutOrderModal .ex-modal-actions,
+  #cashOutModal .ex-modal-actions{
+    position: sticky !important;
+    bottom: -1px !important;
+    z-index: 4 !important;
+    padding-top: 12px !important;
+    background: linear-gradient(180deg, rgba(255,255,255,0.72), #ffffff 45%) !important;
+    backdrop-filter: blur(10px) !important;
+  }
+
+  /* Add Team Member modal: header/actions remain visible, body scrolls safely. */
+  .user-access-page #uaMemberFormModal .ua-modal{
+    overflow: hidden !important;
+  }
+
+  .user-access-page #uaMemberFormModal .ua-modal__body{
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .user-access-page #uaMemberFormModal .ua-modal__actions{
+    flex: 0 0 auto !important;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+    background: linear-gradient(180deg, rgba(255,255,255,0.82), #ffffff 48%) !important;
+    backdrop-filter: blur(10px) !important;
+  }
+}
