@@ -2882,3 +2882,66 @@ input.ops-auto-dir-rtl{
 .ops-bidi-wrap{
   display: inline;
 }
+
+/* =========================================================
+   Header panels polish
+   - More breathing space between App and Hard Refresh actions
+   - Smooth open/close motion for Search, Notifications, and User menu
+   ========================================================= */
+.user-menu-item.user-menu-item--refresh{
+  margin-top: 10px;
+}
+
+.user-menu-panel,
+.notif-panel,
+.floating-search-panel{
+  pointer-events: none;
+}
+
+.user-menu-panel.is-open,
+.notif-panel.is-open,
+.floating-search-panel.is-open{
+  pointer-events: auto;
+}
+
+.user-menu-shell{
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+  transition: opacity 210ms cubic-bezier(.22, 1, .36, 1), transform 210ms cubic-bezier(.22, 1, .36, 1);
+  will-change: opacity, transform;
+}
+
+.user-menu-panel.is-open .user-menu-shell{
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.user-menu-panel:not([hidden]) .user-menu-shell{
+  animation: none !important;
+}
+
+.notif-center-shell{
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+  transform-origin: top right;
+  transition: opacity 210ms cubic-bezier(.22, 1, .36, 1), transform 210ms cubic-bezier(.22, 1, .36, 1);
+  will-change: opacity, transform;
+}
+
+.notif-panel.is-open .notif-center-shell{
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.floating-search-panel{
+  transition: opacity 210ms cubic-bezier(.22, 1, .36, 1), transform 210ms cubic-bezier(.22, 1, .36, 1);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .user-menu-shell,
+  .notif-center-shell,
+  .floating-search-panel{
+    transition: none !important;
+    animation: none !important;
+  }
+}
