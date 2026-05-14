@@ -1201,10 +1201,13 @@ body.co-modal-open{ overflow: hidden; }
 .co-meta-row--reason{
   grid-column: 1 / -1;
   position: relative;
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
   min-height: 76px;
-  margin-top: 18px;
-  padding: 34px 18px 16px;
+  margin-top: 10px;
+  padding: 0 18px 16px;
   background: #020617;
   border: 0;
   border-radius: 24px;
@@ -1213,22 +1216,13 @@ body.co-modal-open{ overflow: hidden; }
 }
 
 .co-meta-row--reason::before{
-  content: "";
-  position: absolute;
-  top: -18px;
-  left: 0;
-  width: 98px;
-  height: 48px;
-  background: #FFFFFF;
-  border-radius: 0 0 18px 18px;
-  pointer-events: none;
+  content: none;
 }
 
 .co-meta-row--reason span{
-  position: absolute;
-  top: -10px;
-  left: 8px;
+  position: static;
   z-index: 1;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1247,12 +1241,14 @@ body.co-modal-open{ overflow: hidden; }
 
 .co-meta-row--reason strong{
   display: block;
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
   max-width: 100%;
+  min-width: 0;
   color: #FFFFFF !important;
   background: transparent;
   border-radius: 0;
-  padding: 0;
+  padding: 7px 0 0;
   font-size: 15px;
   font-weight: 900;
   line-height: 1.35;
@@ -2211,24 +2207,23 @@ body.co-modal-open{ overflow: hidden; }
   }
 
   body.order-modal-fit-screen .co-meta-row--reason{
-    display: block;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 10px;
     min-height: 70px;
-    margin-top: 18px;
+    margin-top: 10px;
     border-radius: 20px;
-    padding: 32px 14px 14px;
+    padding: 0 14px 14px;
   }
 
   body.order-modal-fit-screen .co-meta-row--reason::before{
-    top: -17px;
-    left: 0;
-    width: 94px;
-    height: 46px;
-    border-radius: 0 0 17px 17px;
+    content: none;
   }
 
   body.order-modal-fit-screen .co-meta-row--reason span{
-    top: -9px;
-    left: 8px;
+    position: static;
+    flex: 0 0 auto;
     width: 78px;
     min-height: 30px;
     padding: 6px 0;
@@ -2236,9 +2231,12 @@ body.co-modal-open{ overflow: hidden; }
   }
 
   body.order-modal-fit-screen .co-meta-row--reason strong{
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
     max-width: 100%;
+    min-width: 0;
     min-height: auto;
+    padding-top: 7px;
     text-align: left;
   }
 
