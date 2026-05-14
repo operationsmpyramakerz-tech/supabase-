@@ -1886,6 +1886,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function opsEditPhotoKey(entry = {}) {
+    const url = String(entry?.url || entry?.rawUrl || entry?.raw || "").trim();
+    const name = String(entry?.name || entry?.filename || entry?.fileName || "").trim();
+    return `${url.toLowerCase()}::${name.toLowerCase()}`;
+  }
+
   function renderOpsEditPhotos() {
     if (!opsEditPhotosList) return;
     const visibleExisting = opsEditPhotoEntries.filter((entry) => !entry.removed);
@@ -1893,14 +1899,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     visibleExisting.forEach((entry, visibleIndex) => {
       const originalIndex = opsEditPhotoEntries.indexOf(entry);
-      const name = entry.name || `Receipt photo ${visibleIndex + 1}`;
+      const sourceName = entry.name || `Receipt photo ${visibleIndex + 1}`;
+      const name = `Image ${visibleIndex + 1}`;
       const url = String(entry.url || entry.rawUrl || "").trim();
       const thumbnail = isImageReceipt({ ...entry, url }) && url
         ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(name)}" loading="lazy" decoding="async" />`
         : `<span class="req-ops-edit-photo-icon"><i data-feather="image"></i></span>`;
       parts.push(`
         <div class="req-ops-edit-photo-card" data-existing-photo-index="${originalIndex}">
-          <button type="button" class="req-ops-edit-photo-preview" data-ops-open-photo="${originalIndex}" title="Open photo">
+          <button type="button" class="req-ops-edit-photo-preview" data-ops-open-photo="${originalIndex}" title="${escapeHTML(sourceName)}">
             ${thumbnail}
           </button>
           <div class="req-ops-edit-photo-name">${escapeHTML(name)}</div>
@@ -1912,10 +1919,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     opsEditNewFiles.forEach((file, index) => {
-      const name = String(file?.name || `New photo ${index + 1}`).trim();
+      const sourceName = String(file?.name || `New photo ${index + 1}`).trim();
+      const name = `New image ${index + 1}`;
       parts.push(`
         <div class="req-ops-edit-photo-card req-ops-edit-photo-card--new" data-new-photo-index="${index}">
-          <div class="req-ops-edit-photo-preview"><span class="req-ops-edit-photo-icon"><i data-feather="image-plus"></i></span></div>
+          <div class="req-ops-edit-photo-preview" title="${escapeHTML(sourceName)}"><span class="req-ops-edit-photo-icon"><i data-feather="image-plus"></i></span></div>
           <div class="req-ops-edit-photo-name">${escapeHTML(name)}</div>
           <button type="button" class="req-ops-edit-mini-remove req-ops-edit-mini-remove--floating" data-ops-remove-new-photo="${index}" aria-label="Remove new photo">
             <span class="req-ops-edit-remove-glyph" aria-hidden="true">×</span>
@@ -1938,6 +1946,7 @@ document.addEventListener("DOMContentLoaded", () => {
       removed: false,
     }));
     opsEditNewFiles = [];
+    opsEditRemovedPhotoKeys = new Set();
     if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
     renderOpsEditPhotos();
   }
@@ -2018,6 +2027,7 @@ document.addEventListener("DOMContentLoaded", () => {
     opsEditVerifiedAdminPassword = "";
     opsEditPhotoEntries = [];
     opsEditNewFiles = [];
+    opsEditRemovedPhotoKeys = new Set();
     if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
     if (restoreFocus && opsEditLastFocus && typeof opsEditLastFocus.focus === "function") {
       try { opsEditLastFocus.focus({ preventScroll: true }); } catch {}
@@ -2071,6 +2081,7 @@ document.addEventListener("DOMContentLoaded", () => {
         url: entry.url || "",
         rawUrl: entry.rawUrl || "",
       }));
+    const removedPhotoKeys = Array.from(opsEditRemovedPhotoKeys || []);
     const files = opsEditNewFiles.slice();
 
     setOpsEditError("");
@@ -2093,6 +2104,7 @@ document.addEventListener("DOMContentLoaded", () => {
         receiptNumbers,
         quantities,
         orderReceiptKeepEntries: keepEntries,
+        orderReceiptRemovedKeys: removedPhotoKeys,
         orderReceiptDataUrls: dataUrls.map((item) => String(item || "").trim()).filter(Boolean),
         orderReceiptFilenames: files.map((file) => file.name || "receipt.jpg"),
       });
@@ -2110,6 +2122,8 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!idSet.has(String(item.id || ""))) return;
           item.receiptNumber = receiptNumbers.join("\n");
           item.orderReceiptEntries = keepEntries;
+          item.orderReceiptNames = keepEntries.map((entry) => entry.name).filter(Boolean);
+          item.orderReceiptUrls = keepEntries.map((entry) => entry.url || entry.rawUrl).filter(Boolean);
           if (Object.prototype.hasOwnProperty.call(quantities, String(item.id || ""))) {
             const base = baseQty(item);
             const q = roundQty(quantities[String(item.id || "")]);
@@ -2899,6 +2913,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let opsEditVerifiedAdminPassword = "";
   let opsEditPhotoEntries = [];
   let opsEditNewFiles = [];
+  let opsEditRemovedPhotoKeys = new Set();
   let requestedDataLoading = false;
   let requestedDataLoaded = false;
 
@@ -5627,6 +5642,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       e.preventDefault();
       const index = Number(removeExisting.getAttribute("data-ops-remove-photo"));
       if (Number.isFinite(index) && opsEditPhotoEntries[index]) {
+        opsEditRemovedPhotoKeys.add(opsEditPhotoKey(opsEditPhotoEntries[index]));
         opsEditPhotoEntries[index].removed = true;
         renderOpsEditPhotos();
       }

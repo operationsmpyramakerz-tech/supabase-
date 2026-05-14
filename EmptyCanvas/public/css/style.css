@@ -8225,3 +8225,136 @@ body:not(.order-modal-fit-screen) .co-item-status{
     grid-template-columns:1fr;
   }
 }
+
+/* Operations Orders edit modal compact controls refinement */
+.req-ops-edit-modal .co-submodal-dialog.req-ops-edit-dialog{
+  width:min(520px, 92vw);
+}
+.req-ops-edit-modal .co-submodal-body{
+  overflow-x:hidden;
+}
+.req-ops-edit-modal .co-submodal-label{
+  margin-bottom:7px;
+  font-size:11px;
+}
+.req-ops-edit-receipts-list{
+  gap:7px;
+}
+.req-ops-edit-receipt-row{
+  grid-template-columns:minmax(0, 1fr) 34px;
+  gap:8px;
+}
+.req-ops-edit-receipt-control{
+  grid-template-columns:28px minmax(0, 1fr);
+  min-height:40px;
+  padding:3px 7px;
+  border-radius:14px;
+}
+.req-ops-edit-control-icon{
+  width:23px;
+  height:23px;
+  border-radius:9px;
+}
+.req-ops-edit-control-icon svg{
+  width:14px;
+  height:14px;
+}
+.req-ops-edit-receipt-input,
+.req-ops-edit-receipt-control .co-submodal-input{
+  min-height:30px !important;
+  height:30px !important;
+  font-size:13px !important;
+  padding:0 6px !important;
+}
+.req-ops-edit-mini-remove{
+  width:34px;
+  min-width:34px;
+  height:34px;
+  border-radius:12px;
+  box-shadow:0 8px 18px rgba(220,38,38,.10);
+}
+.req-ops-edit-remove-glyph{
+  font-size:18px;
+}
+.req-ops-edit-add-btn{
+  min-height:38px;
+  padding:.58rem .82rem;
+  border-radius:14px;
+  font-size:13px;
+  margin-top:8px;
+}
+.req-ops-edit-add-btn svg{
+  width:16px;
+  height:16px;
+}
+.req-ops-edit-photos-list{
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:9px;
+}
+.req-ops-edit-photo-card{
+  grid-template-columns:42px minmax(0, 1fr);
+  gap:8px;
+  min-height:58px;
+  padding:8px 36px 8px 8px;
+  border-radius:16px;
+  box-shadow:0 10px 24px rgba(15,23,42,.07);
+}
+.req-ops-edit-photo-preview{
+  width:42px;
+  height:42px;
+  border-radius:13px;
+}
+.req-ops-edit-photo-name{
+  font-size:12px;
+  line-height:1.1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.req-ops-edit-mini-remove--floating,
+.req-ops-edit-photo-card .req-ops-edit-mini-remove{
+  top:8px;
+  right:8px;
+  width:28px;
+  min-width:28px;
+  height:28px;
+  border-radius:10px;
+}
+.req-ops-edit-mini-remove--floating .req-ops-edit-remove-glyph,
+.req-ops-edit-photo-card .req-ops-edit-remove-glyph{
+  font-size:17px;
+}
+.req-ops-edit-qty-row{
+  min-width:0;
+  grid-template-columns:minmax(0, 1fr) 108px;
+  padding:10px;
+  border-radius:17px;
+}
+.req-ops-edit-qty-name{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:100%;
+}
+.req-ops-edit-qty-input{
+  min-height:40px !important;
+  height:40px !important;
+  border-radius:14px !important;
+  font-size:14px !important;
+}
+@media (max-width:560px){
+  .req-ops-edit-modal .co-submodal-dialog.req-ops-edit-dialog{
+    width:min(94vw, 500px);
+  }
+  .req-ops-edit-photos-list{
+    grid-template-columns:1fr 1fr;
+  }
+  .req-ops-edit-qty-row{
+    grid-template-columns:minmax(0, 1fr) 96px;
+  }
+}
+@media (max-width:430px){
+  .req-ops-edit-photos-list{
+    grid-template-columns:1fr;
+  }
+}

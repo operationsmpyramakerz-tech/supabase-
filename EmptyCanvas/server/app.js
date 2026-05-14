@@ -23327,6 +23327,7 @@ app.post(
         receiptNumbers,
         quantities,
         orderReceiptKeepEntries,
+        orderReceiptRemovedKeys,
         orderReceiptDataUrls,
         orderReceiptFilenames,
       } = req.body || {};
@@ -23357,12 +23358,35 @@ app.post(
       );
 
       const keepReceiptEntriesProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "orderReceiptKeepEntries");
+      const normalizeReceiptEditPhotoKey = (entry = {}) => {
+        const url = String(
+          entry?.url ||
+          entry?.publicUrl ||
+          entry?.public_url ||
+          entry?.rawUrl ||
+          entry?.raw ||
+          entry?.path ||
+          entry?.fullPath ||
+          entry?.full_path ||
+          "",
+        ).trim().toLowerCase();
+        const name = String(entry?.name || entry?.filename || entry?.fileName || "").trim().toLowerCase();
+        return `${url}::${name}`;
+      };
+      const removedPhotoKeys = new Set(
+        (Array.isArray(orderReceiptRemovedKeys) ? orderReceiptRemovedKeys : [])
+          .map((key) => String(key || "").trim().toLowerCase())
+          .filter(Boolean),
+      );
       const keepReceiptEntries = (Array.isArray(orderReceiptKeepEntries) ? orderReceiptKeepEntries : [])
         .map((entry, index) => {
           const name = String(entry?.name || entry?.filename || `Receipt photo ${index + 1}`).trim() || `Receipt photo ${index + 1}`;
           const url = String(entry?.url || entry?.publicUrl || entry?.public_url || entry?.rawUrl || entry?.raw || entry?.path || entry?.fullPath || "").trim();
           if (!url) return null;
-          return { name, url };
+          const normalized = { name, url };
+          const key = normalizeReceiptEditPhotoKey({ ...entry, ...normalized });
+          if (key && removedPhotoKeys.has(key)) return null;
+          return normalized;
         })
         .filter(Boolean);
 
@@ -23454,11 +23478,14 @@ app.post(
       try { await cacheDel("cache:api:orders:requested:v7"); } catch {}
       try { await cacheDel("cache:api:b2b:school-stock:supabase:v1"); } catch {}
 
+      const freshRowsAfterUpdate = await _sbOrderRowsByIds(ids).catch(() => updatedRows);
+      const responseRows = Array.isArray(freshRowsAfterUpdate) && freshRowsAfterUpdate.length ? freshRowsAfterUpdate : updatedRows;
+
       if (stocktakingSyncErrors.length) {
         return res.status(500).json({
           success: false,
           error: "Order details updated but failed to sync some Stocktaking rows.",
-          items: updatedRows.map((row) => _sbSerializeOrderRow(row)),
+          items: responseRows.map((row) => _sbSerializeOrderRow(row)),
           stocktakingSyncErrors,
           source: "supabase",
         });
@@ -23466,7 +23493,7 @@ app.post(
 
       return res.json({
         success: true,
-        items: updatedRows.map((row) => _sbSerializeOrderRow(row)),
+        items: responseRows.map((row) => _sbSerializeOrderRow(row)),
         stocktakingSyncedCount: stocktakingSyncResults.filter((item) => item && item.skipped === false).length,
         stocktakingSkippedCount: stocktakingSyncResults.filter((item) => item && item.skipped === true).length,
         source: "supabase",
