@@ -1711,6 +1711,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     pendingEditOrderIds = cleanIds;
+    pendingEditMode = String(editOrderBtn?.dataset?.editAction || "cart-edit");
     setEditPwdError("");
     editPwdInput.value = "";
     editPwdConfirmBtn.disabled = false;
@@ -1735,6 +1736,7 @@ document.addEventListener("DOMContentLoaded", () => {
     editPwdModal.setAttribute("aria-hidden", "true");
     editPwdModal.hidden = true;
     pendingEditOrderIds = [];
+    pendingEditMode = "cart-edit";
     setEditPwdError("");
     if (restoreFocus && editPwdLastFocus && typeof editPwdLastFocus.focus === "function") {
       try { editPwdLastFocus.focus({ preventScroll: true }); } catch {}
@@ -1773,6 +1775,46 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
+      if (pendingEditMode === "return-to-not-started") {
+        const res = await fetch("/api/orders/operations/edit-to-not-started", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ orderIds: cleanIds, adminPassword: pwd }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          setEditPwdError("Wrong password. Please try again.");
+          if (editPwdInput) editPwdInput.value = "";
+          try { editPwdInput?.focus(); } catch {}
+          return;
+        }
+        if (res.status === 403) {
+          toast("error", "Not allowed", data?.error || "You are not allowed to edit this order.");
+          closeEditPasswordModal();
+          return;
+        }
+        if (res.status === 404) {
+          toast("error", "Not found", data?.error || "Order not found.");
+          closeEditPasswordModal();
+          return;
+        }
+        if (!res.ok) throw new Error(data?.error || "Failed to return order to Not Started.");
+
+        closeEditPasswordModal({ restoreFocus: false });
+        closeOrderModal({ restoreFocus: false });
+        toast("success", "Returned", "Order moved back to Not Started.");
+
+        const nextUrl = new URL(window.location.href);
+        nextUrl.pathname = "/orders/requested";
+        nextUrl.searchParams.set("tab", "not-started");
+        nextUrl.searchParams.set("_fresh", "1");
+        nextUrl.searchParams.set("_refresh", String(Date.now()));
+        window.location.href = `${nextUrl.pathname}${nextUrl.search}`;
+        return;
+      }
+
       const res = await fetch("/api/orders/operations/edit/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2408,6 +2450,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastFocus = null;
   let editPwdLastFocus = null;
   let pendingEditOrderIds = [];
+  let pendingEditMode = "cart-edit";
   let requestedDataLoading = false;
   let requestedDataLoaded = false;
 
@@ -2952,12 +2995,18 @@ document.addEventListener("DOMContentLoaded", () => {
         : '<i data-feather="archive"></i><span>Archive</span>';
     }
     if (editOrderBtn) {
-      // Operations Orders edit is intentionally disabled.
-      // Use the Edit action from Current Orders only, where the edit flow is stable.
-      editOrderBtn.hidden = true;
-      editOrderBtn.disabled = true;
+      const isArchivedForEdit = (stage?.idx || 1) >= 5 || norm(stage?.key) === "archive";
+      const canReturnToNotStarted =
+        !isMaintenancePage &&
+        !isMaintenanceOrder &&
+        !isArchivedForEdit &&
+        (currentTab === "remaining" || currentTab === "received" || currentTab === "delivered" || (stage?.idx || 1) >= 3);
+
+      editOrderBtn.hidden = !canReturnToNotStarted;
+      editOrderBtn.disabled = !canReturnToNotStarted;
+      editOrderBtn.dataset.editAction = canReturnToNotStarted ? "return-to-not-started" : "cart-edit";
       editOrderBtn.innerHTML = '<i data-feather="edit-2"></i><span>Edit</span>';
-      orderModal?.querySelector?.(".co-modal-dialog")?.classList.remove("has-edit-action");
+      orderModal?.querySelector?.(".co-modal-dialog")?.classList.toggle("has-edit-action", !!canReturnToNotStarted);
     }
     syncModalMoreVisibility();
     if (logMaintenanceBtn) {
