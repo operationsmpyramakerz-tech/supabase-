@@ -23280,6 +23280,160 @@ app.post(
   },
 );
 
+// Edit Operations Order details without moving the order back to the beginning.
+// Body: { orderIds, adminPassword, receiptNumbers, quantities: { [orderRowId]: number }, orderReceiptDataUrls, orderReceiptFilenames }
+app.post(
+  "/api/orders/operations/details-edit",
+  requireAuth,
+  requirePage("Operations Orders"),
+  async (req, res) => {
+    try {
+      const {
+        orderIds,
+        adminPassword,
+        receiptNumber,
+        receiptNumbers,
+        quantities,
+        orderReceiptDataUrls,
+        orderReceiptFilenames,
+      } = req.body || {};
+
+      const ids = (Array.isArray(orderIds) ? orderIds : [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+        .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+      const ok = await verifyAdminPassword(pwd);
+      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+
+      if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(String(id)))) {
+        return res.status(400).json({ error: "Operations edit details is available for Supabase orders only." });
+      }
+
+      const rowsBeforeUpdate = await _sbOrderRowsByIds(ids);
+      if (!rowsBeforeUpdate.length) return res.status(404).json({ error: "Orders not found" });
+
+      const receiptTextProvided =
+        Object.prototype.hasOwnProperty.call(req.body || {}, "receiptNumbers") ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "receiptNumber");
+      const receiptText = _normalizeReceiptNumbersText(
+        Array.isArray(receiptNumbers) && receiptNumbers.length ? receiptNumbers : receiptNumber,
+      );
+
+      const photoDataUrls = (Array.isArray(orderReceiptDataUrls) ? orderReceiptDataUrls : [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
+      const photoNames = (Array.isArray(orderReceiptFilenames) ? orderReceiptFilenames : [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
+      const uploadedReceiptFiles = [];
+      for (let index = 0; index < photoDataUrls.length; index += 1) {
+        const dataUrl = photoDataUrls[index];
+        const fallbackName = `operations-receipt-${index + 1}.jpg`;
+        const rawName = String(photoNames[index] || fallbackName).trim() || fallbackName;
+        const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
+        const extMatch = cleanName.match(/\.([a-zA-Z0-9]+)$/);
+        const safeExt = extMatch?.[1] ? extMatch[1].toLowerCase() : "jpg";
+        const objectName = `delivery-receipts/${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 10)}.${safeExt}`;
+        try {
+          const publicUrl = await uploadToBlobFromBase64(dataUrl, objectName);
+          uploadedReceiptFiles.push({ name: cleanName, url: publicUrl });
+        } catch (uploadErr) {
+          const uploadMessage =
+            String(uploadErr?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+              ? "Supabase Storage upload is not configured."
+              : "Failed to upload receipt photo.";
+          return res.status(500).json({ error: uploadMessage });
+        }
+      }
+
+      const quantityMap = quantities && typeof quantities === "object" ? quantities : {};
+      const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
+      const updatedRows = [];
+
+      for (const id of ids) {
+        const beforeRow = beforeById.get(String(id)) || null;
+        if (!beforeRow) continue;
+        const patch = {};
+
+        if (receiptTextProvided) {
+          patch.receipt_number = receiptText || null;
+        }
+        if (uploadedReceiptFiles.length) {
+          patch.order_receipt = JSON.stringify(uploadedReceiptFiles);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(quantityMap, String(id))) {
+          const rawQty = Number(quantityMap[String(id)]);
+          if (!Number.isFinite(rawQty)) {
+            return res.status(400).json({ error: "Quantity received must be a valid number." });
+          }
+          const serialized = _sbSerializeOrderRow(beforeRow);
+          const base = Number(serialized?.quantity) || 0;
+          let nextQty = roundOrderQty(rawQty);
+          if (base < 0 && nextQty > 0) nextQty = -Math.abs(nextQty);
+          const clampedQty = clampOrderQtyToBase(base, nextQty);
+          patch.quantity_received_by_operations = clampedQty;
+          patch.quantity_remaining = roundOrderQty(base - clampedQty);
+        }
+
+        if (!Object.keys(patch).length) {
+          updatedRows.push(beforeRow);
+          continue;
+        }
+        updatedRows.push(await _sbUpdateOrderRowSafe(id, patch));
+      }
+
+      const rowsNeedingStockSync = updatedRows.filter((row) => {
+        const serialized = _sbSerializeOrderRow(row || {});
+        return _sbOrderFinalStatusName(serialized?.status);
+      });
+      const stocktakingSyncResults = [];
+      const stocktakingSyncErrors = [];
+      if (rowsNeedingStockSync.length) {
+        await _sbDeleteStocktakingRowsForOrderRows(rowsBeforeUpdate);
+        for (const row of rowsNeedingStockSync) {
+          const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "").trim();
+          try {
+            const result = await _sbSyncArrivedOrderToStocktaking(row, { wasArrivedLike: true });
+            stocktakingSyncResults.push({ orderId: id, ...result });
+          } catch (syncErr) {
+            stocktakingSyncErrors.push({ orderId: id, message: String(syncErr?.message || "Failed to sync Stocktaking row.") });
+          }
+        }
+      }
+
+      await _sbInvalidateOrdersCaches(req);
+      try { await cacheDel("cache:api:orders:requested:v7"); } catch {}
+      try { await cacheDel("cache:api:b2b:school-stock:supabase:v1"); } catch {}
+
+      if (stocktakingSyncErrors.length) {
+        return res.status(500).json({
+          success: false,
+          error: "Order details updated but failed to sync some Stocktaking rows.",
+          items: updatedRows.map((row) => _sbSerializeOrderRow(row)),
+          stocktakingSyncErrors,
+          source: "supabase",
+        });
+      }
+
+      return res.json({
+        success: true,
+        items: updatedRows.map((row) => _sbSerializeOrderRow(row)),
+        stocktakingSyncedCount: stocktakingSyncResults.filter((item) => item && item.skipped === false).length,
+        stocktakingSkippedCount: stocktakingSyncResults.filter((item) => item && item.skipped === true).length,
+        source: "supabase",
+      });
+    } catch (e) {
+      console.error("operations details edit error:", e?.details || e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to update order details" });
+    }
+  },
+);
+
 // ===== Stocktaking data (JSON) — requires Stocktaking =====
 
 // ===== Helpers: Stocktaking / Products "ID code" extraction (Notion) =====
@@ -28353,6 +28507,46 @@ app.post("/api/sv-orders/actions/unarchive", requireAuth, requirePage("Orders Re
   } catch (e) {
     console.error("SV unarchive action error:", e?.body || e);
     return res.status(e?.status || 500).json({ error: e?.message || "Failed to unarchive order" });
+  }
+});
+
+app.post("/api/sv-orders/actions/update-approval", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const ids = _normalizeSVOrderActionIds(req.body?.orderIds);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!await _verifySVOrderActionPassword(req, res)) return;
+
+    const rawApproval = String(req.body?.approvalStatus || req.body?.approval || "").trim();
+    const approvalKey = norm(rawApproval).replace(/[_\s-]+/g, " ");
+    const approval = approvalKey === "approved"
+      ? "Approved"
+      : approvalKey === "rejected"
+        ? "Rejected"
+        : "Not Started";
+
+    if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+      await _sbGetAllowedSVActionRows(req, ids);
+      await _sbUpdateOrdersByIds(ids, { sv_approval: approval });
+      await _invalidateSVOrderActionCaches(req);
+      return res.json({ ok: true, action: "update-approval", approval, source: "supabase" });
+    }
+
+    const pages = await _notionGetAllowedSVActionPages(req, ids);
+    const dbProps = await getOrdersDBProps();
+    const approvalProp = await detectSVApprovalPropName();
+    const approvalMeta = dbProps?.[approvalProp] || null;
+    await Promise.all((pages || []).map((page) => notion.pages.update({
+      page_id: page.id,
+      archived: false,
+      properties: {
+        [approvalProp]: _notionOptionValueForMeta(approvalMeta || page?.properties?.[approvalProp], approval),
+      },
+    })));
+    await _invalidateSVOrderActionCaches(req);
+    return res.json({ ok: true, action: "update-approval", approval });
+  } catch (e) {
+    console.error("SV update approval action error:", e?.body || e);
+    return res.status(e?.status || 500).json({ error: e?.message || "Failed to update approval status" });
   }
 });
 

@@ -39,6 +39,14 @@
   const adminPwdSub = document.getElementById("svAdminPwdSub");
   const adminPwdIcon = document.getElementById("svAdminPwdIcon");
 
+  const reviewEditModal = document.getElementById("svReviewEditModal");
+  const reviewEditCloseBtn = document.getElementById("svReviewEditClose");
+  const reviewEditCancelBtn = document.getElementById("svReviewEditCancel");
+  const reviewEditConfirmBtn = document.getElementById("svReviewEditConfirm");
+  const reviewEditAdminPassword = document.getElementById("svReviewEditAdminPassword");
+  const reviewEditApproval = document.getElementById("svReviewEditApproval");
+  const reviewEditError = document.getElementById("svReviewEditError");
+
   const modalEls = {
     title: document.getElementById("svModalTitle"),
     sub: document.getElementById("svModalSub"),
@@ -693,12 +701,12 @@
   const SV_ORDER_ACTION_CONFIG = {
     edit: {
       title: "Edit review decision",
-      sub: "Enter admin password to return this order to Not Started.",
-      confirm: "Return to Not Started",
-      loading: "Updating...",
+      sub: "Update the approval status for this order.",
+      confirm: "Save changes",
+      loading: "Saving...",
       icon: "edit-2",
-      endpoint: "/api/sv-orders/actions/edit",
-      success: "Order returned to Not Started.",
+      endpoint: "/api/sv-orders/actions/update-approval",
+      success: "Review decision updated.",
     },
     archive: {
       title: "Archive order",
@@ -755,6 +763,121 @@
     if (!modalMorePanel) return;
     if (modalMorePanel.hidden) openSvMoreMenu();
     else closeSvMoreMenu();
+  }
+
+  let reviewEditLastFocusEl = null;
+
+  function setReviewEditError(message) {
+    if (reviewEditError) reviewEditError.textContent = String(message || "");
+  }
+
+  function isReviewEditOpen() {
+    return !!reviewEditModal && reviewEditModal.classList.contains("is-open");
+  }
+
+  function openReviewEditModal(group = activeGroup) {
+    const ids = groupOrderIds(group);
+    if (!ids.length) {
+      toastERR("Could not find this order items.");
+      return false;
+    }
+
+    if (!reviewEditModal || !reviewEditAdminPassword || !reviewEditApproval || !reviewEditConfirmBtn) {
+      openAdminPasswordModal("edit", ids);
+      return true;
+    }
+
+    reviewEditLastFocusEl = document.activeElement;
+    setReviewEditError("");
+    reviewEditAdminPassword.value = "";
+    reviewEditApproval.value = normalizeApproval(group?.approval || "Not Started");
+    reviewEditConfirmBtn.disabled = false;
+    if (reviewEditCancelBtn) reviewEditCancelBtn.disabled = false;
+    if (reviewEditCloseBtn) reviewEditCloseBtn.disabled = false;
+
+    reviewEditModal.hidden = false;
+    reviewEditModal.classList.add("is-open");
+    reviewEditModal.setAttribute("aria-hidden", "false");
+    window.requestAnimationFrame(() => {
+      try { reviewEditAdminPassword.focus(); } catch {}
+    });
+    if (window.feather) window.feather.replace();
+    return true;
+  }
+
+  function closeReviewEditModal(opts = {}) {
+    const { restoreFocus = true } = opts || {};
+    if (!reviewEditModal || !isReviewEditOpen()) return;
+    reviewEditModal.classList.remove("is-open");
+    reviewEditModal.setAttribute("aria-hidden", "true");
+    reviewEditModal.hidden = true;
+    setReviewEditError("");
+    if (restoreFocus && reviewEditLastFocusEl && typeof reviewEditLastFocusEl.focus === "function") {
+      try { reviewEditLastFocusEl.focus({ preventScroll: true }); } catch {}
+    }
+    reviewEditLastFocusEl = null;
+  }
+
+  async function submitReviewEditDetails() {
+    const ids = groupOrderIds(activeGroup);
+    const adminPassword = String(reviewEditAdminPassword?.value || "").trim();
+    const approvalStatus = normalizeApproval(reviewEditApproval?.value || "Not Started");
+
+    if (!ids.length) {
+      setReviewEditError("Order items are missing.");
+      return;
+    }
+    if (!adminPassword) {
+      setReviewEditError("Admin password is required.");
+      try { reviewEditAdminPassword?.focus(); } catch {}
+      return;
+    }
+
+    setReviewEditError("");
+    if (reviewEditConfirmBtn) {
+      reviewEditConfirmBtn.disabled = true;
+      reviewEditConfirmBtn.dataset.prevText = reviewEditConfirmBtn.textContent || "";
+      reviewEditConfirmBtn.textContent = "Saving...";
+    }
+    if (reviewEditCancelBtn) reviewEditCancelBtn.disabled = true;
+    if (reviewEditCloseBtn) reviewEditCloseBtn.disabled = true;
+
+    try {
+      const res = await fetch("/api/sv-orders/actions/update-approval", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: ids, adminPassword, approvalStatus }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setReviewEditError("Wrong password. Please try again.");
+        if (reviewEditAdminPassword) reviewEditAdminPassword.value = "";
+        try { reviewEditAdminPassword?.focus(); } catch {}
+        return;
+      }
+      if (!res.ok) throw new Error(data?.error || "Failed to update approval status.");
+
+      closeReviewEditModal({ restoreFocus: false });
+      closeSvMoreMenu();
+      closeModal();
+      clearSvCache();
+      TAB = approvalKey(approvalStatus);
+      setActiveTab();
+      updateSvToolbarUrl();
+      await loadList({ tab: TAB, force: true });
+      toastOK("Review decision updated.");
+    } catch (err) {
+      console.error(err);
+      setReviewEditError(err?.message || "Failed to update approval status.");
+    } finally {
+      if (reviewEditConfirmBtn) {
+        reviewEditConfirmBtn.disabled = false;
+        reviewEditConfirmBtn.textContent = reviewEditConfirmBtn.dataset.prevText || "Save changes";
+      }
+      if (reviewEditCancelBtn) reviewEditCancelBtn.disabled = false;
+      if (reviewEditCloseBtn) reviewEditCloseBtn.disabled = false;
+    }
   }
 
   function updateSvActionsMenu(group = activeGroup) {
@@ -1958,6 +2081,10 @@ if (tabsWrap) {
       const ids = groupOrderIds(activeGroup);
       if (!SV_ORDER_ACTION_CONFIG[action] || !ids.length) return;
       closeSvMoreMenu();
+      if (action === "edit") {
+        openReviewEditModal(activeGroup);
+        return;
+      }
       openAdminPasswordModal(action, ids);
     });
 
@@ -1965,6 +2092,28 @@ if (tabsWrap) {
       if (!modalMoreWrap || !modalMorePanel || modalMorePanel.hidden) return;
       if (modalMoreWrap.contains(e.target)) return;
       closeSvMoreMenu();
+    });
+
+    reviewEditCloseBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeReviewEditModal();
+    });
+    reviewEditCancelBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeReviewEditModal();
+    });
+    reviewEditConfirmBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      submitReviewEditDetails();
+    });
+    reviewEditAdminPassword?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitReviewEditDetails();
+      }
+    });
+    reviewEditModal?.addEventListener("click", (e) => {
+      if (e.target === reviewEditModal) closeReviewEditModal();
     });
 
     adminPwdConfirmBtn?.addEventListener("click", (e) => {
@@ -2027,6 +2176,12 @@ if (tabsWrap) {
     // Escape closes open overlays
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (isReviewEditOpen()) {
+        e.preventDefault();
+        closeReviewEditModal();
+        return;
+      }
+
       if (isAdminPwdOpen()) {
         e.preventDefault();
         closeAdminPasswordModal();

@@ -121,6 +121,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const archivePwdInput = document.getElementById("reqArchivePwdInput");
   const archivePwdError = document.getElementById("reqArchivePwdError");
 
+  // Operations edit details sub-modal
+  const opsEditModal = document.getElementById("reqOpsEditModal");
+  const opsEditCloseBtn = document.getElementById("reqOpsEditClose");
+  const opsEditCancelBtn = document.getElementById("reqOpsEditCancel");
+  const opsEditConfirmBtn = document.getElementById("reqOpsEditConfirm");
+  const opsEditAdminPassword = document.getElementById("reqOpsEditAdminPassword");
+  const opsEditReceiptNumber = document.getElementById("reqOpsEditReceiptNumber");
+  const opsEditReceiptFiles = document.getElementById("reqOpsEditReceiptFiles");
+  const opsEditChoosePhotos = document.getElementById("reqOpsEditChoosePhotos");
+  const opsEditPhotosName = document.getElementById("reqOpsEditPhotosName");
+  const opsEditPhotosMeta = document.getElementById("reqOpsEditPhotosMeta");
+  const opsEditQtyList = document.getElementById("reqOpsEditQtyList");
+  const opsEditError = document.getElementById("reqOpsEditError");
+
   // Request technical visit sub-modal
   const techVisitModal = document.getElementById("reqTechVisitModal");
   const techVisitCloseBtn = document.getElementById("reqTechVisitClose");
@@ -1800,6 +1814,212 @@ document.addEventListener("DOMContentLoaded", () => {
       try { editPwdLastFocus.focus({ preventScroll: true }); } catch {}
     }
     editPwdLastFocus = null;
+  }
+
+  let opsEditLastFocus = null;
+
+  function setOpsEditError(message) {
+    if (opsEditError) opsEditError.textContent = String(message || "");
+  }
+
+  function isOpsEditOpen() {
+    return !!opsEditModal && opsEditModal.classList.contains("is-open");
+  }
+
+  function updateOpsEditPhotosUi(files = []) {
+    const picked = Array.from(files || []).filter(Boolean);
+    if (opsEditPhotosName) {
+      if (!picked.length) opsEditPhotosName.textContent = "Keep current photos";
+      else if (picked.length === 1) opsEditPhotosName.textContent = picked[0].name || "1 image selected";
+      else opsEditPhotosName.textContent = `${picked.length} images selected`;
+    }
+    if (opsEditPhotosMeta) {
+      if (!picked.length) {
+        const count = collectReceiptEntriesFromGroup(activeGroup || {}).length;
+        opsEditPhotosMeta.textContent = count > 0
+          ? `${count} existing photo${count === 1 ? "" : "s"} will be kept unless you choose new images.`
+          : "Choose images to add receipt photos.";
+      } else {
+        const totalSize = picked.reduce((sum, file) => sum + (Number(file?.size) || 0), 0);
+        const labels = picked.slice(0, 2).map((file) => String(file?.name || "").trim()).filter(Boolean);
+        const more = picked.length > 2 ? `+${picked.length - 2} more` : "";
+        opsEditPhotosMeta.textContent = [labels.join(" • "), more, humanFileSize(totalSize)].filter(Boolean).join(" • ");
+      }
+    }
+  }
+
+  function renderOpsEditQtyRows(group = activeGroup) {
+    if (!opsEditQtyList) return;
+    const items = (group?.items || []).slice().sort(compareItemsByProductName);
+    if (!items.length) {
+      opsEditQtyList.innerHTML = '<div class="req-ops-edit-empty">No items found.</div>';
+      return;
+    }
+    opsEditQtyList.innerHTML = items.map((item) => {
+      const base = baseQty(item);
+      const current = receivedQtyRaw(item);
+      const value = current !== null && current !== undefined ? current : base;
+      return `
+        <div class="req-ops-edit-qty-row" data-id="${escapeHTML(item.id || "")}">
+          <div class="req-ops-edit-qty-info">
+            <div class="req-ops-edit-qty-name">${escapeHTML(item.productName || "Product")}</div>
+            <div class="req-ops-edit-qty-sub">Requested: ${escapeHTML(fmtQty(base))}</div>
+          </div>
+          <input class="co-submodal-input req-ops-edit-qty-input" data-id="${escapeHTML(item.id || "")}" type="number" inputmode="decimal" min="0" step="any" value="${escapeHTML(fmtQty(value))}" aria-label="Quantity received for ${escapeHTML(item.productName || "Product")}" />
+        </div>
+      `.trim();
+    }).join("");
+  }
+
+  function openOpsEditDetailsModal(group = activeGroup) {
+    if (!group || !Array.isArray(group.orderIds) || !group.orderIds.length) {
+      toast("error", "Missing order", "Could not find this order items.");
+      return false;
+    }
+    if (!opsEditModal || !opsEditAdminPassword || !opsEditConfirmBtn) {
+      openEditPasswordModal(group.orderIds);
+      return true;
+    }
+
+    opsEditLastFocus = document.activeElement;
+    setOpsEditError("");
+    opsEditAdminPassword.value = "";
+    if (opsEditReceiptNumber) opsEditReceiptNumber.value = formatReceiptNumbersInline(group.receiptNumber || "");
+    if (opsEditReceiptFiles) opsEditReceiptFiles.value = "";
+    updateOpsEditPhotosUi([]);
+    renderOpsEditQtyRows(group);
+
+    opsEditConfirmBtn.disabled = false;
+    if (opsEditCancelBtn) opsEditCancelBtn.disabled = false;
+    if (opsEditCloseBtn) opsEditCloseBtn.disabled = false;
+    if (opsEditChoosePhotos) opsEditChoosePhotos.disabled = false;
+
+    opsEditModal.hidden = false;
+    opsEditModal.classList.add("is-open");
+    opsEditModal.setAttribute("aria-hidden", "false");
+    window.requestAnimationFrame(() => {
+      try { opsEditAdminPassword.focus(); } catch {}
+    });
+    if (window.feather) window.feather.replace();
+    return true;
+  }
+
+  function closeOpsEditDetailsModal({ restoreFocus = true } = {}) {
+    if (!opsEditModal || !isOpsEditOpen()) return;
+    opsEditModal.classList.remove("is-open");
+    opsEditModal.setAttribute("aria-hidden", "true");
+    opsEditModal.hidden = true;
+    setOpsEditError("");
+    if (restoreFocus && opsEditLastFocus && typeof opsEditLastFocus.focus === "function") {
+      try { opsEditLastFocus.focus({ preventScroll: true }); } catch {}
+    }
+    opsEditLastFocus = null;
+  }
+
+  function collectOpsEditQuantities() {
+    const rows = {};
+    opsEditQtyList?.querySelectorAll?.(".req-ops-edit-qty-input[data-id]")?.forEach((input) => {
+      const id = String(input.getAttribute("data-id") || "").trim();
+      if (!id) return;
+      const raw = String(input.value || "").trim();
+      if (raw === "") return;
+      const num = Number(raw);
+      if (!Number.isFinite(num) || num < 0) {
+        throw new Error("Quantity received must be a valid positive number.");
+      }
+      rows[id] = roundQty(num);
+    });
+    return rows;
+  }
+
+  async function submitOpsEditDetails() {
+    const group = activeGroup;
+    const ids = (group?.orderIds || []).map((id) => String(id || "").trim()).filter(Boolean);
+    const adminPassword = String(opsEditAdminPassword?.value || "").trim();
+    if (!ids.length) {
+      setOpsEditError("Order items are missing.");
+      return;
+    }
+    if (!adminPassword) {
+      setOpsEditError("Admin password is required.");
+      try { opsEditAdminPassword?.focus(); } catch {}
+      return;
+    }
+
+    let quantities = {};
+    try {
+      quantities = collectOpsEditQuantities();
+    } catch (err) {
+      setOpsEditError(err?.message || "Invalid quantity.");
+      return;
+    }
+
+    const receiptNumbers = normalizeReceiptNumbers(opsEditReceiptNumber?.value || "");
+    const files = Array.from(opsEditReceiptFiles?.files || []).filter(Boolean);
+
+    setOpsEditError("");
+    if (opsEditConfirmBtn) {
+      opsEditConfirmBtn.disabled = true;
+      opsEditConfirmBtn.dataset.prevText = opsEditConfirmBtn.textContent || "";
+      opsEditConfirmBtn.textContent = "Saving...";
+    }
+    if (opsEditCancelBtn) opsEditCancelBtn.disabled = true;
+    if (opsEditCloseBtn) opsEditCloseBtn.disabled = true;
+    if (opsEditChoosePhotos) opsEditChoosePhotos.disabled = true;
+
+    try {
+      const dataUrls = files.length ? await Promise.all(files.map((file) => fileToDataUrl(file))) : [];
+      const data = await postJson("/api/orders/operations/details-edit", {
+        orderIds: ids,
+        adminPassword,
+        receiptNumbers,
+        quantities,
+        orderReceiptDataUrls: dataUrls.map((item) => String(item || "").trim()).filter(Boolean),
+        orderReceiptFilenames: files.map((file) => file.name || "receipt.jpg"),
+      });
+
+      const updatedItems = Array.isArray(data?.items) ? data.items : [];
+      if (updatedItems.length) {
+        const byId = new Map(updatedItems.map((item) => [String(item.id || ""), item]));
+        allItems = allItems.map((item) => {
+          const updated = byId.get(String(item.id || ""));
+          return updated ? { ...item, ...updated } : item;
+        });
+      } else {
+        const idSet = new Set(ids);
+        allItems.forEach((item) => {
+          if (!idSet.has(String(item.id || ""))) return;
+          if (receiptNumbers.length) item.receiptNumber = receiptNumbers.join("\n");
+          if (Object.prototype.hasOwnProperty.call(quantities, String(item.id || ""))) {
+            const base = baseQty(item);
+            const q = roundQty(quantities[String(item.id || "")]);
+            item.quantityReceived = q;
+            item.quantityRemaining = roundQty(base - q);
+            item.quantityReceivedEdited = true;
+          }
+        });
+      }
+
+      writeRequestedCache(allItems);
+      groups = buildGroups(allItems);
+      render();
+      const updatedGroup = groups.find((x) => x.groupId === group.groupId);
+      closeOpsEditDetailsModal({ restoreFocus: false });
+      if (updatedGroup && orderModal?.classList.contains("is-open")) openOrderModal(updatedGroup);
+      toast("success", "Saved", "Order details updated.");
+    } catch (err) {
+      console.error(err);
+      setOpsEditError(err?.message || "Failed to save order details.");
+    } finally {
+      if (opsEditConfirmBtn) {
+        opsEditConfirmBtn.disabled = false;
+        opsEditConfirmBtn.textContent = opsEditConfirmBtn.dataset.prevText || "Save changes";
+      }
+      if (opsEditCancelBtn) opsEditCancelBtn.disabled = false;
+      if (opsEditCloseBtn) opsEditCloseBtn.disabled = false;
+      if (opsEditChoosePhotos) opsEditChoosePhotos.disabled = false;
+      if (window.feather) window.feather.replace();
+    }
   }
 
   // Legacy Operations Orders shopping-cart edit flow kept intact for future use.
@@ -4956,6 +5176,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       return;
     }
 
+    if (isOpsEditOpen()) {
+      e.preventDefault();
+      closeOpsEditDetailsModal();
+      return;
+    }
+
     if (isMaintenanceLogOpen()) {
       e.preventDefault();
       closeMaintenanceLogModal();
@@ -5260,11 +5486,37 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     e.preventDefault();
     e.stopPropagation();
     closeModalMoreMenu();
-    if (!activeGroup || !Array.isArray(activeGroup.orderIds) || !activeGroup.orderIds.length) {
-      toast("error", "Missing order", "Could not find this order items.");
-      return;
+    openOpsEditDetailsModal(activeGroup);
+  });
+
+  opsEditChoosePhotos?.addEventListener("click", (e) => {
+    e.preventDefault();
+    opsEditReceiptFiles?.click();
+  });
+  opsEditReceiptFiles?.addEventListener("change", () => {
+    updateOpsEditPhotosUi(Array.from(opsEditReceiptFiles.files || []));
+    if (opsEditError?.textContent) setOpsEditError("");
+  });
+  opsEditCloseBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeOpsEditDetailsModal();
+  });
+  opsEditCancelBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeOpsEditDetailsModal();
+  });
+  opsEditConfirmBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    submitOpsEditDetails();
+  });
+  opsEditAdminPassword?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitOpsEditDetails();
     }
-    openEditPasswordModal(activeGroup.orderIds);
+  });
+  opsEditModal?.addEventListener("click", (e) => {
+    if (e.target === opsEditModal) closeOpsEditDetailsModal();
   });
 
   editPwdCloseBtn?.addEventListener("click", (e) => {

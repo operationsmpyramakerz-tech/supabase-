@@ -20,7 +20,7 @@
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
-  <link rel="stylesheet" href="/css/style.css?v=creator-restore-v1"/>
+  <link rel="stylesheet" href="/css/style.css?v=edit-details-v1"/>
   <link href="/css/ui-redesign.css?v=bidi-mixed-v1" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -206,6 +206,48 @@
   </div>
 </div>
 
+<!-- ===================== ORDERS REVIEW EDIT DETAILS MODAL ===================== -->
+<div id="svReviewEditModal" class="co-submodal-overlay sv-review-edit-modal" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog sv-review-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="svReviewEditTitle" aria-describedby="svReviewEditSub">
+    <button type="button" class="co-submodal-close" id="svReviewEditClose" aria-label="Close review edit dialog">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header req-edit-header">
+      <div class="req-edit-icon" aria-hidden="true"><i data-feather="edit-2"></i></div>
+      <div>
+        <div class="co-submodal-title" id="svReviewEditTitle">Edit review decision</div>
+        <div class="co-submodal-sub" id="svReviewEditSub">Update only the approval status for this order.</div>
+      </div>
+    </div>
+
+    <div class="co-submodal-body">
+      <div class="co-submodal-fields">
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="svReviewEditAdminPassword">Admin password</label>
+          <input class="co-submodal-input" id="svReviewEditAdminPassword" type="password" autocomplete="current-password" placeholder="••••••••" />
+        </div>
+
+        <div class="co-submodal-field">
+          <label class="co-submodal-label" for="svReviewEditApproval">Approval status</label>
+          <select class="co-submodal-select" id="svReviewEditApproval">
+            <option value="Not Started">Not Started</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="co-submodal-error" id="svReviewEditError" role="alert" aria-live="polite"></div>
+    </div>
+
+    <div class="co-submodal-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--light" id="svReviewEditCancel">Cancel</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="svReviewEditConfirm">Save changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== ORDERS REVIEW ADMIN PASSWORD (SUB-MODAL) ===================== -->
 <div id="svAdminPwdModal" class="co-submodal-overlay req-edit-modal" aria-hidden="true" hidden>
   <div class="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="svAdminPwdTitle" aria-describedby="svAdminPwdSub">
@@ -260,6 +302,6 @@
     })();
   </script>
   <!-- Controller -->
-  <script src="/js/sv-orders.js?v=review-actions-menu-v1"></script>
+  <script src="/js/sv-orders.js?v=review-edit-details-v1"></script>
 </body>
 </html>

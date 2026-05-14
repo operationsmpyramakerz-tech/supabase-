@@ -7468,3 +7468,78 @@ body:not(.order-modal-fit-screen) .co-item-status{
   border-color:#FECACA;
   box-shadow:0 14px 30px rgba(220,38,38,.12);
 }
+
+
+/* Modern small edit dialogs for Operations Orders and Orders Review */
+.req-ops-edit-dialog,
+.sv-review-edit-dialog{
+  max-width: 560px;
+}
+
+.req-ops-edit-receipt-textarea{
+  min-height: 86px;
+}
+
+.req-ops-edit-qty-list{
+  display: grid;
+  gap: 10px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.req-ops-edit-qty-row{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F9FAFB 100%);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .05);
+}
+
+.req-ops-edit-qty-info{
+  min-width: 0;
+}
+
+.req-ops-edit-qty-name{
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 900;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.req-ops-edit-qty-sub{
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #6B7280;
+}
+
+.req-ops-edit-qty-input{
+  min-height: 44px !important;
+  text-align: center;
+  font-weight: 900 !important;
+}
+
+.req-ops-edit-empty{
+  padding: 14px;
+  border-radius: 16px;
+  background: #F9FAFB;
+  color: #6B7280;
+  font-weight: 800;
+}
+
+@media (max-width: 560px){
+  .req-ops-edit-qty-row{
+    grid-template-columns: 1fr;
+  }
+  .req-ops-edit-qty-input{
+    text-align: left;
+  }
+}
