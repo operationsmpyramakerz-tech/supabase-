@@ -2951,8 +2951,8 @@ input.ops-auto-dir-rtl{
    - Keep the final page content above the fixed mobile sidebar/dock.
    - Proposals already owns its page-specific bottom clearance, so it is
      excluded to avoid adding double empty space.
-   - Order detail modals also get internal scroll clearance so their last
-     rows/buttons can be scrolled above the dock.
+   - Order detail modals should stay content-height only; do not add
+     dock clearance inside the modal because it creates empty space.
    ========================================================= */
 @media (max-width: 768px){
   :root{
@@ -2975,14 +2975,14 @@ input.ops-auto-dir-rtl{
   }
 
   body.order-modal-fit-screen .co-modal-dialog{
-    scroll-padding-bottom: var(--mobile-dock-safe-focus-clearance) !important;
+    scroll-padding-bottom: 16px !important;
   }
 
   body.order-modal-fit-screen .co-modal-dialog::after{
-    content: "";
-    display: block;
-    height: var(--mobile-dock-safe-clearance);
-    min-height: var(--mobile-dock-safe-clearance);
+    content: none !important;
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
     pointer-events: none;
   }
 }
