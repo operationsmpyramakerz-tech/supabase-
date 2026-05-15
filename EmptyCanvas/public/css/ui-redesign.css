@@ -3086,14 +3086,15 @@ input.ops-auto-dir-rtl{
 }
 
 /* =========================================================
-   Mobile page-end clearance trim
-   - The bottom dock is fixed; keep only the exact dock-height clearance.
-   - Removes the large empty white strip after the last page card/panel.
+   Mobile page-end clearance rebalance
+   - The page itself should not scroll past its real content.
+   - Keep a smaller dock-safe clearance only for the fixed bottom sidebar.
+   - Do not inject an extra spacer inside the final page card/panel.
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    --mobile-page-end-clearance: calc(98px + env(safe-area-inset-bottom, 0px));
-    --mobile-page-focus-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
+    --mobile-page-end-clearance: calc(56px + env(safe-area-inset-bottom, 0px));
+    --mobile-page-focus-clearance: calc(104px + env(safe-area-inset-bottom, 0px));
     --mobile-main-bottom-space: var(--mobile-page-end-clearance);
     --mobile-dock-safe-clearance: var(--mobile-page-end-clearance);
     --mobile-dock-safe-focus-clearance: var(--mobile-page-focus-clearance);
@@ -3113,6 +3114,12 @@ input.ops-auto-dir-rtl{
 
   body:not(.emails-page) .main-content > main > :last-child{
     scroll-margin-bottom: var(--mobile-page-focus-clearance) !important;
+  }
+
+  .main-content > main.container-full-width > .home-grid > :last-child::after{
+    content: none !important;
+    display: none !important;
+    height: 0 !important;
   }
 
   .proposals-page .products-shell.proposals-shell{
