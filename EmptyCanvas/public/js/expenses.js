@@ -1694,6 +1694,31 @@ function buildExpenseOrderTypeChipHtml(type, { className = "order-select__chip",
   `;
 }
 
+function getExpenseOrderCreatorName(item) {
+  const candidates = [
+    item?.createdByName,
+    item?.creatorName,
+    item?.createdBy,
+    item?.requestedByName,
+    item?.teamMemberName,
+    item?.ownerName,
+  ];
+
+  for (const value of candidates) {
+    const name = String(value || "").trim();
+    if (name) return name;
+  }
+
+  return "";
+}
+
+function buildExpenseOrderCreatorLabelHtml(item) {
+  if (!item || item?.isManualReason || isOtherReasonExpenseOrderId(item?.id)) return "";
+  const creatorName = getExpenseOrderCreatorName(item);
+  if (!creatorName) return "";
+  return `<span class="order-select__creator-label">${escapeHtml(creatorName)}</span>`;
+}
+
 function buildExpenseOrderSummaryHtml(item) {
   if (!item) return "";
   const isManualReason = !!item?.isManualReason || isOtherReasonExpenseOrderId(item?.id);
@@ -1703,7 +1728,10 @@ function buildExpenseOrderSummaryHtml(item) {
   const chipLabel = isManualReason ? "Manual" : "";
   return `
     <span class="order-summary-inline">
-      <span class="order-summary-inline__id">${escapeHtml(orderId)}</span>
+      <span class="order-select__option-heading">
+        <span class="order-summary-inline__id">${escapeHtml(orderId)}</span>
+        ${buildExpenseOrderCreatorLabelHtml(item)}
+      </span>
       ${buildExpenseOrderTypeChipHtml(item?.orderType, {
         className: "order-select__chip order-select__chip--selected",
         label: chipLabel,
@@ -2176,7 +2204,10 @@ function renderExpenseOrderDropdown() {
         title="${escapeHtml(formatExpenseOrderLabel(item))}"
       >
         <span class="order-select__option-main">
-          <span class="order-select__option-id">${escapeHtml(orderId)}</span>
+          <span class="order-select__option-heading">
+            <span class="order-select__option-id">${escapeHtml(orderId)}</span>
+            ${buildExpenseOrderCreatorLabelHtml(item)}
+          </span>
         </span>
         ${buildExpenseOrderTypeChipHtml(item?.orderType, { label: chipLabel })}
       </button>
