@@ -1,6 +1,6 @@
 // Bump this value whenever we change static assets (CSS/JS/images)
 // so existing installs don't keep serving stale cached files.
-const CACHE_NAME = "ops-static-vv31-mobile-normal-page";
+const CACHE_NAME = "ops-static-vv28-mobile-measured-scroll";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
