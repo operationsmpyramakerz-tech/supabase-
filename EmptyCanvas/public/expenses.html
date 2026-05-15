@@ -2565,6 +2565,268 @@ body.expense-shots-modal-open{
   }
 }
 
+
+
+/* Expenses main card: premium wallet-card layout matching the provided reference while keeping the current color palette */
+.expenses-layout > .total-card{
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  min-height: 292px;
+  padding: 1.65rem 1.55rem 6.05rem;
+  border-radius: 34px;
+  margin-bottom: 2.35rem;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(151, 185, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 86% 18%, rgba(56, 189, 248, 0.12), transparent 28%),
+    linear-gradient(135deg, #07122b 0%, #0b1a3c 58%, #08142f 100%);
+  box-shadow: 0 20px 42px rgba(3, 10, 24, 0.23), 0 34px 68px rgba(7, 18, 43, 0.24);
+}
+
+.expenses-layout > .total-card::before{
+  z-index: 0;
+}
+
+.expenses-layout > .total-card::after{
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: min(42%, 214px);
+  height: 104px;
+  border-top-left-radius: 42px;
+  background: #fff;
+  box-shadow: -10px -10px 0 rgba(255, 255, 255, 0.98);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.expenses-layout > .total-card > *{
+  position: relative;
+  z-index: 2;
+}
+
+.expenses-layout .total-card__grid{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.42fr);
+  gap: 1.05rem;
+  align-items: start;
+}
+
+.expenses-layout .total-card__main{
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.expenses-layout .total-label{
+  font-size: 1rem;
+  font-weight: 750;
+  opacity: 0.88;
+  margin-bottom: 0.42rem;
+}
+
+.expenses-layout .total-amount{
+  font-size: clamp(3.15rem, 9.4vw, 5.35rem);
+  line-height: 0.92;
+  margin: 0.12rem 0 0;
+  letter-spacing: -0.065em;
+}
+
+.expenses-layout .total-currency{
+  margin-top: 0.42rem;
+  font-size: 1rem;
+  opacity: 0.92;
+}
+
+.expenses-layout .total-card__side{
+  display: flex;
+  flex-direction: column;
+  gap: 0.78rem;
+  align-self: start;
+}
+
+.expenses-layout .summary-pill{
+  min-height: 78px;
+  padding: 0.92rem 1.02rem;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
+  box-shadow: 0 12px 26px rgba(15,23,42,0.14), inset 0 1px 0 rgba(255,255,255,0.76);
+}
+
+.expenses-layout .summary-pill__label{
+  font-size: 0.9rem;
+}
+
+.expenses-layout .summary-pill__value{
+  font-size: 1.06rem;
+}
+
+.expenses-layout .total-card__actions{
+  position: absolute;
+  left: 1.55rem;
+  right: 1.2rem;
+  bottom: -0.85rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: end;
+  margin: 0;
+  z-index: 3;
+}
+
+.expenses-layout .settle-btn{
+  grid-column: 2;
+  min-width: 176px;
+  min-height: 82px;
+  padding: 0.9rem 1.18rem;
+  border-radius: 26px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, #111827 0%, #080a0f 100%);
+  color: #fff;
+  font-size: 0.98rem;
+  font-weight: 850;
+  box-shadow: 0 18px 34px rgba(0,0,0,0.24), 0 8px 18px rgba(7,18,43,0.22);
+  backdrop-filter: none;
+}
+
+.expenses-layout .last-settled{
+  grid-column: 1;
+  justify-self: start;
+  align-self: end;
+  min-width: min(250px, 100%);
+  min-height: 66px;
+  padding: 0.76rem 0.98rem;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.1);
+  align-items: flex-start;
+  text-align: left;
+}
+
+.expenses-layout .last-settled__date{
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.expenses-layout .last-settled__receipt{
+  font-size: 0.76rem;
+}
+
+@media (max-width: 768px){
+  .expenses-layout > .total-card{
+    width: calc(100% - 0.35rem);
+    max-width: calc(100% - 0.35rem);
+    min-height: 258px;
+    padding: 1.36rem 1.05rem 5.45rem;
+    border-radius: 30px;
+    margin-bottom: 1.95rem;
+  }
+
+  .expenses-layout > .total-card::after{
+    width: min(44%, 190px);
+    height: 92px;
+    border-top-left-radius: 38px;
+    box-shadow: -8px -8px 0 rgba(255,255,255,0.98);
+  }
+
+  .expenses-layout .total-card__grid{
+    grid-template-columns: minmax(0, 1fr) minmax(126px, 0.42fr);
+    gap: 0.78rem;
+  }
+
+  .expenses-layout .total-card__main{
+    min-height: 132px;
+  }
+
+  .expenses-layout .total-label{
+    font-size: 0.88rem;
+    margin-bottom: 0.28rem;
+  }
+
+  .expenses-layout .total-amount{
+    font-size: clamp(3rem, 14vw, 4.35rem);
+  }
+
+  .expenses-layout .total-currency{
+    font-size: 0.86rem;
+    margin-top: 0.3rem;
+  }
+
+  .expenses-layout .total-card__side{
+    gap: 0.62rem;
+  }
+
+  .expenses-layout .summary-pill{
+    min-height: 66px;
+    padding: 0.72rem 0.82rem;
+    border-radius: 21px;
+  }
+
+  .expenses-layout .summary-pill__label{
+    font-size: 0.78rem;
+  }
+
+  .expenses-layout .summary-pill__value{
+    font-size: 0.92rem;
+  }
+
+  .expenses-layout .total-card__actions{
+    left: 1.05rem;
+    right: 0.88rem;
+    bottom: -0.72rem;
+    gap: 0.68rem;
+  }
+
+  .expenses-layout .settle-btn{
+    min-width: 148px;
+    min-height: 70px;
+    padding: 0.74rem 0.86rem;
+    border-radius: 22px;
+    font-size: 0.84rem;
+    line-height: 1.18;
+  }
+
+  .expenses-layout .last-settled{
+    min-width: 0;
+    max-width: 54%;
+    min-height: 58px;
+    padding: 0.66rem 0.72rem;
+    border-radius: 19px;
+  }
+
+  .expenses-layout .last-settled__date{
+    font-size: 0.78rem;
+    line-height: 1.24;
+  }
+
+  .expenses-layout .last-settled__receipt{
+    font-size: 0.66rem;
+  }
+}
+
+@media (max-width: 390px){
+  .expenses-layout > .total-card{
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
+  }
+
+  .expenses-layout .total-card__grid{
+    grid-template-columns: minmax(0, 1fr) 118px;
+    gap: 0.62rem;
+  }
+
+  .expenses-layout .summary-pill{
+    min-height: 62px;
+    padding: 0.64rem 0.72rem;
+  }
+
+  .expenses-layout .settle-btn{
+    min-width: 138px;
+    min-height: 66px;
+  }
+}
 </style>
 
 </head>
