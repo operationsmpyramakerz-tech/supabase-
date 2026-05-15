@@ -4300,6 +4300,23 @@ function shouldSkipOpsPersistentShellHostForCurrentPage() {
   return false;
 }
 
+function setOpsShellHiddenElement(el, hidden) {
+  if (!el) return;
+  try { el.hidden = !!hidden; } catch {}
+  try {
+    if (hidden) {
+      el.setAttribute('aria-hidden', 'true');
+      // Some page-level CSS uses display: ... !important on <main>.
+      // Use an inline !important display override so the legacy page cannot
+      // remain visible underneath the iframe after a hard refresh.
+      el.style.setProperty('display', 'none', 'important');
+    } else {
+      el.removeAttribute('aria-hidden');
+      el.style.removeProperty('display');
+    }
+  } catch {}
+}
+
 function initOpsPersistentShellHost() {
   if (window.__opsShellHostInitialized) return;
   if (isOpsShellEmbeddedMode()) return;
@@ -4312,7 +4329,10 @@ function initOpsPersistentShellHost() {
     try {
       document.body.classList.remove('page-shell-host');
       document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
-      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => el.removeAttribute('data-ops-shell-legacy'));
+      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
+        el.removeAttribute('data-ops-shell-legacy');
+        setOpsShellHiddenElement(el, false);
+      });
     } catch {}
     return;
   }
@@ -4329,7 +4349,7 @@ function initOpsPersistentShellHost() {
 
   const hostMain = document.createElement('main');
   hostMain.className = 'ops-shell-host-main';
-  hostMain.hidden = true;
+  setOpsShellHiddenElement(hostMain, true);
   hostMain.innerHTML = `
     <div class="ops-shell-frame-wrap is-loading">
       <div class="ops-shell-loading" aria-live="polite">
@@ -4360,8 +4380,8 @@ function initOpsPersistentShellHost() {
     frame.classList.remove('is-ready');
     frame.style.visibility = 'hidden';
     if (hideLegacy) {
-      legacyMain.hidden = true;
-      hostMain.hidden = false;
+      setOpsShellHiddenElement(legacyMain, true);
+      setOpsShellHiddenElement(hostMain, false);
     }
   };
 
@@ -4381,8 +4401,8 @@ function initOpsPersistentShellHost() {
     state.requestedPath = null;
 
     applyOpsShellChrome(meta);
-    legacyMain.hidden = true;
-    hostMain.hidden = false;
+    setOpsShellHiddenElement(legacyMain, true);
+    setOpsShellHiddenElement(hostMain, false);
     frameWrap.classList.remove('is-loading');
     frame.style.visibility = 'visible';
     frame.classList.add('is-ready');
