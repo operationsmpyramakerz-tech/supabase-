@@ -5291,22 +5291,22 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     const dialog = closeBtn.closest?.(".co-modal-dialog");
     if (!dialog) return;
 
-    dialog.addEventListener("pointerup", (e) => {
+    // Close on the final click event, not on pointerup/touchend.
+    // Closing on pointerup can remove the modal before the browser fires click,
+    // causing the same tap to activate an element underneath the modal on mobile.
+    dialog.addEventListener("click", (e) => {
       if (!isPointInsideElement(e, closeBtn)) return;
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       closeFn();
     }, true);
-
-    dialog.addEventListener("touchend", (e) => {
-      if (!isPointInsideElement(e, closeBtn)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      closeFn();
-    }, { capture: true, passive: false });
   }
 
-  modalClose?.addEventListener("click", closeOrderModal);
+  modalClose?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeOrderModal();
+  });
   bindOrderModalCloseHitArea(modalClose, closeOrderModal);
   modalMoreBtn?.addEventListener("click", (e) => {
     e.preventDefault();
