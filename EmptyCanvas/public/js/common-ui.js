@@ -4300,26 +4300,45 @@ function shouldSkipOpsPersistentShellHostForCurrentPage() {
   return false;
 }
 
-function setOpsShellHiddenElement(el, hidden) {
-  if (!el) return;
-  try { el.hidden = !!hidden; } catch {}
+
+function shouldSkipOpsPersistentShellHostForFreshLoad() {
   try {
-    if (hidden) {
-      el.setAttribute('aria-hidden', 'true');
-      // Some page-level CSS uses display: ... !important on <main>.
-      // Use an inline !important display override so the legacy page cannot
-      // remain visible underneath the iframe after a hard refresh.
-      el.style.setProperty('display', 'none', 'important');
-    } else {
-      el.removeAttribute('aria-hidden');
-      el.style.removeProperty('display');
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('_fresh') === '1' || params.has('_refresh')) return true;
+  } catch {}
+
+  try {
+    const markerKey = 'ops.hardRefresh.pendingAt';
+    const ts = Number(sessionStorage.getItem(markerKey) || 0);
+    if (ts && Number.isFinite(ts)) {
+      const age = Date.now() - ts;
+      if (age >= 0 && age <= (90 * 1000)) return true;
     }
   } catch {}
+
+  return false;
 }
 
 function initOpsPersistentShellHost() {
   if (window.__opsShellHostInitialized) return;
   if (isOpsShellEmbeddedMode()) return;
+
+  // During the first load after Hard Refresh, do not boot the persistent
+  // iframe shell. The top window already reloads, and loading the same page
+  // again inside the iframe can show a second native loading/progress line
+  // across the mobile header on Android. The normal page stays fully usable;
+  // the shell is available again on the next regular page load.
+  if (shouldSkipOpsPersistentShellHostForFreshLoad()) {
+    try {
+      document.body.classList.remove('page-shell-host');
+      document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
+      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
+        el.removeAttribute('data-ops-shell-legacy');
+        setOpsShellHiddenElement(el, false);
+      });
+    } catch {}
+    return;
+  }
 
   // The Emails page already has its own full layout and mobile dock.
   // Creating a persistent iframe shell on a direct /messages refresh makes
@@ -4329,10 +4348,7 @@ function initOpsPersistentShellHost() {
     try {
       document.body.classList.remove('page-shell-host');
       document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
-      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
-        el.removeAttribute('data-ops-shell-legacy');
-        setOpsShellHiddenElement(el, false);
-      });
+      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => el.removeAttribute('data-ops-shell-legacy'));
     } catch {}
     return;
   }
@@ -4349,7 +4365,7 @@ function initOpsPersistentShellHost() {
 
   const hostMain = document.createElement('main');
   hostMain.className = 'ops-shell-host-main';
-  setOpsShellHiddenElement(hostMain, true);
+  hostMain.hidden = true;
   hostMain.innerHTML = `
     <div class="ops-shell-frame-wrap is-loading">
       <div class="ops-shell-loading" aria-live="polite">
@@ -4380,8 +4396,8 @@ function initOpsPersistentShellHost() {
     frame.classList.remove('is-ready');
     frame.style.visibility = 'hidden';
     if (hideLegacy) {
-      setOpsShellHiddenElement(legacyMain, true);
-      setOpsShellHiddenElement(hostMain, false);
+      legacyMain.hidden = true;
+      hostMain.hidden = false;
     }
   };
 
@@ -4401,8 +4417,8 @@ function initOpsPersistentShellHost() {
     state.requestedPath = null;
 
     applyOpsShellChrome(meta);
-    setOpsShellHiddenElement(legacyMain, true);
-    setOpsShellHiddenElement(hostMain, false);
+    legacyMain.hidden = true;
+    hostMain.hidden = false;
     frameWrap.classList.remove('is-loading');
     frame.style.visibility = 'visible';
     frame.classList.add('is-ready');
