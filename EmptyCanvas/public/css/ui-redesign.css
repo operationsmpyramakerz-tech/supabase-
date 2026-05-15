@@ -3135,11 +3135,10 @@ input.ops-auto-dir-rtl{
 }
 
 /* =========================================================
-   Home mobile scroll viewport fix
-   - Only Home: keep the page scroll area between the header
-     and the top edge of the mobile bottom dock.
-   - Do not change the dock background/shape; just constrain
-     the Home main scroller and remove the internal bottom spacer.
+   Home mobile dock vertical balance
+   - Home only: keep the scroller ending above the dock, then lower the
+     floating bottom dock slightly so the gap above and below it is balanced.
+   - Does not change the dock background or any other page spacing.
    ========================================================= */
 @media (max-width: 768px){
   body.page-home .main-content{
@@ -3156,4 +3155,11 @@ input.ops-auto-dir-rtl{
     padding-bottom: 0 !important;
     scroll-padding-bottom: 0 !important;
   }
+
+  body.page-home .sidebar,
+  body.page-home.sidebar-collapsed .sidebar,
+  body.page-home .sidebar.mobile-dock-structured-host{
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 9px) !important;
+  }
 }
+
