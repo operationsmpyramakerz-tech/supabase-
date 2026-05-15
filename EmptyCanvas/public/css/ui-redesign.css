@@ -3135,17 +3135,30 @@ input.ops-auto-dir-rtl{
 }
 
 /* =========================================================
-   Home mobile dock vertical balance
-   - Home only: keep the scroller ending above the dock, then lower the
-     floating bottom dock slightly so the gap above and below it is balanced.
-   - Does not change the dock background or any other page spacing.
+   Global mobile viewport scroller + dock balance
+   - Apply the approved Home behavior to all dashboard pages.
+   - The page scroller starts below the fixed header and ends above the
+     floating bottom dock, so the last content row reaches the dock top
+     without creating a large white scroll tail.
+   - Keep the bottom dock background/shape unchanged; only its vertical
+     position is balanced.
    ========================================================= */
 @media (max-width: 768px){
-  body.page-home .main-content{
+  .main-content,
+  body.shell-embedded .main-content{
     padding-bottom: calc(98px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
-  body.page-home .main-content > main.container-full-width{
+  .main-content > main,
+  .main-content > main.container,
+  .main-content > main.container-full-width,
+  .main-content > main.page-body,
+  .main-content > main.tasks-v2-main,
+  body.shell-embedded .main-content > main,
+  body.shell-embedded .main-content > main.container,
+  body.shell-embedded .main-content > main.container-full-width,
+  body.shell-embedded .main-content > main.page-body,
+  body.shell-embedded .main-content > main.tasks-v2-main{
     flex: 1 1 auto !important;
     min-height: 0 !important;
     height: auto !important;
@@ -3156,9 +3169,9 @@ input.ops-auto-dir-rtl{
     scroll-padding-bottom: 0 !important;
   }
 
-  body.page-home .sidebar,
-  body.page-home.sidebar-collapsed .sidebar,
-  body.page-home .sidebar.mobile-dock-structured-host{
+  .sidebar,
+  body.sidebar-collapsed .sidebar,
+  .sidebar.mobile-dock-structured-host{
     bottom: calc(env(safe-area-inset-bottom, 0px) + 9px) !important;
   }
 }
