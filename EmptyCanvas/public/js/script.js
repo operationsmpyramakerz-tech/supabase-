@@ -1769,8 +1769,39 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchAndDisplayOrders();
   setupSearch();
 
+  function isPointInsideElement(e, el) {
+    if (!e || !el) return false;
+    const point = e.changedTouches?.[0] || e.touches?.[0] || e;
+    const x = point.clientX;
+    const y = point.clientY;
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    const rect = el.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  function bindOrderModalCloseHitArea(closeBtn, closeFn) {
+    if (!closeBtn || typeof closeFn !== 'function') return;
+    const dialog = closeBtn.closest?.('.co-modal-dialog');
+    if (!dialog) return;
+
+    dialog.addEventListener('pointerup', (e) => {
+      if (!isPointInsideElement(e, closeBtn)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeFn();
+    }, true);
+
+    dialog.addEventListener('touchend', (e) => {
+      if (!isPointInsideElement(e, closeBtn)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeFn();
+    }, { capture: true, passive: false });
+  }
+
   // Modal wiring
   if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeOrderModal);
+  bindOrderModalCloseHitArea(modalCloseBtn, closeOrderModal);
   if (modalOverlay) {
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) closeOrderModal();
