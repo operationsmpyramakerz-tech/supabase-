@@ -1050,10 +1050,10 @@ body.co-modal-open{ overflow: hidden; }
 
 .co-modal-close{
   position: absolute;
-  top: 15px;
-  right: 15px;
-  width: 38px;
-  height: 38px;
+  top: 14px;
+  right: 14px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   border: 0;
   background: #F3F4F6;
@@ -1100,12 +1100,10 @@ body.co-modal-open{ overflow: hidden; }
 /* Fallback: show a visible X even if feather icons fail to render */
 .co-modal-close::before{
   content: "×";
-  display: block;
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1;
   font-weight: 800;
   color: currentColor;
-  transform: translateY(-1px);
 }
 
 .co-modal-status{
@@ -2338,27 +2336,6 @@ body.co-modal-open{ overflow: hidden; }
     flex: 1 1 140px;
     justify-content: center;
   }
-
-  body.order-modal-fit-screen .co-modal-close{
-    top: 14px;
-    right: 14px;
-    width: 34px;
-    height: 34px;
-  }
-
-  body.order-modal-fit-screen .co-modal-close::before{
-    font-size: 22px;
-  }
-
-  body.order-modal-fit-screen .co-modal-more{
-    top: 16px;
-    right: 54px;
-  }
-
-  body.order-modal-fit-screen .co-modal-more-btn{
-    width: 30px;
-    height: 30px;
-  }
 }
 
 @media (max-width: 420px){
@@ -2373,24 +2350,10 @@ body.co-modal-open{ overflow: hidden; }
   }
 
   body.order-modal-fit-screen .co-modal-close{
-    top: 14px;
-    right: 14px;
-    width: 34px;
-    height: 34px;
-  }
-
-  body.order-modal-fit-screen .co-modal-close::before{
-    font-size: 22px;
-  }
-
-  body.order-modal-fit-screen .co-modal-more{
-    top: 16px;
-    right: 54px;
-  }
-
-  body.order-modal-fit-screen .co-modal-more-btn{
-    width: 30px;
-    height: 30px;
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
   }
 
   body.order-modal-fit-screen .co-modal-archive{
@@ -7388,13 +7351,13 @@ body:not(.order-modal-fit-screen) .co-item-status{
 /* Operations Orders modal: compact actions menu */
 .co-modal-more{
   position:absolute;
-  top:19px;
-  right:62px;
+  top:18px;
+  right:74px;
   z-index:8;
 }
 .co-modal-more-btn{
-  width:30px;
-  height:30px;
+  width:28px;
+  height:28px;
   border:0;
   border-radius:10px;
   background:transparent;
@@ -7421,7 +7384,7 @@ body:not(.order-modal-fit-screen) .co-item-status{
   color:transparent;
   font-size:0;
   line-height:0;
-  box-shadow:0 -6px 0 #071022, 0 6px 0 #071022;
+  box-shadow:0 -7px 0 #071022, 0 7px 0 #071022;
 }
 .co-modal-more-btn svg{
   width:18px;
@@ -8507,45 +8470,103 @@ body:not(.order-modal-fit-screen) .co-item-status{
 }
 
 
-/* Orders Review modal: keep item Qty and action buttons on one compact row */
-body.order-modal-fit-screen .co-item-right .sv-review-item-actions{
-  width: auto !important;
-  max-width: none !important;
-  flex: 0 0 auto;
-  display: inline-flex;
+/* Order details header: centered title with left edit/actions and right close */
+.co-modal-dialog .co-modal-header{
+  min-height: 52px;
+  padding: 0 64px;
+  display: flex;
   align-items: center;
-  justify-content: flex-end !important;
-  gap: 8px;
-  margin-top: 0 !important;
+  justify-content: center;
+  text-align: center;
 }
-body.order-modal-fit-screen .co-item-right .sv-review-item-actions .btn{
-  width: auto !important;
-  flex: 0 0 auto !important;
-  min-width: 96px;
-  height: 36px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1;
+.co-modal-dialog .co-modal-head-left{
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.co-modal-dialog .co-modal-status{
+  width: 100%;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  text-align: center;
+  font-size: clamp(26px, 5vw, 36px);
+  line-height: 1.06;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.co-modal-dialog .co-modal-status-sub[hidden]{
+  display: none !important;
+}
+.co-modal-dialog .co-modal-close{
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
 }
-body.order-modal-fit-screen .co-item-right .sv-review-item-actions .btn svg{
-  width: 16px;
-  height: 16px;
+.co-modal-dialog .co-modal-close::before{
+  transform: none;
+}
+.co-modal-dialog .co-modal-more{
+  top: 18px;
+  left: 18px;
+  right: auto;
+}
+.co-modal-dialog .co-modal-more-btn{
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: #F3F4F6;
+  color: #071022;
+}
+.co-modal-dialog .co-modal-more-btn:hover,
+.co-modal-dialog .co-modal-more-btn:focus-visible{
+  background: #E5E7EB;
+}
+.co-modal-dialog .co-modal-more-btn svg{
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.6;
+}
+.co-modal-dialog .co-modal-more-panel{
+  left: 0;
+  right: auto;
+}
+@media (max-width: 768px){
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-header{
+    min-height: 48px;
+    padding: 0 58px;
+  }
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-status{
+    font-size: clamp(24px, 7vw, 34px);
+  }
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-close{
+    top: 14px;
+    right: 14px;
+    width: 38px;
+    height: 38px;
+  }
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-more{
+    top: 14px;
+    left: 14px;
+    right: auto;
+  }
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-more-btn{
+    width: 38px;
+    height: 38px;
+  }
 }
 @media (max-width: 380px){
-  body.order-modal-fit-screen .co-item-right .sv-review-item-actions{
-    gap: 6px;
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-header{
+    padding: 0 52px;
   }
-  body.order-modal-fit-screen .co-item-right .sv-review-item-actions .btn{
-    min-width: 86px;
-    height: 34px;
-    min-height: 34px;
-    padding: 0 10px;
-    font-size: 12.5px;
+  body.order-modal-fit-screen .co-modal-dialog .co-modal-status{
+    font-size: clamp(22px, 6.8vw, 30px);
   }
 }
