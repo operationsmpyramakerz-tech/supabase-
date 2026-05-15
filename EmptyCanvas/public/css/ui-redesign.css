@@ -3084,3 +3084,38 @@ input.ops-auto-dir-rtl{
     backdrop-filter: blur(10px) !important;
   }
 }
+
+/* =========================================================
+   Mobile page-end clearance trim
+   - The bottom dock is fixed; keep only the exact dock-height clearance.
+   - Removes the large empty white strip after the last page card/panel.
+   ========================================================= */
+@media (max-width: 768px){
+  :root{
+    --mobile-page-end-clearance: calc(98px + env(safe-area-inset-bottom, 0px));
+    --mobile-page-focus-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
+    --mobile-main-bottom-space: var(--mobile-page-end-clearance);
+    --mobile-dock-safe-clearance: var(--mobile-page-end-clearance);
+    --mobile-dock-safe-focus-clearance: var(--mobile-page-focus-clearance);
+    --mobile-content-dock-clearance: var(--mobile-page-end-clearance);
+    --mobile-content-focus-clearance: var(--mobile-page-focus-clearance);
+  }
+
+  body:not(.emails-page) .main-content > main,
+  body:not(.emails-page) .main-content > main.container,
+  body:not(.emails-page) .main-content > main.container-full-width,
+  body:not(.emails-page).shell-embedded .main-content > main,
+  body:not(.emails-page).shell-embedded .main-content > main.tasks-v2-main,
+  body:not(.emails-page).shell-embedded .main-content > main.container-full-width{
+    padding-bottom: var(--mobile-page-end-clearance) !important;
+    scroll-padding-bottom: var(--mobile-page-focus-clearance) !important;
+  }
+
+  body:not(.emails-page) .main-content > main > :last-child{
+    scroll-margin-bottom: var(--mobile-page-focus-clearance) !important;
+  }
+
+  .proposals-page .products-shell.proposals-shell{
+    padding-bottom: var(--mobile-page-end-clearance) !important;
+  }
+}
