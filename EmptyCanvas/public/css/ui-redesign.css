@@ -2646,8 +2646,8 @@ body.ops-hard-refresh-active{
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    --mobile-content-dock-clearance: calc(106px + env(safe-area-inset-bottom, 0px));
-    --mobile-content-focus-clearance: calc(126px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-dock-clearance: calc(118px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-focus-clearance: calc(150px + env(safe-area-inset-bottom, 0px));
     --mobile-main-bottom-space: max(14px, env(safe-area-inset-bottom, 0px));
   }
 
@@ -2956,9 +2956,8 @@ input.ops-auto-dir-rtl{
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    /* Bottom dock size: 80px height + 18px bottom offset + ~8px (2mm) breathing room. */
-    --mobile-dock-safe-clearance: calc(106px + env(safe-area-inset-bottom, 0px));
-    --mobile-dock-safe-focus-clearance: calc(126px + env(safe-area-inset-bottom, 0px));
+    --mobile-dock-safe-clearance: calc(132px + env(safe-area-inset-bottom, 0px));
+    --mobile-dock-safe-focus-clearance: calc(164px + env(safe-area-inset-bottom, 0px));
   }
 
   body:not(.proposals-page) .main-content > main,
@@ -3087,66 +3086,19 @@ input.ops-auto-dir-rtl{
 }
 
 /* =========================================================
-   Mobile page-end whitespace trim
-   - Removes the extra blank scroll area after the last page content.
-   - Keeps only a small natural gap; the fixed bottom dock still floats above.
-   - Order detail modals use the same compact end gap.
+   Mobile measured viewport scroller fix
+   - Removes the large white scroll tail that appears on Android/PWA first open.
+   - The page scroller is measured from the header bottom to the dock top.
+   - No dock background or content spacing is changed.
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    --mobile-page-end-gap: calc(32px + env(safe-area-inset-bottom, 0px));
-    --mobile-page-focus-gap: calc(126px + env(safe-area-inset-bottom, 0px));
-    --mobile-order-modal-end-gap: calc(12px + env(safe-area-inset-bottom, 0px));
+    --ops-mobile-scroll-area-height: calc(100dvh - var(--mobile-header-height, 140px) - 108px);
   }
 
-  body:not(.proposals-page) .main-content > main,
-  body:not(.proposals-page) .main-content > main.container,
-  body:not(.proposals-page) .main-content > main.container-full-width,
-  body:not(.proposals-page).shell-embedded .main-content > main,
-  body:not(.proposals-page).shell-embedded .main-content > main.tasks-v2-main,
-  body:not(.proposals-page).shell-embedded .main-content > main.container-full-width{
-    padding-bottom: var(--mobile-page-end-gap) !important;
-    scroll-padding-bottom: var(--mobile-page-focus-gap) !important;
-  }
-
-  body:not(.proposals-page) .main-content > main > :last-child{
-    scroll-margin-bottom: 0 !important;
-  }
-
-  .main-content > main.container-full-width > .home-grid::after,
-  .main-content > main.container-full-width > .home-grid > :last-child::after{
-    content: none !important;
-    display: none !important;
-    height: 0 !important;
-    min-height: 0 !important;
-  }
-
-  body.order-modal-fit-screen .co-modal-dialog{
-    scroll-padding-bottom: var(--mobile-page-focus-gap) !important;
-  }
-
-  body.order-modal-fit-screen .co-modal-dialog::after{
-    content: "";
-    display: block;
-    height: var(--mobile-order-modal-end-gap) !important;
-    min-height: var(--mobile-order-modal-end-gap) !important;
-    pointer-events: none;
-  }
-}
-
-/* =========================================================
-   Global mobile viewport scroller + dock balance
-   - Apply the approved Home behavior to all dashboard pages.
-   - The page scroller starts below the fixed header and ends above the
-     floating bottom dock, so the last content row reaches the dock top
-     without creating a large white scroll tail.
-   - Keep the bottom dock background/shape unchanged; only its vertical
-     position is balanced.
-   ========================================================= */
-@media (max-width: 768px){
   .main-content,
   body.shell-embedded .main-content{
-    padding-bottom: calc(98px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: 0 !important;
   }
 
   .main-content > main,
@@ -3159,20 +3111,26 @@ input.ops-auto-dir-rtl{
   body.shell-embedded .main-content > main.container-full-width,
   body.shell-embedded .main-content > main.page-body,
   body.shell-embedded .main-content > main.tasks-v2-main{
-    flex: 1 1 auto !important;
+    flex: 0 0 var(--ops-mobile-scroll-area-height) !important;
+    height: var(--ops-mobile-scroll-area-height) !important;
+    max-height: var(--ops-mobile-scroll-area-height) !important;
     min-height: 0 !important;
-    height: auto !important;
-    max-height: none !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     padding-bottom: 0 !important;
     scroll-padding-bottom: 0 !important;
   }
 
-  .sidebar,
-  body.sidebar-collapsed .sidebar,
-  .sidebar.mobile-dock-structured-host{
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 9px) !important;
+  .main-content > main > :last-child,
+  body:not(.proposals-page) .main-content > main > :last-child{
+    scroll-margin-bottom: 0 !important;
+  }
+
+  .main-content > main.container-full-width > .home-grid::after,
+  .main-content > main.container-full-width > .home-grid > :last-child::after{
+    content: none !important;
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
   }
 }
-
