@@ -555,24 +555,18 @@
     return meta.label && meta.label !== 'Order' ? meta.label : fallback;
   }
 
-  function orderTypeBadgeMeta(type, notionColor) {
-    const key = orderTypeKey(type);
-    const meta = orderTypeMeta(type, notionColor);
-    const labelMap = {
-      requestproducts: 'Request',
-      withdrawproducts: 'Withdrawal',
-      requestmaintenance: 'Maintenance',
-    };
-    return {
-      label: labelMap[key] || (meta.label && meta.label !== 'Order' ? meta.label : 'Order'),
-      bg: meta.bg,
-      fg: meta.fg,
-      bd: meta.bd,
-    };
-  }
-
   function orderTypeKey(type) {
     return String(type || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function orderTypeHeaderTitle(type, notionColor, fallback = 'Order') {
+    const key = orderTypeKey(type);
+    if (key === 'requestproducts') return 'Request';
+    if (key === 'withdrawproducts') return 'Withdrawal';
+    if (key === 'requestmaintenance') return 'Maintenance';
+
+    const label = orderTypeSubtitle(type, notionColor, fallback);
+    return label && label !== '—' ? label : fallback;
   }
 
   function normalizeTypeFilterValue(value) {
@@ -1504,10 +1498,10 @@
     const creatorName = String(group.createdByName || first.createdByName || '').trim() || '—';
     const creatorId = String(group.createdById || first.createdById || first.teamMemberId || '').trim();
 
-    const typeBadge = orderTypeBadgeMeta(
-      group.orderType || first.orderType,
-      group.orderTypeColor || first.orderTypeColor,
-    );
+    const statusVars = group.isArchived
+      ? { bg: '#F3E8FF', fg: '#6B21A8', bd: '#E9D5FF' }
+      : notionColorVars(group.approvalColor);
+    const displayStatus = group.isArchived ? 'Archive' : (group.approval || 'Not Started');
 
     const thumbHTML = orderTypeThumbMarkup(
       group.orderType || first.orderType,
@@ -1542,7 +1536,7 @@
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="--tag-bg:${typeBadge.bg};--tag-fg:${typeBadge.fg};--tag-border:${typeBadge.bd};">${escapeHTML(typeBadge.label)}</span>
+          <span class="co-status-btn" style="--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};">${escapeHTML(displayStatus)}</span>
           ${creatorButtonMarkup(creatorId, creatorName)}
         </div>
       </div>
@@ -1595,13 +1589,16 @@
     const modalItemsList = group.products || [];
     const firstItem = modalItemsList[0] || {};
     const isMaintenanceOrder = isMaintenanceOrderType(group.orderType || firstItem.orderType);
-    if (modalEls.title) modalEls.title.textContent = approval;
-    if (modalEls.sub) {
-      modalEls.sub.textContent = orderTypeSubtitle(
+    if (modalEls.title) {
+      modalEls.title.textContent = orderTypeHeaderTitle(
         group.orderType || firstItem.orderType,
         group.orderTypeColor || firstItem.orderTypeColor,
-        approvalSubtitle(approval),
+        approval || 'Order',
       );
+    }
+    if (modalEls.sub) {
+      modalEls.sub.textContent = '';
+      modalEls.sub.hidden = true;
     }
 
     // Tracking progress (operations status) — always show in all tabs

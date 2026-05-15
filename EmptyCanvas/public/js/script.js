@@ -302,24 +302,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return meta.label && meta.label !== 'Order' ? meta.label : fallback;
   }
 
-  function orderTypeBadgeMeta(type, notionColor) {
-    const key = orderTypeKey(type);
-    const meta = orderTypeMeta(type, notionColor);
-    const labelMap = {
-      requestproducts: 'Request',
-      withdrawproducts: 'Withdrawal',
-      requestmaintenance: 'Maintenance',
-    };
-    return {
-      label: labelMap[key] || (meta.label && meta.label !== 'Order' ? meta.label : 'Order'),
-      bg: meta.bg,
-      fg: meta.fg,
-      bd: meta.bd,
-    };
-  }
-
   function orderTypeKey(type) {
     return String(type || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function orderTypeHeaderTitle(type, notionColor, fallback = 'Order') {
+    const key = orderTypeKey(type);
+    if (key === 'requestproducts') return 'Request';
+    if (key === 'withdrawproducts') return 'Withdrawal';
+    if (key === 'requestmaintenance') return 'Maintenance';
+
+    const label = orderTypeSubtitle(type, notionColor, fallback);
+    return label && label !== '—' ? label : fallback;
   }
 
 
@@ -528,14 +522,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMaintenanceOrder = isMaintenanceOrderType(group?.orderType || items?.[0]?.orderType);
 
     // Populate header
-    if (modalEls.statusTitle) modalEls.statusTitle.textContent = stage.label;
-    if (modalEls.statusSub) {
+    if (modalEls.statusTitle) {
       const first = items[0] || {};
-      modalEls.statusSub.textContent = orderTypeSubtitle(
+      modalEls.statusTitle.textContent = orderTypeHeaderTitle(
         group?.orderType || first.orderType,
         group?.orderTypeColor || first.orderTypeColor,
-        stage.sub,
+        stage.label || 'Order',
       );
+    }
+    if (modalEls.statusSub) {
+      modalEls.statusSub.textContent = '';
+      modalEls.statusSub.hidden = true;
     }
 
     // In Current Orders we show Qty based on:
@@ -601,11 +598,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `<a class="co-item-link" href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><i data-feather="external-link"></i></a>`
             : '';
 
-          const typeBadge = orderTypeBadgeMeta(
-            group?.orderType || it.orderType || first.orderType,
-            group?.orderTypeColor || it.orderTypeColor || first.orderTypeColor,
-          );
-          const sStyle = `--tag-bg:${typeBadge.bg};--tag-fg:${typeBadge.fg};--tag-border:${typeBadge.bd};`;
+          const approvalLabel = it.svApproval || it.status || '—';
+          const approvalColor = it.svApprovalColor || it.statusColor;
+          const sVars = approvalLabelColorVars(approvalLabel, approvalColor);
+          const sStyle = `--tag-bg:${sVars.bg};--tag-fg:${sVars.fg};--tag-border:${sVars.bd};`;
 
           const row = document.createElement('div');
           row.className = 'co-item';
@@ -625,7 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
               ${isMaintenanceOrder
                 ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
                 : `<div class="co-item-total">Qty: ${qtyHTML}</div>`}
-              <div class="co-item-status" style="${sStyle}">${escapeHTML(typeBadge.label)}</div>
+              <div class="co-item-status" style="${sStyle}">${escapeHTML(approvalLabel)}</div>
             </div>
           `;
           frag.appendChild(row);
@@ -1554,11 +1550,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const created = fmtDateOnly(group.latestCreated);
     const stage = computeStage(items);
 
-    const typeBadge = orderTypeBadgeMeta(
-      group.orderType || first.orderType,
-      group.orderTypeColor || first.orderTypeColor,
-    );
-    const statusStyle = `--tag-bg:${typeBadge.bg};--tag-fg:${typeBadge.fg};--tag-border:${typeBadge.bd};`;
+    const statusVars = notionColorVars(stage.color);
+    const statusStyle = `--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};`;
 
     const title = escapeHTML(group.orderIdRange || group.reason);
 
@@ -1601,7 +1594,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(typeBadge.label)}</span>
+          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(stage.label)}</span>
           <span class="co-right-ico" aria-hidden="true"><i data-feather="percent"></i></span>
         </div>
       </div>
