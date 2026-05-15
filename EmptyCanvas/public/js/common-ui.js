@@ -4319,9 +4319,52 @@ function shouldSkipOpsPersistentShellHostForFreshLoad() {
   return false;
 }
 
+function shouldSkipOpsPersistentShellHostOnMobile() {
+  try {
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) return true;
+  } catch {}
+
+  try {
+    const visualWidth = Number(window.visualViewport?.width || 0);
+    if (visualWidth > 0 && visualWidth <= 768) return true;
+  } catch {}
+
+  try {
+    const layoutWidth = Math.min(
+      Number(window.innerWidth || 0) || Infinity,
+      Number(document.documentElement?.clientWidth || 0) || Infinity
+    );
+    if (Number.isFinite(layoutWidth) && layoutWidth <= 768) return true;
+  } catch {}
+
+  return false;
+}
+
+function restoreOpsPersistentShellHostNormalPage() {
+  try {
+    document.body.classList.remove('page-shell-host');
+    document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
+    document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
+      el.removeAttribute('data-ops-shell-legacy');
+      setOpsShellHiddenElement(el, false);
+    });
+  } catch {}
+}
+
 function initOpsPersistentShellHost() {
   if (window.__opsShellHostInitialized) return;
   if (isOpsShellEmbeddedMode()) return;
+
+  // On mobile, keep the app in normal page mode instead of booting the
+  // persistent iframe shell. The shell and the normal hard-refresh mode use
+  // slightly different viewport calculations on Android/PWA launch, which can
+  // make the bottom white scroll area large until a hard refresh. Normal page
+  // mode keeps first open and hard refresh identical while preserving all page
+  // features and bottom dock behavior.
+  if (shouldSkipOpsPersistentShellHostOnMobile()) {
+    restoreOpsPersistentShellHostNormalPage();
+    return;
+  }
 
   // During the first load after Hard Refresh, do not boot the persistent
   // iframe shell. The top window already reloads, and loading the same page
@@ -4329,14 +4372,7 @@ function initOpsPersistentShellHost() {
   // across the mobile header on Android. The normal page stays fully usable;
   // the shell is available again on the next regular page load.
   if (shouldSkipOpsPersistentShellHostForFreshLoad()) {
-    try {
-      document.body.classList.remove('page-shell-host');
-      document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
-      document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
-        el.removeAttribute('data-ops-shell-legacy');
-        setOpsShellHiddenElement(el, false);
-      });
-    } catch {}
+    restoreOpsPersistentShellHostNormalPage();
     return;
   }
 
