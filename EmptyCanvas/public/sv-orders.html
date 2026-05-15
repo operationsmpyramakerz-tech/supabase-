@@ -20,7 +20,7 @@
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
-  <link rel="stylesheet" href="/css/style.css?v=order-modal-compact-controls-v1"/>
+  <link rel="stylesheet" href="/css/style.css?v=order-modal-centered-header-v1"/>
   <link href="/css/ui-redesign.css?v=bidi-mixed-v1" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -155,7 +155,7 @@
   <div class="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="svModalTitle">
     <div class="co-modal-more" id="svModalMoreWrap" hidden>
       <button type="button" class="co-modal-more-btn" id="svModalMoreBtn" aria-label="Order review actions" aria-haspopup="menu" aria-expanded="false">
-        <span class="co-modal-more-dots" aria-hidden="true">⋮</span>
+        <i data-feather="edit-2" aria-hidden="true"></i>
       </button>
       <div class="co-modal-more-panel" id="svModalMorePanel" role="menu" aria-label="Order review actions" hidden>
         <button type="button" class="co-modal-more-item" id="svModalActionEdit" role="menuitem" data-sv-order-action="edit" hidden>
@@ -304,6 +304,6 @@
     })();
   </script>
   <!-- Controller -->
-  <script src="/js/sv-orders.js?v=review-compact-item-actions-v1"></script>
+  <script src="/js/sv-orders.js?v=review-edit-details-v1"></script>
 </body>
 </html>
