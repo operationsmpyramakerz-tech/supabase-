@@ -1578,6 +1578,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return meta.label && meta.label !== 'Order' ? meta.label : fallback;
   }
 
+  function orderTypeBadgeMeta(type, notionColor) {
+    const key = orderTypeKey(type);
+    const meta = orderTypeMeta(type, notionColor);
+    const labelMap = {
+      requestproducts: 'Request',
+      withdrawproducts: 'Withdrawal',
+      requestmaintenance: 'Maintenance',
+    };
+    return {
+      label: labelMap[key] || (meta.label && meta.label !== 'Order' ? meta.label : 'Order'),
+      bg: meta.bg,
+      fg: meta.fg,
+      bd: meta.bd,
+    };
+  }
+
   const moneyFmt = (() => {
     try {
       return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
@@ -3263,8 +3279,11 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     const stage = g.stage || computeStage(g.items || []);
-    const statusVars = notionColorVars(stage.color);
-    const statusStyle = `--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};`;
+    const typeBadge = orderTypeBadgeMeta(
+      g.orderType || first.orderType,
+      g.orderTypeColor || first.orderTypeColor,
+    );
+    const statusStyle = `--tag-bg:${typeBadge.bg};--tag-fg:${typeBadge.fg};--tag-border:${typeBadge.bd};`;
 
     const receivedBy = String(g.operationsByName || "").trim();
     const receivedLine = receivedBy
@@ -3316,7 +3335,7 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(stage.label)}</span>
+          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(typeBadge.label)}</span>
           ${creatorButtonMarkup(creatorId, createdByRaw)}
         </div>
       </div>
@@ -3630,15 +3649,17 @@ document.addEventListener("DOMContentLoaded", () => {
              </button>`
           : "";
 
-        const itemStatusLabel = String(it.status || stage.label || '—').trim() || '—';
-        const itemStatusVars = notionColorVars(it.statusColor || stage.color);
-        const itemStatusStyle = `--tag-bg:${itemStatusVars.bg};--tag-fg:${itemStatusVars.fg};--tag-border:${itemStatusVars.bd};`;
+        const typeBadge = orderTypeBadgeMeta(
+          group?.orderType || it.orderType || first.orderType,
+          group?.orderTypeColor || it.orderTypeColor || first.orderTypeColor,
+        );
+        const itemStatusStyle = `--tag-bg:${typeBadge.bg};--tag-fg:${typeBadge.fg};--tag-border:${typeBadge.bd};`;
         const subLine = isMaintenanceOrder ? '' : `Unit: ${fmtMoney(unit)} · Total: ${fmtMoney(total)}`;
         const rightRowHtml = isMaintenanceOrder
           ? ''
           : `
             <div class="co-item-right-row">
-              <div class="co-item-status" style="${itemStatusStyle}">${escapeHTML(itemStatusLabel)}</div>
+              <div class="co-item-status" style="${itemStatusStyle}">${escapeHTML(typeBadge.label)}</div>
               ${editBtnHTML}
             </div>
           `;
