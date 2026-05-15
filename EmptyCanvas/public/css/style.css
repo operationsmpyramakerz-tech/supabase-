@@ -8703,3 +8703,25 @@ body.order-modal-fit-screen .co-item-right:has(.sv-review-item-actions) .co-item
     font-size: 12.5px !important;
   }
 }
+
+
+/* Order modal close button fix: keep header text from blocking tap/click targets. */
+.co-modal-dialog .co-modal-header,
+.co-modal-dialog .co-modal-head-left,
+.co-modal-dialog .co-modal-status,
+.co-modal-dialog .co-modal-status-sub{
+  pointer-events: none !important;
+}
+.co-modal-dialog .co-modal-close,
+.co-modal-dialog .co-modal-more,
+.co-modal-dialog .co-modal-more-btn,
+.co-modal-dialog .co-modal-more-panel{
+  pointer-events: auto !important;
+}
+.co-modal-dialog .co-modal-close{
+  z-index: 40 !important;
+  touch-action: manipulation;
+}
+.co-modal-dialog .co-modal-more{
+  z-index: 39 !important;
+}
