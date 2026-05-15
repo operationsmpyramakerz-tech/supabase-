@@ -2646,8 +2646,8 @@ body.ops-hard-refresh-active{
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    --mobile-content-dock-clearance: calc(118px + env(safe-area-inset-bottom, 0px));
-    --mobile-content-focus-clearance: calc(150px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-dock-clearance: calc(106px + env(safe-area-inset-bottom, 0px));
+    --mobile-content-focus-clearance: calc(126px + env(safe-area-inset-bottom, 0px));
     --mobile-main-bottom-space: max(14px, env(safe-area-inset-bottom, 0px));
   }
 
@@ -2951,13 +2951,14 @@ input.ops-auto-dir-rtl{
    - Keep the final page content above the fixed mobile sidebar/dock.
    - Proposals already owns its page-specific bottom clearance, so it is
      excluded to avoid adding double empty space.
-   - Order detail modals should stay content-height only; do not add
-     dock clearance inside the modal because it creates empty space.
+   - Order detail modals also get internal scroll clearance so their last
+     rows/buttons can be scrolled above the dock.
    ========================================================= */
 @media (max-width: 768px){
   :root{
-    --mobile-dock-safe-clearance: calc(132px + env(safe-area-inset-bottom, 0px));
-    --mobile-dock-safe-focus-clearance: calc(164px + env(safe-area-inset-bottom, 0px));
+    /* Bottom dock size: 80px height + 18px bottom offset + ~8px (2mm) breathing room. */
+    --mobile-dock-safe-clearance: calc(106px + env(safe-area-inset-bottom, 0px));
+    --mobile-dock-safe-focus-clearance: calc(126px + env(safe-area-inset-bottom, 0px));
   }
 
   body:not(.proposals-page) .main-content > main,
@@ -2975,14 +2976,14 @@ input.ops-auto-dir-rtl{
   }
 
   body.order-modal-fit-screen .co-modal-dialog{
-    scroll-padding-bottom: 16px !important;
+    scroll-padding-bottom: var(--mobile-dock-safe-focus-clearance) !important;
   }
 
   body.order-modal-fit-screen .co-modal-dialog::after{
-    content: none !important;
-    display: none !important;
-    height: 0 !important;
-    min-height: 0 !important;
+    content: "";
+    display: block;
+    height: var(--mobile-dock-safe-clearance);
+    min-height: var(--mobile-dock-safe-clearance);
     pointer-events: none;
   }
 }
@@ -3082,47 +3083,5 @@ input.ops-auto-dir-rtl{
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
     background: linear-gradient(180deg, rgba(255,255,255,0.82), #ffffff 48%) !important;
     backdrop-filter: blur(10px) !important;
-  }
-}
-
-/* =========================================================
-   Mobile page-end clearance rebalance
-   - The page itself should not scroll past its real content.
-   - Keep a smaller dock-safe clearance only for the fixed bottom sidebar.
-   - Do not inject an extra spacer inside the final page card/panel.
-   ========================================================= */
-@media (max-width: 768px){
-  :root{
-    --mobile-page-end-clearance: calc(56px + env(safe-area-inset-bottom, 0px));
-    --mobile-page-focus-clearance: calc(104px + env(safe-area-inset-bottom, 0px));
-    --mobile-main-bottom-space: var(--mobile-page-end-clearance);
-    --mobile-dock-safe-clearance: var(--mobile-page-end-clearance);
-    --mobile-dock-safe-focus-clearance: var(--mobile-page-focus-clearance);
-    --mobile-content-dock-clearance: var(--mobile-page-end-clearance);
-    --mobile-content-focus-clearance: var(--mobile-page-focus-clearance);
-  }
-
-  body:not(.emails-page) .main-content > main,
-  body:not(.emails-page) .main-content > main.container,
-  body:not(.emails-page) .main-content > main.container-full-width,
-  body:not(.emails-page).shell-embedded .main-content > main,
-  body:not(.emails-page).shell-embedded .main-content > main.tasks-v2-main,
-  body:not(.emails-page).shell-embedded .main-content > main.container-full-width{
-    padding-bottom: var(--mobile-page-end-clearance) !important;
-    scroll-padding-bottom: var(--mobile-page-focus-clearance) !important;
-  }
-
-  body:not(.emails-page) .main-content > main > :last-child{
-    scroll-margin-bottom: var(--mobile-page-focus-clearance) !important;
-  }
-
-  .main-content > main.container-full-width > .home-grid > :last-child::after{
-    content: none !important;
-    display: none !important;
-    height: 0 !important;
-  }
-
-  .proposals-page .products-shell.proposals-shell{
-    padding-bottom: var(--mobile-page-end-clearance) !important;
   }
 }
