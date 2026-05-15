@@ -1660,7 +1660,7 @@
             : `<strong data-role="qty-val">${escapeHTML(fmtQty(qtyReq))}</strong>`;
 
           const actionButtons = canAct && !isMaintenanceOrder ? `
-            <div class="btn-group" style="justify-content:flex-end; margin-top:8px;">
+            <div class="btn-group sv-review-item-actions">
               <button class="btn btn-warning btn-xs sv-edit" data-id="${escapeHTML(it.id)}" title="Edit qty">
                 <i data-feather="edit-2"></i> Edit
               </button>
@@ -1708,6 +1708,8 @@
     lastFocusEl = document.activeElement;
     renderModal(group);
 
+    const modalDialog = modalOverlay.querySelector?.(".co-modal-dialog");
+    if (modalDialog) modalDialog.scrollTop = 0;
     modalOverlay.classList.add("is-open");
     modalOverlay.setAttribute("aria-hidden", "false");
     document.body.classList.add("co-modal-open");

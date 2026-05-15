@@ -3680,6 +3680,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Open
+    const modalDialog = orderModal.querySelector?.(".co-modal-dialog");
+    if (modalDialog) modalDialog.scrollTop = 0;
     orderModal.classList.add("is-open");
     document.body.classList.add("co-modal-open");
     orderModal.setAttribute("aria-hidden", "false");

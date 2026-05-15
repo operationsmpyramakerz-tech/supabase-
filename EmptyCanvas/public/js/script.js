@@ -637,6 +637,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Show
     lastFocusEl = document.activeElement;
+    const modalDialog = modalOverlay.querySelector?.('.co-modal-dialog');
+    if (modalDialog) modalDialog.scrollTop = 0;
     modalOverlay.classList.add('is-open');
     modalOverlay.setAttribute('aria-hidden', 'false');
     document.body.classList.add('co-modal-open');
