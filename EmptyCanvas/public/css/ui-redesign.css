@@ -3085,3 +3085,51 @@ input.ops-auto-dir-rtl{
     backdrop-filter: blur(10px) !important;
   }
 }
+
+/* =========================================================
+   Mobile page-end whitespace trim
+   - Removes the extra blank scroll area after the last page content.
+   - Keeps only a small natural gap; the fixed bottom dock still floats above.
+   - Order detail modals use the same compact end gap.
+   ========================================================= */
+@media (max-width: 768px){
+  :root{
+    --mobile-page-end-gap: calc(32px + env(safe-area-inset-bottom, 0px));
+    --mobile-page-focus-gap: calc(126px + env(safe-area-inset-bottom, 0px));
+    --mobile-order-modal-end-gap: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body:not(.proposals-page) .main-content > main,
+  body:not(.proposals-page) .main-content > main.container,
+  body:not(.proposals-page) .main-content > main.container-full-width,
+  body:not(.proposals-page).shell-embedded .main-content > main,
+  body:not(.proposals-page).shell-embedded .main-content > main.tasks-v2-main,
+  body:not(.proposals-page).shell-embedded .main-content > main.container-full-width{
+    padding-bottom: var(--mobile-page-end-gap) !important;
+    scroll-padding-bottom: var(--mobile-page-focus-gap) !important;
+  }
+
+  body:not(.proposals-page) .main-content > main > :last-child{
+    scroll-margin-bottom: 0 !important;
+  }
+
+  .main-content > main.container-full-width > .home-grid::after,
+  .main-content > main.container-full-width > .home-grid > :last-child::after{
+    content: none !important;
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+  }
+
+  body.order-modal-fit-screen .co-modal-dialog{
+    scroll-padding-bottom: var(--mobile-page-focus-gap) !important;
+  }
+
+  body.order-modal-fit-screen .co-modal-dialog::after{
+    content: "";
+    display: block;
+    height: var(--mobile-order-modal-end-gap) !important;
+    min-height: var(--mobile-order-modal-end-gap) !important;
+    pointer-events: none;
+  }
+}
