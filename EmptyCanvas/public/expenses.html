@@ -1230,29 +1230,26 @@
   }
   .order-select__option{
     width:100%;
-    border:1px solid #eef2f7;
+    border:none;
     background:#fff;
-    padding:0.98rem 1rem;
-    border-radius:18px;
+    padding:0.9rem 0.95rem;
+    border-radius:16px;
     display:flex;
     align-items:center;
     justify-content:space-between;
     gap:0.8rem;
     cursor:pointer;
     text-align:left;
-    box-shadow:0 10px 24px rgba(15,23,42,0.08);
-    transition:transform .12s ease, background .12s ease, box-shadow .12s ease, border-color .12s ease;
+    transition:transform .12s ease, background .12s ease, box-shadow .12s ease;
   }
   .order-select__option:hover{
     background:#f8fbff;
-    border-color:#dbeafe;
-    box-shadow:0 16px 30px rgba(37,99,235,0.13);
+    box-shadow:0 8px 18px rgba(37,99,235,0.10);
     transform:translateY(-1px);
   }
   .order-select__option.is-selected{
     background:#eff6ff;
-    border-color:#bfdbfe;
-    box-shadow:0 14px 28px rgba(37,99,235,0.12), inset 0 0 0 1px #bfdbfe;
+    box-shadow:inset 0 0 0 1px #bfdbfe;
   }
   .order-select__option-main{
     min-width:0;
@@ -1260,30 +1257,6 @@
     display:flex;
     align-items:center;
     gap:0.7rem;
-  }
-  .order-select__option-heading{
-    min-width:0;
-    display:flex;
-    align-items:center;
-    gap:0.55rem;
-    flex-wrap:wrap;
-  }
-  .order-select__creator-label{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    max-width:155px;
-    padding:0.35rem 0.62rem;
-    border-radius:999px;
-    background:#111827;
-    color:#ffffff;
-    font-size:0.74rem;
-    font-weight:850;
-    line-height:1.15;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    box-shadow:0 8px 18px rgba(15,23,42,0.14);
   }
   .order-select__option-id{
     min-width:0;
@@ -1523,10 +1496,6 @@
     .order-summary-inline{
       flex-wrap:wrap;
       align-items:flex-start;
-    }
-    .order-select__creator-label{
-      max-width:100%;
-      font-size:0.72rem;
     }
     .funds-type-summary{
       flex-wrap:wrap;
@@ -2786,6 +2755,7 @@ body.expense-shots-modal-open{
   <div class="ex-modal-box ex-modal-box--compact">
 
     <h3 class="ex-modal-title">Choose Order</h3>
+    <p class="order-picker-hint">Select the order and date first, then add one or more expenses before confirming.</p>
 
     <label class="field-label"><i data-feather="file-text"></i> Order <span class="req-star">*</span></label>
     <div id="cashOutOrderPicker" class="order-select">
@@ -3021,7 +2991,7 @@ body.expense-shots-modal-open{
 
 
 <script>if (window.feather) feather.replace();</script>
-<script src="/js/common-ui.js?v=shell-hard-refresh-fix-v1"></script>
+<script src="/js/common-ui.js?v=hard-refresh-loading-bars-fix-v1"></script>
 <script src="/js/expenses.js?v=no-data-empty-v1"></script>
 
   

@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-static-vv58-shell-hard-refresh-fix";
+const CACHE_NAME = "ops-static-vv59-hard-refresh-loading-bars-fix";
 
 const PRECACHE_URLS = [
   "/pwa-start",
