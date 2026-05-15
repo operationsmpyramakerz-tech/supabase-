@@ -1902,7 +1902,6 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/tasks', label: 'Tasks', icon: 'check-square' });
 
   syncMobileDockStructure();
-  initMobileScrollViewportSizing();
 
   // UI Redesign: sidebar tooltips (labels are hidden in the new style)
   ensureNavTooltips();
@@ -1920,7 +1919,6 @@ if (document.querySelector('.sidebar')) {
     resizeTimer = setTimeout(() => {
       applyInitial();
       syncMobileDockStructure();
-      syncMobileScrollViewport();
     }, 150);
   });
 
@@ -1931,131 +1929,6 @@ if (document.querySelector('.sidebar')) {
   }, 0);
 });
 
-
-
-function isOpsMobileViewportMode() {
-  try {
-    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) return true;
-  } catch {}
-
-  try {
-    const visualWidth = Number(window.visualViewport?.width || 0);
-    if (visualWidth > 0 && visualWidth <= 768) return true;
-  } catch {}
-
-  try {
-    const layoutWidth = Math.min(
-      Number(window.innerWidth || 0) || Infinity,
-      Number(document.documentElement?.clientWidth || 0) || Infinity
-    );
-    if (Number.isFinite(layoutWidth) && layoutWidth <= 768) return true;
-  } catch {}
-
-  return false;
-}
-
-function readOpsVisibleViewportHeight() {
-  const values = [];
-  try {
-    const vh = Number(window.visualViewport?.height || 0);
-    if (vh > 0) values.push(vh);
-  } catch {}
-  try {
-    const ih = Number(window.innerHeight || 0);
-    if (ih > 0) values.push(ih);
-  } catch {}
-  try {
-    const ch = Number(document.documentElement?.clientHeight || 0);
-    if (ch > 0) values.push(ch);
-  } catch {}
-
-  const sane = values.filter((v) => Number.isFinite(v) && v > 240);
-  return sane.length ? Math.floor(Math.min(...sane)) : 0;
-}
-
-function syncMobileScrollViewport() {
-  const root = document.documentElement;
-  const mainContent = document.querySelector('.main-content');
-  const scroller = mainContent?.querySelector(':scope > main') || mainContent?.querySelector('main');
-
-  if (!isOpsMobileViewportMode()) {
-    try { root.style.removeProperty('--ops-mobile-scroll-area-height'); } catch {}
-    try { root.style.removeProperty('--ops-mobile-visible-height'); } catch {}
-    try { mainContent?.classList?.remove('mobile-scroll-viewport-ready'); } catch {}
-    return;
-  }
-
-  if (!mainContent || !scroller) return;
-
-  const header = mainContent.querySelector(':scope > .main-header') || document.querySelector('.main-header');
-  const dock = document.querySelector('.sidebar.mobile-dock-structured-host') || document.querySelector('.sidebar');
-  const visibleHeight = readOpsVisibleViewportHeight();
-
-  const scrollerRect = scroller.getBoundingClientRect();
-  const headerRect = header?.getBoundingClientRect?.() || null;
-  const scrollerTopFromRect = Number(scrollerRect?.top || 0);
-  const headerBottom = Number(headerRect?.bottom || 0);
-  const scrollerTop = Math.max(0, Math.ceil(scrollerTopFromRect || headerBottom || 0));
-
-  let dockTop = 0;
-  try {
-    const dockRect = dock?.getBoundingClientRect?.();
-    const candidate = Number(dockRect?.top || 0);
-    const dockHeight = Number(dockRect?.height || 0);
-    if (candidate > 0 && dockHeight > 30) dockTop = Math.floor(candidate);
-  } catch {}
-
-  const fallbackBottom = visibleHeight > 0 ? Math.max(220, visibleHeight - 108) : 0;
-  const scrollBottom = dockTop > 0 ? dockTop : fallbackBottom;
-  const height = Math.max(220, Math.floor(scrollBottom - scrollerTop));
-
-  if (height > 0 && Number.isFinite(height)) {
-    try { root.style.setProperty('--ops-mobile-visible-height', `${visibleHeight || Math.ceil(scrollBottom)}px`); } catch {}
-    try { root.style.setProperty('--ops-mobile-scroll-area-height', `${height}px`); } catch {}
-    try { mainContent.classList.add('mobile-scroll-viewport-ready'); } catch {}
-  }
-}
-
-function scheduleMobileScrollViewportSync() {
-  [0, 40, 120, 280, 650, 1200].forEach((delay) => {
-    window.setTimeout(() => {
-      if (typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(syncMobileScrollViewport);
-      } else {
-        syncMobileScrollViewport();
-      }
-    }, delay);
-  });
-}
-
-function initMobileScrollViewportSizing() {
-  if (window.__opsMobileScrollViewportSizingInitialized) {
-    scheduleMobileScrollViewportSync();
-    return;
-  }
-  window.__opsMobileScrollViewportSizingInitialized = true;
-
-  scheduleMobileScrollViewportSync();
-
-  const onChange = () => scheduleMobileScrollViewportSync();
-  window.addEventListener('resize', onChange, { passive: true });
-  window.addEventListener('orientationchange', onChange, { passive: true });
-  window.addEventListener('pageshow', onChange, { passive: true });
-  window.addEventListener('load', onChange, { passive: true });
-
-  try {
-    window.visualViewport?.addEventListener?.('resize', onChange, { passive: true });
-    window.visualViewport?.addEventListener?.('scroll', onChange, { passive: true });
-  } catch {}
-
-  try {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent && window.MutationObserver) {
-      const obs = new MutationObserver(onChange);
-      obs.observe(mainContent, { attributes: true, attributeFilter: ['class', 'style'] });
-    }
-  } catch {}
-}
 
 function initMobileHeaderAutoHide() {
   const mainContent = document.querySelector('.main-content');
@@ -4413,22 +4286,6 @@ function bindOpsShellFrameNavigation(frameDoc) {
   }, true);
 }
 
-
-function shouldSkipOpsPersistentShellHostOnMobile() {
-  return isOpsMobileViewportMode();
-}
-
-function restoreOpsPersistentShellHostNormalPage() {
-  try {
-    document.body.classList.remove('page-shell-host');
-    document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
-    document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
-      el.removeAttribute('data-ops-shell-legacy');
-      try { setOpsShellHiddenElement(el, false); } catch {}
-    });
-  } catch {}
-}
-
 function shouldSkipOpsPersistentShellHostForCurrentPage() {
   try {
     const pathname = new URL(window.location.href).pathname.replace(/\/+$/, '') || '/';
@@ -4443,14 +4300,78 @@ function shouldSkipOpsPersistentShellHostForCurrentPage() {
   return false;
 }
 
+
+function shouldSkipOpsPersistentShellHostForFreshLoad() {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('_fresh') === '1' || params.has('_refresh')) return true;
+  } catch {}
+
+  try {
+    const markerKey = 'ops.hardRefresh.pendingAt';
+    const ts = Number(sessionStorage.getItem(markerKey) || 0);
+    if (ts && Number.isFinite(ts)) {
+      const age = Date.now() - ts;
+      if (age >= 0 && age <= (90 * 1000)) return true;
+    }
+  } catch {}
+
+  return false;
+}
+
+function shouldSkipOpsPersistentShellHostOnMobile() {
+  try {
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) return true;
+  } catch {}
+
+  try {
+    const visualWidth = Number(window.visualViewport?.width || 0);
+    if (visualWidth > 0 && visualWidth <= 768) return true;
+  } catch {}
+
+  try {
+    const layoutWidth = Math.min(
+      Number(window.innerWidth || 0) || Infinity,
+      Number(document.documentElement?.clientWidth || 0) || Infinity
+    );
+    if (Number.isFinite(layoutWidth) && layoutWidth <= 768) return true;
+  } catch {}
+
+  return false;
+}
+
+function restoreOpsPersistentShellHostNormalPage() {
+  try {
+    document.body.classList.remove('page-shell-host');
+    document.querySelectorAll('.ops-shell-host-main').forEach((el) => el.remove());
+    document.querySelectorAll('[data-ops-shell-legacy="1"]').forEach((el) => {
+      el.removeAttribute('data-ops-shell-legacy');
+      setOpsShellHiddenElement(el, false);
+    });
+  } catch {}
+}
+
 function initOpsPersistentShellHost() {
   if (window.__opsShellHostInitialized) return;
   if (isOpsShellEmbeddedMode()) return;
 
-  // Keep mobile in normal page mode. The iframe shell can measure Android/PWA
-  // first-open viewport differently from hard refresh, which creates the large
-  // white scroll tail above the bottom dock.
+  // On mobile, keep the app in normal page mode instead of booting the
+  // persistent iframe shell. The shell and the normal hard-refresh mode use
+  // slightly different viewport calculations on Android/PWA launch, which can
+  // make the bottom white scroll area large until a hard refresh. Normal page
+  // mode keeps first open and hard refresh identical while preserving all page
+  // features and bottom dock behavior.
   if (shouldSkipOpsPersistentShellHostOnMobile()) {
+    restoreOpsPersistentShellHostNormalPage();
+    return;
+  }
+
+  // During the first load after Hard Refresh, do not boot the persistent
+  // iframe shell. The top window already reloads, and loading the same page
+  // again inside the iframe can show a second native loading/progress line
+  // across the mobile header on Android. The normal page stays fully usable;
+  // the shell is available again on the next regular page load.
+  if (shouldSkipOpsPersistentShellHostForFreshLoad()) {
     restoreOpsPersistentShellHostNormalPage();
     return;
   }
