@@ -20,8 +20,8 @@
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
-  <link rel="stylesheet" href="/css/style.css?v=order-modal-close-fix-v2"/>
-  <link href="/css/ui-redesign.css?v=mobile-page-end-clearance-v2" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css?v=edit-details-v1"/>
+  <link href="/css/ui-redesign.css?v=mobile-dock-bg-clearance-v1" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading order-modal-fit-screen">
@@ -155,7 +155,7 @@
   <div class="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="svModalTitle">
     <div class="co-modal-more" id="svModalMoreWrap" hidden>
       <button type="button" class="co-modal-more-btn" id="svModalMoreBtn" aria-label="Order review actions" aria-haspopup="menu" aria-expanded="false">
-        <i data-feather="more-vertical" aria-hidden="true"></i>
+        <span class="co-modal-more-dots" aria-hidden="true">⋮</span>
       </button>
       <div class="co-modal-more-panel" id="svModalMorePanel" role="menu" aria-label="Order review actions" hidden>
         <button type="button" class="co-modal-more-item" id="svModalActionEdit" role="menuitem" data-sv-order-action="edit" hidden>
@@ -286,7 +286,7 @@
 </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=hard-refresh-loading-bars-fix-v1"></script>
+  <script src="/js/common-ui.js?v=bidi-mixed-v1"></script>
   <script>
     // Activate the current tab visually
     (function(){
@@ -304,6 +304,6 @@
     })();
   </script>
   <!-- Controller -->
-  <script src="/js/sv-orders.js?v=order-modal-close-tap-fix-v1"></script>
+  <script src="/js/sv-orders.js?v=review-edit-details-v1"></script>
 </body>
 </html>
