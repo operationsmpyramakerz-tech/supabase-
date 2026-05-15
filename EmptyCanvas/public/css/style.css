@@ -1050,10 +1050,10 @@ body.co-modal-open{ overflow: hidden; }
 
 .co-modal-close{
   position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 44px;
-  height: 44px;
+  top: 15px;
+  right: 15px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
   border: 0;
   background: #F3F4F6;
@@ -1100,10 +1100,12 @@ body.co-modal-open{ overflow: hidden; }
 /* Fallback: show a visible X even if feather icons fail to render */
 .co-modal-close::before{
   content: "×";
-  font-size: 28px;
+  display: block;
+  font-size: 24px;
   line-height: 1;
   font-weight: 800;
   color: currentColor;
+  transform: translateY(-1px);
 }
 
 .co-modal-status{
@@ -2336,6 +2338,27 @@ body.co-modal-open{ overflow: hidden; }
     flex: 1 1 140px;
     justify-content: center;
   }
+
+  body.order-modal-fit-screen .co-modal-close{
+    top: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+  }
+
+  body.order-modal-fit-screen .co-modal-close::before{
+    font-size: 22px;
+  }
+
+  body.order-modal-fit-screen .co-modal-more{
+    top: 16px;
+    right: 54px;
+  }
+
+  body.order-modal-fit-screen .co-modal-more-btn{
+    width: 30px;
+    height: 30px;
+  }
 }
 
 @media (max-width: 420px){
@@ -2350,10 +2373,24 @@ body.co-modal-open{ overflow: hidden; }
   }
 
   body.order-modal-fit-screen .co-modal-close{
-    top: 12px;
-    right: 12px;
-    width: 40px;
-    height: 40px;
+    top: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+  }
+
+  body.order-modal-fit-screen .co-modal-close::before{
+    font-size: 22px;
+  }
+
+  body.order-modal-fit-screen .co-modal-more{
+    top: 16px;
+    right: 54px;
+  }
+
+  body.order-modal-fit-screen .co-modal-more-btn{
+    width: 30px;
+    height: 30px;
   }
 
   body.order-modal-fit-screen .co-modal-archive{
@@ -7351,13 +7388,13 @@ body:not(.order-modal-fit-screen) .co-item-status{
 /* Operations Orders modal: compact actions menu */
 .co-modal-more{
   position:absolute;
-  top:18px;
-  right:74px;
+  top:19px;
+  right:62px;
   z-index:8;
 }
 .co-modal-more-btn{
-  width:28px;
-  height:28px;
+  width:30px;
+  height:30px;
   border:0;
   border-radius:10px;
   background:transparent;
@@ -7384,7 +7421,7 @@ body:not(.order-modal-fit-screen) .co-item-status{
   color:transparent;
   font-size:0;
   line-height:0;
-  box-shadow:0 -7px 0 #071022, 0 7px 0 #071022;
+  box-shadow:0 -6px 0 #071022, 0 6px 0 #071022;
 }
 .co-modal-more-btn svg{
   width:18px;
@@ -8466,5 +8503,49 @@ body:not(.order-modal-fit-screen) .co-item-status{
   .req-ops-edit-photo-card{
     width:100%;
     max-width:100%;
+  }
+}
+
+
+/* Orders Review modal: keep item Qty and action buttons on one compact row */
+body.order-modal-fit-screen .co-item-right .sv-review-item-actions{
+  width: auto !important;
+  max-width: none !important;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end !important;
+  gap: 8px;
+  margin-top: 0 !important;
+}
+body.order-modal-fit-screen .co-item-right .sv-review-item-actions .btn{
+  width: auto !important;
+  flex: 0 0 auto !important;
+  min-width: 96px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+body.order-modal-fit-screen .co-item-right .sv-review-item-actions .btn svg{
+  width: 16px;
+  height: 16px;
+}
+@media (max-width: 380px){
+  body.order-modal-fit-screen .co-item-right .sv-review-item-actions{
+    gap: 6px;
+  }
+  body.order-modal-fit-screen .co-item-right .sv-review-item-actions .btn{
+    min-width: 86px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 12.5px;
   }
 }
