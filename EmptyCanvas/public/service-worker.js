@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-static-vv58-mobile-dock-bg-clearance";
+const CACHE_NAME = "ops-static-vv59-mobile-page-end-gap-trim";
 
 const PRECACHE_URLS = [
   "/pwa-start",
