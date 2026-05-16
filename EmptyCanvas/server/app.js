@@ -24225,112 +24225,478 @@ async function _sbStocktakingForRequest(req) {
 }
 
 async function _sbRenderStocktakingPdf(req, res) {
+  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
   const items = await _sbStocktakingForRequest(req);
-  await ensurePdfArabicSupport();
+
+  const normalizeTagName = (name) => {
+    const n = String(name || "").trim();
+    if (!n) return "Untagged";
+    if (n.toLowerCase() === "untagged" || n === "-") return "Untagged";
+    return n;
+  };
+
+  const notionToHex = (color = "default") => {
+    switch (color) {
+      case "gray":
+        return { bg: "#F3F4F6", text: "#374151" };
+      case "brown":
+        return { bg: "#EFEBE9", text: "#4E342E" };
+      case "orange":
+        return { bg: "#FFF7ED", text: "#9A3412" };
+      case "yellow":
+        return { bg: "#FEFCE8", text: "#854D0E" };
+      case "green":
+        return { bg: "#ECFDF5", text: "#065F46" };
+      case "blue":
+        return { bg: "#EFF6FF", text: "#1E40AF" };
+      case "purple":
+        return { bg: "#F5F3FF", text: "#5B21B6" };
+      case "pink":
+        return { bg: "#FDF2F8", text: "#9D174D" };
+      case "red":
+        return { bg: "#FEF2F2", text: "#991B1B" };
+      default:
+        return { bg: "#F3F4F6", text: "#374151" };
+    }
+  };
+
+  const filteredStockForPdf = (items || [])
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      idCode: r.idCode,
+      quantity: Number(r.quantity) || 0,
+      tag: r.tag,
+    }))
+    .filter((r) => {
+      const quantity = Number(r.quantity);
+      return Number.isFinite(quantity) && quantity !== 0;
+    });
+
   const createdAt = new Date();
+  const exportDateLabel = formatDateTime(createdAt);
   const dateStr = createdAt.toISOString().slice(0, 10);
   const fileName = `Stocktaking-${dateStr}.pdf`;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   res.set("Cache-Control", "no-store");
 
+  await ensurePdfArabicSupport();
   const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
   enableArabicPdf(doc);
   doc.pipe(res);
   attachPageNumbers(doc);
-  drawStocktakingHeader(doc, {
-    title: "Stocktaking",
-    subtitle: `Generated ${formatDateTime(createdAt)}`,
-    logoPath: path.join(__dirname, "../public/images/logo.png"),
-  });
 
-  const groups = new Map();
-  for (const item of items) {
-    const tag = item?.tag?.name || "Untagged";
-    if (!groups.has(tag)) groups.set(tag, []);
-    groups.get(tag).push(item);
-  }
-  const tags = Array.from(groups.keys()).sort((a, b) => String(a).localeCompare(String(b)));
-
-  const left = doc.page.margins.left;
-  const right = doc.page.width - doc.page.margins.right;
-  const bottom = doc.page.height - doc.page.margins.bottom;
-  let y = Math.max(doc.y + 14, 120);
-  const rowH = 20;
-  const colIdW = 70;
-  const colQtyW = 55;
-  const colNameW = right - left - colIdW - colQtyW;
-
-  const ensureSpace = (h = rowH) => {
-    if (y + h > bottom) {
-      doc.addPage();
-      y = doc.page.margins.top;
-    }
+  const logoPath = path.join(__dirname, "../public/images/logo.png");
+  const COLORS = {
+    text: "#111827",
+    muted: "#6B7280",
+    border: "#E5E7EB",
+    headerBg: "#F9FAFB",
+    tableHeadBg: "#ECFDF5",
+    tagPillBg: "#D1FAE5",
+    accent: "#065F46",
+    mismatch: "#DC2626",
+    mismatchBg: "#FEF2F2",
   };
 
-  for (const tag of tags) {
-    const groupItems = (groups.get(tag) || []).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-    ensureSpace(50);
-    doc.font("Helvetica-Bold").fontSize(12).fillColor("#111827").text(`${tag} (${groupItems.length})`, left, y);
-    y += 20;
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#374151");
-    doc.text("ID Code", left, y, { width: colIdW });
-    doc.text("Component", left + colIdW, y, { width: colNameW });
-    doc.text("In Stock", right - colQtyW, y, { width: colQtyW, align: "right" });
-    y += 14;
-    doc.moveTo(left, y).lineTo(right, y).strokeColor("#E5E7EB").stroke();
-    y += 4;
+  // Group items by tag — same visual grouping used by B2B stocktaking exports.
+  const groupMap = new Map();
+  for (const it of filteredStockForPdf) {
+    const tagName = normalizeTagName(it?.tag?.name);
+    const tagColor = it?.tag?.color || "default";
+    const key = `${tagName.toLowerCase()}|${tagColor}`;
+    if (!groupMap.has(key)) groupMap.set(key, { name: tagName, color: tagColor, items: [] });
+    groupMap.get(key).items.push(it);
+  }
+  let groups = Array.from(groupMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const untagged = groups.filter((g) => g.name === "Untagged");
+  groups = groups.filter((g) => g.name !== "Untagged").concat(untagged);
 
-    doc.font("Helvetica").fontSize(8).fillColor("#111827");
-    for (const item of groupItems) {
-      ensureSpace(rowH + 4);
-      doc.text(String(item.idCode || "-"), left, y, { width: colIdW - 6 });
-      doc.text(String(item.name || "-"), left + colIdW, y, { width: colNameW - 8 });
-      doc.text(String(item.quantity ?? 0), right - colQtyW, y, { width: colQtyW, align: "right" });
-      y += rowH;
-    }
-    y += 8;
+  // Layout matches B2B direct stocktaking PDF export: Done/In Stock only, no inventory signature blocks.
+  const pageW = doc.page.width;
+  const mL = doc.page.margins.left;
+  const mR = doc.page.margins.right;
+  const mB = doc.page.margins.bottom;
+  const contentW = pageW - mL - mR;
+
+  const colIdW = 70;
+  const colQtyW = 60;
+  const colCompW = contentW - colIdW - colQtyW;
+  const bottomLimit = () => doc.page.height - mB;
+  const ensureSpace = (needed) => {
+    if (doc.y + needed > bottomLimit()) doc.addPage();
+  };
+
+  drawStocktakingHeader(doc, {
+    title: "Stocktaking",
+    subtitle: `School: ${schoolName || "School"}  •  Inventory date: ${exportDateLabel}`,
+    logoPath,
+    colors: COLORS,
+  });
+
+  doc
+    .fillColor(COLORS.text)
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text("Handover Confirmation", mL, doc.y);
+
+  doc
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(
+      "I hereby confirm receiving the below items in good condition. Any discrepancies were noted at delivery.",
+      mL,
+      doc.y + 4,
+      { width: contentW },
+    );
+
+  doc.moveDown(1.1);
+
+  const boxH = 32;
+  const boxGap = 12;
+  const boxW = (contentW - boxGap) / 2;
+  const boxY = doc.y;
+  const drawInfoBox = (x, title, value) => {
+    doc
+      .roundedRect(x, boxY, boxW, boxH, 8)
+      .fillColor(COLORS.headerBg)
+      .fill();
+    doc
+      .roundedRect(x, boxY, boxW, boxH, 8)
+      .strokeColor(COLORS.border)
+      .stroke();
+    doc
+      .fillColor(COLORS.muted)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(title, x + 10, boxY + 6);
+    doc
+      .fillColor(COLORS.text)
+      .font("Helvetica")
+      .fontSize(10)
+      .text(String(value || "-"), x + 10, boxY + 18, { width: boxW - 20 });
+  };
+  drawInfoBox(mL, "School", schoolName || "School");
+  drawInfoBox(mL + boxW + boxGap, "Date", exportDateLabel);
+  doc.y = boxY + boxH + 16;
+  doc.moveDown(0.5);
+
+  if (!groups.length) {
+    doc
+      .fillColor(COLORS.muted)
+      .font("Helvetica")
+      .fontSize(11)
+      .text("No stock data found.", mL, doc.y);
+    doc.end();
+    return;
+  }
+
+  const drawGroupHeader = (tagName, tagColor, count) => {
+    const y = doc.y;
+    const pill = notionToHex(tagColor);
+    const pillText = `Tag   ${tagName}`;
+
+    doc
+      .roundedRect(mL, y, contentW, 28, 10)
+      .fillColor(pill.bg)
+      .fill();
+
+    doc
+      .roundedRect(mL + 10, y + 6, Math.min(280, doc.widthOfString(pillText) + 18), 16, 8)
+      .fillColor(pill.bg)
+      .fill();
+    doc
+      .fillColor(pill.text)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(pillText, mL + 18, y + 9);
+
+    const countText = `${count} items`;
+    const countW = doc.widthOfString(countText) + 18;
+    doc
+      .roundedRect(mL + contentW - countW - 10, y + 6, countW, 16, 8)
+      .fillColor(pill.bg)
+      .fill();
+    doc
+      .roundedRect(mL + contentW - countW - 10, y + 6, countW, 16, 8)
+      .strokeColor(COLORS.border)
+      .stroke();
+    doc
+      .fillColor(COLORS.text)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(countText, mL + contentW - countW - 10 + 9, y + 9);
+
+    doc.y = y + 34;
+    return pill;
+  };
+
+  const drawTableHeader = (pill) => {
+    const y = doc.y;
+    const bg = pill?.bg || COLORS.tableHeadBg;
+    const txt = pill?.text || COLORS.accent;
+
+    doc
+      .rect(mL, y, contentW, 20)
+      .fillColor(bg)
+      .fill();
+
+    doc
+      .fillColor(txt)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text("ID Code", mL + 8, y + 6, { width: colIdW - 10 });
+    doc
+      .fillColor(txt)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text("Component", mL + colIdW, y + 6, { width: colCompW - 10 });
+    doc
+      .fillColor(txt)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text("In Stock", mL + colIdW + colCompW, y + 6, { width: colQtyW - 10, align: "right" });
+
+    doc.y = y + 24;
+  };
+
+  const drawRow = (item) => {
+    const y = doc.y;
+    const rowH = 20;
+
+    doc
+      .fillColor(COLORS.text)
+      .font("Helvetica")
+      .fontSize(9)
+      .text(String(item.idCode || ""), mL + 8, y + 6, { width: colIdW - 10 });
+    doc
+      .fillColor(COLORS.text)
+      .font("Helvetica")
+      .fontSize(9)
+      .text(String(item.name || "-"), mL + colIdW, y + 6, { width: colCompW - 10 });
+    doc
+      .fillColor(COLORS.text)
+      .font("Helvetica")
+      .fontSize(9)
+      .text(String(item.quantity ?? 0), mL + colIdW + colCompW, y + 6, { width: colQtyW - 10, align: "right" });
+
+    doc
+      .moveTo(mL, y + rowH)
+      .lineTo(mL + contentW, y + rowH)
+      .lineWidth(1)
+      .strokeColor("#F3F4F6")
+      .stroke();
+
+    doc.y = y + rowH + 2;
+  };
+
+  for (const group of groups) {
+    ensureSpace(60);
+    const pill = drawGroupHeader(group.name, group.color, group.items.length);
+    drawTableHeader(pill);
+
+    (group.items || [])
+      .slice()
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+      .forEach((it) => {
+        ensureSpace(28);
+        drawRow(it);
+      });
+
+    doc.moveDown(0.5);
   }
 
   doc.end();
 }
 
 async function _sbRenderStocktakingExcel(req, res) {
+  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
   const items = await _sbStocktakingForRequest(req);
-  const ExcelJS = require("exceljs");
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Operations Hub";
-  workbook.created = new Date();
-  const ws = workbook.addWorksheet("Stocktaking");
-  ws.columns = [
-    { header: "Tag", key: "tag", width: 24 },
-    { header: "ID Code", key: "idCode", width: 18 },
-    { header: "Component", key: "name", width: 52 },
-    { header: "In Stock", key: "quantity", width: 12 },
-    { header: "One Kit Quantity", key: "oneKitQuantity", width: 18 },
-    { header: "Unit Price", key: "unitPrice", width: 14 },
-    { header: "URL", key: "url", width: 50 },
-  ];
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-  for (const item of items.sort((a, b) => String(a?.tag?.name || "").localeCompare(String(b?.tag?.name || "")) || String(a.name || "").localeCompare(String(b.name || "")))) {
-    ws.addRow({
-      tag: item?.tag?.name || "Untagged",
-      idCode: item.idCode || "",
-      name: item.name || "",
-      quantity: Number(item.quantity) || 0,
-      oneKitQuantity: Number(item.oneKitQuantity) || 0,
-      unitPrice: Number(item.unitPrice) || 0,
-      url: item.url || "",
+  const rows = (items || [])
+    .filter((r) => Number(r.quantity) > 0)
+    .slice()
+    .sort((a, b) => {
+      const ta = String(a?.tag?.name || "Untagged");
+      const tb = String(b?.tag?.name || "Untagged");
+      if (ta !== tb) return ta.localeCompare(tb);
+      return String(a?.name || "").localeCompare(String(b?.name || ""));
     });
+
+  const ExcelJS = require("exceljs");
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Operations Hub";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Stocktaking");
+
+  const createdAt = new Date();
+  const formattedDate = formatDateTime(createdAt);
+
+  const EXCEL_BORDER_COLOR = "FF000000";
+  const borderAll = (argb = EXCEL_BORDER_COLOR) => ({
+    top: { style: "thin", color: { argb } },
+    left: { style: "thin", color: { argb } },
+    bottom: { style: "thin", color: { argb } },
+    right: { style: "thin", color: { argb } },
+  });
+
+  // Match the B2B direct export styling while keeping Stocktaking's Done/In Stock columns only.
+  const columns = ["Tag", "ID Code", "Component", "In Stock", "Unity Price"];
+
+  const colLetter = (n) => {
+    let num = Math.max(1, Number(n) || 1);
+    let s = "";
+    while (num > 0) {
+      const m = (num - 1) % 26;
+      s = String.fromCharCode(65 + m) + s;
+      num = Math.floor((num - 1) / 26);
+    }
+    return s;
+  };
+
+  const lastCol = colLetter(columns.length);
+  const split = Math.ceil(columns.length / 2);
+  const leftEnd = colLetter(split);
+  const rightStart = colLetter(split + 1);
+
+  const safeSchool = String(schoolName || "School")
+    .replace(/[<>:"/\\|?*]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s/g, "_")
+    .slice(0, 50);
+  const fileName = `stocktaking_${safeSchool || "School"}.xlsx`;
+
+  ws.mergeCells(`A1:${lastCol}1`);
+  ws.getCell("A1").value = "Stocktaking";
+  ws.getCell("A1").font = { size: 18, bold: true };
+  ws.getCell("A1").alignment = { vertical: "middle", horizontal: "center" };
+  ws.getRow(1).height = 28;
+
+  ws.getRow(2).height = 22;
+  ws.mergeCells(`A2:${leftEnd}2`);
+  ws.mergeCells(`${rightStart}2:${lastCol}2`);
+  ws.getCell("A2").value = `School: ${schoolName || "School"}`;
+  ws.getCell(`${rightStart}2`).value = `Date: ${formattedDate}`;
+  ["A2", `${rightStart}2`].forEach((addr) => {
+    const c = ws.getCell(addr);
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+    c.border = borderAll();
+    c.font = { size: 10, bold: true };
+    c.alignment = { vertical: "middle", horizontal: "left" };
+  });
+
+  ws.addRow([]);
+
+  const headerRowIndex = ws.lastRow.number + 1;
+  ws.addRow(columns);
+  const headerRow = ws.getRow(headerRowIndex);
+  headerRow.height = 20;
+  const headerFont = { bold: true, color: { argb: "FF065F46" } };
+  const headerFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
+  for (let i = 1; i <= columns.length; i++) {
+    const cell = headerRow.getCell(i);
+    cell.font = headerFont;
+    cell.fill = headerFill;
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+    cell.border = borderAll();
   }
-  const dateStr = new Date().toISOString().slice(0, 10);
+
+  const widthByHeader = {
+    "Tag": 32,
+    "ID Code": 14,
+    "Component": 52,
+    "In Stock": 12,
+    "Unity Price": 14,
+  };
+  columns.forEach((h, idx) => {
+    ws.getColumn(idx + 1).width = widthByHeader[h] || 12;
+  });
+
+  let unitPriceMap = new Map();
+  try {
+    unitPriceMap = await _getProductsNameToUnityPriceMap();
+  } catch {}
+  const unitPriceOf = (item) => {
+    const direct = Number(item?.unitPrice);
+    if (Number.isFinite(direct) && direct !== 0) return direct;
+    const n = unitPriceMap.get(_normNameKey(item?.name || ""));
+    if (typeof n === "number" && Number.isFinite(n)) return n;
+    return null;
+  };
+
+  const notionColorToARGB = (color = "default") => {
+    switch (color) {
+      case "gray":
+        return { fg: "FFF3F4F6", text: "FF374151" };
+      case "brown":
+        return { fg: "FFEFEBE9", text: "FF4E342E" };
+      case "orange":
+        return { fg: "FFFFF7ED", text: "FF9A3412" };
+      case "yellow":
+        return { fg: "FFFEFCE8", text: "FF854D0E" };
+      case "green":
+        return { fg: "FFECFDF5", text: "FF065F46" };
+      case "blue":
+        return { fg: "FFEFF6FF", text: "FF1E40AF" };
+      case "purple":
+        return { fg: "FFF5F3FF", text: "FF5B21B6" };
+      case "pink":
+        return { fg: "FFFDF2F8", text: "FF9D174D" };
+      case "red":
+        return { fg: "FFFEF2F2", text: "FF991B1B" };
+      default:
+        return { fg: "FFF3F4F6", text: "FF374151" };
+    }
+  };
+
+  for (const r of rows) {
+    const tagName = r?.tag?.name || "Untagged";
+    const tagColor = r?.tag?.color || "default";
+    const price = unitPriceOf(r);
+    const row = ws.addRow([
+      tagName,
+      r.idCode || "",
+      r.name || "-",
+      Number(r.quantity) || 0,
+      price === null ? "" : price,
+    ]);
+
+    const idxComponent = columns.indexOf("Component") + 1;
+    if (idxComponent > 0 && r.url) {
+      const cell = row.getCell(idxComponent);
+      cell.value = { text: String(r.name || "-"), hyperlink: r.url };
+      cell.font = { color: { argb: "FF1D4ED8" }, underline: true };
+    }
+
+    const tagCell = row.getCell(1);
+    const c = notionColorToARGB(tagColor);
+    tagCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: c.fg } };
+    tagCell.font = { bold: true, color: { argb: c.text } };
+    tagCell.alignment = { vertical: "middle", horizontal: "left" };
+
+    row.eachCell((cell) => {
+      cell.border = borderAll();
+      if (!cell.alignment) cell.alignment = { vertical: "middle", horizontal: "left" };
+    });
+
+    const idxInStock = columns.indexOf("In Stock") + 1;
+    const idxPrice = columns.indexOf("Unity Price") + 1;
+    if (idxInStock > 0) row.getCell(idxInStock).alignment = { vertical: "middle", horizontal: "right" };
+    if (idxPrice > 0) row.getCell(idxPrice).alignment = { vertical: "middle", horizontal: "right" };
+    if (price !== null && idxPrice > 0) row.getCell(idxPrice).numFmt = '"EGP" #,##0.00';
+  }
+
+  ws.views = [{ state: "frozen", ySplit: headerRowIndex }];
+
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="stocktaking_${dateStr}.xlsx"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   res.set("Cache-Control", "no-store");
-  await workbook.xlsx.write(res);
+  await wb.xlsx.write(res);
   res.end();
 }
+
 
 app.get(
   "/api/stock",
