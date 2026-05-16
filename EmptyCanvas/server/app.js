@@ -11297,6 +11297,16 @@ function _sbBuildB2BSchoolWriteRow(payload = {}) {
     row.program_type = row.solution_type || null;
   }
 
+  if (Object.prototype.hasOwnProperty.call(source, 'stocktaking_column')) {
+    // Compatibility with older B2B schemas that may already have one of these
+    // columns instead of the new stocktaking_column field. The missing-column
+    // fallback strips unsupported aliases and keeps whichever one exists.
+    const stocktakingColumn = String(source.stocktaking_column ?? '').trim();
+    row.stock_column = stocktakingColumn || null;
+    row.done_column = stocktakingColumn || null;
+    row.school_stock_column = stocktakingColumn || null;
+  }
+
   const schoolName = String(row.school_name || '').trim();
   if (!schoolName) {
     const err = new Error('School name is required.');
@@ -11479,6 +11489,12 @@ function _sbB2BResolvedColumn(rows = [], { schoolName = '', configuredColumn = '
     const fromConfiguredRaw = _sbB2BFindColumnInRows(rows, configured, kind, dateISO);
     if (fromConfiguredRaw?.name) return fromConfiguredRaw;
   }
+
+  // When a school has a manually selected Stocktaking column, that manual
+  // column must be the source of truth. Do not fall back to the old auto-detect
+  // based on the school name, otherwise the manual selection appears saved but
+  // the school page still reads another column.
+  if (configured) return null;
 
   return _sbB2BFindColumnInRows(rows, schoolName, kind, dateISO);
 }
@@ -12593,6 +12609,25 @@ app.get(
     } catch (e) {
       console.error("Error fetching B2B stocktaking columns:", e?.details || e);
       return res.status(500).json({ ok: false, error: e?.message || "Failed to load Stocktaking columns." });
+    }
+  },
+);
+
+app.post(
+  "/api/b2b/stocktaking-columns",
+  requireAuth,
+  requirePage("B2B"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      }
+      const created = await _uaAddStocktakingSchoolColumn(req.body?.name || req.body?.column || "");
+      return res.json({ ok: true, ...created });
+    } catch (e) {
+      console.error("Error adding B2B stocktaking column:", e?.details || e?.body || e);
+      return res.status(e?.status || 500).json({ ok: false, error: e?.message || "Failed to add Stocktaking column." });
     }
   },
 );
