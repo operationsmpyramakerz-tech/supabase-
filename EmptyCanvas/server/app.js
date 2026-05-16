@@ -13122,7 +13122,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
+    const hasSupabaseStockExport = _sbB2BSchoolsEnabled() && _sbStocktakingEnabled();
+    if (!hasSupabaseStockExport && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking database ID is not configured." });
     }
 
@@ -13639,7 +13640,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
+    const hasSupabaseStockExport = _sbB2BSchoolsEnabled() && _sbStocktakingEnabled();
+    if (!hasSupabaseStockExport && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking database ID is not configured." });
     }
 
@@ -25720,7 +25722,7 @@ app.get(
   "/api/expenses/orders/options",
   requireAuth,
   requirePage("Expenses"),
-  cachedJsonRoute(60, () => "cache:api:expenses:orders-options:creator-label:v5"),
+  cachedJsonRoute(60, () => "cache:api:expenses:orders-options:all:v4"),
   async (req, res) => {
     try {
       if (_sbOrdersEnabled()) {
@@ -25730,8 +25732,6 @@ app.get(
           const item = _sbSerializeOrderRow(row);
           const num = item.orderIdNumber || item.orderId || item.id;
           const key = num ? `ord:${num}` : `row:${item.id}`;
-          const createdByName = String(item.createdByName || item.createdBy || item.assignedToName || "").trim();
-          const createdById = String(item.createdById || "").trim();
           if (!groups.has(key)) {
             groups.set(key, {
               id: key,
@@ -25739,8 +25739,6 @@ app.get(
               orderId: item.orderId || key,
               orderType: item.orderType || "Request Products",
               label: [item.orderId, item.orderType || "Request Products"].filter(Boolean).join(" - "),
-              createdByName: createdByName || null,
-              createdById: createdById || null,
               relationIds: [],
               receiptEntries: [],
               trackingGroupId: key,
@@ -25748,8 +25746,6 @@ app.get(
             });
           }
           const group = groups.get(key);
-          if (!group.createdByName && createdByName) group.createdByName = createdByName;
-          if (!group.createdById && createdById) group.createdById = createdById;
           if (item.id && !group.relationIds.includes(item.id)) group.relationIds.push(item.id);
         }
         const options = Array.from(groups.values())
