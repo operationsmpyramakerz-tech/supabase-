@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-static-vv61-b2b-clean-copy";
+const CACHE_NAME = "ops-static-vv62-b2b-stock-column";
 
 const PRECACHE_URLS = [
   "/pwa-start",
