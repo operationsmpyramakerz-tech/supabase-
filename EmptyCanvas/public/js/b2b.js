@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeEditId = null;
   let activeEditName = '';
   let modalUi = null;
+  let stocktakingColumnOptions = [];
+  let stocktakingColumnOptionsPromise = null;
 
   const EGYPT_GOVERNORATES = [
     'Cairo', 'Giza', 'Alexandria', 'Dakahlia', 'Red Sea', 'Beheira', 'Fayoum', 'Gharbia',
@@ -32,6 +34,13 @@ document.addEventListener('DOMContentLoaded', () => {
         { key: 'solution_type', label: 'Solution Type', type: 'select', options: ['Full Solution', 'Lab solution', 'STEAM Attack solution'] },
         { key: 'theme_type', label: 'Theme Type', type: 'multiselect', options: Array.from({ length: 10 }, (_, index) => String(index + 1)) },
         { key: 'education_system', label: 'Education System', type: 'multiselect', options: ['IG', 'American', 'British', 'National'] },
+      ],
+    },
+    {
+      name: 'Stocktaking',
+      icon: 'archive',
+      fields: [
+        { key: 'stocktaking_column', label: 'Stocktaking Column', type: 'select', options: () => stocktakingColumnOptions, placeholder: 'Select stocktaking column' },
       ],
     },
     {
@@ -369,9 +378,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return iso || '';
   };
 
+  const optionsForField = (field) => {
+    const source = typeof field.options === 'function' ? field.options() : field.options;
+    return Array.isArray(source) ? source.map(String).filter(Boolean) : [];
+  };
+
   const selectOptionsHtml = (field, currentValue = '') => {
     const value = String(currentValue ?? '').trim();
-    const options = Array.isArray(field.options) ? field.options.map(String) : [];
+    const options = optionsForField(field);
     const allOptions = value && !options.some((option) => norm(option) === norm(value))
       ? [value, ...options]
       : options;
@@ -413,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const choiceOptions = (field, currentValue = '', { multi = false } = {}) => {
     const selected = multi ? parseChoiceValues(currentValue) : [String(currentValue ?? '').trim()].filter(Boolean);
-    const options = Array.isArray(field.options) ? field.options.map(String) : [];
+    const options = optionsForField(field);
     const selectedMissing = selected.filter((value) => value && !options.some((option) => norm(option) === norm(value)));
     return [...selectedMissing, ...options];
   };
@@ -751,8 +765,35 @@ document.addEventListener('DOMContentLoaded', () => {
     setModalError('');
   }
 
-  const openAddModal = () => {
+  async function ensureStocktakingColumnOptions() {
+    if (stocktakingColumnOptions.length) return stocktakingColumnOptions;
+    if (!stocktakingColumnOptionsPromise) {
+      stocktakingColumnOptionsPromise = fetch('/api/b2b/stocktaking-columns', { credentials: 'include' })
+        .then(async (response) => {
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload?.ok === false) {
+            throw new Error(payload?.error || 'Failed to load Stocktaking columns');
+          }
+          const rawColumns = Array.isArray(payload?.columns) ? payload.columns : [];
+          stocktakingColumnOptions = rawColumns
+            .map((item) => String(item?.value || item?.label || item?.column || item || '').trim())
+            .filter(Boolean);
+          return stocktakingColumnOptions;
+        })
+        .catch((error) => {
+          console.warn('[b2b] Failed to load Stocktaking column options:', error?.message || error);
+          return stocktakingColumnOptions;
+        })
+        .finally(() => {
+          stocktakingColumnOptionsPromise = null;
+        });
+    }
+    return stocktakingColumnOptionsPromise;
+  }
+
+  const openAddModal = async () => {
     activeEditId = null;
+    await ensureStocktakingColumnOptions();
     openModal({ mode: 'add', values: {} });
   };
 
@@ -762,6 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fields.governorate = fields.governorate || data?.governorate?.name || '';
     fields.location = fields.location || data?.location || '';
     fields.solution_type = fields.solution_type || fields.program_type || data?.programType || data?.solutionType || '';
+    fields.stocktaking_column = fields.stocktaking_column || fields.stock_column || fields.done_column || data?.stocktakingColumn || '';
     fields.education_system = fields.education_system || (Array.isArray(data?.educationSystem) ? data.educationSystem.join(', ') : '');
     if (data?.grades && typeof data.grades === 'object') {
       for (let i = 1; i <= 12; i += 1) {
@@ -778,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ui = ensureModal();
     activeEditId = cleanId;
     activeEditName = schoolName;
+    await ensureStocktakingColumnOptions();
     openModal({ mode: 'edit', values: { school_name: schoolName }, schoolName });
     ui.submit.disabled = true;
     ui.submit.textContent = 'Loading...';
