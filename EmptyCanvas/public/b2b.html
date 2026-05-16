@@ -762,6 +762,70 @@
     .b2b-school-field--contract-year > label{ display:none; }
     .b2b-school-field--contract-year{ min-width:0; }
 
+
+    .b2b-stocktaking-column-field{
+      overflow:visible;
+    }
+
+    .b2b-inline-add{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:10px;
+      margin-top:12px;
+      align-items:center;
+    }
+
+    .b2b-inline-add input{
+      width:100%;
+      min-height:48px;
+      border:1px solid #e2e8f0;
+      border-radius:14px;
+      background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);
+      color:#0f172a;
+      padding:12px 14px;
+      font:inherit;
+      font-weight:800;
+      outline:none;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px rgba(15,23,42,.04);
+    }
+
+    .b2b-inline-add input:focus{
+      border-color:rgba(249,115,22,.55);
+      box-shadow:0 0 0 4px rgba(249,115,22,.10), 0 12px 24px rgba(15,23,42,.08);
+    }
+
+    .b2b-mini-btn{
+      min-height:48px;
+      border:0;
+      border-radius:14px;
+      background:#070b1a;
+      color:#fff;
+      padding:0 16px;
+      font:inherit;
+      font-weight:900;
+      cursor:pointer;
+      white-space:nowrap;
+      box-shadow:0 14px 24px rgba(15,23,42,.16);
+      transition:transform .16s ease, opacity .16s ease;
+    }
+
+    .b2b-mini-btn:hover{ transform:translateY(-1px); }
+    .b2b-mini-btn:disabled{ opacity:.62; cursor:not-allowed; transform:none; }
+
+    .b2b-stocktaking-help{
+      display:block;
+      margin-top:8px;
+      color:#94a3b8;
+      font-size:.86rem;
+      font-weight:800;
+      line-height:1.4;
+    }
+
+    @media (max-width:640px){
+      .b2b-inline-add{ grid-template-columns:1fr; }
+      .b2b-mini-btn{ width:100%; }
+    }
+
     .b2b-contract-years{
       overflow:visible;
       align-items:end;
@@ -1067,6 +1131,6 @@
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=bidi-mixed-v1"></script>
-<script src="/js/b2b.js?v=stocktaking-column-field-v1"></script>
+<script src="/js/b2b.js?v=stocktaking-column-add-v2"></script>
 </body>
 </html>
