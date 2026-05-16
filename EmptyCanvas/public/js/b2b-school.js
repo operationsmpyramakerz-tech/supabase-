@@ -164,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
       : '—';
 
     const gradesHtml = grades.length
-      ? `<div class="grades-pill-grid">${grades.map((grade) => `<span class="grade-pill">${grade}</span>`).join('')}</div><div class="grades-meta">${grades.length} grade${grades.length > 1 ? 's' : ''} selected for this school.</div>`
+      ? `<div class="grades-pill-grid">${grades.map((grade) => `<span class="grade-pill">${grade}</span>`).join('')}</div>`
       : '—';
 
     detailsEl.innerHTML = `
