@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
       name: 'Stocktaking',
       icon: 'archive',
       fields: [
-        { key: 'stocktaking_column', label: 'Stocktaking Column', type: 'select', options: () => stocktakingColumnOptions, placeholder: 'Select stocktaking column' },
+        { key: 'stocktaking_column', label: 'Stocktaking Column', type: 'stocktaking-select', options: () => stocktakingColumnOptions, placeholder: 'Select stocktaking column' },
       ],
     },
     {
@@ -476,8 +476,47 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   };
 
+
+  const renderStocktakingColumnField = (field, currentValue = '') => {
+    const options = choiceOptions(field, currentValue, { multi: false });
+    const selected = [String(currentValue ?? '').trim()].filter(Boolean);
+    const hiddenValue = selected[0] || '';
+    const fieldId = `b2b_${field.key}`;
+    return `
+      <div class="b2b-school-field b2b-school-field--wide b2b-stocktaking-column-field" data-b2b-stocktaking-column-field>
+        <label for="${escapeHtml(fieldId)}">${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>
+        <div class="b2b-modern-select" data-b2b-modern-select data-multi="false">
+          <input id="${escapeHtml(fieldId)}" type="hidden" name="${escapeHtml(field.key)}" value="${escapeHtml(hiddenValue)}" />
+          <button class="b2b-modern-select__button" type="button" data-b2b-select-toggle aria-expanded="false">
+            <span data-b2b-select-summary>${escapeHtml(selectedChoiceLabel(field, currentValue, { multi: false }))}</span>
+            <i data-feather="chevron-down"></i>
+          </button>
+          <div class="b2b-modern-select__panel" data-b2b-select-panel hidden>
+            <button class="b2b-modern-option ${hiddenValue ? '' : 'is-selected'}" type="button" data-b2b-option-value="">
+              <span>${escapeHtml(field.placeholder || `Select ${field.label}`)}</span>
+            </button>
+            ${options.map((option) => `
+              <button class="b2b-modern-option ${norm(option) === norm(hiddenValue) ? 'is-selected' : ''}" type="button" data-b2b-option-value="${escapeHtml(option)}">
+                <span>${escapeHtml(option)}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="b2b-inline-add b2b-stocktaking-add">
+          <input type="text" data-b2b-stocktaking-column-name placeholder="Add new Stocktaking column, e.g. ACIC Done">
+          <button type="button" class="b2b-mini-btn" data-b2b-stocktaking-column-add>Add column</button>
+        </div>
+        <small class="b2b-stocktaking-help">Create a new Stocktaking number column and select it for this school.</small>
+      </div>
+    `;
+  };
+
   const renderField = (field, values = {}) => {
     const value = field.type === 'date' ? normalizeDateValue(values[field.key]) : String(values[field.key] ?? '');
+
+    if (field.type === 'stocktaking-select' || field.key === 'stocktaking_column') {
+      return renderStocktakingColumnField(field, value);
+    }
 
     if (field.type === 'select') {
       return renderModernSelect(field, value, { multi: false });
@@ -539,15 +578,126 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   };
 
+
+  function setModernSelectValue(wrap, value = '') {
+    if (!wrap) return;
+    const cleanValue = String(value || '').trim();
+    const input = wrap.querySelector('input[type="hidden"]');
+    const summary = wrap.querySelector('[data-b2b-select-summary]');
+    const selectedOption = wrap.querySelector('[data-b2b-option-value=""]');
+    const placeholder = selectedOption?.textContent?.trim() || 'Select';
+    if (input) input.value = cleanValue;
+    if (summary) summary.textContent = cleanValue || placeholder;
+    wrap.classList.toggle('has-value', !!cleanValue);
+    wrap.querySelectorAll('[data-b2b-option-value]').forEach((node) => {
+      node.classList.toggle('is-selected', norm(node.getAttribute('data-b2b-option-value') || '') === norm(cleanValue));
+    });
+  }
+
+  function closeModernSelect(wrap) {
+    if (!wrap) return;
+    wrap.classList.remove('is-open');
+    const panel = wrap.querySelector('[data-b2b-select-panel]');
+    const toggle = wrap.querySelector('[data-b2b-select-toggle]');
+    if (panel) panel.hidden = true;
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  function ensureModernSelectOption(wrap, value = '') {
+    const cleanValue = String(value || '').trim();
+    if (!wrap || !cleanValue) return;
+    const panel = wrap.querySelector('[data-b2b-select-panel]');
+    if (!panel) return;
+    const exists = Array.from(panel.querySelectorAll('[data-b2b-option-value]'))
+      .some((node) => norm(node.getAttribute('data-b2b-option-value') || '') === norm(cleanValue));
+    if (exists) return;
+    const btn = document.createElement('button');
+    btn.className = 'b2b-modern-option';
+    btn.type = 'button';
+    btn.setAttribute('data-b2b-option-value', cleanValue);
+    btn.innerHTML = `<span>${escapeHtml(cleanValue)}</span>`;
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      setModernSelectValue(wrap, cleanValue);
+      closeModernSelect(wrap);
+    });
+    panel.appendChild(btn);
+  }
+
+  function addStocktakingColumnOption(label = '') {
+    const cleanLabel = String(label || '').trim();
+    if (!cleanLabel) return;
+    if (!stocktakingColumnOptions.some((option) => norm(option) === norm(cleanLabel))) {
+      stocktakingColumnOptions = [...stocktakingColumnOptions, cleanLabel]
+        .filter(Boolean)
+        .sort((a, b) => String(a).localeCompare(String(b)));
+    }
+  }
+
+  async function handleStocktakingColumnAdd(button) {
+    const fieldWrap = button?.closest('[data-b2b-stocktaking-column-field]');
+    const nameInput = fieldWrap?.querySelector('[data-b2b-stocktaking-column-name]');
+    const rawName = String(nameInput?.value || '').replace(/\s+/g, ' ').trim();
+    if (!rawName) {
+      setModalError('Enter the new Stocktaking column name first.');
+      nameInput?.focus();
+      return;
+    }
+
+    button.disabled = true;
+    button.classList.add('is-loading');
+    const originalText = button.textContent;
+    button.textContent = 'Adding...';
+    setModalError('');
+
+    try {
+      const response = await fetch('/api/b2b/stocktaking-columns', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: rawName }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.error || 'Failed to add Stocktaking column.');
+      }
+
+      const label = String(payload?.label || rawName).trim();
+      addStocktakingColumnOption(label);
+      const selectWrap = fieldWrap?.querySelector('[data-b2b-modern-select]');
+      ensureModernSelectOption(selectWrap, label);
+      setModernSelectValue(selectWrap, label);
+      closeModernSelect(selectWrap);
+      if (nameInput) nameInput.value = '';
+    } catch (error) {
+      console.error(error);
+      setModalError(error?.message || 'Failed to add Stocktaking column.');
+    } finally {
+      button.disabled = false;
+      button.classList.remove('is-loading');
+      button.textContent = originalText || 'Add column';
+    }
+  }
+
+  function bindStocktakingColumnAdd(container) {
+    container.querySelectorAll('[data-b2b-stocktaking-column-add]').forEach((button) => {
+      button.addEventListener('click', () => handleStocktakingColumnAdd(button));
+    });
+    container.querySelectorAll('[data-b2b-stocktaking-column-name]').forEach((input) => {
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        const button = input.closest('[data-b2b-stocktaking-column-field]')?.querySelector('[data-b2b-stocktaking-column-add]');
+        if (button) handleStocktakingColumnAdd(button);
+      });
+    });
+  }
+
   function bindModernChoiceControls(container) {
     const closeAll = (except = null) => {
       container.querySelectorAll('[data-b2b-modern-select].is-open').forEach((wrap) => {
         if (except && wrap === except) return;
-        wrap.classList.remove('is-open');
-        const panel = wrap.querySelector('[data-b2b-select-panel]');
-        const toggle = wrap.querySelector('[data-b2b-select-toggle]');
-        if (panel) panel.hidden = true;
-        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        closeModernSelect(wrap);
       });
     };
 
@@ -592,10 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
           optionBtn.addEventListener('click', (event) => {
             event.preventDefault();
             const value = optionBtn.getAttribute('data-b2b-option-value') || '';
-            if (input) input.value = value;
-            wrap.querySelectorAll('[data-b2b-option-value]').forEach((node) => node.classList.remove('is-selected'));
-            optionBtn.classList.add('is-selected');
-            if (summary) summary.textContent = value || placeholder;
+            setModernSelectValue(wrap, value);
             closeAll();
           });
         });
@@ -723,6 +870,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.body.innerHTML = sections;
     bindGradesDropdown(ui.body);
     bindModernChoiceControls(ui.body);
+    bindStocktakingColumnAdd(ui.body);
     bindContractFileUpload(ui.body);
     if (window.feather) feather.replace();
   }
