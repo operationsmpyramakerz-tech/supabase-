@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="color-scheme" content="light" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>KPIs</title>
+  <style>body.permissions-loading .sidebar li{display:none!important;}</style>
+  <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=mobile-global-scroll-dock-balance-v1" rel="stylesheet" />
+  <link href="/css/kpis.css" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading kpis-page">
+  <script>(function(){try{if(window.innerWidth>768&&localStorage.getItem('ui.sidebarMini')==='1')document.body.classList.add('sidebar-mini');}catch(e){}})();</script>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header"><h2>Dashboard</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
+      <nav class="sidebar-nav"><ul class="nav-list">
+        <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+        <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+        <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+        <li><a class="nav-link active" href="/kpis"><i data-feather="bar-chart-2"></i><span class="nav-label">KPIs</span></a></li>
+        <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+        <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+        <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+        <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+        <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li>
+      </ul></nav>
+      <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
+    </aside>
+    <div class="main-content"><main class="kpis-main">
+      <section class="kpis-hero"><div><span class="kpis-kicker">Performance management</span><h1>KPIs</h1><p>Create KPI standards by department/position, evaluate employees monthly, and track their performance graph.</p></div><div class="kpis-hero-actions"><button class="kpis-btn kpis-btn--ghost" id="kpiRefreshBtn" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button><button class="kpis-btn kpis-btn--primary" id="openStandardBtn" type="button"><i data-feather="plus"></i><span>Create KPI standard</span></button></div></section>
+      <section class="kpis-grid"><article class="kpis-card kpis-card--graph"><div class="kpis-card-head"><div><span class="kpis-card-label">Employee monthly KPIs</span><h2 id="kpiGraphTitle">Select employee</h2></div><select class="kpis-select" id="kpiEmployeeFilter" aria-label="Select employee"></select></div><div class="kpis-chart" id="kpiChart" aria-label="KPI monthly graph"></div></article><article class="kpis-card kpis-card--score"><span class="kpis-card-label">Current score</span><div class="kpis-score-ring" id="kpiScoreRing" style="--score:0"><strong id="kpiScoreValue">—</strong><span>Final %</span></div><div class="kpis-score-meta"><strong id="kpiScoreRating">No review selected</strong><span id="kpiScoreMonth">—</span></div></article></section>
+      <section class="kpis-layout"><article class="kpis-card"><div class="kpis-card-head kpis-card-head--wrap"><div><span class="kpis-card-label">Monthly reviews</span><h2>Employee KPI reviews</h2></div><div class="kpis-filters"><select class="kpis-select" id="reviewDepartmentFilter"></select><select class="kpis-select" id="reviewPositionFilter"></select><input class="kpis-input" id="reviewMonthFilter" type="month" /><button class="kpis-btn kpis-btn--dark" id="openReviewBtn" type="button"><i data-feather="edit-3"></i><span>Create review</span></button></div></div><div class="kpis-table-wrap"><table class="kpis-table"><thead><tr><th>Employee</th><th>Department</th><th>Role</th><th>Month</th><th>Final %</th><th>Status</th><th></th></tr></thead><tbody id="kpiReviewsBody"><tr><td colspan="7">Loading KPI reviews...</td></tr></tbody></table></div></article><article class="kpis-card"><div class="kpis-card-head kpis-card-head--wrap"><div><span class="kpis-card-label">Standards</span><h2>KPI standards</h2></div><button class="kpis-btn kpis-btn--ghost" id="openStandardBtn2" type="button"><i data-feather="plus-circle"></i><span>New standard</span></button></div><div class="kpis-standards" id="kpiStandardsList"></div></article></section>
+    </main></div>
+  </div>
+  <div class="kpis-modal" id="standardModal" aria-hidden="true" hidden><div class="kpis-modal-backdrop" data-kpi-close="standard"></div><section class="kpis-modal-panel kpis-modal-panel--wide" role="dialog" aria-modal="true"><button class="kpis-close" type="button" data-kpi-close="standard"><i data-feather="x"></i></button><div class="kpis-modal-head"><span class="kpis-modal-icon"><i data-feather="target"></i></span><div><span class="kpis-kicker">Create a KPI standard</span><h2>Department & role KPI points</h2><p>Define section, description, subsection, weight, and target percentage.</p></div></div><form id="standardForm" class="kpis-form"><div class="kpis-form-grid"><label>Department<input class="kpis-input" name="department" list="kpiDepartmentOptions" required /></label><label>Role / Position<input class="kpis-input" name="rolePosition" list="kpiPositionOptions" required /></label><label>Academic Year<input class="kpis-input" name="academicYear" value="2025-2026" required /></label><label>Version<input class="kpis-input" name="version" type="number" min="1" value="1" required /></label></div><label>Standard title<input class="kpis-input" name="title" placeholder="Example: STEAM Instructor KPIs 25-26" /></label><label>Description<textarea class="kpis-textarea" name="description" rows="2"></textarea></label><div class="kpis-items-head"><h3>KPI rows</h3><button class="kpis-btn kpis-btn--ghost" id="addKpiRowBtn" type="button"><i data-feather="plus"></i><span>Add row</span></button></div><div class="kpis-items" id="kpiItemsEditor"></div><div class="kpis-modal-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-kpi-close="standard">Cancel</button><button class="kpis-btn kpis-btn--primary" type="submit"><i data-feather="save"></i><span>Save standard</span></button></div></form></section></div>
+  <div class="kpis-modal" id="reviewModal" aria-hidden="true" hidden><div class="kpis-modal-backdrop" data-kpi-close="review"></div><section class="kpis-modal-panel" role="dialog" aria-modal="true"><button class="kpis-close" type="button" data-kpi-close="review"><i data-feather="x"></i></button><div class="kpis-modal-head"><span class="kpis-modal-icon"><i data-feather="user-check"></i></span><div><span class="kpis-kicker">Monthly review</span><h2>Create employee KPI review</h2><p>Choose employee, month, and matching KPI standard.</p></div></div><form id="reviewForm" class="kpis-form"><label>Employee<select class="kpis-select" name="teamMemberId" id="reviewEmployeeSelect" required></select></label><label>Review Month<input class="kpis-input" name="reviewMonth" type="month" required /></label><label>KPI Standard<select class="kpis-select" name="standardId" id="reviewStandardSelect" required></select></label><div class="kpis-modal-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-kpi-close="review">Cancel</button><button class="kpis-btn kpis-btn--primary" type="submit"><i data-feather="arrow-right"></i><span>Create / open</span></button></div></form></section></div>
+  <div class="kpis-modal" id="scoreModal" aria-hidden="true" hidden><div class="kpis-modal-backdrop" data-kpi-close="score"></div><section class="kpis-modal-panel kpis-modal-panel--wide" role="dialog" aria-modal="true"><button class="kpis-close" type="button" data-kpi-close="score"><i data-feather="x"></i></button><div class="kpis-modal-head"><span class="kpis-modal-icon"><i data-feather="trending-up"></i></span><div><span class="kpis-kicker" id="scoreModalKicker">KPI review</span><h2 id="scoreModalTitle">Employee KPI review</h2><p id="scoreModalSub">Enter actual percentage for each KPI row.</p></div></div><form id="scoreForm" class="kpis-form"><div id="scoreItemsEditor" class="kpis-score-editor"></div><div class="kpis-modal-actions"><select class="kpis-select kpis-status-select" id="scoreStatusSelect"><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="archived">Archived</option></select><button class="kpis-btn kpis-btn--ghost" type="button" data-kpi-close="score">Cancel</button><button class="kpis-btn kpis-btn--primary" type="submit"><i data-feather="save"></i><span>Save scores</span></button></div></form></section></div>
+  <datalist id="kpiDepartmentOptions"></datalist><datalist id="kpiPositionOptions"></datalist>
+  <script src="/js/common-ui.js?v=kpis-page-v1"></script><script src="/js/kpis.js?v=kpis-page-v1"></script>
+</body>
+</html>
