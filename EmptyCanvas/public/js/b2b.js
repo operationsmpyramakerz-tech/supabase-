@@ -1040,11 +1040,16 @@ document.addEventListener('DOMContentLoaded', () => {
         values = await uploadPendingContractFile(ui.form, values);
         ui.submit.textContent = mode === 'edit' ? 'Saving...' : 'Adding...';
       }
+      const savePayload = { fields: values };
+      if (Object.prototype.hasOwnProperty.call(values, 'stocktaking_column')) {
+        savePayload.stocktaking_column = values.stocktaking_column;
+      }
+
       const response = await fetch(url, {
         method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: values }),
+        body: JSON.stringify(savePayload),
       });
 
       if (!response.ok) {
