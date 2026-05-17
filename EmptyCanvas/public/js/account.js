@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="profile-files-media-badge"><i data-feather="paperclip"></i></span>
           <div>
             <div class="profile-files-media-title">Files &amp; media</div>
-            <div class="profile-files-media-sub">${files.length ? `${files.length} item${files.length === 1 ? '' : 's'} attached to your profile` : 'Attachments from your profile'}</div>
+            <div class="profile-files-media-sub">${files.length ? `${files.length} item${files.length === 1 ? '' : 's'} attached to your Notion profile` : 'Attachments from your Team Members record'}</div>
           </div>
         </div>
         <div class="profile-media-files-grid">
@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       toast('success', 'Saved', 'Profile picture updated successfully.');
       return true;
     } catch (e) {
-      toast('error', 'Upload failed', e.message || 'Failed to update profile picture.');
+      toast('error', 'Upload failed', e.message === 'invalid password' ? 'invalid password' : 'Failed to update profile picture.');
       return false;
     } finally {
       if (inputEl) inputEl.value = '';
@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error(vJson.error || `Request failed (${vRes.status})`);
       }
 
-      // Password OK → close modal + show saving loader until Notion update completes
+      // Password OK → close modal + show saving loader until the update completes
       closeModal({ preservePendingProfilePicture: isProfilePicture });
       showSavingOverlay();
 

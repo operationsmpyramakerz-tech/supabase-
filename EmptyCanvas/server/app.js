@@ -151,76 +151,6 @@ app.use(
 );
 
 
-// Keep internal provider/configuration details out of user-facing API errors.
-// Detailed technical errors are still written to server logs for debugging.
-const CLIENT_INTERNAL_TEXT_RE = /(notion|supabase|database\s*id|database\s*ids|team_members|products_database|school_stocktaking_db_id|massage\s+database|vercel|environment\s+variables?|service_role|api\s*key|schema\s+cache|migration|rpc|rest|sql|helper\s+function|table\s+is\s+not\s+configured|source\s+is\s+required|data\s+source\s+is\s+not\s+configured)/i;
-
-function _publicFallbackForRequest(req, statusCode = 500) {
-  const pathName = String(req?.path || req?.originalUrl || "").toLowerCase();
-  if (pathName.includes("/api/login")) return "Invalid username or password.";
-  if (pathName.includes("forgot-password")) return "Could not complete this request. Please try again.";
-  if (statusCode === 401 || statusCode === 403) return "You are not allowed to perform this action.";
-  if (pathName.includes("stock")) return "Failed to load stock data. Please try again.";
-  if (pathName.includes("b2b")) return "Failed to load school data. Please try again.";
-  if (pathName.includes("expenses")) return "Failed to load expenses. Please try again.";
-  if (pathName.includes("orders")) return "Failed to load orders. Please try again.";
-  if (pathName.includes("tasks")) return "Failed to load tasks. Please try again.";
-  if (pathName.includes("messages") || pathName.includes("mail")) return "Failed to load messages. Please try again.";
-  if (pathName.includes("products") || pathName.includes("proposals") || pathName.includes("kits")) return "Failed to load product data. Please try again.";
-  return "Something went wrong. Please try again.";
-}
-
-function _cleanSuccessMessage(textValue) {
-  let out = String(textValue || "");
-  out = out.replace(/\s+to\s+Supabase\b/gi, "");
-  out = out.replace(/\s+to\s+Notion\b/gi, "");
-  out = out.replace(/\s+from\s+Supabase\b/gi, "");
-  out = out.replace(/\s+from\s+Notion\b/gi, "");
-  out = out.replace(/\bSupabase\b/gi, "the system");
-  out = out.replace(/\bNotion\b/gi, "the system");
-  out = out.replace(/\bdatabase\b/gi, "data");
-  return out.replace(/\s{2,}/g, " ").trim() || "Done.";
-}
-
-function _sanitizePublicApiPayload(payload, req, statusCode = 200, depth = 0) {
-  if (depth > 5 || payload == null) return payload;
-  if (typeof payload === "string") {
-    return CLIENT_INTERNAL_TEXT_RE.test(payload)
-      ? (statusCode >= 400 ? _publicFallbackForRequest(req, statusCode) : _cleanSuccessMessage(payload))
-      : payload;
-  }
-  if (Array.isArray(payload)) {
-    return payload.map((item) => _sanitizePublicApiPayload(item, req, statusCode, depth + 1));
-  }
-  if (typeof payload !== "object") return payload;
-
-  const out = { ...payload };
-  for (const [key, value] of Object.entries(out)) {
-    const keyName = String(key || "").toLowerCase();
-    if (typeof value === "string") {
-      if (["error", "message", "details", "hint"].includes(keyName) && CLIENT_INTERNAL_TEXT_RE.test(value)) {
-        out[key] = statusCode >= 400 ? _publicFallbackForRequest(req, statusCode) : _cleanSuccessMessage(value);
-      } else if (["error", "message"].includes(keyName)) {
-        out[key] = _cleanSuccessMessage(value);
-      }
-      continue;
-    }
-    if (value && typeof value === "object" && ["error", "message", "details", "hint"].includes(keyName)) {
-      out[key] = statusCode >= 400 ? _publicFallbackForRequest(req, statusCode) : "Done.";
-      continue;
-    }
-    out[key] = _sanitizePublicApiPayload(value, req, statusCode, depth + 1);
-  }
-  return out;
-}
-
-app.use((req, res, next) => {
-  const originalJson = res.json.bind(res);
-  res.json = (payload) => originalJson(_sanitizePublicApiPayload(payload, req, res.statusCode || 200));
-  next();
-});
-
-
 // --- Health FIRST (before session) so it works even if env is missing ---
 app.get("/health", (req, res) => {
   res.json({ ok: true, region: process.env.VERCEL_REGION || "unknown" });
@@ -590,205 +520,6 @@ function clearLocalAppCaches() {
   try {
     _CACHE_INFLIGHT.clear();
   } catch {}
-}
-
-// -----------------------------------------------------------------------------
-// Auth revocation for deleted users
-// -----------------------------------------------------------------------------
-// A deleted team member may still have an active browser/PWA session stored in
-// Upstash.  The session itself is keyed by sid, so deleting the user row is not
-// enough to log out that device.  We store a small revocation marker by team
-// member id and make requireAuth reject that session on the next request.
-const AUTH_REVOKED_USER_PREFIX = "auth:revoked:team-member:";
-const AUTH_REVOKED_TTL_SECONDS = 60 * 60 * 24 * 180; // long enough to outlive normal sessions
-const AUTH_USER_VALIDATE_TTL_MS = 30 * 1000;
-
-function _authRevokedKey(userId = "") {
-  const id = String(userId || "").trim();
-  return id ? `${AUTH_REVOKED_USER_PREFIX}${id}` : "";
-}
-
-function _trimTrailingSlash(value) {
-  return String(value || "").replace(/\/+$/, "");
-}
-
-async function _upstashRestCommand(command) {
-  const url = _trimTrailingSlash(process.env.UPSTASH_REDIS_REST_URL || "");
-  const token = String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
-  if (!url || !token || typeof fetch !== "function") return null;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(command),
-  });
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.error) {
-    throw new Error(payload?.error || `Upstash REST request failed with HTTP ${response.status}`);
-  }
-  return payload?.result;
-}
-
-async function _authSetRevokedMarker(userId = "", meta = {}) {
-  const key = _authRevokedKey(userId);
-  if (!key) return false;
-
-  const payload = {
-    revoked: true,
-    userId: String(userId || "").trim(),
-    name: String(meta?.name || "").trim(),
-    reason: String(meta?.reason || "team_member_deleted").trim() || "team_member_deleted",
-    revokedAt: new Date().toISOString(),
-  };
-
-  try { _memSet(key, payload, AUTH_REVOKED_TTL_SECONDS); } catch {}
-
-  let stored = false;
-  try {
-    if (redisClient && redisClient.isReady) {
-      await redisClient.set(key, JSON.stringify(payload), { EX: AUTH_REVOKED_TTL_SECONDS });
-      stored = true;
-    }
-  } catch (error) {
-    console.warn("[auth-revoke] redis marker set failed:", error?.message || error);
-  }
-
-  if (!stored) {
-    try {
-      await _upstashRestCommand(["SET", key, JSON.stringify(payload), "EX", AUTH_REVOKED_TTL_SECONDS]);
-      stored = true;
-    } catch (error) {
-      console.warn("[auth-revoke] upstash REST marker set failed:", error?.message || error);
-    }
-  }
-
-  return stored;
-}
-
-async function _authGetRevokedMarker(userId = "") {
-  const key = _authRevokedKey(userId);
-  if (!key) return null;
-
-  const mem = _memGet(key);
-  if (mem !== null && mem !== undefined) return mem;
-
-  let raw = null;
-  try {
-    if (redisClient && redisClient.isReady) raw = await redisClient.get(key);
-  } catch (error) {
-    console.warn("[auth-revoke] redis marker get failed:", error?.message || error);
-  }
-
-  if (!raw) {
-    try { raw = await _upstashRestCommand(["GET", key]); } catch (error) {
-      console.warn("[auth-revoke] upstash REST marker get failed:", error?.message || error);
-    }
-  }
-
-  if (!raw) return null;
-  let parsed = raw;
-  if (typeof raw === "string") {
-    try { parsed = JSON.parse(raw); } catch { parsed = { revoked: true }; }
-  }
-  try { _memSet(key, parsed, Math.min(300, AUTH_REVOKED_TTL_SECONDS)); } catch {}
-  return parsed;
-}
-
-async function _revokeTeamMemberSessions(userId = "", meta = {}) {
-  const id = String(userId || "").trim();
-  if (!id) return false;
-
-  await _authSetRevokedMarker(id, meta);
-  try { await clearUserRelatedCaches({ userId: id, username: meta?.name || "" }); } catch {}
-  return true;
-}
-
-function _clearAuthCookie(res) {
-  const cookieName = process.env.SESSION_COOKIE_NAME || "op.sid";
-  try { res.clearCookie(cookieName, { path: "/" }); } catch {}
-  // Legacy deployments used the default express-session cookie name. Clearing it
-  // is harmless and helps old installed PWAs migrate cleanly.
-  try { res.clearCookie("connect.sid", { path: "/" }); } catch {}
-}
-
-function _destroySession(req) {
-  return new Promise((resolve) => {
-    try {
-      if (!req?.session || typeof req.session.destroy !== "function") return resolve();
-      req.session.destroy(() => resolve());
-    } catch {
-      resolve();
-    }
-  });
-}
-
-async function _rejectAuthenticatedRequest(req, res, { code = "AUTH_REQUIRED", message = "Login is required.", status = 401 } = {}) {
-  _clearAuthCookie(res);
-  await _destroySession(req);
-
-  if (String(req.path || "").startsWith("/api/")) {
-    res.set("Cache-Control", "no-store");
-    return res.status(status).json({
-      ok: false,
-      authenticated: false,
-      code,
-      message,
-      redirect: "/login",
-    });
-  }
-
-  return res.redirect("/login");
-}
-
-async function _validateAuthenticatedSession(req) {
-  if (!req?.session?.authenticated) {
-    return { ok: false, code: "AUTH_REQUIRED", message: "Login is required before calling this endpoint." };
-  }
-
-  const userSupabaseId = String(req.session.userSupabaseId || "").trim();
-  if (!userSupabaseId || !_sbTeamMembersEnabled()) return { ok: true };
-
-  const revoked = await _authGetRevokedMarker(userSupabaseId);
-  if (revoked) {
-    return {
-      ok: false,
-      code: "AUTH_REVOKED",
-      message: "This account was removed from the system. Please log in again with an active account.",
-    };
-  }
-
-  // Also catch users removed directly from Supabase or before this revocation
-  // marker existed.  This is throttled per session to avoid adding a DB lookup
-  // to every request.
-  const lastValidated = Number(req.session.activeUserValidatedAt || 0);
-  if (lastValidated && Date.now() - lastValidated < AUTH_USER_VALIDATE_TTL_MS) return { ok: true };
-
-  let row = null;
-  try {
-    row = await _sbFindTeamMemberById(userSupabaseId);
-  } catch (error) {
-    console.warn("[auth] active user validation failed:", error?.message || error);
-    return { ok: true };
-  }
-
-  if (!row) {
-    await _revokeTeamMemberSessions(userSupabaseId, { name: req.session.username || "", reason: "team_member_missing" }).catch(() => {});
-    return {
-      ok: false,
-      code: "AUTH_REVOKED",
-      message: "This account is no longer available. Please log in again with an active account.",
-    };
-  }
-
-  try {
-    req.session.activeUserValidatedAt = Date.now();
-  } catch {}
-
-  return { ok: true };
 }
 
 async function deleteRedisKeysByPattern(pattern, batchSize = 200) {
@@ -2880,7 +2611,24 @@ function _sbValueForLabel(row, label) {
   if (canon === "allowedpages") aliases.push("Allowed Pages", "allowed_pages", "Pages", "pages", "access_pages");
   if (canon === "svschools") aliases.push("S.V Schools", "sv_schools", "SV Schools", "schools");
   if (canon === "position") aliases.push("Position", "position", "role");
-  if (canon === "profilepicture") aliases.push("Profile picture", "profile_picture", "photo", "photo_url", "avatar", "avatar_url");
+  if (canon === "profilepicture") aliases.push(
+    "Profile picture",
+    "Profile Picture",
+    "Profile Photo",
+    "Profile photo",
+    "profile_picture",
+    "profile_picture_url",
+    "profile_photo",
+    "profile_photo_url",
+    "photo",
+    "photo_url",
+    "avatar",
+    "avatar_url",
+    "image",
+    "image_url",
+    "picture",
+    "picture_url"
+  );
   if (canon === "filesmedia") aliases.push("Files & media", "files_media", "files", "media");
   if (canon === "employeecode") aliases.push("Employee Code", "employee_code", "code");
   if (canon === "email") aliases.push("Email", "email", "mail");
@@ -2938,6 +2686,91 @@ async function _sbFindTeamMemberById(id) {
   try { return await supabaseDb.selectById(_sbTeamMembersTable(), id); } catch {}
   const rows = await _sbSelectTeamMembersRows();
   return (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === String(id)) || null;
+}
+
+async function _sbFindSessionTeamMember(req) {
+  if (!_sbTeamMembersEnabled()) return null;
+
+  const sessionId = String(req?.session?.userSupabaseId || "").trim();
+  if (sessionId) {
+    const byId = await _sbFindTeamMemberById(sessionId).catch(() => null);
+    if (byId) return byId;
+  }
+
+  const username = String(req?.session?.username || "").trim();
+  if (username) {
+    const byName = await _sbFindTeamMemberByName(username).catch(() => null);
+    if (byName) {
+      try {
+        const id = String(_sbGet(byName, ["id", "ID"]) || "").trim();
+        if (id) req.session.userSupabaseId = id;
+        const name = _sbString(_sbValueForLabel(byName, "Name"));
+        if (name) req.session.username = name;
+      } catch {}
+      return byName;
+    }
+  }
+
+  return null;
+}
+
+function _sbTeamMemberPasswordValue(row = {}) {
+  return _sbString(_sbValueForLabel(row, "Password"));
+}
+
+function _sbAccountFieldColumnKey(keys = [], label = "") {
+  const aliases = [label];
+  const canon = _sbCanon(label);
+  if (canon === "name") aliases.push("Name", "name", "full_name", "username");
+  if (canon === "department") aliases.push("Department", "department");
+  if (canon === "position") aliases.push("Position", "position", "role");
+  if (canon === "phone") aliases.push("Phone", "phone", "mobile");
+  if (canon === "email") aliases.push("Email", "email", "mail");
+  if (canon === "employeecode") aliases.push("Employee Code", "employee_code", "employeeCode", "code");
+  if (canon === "password") aliases.push("Password", "password", "passcode", "pin");
+  return _sbFindKey(keys, aliases);
+}
+
+function _sbProfilePictureColumnKey(row = {}, extraRows = []) {
+  const keys = _sbAllColumnKeys([row, ...(Array.isArray(extraRows) ? extraRows : [])]).filter((key) => !_sbNonEditableColumn(key));
+  const direct = _sbFindKey(keys, [
+    "Profile picture",
+    "Profile Picture",
+    "Profile Photo",
+    "Profile photo",
+    "profile_picture",
+    "profile_picture_url",
+    "profile_photo",
+    "profile_photo_url",
+    "photo_url",
+    "avatar_url",
+    "picture_url",
+    "image_url",
+    "photo",
+    "avatar",
+    "picture",
+    "image",
+  ]);
+  if (direct) return direct;
+
+  return keys.find((key) => {
+    const canon = _sbCanon(key);
+    if (!canon || canon === "filesmedia" || canon === "allowedpages" || canon === "password") return false;
+    const hasProfileWord = canon.includes("profile") || canon.includes("avatar");
+    const hasImageWord = canon.includes("picture") || canon.includes("photo") || canon.includes("image") || canon.includes("pic");
+    return (hasProfileWord && hasImageWord) || canon === "photo" || canon === "avatar" || canon === "image";
+  }) || "";
+}
+
+function _sbCoerceAccountPatchValue(existingValue, nextValue) {
+  if (nextValue === null || typeof nextValue === "undefined") return null;
+  if (typeof existingValue === "number") {
+    const n = Number(String(nextValue).replace(/,/g, ""));
+    if (!Number.isFinite(n)) return nextValue;
+    return n;
+  }
+  if (typeof existingValue === "boolean") return _sbBool(nextValue, false);
+  return String(nextValue ?? "").trim() || null;
 }
 
 function _sbExtractAllowedPages(row) {
@@ -7148,18 +6981,24 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
 }
 
 // Authentication middleware
-async function requireAuth(req, res, next) {
-  try {
-    const validation = await _validateAuthenticatedSession(req);
-    if (validation.ok) return next();
-    return _rejectAuthenticatedRequest(req, res, validation);
-  } catch (error) {
-    console.error("requireAuth validation error:", error?.message || error);
-    return _rejectAuthenticatedRequest(req, res, {
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) return next();
+
+  // API calls should not silently render the login page. Returning JSON makes
+  // debugging and frontend handling clearer, while normal page routes still
+  // redirect to /login.
+  if (String(req.path || "").startsWith("/api/")) {
+    res.set("Cache-Control", "no-store");
+    return res.status(401).json({
+      ok: false,
+      authenticated: false,
       code: "AUTH_REQUIRED",
       message: "Login is required before calling this endpoint.",
+      redirect: "/login",
     });
   }
+
+  return res.redirect("/login");
 }
 
 // Page-Access middleware
@@ -7629,6 +7468,19 @@ app.post("/api/forgot-password", async (req, res) => {
       }
     }
 
+    if (!account && teamMembersDatabaseId) {
+      const page = await _notionFindTeamMemberByEmail(email);
+      if (page) {
+        const props = page.properties || {};
+        account = {
+          source: "notion",
+          name: props?.Name?.title?.[0]?.plain_text || email,
+          email: props?.Email?.email || email,
+          password: _extractPropText(props?.Password) || "",
+        };
+      }
+    }
+
     if (!account) {
       return res.status(404).json({ success: false, error: "No user found with this email." });
     }
@@ -7646,6 +7498,7 @@ app.post("/api/forgot-password", async (req, res) => {
     return res.json({
       success: true,
       message: "Password sent successfully. Please check your inbox.",
+      source: account.source,
     });
   } catch (error) {
     console.error("Forgot password error:", error?.details || error);
@@ -7674,13 +7527,12 @@ app.post("/api/login", async (req, res) => {
           req.session.username = accountPayload.username || providedUsername;
           req.session.allowedPages = allowedNormalized;
           req.session.userSupabaseId = String(_sbGet(row, ["id", "ID"]) ?? "");
-          req.session.activeUserValidatedAt = Date.now();
           req.session.accountCache = { ...accountPayload, allowedPages: allowedUI };
           req.session.accountCacheTs = Date.now();
 
           return req.session.save((err) => {
             if (err) return res.status(500).json({ error: "Session could not be saved." });
-            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, redirect: "/home" });
+            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase", redirect: "/home" });
           });
         }
         return res.status(401).json({ error: "incorrect password" });
@@ -7690,7 +7542,60 @@ app.post("/api/login", async (req, res) => {
     }
   }
 
-  return res.status(401).json({ error: "Invalid username or password." });
+  if (!teamMembersDatabaseId) {
+    return res
+      .status(500)
+      .json({ error: "Team_Members database ID is not configured, and Supabase login did not find this user." });
+  }
+  try {
+    const response = await notion.databases.query({
+      database_id: teamMembersDatabaseId,
+      filter: { property: "Name", title: { equals: username } },
+    });
+    if (response.results.length === 0) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+    const user = response.results[0];
+    const storedPassword = _extractPropText(user.properties?.Password);
+
+    if (storedPassword !== null && typeof storedPassword !== "undefined" && String(storedPassword) === providedPassword) {
+      const allowedNormalized = extractAllowedPages(user.properties);
+      req.session.authenticated = true;
+      req.session.username = username;
+      req.session.allowedPages = allowedNormalized;
+      req.session.userNotionId = user.id;
+
+      const allowedUI = expandAllowedForUI(allowedNormalized);
+
+      try {
+        const p = user.properties || {};
+        req.session.accountCache = {
+          name: p?.Name?.title?.[0]?.plain_text || "",
+          username,
+          department: p?.Department?.select?.name || "",
+          position: p?.Position?.select?.name || "",
+          photoUrl: extractProfilePhotoUrlFromProps(p) || "",
+          phone: p?.Phone?.phone_number || "",
+          email: p?.Email?.email || "",
+          employeeCode: p?.["Employee Code"]?.number ?? null,
+          filesMedia: extractFilesMediaFromProps(p),
+          passwordSet: (_extractPropText(p?.Password) ?? null) !== null,
+          allowedPages: allowedUI,
+        };
+        req.session.accountCacheTs = Date.now();
+      } catch {}
+
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ error: "Session could not be saved." });
+        res.json({ success: true, message: "Login successful", allowedPages: allowedUI, redirect: "/home" });
+      });
+    } else {
+      res.status(401).json({ error: "incorrect password" });
+    }
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ error: "Login failed" });
+  }
 });
 // === Helper: Received Quantity (number) ===
 async function detectReceivedQtyPropName() {
@@ -8063,11 +7968,10 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
     }
 
     if (_sbTeamMembersEnabled()) {
-      const username = String(req.session?.username || "").trim();
-      const row = await _sbFindTeamMemberByName(username);
+      const row = await _sbFindSessionTeamMember(req);
       if (!row) return res.status(404).json({ error: "User not found." });
 
-      const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
+      const storedPassword = _sbTeamMemberPasswordValue(row);
       if (!storedPassword) return res.status(400).json({ error: "No password set for this account." });
       if (String(storedPassword) !== providedPassword) {
         return res.status(401).json({ error: "invalid password" });
@@ -8076,13 +7980,29 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
       const safeOriginalName = String(filename || "profile-picture.png").trim() || "profile-picture.png";
       const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
       const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+      const username = _sbString(_sbValueForLabel(row, "Name")) || String(req.session?.username || "").trim();
+      if (!rowId) return res.status(500).json({ error: "Unable to update profile picture." });
+
+      const rows = await _sbSelectTeamMembersRows().catch(() => [row]);
+      const profileKey = _sbProfilePictureColumnKey(row, rows || []);
+      if (!profileKey) {
+        return res.status(400).json({ error: "Profile picture field is not configured." });
+      }
+
       const objectName = `team-members/profile-pictures/${rowId || username || "user"}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
       const publicUrl = await uploadToBlobFromBase64(dataUrl, objectName);
 
-      const profileKey = Object.keys(row || {}).find((key) => _sbCanon(key) === "profilepicture") || "profile_picture";
-      await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [profileKey]: publicUrl });
-      await clearUserServerCaches(req, { userId: rowId });
-      return res.json({ success: true, photoUrl: publicUrl, source: "supabase" });
+      const updated = await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [profileKey]: publicUrl });
+      req.session.userSupabaseId = rowId;
+      if (username) req.session.username = username;
+
+      await clearUserServerCaches(req, { userId: rowId, username });
+      await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(rowId)}:v1`).catch(() => {});
+      if (username) await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(username)}:v1`).catch(() => {});
+
+      const nextRow = updated || { ...row, [profileKey]: publicUrl };
+      const photoUrl = _sbExtractUrl(_sbValueForLabel(nextRow, "Profile picture")) || publicUrl;
+      return res.json({ success: true, photoUrl, source: "supabase" });
     }
 
     if (!teamMembersDatabaseId) {
@@ -8129,8 +8049,12 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
 
     return res.json({ success: true, photoUrl: publicUrl });
   } catch (error) {
-    console.error("Error updating profile picture:", error?.body || error);
-    return res.status(500).json({ error: error?.message || "Failed to update profile picture." });
+    console.error("Error updating profile picture:", error?.details || error?.body || error);
+    const status = Number(error?.statusCode) || Number(error?.status) || 500;
+    const safeMessage = status === 401
+      ? "invalid password"
+      : (status >= 400 && status < 500 ? (error?.message || "Failed to update profile picture.") : "Failed to update profile picture.");
+    return res.status(status >= 400 && status < 500 ? status : 500).json({ error: safeMessage });
   }
 });
 
@@ -8704,7 +8628,7 @@ async function _sbInsertWithMissingColumnFallback(table, row = {}, requiredColum
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).map((x) => String(x || "").trim()).filter(Boolean));
   const current = { ...(row || {}) };
   const removed = [];
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     try {
       const created = await supabaseDb.insert(table, current);
       if (removed.length) {
@@ -8727,7 +8651,7 @@ async function _sbUpdateByIdWithMissingColumnFallback(table, id, row = {}, requi
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).map((x) => String(x || "").trim()).filter(Boolean));
   const current = { ...(row || {}) };
   const removed = [];
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     try {
       const updated = await supabaseDb.updateById(table, id, current);
       if (removed.length) {
@@ -11396,7 +11320,6 @@ const B2B_SCHOOL_FIELD_DEFS = [
   { key: 'solution_type', label: 'Solution Type', type: 'text', section: 'Main' },
   { key: 'theme_type', label: 'Theme Type', type: 'text', section: 'Main' },
   { key: 'education_system', label: 'Education System', type: 'text', section: 'Main' },
-  { key: 'stocktaking_column', label: 'Stocktaking Column', type: 'text', section: 'Stocktaking' },
   { key: 'governorate', label: 'Governorate', type: 'text', section: 'Location' },
   { key: 'location', label: 'Location', type: 'url', section: 'Location' },
   { key: 'date_of_supply', label: 'Date of Supply', type: 'date', section: 'Contract' },
@@ -11431,85 +11354,6 @@ const B2B_SCHOOL_FIELD_KEYS = B2B_SCHOOL_FIELD_DEFS.map((field) => field.key);
 const B2B_SCHOOL_NUMBER_FIELDS = new Set(B2B_SCHOOL_FIELD_DEFS.filter((field) => field.type === 'number').map((field) => field.key));
 const B2B_SCHOOL_BOOL_FIELDS = new Set(B2B_SCHOOL_FIELD_DEFS.filter((field) => field.type === 'checkbox').map((field) => field.key));
 
-const B2B_STOCKTAKING_COLUMN_ALIASES = [
-  'stocktaking_column',
-  'Stocktaking Column',
-  'stock_column',
-  'Stock Column',
-  'done_column',
-  'Done Column',
-  'school_stock_column',
-  'School Stock Column',
-  'stocktaking',
-  'Stocktaking',
-  'stocktaking_column_name',
-  'Stocktaking Column Name',
-  'selected_stocktaking_column',
-  'Selected Stocktaking Column',
-];
-
-const B2B_STOCKTAKING_COLUMN_WRITE_ALIASES = [
-  'stocktaking_column',
-  'stock_column',
-  'done_column',
-  'school_stock_column',
-  'stocktaking',
-  'stocktaking_column_name',
-  'selected_stocktaking_column',
-];
-
-const B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC = 60 * 60 * 24 * 365;
-
-function _sbB2BStockColumnOverrideKey(schoolId = '') {
-  const id = String(schoolId || '').trim();
-  return id ? `cache:api:b2b:school-stock-column-override:${id}:v1` : '';
-}
-
-async function _sbGetB2BStockColumnOverride(schoolId = '') {
-  const key = _sbB2BStockColumnOverrideKey(schoolId);
-  if (!key) return '';
-  const mem = _memGet(key);
-  if (mem !== null && typeof mem !== 'undefined') return _sbString(mem);
-  const redisValue = await _redisGet(key);
-  if (redisValue !== null && typeof redisValue !== 'undefined') {
-    const clean = _sbString(redisValue);
-    if (clean) _memSet(key, clean, B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC);
-    return clean;
-  }
-  return '';
-}
-
-async function _sbSetB2BStockColumnOverride(schoolId = '', value = '') {
-  const key = _sbB2BStockColumnOverrideKey(schoolId);
-  if (!key) return;
-  const clean = _sbString(value);
-  if (!clean) {
-    await cacheDel(key);
-    return;
-  }
-  _memSet(key, clean, B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC);
-  await _redisSet(key, clean, B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC);
-}
-
-function _sbApplyB2BStockColumnSelection(school = {}, value = '') {
-  const clean = _sbString(value);
-  if (!clean || !school || typeof school !== 'object') return school;
-  school.stocktakingColumn = clean;
-  if (!school.fields || typeof school.fields !== 'object') school.fields = {};
-  school.fields.stocktaking_column = clean;
-  school.fields.stock_column = clean;
-  school.fields.done_column = clean;
-  school.fields.school_stock_column = clean;
-  return school;
-}
-
-async function _sbHydrateB2BStockColumnSelection(school = {}) {
-  if (!school || typeof school !== 'object') return school;
-  const override = await _sbGetB2BStockColumnOverride(school.id);
-  return override ? _sbApplyB2BStockColumnSelection(school, override) : school;
-}
-
-
 function _sbB2BPublicFieldValues(row = {}) {
   const out = {};
   for (const key of B2B_SCHOOL_FIELD_KEYS) {
@@ -11520,8 +11364,6 @@ function _sbB2BPublicFieldValues(row = {}) {
       out[key] = raw === null || typeof raw === 'undefined' || raw === '' ? '' : Number(raw);
     } else if (key === 'solution_type') {
       out[key] = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program Type', 'Program type']));
-    } else if (key === 'stocktaking_column') {
-      out[key] = _sbString(_sbGet(row, B2B_STOCKTAKING_COLUMN_ALIASES));
     } else {
       out[key] = _sbString(_sbGet(row, [key]));
     }
@@ -11562,16 +11404,6 @@ function _sbBuildB2BSchoolWriteRow(payload = {}) {
     // Temporary compatibility while the Supabase column is being renamed from program_type to solution_type.
     // The missing-column fallback will keep whichever column exists in the deployed schema.
     row.program_type = row.solution_type || null;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(source, 'stocktaking_column')) {
-    // Compatibility with older B2B schemas that may already have one of these
-    // columns instead of the new stocktaking_column field. The missing-column
-    // fallback strips unsupported aliases and keeps whichever one exists.
-    const stocktakingColumn = String(source.stocktaking_column ?? '').trim();
-    for (const alias of B2B_STOCKTAKING_COLUMN_WRITE_ALIASES) {
-      row[alias] = stocktakingColumn || null;
-    }
   }
 
   const schoolName = String(row.school_name || '').trim();
@@ -11616,7 +11448,6 @@ function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
   const governorateName = _sbString(_sbGet(row, ['governorate', 'Governorate', 'governorates']));
   const educationSystem = _sbSplitValues(_sbGet(row, ['education_system', 'Education System', 'Education system', 'education']));
   const programType = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program type', 'Program Type', 'program']));
-  const stocktakingColumn = _sbString(_sbGet(row, B2B_STOCKTAKING_COLUMN_ALIASES));
   const location = _sbExtractUrl(_sbGet(row, ['location', 'Location', 'google_maps', 'Google Maps'])) || _sbString(_sbGet(row, ['location', 'Location']));
   const grades = {};
   for (let i = 1; i <= 12; i++) {
@@ -11632,7 +11463,6 @@ function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
     programType,
     grades,
     schoolCode: _sbString(_sbGet(row, ['school_code', 'School Code', 'code', 'ID'])),
-    stocktakingColumn,
     source: 'supabase',
   };
 
@@ -11701,71 +11531,14 @@ function _sbB2BFindColumnInRows(rows = [], schoolName = '', kind = 'done', dateI
   return matches[0] || null;
 }
 
-function _sbB2BExactColumnInRows(rows = [], columnName = '') {
-  const raw = String(columnName || '').trim();
-  if (!raw) return null;
-  const keys = _sbAllColumnKeys(rows || []);
-  if (!keys.length) return null;
-
-  const direct = _sbFindKey(keys, [raw]);
-  if (direct) return { name: direct, date: null };
-
-  const wanted = _sbStocktakingColumnKey(raw);
-  if (!wanted) return null;
-  const matched = keys.find((key) => {
-    const keyText = String(key || '').trim();
-    return _sbStocktakingColumnKey(keyText) === wanted || _sbStocktakingColumnKey(_uaTitleCaseLabel(keyText)) === wanted;
-  });
-  return matched ? { name: matched, date: null } : null;
-}
-
-function _sbB2BStockColumnBaseLabel(columnName = '') {
-  const raw = String(columnName || '').trim();
-  if (!raw) return '';
-  return raw
-    .replace(/[_\s-]*(done|stock|quantity)$/i, '')
-    .replace(/[_\s-]+$/g, '')
-    .trim() || raw;
-}
-
-function _sbB2BResolvedColumn(rows = [], { schoolName = '', configuredColumn = '', kind = 'done', dateISO = '' } = {}) {
-  const cleanKind = String(kind || 'done').trim().toLowerCase();
-  const configured = String(configuredColumn || '').trim();
-  const configuredBase = _sbB2BStockColumnBaseLabel(configured);
-
-  if (configured && cleanKind === 'done') {
-    const exact = _sbB2BExactColumnInRows(rows, configured);
-    if (exact?.name) return exact;
-  }
-
-  if (configuredBase) {
-    const fromConfigured = _sbB2BFindColumnInRows(rows, configuredBase, kind, dateISO);
-    if (fromConfigured?.name) return fromConfigured;
-  }
-
-  if (configured && cleanKind !== 'done') {
-    const fromConfiguredRaw = _sbB2BFindColumnInRows(rows, configured, kind, dateISO);
-    if (fromConfiguredRaw?.name) return fromConfiguredRaw;
-  }
-
-  // When a school has a manually selected Stocktaking column, that manual
-  // column must be the source of truth. Do not fall back to the old auto-detect
-  // based on the school name, otherwise the manual selection appears saved but
-  // the school page still reads another column.
-  if (configured) return null;
-
-  return _sbB2BFindColumnInRows(rows, schoolName, kind, dateISO);
-}
-
 async function _sbGetB2BSchoolStocktakingPayload(schoolId) {
   const school = await _getB2BSchoolById(schoolId);
   if (!school) return { meta: {}, items: [] };
   const schoolName = String(school.name || '').trim();
-  const configuredStockColumn = String(school.stocktakingColumn || school.fields?.stocktaking_column || '').trim();
   const rows = await _sbStocktakingRows();
-  const doneCol = _sbB2BResolvedColumn(rows, { schoolName, configuredColumn: configuredStockColumn, kind: 'done' }) || null;
-  const inventoryCol = _sbB2BResolvedColumn(rows, { schoolName, configuredColumn: configuredStockColumn, kind: 'inventory' }) || null;
-  const defectedCol = _sbB2BResolvedColumn(rows, { schoolName, configuredColumn: configuredStockColumn, kind: 'defected' }) || null;
+  const doneCol = _sbB2BFindColumnInRows(rows, schoolName, 'done') || null;
+  const inventoryCol = _sbB2BFindColumnInRows(rows, schoolName, 'inventory') || null;
+  const defectedCol = _sbB2BFindColumnInRows(rows, schoolName, 'defected') || null;
 
   const items = (rows || [])
     .map((row) => {
@@ -11784,7 +11557,6 @@ async function _sbGetB2BSchoolStocktakingPayload(schoolId) {
   return {
     meta: {
       schoolName,
-      configuredStockColumn: configuredStockColumn || null,
       donePropName: doneCol?.name || null,
       inventoryPropName: inventoryCol?.name || null,
       inventoryDate: inventoryCol?.date || null,
@@ -11809,7 +11581,6 @@ async function _sbUpdateB2BStockValue({ schoolId, stockId, kind, value, requeste
     throw err;
   }
   const schoolName = String(school.name || '').trim();
-  const configuredStockColumn = String(school.stocktakingColumn || school.fields?.stocktaking_column || '').trim();
   const rows = await _sbStocktakingRows();
   const target = (rows || []).find((row) => String(row?.id ?? '').trim() === String(stockId || '').trim());
   if (!target) {
@@ -11822,8 +11593,8 @@ async function _sbUpdateB2BStockValue({ schoolId, stockId, kind, value, requeste
   if (requestedPropName && Object.prototype.hasOwnProperty.call(target, requestedPropName)) {
     column = { name: requestedPropName, date: _normalizeISODateInput(String(requestedPropName).match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1] || '') || null };
   }
-  if (!column && requestedDate) column = _sbB2BResolvedColumn([target], { schoolName, configuredColumn: configuredStockColumn, kind, dateISO: requestedDate });
-  if (!column) column = _sbB2BResolvedColumn([target], { schoolName, configuredColumn: configuredStockColumn, kind });
+  if (!column && requestedDate) column = _sbB2BFindColumnInRows([target], schoolName, kind, requestedDate);
+  if (!column) column = _sbB2BFindColumnInRows([target], schoolName, kind);
   if (!column?.name) {
     const err = new Error(`No Supabase column exists for ${kind}. Add the column to the stocktaking table first or re-import the latest stocktaking schema.`);
     err.status = 400;
@@ -11895,7 +11666,7 @@ async function _getB2BSchoolById(schoolId) {
 
   if (_sbB2BSchoolsEnabled()) {
     const row = await _sbFindB2BSchoolById(schoolId);
-    if (row) return await _sbHydrateB2BStockColumnSelection(_sbSerializeB2BSchoolRow(row, { detail: true }));
+    if (row) return _sbSerializeB2BSchoolRow(row, { detail: true });
     return null;
   }
 
@@ -12857,40 +12628,6 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
 }
 
 app.get(
-  "/api/b2b/stocktaking-columns",
-  requireAuth,
-  requirePage("B2B"),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      return res.json({ ok: true, columns: await _uaStocktakingSchoolOptions() });
-    } catch (e) {
-      console.error("Error fetching B2B stocktaking columns:", e?.details || e);
-      return res.status(500).json({ ok: false, error: e?.message || "Failed to load Stocktaking columns." });
-    }
-  },
-);
-
-app.post(
-  "/api/b2b/stocktaking-columns",
-  requireAuth,
-  requirePage("B2B"),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbStocktakingEnabled()) {
-        return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
-      }
-      const created = await _uaAddStocktakingSchoolColumn(req.body?.name || req.body?.column || "");
-      return res.json({ ok: true, ...created });
-    } catch (e) {
-      console.error("Error adding B2B stocktaking column:", e?.details || e?.body || e);
-      return res.status(e?.status || 500).json({ ok: false, error: e?.message || "Failed to add Stocktaking column." });
-    }
-  },
-);
-
-app.get(
   "/api/b2b/schools",
   requireAuth,
   requirePage("B2B"),
@@ -12954,13 +12691,8 @@ app.post(
         }
       }
 
-      const createdId = String(created?.id || row.id || '').trim();
-      if (Object.prototype.hasOwnProperty.call(req.body?.fields || req.body || {}, 'stocktaking_column')) {
-        await _sbSetB2BStockColumnOverride(createdId, req.body?.fields?.stocktaking_column ?? req.body?.stocktaking_column ?? '');
-      }
-      await _sbClearB2BCaches(createdId);
-      const responseSchool = await _sbHydrateB2BStockColumnSelection(_sbSerializeB2BSchoolRow(created || row, { detail: true }));
-      return res.status(201).json(responseSchool);
+      await _sbClearB2BCaches(created?.id || row.id || '');
+      return res.status(201).json(_sbSerializeB2BSchoolRow(created || row, { detail: true }));
     } catch (e) {
       console.error("Error creating B2B school:", e?.details || e);
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to create B2B school." });
@@ -12990,12 +12722,8 @@ app.patch(
       delete row.id;
 
       const updated = await _sbUpdateByIdWithMissingColumnFallback(_sbB2BSchoolsTable(), id, row, ['school_name']);
-      if (Object.prototype.hasOwnProperty.call(req.body?.fields || req.body || {}, 'stocktaking_column')) {
-        await _sbSetB2BStockColumnOverride(id, req.body?.fields?.stocktaking_column ?? req.body?.stocktaking_column ?? '');
-      }
       await _sbClearB2BCaches(id);
-      const responseSchool = await _sbHydrateB2BStockColumnSelection(_sbSerializeB2BSchoolRow(updated || { ...existing, ...row }, { detail: true }));
-      return res.json(responseSchool);
+      return res.json(_sbSerializeB2BSchoolRow(updated || { ...existing, ...row }, { detail: true }));
     } catch (e) {
       console.error("Error updating B2B school:", e?.details || e);
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to update B2B school." });
@@ -13022,7 +12750,6 @@ app.delete(
       if (!existing) return res.status(404).json({ error: "School not found." });
 
       const deleted = await supabaseDb.deleteById(_sbB2BSchoolsTable(), id);
-      await _sbSetB2BStockColumnOverride(id, '');
       await _sbClearB2BCaches(id);
       return res.json({ ok: true, deletedId: id, school: _sbSerializeB2BSchoolRow(deleted || existing, { detail: true }) });
     } catch (e) {
@@ -16982,11 +16709,7 @@ app.delete(
     res.set("Cache-Control", "no-store");
     try {
       const result = await _sbDeleteUserAccessTeamMember(req.params?.id || "");
-      await _revokeTeamMemberSessions(result?.id || req.params?.id || "", {
-        name: result?.name || "",
-        reason: "team_member_deleted",
-      });
-      return res.json({ ok: true, source: "supabase", result, sessionRevoked: true, message: `${result.name || "Team member"} deleted.` });
+      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted.` });
     } catch (error) {
       console.error("DELETE /api/user-access/team-members/:id error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete team member." });
@@ -24734,10 +24457,10 @@ app.get(
   requirePage("Stocktaking"),
   cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v2`),
   async (req, res) => {
-    if (!_sbStocktakingEnabled()) {
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res
         .status(500)
-        .json({ error: "Stocktaking data is not available right now." });
+        .json({ error: "Database IDs are not configured." });
     }
     try {
       if (_sbStocktakingEnabled()) {
@@ -24884,7 +24607,7 @@ app.get(
       console.error("Error fetching stock data:", error.body || error);
       res
         .status(500)
-        .json({ error: "Failed to fetch stock data." });
+        .json({ error: "Failed to fetch stock data from Notion." });
     }
   },
 );
@@ -24898,8 +24621,8 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!_sbStocktakingEnabled()) {
-      return res.status(500).json({ error: "Stocktaking data is not available right now." });
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
+      return res.status(500).json({ error: "Database IDs are not configured." });
     }
 
     try {
@@ -25469,8 +25192,8 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!_sbStocktakingEnabled()) {
-      return res.status(500).json({ error: "Stocktaking data is not available right now." });
+    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
+      return res.status(500).json({ error: "Database IDs are not configured." });
     }
 
     try {
@@ -25820,10 +25543,10 @@ app.all(
 
 // Verify current password (used by Account page before saving)
 app.post("/api/account/verify-password", requireAuth, async (req, res) => {
-  if (!teamMembersDatabaseId) {
+  if (!_sbTeamMembersEnabled() && !teamMembersDatabaseId) {
     return res
       .status(500)
-      .json({ error: "Team_Members database ID is not configured." });
+      .json({ error: "Account data source is not configured." });
   }
 
   try {
@@ -25832,6 +25555,22 @@ app.post("/api/account/verify-password", requireAuth, async (req, res) => {
 
     if (!provided) {
       return res.status(400).json({ error: "Current password is required." });
+    }
+
+    if (_sbTeamMembersEnabled()) {
+      const row = await _sbFindSessionTeamMember(req);
+      if (!row) return res.status(404).json({ error: "User not found." });
+
+      const storedPassword = _sbTeamMemberPasswordValue(row);
+      if (!storedPassword) {
+        return res.status(400).json({ error: "No password set for this account." });
+      }
+
+      if (String(storedPassword) !== provided) {
+        return res.status(401).json({ error: "invalid password" });
+      }
+
+      return res.json({ ok: true, source: "supabase" });
     }
 
     const response = await notion.databases.query({
@@ -25856,7 +25595,7 @@ app.post("/api/account/verify-password", requireAuth, async (req, res) => {
 
     return res.json({ ok: true });
   } catch (error) {
-    console.error("Error verifying account password:", error.body || error);
+    console.error("Error verifying account password:", error?.details || error?.body || error);
     return res.status(500).json({ error: "Failed to verify password." });
   }
 });
@@ -25864,10 +25603,10 @@ app.post("/api/account/verify-password", requireAuth, async (req, res) => {
 // Update account info (PATCH) — اختيارى
 // Update account info (PATCH) — requires current password confirmation
 app.patch("/api/account", requireAuth, async (req, res) => {
-  if (!teamMembersDatabaseId) {
+  if (!_sbTeamMembersEnabled() && !teamMembersDatabaseId) {
     return res
       .status(500)
-      .json({ error: "Team_Members database ID is not configured." });
+      .json({ error: "Account data source is not configured." });
   }
 
   try {
@@ -25882,6 +25621,77 @@ app.patch("/api/account", requireAuth, async (req, res) => {
       password,
     } = req.body || {};
 
+    const provided = String(currentPassword ?? "").trim();
+    if (!provided) {
+      return res.status(400).json({ error: "Current password is required." });
+    }
+
+    if (_sbTeamMembersEnabled()) {
+      const row = await _sbFindSessionTeamMember(req);
+      if (!row) return res.status(404).json({ error: "User not found." });
+
+      const storedPassword = _sbTeamMemberPasswordValue(row);
+      if (!storedPassword) {
+        return res.status(400).json({ error: "No password set for this account." });
+      }
+
+      if (String(storedPassword) !== provided) {
+        return res.status(401).json({ error: "invalid password" });
+      }
+
+      const rows = await _sbSelectTeamMembersRows().catch(() => [row]);
+      const keys = _sbAllColumnKeys([...(rows || []), row]).filter((key) => !_sbNonEditableColumn(key));
+      const patch = {};
+
+      const setPatch = (label, rawValue, { required = false } = {}) => {
+        if (typeof rawValue === "undefined") return;
+        const value = String(rawValue ?? "").trim();
+        if (required && !value) {
+          const err = new Error(`${label} cannot be empty.`);
+          err.statusCode = 400;
+          throw err;
+        }
+        const key = _sbAccountFieldColumnKey(keys, label);
+        if (!key) return;
+        patch[key] = _sbCoerceAccountPatchValue(row?.[key], value || null);
+      };
+
+      setPatch("Phone", phone);
+      setPatch("Email", email);
+      setPatch("Department", department);
+      setPatch("Position", position);
+      setPatch("Employee Code", employeeCode);
+      setPatch("Name", name, { required: true });
+
+      if (typeof password !== "undefined") {
+        const newPwd = String(password ?? "").trim();
+        if (!newPwd) return res.status(400).json({ error: "Password cannot be empty." });
+        const key = _sbAccountFieldColumnKey(keys, "Password");
+        if (key) patch[key] = _sbCoerceAccountPatchValue(row?.[key], newPwd);
+      }
+
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update." });
+      }
+
+      const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+      if (!rowId) return res.status(500).json({ error: "Unable to update account." });
+
+      await supabaseDb.updateById(_sbTeamMembersTable(), rowId, patch);
+
+      const nextUsername = typeof name !== "undefined"
+        ? String(name || "").trim()
+        : (_sbString(_sbValueForLabel(row, "Name")) || req.session?.username || "");
+      if (nextUsername) req.session.username = nextUsername;
+      req.session.userSupabaseId = rowId;
+
+      await clearUserServerCaches(req, { userId: rowId, username: nextUsername });
+      await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(rowId)}:v1`).catch(() => {});
+      if (nextUsername) await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(nextUsername)}:v1`).catch(() => {});
+
+      return res.json({ success: true, source: "supabase" });
+    }
+
     // Fetch current user (by session username)
     const response = await notion.databases.query({
       database_id: teamMembersDatabaseId,
@@ -25895,14 +25705,8 @@ app.patch("/api/account", requireAuth, async (req, res) => {
     const user = response.results[0];
     const storedPassword = _extractPropText(user.properties?.Password);
 
-    const provided = String(currentPassword ?? "").trim();
-
     if (storedPassword === null || typeof storedPassword === "undefined") {
       return res.status(400).json({ error: "No password set for this account." });
-    }
-
-    if (!provided) {
-      return res.status(400).json({ error: "Current password is required." });
     }
 
     if (String(storedPassword) !== provided) {
@@ -25947,7 +25751,6 @@ app.patch("/api/account", requireAuth, async (req, res) => {
         return res.status(400).json({ error: "Password cannot be empty." });
       }
 
-      // Team Members DB: Password may be a Number (legacy) or Rich text (new).
       const passType = user.properties?.Password?.type || "rich_text";
 
       if (passType === "number") {
@@ -25959,7 +25762,6 @@ app.patch("/api/account", requireAuth, async (req, res) => {
       } else if (passType === "title") {
         updateProps["Password"] = { title: [{ text: { content: newPwd } }] };
       } else {
-        // default: rich_text
         updateProps["Password"] = { rich_text: [{ text: { content: newPwd } }] };
       }
     }
@@ -25983,15 +25785,15 @@ app.patch("/api/account", requireAuth, async (req, res) => {
 
     await clearUserServerCaches(req, { userId: userPageId, username: String(name || req.session?.username || "").trim() || req.session?.username || "" });
 
-    // Keep session username in sync if Name changed
     if (updateProps["Name"]) {
       req.session.username = String(name || "").trim();
     }
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Error updating account:", error.body || error);
-    res.status(500).json({ error: "Failed to update account." });
+    console.error("Error updating account:", error?.details || error?.body || error);
+    const status = Number(error?.statusCode) || Number(error?.status) || 500;
+    res.status(status >= 400 && status < 500 ? status : 500).json({ error: status >= 400 && status < 500 ? (error?.message || "Failed to update account.") : "Failed to update account." });
   }
 });
 
