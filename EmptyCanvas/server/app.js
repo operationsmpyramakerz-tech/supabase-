@@ -24374,7 +24374,9 @@ async function _sbStocktakingForRequest(req) {
   }
   const rows = await _sbStocktakingRows();
   const items = rows.map((row) => _sbSerializeStocktakingRow(row, schoolName));
-  return items.filter((item) => Number(item.quantity) > 0);
+  // Stocktaking must show both incoming Request Products (+qty) and outgoing Withdrawal Products (-qty).
+  // Keep zero-only rows hidden so the page still behaves as an active stock/movement view.
+  return items.filter((item) => Number(item.quantity) !== 0);
 }
 
 async function _sbRenderStocktakingPdf(req, res) {
@@ -24489,7 +24491,7 @@ app.get(
   "/api/stock",
   requireAuth,
   requirePage("Stocktaking"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v2`),
+  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v3`),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res
@@ -24634,8 +24636,8 @@ app.get(
         startCursor = stockResponse.next_cursor;
       }
 
-      // Filter: return only rows that have a positive In Stock value
-      const filteredStock = (allStock || []).filter((it) => Number(it.quantity) > 0);
+      // Return all non-zero rows so withdrawals (negative quantities) appear too.
+      const filteredStock = (allStock || []).filter((it) => Number(it.quantity) !== 0);
       res.json(filteredStock);
     } catch (error) {
       console.error("Error fetching stock data:", error.body || error);
@@ -24794,8 +24796,8 @@ app.all(
         startCursor = stockResponse.next_cursor;
       }
 
-      // Filter: include only items that have a positive In Stock value
-      const filteredStockForPdf = (allStock || []).filter((it) => Number(it.quantity) > 0);
+      // Include all non-zero movements so Withdrawal Products (negative quantities) appear in exports too.
+      const filteredStockForPdf = (allStock || []).filter((it) => Number(it.quantity) !== 0);
 
       // PDF should be Done-only (no Inventory/Defected) for Stocktaking.
       const includeInventoryCol = false;
@@ -25366,7 +25368,7 @@ app.all(
       }
 
       const rows = (allStock || [])
-        .filter((r) => Number(r.quantity) > 0)
+        .filter((r) => Number(r.quantity) !== 0)
         .slice()
         .sort((a, b) => {
           const ta = String(a?.tag?.name || "Untagged");

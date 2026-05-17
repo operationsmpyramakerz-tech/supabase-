@@ -21,9 +21,9 @@ document.addEventListener('DOMContentLoaded', function() {
     return null;
   };
 
-  const isPositiveQty = (item) => {
+  const hasStockQty = (item) => {
     const n = Number(item?.quantity);
-    return Number.isFinite(n) && n > 0;
+    return Number.isFinite(n) && n !== 0;
   };
 
   // ألوان Notion للـ select
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const renderGroups = (rows) => {
     groupsContainer.innerHTML = '';
 
-    const visibleRows = (rows || []).filter(isPositiveQty);
+    const visibleRows = (rows || []).filter(hasStockQty);
 
     if (!visibleRows || visibleRows.length === 0) {
       const empty = document.createElement('div');
@@ -207,8 +207,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const data = await response.json();
       // متوقع: [{ id, name, quantity, oneKitQuantity, tag }]
       allStock = Array.isArray(data) ? data : [];
-      // Filter: show only items that have a positive In Stock value
-      allStock = allStock.filter(isPositiveQty);
+      // Filter: show all non-zero stock movements, including withdrawal quantities.
+      allStock = allStock.filter(hasStockQty);
       renderGroups(allStock);
     } catch (error) {
       console.error('Error fetching stock data:', error);
