@@ -595,6 +595,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
       urls.push('/api/tasks?scope=mine', '/api/tasks/users');
     }
+    if (hasAllowedPage(allowedPages, ['KPIs', 'KPI', '/kpis'])) {
+      urls.push('/api/kpis/meta', '/api/kpis/reviews');
+    }
     if (hasAllowedPage(allowedPages, ['Stocktaking', '/stocktaking'])) {
       urls.push('/api/stock');
     }
@@ -1456,6 +1459,9 @@ if (document.querySelector('.sidebar')) {
     'kits': 'a[href="/proposals"]',
     'saved quotations': 'a[href="/proposals"]',
     'tasks': 'a[href="/tasks"]',
+    'kpis': 'a[href="/kpis"]',
+    'kpi': 'a[href="/kpis"]',
+    'key performance indicators': 'a[href="/kpis"]',
     'messages': 'a[href="/messages"]',
     'emails': 'a[href="/messages"]',
     'email': 'a[href="/messages"]',
@@ -1995,6 +2001,7 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/user-access', label: 'Users Center', icon: 'shield' });
   ensureLink({ href: '/b2b', label: 'B2B', icon: 'folder' });
   ensureLink({ href: '/tasks', label: 'Tasks', icon: 'check-square' });
+  ensureLink({ href: '/kpis', label: 'KPIs', icon: 'bar-chart-2', beforeHref: '/user-access' });
 
   syncMobileDockStructure();
 
