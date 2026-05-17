@@ -24445,6 +24445,40 @@ async function _sbStocktakingForRequest(req) {
 
 async function _sbRenderStocktakingPdf(req, res) {
   const items = await _sbStocktakingForRequest(req);
+  const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
+  const includeInventoryCol = selectedExportColumns.includes("inventory");
+  const includeDefectedCol = selectedExportColumns.includes("defected");
+
+  const exportRows = (items || [])
+    .map((item) => {
+      const quantity = Number(item?.quantity) || 0;
+      const unityPrice = _b2bStockMoneyValue(item?.unitPrice);
+      return {
+        id: item?.id,
+        name: item?.name,
+        url: item?.url,
+        idCode: item?.idCode,
+        receiptNumber: _b2bReceiptNumbersInline(item?.receiptNumber || ""),
+        quantity,
+        unityPrice,
+        totalPrice: _b2bStockTotalPrice(quantity, unityPrice),
+        inventory:
+          item?.inventory === null || typeof item?.inventory === "undefined" ? null : Number(item.inventory),
+        defected:
+          item?.defected === null || typeof item?.defected === "undefined" ? null : Number(item.defected),
+        tag: item?.tag || { name: "Untagged", color: "default" },
+      };
+    })
+    .filter((row) => {
+      const q = Number(row.quantity);
+      const qOk = Number.isFinite(q) && q !== 0;
+      const inv = Number(row.inventory);
+      const def = Number(row.defected);
+      const invOk = includeInventoryCol && row.inventory !== null && Number.isFinite(inv);
+      const defOk = includeDefectedCol && row.defected !== null && Number.isFinite(def);
+      return qOk || invOk || defOk;
+    });
+
   await ensurePdfArabicSupport();
   const createdAt = new Date();
   const dateStr = createdAt.toISOString().slice(0, 10);
@@ -24453,7 +24487,8 @@ async function _sbRenderStocktakingPdf(req, res) {
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   res.set("Cache-Control", "no-store");
 
-  const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  const pdfLayout = selectedExportColumns.length > 4 ? "landscape" : "portrait";
+  const doc = new PDFDocument({ size: "A4", layout: pdfLayout, margin: 36, bufferPages: true });
   enableArabicPdf(doc);
   doc.pipe(res);
   attachPageNumbers(doc);
@@ -24464,21 +24499,51 @@ async function _sbRenderStocktakingPdf(req, res) {
   });
 
   const groups = new Map();
-  for (const item of items) {
+  for (const item of exportRows) {
     const tag = item?.tag?.name || "Untagged";
-    if (!groups.has(tag)) groups.set(tag, []);
-    groups.get(tag).push(item);
+    const color = item?.tag?.color || "default";
+    const key = `${String(tag).toLowerCase()}|${color}`;
+    if (!groups.has(key)) groups.set(key, { name: tag, color, items: [] });
+    groups.get(key).items.push(item);
   }
-  const tags = Array.from(groups.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+  const tagGroups = Array.from(groups.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
   const bottom = doc.page.height - doc.page.margins.bottom;
+  const contentW = right - left;
   let y = Math.max(doc.y + 14, 120);
   const rowH = 20;
-  const colIdW = 70;
-  const colQtyW = 55;
-  const colNameW = right - left - colIdW - colQtyW;
+  const colIdW = 66;
+  const extraDefs = selectedExportColumns.map((key) => {
+    const widths = {
+      stock: 58,
+      receiptNumber: 94,
+      unityPrice: 68,
+      totalPrice: 70,
+      inventory: 64,
+      defected: 64,
+    };
+    const alignRight = new Set(["stock", "unityPrice", "totalPrice", "inventory", "defected"]);
+    return {
+      key,
+      label: _b2bStockExportColumnLabel(key),
+      width: widths[key] || 66,
+      align: alignRight.has(key) ? "right" : "left",
+    };
+  });
+  const extraW = extraDefs.reduce((sum, col) => sum + Number(col.width || 0), 0);
+  const colNameW = Math.max(140, contentW - colIdW - extraW);
+
+  const pdfValueForColumn = (item, key) => {
+    if (key === "stock") return String(item.quantity ?? 0);
+    if (key === "receiptNumber") return String(item.receiptNumber || "");
+    if (key === "unityPrice") return _b2bStockMoneyText(item.unityPrice);
+    if (key === "totalPrice") return _b2bStockMoneyText(item.totalPrice);
+    if (key === "inventory") return item.inventory === null || typeof item.inventory === "undefined" ? "" : String(Number(item.inventory));
+    if (key === "defected") return item.defected === null || typeof item.defected === "undefined" ? "" : String(Number(item.defected));
+    return "";
+  };
 
   const ensureSpace = (h = rowH) => {
     if (y + h > bottom) {
@@ -24487,28 +24552,40 @@ async function _sbRenderStocktakingPdf(req, res) {
     }
   };
 
-  for (const tag of tags) {
-    const groupItems = (groups.get(tag) || []).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-    ensureSpace(50);
-    doc.font("Helvetica-Bold").fontSize(12).fillColor("#111827").text(`${tag} (${groupItems.length})`, left, y);
-    y += 20;
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#374151");
-    doc.text("ID Code", left, y, { width: colIdW });
-    doc.text("Component", left + colIdW, y, { width: colNameW });
-    doc.text("In Stock", right - colQtyW, y, { width: colQtyW, align: "right" });
-    y += 14;
-    doc.moveTo(left, y).lineTo(right, y).strokeColor("#E5E7EB").stroke();
-    y += 4;
+  for (const group of tagGroups) {
+    const groupItems = (group.items || []).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    ensureSpace(54);
+    doc.roundedRect(left, y, contentW, 22, 10).fillAndStroke("#F3F4F6", "#E5E7EB");
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#111827").text(`Tag  ${group.name}`, left + 10, y + 7, { width: contentW - 90 });
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827").text(`${groupItems.length} items`, right - 72, y + 7, { width: 62, align: "right" });
+    y += 30;
+
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827");
+    doc.rect(left, y, contentW, 22).fill("#F3F4F6");
+    doc.fillColor("#111827");
+    doc.text("ID Code", left + 6, y + 7, { width: colIdW - 10 });
+    doc.text("Component", left + colIdW + 6, y + 7, { width: colNameW - 12 });
+    let x = left + colIdW + colNameW;
+    for (const col of extraDefs) {
+      doc.text(col.label, x + 4, y + 7, { width: col.width - 8, align: col.align });
+      x += col.width;
+    }
+    y += 24;
 
     doc.font("Helvetica").fontSize(8).fillColor("#111827");
     for (const item of groupItems) {
       ensureSpace(rowH + 4);
-      doc.text(String(item.idCode || "-"), left, y, { width: colIdW - 6 });
-      doc.text(String(item.name || "-"), left + colIdW, y, { width: colNameW - 8 });
-      doc.text(String(item.quantity ?? 0), right - colQtyW, y, { width: colQtyW, align: "right" });
+      doc.text(String(item.idCode || ""), left + 6, y, { width: colIdW - 10 });
+      doc.text(String(item.name || "-"), left + colIdW + 6, y, { width: colNameW - 12 });
+      let cx = left + colIdW + colNameW;
+      for (const col of extraDefs) {
+        doc.text(pdfValueForColumn(item, col.key), cx + 4, y, { width: col.width - 8, align: col.align });
+        cx += col.width;
+      }
       y += rowH;
+      doc.moveTo(left, y - 4).lineTo(right, y - 4).strokeColor("#F3F4F6").stroke();
     }
-    y += 8;
+    y += 12;
   }
 
   doc.end();
@@ -24516,33 +24593,74 @@ async function _sbRenderStocktakingPdf(req, res) {
 
 async function _sbRenderStocktakingExcel(req, res) {
   const items = await _sbStocktakingForRequest(req);
+  const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Operations Hub";
   workbook.created = new Date();
   const ws = workbook.addWorksheet("Stocktaking");
-  ws.columns = [
-    { header: "Tag", key: "tag", width: 24 },
-    { header: "ID Code", key: "idCode", width: 18 },
-    { header: "Component", key: "name", width: 52 },
-    { header: "In Stock", key: "quantity", width: 12 },
-    { header: "One Kit Quantity", key: "oneKitQuantity", width: 18 },
-    { header: "Unit Price", key: "unitPrice", width: 14 },
-    { header: "URL", key: "url", width: 50 },
-  ];
+
+  const columns = ["Tag", "ID Code", "Component", ...selectedExportColumns.map((key) => _b2bStockExportColumnLabel(key))];
+  const columnKeys = ["tag", "idCode", "name", ...selectedExportColumns];
+  ws.columns = columns.map((header, index) => {
+    const key = columnKeys[index];
+    const widths = {
+      tag: 24,
+      idCode: 18,
+      name: 52,
+      stock: 12,
+      receiptNumber: 26,
+      unityPrice: 14,
+      totalPrice: 14,
+      inventory: 14,
+      defected: 14,
+    };
+    return { header, key, width: widths[key] || 14 };
+  });
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];
-  for (const item of items.sort((a, b) => String(a?.tag?.name || "").localeCompare(String(b?.tag?.name || "")) || String(a.name || "").localeCompare(String(b.name || "")))) {
-    ws.addRow({
+
+  const excelValueForColumn = (item, key) => {
+    const quantity = Number(item?.quantity) || 0;
+    const unityPrice = _b2bStockMoneyValue(item?.unitPrice);
+    if (key === "stock") return quantity;
+    if (key === "receiptNumber") return _b2bReceiptNumbersInline(item?.receiptNumber || "");
+    if (key === "unityPrice") return unityPrice === null ? "" : unityPrice;
+    if (key === "totalPrice") {
+      const total = _b2bStockTotalPrice(quantity, unityPrice);
+      return total === null ? "" : total;
+    }
+    if (key === "inventory") return item?.inventory === null || typeof item?.inventory === "undefined" ? "" : Number(item.inventory);
+    if (key === "defected") return item?.defected === null || typeof item?.defected === "undefined" ? "" : Number(item.defected);
+    return "";
+  };
+
+  const sortedItems = (items || [])
+    .filter((item) => Number(item?.quantity) !== 0)
+    .sort((a, b) => String(a?.tag?.name || "").localeCompare(String(b?.tag?.name || "")) || String(a.name || "").localeCompare(String(b.name || "")));
+
+  for (const item of sortedItems) {
+    const rowPayload = {
       tag: item?.tag?.name || "Untagged",
       idCode: item.idCode || "",
       name: item.name || "",
-      quantity: Number(item.quantity) || 0,
-      oneKitQuantity: Number(item.oneKitQuantity) || 0,
-      unitPrice: Number(item.unitPrice) || 0,
-      url: item.url || "",
-    });
+    };
+    for (const key of selectedExportColumns) rowPayload[key] = excelValueForColumn(item, key);
+    const row = ws.addRow(rowPayload);
+    if (item.url) {
+      const cell = row.getCell("name");
+      cell.value = { text: String(item.name || ""), hyperlink: item.url };
+      cell.font = { color: { argb: "FF1D4ED8" }, underline: true };
+    }
   }
+
+  const moneyColumns = new Set(["unityPrice", "totalPrice"]);
+  for (const key of selectedExportColumns) {
+    if (!moneyColumns.has(key)) continue;
+    const col = ws.getColumn(key);
+    col.numFmt = '"EGP" #,##0.00';
+  }
+
   const dateStr = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="stocktaking_${dateStr}.xlsx"`);
