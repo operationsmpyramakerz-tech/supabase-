@@ -882,20 +882,31 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="b2b-export-modal__close" type="button" aria-label="Close" data-export-cancel>&times;</button>
           </div>
           <div class="b2b-export-modal__body">
-            <label class="b2b-export-field">
+            <div class="b2b-export-field b2b-export-filetype" data-export-filetype-picker>
               <span class="b2b-export-field__label">File type</span>
-              <select class="b2b-export-input" data-export-filetype>
-                <option value="pdf">PDF</option>
-                <option value="excel">Excel</option>
-              </select>
-            </label>
+              <input type="hidden" data-export-filetype value="pdf" />
+              <button class="b2b-export-picker-button" type="button" data-export-filetype-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-export-filetype-summary>PDF</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="b2b-export-filetype__panel b2b-export-floating-panel" data-export-filetype-panel role="listbox" aria-label="File type" hidden>
+                <button class="b2b-export-option is-selected" type="button" data-export-filetype-option="pdf" role="option" aria-selected="true">
+                  <span>PDF</span>
+                  <i data-feather="check" aria-hidden="true"></i>
+                </button>
+                <button class="b2b-export-option" type="button" data-export-filetype-option="excel" role="option" aria-selected="false">
+                  <span>Excel</span>
+                  <i data-feather="check" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
             <div class="b2b-export-field b2b-export-multiselect" data-export-column-picker>
               <span class="b2b-export-field__label">Columns</span>
               <button class="b2b-export-multiselect__button" type="button" data-export-column-toggle aria-haspopup="listbox" aria-expanded="false">
                 <span data-export-column-summary>Columns selected</span>
                 <i data-feather="chevron-down" aria-hidden="true"></i>
               </button>
-              <div class="b2b-export-multiselect__panel" data-export-column-panel role="listbox" aria-label="Columns" hidden>
+              <div class="b2b-export-multiselect__panel b2b-export-floating-panel" data-export-column-panel role="listbox" aria-label="Columns" hidden>
                 <div class="b2b-export-columns" data-export-columns>
                   ${B2B_EXPORT_COLUMNS.map((col) => `
                     <label class="b2b-export-check" role="option">
@@ -928,6 +939,62 @@ document.addEventListener('DOMContentLoaded', () => {
       const columnToggle = modal.querySelector('[data-export-column-toggle]');
       const columnPanel = modal.querySelector('[data-export-column-panel]');
       const columnSummary = modal.querySelector('[data-export-column-summary]');
+      const fileTypePicker = modal.querySelector('[data-export-filetype-picker]');
+      const fileTypeToggle = modal.querySelector('[data-export-filetype-toggle]');
+      const fileTypePanel = modal.querySelector('[data-export-filetype-panel]');
+      const fileTypeSummary = modal.querySelector('[data-export-filetype-summary]');
+      const fileTypeOptions = Array.from(modal.querySelectorAll('[data-export-filetype-option]'));
+
+      const positionFloatingPanel = (toggle, panel) => {
+        if (!toggle || !panel || panel.hidden) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+
+        const rect = toggle.getBoundingClientRect();
+        const margin = 12;
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const panelWidth = Math.min(rect.width, Math.max(0, viewportWidth - (margin * 2)));
+        const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportWidth - panelWidth - margin));
+        const belowSpace = viewportHeight - rect.bottom - margin;
+        const aboveSpace = rect.top - margin;
+        const shouldOpenUp = belowSpace < 230 && aboveSpace > belowSpace;
+        const maxHeight = Math.max(160, Math.min(340, (shouldOpenUp ? aboveSpace : belowSpace) - 8));
+
+        panel.style.width = `${panelWidth}px`;
+        panel.style.left = `${left}px`;
+        panel.style.maxHeight = `${maxHeight}px`;
+
+        if (shouldOpenUp) {
+          panel.style.top = 'auto';
+          panel.style.bottom = `${Math.max(margin, viewportHeight - rect.top + 8)}px`;
+        } else {
+          panel.style.top = `${Math.min(rect.bottom + 8, viewportHeight - margin)}px`;
+          panel.style.bottom = 'auto';
+        }
+      };
+
+      const setFloatingPanelOpen = (toggle, panel, open) => {
+        if (!toggle || !panel) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        panel.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.classList.toggle('is-open', !!open);
+        if (open) {
+          positionFloatingPanel(toggle, panel);
+          requestAnimationFrame(() => positionFloatingPanel(toggle, panel));
+        }
+      };
+
+      const updateFileTypeSummary = () => {
+        const value = String(fileType?.value || 'pdf').toLowerCase();
+        const label = value === 'excel' ? 'Excel' : 'PDF';
+        if (fileTypeSummary) fileTypeSummary.textContent = label;
+        fileTypeOptions.forEach((option) => {
+          const selected = option.dataset.exportFiletypeOption === value;
+          option.classList.toggle('is-selected', selected);
+          option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+      };
 
       const selectedLabels = () => checks
         .filter((x) => x.checked)
@@ -941,14 +1008,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (err && labels.length) err.style.display = 'none';
       };
 
+      const setFileTypePanelOpen = (open) => {
+        if (!fileTypePanel || !fileTypeToggle) return;
+        if (open) setColumnPanelOpen(false);
+        setFloatingPanelOpen(fileTypeToggle, fileTypePanel, open);
+      };
+
       const setColumnPanelOpen = (open) => {
         if (!columnPanel || !columnToggle) return;
-        columnPanel.hidden = !open;
-        columnToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-        columnToggle.classList.toggle('is-open', !!open);
+        if (open) setFileTypePanelOpen(false);
+        setFloatingPanelOpen(columnToggle, columnPanel, open);
       };
 
       const close = (value = null) => {
+        setFileTypePanelOpen(false);
         setColumnPanelOpen(false);
         modal.classList.add('hidden');
         document.body.classList.remove('modal-open');
@@ -962,12 +1035,29 @@ document.addEventListener('DOMContentLoaded', () => {
       cancelEls.forEach((el) => el.addEventListener('click', () => close(null)));
       modal.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+          if (fileTypePanel && !fileTypePanel.hidden) {
+            setFileTypePanelOpen(false);
+            return;
+          }
           if (columnPanel && !columnPanel.hidden) {
             setColumnPanelOpen(false);
             return;
           }
           close(null);
         }
+      });
+      fileTypeToggle?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setFileTypePanelOpen(!!fileTypePanel?.hidden);
+      });
+      fileTypePanel?.addEventListener('click', (e) => e.stopPropagation());
+      fileTypeOptions.forEach((option) => {
+        option.addEventListener('click', () => {
+          if (fileType) fileType.value = option.dataset.exportFiletypeOption || 'pdf';
+          updateFileTypeSummary();
+          setFileTypePanelOpen(false);
+        });
       });
       columnToggle?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -977,9 +1067,21 @@ document.addEventListener('DOMContentLoaded', () => {
       columnPanel?.addEventListener('click', (e) => e.stopPropagation());
       document.addEventListener('click', (e) => {
         if (modal.classList.contains('hidden')) return;
-        if (columnPicker && columnPicker.contains(e.target)) return;
+        const target = e.target;
+        const insideFileType = fileTypePicker?.contains(target) || fileTypePanel?.contains(target);
+        const insideColumns = columnPicker?.contains(target) || columnPanel?.contains(target);
+        if (insideFileType || insideColumns) return;
+        setFileTypePanelOpen(false);
         setColumnPanelOpen(false);
       });
+      const repositionOpenPanels = () => {
+        if (!modal.classList.contains('hidden')) {
+          positionFloatingPanel(fileTypeToggle, fileTypePanel);
+          positionFloatingPanel(columnToggle, columnPanel);
+        }
+      };
+      window.addEventListener('resize', repositionOpenPanels);
+      window.addEventListener('scroll', repositionOpenPanels, true);
       checks.forEach((input) => input.addEventListener('change', updateColumnSummary));
       confirm.addEventListener('click', () => {
         const selected = checks.filter((x) => x.checked).map((x) => x.value);
@@ -992,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', () => {
         close({ fileType: String(fileType?.value || 'pdf').toLowerCase(), columns: selected });
       });
 
-      ui = { modal, fileType, checks, err, updateColumnSummary, setColumnPanelOpen };
+      ui = { modal, fileType, fileTypeToggle, checks, err, updateFileTypeSummary, updateColumnSummary, setFileTypePanelOpen, setColumnPanelOpen };
       if (window.feather) window.feather.replace();
       return ui;
     };
@@ -1002,16 +1104,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const x = ensure();
         resolver = resolve;
         if (x.fileType) x.fileType.value = 'pdf';
+        x.updateFileTypeSummary?.();
         x.checks.forEach((input) => {
           const def = B2B_EXPORT_COLUMNS.find((col) => col.value === input.value);
           input.checked = !!def?.checked;
         });
         x.updateColumnSummary?.();
+        x.setFileTypePanelOpen?.(false);
         x.setColumnPanelOpen?.(false);
         if (x.err) x.err.style.display = 'none';
         x.modal.classList.remove('hidden');
         document.body.classList.add('modal-open');
-        setTimeout(() => x.fileType?.focus?.(), 30);
+        setTimeout(() => x.fileTypeToggle?.focus?.(), 30);
       }),
     };
   })();
