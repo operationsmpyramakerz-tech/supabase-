@@ -355,6 +355,59 @@ document.addEventListener('DOMContentLoaded', () => {
     try { localStorage.removeItem('username'); } catch {}
   }
 
+  let __opsAuthRedirectScheduled = false;
+
+  function shouldIgnoreAuthRedirect(urlObj) {
+    try {
+      const path = String(urlObj?.pathname || '');
+      return path === '/api/login' || path === '/api/logout' || path === '/api/session-diagnostics';
+    } catch {
+      return false;
+    }
+  }
+
+  function scheduleLoginRedirect(reason) {
+    if (__opsAuthRedirectScheduled) return;
+    __opsAuthRedirectScheduled = true;
+    try { clearKnownClientDataCaches(); } catch {}
+    try { sessionStorage.clear(); } catch {}
+    try { localStorage.removeItem('username'); } catch {}
+
+    const next = '/login';
+    window.setTimeout(() => {
+      try { window.location.replace(next); } catch { window.location.href = next; }
+    }, reason === 'immediate' ? 0 : 25);
+  }
+
+  async function handleApiAuthResponse(response, urlObj) {
+    try {
+      if (!response || response.status !== 401) return response;
+      if (!urlObj || urlObj.origin !== window.location.origin) return response;
+      if (!String(urlObj.pathname || '').startsWith('/api/')) return response;
+      if (shouldIgnoreAuthRedirect(urlObj)) return response;
+      if (String(window.location.pathname || '') === '/login') return response;
+
+      let payload = null;
+      try { payload = await response.clone().json(); } catch {}
+      const code = String(payload?.code || '').toUpperCase();
+      const redirect = String(payload?.redirect || '').trim();
+      if (redirect || code === 'AUTH_REQUIRED' || code === 'AUTH_REVOKED' || payload?.authenticated === false) {
+        scheduleLoginRedirect('immediate');
+      }
+    } catch {}
+    return response;
+  }
+
+  function requestForcesNetwork(input, init) {
+    try {
+      const req = input instanceof Request ? input : null;
+      const mode = String(init?.cache || req?.cache || '').toLowerCase();
+      return mode === 'no-store' || mode === 'no-cache' || mode === 'reload';
+    } catch {
+      return false;
+    }
+  }
+
   function readAppApiCache(storageKey) {
     try {
       const raw = sessionStorage.getItem(storageKey);
@@ -590,11 +643,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (response && response.ok) {
           clearAppApiCache();
         }
-        return response;
+        return await handleApiAuthResponse(response, urlObj);
       }
 
       const rule = getApiCacheRule(urlObj, method);
-      const bypass = String(urlObj.searchParams.get('_fresh') || '') === '1' || pageForcesFreshApiRequests();
+      const bypass =
+        String(urlObj.searchParams.get('_fresh') || '') === '1' ||
+        pageForcesFreshApiRequests() ||
+        requestForcesNetwork(input, init) ||
+        urlObj.pathname === '/api/account';
 
       // During Hard Refresh, force every GET API request to bypass BOTH layers:
       // 1) this browser/sessionStorage cache, and
@@ -614,11 +671,13 @@ document.addEventListener('DOMContentLoaded', () => {
         nextInit.cache = 'no-store';
         nextInit.credentials = nextInit.credentials || 'same-origin';
 
-        return _nativeFetch(freshUrl.toString(), nextInit);
+        const response = await _nativeFetch(freshUrl.toString(), nextInit);
+        return await handleApiAuthResponse(response, freshUrl);
       }
 
       if (!rule) {
-        return _nativeFetch(input, init);
+        const response = await _nativeFetch(input, init);
+        return await handleApiAuthResponse(response, urlObj);
       }
 
       const storageKey = getApiCacheStorageKey(rule.name, urlObj);
@@ -635,6 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const pending = (async () => {
         const response = await _nativeFetch(input, init);
+        await handleApiAuthResponse(response, urlObj);
         if (response && response.ok) {
           const ctype = String(response.headers.get('content-type') || '').toLowerCase();
           if (ctype.includes('json')) {
@@ -1652,7 +1712,10 @@ if (document.querySelector('.sidebar')) {
 
     try {
       const res = await fetch('/api/account', { credentials: 'same-origin', cache: 'no-store' });
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (res.status === 401) scheduleLoginRedirect('immediate');
+        return;
+      }
       const data = await res.json();
 
       const name = (data && (data.name || data.username)) ? String(data.name || data.username) : '';

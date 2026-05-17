@@ -522,6 +522,205 @@ function clearLocalAppCaches() {
   } catch {}
 }
 
+// -----------------------------------------------------------------------------
+// Auth revocation for deleted users
+// -----------------------------------------------------------------------------
+// A deleted team member may still have an active browser/PWA session stored in
+// Upstash.  The session itself is keyed by sid, so deleting the user row is not
+// enough to log out that device.  We store a small revocation marker by team
+// member id and make requireAuth reject that session on the next request.
+const AUTH_REVOKED_USER_PREFIX = "auth:revoked:team-member:";
+const AUTH_REVOKED_TTL_SECONDS = 60 * 60 * 24 * 180; // long enough to outlive normal sessions
+const AUTH_USER_VALIDATE_TTL_MS = 30 * 1000;
+
+function _authRevokedKey(userId = "") {
+  const id = String(userId || "").trim();
+  return id ? `${AUTH_REVOKED_USER_PREFIX}${id}` : "";
+}
+
+function _trimTrailingSlash(value) {
+  return String(value || "").replace(/\/+$/, "");
+}
+
+async function _upstashRestCommand(command) {
+  const url = _trimTrailingSlash(process.env.UPSTASH_REDIS_REST_URL || "");
+  const token = String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
+  if (!url || !token || typeof fetch !== "function") return null;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(command),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.error) {
+    throw new Error(payload?.error || `Upstash REST request failed with HTTP ${response.status}`);
+  }
+  return payload?.result;
+}
+
+async function _authSetRevokedMarker(userId = "", meta = {}) {
+  const key = _authRevokedKey(userId);
+  if (!key) return false;
+
+  const payload = {
+    revoked: true,
+    userId: String(userId || "").trim(),
+    name: String(meta?.name || "").trim(),
+    reason: String(meta?.reason || "team_member_deleted").trim() || "team_member_deleted",
+    revokedAt: new Date().toISOString(),
+  };
+
+  try { _memSet(key, payload, AUTH_REVOKED_TTL_SECONDS); } catch {}
+
+  let stored = false;
+  try {
+    if (redisClient && redisClient.isReady) {
+      await redisClient.set(key, JSON.stringify(payload), { EX: AUTH_REVOKED_TTL_SECONDS });
+      stored = true;
+    }
+  } catch (error) {
+    console.warn("[auth-revoke] redis marker set failed:", error?.message || error);
+  }
+
+  if (!stored) {
+    try {
+      await _upstashRestCommand(["SET", key, JSON.stringify(payload), "EX", AUTH_REVOKED_TTL_SECONDS]);
+      stored = true;
+    } catch (error) {
+      console.warn("[auth-revoke] upstash REST marker set failed:", error?.message || error);
+    }
+  }
+
+  return stored;
+}
+
+async function _authGetRevokedMarker(userId = "") {
+  const key = _authRevokedKey(userId);
+  if (!key) return null;
+
+  const mem = _memGet(key);
+  if (mem !== null && mem !== undefined) return mem;
+
+  let raw = null;
+  try {
+    if (redisClient && redisClient.isReady) raw = await redisClient.get(key);
+  } catch (error) {
+    console.warn("[auth-revoke] redis marker get failed:", error?.message || error);
+  }
+
+  if (!raw) {
+    try { raw = await _upstashRestCommand(["GET", key]); } catch (error) {
+      console.warn("[auth-revoke] upstash REST marker get failed:", error?.message || error);
+    }
+  }
+
+  if (!raw) return null;
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try { parsed = JSON.parse(raw); } catch { parsed = { revoked: true }; }
+  }
+  try { _memSet(key, parsed, Math.min(300, AUTH_REVOKED_TTL_SECONDS)); } catch {}
+  return parsed;
+}
+
+async function _revokeTeamMemberSessions(userId = "", meta = {}) {
+  const id = String(userId || "").trim();
+  if (!id) return false;
+
+  await _authSetRevokedMarker(id, meta);
+  try { await clearUserRelatedCaches({ userId: id, username: meta?.name || "" }); } catch {}
+  return true;
+}
+
+function _clearAuthCookie(res) {
+  const cookieName = process.env.SESSION_COOKIE_NAME || "op.sid";
+  try { res.clearCookie(cookieName, { path: "/" }); } catch {}
+  // Legacy deployments used the default express-session cookie name. Clearing it
+  // is harmless and helps old installed PWAs migrate cleanly.
+  try { res.clearCookie("connect.sid", { path: "/" }); } catch {}
+}
+
+function _destroySession(req) {
+  return new Promise((resolve) => {
+    try {
+      if (!req?.session || typeof req.session.destroy !== "function") return resolve();
+      req.session.destroy(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function _rejectAuthenticatedRequest(req, res, { code = "AUTH_REQUIRED", message = "Login is required.", status = 401 } = {}) {
+  _clearAuthCookie(res);
+  await _destroySession(req);
+
+  if (String(req.path || "").startsWith("/api/")) {
+    res.set("Cache-Control", "no-store");
+    return res.status(status).json({
+      ok: false,
+      authenticated: false,
+      code,
+      message,
+      redirect: "/login",
+    });
+  }
+
+  return res.redirect("/login");
+}
+
+async function _validateAuthenticatedSession(req) {
+  if (!req?.session?.authenticated) {
+    return { ok: false, code: "AUTH_REQUIRED", message: "Login is required before calling this endpoint." };
+  }
+
+  const userSupabaseId = String(req.session.userSupabaseId || "").trim();
+  if (!userSupabaseId || !_sbTeamMembersEnabled()) return { ok: true };
+
+  const revoked = await _authGetRevokedMarker(userSupabaseId);
+  if (revoked) {
+    return {
+      ok: false,
+      code: "AUTH_REVOKED",
+      message: "This account was removed from the system. Please log in again with an active account.",
+    };
+  }
+
+  // Also catch users removed directly from Supabase or before this revocation
+  // marker existed.  This is throttled per session to avoid adding a DB lookup
+  // to every request.
+  const lastValidated = Number(req.session.activeUserValidatedAt || 0);
+  if (lastValidated && Date.now() - lastValidated < AUTH_USER_VALIDATE_TTL_MS) return { ok: true };
+
+  let row = null;
+  try {
+    row = await _sbFindTeamMemberById(userSupabaseId);
+  } catch (error) {
+    console.warn("[auth] active user validation failed:", error?.message || error);
+    return { ok: true };
+  }
+
+  if (!row) {
+    await _revokeTeamMemberSessions(userSupabaseId, { name: req.session.username || "", reason: "team_member_missing" }).catch(() => {});
+    return {
+      ok: false,
+      code: "AUTH_REVOKED",
+      message: "This account is no longer available. Please log in again with an active account.",
+    };
+  }
+
+  try {
+    req.session.activeUserValidatedAt = Date.now();
+  } catch {}
+
+  return { ok: true };
+}
+
 async function deleteRedisKeysByPattern(pattern, batchSize = 200) {
   if (!pattern || !redisClient || !redisClient.isReady) return 0;
 
@@ -6879,24 +7078,18 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
 }
 
 // Authentication middleware
-function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) return next();
-
-  // API calls should not silently render the login page. Returning JSON makes
-  // debugging and frontend handling clearer, while normal page routes still
-  // redirect to /login.
-  if (String(req.path || "").startsWith("/api/")) {
-    res.set("Cache-Control", "no-store");
-    return res.status(401).json({
-      ok: false,
-      authenticated: false,
+async function requireAuth(req, res, next) {
+  try {
+    const validation = await _validateAuthenticatedSession(req);
+    if (validation.ok) return next();
+    return _rejectAuthenticatedRequest(req, res, validation);
+  } catch (error) {
+    console.error("requireAuth validation error:", error?.message || error);
+    return _rejectAuthenticatedRequest(req, res, {
       code: "AUTH_REQUIRED",
       message: "Login is required before calling this endpoint.",
-      redirect: "/login",
     });
   }
-
-  return res.redirect("/login");
 }
 
 // Page-Access middleware
@@ -7425,6 +7618,7 @@ app.post("/api/login", async (req, res) => {
           req.session.username = accountPayload.username || providedUsername;
           req.session.allowedPages = allowedNormalized;
           req.session.userSupabaseId = String(_sbGet(row, ["id", "ID"]) ?? "");
+          req.session.activeUserValidatedAt = Date.now();
           req.session.accountCache = { ...accountPayload, allowedPages: allowedUI };
           req.session.accountCacheTs = Date.now();
 
@@ -16785,7 +16979,11 @@ app.delete(
     res.set("Cache-Control", "no-store");
     try {
       const result = await _sbDeleteUserAccessTeamMember(req.params?.id || "");
-      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted.` });
+      await _revokeTeamMemberSessions(result?.id || req.params?.id || "", {
+        name: result?.name || "",
+        reason: "team_member_deleted",
+      });
+      return res.json({ ok: true, source: "supabase", result, sessionRevoked: true, message: `${result.name || "Team member"} deleted.` });
     } catch (error) {
       console.error("DELETE /api/user-access/team-members/:id error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete team member." });
