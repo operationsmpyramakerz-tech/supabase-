@@ -1,6 +1,6 @@
 // Bump this value whenever we change static assets (CSS/JS/images)
 // so existing installs don't keep serving stale cached files.
-const CACHE_NAME = "ops-static-vv33-b2b-stock-column-add";
+const CACHE_NAME = "ops-static-vv34-b2b-stock-column-save";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
