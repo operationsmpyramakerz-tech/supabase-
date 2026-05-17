@@ -12501,6 +12501,7 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
     const defectedDate = latestDef?.date || null;
 
     const productsNameToIdCode = await _getProductsNameToIdCodeMap();
+    const receiptPropName = _detectStocktakingReceiptPropName(schemaProps);
     const lookupIdCode = (componentName, fallbackProps) => {
       const fromProducts = productsNameToIdCode.get(_normNameKey(componentName));
       return fromProducts || _extractIdCodeFromProps(fallbackProps || {}) || "";
@@ -12565,6 +12566,13 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
           }
 
           const idCode = lookupIdCode(componentName, props);
+          const receiptNumber = _normalizeMultilineText(
+            _extractPropText(receiptPropName ? props?.[receiptPropName] : null) ||
+            _extractPropText(_propInsensitive(props, 'Receipt Number')) ||
+            _extractPropText(_propInsensitive(props, 'receipt_number')) ||
+            _extractPropText(_propInsensitive(props, 'Receipt')) ||
+            '',
+          );
 
           let tag = null;
           if (props.Tag?.select) {
@@ -12614,6 +12622,7 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
             name: componentName,
             url,
             idCode: idCode || "",
+            receiptNumber,
             doneQuantity: doneQuantity === null ? 0 : Number(doneQuantity) || 0,
             done: !!doneBool,
             inventory,
@@ -13267,14 +13276,87 @@ app.patch(
 );
 
 
+
+const B2B_STOCK_EXPORT_COLUMN_DEFS = [
+  { key: "stock", label: "In Stock", aliases: ["stock", "in_stock", "instock", "done", "quantity", "qty"] },
+  { key: "receiptNumber", label: "Receipt Number", aliases: ["receipt", "receipt_number", "receiptnumber", "receiptNumber", "receipt no", "receipt_no"] },
+  { key: "unityPrice", label: "Unity Price", aliases: ["unity", "unity_price", "unityprice", "unit", "unit_price", "unitprice", "price"] },
+  { key: "totalPrice", label: "Total Price", aliases: ["total", "total_price", "totalprice", "total cost", "cost"] },
+  { key: "inventory", label: "Inventory", aliases: ["inventory", "inv"] },
+  { key: "defected", label: "Defected", aliases: ["defected", "def", "damaged"] },
+];
+
+function _b2bExportCanon(value = "") {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function _b2bExportColumnKey(value = "") {
+  const wanted = _b2bExportCanon(value);
+  if (!wanted) return "";
+  for (const def of B2B_STOCK_EXPORT_COLUMN_DEFS) {
+    if (_b2bExportCanon(def.key) === wanted) return def.key;
+    if ((def.aliases || []).some((alias) => _b2bExportCanon(alias) === wanted)) return def.key;
+  }
+  return "";
+}
+
+function _parseB2BStockExportColumns(query = {}, fallback = ["stock"]) {
+  const hasColumns = query && Object.prototype.hasOwnProperty.call(query, "columns");
+  const rawColumns = hasColumns ? String(query.columns || "") : "";
+  let requested = [];
+
+  if (rawColumns.trim()) {
+    requested = rawColumns
+      .split(/[,+|;]/)
+      .map((part) => _b2bExportColumnKey(part))
+      .filter(Boolean);
+  } else if (query && Object.prototype.hasOwnProperty.call(query, "cols")) {
+    // Backward compatibility for the existing Finish Inventory modal.
+    const cols = String(query.cols || "").toLowerCase().trim();
+    requested = ["stock"];
+    if (cols === "inventory" || cols === "inv") requested.push("inventory");
+    else if (cols === "defected" || cols === "def" || cols === "damaged") requested.push("defected");
+    else if (cols === "both") requested.push("inventory", "defected");
+    else if (cols === "done" || cols === "onlydone" || cols === "none") requested = ["stock"];
+    else requested.push("inventory", "defected");
+  } else {
+    requested = Array.isArray(fallback) ? fallback.slice() : ["stock"];
+  }
+
+  const allowedOrder = B2B_STOCK_EXPORT_COLUMN_DEFS.map((def) => def.key);
+  const set = new Set(requested);
+  const selected = allowedOrder.filter((key) => set.has(key));
+  return selected.length ? selected : ["stock"];
+}
+
+function _b2bStockExportColumnLabel(key = "") {
+  return B2B_STOCK_EXPORT_COLUMN_DEFS.find((def) => def.key === key)?.label || String(key || "");
+}
+
+function _b2bStockMoneyValue(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _b2bStockTotalPrice(quantity, price) {
+  const q = Number(quantity);
+  const p = Number(price);
+  return Number.isFinite(q) && Number.isFinite(p) ? q * p : null;
+}
+
+function _b2bStockMoneyText(value) {
+  const n = _b2bStockMoneyValue(value);
+  return n === null ? "" : `EGP ${n.toFixed(2)}`;
+}
+
 // ===== B2B School Stocktaking — PDF download (same template as /stocktaking) =====
 app.get(
   "/api/b2b/schools/:id/stock/pdf",
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const id = String(req.params.id || "").trim();
@@ -13286,60 +13368,50 @@ app.get(
       const { meta, items } = await _getB2BSchoolStocktakingPayload(id);
       const schoolName = String(meta?.schoolName || "School").trim() || "School";
 
-      // Columns selection
-      // - Download PDF button (no query) should show Done only (no Inventory/Defected)
-      // - Finish Inventory modal uses: ?cols=inventory | defected | both
-      //
-      // Supported values:
-      // ?cols=done|none        -> Done only (hide Inventory & Defected)
-      // ?cols=inventory|inv    -> Inventory only
-      // ?cols=defected|def     -> Defected only
-      // ?cols=both             -> Inventory & Defected (default when cols is provided but invalid)
-      const hasColsParam = !!(req.query && Object.prototype.hasOwnProperty.call(req.query, "cols"));
-      const colsReqRaw = String(hasColsParam ? (req.query && req.query.cols) : "done")
-        .toLowerCase()
-        .trim();
+      const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock"]);
+      const hasExportOptions = !!(
+        req.query &&
+        (Object.prototype.hasOwnProperty.call(req.query, "columns") ||
+          Object.prototype.hasOwnProperty.call(req.query, "cols"))
+      );
+      const includeSignatureBlocks = !!(req.query && Object.prototype.hasOwnProperty.call(req.query, "cols"));
 
-      let includeInventoryCol = true;
-      let includeDefectedCol = true;
+      const includeStockCol = selectedExportColumns.includes("stock");
+      const includeReceiptNumberCol = selectedExportColumns.includes("receiptNumber");
+      const includeUnityPriceCol = selectedExportColumns.includes("unityPrice");
+      const includeTotalPriceCol = selectedExportColumns.includes("totalPrice");
+      const includeInventoryCol = selectedExportColumns.includes("inventory");
+      const includeDefectedCol = selectedExportColumns.includes("defected");
 
-      const doneOnly = colsReqRaw === "done" || colsReqRaw === "onlydone" || colsReqRaw === "none";
-      if (doneOnly) {
-        includeInventoryCol = false;
-        includeDefectedCol = false;
-      } else if (colsReqRaw === "inventory" || colsReqRaw === "inv") {
-        includeDefectedCol = false;
-      } else if (colsReqRaw === "defected" || colsReqRaw === "def" || colsReqRaw === "damaged") {
-        includeInventoryCol = false;
-      } else {
-        includeInventoryCol = true;
-        includeDefectedCol = true;
-      }
+      const unitPriceMap = await _getProductsNameToUnityPriceMap();
+      const unitPriceOf = (row) => {
+        const direct = _b2bStockMoneyValue(row?.unitPrice);
+        if (direct !== null) return direct;
+        const fromProducts = unitPriceMap.get(_normNameKey(row?.name));
+        return Number.isFinite(Number(fromProducts)) ? Number(fromProducts) : null;
+      };
 
-      // Safety: don't allow both to be hidden unless explicitly requested.
-      if (!doneOnly && !includeInventoryCol && !includeDefectedCol) {
-        includeInventoryCol = true;
-        includeDefectedCol = true;
-      }
-
-      // Signature blocks:
-      // - Download PDF button should NOT include signatures blocks
-      // - Finish Inventory modal keeps signatures blocks (it sends ?cols=...)
-      const includeSignatureBlocks = hasColsParam;
-
-      // Build rows in the same shape as /api/stock/pdf
+      // Build rows in the same shape as /api/stock/pdf, with optional export columns.
       const filteredStockForPdf = (items || [])
-        .map((r) => ({
-          id: r.id,
-          name: r.name,
-          idCode: r.idCode,
-          quantity: Number(r.doneQuantity) || 0,
-          inventory:
-            r.inventory === null || typeof r.inventory === "undefined" ? null : Number(r.inventory),
-          defected:
-            r.defected === null || typeof r.defected === "undefined" ? null : Number(r.defected),
-          tag: r.tag,
-        }))
+        .map((r) => {
+          const quantity = Number(r.doneQuantity) || 0;
+          const unityPrice = unitPriceOf(r);
+          return {
+            id: r.id,
+            name: r.name,
+            url: r.url,
+            idCode: r.idCode,
+            receiptNumber: _normalizeMultilineText(r.receiptNumber || ""),
+            quantity,
+            unityPrice,
+            totalPrice: _b2bStockTotalPrice(quantity, unityPrice),
+            inventory:
+              r.inventory === null || typeof r.inventory === "undefined" ? null : Number(r.inventory),
+            defected:
+              r.defected === null || typeof r.defected === "undefined" ? null : Number(r.defected),
+            tag: r.tag,
+          };
+        })
         .filter((r) => {
           const quantity = Number(r.quantity);
           const qOk = Number.isFinite(quantity) && quantity !== 0;
@@ -13359,7 +13431,8 @@ app.get(
       res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
 
       await ensurePdfArabicSupport();
-      const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+      const pdfLayout = selectedExportColumns.length > 4 ? "landscape" : "portrait";
+      const doc = new PDFDocument({ size: "A4", layout: pdfLayout, margin: 36, bufferPages: true });
       enableArabicPdf(doc);
       doc.pipe(res);
       attachPageNumbers(doc);
@@ -13437,11 +13510,37 @@ app.get(
       const mB = doc.page.margins.bottom;
       const contentW = pageW - mL - mR;
 
+      const pdfExtraColumnDefs = selectedExportColumns.map((key) => {
+        const widths = {
+          stock: 58,
+          receiptNumber: 98,
+          unityPrice: 70,
+          totalPrice: 74,
+          inventory: 70,
+          defected: 70,
+        };
+        const alignRight = new Set(["stock", "unityPrice", "totalPrice", "inventory", "defected"]);
+        return {
+          key,
+          label: _b2bStockExportColumnLabel(key),
+          width: widths[key] || 68,
+          align: alignRight.has(key) ? "right" : "left",
+        };
+      });
       const colIdW = 70;
-      const colQtyW = 60;
-      const colInvW = includeInventoryCol ? 70 : 0;
-      const colDefW = includeDefectedCol ? 70 : 0;
-      const colCompW = contentW - colIdW - colQtyW - colInvW - colDefW;
+      const extraTotalW = pdfExtraColumnDefs.reduce((sum, col) => sum + Number(col.width || 0), 0);
+      const colCompW = Math.max(150, contentW - colIdW - extraTotalW);
+      const pdfTableW = Math.min(contentW, colIdW + colCompW + extraTotalW);
+
+      const pdfValueForColumn = (item, key) => {
+        if (key === "stock") return String(item.quantity ?? 0);
+        if (key === "receiptNumber") return String(item.receiptNumber || "");
+        if (key === "unityPrice") return _b2bStockMoneyText(item.unityPrice);
+        if (key === "totalPrice") return _b2bStockMoneyText(item.totalPrice);
+        if (key === "inventory") return item.inventory === null || typeof item.inventory === "undefined" ? "" : String(Number(item.inventory));
+        if (key === "defected") return item.defected === null || typeof item.defected === "undefined" ? "" : String(Number(item.defected));
+        return "";
+      };
 
       // Page tracking for footer signatures
       let pageNum = 1;
@@ -13631,39 +13730,30 @@ app.get(
         const txt = pill?.text || COLORS.accent;
 
         doc
-          .rect(mL, y, contentW, 20)
+          .rect(mL, y, pdfTableW, 20)
           .fillColor(bg)
           .fill();
 
+        let x = mL;
         doc
           .fillColor(txt)
           .font("Helvetica-Bold")
-          .fontSize(9)
-          .text("ID Code", mL + 8, y + 6, { width: colIdW - 10 });
+          .fontSize(8.5)
+          .text("ID Code", x + 8, y + 6, { width: colIdW - 10 });
+        x += colIdW;
         doc
           .fillColor(txt)
           .font("Helvetica-Bold")
-          .fontSize(9)
-          .text("Component", mL + colIdW, y + 6, { width: colCompW - 10 });
-        doc
-          .fillColor(txt)
-          .font("Helvetica-Bold")
-          .fontSize(9)
-          .text("In Stock", mL + colIdW + colCompW, y + 6, { width: colQtyW - 10, align: "right" });
-        if (includeInventoryCol) {
+          .fontSize(8.5)
+          .text("Component", x, y + 6, { width: colCompW - 10 });
+        x += colCompW;
+        for (const col of pdfExtraColumnDefs) {
           doc
             .fillColor(txt)
             .font("Helvetica-Bold")
-            .fontSize(9)
-            .text("Inventory", mL + colIdW + colCompW + colQtyW, y + 6, { width: colInvW - 10, align: "right" });
-        }
-        if (includeDefectedCol) {
-          const defX = mL + colIdW + colCompW + colQtyW + (includeInventoryCol ? colInvW : 0);
-          doc
-            .fillColor(txt)
-            .font("Helvetica-Bold")
-            .fontSize(9)
-            .text("Defected", defX, y + 6, { width: colDefW - 10, align: "right" });
+            .fontSize(8.2)
+            .text(col.label, x, y + 6, { width: col.width - 8, align: col.align || "left" });
+          x += col.width;
         }
 
         doc.y = y + 24;
@@ -13671,88 +13761,58 @@ app.get(
 
       const drawRow = (item) => {
         const y = doc.y;
-        const rowH = 20;
+        const rowH = 22;
 
-        // Mismatch highlight background
         const invHasValue = includeInventoryCol && item.inventory !== null && typeof item.inventory !== "undefined";
         const mismatch = includeInventoryCol && invHasValue && Number(item.inventory) !== Number(item.quantity);
         if (mismatch) {
           doc
-            .rect(mL, y, contentW, rowH)
+            .rect(mL, y, pdfTableW, rowH)
             .fillColor(COLORS.mismatchBg)
             .fill();
         }
 
-        // Text
+        let x = mL;
         doc
           .fillColor(COLORS.text)
           .font("Helvetica")
-          .fontSize(9)
-          .text(String(item.idCode || ""), mL + 8, y + 6, { width: colIdW - 10 });
+          .fontSize(8.5)
+          .text(String(item.idCode || ""), x + 8, y + 6, { width: colIdW - 10 });
+        x += colIdW;
         doc
           .fillColor(COLORS.text)
           .font("Helvetica")
-          .fontSize(9)
-          .text(String(item.name || "-"), mL + colIdW, y + 6, { width: colCompW - 10 });
-        doc
-          .fillColor(COLORS.text)
-          .font("Helvetica")
-          .fontSize(9)
-          .text(String(item.quantity ?? 0), mL + colIdW + colCompW, y + 6, { width: colQtyW - 10, align: "right" });
+          .fontSize(8.5)
+          .text(String(item.name || "-"), x, y + 6, { width: colCompW - 10 });
+        x += colCompW;
 
-        const afterQtyX = mL + colIdW + colCompW + colQtyW;
-        const invX = afterQtyX;
-        const defX = afterQtyX + (includeInventoryCol ? colInvW : 0);
-
-        if (includeInventoryCol) {
-          if (invHasValue) {
-            doc
-              .fillColor(mismatch ? COLORS.mismatch : COLORS.text)
-              .font("Helvetica")
-              .fontSize(9)
-              .text(String(Number(item.inventory)), invX, y + 6, {
-                width: colInvW - 10,
-                align: "right",
-              });
-          } else {
-            // underline for handwritten inventory
+        for (const col of pdfExtraColumnDefs) {
+          const value = pdfValueForColumn(item, col.key);
+          const emptyHandwrite = (col.key === "inventory" || col.key === "defected") && !String(value || "").trim();
+          if (emptyHandwrite) {
             const lineY = y + 14;
             doc
-              .moveTo(invX + 8, lineY)
-              .lineTo(invX + colInvW - 8, lineY)
+              .moveTo(x + 8, lineY)
+              .lineTo(x + col.width - 8, lineY)
               .lineWidth(0.8)
               .strokeColor(COLORS.border)
               .stroke();
-          }
-        }
-
-        if (includeDefectedCol) {
-          const defHasValue = item.defected !== null && typeof item.defected !== "undefined";
-          if (defHasValue) {
-            doc
-              .fillColor(COLORS.text)
-              .font("Helvetica")
-              .fontSize(9)
-              .text(String(Number(item.defected)), defX, y + 6, {
-                width: colDefW - 10,
-                align: "right",
-              });
           } else {
-            // underline for handwritten defected
-            const lineY = y + 14;
             doc
-              .moveTo(defX + 8, lineY)
-              .lineTo(defX + colDefW - 8, lineY)
-              .lineWidth(0.8)
-              .strokeColor(COLORS.border)
-              .stroke();
+              .fillColor(col.key === "inventory" && mismatch ? COLORS.mismatch : COLORS.text)
+              .font("Helvetica")
+              .fontSize(8.2)
+              .text(String(value || ""), x, y + 6, {
+                width: col.width - 8,
+                align: col.align || "left",
+              });
           }
+          x += col.width;
         }
 
-        // separator
         doc
           .moveTo(mL, y + rowH)
-          .lineTo(mL + contentW, y + rowH)
+          .lineTo(mL + pdfTableW, y + rowH)
           .lineWidth(1)
           .strokeColor("#F3F4F6")
           .stroke();
@@ -13790,8 +13850,8 @@ app.get(
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!stocktakingDatabaseId) {
-      return res.status(500).json({ error: "Stocktaking database ID is not configured." });
+    if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
+      return res.status(500).json({ error: "Stocktaking table/database is not configured." });
     }
 
     const id = String(req.params.id || "").trim();
@@ -13803,40 +13863,44 @@ app.get(
       const { meta, items } = await _getB2BSchoolStocktakingPayload(id);
       const schoolName = String(meta?.schoolName || "School").trim() || "School";
 
-      // Columns selection (used by Finish Inventory modal)
-      // ?cols=inventory | defected | both
-      const colsReqRaw = String((req.query && req.query.cols) || "both").toLowerCase().trim();
-      let includeInventoryCol = true;
-      let includeDefectedCol = true;
-      if (colsReqRaw === "inventory" || colsReqRaw === "inv") {
-        includeDefectedCol = false;
-      } else if (colsReqRaw === "defected" || colsReqRaw === "def" || colsReqRaw === "damaged") {
-        includeInventoryCol = false;
-      } else {
-        includeInventoryCol = true;
-        includeDefectedCol = true;
-      }
+      const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "inventory", "defected", "unityPrice"]);
+      const includeStockCol = selectedExportColumns.includes("stock");
+      const includeReceiptNumberCol = selectedExportColumns.includes("receiptNumber");
+      const includeUnityPriceCol = selectedExportColumns.includes("unityPrice");
+      const includeTotalPriceCol = selectedExportColumns.includes("totalPrice");
+      const includeInventoryCol = selectedExportColumns.includes("inventory");
+      const includeDefectedCol = selectedExportColumns.includes("defected");
 
-      // Safety: don't allow both to be hidden.
-      if (!includeInventoryCol && !includeDefectedCol) {
-        includeInventoryCol = true;
-        includeDefectedCol = true;
-      }
+      const unitPriceMap = await _getProductsNameToUnityPriceMap();
+      const unitPriceOf = (row) => {
+        const direct = _b2bStockMoneyValue(row?.unitPrice);
+        if (direct !== null) return direct;
+        const n = unitPriceMap.get(_normNameKey(row?.name));
+        if (typeof n === "number" && Number.isFinite(n)) return n;
+        return null;
+      };
 
       // Sort by tag then component name (same as /api/stock/excel)
       const rows = (items || [])
-        .map((r) => ({
-          id: r.id,
-          name: r.name,
-          url: r.url,
-          idCode: r.idCode,
-          tag: r.tag,
-          quantity: Number(r.doneQuantity) || 0,
-          inventory:
-            r.inventory === null || typeof r.inventory === "undefined" ? null : Number(r.inventory),
-          defected:
-            r.defected === null || typeof r.defected === "undefined" ? null : Number(r.defected),
-        }))
+        .map((r) => {
+          const quantity = Number(r.doneQuantity) || 0;
+          const unityPrice = unitPriceOf(r);
+          return {
+            id: r.id,
+            name: r.name,
+            url: r.url,
+            idCode: r.idCode,
+            receiptNumber: _normalizeMultilineText(r.receiptNumber || ""),
+            tag: r.tag,
+            quantity,
+            unityPrice,
+            totalPrice: _b2bStockTotalPrice(quantity, unityPrice),
+            inventory:
+              r.inventory === null || typeof r.inventory === "undefined" ? null : Number(r.inventory),
+            defected:
+              r.defected === null || typeof r.defected === "undefined" ? null : Number(r.defected),
+          };
+        })
         .filter((r) => {
           const quantity = Number(r.quantity);
           const qOk = Number.isFinite(quantity) && quantity !== 0;
@@ -13874,11 +13938,11 @@ app.get(
         right: { style: "thin", color: { argb } },
       });
 
-      // Dynamic columns (based on cols selection)
-      const columns = ["Tag", "ID Code", "Component", "In Stock"];
-      if (includeInventoryCol) columns.push("Inventory");
-      if (includeDefectedCol) columns.push("Defected");
-      columns.push("Unity Price");
+      // Dynamic columns (based on selected download options)
+      const columns = ["Tag", "ID Code", "Component"];
+      for (const key of selectedExportColumns) {
+        columns.push(_b2bStockExportColumnLabel(key));
+      }
 
       const colLetter = (n) => {
         let num = Math.max(1, Number(n) || 1);
@@ -13951,21 +14015,15 @@ app.get(
         "ID Code": 14,
         "Component": 52,
         "In Stock": 12,
+        "Receipt Number": 24,
         "Inventory": 12,
         "Defected": 12,
         "Unity Price": 14,
+        "Total Price": 14,
       };
       columns.forEach((h, idx) => {
         ws.getColumn(idx + 1).width = widthByHeader[h] || 12;
       });
-
-      // Unit price map (same as /api/stock/excel)
-      const unitPriceMap = await _getProductsNameToUnityPriceMap();
-      const unitPriceOf = (componentName) => {
-        const n = unitPriceMap.get(_normNameKey(componentName));
-        if (typeof n === "number" && Number.isFinite(n)) return n;
-        return null;
-      };
 
       // Notion tag color map for Excel
       const notionColorToARGB = (color = "default") => {
@@ -13993,24 +14051,26 @@ app.get(
         }
       };
 
+      const excelValueForColumn = (row, key) => {
+        if (key === "stock") return Number(row.quantity) || 0;
+        if (key === "receiptNumber") return String(row.receiptNumber || "");
+        if (key === "unityPrice") return row.unityPrice === null ? "" : Number(row.unityPrice);
+        if (key === "totalPrice") return row.totalPrice === null ? "" : Number(row.totalPrice);
+        if (key === "inventory") return row.inventory === null || typeof row.inventory === "undefined" ? "" : Number(row.inventory);
+        if (key === "defected") return row.defected === null || typeof row.defected === "undefined" ? "" : Number(row.defected);
+        return "";
+      };
+
       // Data rows
       for (const r of rows) {
         const tagName = r?.tag?.name || "Untagged";
         const tagColor = r?.tag?.color || "default";
-        const price = unitPriceOf(r.name);
         const rowValues = [
           tagName,
           r.idCode || "",
           r.name || "-",
-          Number(r.quantity) || 0,
+          ...selectedExportColumns.map((key) => excelValueForColumn(r, key)),
         ];
-        if (includeInventoryCol) {
-          rowValues.push(r.inventory === null || typeof r.inventory === "undefined" ? "" : Number(r.inventory));
-        }
-        if (includeDefectedCol) {
-          rowValues.push(r.defected === null || typeof r.defected === "undefined" ? "" : Number(r.defected));
-        }
-        rowValues.push(price === null ? "" : price);
 
         const row = ws.addRow(rowValues);
 
@@ -14032,24 +14092,16 @@ app.get(
         // Borders
         row.eachCell((cell) => {
           cell.border = borderAll();
-          // Keep things readable when printing
           if (!cell.alignment) cell.alignment = { vertical: "middle", horizontal: "left" };
         });
 
-        // Numeric alignment
-        const idxInStock = columns.indexOf("In Stock") + 1;
-        const idxInventory = includeInventoryCol ? columns.indexOf("Inventory") + 1 : null;
-        const idxDefected = includeDefectedCol ? columns.indexOf("Defected") + 1 : null;
-        const idxPrice = columns.indexOf("Unity Price") + 1;
-
-        if (idxInStock > 0) row.getCell(idxInStock).alignment = { vertical: "middle", horizontal: "right" };
-        if (idxInventory) row.getCell(idxInventory).alignment = { vertical: "middle", horizontal: "right" };
-        if (idxDefected) row.getCell(idxDefected).alignment = { vertical: "middle", horizontal: "right" };
-        if (idxPrice > 0) row.getCell(idxPrice).alignment = { vertical: "middle", horizontal: "right" };
-
-        // Unity price format
-        if (price !== null && idxPrice > 0) {
-          row.getCell(idxPrice).numFmt = '"EGP" #,##0.00';
+        // Numeric alignment and money formats
+        for (const key of ["stock", "inventory", "defected", "unityPrice", "totalPrice"]) {
+          const idx = columns.indexOf(_b2bStockExportColumnLabel(key)) + 1;
+          if (idx > 0) row.getCell(idx).alignment = { vertical: "middle", horizontal: "right" };
+          if ((key === "unityPrice" || key === "totalPrice") && idx > 0) {
+            row.getCell(idx).numFmt = '"EGP" #,##0.00';
+          }
         }
       }
 
@@ -24358,6 +24410,9 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
     quantity: _sbStocktakingNum(quantityColumn ? row?.[quantityColumn] : 0),
     oneKitQuantity: _sbStocktakingNum(_sbGet(row, ["one_kit_quantity", "One Kit Quantity", "one kit quantity"])),
     idCode: _sbStocktakingText(_sbGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
+    receiptNumber: _normalizeMultilineText(
+      _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])) || "",
+    ),
     unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
     tag: { name: tagName, color: "default" },
     quantityColumn: quantityColumn || null,

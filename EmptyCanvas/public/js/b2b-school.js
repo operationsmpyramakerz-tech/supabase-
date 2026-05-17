@@ -5,8 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const schoolMetaChipsEl = document.getElementById('schoolMetaChips');
   const stockSummaryEl = document.getElementById('stockSummary');
   const searchInput = document.getElementById('schoolStockSearch');
-  const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-  const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+  const downloadStockBtn = document.getElementById('downloadStockBtn');
   const makeInventoryBtn = document.getElementById('makeInventoryBtn');
 
   let school = null;
@@ -16,8 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let inventoryMode = false;
 
   // Disable export buttons until we know the school
-  if (downloadPdfBtn) downloadPdfBtn.disabled = true;
-  if (downloadExcelBtn) downloadExcelBtn.disabled = true;
+  if (downloadStockBtn) downloadStockBtn.disabled = true;
   if (makeInventoryBtn) makeInventoryBtn.disabled = true;
 
   const norm = (s) => String(s || '').toLowerCase().trim();
@@ -852,6 +850,120 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+  const B2B_EXPORT_COLUMNS = [
+    { value: 'stock', label: 'Stock', checked: true },
+    { value: 'receiptNumber', label: 'Receipt number', checked: false },
+    { value: 'unityPrice', label: 'Unity price', checked: true },
+    { value: 'totalPrice', label: 'Total price', checked: true },
+    { value: 'inventory', label: 'Inventory', checked: false },
+    { value: 'defected', label: 'Defected', checked: false },
+  ];
+
+  const B2BExportModal = (() => {
+    let ui = null;
+    let resolver = null;
+
+    const ensure = () => {
+      if (ui) return ui;
+      const modal = document.createElement('div');
+      modal.className = 'b2b-export-modal hidden';
+      modal.id = 'b2bExportModal';
+      modal.innerHTML = `
+        <div class="b2b-export-modal__backdrop" data-export-cancel></div>
+        <div class="b2b-export-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="b2bExportTitle">
+          <div class="b2b-export-modal__header">
+            <div class="b2b-export-modal__icon" aria-hidden="true"><i data-feather="download"></i></div>
+            <div>
+              <h3 class="b2b-export-modal__title" id="b2bExportTitle">Download stock file</h3>
+              <p class="b2b-export-modal__hint">Choose the file type and the columns that should appear in the file.</p>
+            </div>
+            <button class="b2b-export-modal__close" type="button" aria-label="Close" data-export-cancel>&times;</button>
+          </div>
+          <div class="b2b-export-modal__body">
+            <label class="b2b-export-field">
+              <span class="b2b-export-field__label">File type</span>
+              <select class="b2b-export-input" data-export-filetype>
+                <option value="pdf">PDF</option>
+                <option value="excel">Excel</option>
+              </select>
+            </label>
+            <fieldset class="b2b-export-field">
+              <legend class="b2b-export-field__label">Columns</legend>
+              <div class="b2b-export-columns" data-export-columns>
+                ${B2B_EXPORT_COLUMNS.map((col) => `
+                  <label class="b2b-export-check">
+                    <input type="checkbox" value="${col.value}" ${col.checked ? 'checked' : ''} />
+                    <span>${col.label}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </fieldset>
+            <div class="b2b-export-modal__error" data-export-error>Please choose at least one column.</div>
+          </div>
+          <div class="b2b-export-modal__footer">
+            <button class="btn btn--light" type="button" data-export-cancel>Cancel</button>
+            <button class="btn b2b-export-confirm" type="button" data-export-confirm>
+              <i data-feather="download"></i>
+              <span>Download</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const fileType = modal.querySelector('[data-export-filetype]');
+      const checks = Array.from(modal.querySelectorAll('[data-export-columns] input[type="checkbox"]'));
+      const err = modal.querySelector('[data-export-error]');
+      const confirm = modal.querySelector('[data-export-confirm]');
+      const cancelEls = Array.from(modal.querySelectorAll('[data-export-cancel]'));
+
+      const close = (value = null) => {
+        modal.classList.add('hidden');
+        document.body.classList.remove('modal-open');
+        if (resolver) {
+          const done = resolver;
+          resolver = null;
+          done(value);
+        }
+      };
+
+      cancelEls.forEach((el) => el.addEventListener('click', () => close(null)));
+      modal.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') close(null);
+      });
+      confirm.addEventListener('click', () => {
+        const selected = checks.filter((x) => x.checked).map((x) => x.value);
+        if (!selected.length) {
+          if (err) err.style.display = 'block';
+          return;
+        }
+        if (err) err.style.display = 'none';
+        close({ fileType: String(fileType?.value || 'pdf').toLowerCase(), columns: selected });
+      });
+
+      ui = { modal, fileType, checks, err };
+      if (window.feather) window.feather.replace();
+      return ui;
+    };
+
+    return {
+      open: () => new Promise((resolve) => {
+        const x = ensure();
+        resolver = resolve;
+        if (x.fileType) x.fileType.value = 'pdf';
+        x.checks.forEach((input) => {
+          const def = B2B_EXPORT_COLUMNS.find((col) => col.value === input.value);
+          input.checked = !!def?.checked;
+        });
+        if (x.err) x.err.style.display = 'none';
+        x.modal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        setTimeout(() => x.fileType?.focus?.(), 30);
+      }),
+    };
+  })();
+
+
   // ---------- Export helpers (PDF / Excel) ----------
   const safeFileName = (s) => {
     const cleaned = String(s || '')
@@ -916,28 +1028,25 @@ document.addEventListener('DOMContentLoaded', () => {
       if (schoolNameEl) schoolNameEl.textContent = school.name || 'School';
       document.title = `B2B — ${school.name || 'School'}`;
 
-      // Enable & wire exports
+      // Enable & wire export options modal
       const safeName = safeFileName(school.name || 'School');
-      if (downloadPdfBtn) {
-        downloadPdfBtn.disabled = false;
-        downloadPdfBtn.onclick = (e) => {
+      if (downloadStockBtn) {
+        downloadStockBtn.disabled = false;
+        downloadStockBtn.onclick = async (e) => {
           e.preventDefault();
-          exportFile(
-            downloadPdfBtn,
-            `/api/b2b/schools/${encodeURIComponent(id)}/stock/pdf`,
-            `Stocktaking-${safeName}.pdf`,
-          );
-        };
-      }
-      if (downloadExcelBtn) {
-        downloadExcelBtn.disabled = false;
-        downloadExcelBtn.onclick = (e) => {
-          e.preventDefault();
-          exportFile(
-            downloadExcelBtn,
-            `/api/b2b/schools/${encodeURIComponent(id)}/stock/excel`,
-            `Stocktaking-${safeName}.xlsx`,
-          );
+          const opts = await B2BExportModal.open();
+          if (!opts) return;
+
+          const isExcel = opts.fileType === 'excel' || opts.fileType === 'xlsx';
+          const columnsParam = encodeURIComponent((opts.columns || []).join(','));
+          const endpoint = isExcel
+            ? `/api/b2b/schools/${encodeURIComponent(id)}/stock/excel?columns=${columnsParam}`
+            : `/api/b2b/schools/${encodeURIComponent(id)}/stock/pdf?columns=${columnsParam}`;
+          const fallbackName = isExcel
+            ? `Stocktaking-${safeName}.xlsx`
+            : `Stocktaking-${safeName}.pdf`;
+
+          await exportFile(downloadStockBtn, endpoint, fallbackName);
         };
       }
 
