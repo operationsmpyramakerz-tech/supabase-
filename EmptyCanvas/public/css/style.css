@@ -8951,10 +8951,14 @@ body.order-modal-fit-screen .co-item-right:has(.sv-review-item-actions) .co-item
 }
 .b2b-export-confirm.is-busy { cursor: progress; opacity: 0.72; }
 @media (max-width: 520px) {
-  .b2b-export-modal { align-items: flex-end; padding: 0.75rem; }
-  .b2b-export-modal__dialog { width: 100%; max-height: calc(100vh - 1.5rem); border-radius: 24px; }
+  .b2b-export-modal {
+    align-items: center;
+    justify-content: center;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px)) 0.75rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+  .b2b-export-modal__dialog { width: 100%; max-height: calc(100dvh - 1.5rem); border-radius: 24px; }
   .b2b-export-modal__header { padding: 1rem 1rem 0.8rem; }
-  .b2b-export-modal__body { max-height: calc(100vh - 210px); padding: 0 1rem 1rem; }
+  .b2b-export-modal__body { max-height: calc(100dvh - 210px); padding: 0 1rem 1rem; }
   .b2b-export-modal__footer { padding: 0.95rem 1rem 1rem; }
   .b2b-export-modal__footer .btn { flex: 1 1 0; justify-content: center; }
 }

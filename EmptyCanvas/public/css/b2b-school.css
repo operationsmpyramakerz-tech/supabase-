@@ -811,13 +811,15 @@ body {
 
 @media (max-width: 520px) {
   #adminPasswordModal.admin-modal {
-    align-items: flex-end;
-    padding: 0.75rem;
+    align-items: center;
+    justify-content: center;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px)) 0.75rem max(0.75rem, env(safe-area-inset-bottom, 0px));
   }
 
   #adminPasswordModal .admin-modal__dialog {
     width: 100%;
     max-width: none;
+    max-height: calc(100dvh - 1.5rem);
     border-radius: 24px;
   }
 
@@ -1070,13 +1072,14 @@ body {
 
 @media (max-width: 520px) {
   .b2b-export-modal {
-    align-items: flex-end;
-    padding: 0.75rem;
+    align-items: center;
+    justify-content: center;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px)) 0.75rem max(0.75rem, env(safe-area-inset-bottom, 0px));
   }
 
   .b2b-export-modal__dialog {
     width: 100%;
-    max-height: calc(100vh - 1.5rem);
+    max-height: calc(100dvh - 1.5rem);
     border-radius: 24px;
   }
 
