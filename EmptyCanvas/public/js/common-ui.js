@@ -610,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Expenses Users', '/expenses/users'])) {
       urls.push('/api/expenses/users');
     }
-    if (hasAllowedPage(allowedPages, ['User Access & Data', 'User Access and Data', 'User Access', 'Team Members', '/user-access'])) {
+    if (hasAllowedPage(allowedPages, ['Users Center', 'User Access & Data', 'User Access and Data', 'User Access', 'Team Members', '/user-access'])) {
       urls.push('/api/user-access/team-members');
     }
 
@@ -1479,7 +1479,11 @@ if (document.querySelector('.sidebar')) {
     'expenses users': 'a[href^="/expenses/users"]',
     'expenses by user': 'a[href^="/expenses/users"]',
 
-    // ===== User Access =====
+    // ===== Users Center =====
+    'users center': 'a[href="/user-access"]',
+    'user center': 'a[href="/user-access"]',
+    'users centre': 'a[href="/user-access"]',
+    'user centre': 'a[href="/user-access"]',
     'user access & data': 'a[href="/user-access"]',
     'user access': 'a[href="/user-access"]',
     'user access and data': 'a[href="/user-access"]',
@@ -1584,12 +1588,6 @@ if (document.querySelector('.sidebar')) {
       });
     } catch {}
 
-    // User Access & Data must be visible from the sidebar on every authenticated page.
-    // The page itself uses Admin password verification before sensitive edit/create actions.
-    try {
-      const userAccess = document.querySelector('a[href="/user-access"]');
-      if (userAccess) showEl(userAccess.closest('li') || userAccess);
-    } catch {}
   }
 
   function cacheAllowedPages(arr){
@@ -1994,7 +1992,7 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
   ensureLink({ href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' });
-  ensureLink({ href: '/user-access', label: 'User Access & Data', icon: 'shield' });
+  ensureLink({ href: '/user-access', label: 'Users Center', icon: 'shield' });
   ensureLink({ href: '/b2b', label: 'B2B', icon: 'folder' });
   ensureLink({ href: '/tasks', label: 'Tasks', icon: 'check-square' });
 

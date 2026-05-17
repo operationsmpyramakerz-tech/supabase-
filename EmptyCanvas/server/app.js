@@ -1301,7 +1301,18 @@ async function serializeTeamMemberPublicProfile(page) {
 }
 
 
-const USER_ACCESS_PAGE_NAME = "User Access & Data";
+const USER_ACCESS_PAGE_NAME = "Users Center";
+const USER_ACCESS_PAGE_ALIASES = [
+  USER_ACCESS_PAGE_NAME,
+  "User Access & Data",
+  "User Access and Data",
+  "User Access",
+  "Users Access",
+  "Team Members",
+  "Teams Members",
+  "Access and Data",
+  "/user-access",
+];
 const USER_ACCESS_CACHE_KEY = "cache:api:user-access:team-members:v2";
 const USER_ACCESS_FIELD_ORDER = [
   "Profile picture",
@@ -1727,6 +1738,10 @@ function normalizePages(names = []) {
     out.push("Orders Review");
   }
   if (
+    set.has("users center") ||
+    set.has("user center") ||
+    set.has("users centre") ||
+    set.has("user centre") ||
     set.has("user access & data") ||
     set.has("user access") ||
     set.has("user access and data") ||
@@ -2864,11 +2879,15 @@ function _sbSerializeAppPage(row = {}) {
     ["messages", "message", "emails", "email", "mail", "massage"].includes(mailKey) ||
     ["messages", "message", "emails", "email", "mail", "massage"].includes(mailName) ||
     mailRoute === "/messages" || mailRoute === "/emails";
+  const isUserAccessPage =
+    ["user-access-data", "user-access", "users-center", "users-centre", "team-members"].includes(mailKey) ||
+    ["user access & data", "user access", "users center", "users centre", "team members"].includes(mailName) ||
+    mailRoute === "/user-access";
   return {
     id: String(id ?? ""),
     pageId: String(id ?? ""),
     pageKey: pageKeyRaw,
-    pageName: isMailPage ? "Mail" : pageNameRaw,
+    pageName: isMailPage ? "Mail" : (isUserAccessPage ? USER_ACCESS_PAGE_NAME : pageNameRaw),
     routePath: routePathRaw,
     routePattern: _sbString(_sbGet(row, ["route_pattern", "routePattern"])) || "",
     moduleName: _sbString(_sbGet(row, ["module_name", "moduleName"])) || "General",
@@ -6103,7 +6122,7 @@ function expandAllowedForUI(list = []) {
     set.add("/messages");
     set.add("/emails");
   }
-  if (set.has(USER_ACCESS_PAGE_NAME)) {
+  if (USER_ACCESS_PAGE_ALIASES.some((name) => set.has(String(name)))) {
     set.add(USER_ACCESS_PAGE_NAME);
     set.add("User Access");
     set.add("Team Members");
@@ -6156,7 +6175,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("B2B")) return "/b2b";
   if (list.includes("Expenses Users")) return "/expenses/users";
   if (list.includes("Expenses")) return "/expenses";
-  if (list.includes(USER_ACCESS_PAGE_NAME)) return "/user-access";
+  if (USER_ACCESS_PAGE_ALIASES.some((name) => list.includes(name))) return "/user-access";
 
   // Fallback (important): avoid redirect loops if user only has a page we don't recognize.
   // /account does NOT require page permission, so it is a safe landing page.
@@ -7019,7 +7038,18 @@ function requirePage(pageNameOrNames) {
 
     const isAllowed = requiredPages.some((pageName) => allowed.includes(pageName));
     if (isAllowed || adminUnlocked) return next();
-    return res.redirect(firstAllowedPath(allowed));
+
+    const redirect = firstAllowedPath(allowed);
+    if (String(req.path || "").startsWith("/api/")) {
+      res.set("Cache-Control", "no-store");
+      return res.status(403).json({
+        ok: false,
+        code: "PAGE_ACCESS_DENIED",
+        error: "You do not have access to this page.",
+        redirect,
+      });
+    }
+    return res.redirect(redirect);
   };
 }
 
@@ -7067,7 +7097,7 @@ app.get("/home", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "home.html"));
 });
 
-app.get("/user-access", requireAuth, (req, res) => {
+app.get("/user-access", requireAuth, requirePage(USER_ACCESS_PAGE_ALIASES), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "user-access.html"));
 });
 
@@ -16261,6 +16291,10 @@ app.post('/api/messages/chats/:id/comments', requireAuth, requirePage(["Mail", "
   }
 });
 
+// Users Center — protect all user-management APIs with Allowed Pages.
+// Legacy aliases are kept so old saved permissions still work.
+app.use("/api/user-access", requireAuth, requirePage(USER_ACCESS_PAGE_ALIASES));
+
 // User Access & Data — Admin verification for edit actions
 app.post(
   "/api/user-access/admin/verify",
@@ -16300,7 +16334,7 @@ app.get(
       });
     } catch (error) {
       console.error("GET /api/user-access/options error:", error?.details || error?.body || error);
-      return res.status(500).json({ ok: false, error: error?.message || "Failed to load User Access options." });
+      return res.status(500).json({ ok: false, error: error?.message || "Failed to load Users Center options." });
     }
   },
 );
@@ -16749,7 +16783,7 @@ app.get(
       return res.json(payload);
     } catch (error) {
       console.error("GET /api/user-access/team-members error:", error?.details || error?.body || error);
-      return res.status(500).json({ error: error?.message || "Failed to load User Access & Data." });
+      return res.status(500).json({ error: error?.message || "Failed to load Users Center." });
     }
   },
 );
