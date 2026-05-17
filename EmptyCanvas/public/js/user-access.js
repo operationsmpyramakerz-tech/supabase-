@@ -798,25 +798,10 @@
     `;
   }
 
-  function stocktakingOptionMatchesMember(option, memberName) {
-    const normalize = (value) => String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[_-]+/g, ' ')
-      .replace(/\s+/g, ' ');
-    const optionText = normalize(option);
-    const fullName = normalize(memberName);
-    if (!optionText || !fullName) return false;
-    const firstToken = fullName.split(/\s+/).filter(Boolean)[0] || '';
-    return optionText.startsWith(fullName) || (!!firstToken && optionText.startsWith(firstToken));
-  }
-
   function stocktakingOptionsForCurrentMember(field, value) {
     const selected = String(value || '').trim();
-    const memberName = String(state.formMemberSnapshot?.name || '').trim();
     const allOptions = uniqValues(fieldOptions(field));
-    const matched = allOptions.filter((option) => stocktakingOptionMatchesMember(option, memberName));
-    return uniqValues([selected, ...matched].filter(Boolean));
+    return uniqValues([selected, ...allOptions].filter(Boolean));
   }
 
   function schoolSelectHTML(field, value) {
@@ -827,7 +812,7 @@
         <input type="text" data-school-column-name placeholder="Add new Stocktaking column, e.g. ${memberName ? `${escapeHTML(memberName)} Done` : 'New School Done'}">
         <button type="button" class="ua-mini-btn" data-school-add>Add column</button>
       </div>
-      <small>Only Stocktaking columns that start with this user name are shown here.</small>
+      <small>All Stocktaking table columns are shown here.</small>
     `;
     return singleSelectHTML(
       { ...field, name: 'School', type: 'school_select', placeholder: 'Select stocktaking column' },
