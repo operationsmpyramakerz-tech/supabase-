@@ -13349,6 +13349,15 @@ function _b2bStockMoneyText(value) {
   return n === null ? "" : `EGP ${n.toFixed(2)}`;
 }
 
+function _b2bReceiptNumbersInline(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split(/[\n,;|]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("-");
+}
+
 // ===== B2B School Stocktaking — PDF download (same template as /stocktaking) =====
 app.get(
   "/api/b2b/schools/:id/stock/pdf",
@@ -13401,7 +13410,7 @@ app.get(
             name: r.name,
             url: r.url,
             idCode: r.idCode,
-            receiptNumber: _normalizeMultilineText(r.receiptNumber || ""),
+            receiptNumber: _b2bReceiptNumbersInline(r.receiptNumber || ""),
             quantity,
             unityPrice,
             totalPrice: _b2bStockTotalPrice(quantity, unityPrice),
@@ -13890,7 +13899,7 @@ app.get(
             name: r.name,
             url: r.url,
             idCode: r.idCode,
-            receiptNumber: _normalizeMultilineText(r.receiptNumber || ""),
+            receiptNumber: _b2bReceiptNumbersInline(r.receiptNumber || ""),
             tag: r.tag,
             quantity,
             unityPrice,

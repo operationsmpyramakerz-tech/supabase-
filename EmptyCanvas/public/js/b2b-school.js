@@ -294,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           modal.classList.add('hidden');
           modal.style.display = 'none';
+          document.body.classList.remove('modal-open');
           startWrap.style.display = 'none';
           finishWrap.style.display = 'none';
           err.style.display = 'none';
@@ -466,6 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       x.modal.classList.remove('hidden');
       x.modal.style.display = 'flex';
+      document.body.classList.add('modal-open');
       setTimeout(() => {
         if (currentMode === 'start' && !x.dateInput.value) {
           x.dateInput.focus();
