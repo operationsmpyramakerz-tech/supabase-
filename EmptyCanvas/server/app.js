@@ -8507,7 +8507,7 @@ async function _sbInsertWithMissingColumnFallback(table, row = {}, requiredColum
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).map((x) => String(x || "").trim()).filter(Boolean));
   const current = { ...(row || {}) };
   const removed = [];
-  for (let attempt = 0; attempt < 20; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
       const created = await supabaseDb.insert(table, current);
       if (removed.length) {
@@ -8530,7 +8530,7 @@ async function _sbUpdateByIdWithMissingColumnFallback(table, id, row = {}, requi
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).map((x) => String(x || "").trim()).filter(Boolean));
   const current = { ...(row || {}) };
   const removed = [];
-  for (let attempt = 0; attempt < 20; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
       const updated = await supabaseDb.updateById(table, id, current);
       if (removed.length) {
@@ -11234,6 +11234,85 @@ const B2B_SCHOOL_FIELD_KEYS = B2B_SCHOOL_FIELD_DEFS.map((field) => field.key);
 const B2B_SCHOOL_NUMBER_FIELDS = new Set(B2B_SCHOOL_FIELD_DEFS.filter((field) => field.type === 'number').map((field) => field.key));
 const B2B_SCHOOL_BOOL_FIELDS = new Set(B2B_SCHOOL_FIELD_DEFS.filter((field) => field.type === 'checkbox').map((field) => field.key));
 
+const B2B_STOCKTAKING_COLUMN_ALIASES = [
+  'stocktaking_column',
+  'Stocktaking Column',
+  'stock_column',
+  'Stock Column',
+  'done_column',
+  'Done Column',
+  'school_stock_column',
+  'School Stock Column',
+  'stocktaking',
+  'Stocktaking',
+  'stocktaking_column_name',
+  'Stocktaking Column Name',
+  'selected_stocktaking_column',
+  'Selected Stocktaking Column',
+];
+
+const B2B_STOCKTAKING_COLUMN_WRITE_ALIASES = [
+  'stocktaking_column',
+  'stock_column',
+  'done_column',
+  'school_stock_column',
+  'stocktaking',
+  'stocktaking_column_name',
+  'selected_stocktaking_column',
+];
+
+const B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC = 60 * 60 * 24 * 365;
+
+function _sbB2BStockColumnOverrideKey(schoolId = '') {
+  const id = String(schoolId || '').trim();
+  return id ? `cache:api:b2b:school-stock-column-override:${id}:v1` : '';
+}
+
+async function _sbGetB2BStockColumnOverride(schoolId = '') {
+  const key = _sbB2BStockColumnOverrideKey(schoolId);
+  if (!key) return '';
+  const mem = _memGet(key);
+  if (mem !== null && typeof mem !== 'undefined') return _sbString(mem);
+  const redisValue = await _redisGet(key);
+  if (redisValue !== null && typeof redisValue !== 'undefined') {
+    const clean = _sbString(redisValue);
+    if (clean) _memSet(key, clean, B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC);
+    return clean;
+  }
+  return '';
+}
+
+async function _sbSetB2BStockColumnOverride(schoolId = '', value = '') {
+  const key = _sbB2BStockColumnOverrideKey(schoolId);
+  if (!key) return;
+  const clean = _sbString(value);
+  if (!clean) {
+    await cacheDel(key);
+    return;
+  }
+  _memSet(key, clean, B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC);
+  await _redisSet(key, clean, B2B_STOCKTAKING_COLUMN_OVERRIDE_TTL_SEC);
+}
+
+function _sbApplyB2BStockColumnSelection(school = {}, value = '') {
+  const clean = _sbString(value);
+  if (!clean || !school || typeof school !== 'object') return school;
+  school.stocktakingColumn = clean;
+  if (!school.fields || typeof school.fields !== 'object') school.fields = {};
+  school.fields.stocktaking_column = clean;
+  school.fields.stock_column = clean;
+  school.fields.done_column = clean;
+  school.fields.school_stock_column = clean;
+  return school;
+}
+
+async function _sbHydrateB2BStockColumnSelection(school = {}) {
+  if (!school || typeof school !== 'object') return school;
+  const override = await _sbGetB2BStockColumnOverride(school.id);
+  return override ? _sbApplyB2BStockColumnSelection(school, override) : school;
+}
+
+
 function _sbB2BPublicFieldValues(row = {}) {
   const out = {};
   for (const key of B2B_SCHOOL_FIELD_KEYS) {
@@ -11245,16 +11324,7 @@ function _sbB2BPublicFieldValues(row = {}) {
     } else if (key === 'solution_type') {
       out[key] = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program Type', 'Program type']));
     } else if (key === 'stocktaking_column') {
-      out[key] = _sbString(_sbGet(row, [
-        'stocktaking_column',
-        'Stocktaking Column',
-        'stock_column',
-        'Stock Column',
-        'done_column',
-        'Done Column',
-        'school_stock_column',
-        'School Stock Column',
-      ]));
+      out[key] = _sbString(_sbGet(row, B2B_STOCKTAKING_COLUMN_ALIASES));
     } else {
       out[key] = _sbString(_sbGet(row, [key]));
     }
@@ -11302,9 +11372,9 @@ function _sbBuildB2BSchoolWriteRow(payload = {}) {
     // columns instead of the new stocktaking_column field. The missing-column
     // fallback strips unsupported aliases and keeps whichever one exists.
     const stocktakingColumn = String(source.stocktaking_column ?? '').trim();
-    row.stock_column = stocktakingColumn || null;
-    row.done_column = stocktakingColumn || null;
-    row.school_stock_column = stocktakingColumn || null;
+    for (const alias of B2B_STOCKTAKING_COLUMN_WRITE_ALIASES) {
+      row[alias] = stocktakingColumn || null;
+    }
   }
 
   const schoolName = String(row.school_name || '').trim();
@@ -11349,16 +11419,7 @@ function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
   const governorateName = _sbString(_sbGet(row, ['governorate', 'Governorate', 'governorates']));
   const educationSystem = _sbSplitValues(_sbGet(row, ['education_system', 'Education System', 'Education system', 'education']));
   const programType = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program type', 'Program Type', 'program']));
-  const stocktakingColumn = _sbString(_sbGet(row, [
-    'stocktaking_column',
-    'Stocktaking Column',
-    'stock_column',
-    'Stock Column',
-    'done_column',
-    'Done Column',
-    'school_stock_column',
-    'School Stock Column',
-  ]));
+  const stocktakingColumn = _sbString(_sbGet(row, B2B_STOCKTAKING_COLUMN_ALIASES));
   const location = _sbExtractUrl(_sbGet(row, ['location', 'Location', 'google_maps', 'Google Maps'])) || _sbString(_sbGet(row, ['location', 'Location']));
   const grades = {};
   for (let i = 1; i <= 12; i++) {
@@ -11637,7 +11698,7 @@ async function _getB2BSchoolById(schoolId) {
 
   if (_sbB2BSchoolsEnabled()) {
     const row = await _sbFindB2BSchoolById(schoolId);
-    if (row) return _sbSerializeB2BSchoolRow(row, { detail: true });
+    if (row) return await _sbHydrateB2BStockColumnSelection(_sbSerializeB2BSchoolRow(row, { detail: true }));
     return null;
   }
 
@@ -12696,8 +12757,13 @@ app.post(
         }
       }
 
-      await _sbClearB2BCaches(created?.id || row.id || '');
-      return res.status(201).json(_sbSerializeB2BSchoolRow(created || row, { detail: true }));
+      const createdId = String(created?.id || row.id || '').trim();
+      if (Object.prototype.hasOwnProperty.call(req.body?.fields || req.body || {}, 'stocktaking_column')) {
+        await _sbSetB2BStockColumnOverride(createdId, req.body?.fields?.stocktaking_column ?? req.body?.stocktaking_column ?? '');
+      }
+      await _sbClearB2BCaches(createdId);
+      const responseSchool = await _sbHydrateB2BStockColumnSelection(_sbSerializeB2BSchoolRow(created || row, { detail: true }));
+      return res.status(201).json(responseSchool);
     } catch (e) {
       console.error("Error creating B2B school:", e?.details || e);
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to create B2B school." });
@@ -12727,8 +12793,12 @@ app.patch(
       delete row.id;
 
       const updated = await _sbUpdateByIdWithMissingColumnFallback(_sbB2BSchoolsTable(), id, row, ['school_name']);
+      if (Object.prototype.hasOwnProperty.call(req.body?.fields || req.body || {}, 'stocktaking_column')) {
+        await _sbSetB2BStockColumnOverride(id, req.body?.fields?.stocktaking_column ?? req.body?.stocktaking_column ?? '');
+      }
       await _sbClearB2BCaches(id);
-      return res.json(_sbSerializeB2BSchoolRow(updated || { ...existing, ...row }, { detail: true }));
+      const responseSchool = await _sbHydrateB2BStockColumnSelection(_sbSerializeB2BSchoolRow(updated || { ...existing, ...row }, { detail: true }));
+      return res.json(responseSchool);
     } catch (e) {
       console.error("Error updating B2B school:", e?.details || e);
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to update B2B school." });
@@ -12755,6 +12825,7 @@ app.delete(
       if (!existing) return res.status(404).json({ error: "School not found." });
 
       const deleted = await supabaseDb.deleteById(_sbB2BSchoolsTable(), id);
+      await _sbSetB2BStockColumnOverride(id, '');
       await _sbClearB2BCaches(id);
       return res.json({ ok: true, deletedId: id, school: _sbSerializeB2BSchoolRow(deleted || existing, { detail: true }) });
     } catch (e) {
