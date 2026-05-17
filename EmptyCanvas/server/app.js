@@ -151,6 +151,76 @@ app.use(
 );
 
 
+// Keep internal provider/configuration details out of user-facing API errors.
+// Detailed technical errors are still written to server logs for debugging.
+const CLIENT_INTERNAL_TEXT_RE = /(notion|supabase|database\s*id|database\s*ids|team_members|products_database|school_stocktaking_db_id|massage\s+database|vercel|environment\s+variables?|service_role|api\s*key|schema\s+cache|migration|rpc|rest|sql|helper\s+function|table\s+is\s+not\s+configured|source\s+is\s+required|data\s+source\s+is\s+not\s+configured)/i;
+
+function _publicFallbackForRequest(req, statusCode = 500) {
+  const pathName = String(req?.path || req?.originalUrl || "").toLowerCase();
+  if (pathName.includes("/api/login")) return "Invalid username or password.";
+  if (pathName.includes("forgot-password")) return "Could not complete this request. Please try again.";
+  if (statusCode === 401 || statusCode === 403) return "You are not allowed to perform this action.";
+  if (pathName.includes("stock")) return "Failed to load stock data. Please try again.";
+  if (pathName.includes("b2b")) return "Failed to load school data. Please try again.";
+  if (pathName.includes("expenses")) return "Failed to load expenses. Please try again.";
+  if (pathName.includes("orders")) return "Failed to load orders. Please try again.";
+  if (pathName.includes("tasks")) return "Failed to load tasks. Please try again.";
+  if (pathName.includes("messages") || pathName.includes("mail")) return "Failed to load messages. Please try again.";
+  if (pathName.includes("products") || pathName.includes("proposals") || pathName.includes("kits")) return "Failed to load product data. Please try again.";
+  return "Something went wrong. Please try again.";
+}
+
+function _cleanSuccessMessage(textValue) {
+  let out = String(textValue || "");
+  out = out.replace(/\s+to\s+Supabase\b/gi, "");
+  out = out.replace(/\s+to\s+Notion\b/gi, "");
+  out = out.replace(/\s+from\s+Supabase\b/gi, "");
+  out = out.replace(/\s+from\s+Notion\b/gi, "");
+  out = out.replace(/\bSupabase\b/gi, "the system");
+  out = out.replace(/\bNotion\b/gi, "the system");
+  out = out.replace(/\bdatabase\b/gi, "data");
+  return out.replace(/\s{2,}/g, " ").trim() || "Done.";
+}
+
+function _sanitizePublicApiPayload(payload, req, statusCode = 200, depth = 0) {
+  if (depth > 5 || payload == null) return payload;
+  if (typeof payload === "string") {
+    return CLIENT_INTERNAL_TEXT_RE.test(payload)
+      ? (statusCode >= 400 ? _publicFallbackForRequest(req, statusCode) : _cleanSuccessMessage(payload))
+      : payload;
+  }
+  if (Array.isArray(payload)) {
+    return payload.map((item) => _sanitizePublicApiPayload(item, req, statusCode, depth + 1));
+  }
+  if (typeof payload !== "object") return payload;
+
+  const out = { ...payload };
+  for (const [key, value] of Object.entries(out)) {
+    const keyName = String(key || "").toLowerCase();
+    if (typeof value === "string") {
+      if (["error", "message", "details", "hint"].includes(keyName) && CLIENT_INTERNAL_TEXT_RE.test(value)) {
+        out[key] = statusCode >= 400 ? _publicFallbackForRequest(req, statusCode) : _cleanSuccessMessage(value);
+      } else if (["error", "message"].includes(keyName)) {
+        out[key] = _cleanSuccessMessage(value);
+      }
+      continue;
+    }
+    if (value && typeof value === "object" && ["error", "message", "details", "hint"].includes(keyName)) {
+      out[key] = statusCode >= 400 ? _publicFallbackForRequest(req, statusCode) : "Done.";
+      continue;
+    }
+    out[key] = _sanitizePublicApiPayload(value, req, statusCode, depth + 1);
+  }
+  return out;
+}
+
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (payload) => originalJson(_sanitizePublicApiPayload(payload, req, res.statusCode || 200));
+  next();
+});
+
+
 // --- Health FIRST (before session) so it works even if env is missing ---
 app.get("/health", (req, res) => {
   res.json({ ok: true, region: process.env.VERCEL_REGION || "unknown" });
@@ -7559,19 +7629,6 @@ app.post("/api/forgot-password", async (req, res) => {
       }
     }
 
-    if (!account && teamMembersDatabaseId) {
-      const page = await _notionFindTeamMemberByEmail(email);
-      if (page) {
-        const props = page.properties || {};
-        account = {
-          source: "notion",
-          name: props?.Name?.title?.[0]?.plain_text || email,
-          email: props?.Email?.email || email,
-          password: _extractPropText(props?.Password) || "",
-        };
-      }
-    }
-
     if (!account) {
       return res.status(404).json({ success: false, error: "No user found with this email." });
     }
@@ -7589,7 +7646,6 @@ app.post("/api/forgot-password", async (req, res) => {
     return res.json({
       success: true,
       message: "Password sent successfully. Please check your inbox.",
-      source: account.source,
     });
   } catch (error) {
     console.error("Forgot password error:", error?.details || error);
@@ -7624,7 +7680,7 @@ app.post("/api/login", async (req, res) => {
 
           return req.session.save((err) => {
             if (err) return res.status(500).json({ error: "Session could not be saved." });
-            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase", redirect: "/home" });
+            return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, redirect: "/home" });
           });
         }
         return res.status(401).json({ error: "incorrect password" });
@@ -7634,60 +7690,7 @@ app.post("/api/login", async (req, res) => {
     }
   }
 
-  if (!teamMembersDatabaseId) {
-    return res
-      .status(500)
-      .json({ error: "Team_Members database ID is not configured, and Supabase login did not find this user." });
-  }
-  try {
-    const response = await notion.databases.query({
-      database_id: teamMembersDatabaseId,
-      filter: { property: "Name", title: { equals: username } },
-    });
-    if (response.results.length === 0) {
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
-    const user = response.results[0];
-    const storedPassword = _extractPropText(user.properties?.Password);
-
-    if (storedPassword !== null && typeof storedPassword !== "undefined" && String(storedPassword) === providedPassword) {
-      const allowedNormalized = extractAllowedPages(user.properties);
-      req.session.authenticated = true;
-      req.session.username = username;
-      req.session.allowedPages = allowedNormalized;
-      req.session.userNotionId = user.id;
-
-      const allowedUI = expandAllowedForUI(allowedNormalized);
-
-      try {
-        const p = user.properties || {};
-        req.session.accountCache = {
-          name: p?.Name?.title?.[0]?.plain_text || "",
-          username,
-          department: p?.Department?.select?.name || "",
-          position: p?.Position?.select?.name || "",
-          photoUrl: extractProfilePhotoUrlFromProps(p) || "",
-          phone: p?.Phone?.phone_number || "",
-          email: p?.Email?.email || "",
-          employeeCode: p?.["Employee Code"]?.number ?? null,
-          filesMedia: extractFilesMediaFromProps(p),
-          passwordSet: (_extractPropText(p?.Password) ?? null) !== null,
-          allowedPages: allowedUI,
-        };
-        req.session.accountCacheTs = Date.now();
-      } catch {}
-
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ error: "Session could not be saved." });
-        res.json({ success: true, message: "Login successful", allowedPages: allowedUI, redirect: "/home" });
-      });
-    } else {
-      res.status(401).json({ error: "incorrect password" });
-    }
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Login failed" });
-  }
+  return res.status(401).json({ error: "Invalid username or password." });
 });
 // === Helper: Received Quantity (number) ===
 async function detectReceivedQtyPropName() {
@@ -24731,10 +24734,10 @@ app.get(
   requirePage("Stocktaking"),
   cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v2`),
   async (req, res) => {
-    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
+    if (!_sbStocktakingEnabled()) {
       return res
         .status(500)
-        .json({ error: "Database IDs are not configured." });
+        .json({ error: "Stocktaking data is not available right now." });
     }
     try {
       if (_sbStocktakingEnabled()) {
@@ -24881,7 +24884,7 @@ app.get(
       console.error("Error fetching stock data:", error.body || error);
       res
         .status(500)
-        .json({ error: "Failed to fetch stock data from Notion." });
+        .json({ error: "Failed to fetch stock data." });
     }
   },
 );
@@ -24895,8 +24898,8 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
-      return res.status(500).json({ error: "Database IDs are not configured." });
+    if (!_sbStocktakingEnabled()) {
+      return res.status(500).json({ error: "Stocktaking data is not available right now." });
     }
 
     try {
@@ -25466,8 +25469,8 @@ app.all(
   requireAuth,
   requirePage("Stocktaking"),
   async (req, res) => {
-    if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
-      return res.status(500).json({ error: "Database IDs are not configured." });
+    if (!_sbStocktakingEnabled()) {
+      return res.status(500).json({ error: "Stocktaking data is not available right now." });
     }
 
     try {

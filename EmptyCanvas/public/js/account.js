@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="profile-files-media-badge"><i data-feather="paperclip"></i></span>
           <div>
             <div class="profile-files-media-title">Files &amp; media</div>
-            <div class="profile-files-media-sub">${files.length ? `${files.length} item${files.length === 1 ? '' : 's'} attached to your Notion profile` : 'Attachments from your Team Members record'}</div>
+            <div class="profile-files-media-sub">${files.length ? `${files.length} item${files.length === 1 ? '' : 's'} attached to your profile` : 'Attachments from your profile'}</div>
           </div>
         </div>
         <div class="profile-media-files-grid">

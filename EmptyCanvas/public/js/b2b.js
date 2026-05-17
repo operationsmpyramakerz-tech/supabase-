@@ -336,9 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
       <form class="b2b-school-modal__dialog" data-b2b-school-form>
         <div class="b2b-school-modal__header">
           <div>
-            <div class="b2b-school-modal__eyebrow">B2B schools database</div>
+            <div class="b2b-school-modal__eyebrow">B2B schools</div>
             <h2 class="b2b-school-modal__title" data-b2b-modal-title>Add school</h2>
-            <p class="b2b-school-modal__subtitle" data-b2b-modal-subtitle>Create or update a school folder directly in Supabase.</p>
+            <p class="b2b-school-modal__subtitle" data-b2b-modal-subtitle>Create or update a school folder.</p>
             <div class="b2b-school-form-error" data-b2b-modal-error></div>
           </div>
           <button class="b2b-school-modal__close" type="button" data-b2b-modal-close aria-label="Close">&times;</button>
@@ -888,8 +888,8 @@ document.addEventListener('DOMContentLoaded', () => {
     activeEditName = mode === 'edit' ? schoolName : '';
     ui.title.textContent = mode === 'edit' ? 'Edit school' : 'Add school';
     ui.subtitle.textContent = mode === 'edit'
-      ? `Update ${schoolName || 'this school'} data directly in Supabase.`
-      : 'Create a new B2B school folder directly in Supabase.';
+      ? `Update ${schoolName || 'this school'} data.`
+      : 'Create a new B2B school folder.';
     ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
     ui.submit.disabled = false;
     setModalError('');
@@ -983,7 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
       activeEditName = data?.name || schoolName;
       const values = normalizeSchoolFieldsForUi(data, schoolName);
       ui.title.textContent = 'Edit school';
-      ui.subtitle.textContent = `Update ${data?.name || schoolName || 'this school'} data directly in Supabase.`;
+      ui.subtitle.textContent = `Update ${data?.name || schoolName || 'this school'} data.`;
       renderModalFields(values);
       setModalError('');
     } catch (error) {

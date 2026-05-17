@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="admin-field__label">Inventory date</span>
                 <input class="input admin-input" type="date" data-admin-date />
               </label>
-              <div class="admin-modal__note">This date will be used to create the Notion columns for Inventory and Defected.</div>
+              <div class="admin-modal__note">This date will be used to create the Inventory and Defected columns.</div>
             </div>
 
             <div class="admin-form-grid" data-admin-finish-extras style="display:none;">
@@ -438,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
         simple: 'Admin verification',
       };
       const hintByMode = {
-        start: 'Enter the admin password and choose the date that will be used in Notion column names.',
+        start: 'Enter the admin password and choose the date that will be used in inventory column names.',
         finish: 'Enter the admin password, then choose the export options for this inventory.',
         simple: currentActionLabel ? `Enter Admin password to ${currentActionLabel}.` : 'Enter Admin password.',
       };

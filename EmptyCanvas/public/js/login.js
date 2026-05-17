@@ -8,8 +8,15 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginBtn = loginForm.querySelector('.login-btn');
   const recoveryBtn = forgotPasswordForm ? forgotPasswordForm.querySelector('.recovery-btn') : null;
 
+  function sanitizeMessage(message) {
+    const value = String(message || '').trim();
+    if (!value) return value;
+    const internalRe = /(notion|supabase|database\s*id|database\s*ids|team_members|vercel|environment\s+variables?|service_role|api\s*key|schema|migration|rpc|rest|sql|table\s+is\s+not\s+configured)/i;
+    return internalRe.test(value) ? 'Invalid username or password.' : value;
+  }
+
   function showMessage(message, type = 'error') {
-    errorMessage.textContent = message;
+    errorMessage.textContent = sanitizeMessage(message);
     errorMessage.classList.toggle('success-message', type === 'success');
     errorMessage.classList.toggle('error-message', type !== 'success');
     errorMessage.style.display = 'block';
@@ -100,8 +107,8 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch {}
         window.location.replace(result.redirect || '/home');
       } else {
-        showError(response.status === 401 && result.error === 'incorrect password'
-          ? 'incorrect password'
+        showError(response.status === 401
+          ? 'Invalid username or password.'
           : (result.error || 'Login failed. Please try again.'));
       }
     } catch (error) {

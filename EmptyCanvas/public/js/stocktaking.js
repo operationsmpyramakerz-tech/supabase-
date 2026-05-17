@@ -212,7 +212,14 @@ document.addEventListener('DOMContentLoaded', function() {
       renderGroups(allStock);
     } catch (error) {
       console.error('Error fetching stock data:', error);
-      groupsContainer.innerHTML = `<div class="error-block">Error: ${error.message}</div>`;
+      const safeError = window.OpsSafeMessage?.sanitize ? window.OpsSafeMessage.sanitize(error.message) : (error.message || 'Failed to fetch stock data');
+      const safeErrorHtml = String(safeError || 'Failed to fetch stock data')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+      groupsContainer.innerHTML = `<div class="error-block">Error: ${safeErrorHtml}</div>`;
     }
   };
 

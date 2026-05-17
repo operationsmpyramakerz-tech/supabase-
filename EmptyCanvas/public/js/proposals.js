@@ -230,7 +230,7 @@
     return `
       <div class="products-loading-card">
         <div class="products-spinner" aria-hidden="true"></div>
-        <div><strong>Loading ${escapeHTML(label)}...</strong><span>Reading saved folders from Supabase.</span></div>
+        <div><strong>Loading ${escapeHTML(label)}...</strong><span>Reading saved folders.</span></div>
       </div>
     `;
   }

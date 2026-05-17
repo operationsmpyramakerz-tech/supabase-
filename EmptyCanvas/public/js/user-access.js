@@ -559,7 +559,7 @@
         <span>${label}</span>
         <div class="ua-page-access-card">
           <div>
-            <strong>Supabase page access</strong>
+            <strong>Page access</strong>
             <small data-page-access-summary>${summary}</small>
           </div>
           <button type="button" class="ua-page-access-open" data-page-access-open>
@@ -978,7 +978,7 @@
     if (els.formTitle) els.formTitle.textContent = mode === 'edit' ? 'Edit Team Member' : 'Add Team Member';
     if (els.formSubtitle) {
       els.formSubtitle.textContent = mode === 'edit'
-        ? `${member?.name || 'User'} • Update data in Team Members database.`
+        ? `${member?.name || 'User'} • Update user data.`
         : `${dept?.name || 'Department'} • Create a new Team Members record.`;
     }
     if (els.formSaveLabel) els.formSaveLabel.textContent = mode === 'edit' ? 'Save Changes' : 'Create Member';
@@ -1822,7 +1822,7 @@
   function renderPageAccessList() {
     if (!els.pageAccessList) return;
     if (state.pageAccessModalLoading) {
-      els.pageAccessList.innerHTML = '<div class="ua-page-access-loading"><span></span> Loading pages from Supabase...</div>';
+      els.pageAccessList.innerHTML = '<div class="ua-page-access-loading"><span></span> Loading pages...</div>';
       if (els.pageAccessSaveBtn) els.pageAccessSaveBtn.disabled = true;
       return;
     }

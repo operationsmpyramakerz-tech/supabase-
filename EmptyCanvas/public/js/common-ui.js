@@ -33,6 +33,40 @@
   window.OpsNoData = { html, set, DEFAULT_TEXT, IMAGE_SRC };
 })();
 
+// Hide internal provider/configuration wording from all user-facing browser messages.
+(function initOpsSafeMessageHelper() {
+  const INTERNAL_RE = /(notion|supabase|database\s*id|database\s*ids|team_members|products_database|school_stocktaking_db_id|vercel|environment\s+variables?|service_role|api\s*key|schema\s+cache|migration|rpc|rest|sql|helper\s+function|table\s+is\s+not\s+configured|source\s+is\s+required|data\s+source\s+is\s+not\s+configured)/i;
+
+  function fallbackForText(text) {
+    const value = String(text || '').toLowerCase();
+    if (value.includes('login') || value.includes('password') || value.includes('team_members')) return 'Invalid username or password.';
+    if (value.includes('stock')) return 'Failed to load stock data. Please try again.';
+    if (value.includes('school') || value.includes('b2b')) return 'Failed to load school data. Please try again.';
+    if (value.includes('expense')) return 'Failed to load expenses. Please try again.';
+    if (value.includes('order')) return 'Failed to load orders. Please try again.';
+    if (value.includes('task')) return 'Failed to load tasks. Please try again.';
+    if (value.includes('message') || value.includes('mail')) return 'Failed to load messages. Please try again.';
+    if (value.includes('product') || value.includes('proposal') || value.includes('kit')) return 'Failed to load product data. Please try again.';
+    return 'Something went wrong. Please try again.';
+  }
+
+  function sanitize(text) {
+    const value = String(text ?? '').trim();
+    if (!value) return value;
+    if (INTERNAL_RE.test(value)) return fallbackForText(value);
+    return value;
+  }
+
+  window.OpsSafeMessage = { sanitize };
+
+  const nativeAlert = window.alert ? window.alert.bind(window) : null;
+  if (nativeAlert && !window.__opsAlertSanitized) {
+    window.__opsAlertSanitized = true;
+    window.alert = function patchedAlert(message) {
+      return nativeAlert(sanitize(message));
+    };
+  }
+})();
 
 
 // Global Arabic/LTR auto-direction helper.
@@ -2129,6 +2163,14 @@ function initMobileHeaderAutoHide() {
 
   function toast({ title = '', message = '', type = 'success', duration = 4000 } = {}) {
     const root = ensureRoot();
+    const safeTitle = window.OpsSafeMessage?.sanitize ? window.OpsSafeMessage.sanitize(title) : String(title || '');
+    const safeMessage = window.OpsSafeMessage?.sanitize ? window.OpsSafeMessage.sanitize(message) : String(message || '');
+    const escapeToastHtml = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
     const el = document.createElement('div');
     el.className = `toast toast--${type}`;
@@ -2136,8 +2178,8 @@ function initMobileHeaderAutoHide() {
     el.innerHTML = `
       <div class="toast__icon"><i data-feather="${iconNameByType(type)}"></i></div>
       <div class="toast__body">
-        ${title ? `<div class="toast__title">${title}</div>` : ''}
-        <div class="toast__msg">${message}</div>
+        ${safeTitle ? `<div class="toast__title">${escapeToastHtml(safeTitle)}</div>` : ''}
+        <div class="toast__msg">${escapeToastHtml(safeMessage)}</div>
       </div>
       <button class="toast__close" aria-label="Close">&times;</button>
       <div class="toast__progress"></div>

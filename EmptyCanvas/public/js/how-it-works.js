@@ -21,7 +21,7 @@
     {
       "title": "Standard daily execution",
       "summary": "Use one operating sequence for any order, expense, task, or maintenance action.",
-      "outcome": "Stable data in Notion",
+      "outcome": "Stable data in the system",
       "steps": [
         {
           "label": "Confirm the allowed page",
@@ -36,7 +36,7 @@
           "note": "Receipts, screenshots, and signed reports are workflow evidence."
         },
         {
-          "label": "Refresh after direct Notion edits",
+          "label": "Refresh after direct data changes",
           "note": "Use Hard Refresh when the source data was changed outside the app."
         }
       ]
@@ -87,7 +87,7 @@
     },
     {
       "title": "Fresh sync path",
-      "summary": "Use Hard Refresh when the app still shows old values after a direct Notion update.",
+      "summary": "Use Hard Refresh when the app still shows old values after a direct data update.",
       "outcome": "Latest cached data cleared",
       "steps": [
         {
@@ -144,7 +144,7 @@
         },
         {
           "label": "Refresh after permission changes",
-          "note": "Run Hard Refresh if Notion access was edited recently."
+          "note": "Run Hard Refresh if page access was edited recently."
         }
       ]
     }
@@ -414,7 +414,7 @@
         },
         {
           "label": "Checkout with password",
-          "note": "The app reads Notion for the highest Order - ID and allocates the next number."
+          "note": "The app reads the system for the highest Order - ID and allocates the next number."
         }
       ]
     },
@@ -799,13 +799,13 @@
       route: 'Shared across the system',
       eyebrow: 'Global SOP',
       overview:
-        'This app reads from Notion and mirrors the daily workflow of the Operations department. Use the correct page for the correct step so the order lifecycle, evidence, and balances stay accurate.',
+        'This app reads from the system and mirrors the daily workflow of the Operations department. Use the correct page for the correct step so the order lifecycle, evidence, and balances stay accurate.',
       purpose:
         'Keep one operating standard across all visible modules and avoid duplicate actions or stale data.',
       whenToUse:
         'Use these rules before you start any update, approval, shipment, receipt, maintenance action, or expense submission.',
       result:
-        'Consistent data in Notion, clean order history, and fewer follow-up corrections.',
+        'Consistent data in the system, clean order history, and fewer follow-up corrections.',
       steps: [
         {
           title: 'Start from the right page',
@@ -813,9 +813,9 @@
             'Each page owns a specific stage. Track in Current Orders, approve in Orders Review, execute in Operations or Maintenance Orders, and log money in Expenses.',
         },
         {
-          title: 'Treat Notion as the source of truth',
+          title: 'Treat the system as the source of truth',
           body:
-            'The app is connected to Notion. When records are edited directly in Notion, use Hard Refresh so the app fetches the latest version instead of older cached responses.',
+            'The app is connected to the system. When records are edited directly in the system, use Hard Refresh so the app fetches the latest version instead of older cached responses.',
         },
         {
           title: 'Close actions with evidence',
@@ -830,11 +830,11 @@
       ],
       rules: [
         'Only the pages allowed for your account should be used for action-taking. The sidebar and this SOP both follow your permission scope.',
-        'Use Hard Refresh after important direct changes in Notion or when the page still shows old values.',
+        'Use Hard Refresh after important direct changes in the system or when the page still shows old values.',
         'Do not close an order, maintenance task, or expense without the required proof for that specific step.',
         'Keep notes, reasons, issue descriptions, and quantities clear enough that another team member can continue the work without guessing.',
       ],
-      controls: ['Role-based access', 'Notion sync', 'Hard Refresh', 'Evidence-first workflow'],
+      controls: ['Role-based access', 'Data sync', 'Hard Refresh', 'Evidence-first workflow'],
       keywords: ['cache', 'notion', 'permissions', 'rules', 'evidence', 'standard operating procedure'],
     },
     {
@@ -850,7 +850,7 @@
       purpose:
         'Give every user one consistent way to search, review alerts, refresh cached data, and manage their account.',
       whenToUse:
-        'Use these controls whenever you need to jump between pages, check new activity, or sync fresh data from Notion.',
+        'Use these controls whenever you need to jump between pages, check new activity, or sync fresh data from the system.',
       result:
         'Faster navigation and fewer cases of working on stale information.',
       steps: [
@@ -872,11 +872,11 @@
         {
           title: 'Hard Refresh',
           body:
-            'Hard Refresh clears the app caches and reloads the current page fresh so updated Notion data appears faster.',
+            'Hard Refresh clears the app caches and reloads the current page fresh so updated the system data appears faster.',
         },
       ],
       rules: [
-        'Hard Refresh is the correct action after direct Notion edits, not repeated manual reloading and guessing.',
+        'Hard Refresh is the correct action after direct data changes, not repeated manual reloading and guessing.',
         'Check notifications before making the next move when your role depends on incoming approvals or updates.',
         'Use Account and How it works from the profile menu so the rest of the navigation remains focused on workflow pages.',
       ],
@@ -1023,7 +1023,7 @@
         },
       ],
       rules: [
-        'Each reviewer only sees the orders created by the team members linked to that reviewer in the Team Members database relation for S.V Schools.',
+        'Each reviewer only sees the orders created by the team members linked to that reviewer in the team member setup for S.V Schools.',
         'Supervisor quantity edits do not erase the original requested quantity. The edited value is stored separately so the request remains auditable.',
         'Approve only after the quantity and reason are operationally correct enough for execution.',
       ],
@@ -1153,7 +1153,7 @@
       whenToUse:
         'Use it to create a fresh order, continue a saved draft, or edit an existing order through the protected edit flow.',
       result:
-        'A clean order group in Notion with the next available Order - ID and the correct order type data.',
+        'A clean order group in the system with the next available Order - ID and the correct order type data.',
       steps: [
         {
           title: 'Choose the order type first',
@@ -1178,7 +1178,7 @@
         {
           title: 'Submit through the protected checkout',
           body:
-            'Checkout requires the user password and the system allocates the next Order - ID by checking the highest current number in Notion before creating the new order group.',
+            'Checkout requires the user password and the system allocates the next Order - ID by checking the highest current number in the system before creating the new order group.',
         },
         {
           title: 'Track it after submission',
@@ -1615,7 +1615,7 @@
         {
           title: 'Apply the shared operating rules',
           body:
-            'Use proof where required, avoid duplicate data entry, and refresh after direct Notion edits if the page looks stale.',
+            'Use proof where required, avoid duplicate data entry, and refresh after direct data changes if the page looks stale.',
         },
       ],
       rules: [
@@ -1693,7 +1693,7 @@
             <h2 class="sop-hero-title">Role-based guide for every page in your scope.</h2>
             <p class="sop-hero-text">
               This page shows only the procedures that match your current access. It is designed to help ${escapeHtml(name)} work faster,
-              move each action in the right place, and keep the Operations workflow aligned with Notion.
+              move each action in the right place, and keep the Operations workflow aligned with the system.
             </p>
             <div class="sop-hero-meta">
               <span class="sop-meta-pill"><i data-feather="user"></i>${escapeHtml(name)}</span>
@@ -1720,7 +1720,7 @@
             </div>
             <div class="sop-stat-card">
               <div class="sop-stat-label">Source of truth</div>
-              <div class="sop-stat-value">Notion</div>
+              <div class="sop-stat-value">the system</div>
               <div class="sop-stat-note">Hard Refresh pulls fresh data after direct edits</div>
             </div>
             <div class="sop-stat-card sop-stat-card--accent">
@@ -1936,7 +1936,7 @@
         <section class="card sop-footer-note">
           <div class="sop-footer-note__title">Permission-aware content</div>
           <p>
-            This guide is rendered from your current access. If your allowed pages change in Notion, use <strong>Hard Refresh</strong>
+            This guide is rendered from your current access. If your allowed pages change in the system, use <strong>Hard Refresh</strong>
             from the profile menu so the navigation and the SOP both update to the latest permission scope.
           </p>
         </section>

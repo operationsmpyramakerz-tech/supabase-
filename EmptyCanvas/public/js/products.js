@@ -255,7 +255,7 @@
       els.results.innerHTML = `
         <div class="products-loading-card">
           <div class="products-spinner" aria-hidden="true"></div>
-          <div><strong>Loading products...</strong><span>Reading the products table from Supabase.</span></div>
+          <div><strong>Loading products...</strong><span>Reading product records.</span></div>
         </div>
       `;
       return;
@@ -375,7 +375,7 @@
     if (els.modalTitle) els.modalTitle.textContent = mode === 'edit' ? 'Edit Product' : 'Add Product';
     if (els.modalSubtitle) {
       els.modalSubtitle.textContent = mode === 'edit'
-        ? 'Update this product record directly inside Supabase.'
+        ? 'Update this product record.'
         : 'Create a new product record in the products table.';
     }
 
