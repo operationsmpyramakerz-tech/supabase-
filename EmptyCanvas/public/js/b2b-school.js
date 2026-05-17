@@ -889,17 +889,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="excel">Excel</option>
               </select>
             </label>
-            <fieldset class="b2b-export-field">
-              <legend class="b2b-export-field__label">Columns</legend>
-              <div class="b2b-export-columns" data-export-columns>
-                ${B2B_EXPORT_COLUMNS.map((col) => `
-                  <label class="b2b-export-check">
-                    <input type="checkbox" value="${col.value}" ${col.checked ? 'checked' : ''} />
-                    <span>${col.label}</span>
-                  </label>
-                `).join('')}
+            <div class="b2b-export-field b2b-export-multiselect" data-export-column-picker>
+              <span class="b2b-export-field__label">Columns</span>
+              <button class="b2b-export-multiselect__button" type="button" data-export-column-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-export-column-summary>Columns selected</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="b2b-export-multiselect__panel" data-export-column-panel role="listbox" aria-label="Columns" hidden>
+                <div class="b2b-export-columns" data-export-columns>
+                  ${B2B_EXPORT_COLUMNS.map((col) => `
+                    <label class="b2b-export-check" role="option">
+                      <input type="checkbox" value="${col.value}" ${col.checked ? 'checked' : ''} />
+                      <span>${col.label}</span>
+                    </label>
+                  `).join('')}
+                </div>
               </div>
-            </fieldset>
+            </div>
             <div class="b2b-export-modal__error" data-export-error>Please choose at least one column.</div>
           </div>
           <div class="b2b-export-modal__footer">
@@ -918,8 +924,32 @@ document.addEventListener('DOMContentLoaded', () => {
       const err = modal.querySelector('[data-export-error]');
       const confirm = modal.querySelector('[data-export-confirm]');
       const cancelEls = Array.from(modal.querySelectorAll('[data-export-cancel]'));
+      const columnPicker = modal.querySelector('[data-export-column-picker]');
+      const columnToggle = modal.querySelector('[data-export-column-toggle]');
+      const columnPanel = modal.querySelector('[data-export-column-panel]');
+      const columnSummary = modal.querySelector('[data-export-column-summary]');
+
+      const selectedLabels = () => checks
+        .filter((x) => x.checked)
+        .map((x) => B2B_EXPORT_COLUMNS.find((col) => col.value === x.value)?.label || x.value);
+
+      const updateColumnSummary = () => {
+        const labels = selectedLabels();
+        if (columnSummary) {
+          columnSummary.textContent = labels.length ? labels.join(', ') : 'Select columns';
+        }
+        if (err && labels.length) err.style.display = 'none';
+      };
+
+      const setColumnPanelOpen = (open) => {
+        if (!columnPanel || !columnToggle) return;
+        columnPanel.hidden = !open;
+        columnToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        columnToggle.classList.toggle('is-open', !!open);
+      };
 
       const close = (value = null) => {
+        setColumnPanelOpen(false);
         modal.classList.add('hidden');
         document.body.classList.remove('modal-open');
         if (resolver) {
@@ -931,19 +961,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
       cancelEls.forEach((el) => el.addEventListener('click', () => close(null)));
       modal.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') close(null);
+        if (e.key === 'Escape') {
+          if (columnPanel && !columnPanel.hidden) {
+            setColumnPanelOpen(false);
+            return;
+          }
+          close(null);
+        }
       });
+      columnToggle?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setColumnPanelOpen(!!columnPanel?.hidden);
+      });
+      columnPanel?.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', (e) => {
+        if (modal.classList.contains('hidden')) return;
+        if (columnPicker && columnPicker.contains(e.target)) return;
+        setColumnPanelOpen(false);
+      });
+      checks.forEach((input) => input.addEventListener('change', updateColumnSummary));
       confirm.addEventListener('click', () => {
         const selected = checks.filter((x) => x.checked).map((x) => x.value);
         if (!selected.length) {
           if (err) err.style.display = 'block';
+          setColumnPanelOpen(true);
           return;
         }
         if (err) err.style.display = 'none';
         close({ fileType: String(fileType?.value || 'pdf').toLowerCase(), columns: selected });
       });
 
-      ui = { modal, fileType, checks, err };
+      ui = { modal, fileType, checks, err, updateColumnSummary, setColumnPanelOpen };
       if (window.feather) window.feather.replace();
       return ui;
     };
@@ -957,6 +1006,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const def = B2B_EXPORT_COLUMNS.find((col) => col.value === input.value);
           input.checked = !!def?.checked;
         });
+        x.updateColumnSummary?.();
+        x.setColumnPanelOpen?.(false);
         if (x.err) x.err.style.display = 'none';
         x.modal.classList.remove('hidden');
         document.body.classList.add('modal-open');

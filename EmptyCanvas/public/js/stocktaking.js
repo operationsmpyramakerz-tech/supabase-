@@ -2,12 +2,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const groupsContainer = document.getElementById('stock-groups');
   const searchInput     = document.getElementById('stockSearch');
 
-  // Download dropdown (single button)
-  const downloadMenuWrap = document.getElementById('downloadMenuWrap');
-  const downloadMenuBtn  = document.getElementById('downloadMenuBtn');
-  const downloadMenuPanel = document.getElementById('downloadMenuPanel');
-  const downloadPdfBtn   = document.getElementById('downloadPdfBtn');
-  const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+  // Modern download modal (same UX as B2B live stock)
+  const stockDownloadBtn = document.getElementById('stockDownloadBtn');
 
   let allStock = [];
 
@@ -235,47 +231,168 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // ---------- Download dropdown ----------
-  const closeDownloadMenu = () => {
-    if (!downloadMenuPanel) return;
-    downloadMenuPanel.hidden = true;
-    if (downloadMenuBtn) downloadMenuBtn.setAttribute('aria-expanded', 'false');
-  };
+  // ---------- Modern export modal (PDF / Excel) ----------
+  const STOCK_EXPORT_COLUMNS = [
+    { value: 'stock', label: 'Stock', checked: true },
+    { value: 'receiptNumber', label: 'Receipt number', checked: false },
+    { value: 'unityPrice', label: 'Unity price', checked: true },
+    { value: 'totalPrice', label: 'Total price', checked: true },
+    { value: 'inventory', label: 'Inventory', checked: false },
+    { value: 'defected', label: 'Defected', checked: false },
+  ];
 
-  const openDownloadMenu = () => {
-    if (!downloadMenuPanel) return;
-    downloadMenuPanel.hidden = false;
-    if (downloadMenuBtn) downloadMenuBtn.setAttribute('aria-expanded', 'true');
-    // Render feather icons inside the dropdown
-    if (window.feather) feather.replace();
-  };
+  const StockExportModal = (() => {
+    let ui = null;
+    let resolver = null;
 
-  const toggleDownloadMenu = () => {
-    if (!downloadMenuPanel) return;
-    if (downloadMenuPanel.hidden) openDownloadMenu();
-    else closeDownloadMenu();
-  };
+    const ensure = () => {
+      if (ui) return ui;
+      const modal = document.createElement('div');
+      modal.className = 'b2b-export-modal hidden';
+      modal.id = 'stockExportModal';
+      modal.innerHTML = `
+        <div class="b2b-export-modal__backdrop" data-export-cancel></div>
+        <div class="b2b-export-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="stockExportTitle">
+          <div class="b2b-export-modal__header">
+            <div class="b2b-export-modal__icon" aria-hidden="true"><i data-feather="download"></i></div>
+            <div>
+              <h3 class="b2b-export-modal__title" id="stockExportTitle">Download stock file</h3>
+              <p class="b2b-export-modal__hint">Choose the file type and the columns that should appear in the file.</p>
+            </div>
+            <button class="b2b-export-modal__close" type="button" aria-label="Close" data-export-cancel>&times;</button>
+          </div>
+          <div class="b2b-export-modal__body">
+            <label class="b2b-export-field">
+              <span class="b2b-export-field__label">File type</span>
+              <select class="b2b-export-input" data-export-filetype>
+                <option value="pdf">PDF</option>
+                <option value="excel">Excel</option>
+              </select>
+            </label>
+            <div class="b2b-export-field b2b-export-multiselect" data-export-column-picker>
+              <span class="b2b-export-field__label">Columns</span>
+              <button class="b2b-export-multiselect__button" type="button" data-export-column-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-export-column-summary>Columns selected</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="b2b-export-multiselect__panel" data-export-column-panel role="listbox" aria-label="Columns" hidden>
+                <div class="b2b-export-columns" data-export-columns>
+                  ${STOCK_EXPORT_COLUMNS.map((col) => `
+                    <label class="b2b-export-check" role="option">
+                      <input type="checkbox" value="${col.value}" ${col.checked ? 'checked' : ''} />
+                      <span>${col.label}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+            <div class="b2b-export-modal__error" data-export-error>Please choose at least one column.</div>
+          </div>
+          <div class="b2b-export-modal__footer">
+            <button class="btn btn--light" type="button" data-export-cancel>Cancel</button>
+            <button class="btn b2b-export-confirm" type="button" data-export-confirm>
+              <i data-feather="download"></i>
+              <span>Download</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
 
-  if (downloadMenuBtn && downloadMenuPanel && downloadMenuWrap) {
-    downloadMenuBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      toggleDownloadMenu();
-    });
+      const fileType = modal.querySelector('[data-export-filetype]');
+      const checks = Array.from(modal.querySelectorAll('[data-export-columns] input[type="checkbox"]'));
+      const err = modal.querySelector('[data-export-error]');
+      const confirm = modal.querySelector('[data-export-confirm]');
+      const cancelEls = Array.from(modal.querySelectorAll('[data-export-cancel]'));
+      const columnPicker = modal.querySelector('[data-export-column-picker]');
+      const columnToggle = modal.querySelector('[data-export-column-toggle]');
+      const columnPanel = modal.querySelector('[data-export-column-panel]');
+      const columnSummary = modal.querySelector('[data-export-column-summary]');
 
-    // Click outside closes
-    document.addEventListener('click', (e) => {
-      if (downloadMenuPanel.hidden) return;
-      if (downloadMenuWrap.contains(e.target)) return;
-      closeDownloadMenu();
-    });
+      const selectedLabels = () => checks
+        .filter((x) => x.checked)
+        .map((x) => STOCK_EXPORT_COLUMNS.find((col) => col.value === x.value)?.label || x.value);
 
-    // Escape closes
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeDownloadMenu();
-    });
-  }
+      const updateColumnSummary = () => {
+        const labels = selectedLabels();
+        if (columnSummary) columnSummary.textContent = labels.length ? labels.join(', ') : 'Select columns';
+        if (err && labels.length) err.style.display = 'none';
+      };
 
-  // ---------- Export helpers (PDF / Excel) ----------
+      const setColumnPanelOpen = (open) => {
+        if (!columnPanel || !columnToggle) return;
+        columnPanel.hidden = !open;
+        columnToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        columnToggle.classList.toggle('is-open', !!open);
+      };
+
+      const close = (value = null) => {
+        setColumnPanelOpen(false);
+        modal.classList.add('hidden');
+        document.body.classList.remove('modal-open');
+        if (resolver) {
+          const done = resolver;
+          resolver = null;
+          done(value);
+        }
+      };
+
+      cancelEls.forEach((el) => el.addEventListener('click', () => close(null)));
+      modal.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (columnPanel && !columnPanel.hidden) {
+            setColumnPanelOpen(false);
+            return;
+          }
+          close(null);
+        }
+      });
+      columnToggle?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setColumnPanelOpen(!!columnPanel?.hidden);
+      });
+      columnPanel?.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', (e) => {
+        if (modal.classList.contains('hidden')) return;
+        if (columnPicker && columnPicker.contains(e.target)) return;
+        setColumnPanelOpen(false);
+      });
+      checks.forEach((input) => input.addEventListener('change', updateColumnSummary));
+      confirm.addEventListener('click', () => {
+        const selected = checks.filter((x) => x.checked).map((x) => x.value);
+        if (!selected.length) {
+          if (err) err.style.display = 'block';
+          setColumnPanelOpen(true);
+          return;
+        }
+        if (err) err.style.display = 'none';
+        close({ fileType: String(fileType?.value || 'pdf').toLowerCase(), columns: selected });
+      });
+
+      ui = { modal, fileType, checks, err, updateColumnSummary, setColumnPanelOpen };
+      if (window.feather) feather.replace();
+      return ui;
+    };
+
+    return {
+      open: () => new Promise((resolve) => {
+        const x = ensure();
+        resolver = resolve;
+        if (x.fileType) x.fileType.value = 'pdf';
+        x.checks.forEach((input) => {
+          const def = STOCK_EXPORT_COLUMNS.find((col) => col.value === input.value);
+          input.checked = !!def?.checked;
+        });
+        x.updateColumnSummary?.();
+        x.setColumnPanelOpen?.(false);
+        if (x.err) x.err.style.display = 'none';
+        x.modal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        setTimeout(() => x.fileType?.focus?.(), 30);
+      }),
+    };
+  })();
 
   const downloadBlobResponse = async (res, fallbackName) => {
     const blob = await res.blob();
@@ -293,8 +410,15 @@ document.addEventListener('DOMContentLoaded', function() {
     URL.revokeObjectURL(url);
   };
 
-  const exportFile = async (btn, endpoint, fallbackName) => {
-    if (!btn) return;
+  const exportFile = async (btn, opts) => {
+    if (!btn || !opts) return;
+    const fileType = String(opts.fileType || 'pdf').toLowerCase() === 'excel' ? 'excel' : 'pdf';
+    const columnsParam = encodeURIComponent((opts.columns || []).join(','));
+    const endpoint = fileType === 'excel'
+      ? `/api/stock/excel?columns=${columnsParam}`
+      : `/api/stock/pdf?columns=${columnsParam}`;
+    const fallbackName = fileType === 'excel' ? 'Stocktaking.xlsx' : 'Stocktaking.pdf';
+
     btn.disabled = true;
     btn.classList.add('is-busy');
 
@@ -320,19 +444,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   };
 
-  if (downloadPdfBtn) {
-    downloadPdfBtn.addEventListener('click', (e) => {
+  if (stockDownloadBtn) {
+    stockDownloadBtn.addEventListener('click', async (e) => {
       e.preventDefault();
-      closeDownloadMenu();
-      exportFile(downloadPdfBtn, '/api/stock/pdf', 'Stocktaking.pdf');
-    });
-  }
-
-  if (downloadExcelBtn) {
-    downloadExcelBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      closeDownloadMenu();
-      exportFile(downloadExcelBtn, '/api/stock/excel', 'Stocktaking.xlsx');
+      const opts = await StockExportModal.open();
+      if (!opts) return;
+      await exportFile(stockDownloadBtn, opts);
     });
   }
 });
