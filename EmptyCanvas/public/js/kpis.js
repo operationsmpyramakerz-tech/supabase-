@@ -142,7 +142,11 @@
   }
 
   function enhanceReviewFilterControls() {
-    ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect', 'filterStatusSelect'].forEach((id) => enhanceSelect($(id)));
+    ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect'].forEach((id) => enhanceSelect($(id)));
+  }
+
+  function enhanceReviewControls() {
+    ['reviewEmployeeSelect', 'reviewStandardSelect'].forEach((id) => enhanceSelect($(id)));
   }
 
   function setOptions(select, items, { allLabel = '', valueKey = '', labelKey = '' } = {}) {
@@ -242,6 +246,45 @@
     if ($('kpiScoreMonth')) $('kpiScoreMonth').textContent = summary ? fmtMonth(summary.reviewMonth) : '—';
   }
 
+
+
+  function scoreToPercentage(score, weight) {
+    const weightValue = num(weight, 0);
+    if (weightValue <= 0) return 0;
+    return Math.max(0, Math.min(100, (num(score, 0) / weightValue) * 100));
+  }
+
+  function performanceRating(value) {
+    const score = Math.max(0, Math.min(100, num(value, 0)));
+    if (score >= 90) return 'Excellent';
+    if (score >= 78) return 'V.good';
+    if (score >= 66) return 'Good';
+    return 'Weak';
+  }
+
+  function setButtonLoading(button, isLoading, label = 'Loading...') {
+    if (!button) return;
+    if (isLoading) {
+      if (!button.dataset.originalHtml) button.dataset.originalHtml = button.innerHTML;
+      button.disabled = true;
+      button.classList.add('is-loading');
+      button.innerHTML = `<span class="kpis-loading-dot"></span><span>${esc(label)}</span>`;
+    } else {
+      button.disabled = false;
+      button.classList.remove('is-loading');
+      if (button.dataset.originalHtml) button.innerHTML = button.dataset.originalHtml;
+      delete button.dataset.originalHtml;
+      feather();
+    }
+  }
+
+  function setReviewTransitionLoading(isLoading) {
+    const loader = $('reviewTransitionLoader');
+    const form = $('reviewForm');
+    if (loader) loader.hidden = !isLoading;
+    if (form) form.classList.toggle('is-transitioning', Boolean(isLoading));
+  }
+
   async function loadGraph() {
     const user = state.currentUser || userById(state.selectedEmployeeId);
     const currentUserId = String(user?.id || state.selectedEmployeeId || '').trim();
@@ -270,13 +313,13 @@
     if (!body) return;
 
     if (!state.reviews.length) {
-      body.innerHTML = '<tr><td colspan="7">No KPI reviews found.</td></tr>';
+      body.innerHTML = '<tr><td colspan="6">No KPI reviews found.</td></tr>';
       return;
     }
 
     body.innerHTML = state.reviews
       .map(
-        (review) => `<tr><td><strong>${esc(review.teamMemberName || '—')}</strong><div class="muted">${esc(review.standardTitle || '—')}</div></td><td>${esc(review.department || '—')}</td><td>${esc(review.rolePosition || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><strong>${num(review.finalPercentage, 0).toFixed(1)}%</strong><div class="muted">${esc(review.performanceRating || '')}</div></td><td><span class="kpis-pill">${esc(review.status || 'draft')}</span></td><td><div class="kpis-row-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-open-review="${esc(review.reviewId)}">Open</button></div></td></tr>`,
+        (review) => `<tr><td><strong>${esc(review.teamMemberName || '—')}</strong><div class="muted">${esc(review.standardTitle || '—')}</div></td><td>${esc(review.department || '—')}</td><td>${esc(review.rolePosition || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><strong>${num(review.finalPercentage, 0).toFixed(1)}%</strong><div class="muted">${esc(review.performanceRating || performanceRating(review.finalPercentage))}</div></td><td><div class="kpis-row-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-open-review="${esc(review.reviewId)}">Open</button></div></td></tr>`,
       )
       .join('');
 
@@ -311,14 +354,12 @@
     const employeeText = $('filterEmployeeSelect')?.selectedOptions?.[0]?.textContent || '';
     const departmentText = $('filterDepartmentSelect')?.selectedOptions?.[0]?.textContent || '';
     const roleText = $('filterPositionSelect')?.selectedOptions?.[0]?.textContent || '';
-    const statusText = $('filterStatusSelect')?.selectedOptions?.[0]?.textContent || '';
     const month = $('filterMonthInput')?.value || '';
     const chips = [];
     if ($('filterEmployeeSelect')?.value) chips.push(`Employee: ${employeeText}`);
     if ($('filterDepartmentSelect')?.value) chips.push(`Department: ${departmentText}`);
     if ($('filterPositionSelect')?.value) chips.push(`Role: ${roleText}`);
     if (month) chips.push(`Month: ${fmtMonth(`${month}-01`)}`);
-    if ($('filterStatusSelect')?.value) chips.push(`Status: ${statusText}`);
     summary.innerHTML = chips.length
       ? chips.map((chip) => `<span>${esc(chip)}</span>`).join('')
       : 'No filters applied';
@@ -330,12 +371,10 @@
     const department = $('filterDepartmentSelect')?.value || '';
     const position = $('filterPositionSelect')?.value || '';
     const month = $('filterMonthInput')?.value || '';
-    const status = $('filterStatusSelect')?.value || '';
 
     if (teamMemberId) query.set('teamMemberId', teamMemberId);
     if (department) query.set('department', department);
     if (position) query.set('rolePosition', position);
-    if (status) query.set('status', status);
     if (month) {
       query.set('from', `${month}-01`);
       query.set('to', `${month}-01`);
@@ -404,6 +443,7 @@
     initAcademicYearPicker();
     enhanceStandardControls();
     enhanceReviewFilterControls();
+    enhanceReviewControls();
     renderReviewFilterSummary();
     setCurrentUserBadge();
     renderStandards();
@@ -641,14 +681,12 @@
             ${section.sectionDescription ? `<p class="kpis-standard-detail-description">${esc(section.sectionDescription)}</p>` : ''}
             <div class="kpis-standard-detail-rows">
               ${(section.items || []).length ? section.items.map((item) => `
-                <article class="kpis-standard-detail-row">
+                <article class="kpis-standard-detail-row kpis-standard-detail-row--card">
                   <div class="kpis-standard-detail-row__main">
                     <span>${esc(String(item.subsectionOrder || '—'))}</span>
                     <div><strong>${esc(item.subsection || 'Untitled subsection')}</strong>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div>
                   </div>
-                  <div class="kpis-standard-detail-row__metrics">
-                    <div><span>Weight</span><strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div>
-                  </div>
+                  <div class="kpis-standard-detail-row__weight"><span>Weight</span><strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div>
                 </article>
               `).join('') : '<div class="kpis-chart-empty">No KPI subsections in this section.</div>'}
             </div>
@@ -685,6 +723,7 @@
         )
         .join('');
     if (!list.length) select.innerHTML = '<option value="">No matching standards</option>';
+    refreshEnhancedSelect(select);
   }
 
   function openReviewModal() {
@@ -693,6 +732,8 @@
     if (form?.elements.reviewMonth) form.elements.reviewMonth.value = monthInput(new Date());
     if ($('reviewEmployeeSelect') && state.selectedEmployeeId) $('reviewEmployeeSelect').value = state.selectedEmployeeId;
     updateReviewStandardOptions();
+    enhanceReviewControls();
+    setReviewTransitionLoading(false);
     openModal('review');
   }
 
@@ -718,22 +759,40 @@
       updateScore(summary);
     }
 
-    if ($('scoreModalKicker')) $('scoreModalKicker').textContent = `${fmtMonth(summary.reviewMonth)} / ${summary.status || 'draft'}`;
+    if ($('scoreModalKicker')) $('scoreModalKicker').textContent = `${fmtMonth(summary.reviewMonth)} KPI review`;
     if ($('scoreModalTitle')) $('scoreModalTitle').textContent = summary.teamMemberName || 'Employee KPI review';
     if ($('scoreModalSub')) $('scoreModalSub').textContent = `${summary.department || '—'} / ${summary.rolePosition || '—'} / ${summary.standardTitle || '—'}`;
-    if ($('scoreStatusSelect')) $('scoreStatusSelect').value = summary.status || 'draft';
 
     const wrapper = $('scoreItemsEditor');
     if (wrapper) {
       wrapper.innerHTML = groupDetails(details)
         .map(
-          (section) => `<div class="kpis-score-section"><div class="kpis-score-section__head"><strong>${esc(section.section || 'Section')}</strong><span>${esc(section.sectionDescription || '')}</span></div>${section.items
-            .map(
-              (item) => `<div class="kpis-score-item" data-score-id="${esc(item.scoreId)}"><div><h4>${esc(item.subsection || 'KPI subsection')}</h4><p>${esc(item.subsectionDescription || '')}</p></div><div class="kpis-score-mini">Weight<strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div><label class="kpis-score-mini">Actual<input class="kpis-input" data-score-field="actualPercent" type="number" min="0" step="0.01" value="${item.actualPercent === null ? '' : esc(item.actualPercent)}" /></label><div class="kpis-score-notes"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div></div>`,
-            )
-            .join('')}</div>`,
+          (section, sectionIndex) => `<div class="kpis-score-section kpis-score-section--modern"><div class="kpis-score-section__head"><div><span class="kpis-score-section__number">${sectionIndex + 1}</span><strong>${esc(section.section || 'Section')}</strong></div>${section.sectionDescription ? `<p>${esc(section.sectionDescription)}</p>` : ''}</div><div class="kpis-score-subcards">${section.items
+            .map((item) => {
+              const scoreValue = item.actualPercent === null ? '' : item.actualPercent;
+              const percentValue = scoreValue === '' ? 0 : scoreToPercentage(scoreValue, item.weightPercent);
+              return `<article class="kpis-score-subcard" data-score-id="${esc(item.scoreId)}" data-weight="${esc(item.weightPercent)}">
+                <div class="kpis-score-subcard__head">
+                  <div class="kpis-score-subcard__title"><span>${esc(String(item.subsectionOrder || '—'))}</span><div><h4>${esc(item.subsection || 'KPI subsection')}</h4>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div></div>
+                  <div class="kpis-score-weight-pill"><span>Weight</span><strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div>
+                </div>
+                <div class="kpis-score-subcard__body">
+                  <label class="kpis-score-input-card"><span>Score</span><input class="kpis-input" data-score-field="actualPercent" type="number" min="0" max="${esc(item.weightPercent || 0)}" step="0.01" value="${scoreValue === '' ? '' : esc(scoreValue)}" /></label>
+                  <div class="kpis-score-percent-card"><span>KPI %</span><strong data-score-percent>${percentValue.toFixed(1)}%</strong></div>
+                </div>
+                <div class="kpis-score-notes kpis-score-notes--modern"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div>
+              </article>`;
+            })
+            .join('')}</div></div>`,
         )
         .join('');
+      wrapper.querySelectorAll('[data-score-field="actualPercent"]').forEach((input) => {
+        input.addEventListener('input', () => {
+          const card = input.closest('[data-score-id]');
+          const percent = card?.querySelector('[data-score-percent]');
+          if (percent) percent.textContent = `${scoreToPercentage(input.value, card?.dataset.weight).toFixed(1)}%`;
+        });
+      });
     }
     openModal('score');
   }
@@ -773,7 +832,7 @@
       loadReviews().catch((error) => toast(error.message));
     });
     $('clearReviewFiltersBtn')?.addEventListener('click', () => {
-      ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect', 'filterStatusSelect'].forEach((id) => { if ($(id)) { $(id).value = ''; refreshEnhancedSelect($(id)); } });
+      ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect'].forEach((id) => { if ($(id)) { $(id).value = ''; refreshEnhancedSelect($(id)); } });
       if ($('filterMonthInput')) $('filterMonthInput').value = '';
       closeModal('reviewFilters');
       loadReviews().catch((error) => toast(error.message));
@@ -832,6 +891,7 @@
     $('reviewForm')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      const submitButton = $('reviewSubmitBtn') || form.querySelector('button[type="submit"]');
       const employee = userById(form.elements.teamMemberId.value);
       const payload = {
         teamMemberId: form.elements.teamMemberId.value,
@@ -839,11 +899,20 @@
         reviewMonth: `${form.elements.reviewMonth.value}-01`,
         standardId: form.elements.standardId.value,
       };
-      const data = await api('/api/kpis/reviews', { method: 'POST', body: JSON.stringify(payload) });
-      closeModal('review');
-      await loadReviews();
-      await loadGraph();
-      await openScoreModal(data.reviewId);
+      try {
+        setButtonLoading(submitButton, true, 'Opening...');
+        setReviewTransitionLoading(true);
+        const data = await api('/api/kpis/reviews', { method: 'POST', body: JSON.stringify(payload) });
+        await loadReviews();
+        await loadGraph();
+        await openScoreModal(data.reviewId);
+        closeModal('review');
+      } catch (error) {
+        toast(error.message || 'Failed to create KPI review.');
+      } finally {
+        setReviewTransitionLoading(false);
+        setButtonLoading(submitButton, false);
+      }
     });
 
     $('scoreForm')?.addEventListener('submit', async (event) => {
@@ -852,7 +921,6 @@
       await api(`/api/kpis/reviews/${encodeURIComponent(state.selectedReviewId)}/scores`, {
         method: 'PATCH',
         body: JSON.stringify({
-          status: $('scoreStatusSelect')?.value || 'draft',
           scores: collectScores(),
         }),
       });
