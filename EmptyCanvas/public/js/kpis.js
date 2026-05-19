@@ -474,14 +474,14 @@
         <div class="kpis-section-card__titleline">
           <span class="kpis-section-card__order" data-section-order-label>${sectionIndex}</span>
           <h4 data-section-title>${esc(sectionTitle)}</h4>
-          <button class="kpis-section-delete" type="button" data-remove-section>Delete section</button>
         </div>
+        <button class="kpis-section-delete" type="button" data-remove-section aria-label="Delete section" title="Delete section"><i data-feather="trash-2"></i></button>
       </div>
-      ${sectionDescription ? `<p class="kpis-section-card__description" data-section-description>${esc(sectionDescription)}</p>` : '<p class="kpis-section-card__description is-empty" data-section-description></p>'}
+      ${sectionDescription ? `<div class="kpis-section-card__description" data-section-description>${esc(sectionDescription)}</div>` : '<div class="kpis-section-card__description is-empty" data-section-description></div>'}
       <div class="kpis-section-rows" data-section-rows></div>
-      <div class="kpis-section-card__footer"><button class="kpis-btn kpis-btn--ghost" type="button" data-add-row-to-section><i data-feather="plus"></i><span>Add row</span></button></div>
+      <div class="kpis-section-card__footer"><button class="kpis-btn kpis-btn--ghost" type="button" data-add-row-to-section><i data-feather="plus"></i><span>Add subsection</span></button></div>
     `;
-    section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section, targetPercent: 10 }));
+    section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section }));
     section.querySelector('[data-remove-section]')?.addEventListener('click', () => {
       section.remove();
       updateSectionNumbers();
@@ -548,13 +548,12 @@
     row.dataset.subsectionOrder = String(rowIndex);
     row.innerHTML = `
       <div class="kpis-item-row__top kpis-item-row__top--sectioned">
-        <label>Sub #<span class="kpis-sub-number" data-subsection-number>${rowIndex}</span></label>
-        <label>Subsection<input class="kpis-input" data-kpi-field="subsection" value="${esc(value.subsection || '')}" /></label>
+        <div class="kpis-subsection-number-field"><span class="kpis-sub-number" data-subsection-number>${rowIndex}</span></div>
+        <label>Title<input class="kpis-input" data-kpi-field="subsection" value="${esc(value.subsection || '')}" /></label>
         <label>Weight<input class="kpis-input" data-kpi-field="weightPercent" type="number" min="0" step="0.01" value="${esc(value.weightPercent ?? '')}" /></label>
-        <label>Target<input class="kpis-input" data-kpi-field="targetPercent" type="number" min="0" step="0.01" value="${esc(value.targetPercent ?? 10)}" /></label>
       </div>
       <label>Subsection description<textarea class="kpis-textarea" data-kpi-field="subsectionDescription" rows="2">${esc(value.subsectionDescription || '')}</textarea></label>
-      <div class="kpis-row-actions"><button class="kpis-row-delete" data-remove-kpi-row type="button"><i data-feather="trash-2"></i><span>Delete row</span></button></div>
+      <div class="kpis-row-actions"><button class="kpis-row-delete" data-remove-kpi-row type="button"><i data-feather="trash-2"></i><span>Delete subsection</span></button></div>
     `;
     row.querySelector('[data-remove-kpi-row]')?.addEventListener('click', () => {
       row.remove();
@@ -623,7 +622,7 @@
         </div>
         <div class="kpis-standard-detail-score">
           <strong>${esc(String(totalRows))}</strong>
-          <span>KPI rows</span>
+          <span>KPI subsections</span>
         </div>
       </div>
       <div class="kpis-standard-detail-grid">
@@ -645,14 +644,13 @@
                 <article class="kpis-standard-detail-row">
                   <div class="kpis-standard-detail-row__main">
                     <span>${esc(String(item.subsectionOrder || '—'))}</span>
-                    <div><strong>${esc(item.subsection || 'KPI row')}</strong>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div>
+                    <div><strong>${esc(item.subsection || 'Untitled subsection')}</strong>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div>
                   </div>
                   <div class="kpis-standard-detail-row__metrics">
                     <div><span>Weight</span><strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div>
-                    <div><span>Target</span><strong>${num(item.targetPercent, 0).toFixed(1)}</strong></div>
                   </div>
                 </article>
-              `).join('') : '<div class="kpis-chart-empty">No KPI rows in this section.</div>'}
+              `).join('') : '<div class="kpis-chart-empty">No KPI subsections in this section.</div>'}
             </div>
           </section>
         `).join('') : '<div class="kpis-chart-empty">No active KPI sections found.</div>'}
@@ -731,7 +729,7 @@
         .map(
           (section) => `<div class="kpis-score-section"><div class="kpis-score-section__head"><strong>${esc(section.section || 'Section')}</strong><span>${esc(section.sectionDescription || '')}</span></div>${section.items
             .map(
-              (item) => `<div class="kpis-score-item" data-score-id="${esc(item.scoreId)}"><div><h4>${esc(item.subsection || 'KPI row')}</h4><p>${esc(item.subsectionDescription || '')}</p></div><div class="kpis-score-mini">Weight<strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div><div class="kpis-score-mini">Target<strong>${num(item.targetPercent, 0).toFixed(1)}</strong></div><label class="kpis-score-mini">Actual<input class="kpis-input" data-score-field="actualPercent" type="number" min="0" step="0.01" value="${item.actualPercent === null ? '' : esc(item.actualPercent)}" /></label><div class="kpis-score-notes"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div></div>`,
+              (item) => `<div class="kpis-score-item" data-score-id="${esc(item.scoreId)}"><div><h4>${esc(item.subsection || 'KPI subsection')}</h4><p>${esc(item.subsectionDescription || '')}</p></div><div class="kpis-score-mini">Weight<strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div><label class="kpis-score-mini">Actual<input class="kpis-input" data-score-field="actualPercent" type="number" min="0" step="0.01" value="${item.actualPercent === null ? '' : esc(item.actualPercent)}" /></label><div class="kpis-score-notes"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div></div>`,
             )
             .join('')}</div>`,
         )
@@ -785,6 +783,7 @@
     $('standardForm')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
       syncAcademicYear();
       const items = collectKpiRows();
       if (!document.querySelector('#kpiItemsEditor .kpis-section-card')) {
@@ -792,25 +791,42 @@
         return;
       }
       if (!items.length) {
-        toast('Add at least one KPI row inside a section.');
+        toast('Add at least one KPI subsection inside a section.');
         return;
       }
-      await api('/api/kpis/standards', {
-        method: 'POST',
-        body: JSON.stringify({
-          department: form.elements.department.value,
-          rolePosition: form.elements.rolePosition.value,
-          academicYear: form.elements.academicYear.value,
-          yearStart: Number($('academicYearFromSelect')?.value || 0) || undefined,
-          yearEnd: Number($('academicYearToSelect')?.value || 0) || undefined,
-          title: form.elements.title.value,
-          description: form.elements.description.value,
-          items,
-        }),
-      });
-      closeModal('standard');
-      await loadMeta();
-      toast('KPI standard saved successfully.');
+      const originalButtonHtml = submitButton?.innerHTML || '';
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.classList.add('is-loading');
+        submitButton.innerHTML = '<span class="kpis-loading-dot"></span><span>Saving...</span>';
+      }
+      try {
+        await api('/api/kpis/standards', {
+          method: 'POST',
+          body: JSON.stringify({
+            department: form.elements.department.value,
+            rolePosition: form.elements.rolePosition.value,
+            academicYear: form.elements.academicYear.value,
+            yearStart: Number($('academicYearFromSelect')?.value || 0) || undefined,
+            yearEnd: Number($('academicYearToSelect')?.value || 0) || undefined,
+            title: form.elements.title.value,
+            description: form.elements.description.value,
+            items,
+          }),
+        });
+        await loadMeta();
+        closeModal('standard');
+        toast('KPI standard saved successfully.');
+      } catch (error) {
+        toast(error.message || 'Failed to save KPI standard.');
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.classList.remove('is-loading');
+          submitButton.innerHTML = originalButtonHtml;
+          feather();
+        }
+      }
     });
 
     $('reviewForm')?.addEventListener('submit', async (event) => {
