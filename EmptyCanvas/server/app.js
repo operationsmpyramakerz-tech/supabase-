@@ -26222,9 +26222,26 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
       return { id: member.id, name: member.name, department: member.department, position: member.position, photoUrl: member.photoUrl, email: member.email };
     }).filter((u) => u.id || u.name);
     const standards = (Array.isArray(standardRows) ? standardRows : []).map(_kpiStandard);
+    const currentRow = await _sbFindSessionTeamMember(req).catch(() => null);
+    const currentMember = currentRow ? _sbSerializeTeamMemberRow(currentRow) : null;
+    const currentUser = currentMember ? {
+      id: currentMember.id,
+      name: currentMember.name,
+      department: currentMember.department,
+      position: currentMember.position,
+      photoUrl: currentMember.photoUrl,
+      email: currentMember.email,
+    } : {
+      id: String(req.session?.userSupabaseId || "").trim(),
+      name: String(req.session?.username || "").trim(),
+      department: "",
+      position: "",
+      photoUrl: "",
+      email: "",
+    };
     const departments = Array.from(new Set([...users.map((u) => u.department), ...standards.map((s) => s.department)].map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
     const positions = Array.from(new Set([...users.map((u) => u.position), ...standards.map((s) => s.rolePosition)].map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
-    res.json({ ok: true, users, standards, departments, positions });
+    res.json({ ok: true, users, standards, departments, positions, currentUser });
   } catch (error) {
     console.error("[kpis] meta failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -26402,8 +26419,12 @@ app.get("/api/kpis/graph", requireAuth, requirePage("KPIs"), async (req, res) =>
   res.set("Cache-Control", "no-store");
   try {
     const params = ["select=*", "order=review_month.asc", "limit=1000"];
-    const teamMemberId = String(req.query.teamMemberId || req.query.team_member_id || "").trim();
+    let teamMemberId = String(req.query.teamMemberId || req.query.team_member_id || "").trim();
     const academicYear = String(req.query.academicYear || req.query.academic_year || "").trim();
+    if (!teamMemberId) {
+      const current = await _kpiCreator(req).catch(() => null);
+      teamMemberId = String(current?.id || "").trim();
+    }
     if (teamMemberId) params.push(`team_member_id=eq.${_sbRestFilterValue(teamMemberId)}`);
     if (academicYear) params.push(`academic_year=eq.${_sbRestFilterValue(academicYear)}`);
     const rows = await supabaseDb.request(`/${KPI_MONTHLY_GRAPH_VIEW}?${params.join("&")}`);
