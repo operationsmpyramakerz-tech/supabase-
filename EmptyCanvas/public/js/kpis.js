@@ -12,6 +12,9 @@
     currentUser: null,
   };
 
+  const enhancedSelects = new Map();
+  let sectionTitleResolver = null;
+
   const $ = (id) => document.getElementById(id);
 
   function esc(value) {
@@ -77,6 +80,67 @@
     } catch {}
   }
 
+
+  function closeEnhancedSelects(except = null) {
+    document.querySelectorAll('.kpis-modern-select.is-open').forEach((dropdown) => {
+      if (dropdown !== except) dropdown.classList.remove('is-open');
+    });
+  }
+
+  function refreshEnhancedSelect(select) {
+    const enhanced = enhancedSelects.get(select);
+    if (!select || !enhanced) return;
+    const options = [...select.options].map((option) => ({
+      value: option.value,
+      label: option.textContent || option.label || option.value,
+      disabled: option.disabled,
+    }));
+    const selected = select.selectedOptions?.[0] || select.options[select.selectedIndex] || options[0];
+    enhanced.label.textContent = selected?.textContent || selected?.label || select.getAttribute('aria-label') || 'Choose';
+    enhanced.menu.innerHTML = options
+      .map((option) => `<button class="kpis-modern-select__option${String(option.value) === String(select.value) ? ' is-selected' : ''}" type="button" data-value="${esc(option.value)}"${option.disabled ? ' disabled' : ''}>${esc(option.label)}</button>`)
+      .join('');
+    enhanced.menu.querySelectorAll('[data-value]').forEach((button) => {
+      button.addEventListener('click', () => {
+        select.value = button.dataset.value || '';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        refreshEnhancedSelect(select);
+        closeEnhancedSelects();
+      });
+    });
+  }
+
+  function enhanceSelect(select) {
+    if (!select) return;
+    if (enhancedSelects.has(select)) {
+      refreshEnhancedSelect(select);
+      return;
+    }
+    select.classList.add('kpis-select--native-hidden');
+    const dropdown = document.createElement('div');
+    dropdown.className = 'kpis-modern-select';
+    dropdown.innerHTML = '<button class="kpis-modern-select__button" type="button"><span></span><i data-feather="chevron-down"></i></button><div class="kpis-modern-select__menu" role="listbox"></div>';
+    select.insertAdjacentElement('afterend', dropdown);
+    const button = dropdown.querySelector('.kpis-modern-select__button');
+    const label = dropdown.querySelector('.kpis-modern-select__button span');
+    const menu = dropdown.querySelector('.kpis-modern-select__menu');
+    enhancedSelects.set(select, { dropdown, button, label, menu });
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const willOpen = !dropdown.classList.contains('is-open');
+      closeEnhancedSelects(dropdown);
+      dropdown.classList.toggle('is-open', willOpen);
+    });
+    select.addEventListener('change', () => refreshEnhancedSelect(select));
+    refreshEnhancedSelect(select);
+    feather();
+  }
+
+  function enhanceStandardControls() {
+    ['standardDepartmentSelect', 'standardPositionSelect', 'academicYearFromSelect', 'academicYearToSelect'].forEach((id) => enhanceSelect($(id)));
+  }
+
   function setOptions(select, items, { allLabel = '', valueKey = '', labelKey = '' } = {}) {
     if (!select) return;
     const currentValue = select.value;
@@ -92,6 +156,7 @@
     if ([...select.options].some((option) => option.value === currentValue)) {
       select.value = currentValue;
     }
+    refreshEnhancedSelect(select);
   }
 
   function userById(id) {
@@ -266,6 +331,7 @@
     for (let year = from; year <= to; year += 1) years.push(year);
     select.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join('');
     if (years.includes(Number(selected))) select.value = String(selected);
+    refreshEnhancedSelect(select);
   }
 
   function syncAcademicYear() {
@@ -307,6 +373,7 @@
     setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
     setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
     initAcademicYearPicker();
+    enhanceStandardControls();
     setCurrentUserBadge();
     renderStandards();
     await Promise.all([loadReviews(), loadGraph()]);
@@ -337,22 +404,32 @@
     return text || fallback;
   }
 
+  function renderEmptyKpiEditor() {
+    const wrapper = $('kpiItemsEditor');
+    if (!wrapper) return;
+    if (wrapper.querySelector('.kpis-section-card')) return;
+    wrapper.innerHTML = '<div class="kpis-empty-editor"><strong>No KPI sections yet.</strong><span>Click Add section to start creating KPI sections.</span></div>';
+  }
+
   function updateSectionNumbers() {
+    const wrapper = $('kpiItemsEditor');
     document.querySelectorAll('#kpiItemsEditor .kpis-section-card').forEach((section, sectionIndex) => {
       section.dataset.sectionOrder = String(sectionIndex + 1);
       const orderBadge = section.querySelector('[data-section-order-label]');
-      if (orderBadge) orderBadge.textContent = `Section ${sectionIndex + 1}`;
+      if (orderBadge) orderBadge.textContent = String(sectionIndex + 1);
       section.querySelectorAll('.kpis-item-row').forEach((row, rowIndex) => {
         row.dataset.subsectionOrder = String(rowIndex + 1);
         const subNumber = row.querySelector('[data-subsection-number]');
         if (subNumber) subNumber.textContent = String(rowIndex + 1);
       });
     });
+    if (wrapper && !wrapper.querySelector('.kpis-section-card')) renderEmptyKpiEditor();
   }
 
   function addKpiSection(title = '') {
     const wrapper = $('kpiItemsEditor');
     if (!wrapper) return null;
+    wrapper.querySelector('.kpis-empty-editor')?.remove();
     const sectionIndex = wrapper.querySelectorAll('.kpis-section-card').length + 1;
     const sectionTitle = cleanSectionTitle(title, `Section ${sectionIndex}`);
     const section = document.createElement('section');
@@ -361,8 +438,8 @@
     section.dataset.sectionOrder = String(sectionIndex);
     section.innerHTML = `
       <div class="kpis-section-card__head">
-        <div>
-          <span class="kpis-section-card__order" data-section-order-label>Section ${sectionIndex}</span>
+        <div class="kpis-section-card__titleline">
+          <span class="kpis-section-card__order" data-section-order-label>${sectionIndex}</span>
           <h4 data-section-title>${esc(sectionTitle)}</h4>
         </div>
         <div class="kpis-section-card__actions">
@@ -373,12 +450,8 @@
       <label>Section description<textarea class="kpis-textarea" data-section-description rows="2"></textarea></label>
       <div class="kpis-section-rows" data-section-rows></div>
     `;
-    section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section, targetPercent: 100 }));
+    section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section, targetPercent: 10 }));
     section.querySelector('[data-remove-section]')?.addEventListener('click', () => {
-      if (document.querySelectorAll('#kpiItemsEditor .kpis-section-card').length <= 1) {
-        toast('At least one section is required.');
-        return;
-      }
       section.remove();
       updateSectionNumbers();
     });
@@ -388,18 +461,50 @@
     return section;
   }
 
-  function promptAndAddSection() {
-    const title = window.prompt('Enter section title');
+  function openSectionTitleDialog() {
+    return new Promise((resolve) => {
+      const dialog = $('sectionTitleDialog');
+      const input = $('sectionTitleInput');
+      if (!dialog || !input) {
+        const title = window.prompt('Enter section title');
+        resolve(title);
+        return;
+      }
+      sectionTitleResolver = resolve;
+      input.value = '';
+      dialog.hidden = false;
+      dialog.setAttribute('aria-hidden', 'false');
+      window.setTimeout(() => input.focus(), 50);
+    });
+  }
+
+  function closeSectionTitleDialog(value = null) {
+    const dialog = $('sectionTitleDialog');
+    if (dialog) {
+      dialog.hidden = true;
+      dialog.setAttribute('aria-hidden', 'true');
+    }
+    if (sectionTitleResolver) {
+      const resolver = sectionTitleResolver;
+      sectionTitleResolver = null;
+      resolver(value);
+    }
+  }
+
+  async function promptAndAddSection() {
+    const title = await openSectionTitleDialog();
     if (title === null) return;
-    const section = addKpiSection(title);
-    if (section) addKpiRow({ sectionElement: section, targetPercent: 100 });
+    addKpiSection(title);
   }
 
   function addKpiRow(value = {}) {
     const wrapper = $('kpiItemsEditor');
     if (!wrapper) return;
     let section = value.sectionElement || wrapper.querySelector('.kpis-section-card:last-of-type');
-    if (!section) section = addKpiSection('Section 1');
+    if (!section) {
+      toast('Add a section first.');
+      return;
+    }
     const rows = section.querySelector('[data-section-rows]');
     if (!rows) return;
     const rowIndex = rows.querySelectorAll('.kpis-item-row').length + 1;
@@ -410,8 +515,8 @@
       <div class="kpis-item-row__top kpis-item-row__top--sectioned">
         <label>Sub #<span class="kpis-sub-number" data-subsection-number>${rowIndex}</span></label>
         <label>Subsection<input class="kpis-input" data-kpi-field="subsection" value="${esc(value.subsection || '')}" /></label>
-        <label>Weight %<input class="kpis-input" data-kpi-field="weightPercent" type="number" min="0" max="100" step="0.01" value="${esc(value.weightPercent ?? '')}" /></label>
-        <label>Target %<input class="kpis-input" data-kpi-field="targetPercent" type="number" min="0" max="100" step="0.01" value="${esc(value.targetPercent ?? 100)}" /></label>
+        <label>Weight<input class="kpis-input" data-kpi-field="weightPercent" type="number" min="0" step="0.01" value="${esc(value.weightPercent ?? '')}" /></label>
+        <label>Target<input class="kpis-input" data-kpi-field="targetPercent" type="number" min="0" step="0.01" value="${esc(value.targetPercent ?? 10)}" /></label>
         <button class="kpis-btn kpis-btn--ghost kpis-icon-only" data-remove-kpi-row type="button" title="Remove row"><i data-feather="trash-2"></i></button>
       </div>
       <label>Subsection description<textarea class="kpis-textarea" data-kpi-field="subsectionDescription" rows="2">${esc(value.subsectionDescription || '')}</textarea></label>
@@ -453,9 +558,9 @@
     setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
     setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
     initAcademicYearPicker();
+    enhanceStandardControls();
     if ($('kpiItemsEditor')) $('kpiItemsEditor').innerHTML = '';
-    const section = addKpiSection('Section 1');
-    if (section) addKpiRow({ sectionElement: section, targetPercent: 100 });
+    renderEmptyKpiEditor();
     openModal('standard');
   }
 
@@ -525,7 +630,7 @@
         .map(
           (section) => `<div class="kpis-score-section"><div class="kpis-score-section__head"><strong>${esc(section.section || 'Section')}</strong><span>${esc(section.sectionDescription || '')}</span></div>${section.items
             .map(
-              (item) => `<div class="kpis-score-item" data-score-id="${esc(item.scoreId)}"><div><h4>${esc(item.subsection || 'KPI row')}</h4><p>${esc(item.subsectionDescription || '')}</p></div><div class="kpis-score-mini">Weight<strong>${num(item.weightPercent, 0).toFixed(1)}%</strong></div><div class="kpis-score-mini">Target<strong>${num(item.targetPercent, 0).toFixed(1)}%</strong></div><label class="kpis-score-mini">Actual %<input class="kpis-input" data-score-field="actualPercent" type="number" min="0" max="200" step="0.01" value="${item.actualPercent === null ? '' : esc(item.actualPercent)}" /></label><div class="kpis-score-notes"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div></div>`,
+              (item) => `<div class="kpis-score-item" data-score-id="${esc(item.scoreId)}"><div><h4>${esc(item.subsection || 'KPI row')}</h4><p>${esc(item.subsectionDescription || '')}</p></div><div class="kpis-score-mini">Weight<strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div><div class="kpis-score-mini">Target<strong>${num(item.targetPercent, 0).toFixed(1)}</strong></div><label class="kpis-score-mini">Actual<input class="kpis-input" data-score-field="actualPercent" type="number" min="0" step="0.01" value="${item.actualPercent === null ? '' : esc(item.actualPercent)}" /></label><div class="kpis-score-notes"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div></div>`,
             )
             .join('')}</div>`,
         )
@@ -550,8 +655,11 @@
     $('openReviewBtn')?.addEventListener('click', openReviewModal);
     $('openHeroReviewBtn')?.addEventListener('click', openReviewModal);
     $('kpiRefreshBtn')?.addEventListener('click', openReviewModal);
-    $('addKpiRowBtn')?.addEventListener('click', () => addKpiRow({ targetPercent: 100 }));
     $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
+    $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog($('sectionTitleInput')?.value || ''));
+    $('sectionTitleInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeSectionTitleDialog(event.currentTarget.value || ''); } });
+    document.querySelectorAll('[data-section-title-cancel]').forEach((element) => element.addEventListener('click', () => closeSectionTitleDialog(null)));
+    document.addEventListener('click', () => closeEnhancedSelects());
     $('academicYearFromSelect')?.addEventListener('change', syncAcademicYear);
     $('academicYearToSelect')?.addEventListener('change', syncAcademicYear);
 
@@ -569,8 +677,12 @@
       const form = event.currentTarget;
       syncAcademicYear();
       const items = collectKpiRows();
+      if (!document.querySelector('#kpiItemsEditor .kpis-section-card')) {
+        toast('Click Add section to start creating KPI sections.');
+        return;
+      }
       if (!items.length) {
-        toast('Add at least one KPI row.');
+        toast('Add at least one KPI row inside a section.');
         return;
       }
       await api('/api/kpis/standards', {
@@ -579,6 +691,8 @@
           department: form.elements.department.value,
           rolePosition: form.elements.rolePosition.value,
           academicYear: form.elements.academicYear.value,
+          yearStart: Number($('academicYearFromSelect')?.value || 0) || undefined,
+          yearEnd: Number($('academicYearToSelect')?.value || 0) || undefined,
           title: form.elements.title.value,
           description: form.elements.description.value,
           items,
