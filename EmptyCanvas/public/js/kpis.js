@@ -141,6 +141,10 @@
     ['standardDepartmentSelect', 'standardPositionSelect', 'academicYearFromSelect', 'academicYearToSelect'].forEach((id) => enhanceSelect($(id)));
   }
 
+  function enhanceReviewFilterControls() {
+    ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect', 'filterStatusSelect'].forEach((id) => enhanceSelect($(id)));
+  }
+
   function setOptions(select, items, { allLabel = '', valueKey = '', labelKey = '' } = {}) {
     if (!select) return;
     const currentValue = select.value;
@@ -301,19 +305,43 @@
     });
   }
 
+  function renderReviewFilterSummary() {
+    const summary = $('reviewFilterSummary');
+    if (!summary) return;
+    const employeeText = $('filterEmployeeSelect')?.selectedOptions?.[0]?.textContent || '';
+    const departmentText = $('filterDepartmentSelect')?.selectedOptions?.[0]?.textContent || '';
+    const roleText = $('filterPositionSelect')?.selectedOptions?.[0]?.textContent || '';
+    const statusText = $('filterStatusSelect')?.selectedOptions?.[0]?.textContent || '';
+    const month = $('filterMonthInput')?.value || '';
+    const chips = [];
+    if ($('filterEmployeeSelect')?.value) chips.push(`Employee: ${employeeText}`);
+    if ($('filterDepartmentSelect')?.value) chips.push(`Department: ${departmentText}`);
+    if ($('filterPositionSelect')?.value) chips.push(`Role: ${roleText}`);
+    if (month) chips.push(`Month: ${fmtMonth(`${month}-01`)}`);
+    if ($('filterStatusSelect')?.value) chips.push(`Status: ${statusText}`);
+    summary.innerHTML = chips.length
+      ? chips.map((chip) => `<span>${esc(chip)}</span>`).join('')
+      : 'No filters applied';
+  }
+
   async function loadReviews() {
     const query = new URLSearchParams();
-    const department = $('reviewDepartmentFilter')?.value || '';
-    const position = $('reviewPositionFilter')?.value || '';
-    const month = $('reviewMonthFilter')?.value || '';
+    const teamMemberId = $('filterEmployeeSelect')?.value || '';
+    const department = $('filterDepartmentSelect')?.value || '';
+    const position = $('filterPositionSelect')?.value || '';
+    const month = $('filterMonthInput')?.value || '';
+    const status = $('filterStatusSelect')?.value || '';
 
+    if (teamMemberId) query.set('teamMemberId', teamMemberId);
     if (department) query.set('department', department);
     if (position) query.set('rolePosition', position);
+    if (status) query.set('status', status);
     if (month) {
       query.set('from', `${month}-01`);
       query.set('to', `${month}-01`);
     }
 
+    renderReviewFilterSummary();
     const data = await api(`/api/kpis/reviews${query.toString() ? `?${query}` : ''}`);
     state.reviews = data.reviews || [];
     renderReviews();
@@ -367,13 +395,16 @@
     state.currentUser = currentUserFromMeta(data);
     state.selectedEmployeeId = String(state.currentUser?.id || '').trim() || state.selectedEmployeeId || state.users[0]?.id || '';
 
-    setOptions($('reviewDepartmentFilter'), state.departments, { allLabel: 'All departments' });
-    setOptions($('reviewPositionFilter'), state.positions, { allLabel: 'All roles' });
+    setOptions($('filterEmployeeSelect'), state.users, { allLabel: 'All employees', valueKey: 'id', labelKey: 'name' });
+    setOptions($('filterDepartmentSelect'), state.departments, { allLabel: 'All departments' });
+    setOptions($('filterPositionSelect'), state.positions, { allLabel: 'All roles' });
     setOptions($('reviewEmployeeSelect'), state.users, { allLabel: 'Choose employee', valueKey: 'id', labelKey: 'name' });
     setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
     setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
     initAcademicYearPicker();
     enhanceStandardControls();
+    enhanceReviewFilterControls();
+    renderReviewFilterSummary();
     setCurrentUserBadge();
     renderStandards();
     await Promise.all([loadReviews(), loadGraph()]);
@@ -564,13 +595,78 @@
     openModal('standard');
   }
 
+  function standardStatusLabel(standard) {
+    return standard?.isActive ? 'Active' : 'Inactive';
+  }
+
+  function renderStandardDetails(standard, sections = []) {
+    const content = $('standardDetailsContent');
+    if (!content) return;
+    if ($('standardDetailsTitle')) $('standardDetailsTitle').textContent = standard?.title || 'KPI standard details';
+    if ($('standardDetailsSubtitle')) {
+      $('standardDetailsSubtitle').textContent = [standard?.department, standard?.rolePosition, standard?.academicYear].filter(Boolean).join(' / ') || 'Standard information and KPI sections.';
+    }
+    const description = String(standard?.description || '').trim();
+    const totalRows = sections.reduce((sum, section) => sum + (section.items || []).length, 0);
+    const totalWeight = sections.reduce((sum, section) => sum + num(section.weightPercent, 0), 0);
+    content.innerHTML = `
+      <div class="kpis-standard-detail-hero">
+        <div class="kpis-standard-detail-title">
+          <span class="kpis-pill">${esc(standardStatusLabel(standard))}</span>
+          <h3>${esc(standard?.title || 'Untitled standard')}</h3>
+          ${description ? `<p>${esc(description)}</p>` : '<p>No description added.</p>'}
+        </div>
+        <div class="kpis-standard-detail-score">
+          <strong>${esc(String(totalRows))}</strong>
+          <span>KPI rows</span>
+        </div>
+      </div>
+      <div class="kpis-standard-detail-grid">
+        <div><span>Department</span><strong>${esc(standard?.department || '—')}</strong></div>
+        <div><span>Role / Position</span><strong>${esc(standard?.rolePosition || '—')}</strong></div>
+        <div><span>Year</span><strong>${esc(standard?.academicYear || '—')}</strong></div>
+        <div><span>Total weight</span><strong>${num(totalWeight, 0).toFixed(1)}</strong></div>
+      </div>
+      <div class="kpis-standard-detail-sections">
+        ${sections.length ? sections.map((section, sectionIndex) => `
+          <section class="kpis-standard-detail-section">
+            <div class="kpis-standard-detail-section__head">
+              <div><span>${sectionIndex + 1}</span><h4>${esc(section.section || `Section ${sectionIndex + 1}`)}</h4></div>
+              <strong>${num(section.weightPercent, 0).toFixed(1)} total weight</strong>
+            </div>
+            ${section.sectionDescription ? `<p class="kpis-standard-detail-description">${esc(section.sectionDescription)}</p>` : ''}
+            <div class="kpis-standard-detail-rows">
+              ${(section.items || []).length ? section.items.map((item) => `
+                <article class="kpis-standard-detail-row">
+                  <div class="kpis-standard-detail-row__main">
+                    <span>${esc(String(item.subsectionOrder || '—'))}</span>
+                    <div><strong>${esc(item.subsection || 'KPI row')}</strong>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div>
+                  </div>
+                  <div class="kpis-standard-detail-row__metrics">
+                    <div><span>Weight</span><strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div>
+                    <div><span>Target</span><strong>${num(item.targetPercent, 0).toFixed(1)}</strong></div>
+                  </div>
+                </article>
+              `).join('') : '<div class="kpis-chart-empty">No KPI rows in this section.</div>'}
+            </div>
+          </section>
+        `).join('') : '<div class="kpis-chart-empty">No active KPI sections found.</div>'}
+      </div>
+    `;
+    feather();
+  }
+
   async function previewStandard(id) {
-    const data = await api(`/api/kpis/standards?id=${encodeURIComponent(id)}`);
-    const standard = standardById(id) || data.standards?.[0];
-    const lines = (data.sections || [])
-      .map((section) => `${section.section} (${Number(section.weightPercent || 0).toFixed(1)}%)`)
-      .join('\n');
-    toast(`${standard?.title || 'KPI standard'}\n\n${lines || 'No active KPI rows.'}`);
+    const content = $('standardDetailsContent');
+    if (content) content.innerHTML = '<div class="kpis-chart-empty">Loading KPI standard...</div>';
+    openModal('standardDetails');
+    try {
+      const data = await api(`/api/kpis/standards?id=${encodeURIComponent(id)}`);
+      const standard = standardById(id) || data.standards?.[0] || null;
+      renderStandardDetails(standard, data.sections || []);
+    } catch (error) {
+      if (content) content.innerHTML = `<div class="kpis-chart-empty">${esc(error.message || 'Failed to load KPI standard.')}</div>`;
+    }
   }
 
   function updateReviewStandardOptions() {
@@ -655,6 +751,7 @@
     $('openReviewBtn')?.addEventListener('click', openReviewModal);
     $('openHeroReviewBtn')?.addEventListener('click', openReviewModal);
     $('kpiRefreshBtn')?.addEventListener('click', openReviewModal);
+    $('openReviewFiltersBtn')?.addEventListener('click', () => { enhanceReviewFilterControls(); openModal('reviewFilters'); });
     $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
     $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog($('sectionTitleInput')?.value || ''));
     $('sectionTitleInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeSectionTitleDialog(event.currentTarget.value || ''); } });
@@ -667,9 +764,17 @@
       element.addEventListener('click', () => closeModal(element.dataset.kpiClose));
     });
 
-    $('reviewDepartmentFilter')?.addEventListener('change', () => loadReviews().catch((error) => toast(error.message)));
-    $('reviewPositionFilter')?.addEventListener('change', () => loadReviews().catch((error) => toast(error.message)));
-    $('reviewMonthFilter')?.addEventListener('change', () => loadReviews().catch((error) => toast(error.message)));
+    $('reviewFilterForm')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      closeModal('reviewFilters');
+      loadReviews().catch((error) => toast(error.message));
+    });
+    $('clearReviewFiltersBtn')?.addEventListener('click', () => {
+      ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect', 'filterStatusSelect'].forEach((id) => { if ($(id)) { $(id).value = ''; refreshEnhancedSelect($(id)); } });
+      if ($('filterMonthInput')) $('filterMonthInput').value = '';
+      closeModal('reviewFilters');
+      loadReviews().catch((error) => toast(error.message));
+    });
     $('reviewEmployeeSelect')?.addEventListener('change', updateReviewStandardOptions);
 
     $('standardForm')?.addEventListener('submit', async (event) => {
