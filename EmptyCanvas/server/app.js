@@ -26426,9 +26426,12 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
     const rolePosition = String(req.query.rolePosition || req.query.position || "").trim();
     const from = String(req.query.from || "").trim();
     const to = String(req.query.to || "").trim();
+    const rawStatus = String(req.query.status || "").trim().toLowerCase();
+    const status = ["draft", "submitted", "approved", "archived"].includes(rawStatus) ? rawStatus : "";
     if (teamMemberId) params.push(`team_member_id=eq.${_sbRestFilterValue(teamMemberId)}`);
     if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
     if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
+    if (status) params.push(`status=eq.${_sbRestFilterValue(status)}`);
     if (from) params.push(`review_month=gte.${_sbRestFilterValue(_kpiMonthStart(from))}`);
     if (to) params.push(`review_month=lte.${_sbRestFilterValue(_kpiMonthStart(to))}`);
     const rows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?${params.join("&")}`);
