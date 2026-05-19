@@ -5,6 +5,8 @@
     users: [],
     standards: [],
     reviews: [],
+    departments: [],
+    positions: [],
     selectedReviewId: '',
     selectedEmployeeId: '',
     currentUser: null,
@@ -90,12 +92,6 @@
     if ([...select.options].some((option) => option.value === currentValue)) {
       select.value = currentValue;
     }
-  }
-
-  function fillDatalist(id, values) {
-    const element = $(id);
-    if (!element) return;
-    element.innerHTML = (values || []).map((value) => `<option value="${esc(value)}"></option>`).join('');
   }
 
   function userById(id) {
@@ -231,7 +227,7 @@
 
     box.innerHTML = state.standards
       .map(
-        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')} / ${esc(standard.academicYear || '—')}</p><div class="kpis-standard-meta"><span class="kpis-pill">v${esc(standard.version || 1)}</span><span class="kpis-pill">${standard.isActive ? 'Active' : 'Inactive'}</span></div></button>`,
+        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')} / ${esc(standard.academicYear || '—')}</p><div class="kpis-standard-meta"><span class="kpis-pill">${standard.isActive ? 'Active' : 'Inactive'}</span></div></button>`,
       )
       .join('');
 
@@ -258,18 +254,59 @@
     renderReviews();
   }
 
+  function defaultAcademicRange() {
+    const today = new Date();
+    const start = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
+    return { from: start, to: start + 1 };
+  }
+
+  function fillYearSelect(select, selected, { from = 2020, to = new Date().getFullYear() + 8 } = {}) {
+    if (!select) return;
+    const years = [];
+    for (let year = from; year <= to; year += 1) years.push(year);
+    select.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join('');
+    if (years.includes(Number(selected))) select.value = String(selected);
+  }
+
+  function syncAcademicYear() {
+    const fromSelect = $('academicYearFromSelect');
+    const toSelect = $('academicYearToSelect');
+    const hidden = $('standardAcademicYearInput');
+    if (!fromSelect || !toSelect || !hidden) return;
+    const from = Number(fromSelect.value);
+    let to = Number(toSelect.value);
+    if (Number.isFinite(from) && Number.isFinite(to) && to <= from) {
+      to = from + 1;
+      if (![...toSelect.options].some((option) => option.value === String(to))) {
+        toSelect.appendChild(new Option(String(to), String(to)));
+      }
+      toSelect.value = String(to);
+    }
+    hidden.value = `${fromSelect.value}-${toSelect.value}`;
+  }
+
+  function initAcademicYearPicker() {
+    const range = defaultAcademicRange();
+    fillYearSelect($('academicYearFromSelect'), range.from);
+    fillYearSelect($('academicYearToSelect'), range.to);
+    syncAcademicYear();
+  }
+
   async function loadMeta() {
     const data = await api('/api/kpis/meta');
     state.users = data.users || [];
     state.standards = data.standards || [];
+    state.departments = data.departments || [];
+    state.positions = data.positions || [];
     state.currentUser = currentUserFromMeta(data);
     state.selectedEmployeeId = String(state.currentUser?.id || '').trim() || state.selectedEmployeeId || state.users[0]?.id || '';
 
-    setOptions($('reviewDepartmentFilter'), data.departments || [], { allLabel: 'All departments' });
-    setOptions($('reviewPositionFilter'), data.positions || [], { allLabel: 'All roles' });
+    setOptions($('reviewDepartmentFilter'), state.departments, { allLabel: 'All departments' });
+    setOptions($('reviewPositionFilter'), state.positions, { allLabel: 'All roles' });
     setOptions($('reviewEmployeeSelect'), state.users, { allLabel: 'Choose employee', valueKey: 'id', labelKey: 'name' });
-    fillDatalist('kpiDepartmentOptions', data.departments || []);
-    fillDatalist('kpiPositionOptions', data.positions || []);
+    setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
+    setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
+    initAcademicYearPicker();
     setCurrentUserBadge();
     renderStandards();
     await Promise.all([loadReviews(), loadGraph()]);
@@ -295,35 +332,130 @@
     }
   }
 
+  function cleanSectionTitle(value, fallback = 'New section') {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    return text || fallback;
+  }
+
+  function updateSectionNumbers() {
+    document.querySelectorAll('#kpiItemsEditor .kpis-section-card').forEach((section, sectionIndex) => {
+      section.dataset.sectionOrder = String(sectionIndex + 1);
+      const orderBadge = section.querySelector('[data-section-order-label]');
+      if (orderBadge) orderBadge.textContent = `Section ${sectionIndex + 1}`;
+      section.querySelectorAll('.kpis-item-row').forEach((row, rowIndex) => {
+        row.dataset.subsectionOrder = String(rowIndex + 1);
+        const subNumber = row.querySelector('[data-subsection-number]');
+        if (subNumber) subNumber.textContent = String(rowIndex + 1);
+      });
+    });
+  }
+
+  function addKpiSection(title = '') {
+    const wrapper = $('kpiItemsEditor');
+    if (!wrapper) return null;
+    const sectionIndex = wrapper.querySelectorAll('.kpis-section-card').length + 1;
+    const sectionTitle = cleanSectionTitle(title, `Section ${sectionIndex}`);
+    const section = document.createElement('section');
+    section.className = 'kpis-section-card';
+    section.dataset.section = sectionTitle;
+    section.dataset.sectionOrder = String(sectionIndex);
+    section.innerHTML = `
+      <div class="kpis-section-card__head">
+        <div>
+          <span class="kpis-section-card__order" data-section-order-label>Section ${sectionIndex}</span>
+          <h4 data-section-title>${esc(sectionTitle)}</h4>
+        </div>
+        <div class="kpis-section-card__actions">
+          <button class="kpis-btn kpis-btn--ghost" type="button" data-add-row-to-section><i data-feather="plus"></i><span>Add row</span></button>
+          <button class="kpis-btn kpis-btn--ghost kpis-icon-only" type="button" data-remove-section title="Remove section"><i data-feather="trash-2"></i></button>
+        </div>
+      </div>
+      <label>Section description<textarea class="kpis-textarea" data-section-description rows="2"></textarea></label>
+      <div class="kpis-section-rows" data-section-rows></div>
+    `;
+    section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section, targetPercent: 100 }));
+    section.querySelector('[data-remove-section]')?.addEventListener('click', () => {
+      if (document.querySelectorAll('#kpiItemsEditor .kpis-section-card').length <= 1) {
+        toast('At least one section is required.');
+        return;
+      }
+      section.remove();
+      updateSectionNumbers();
+    });
+    wrapper.appendChild(section);
+    feather();
+    updateSectionNumbers();
+    return section;
+  }
+
+  function promptAndAddSection() {
+    const title = window.prompt('Enter section title');
+    if (title === null) return;
+    const section = addKpiSection(title);
+    if (section) addKpiRow({ sectionElement: section, targetPercent: 100 });
+  }
+
   function addKpiRow(value = {}) {
     const wrapper = $('kpiItemsEditor');
     if (!wrapper) return;
-    const index = wrapper.children.length + 1;
+    let section = value.sectionElement || wrapper.querySelector('.kpis-section-card:last-of-type');
+    if (!section) section = addKpiSection('Section 1');
+    const rows = section.querySelector('[data-section-rows]');
+    if (!rows) return;
+    const rowIndex = rows.querySelectorAll('.kpis-item-row').length + 1;
     const row = document.createElement('div');
-    row.className = 'kpis-item-row';
-    row.innerHTML = `<div class="kpis-item-row__top"><label>Section #<input class="kpis-input" data-kpi-field="sectionOrder" type="number" min="1" value="${esc(value.sectionOrder || index)}" /></label><label>Section<input class="kpis-input" data-kpi-field="section" value="${esc(value.section || '')}" /></label><label>Sub #<input class="kpis-input" data-kpi-field="subsectionOrder" type="number" min="1" value="${esc(value.subsectionOrder || 1)}" /></label><label>Subsection<input class="kpis-input" data-kpi-field="subsection" value="${esc(value.subsection || '')}" /></label><label>Weight %<input class="kpis-input" data-kpi-field="weightPercent" type="number" min="0" max="100" step="0.01" value="${esc(value.weightPercent ?? '')}" /></label><label>Target %<input class="kpis-input" data-kpi-field="targetPercent" type="number" min="0" max="100" step="0.01" value="${esc(value.targetPercent ?? 100)}" /></label><button class="kpis-btn kpis-btn--ghost kpis-icon-only" data-remove-kpi-row type="button"><i data-feather="trash-2"></i></button></div><label>Section description<textarea class="kpis-textarea" data-kpi-field="sectionDescription">${esc(value.sectionDescription || '')}</textarea></label><label>Subsection description<textarea class="kpis-textarea" data-kpi-field="subsectionDescription">${esc(value.subsectionDescription || '')}</textarea></label>`;
-    row.querySelector('[data-remove-kpi-row]').addEventListener('click', () => row.remove());
-    wrapper.appendChild(row);
+    row.className = 'kpis-item-row kpis-item-row--sectioned';
+    row.dataset.subsectionOrder = String(rowIndex);
+    row.innerHTML = `
+      <div class="kpis-item-row__top kpis-item-row__top--sectioned">
+        <label>Sub #<span class="kpis-sub-number" data-subsection-number>${rowIndex}</span></label>
+        <label>Subsection<input class="kpis-input" data-kpi-field="subsection" value="${esc(value.subsection || '')}" /></label>
+        <label>Weight %<input class="kpis-input" data-kpi-field="weightPercent" type="number" min="0" max="100" step="0.01" value="${esc(value.weightPercent ?? '')}" /></label>
+        <label>Target %<input class="kpis-input" data-kpi-field="targetPercent" type="number" min="0" max="100" step="0.01" value="${esc(value.targetPercent ?? 100)}" /></label>
+        <button class="kpis-btn kpis-btn--ghost kpis-icon-only" data-remove-kpi-row type="button" title="Remove row"><i data-feather="trash-2"></i></button>
+      </div>
+      <label>Subsection description<textarea class="kpis-textarea" data-kpi-field="subsectionDescription" rows="2">${esc(value.subsectionDescription || '')}</textarea></label>
+    `;
+    row.querySelector('[data-remove-kpi-row]')?.addEventListener('click', () => {
+      row.remove();
+      updateSectionNumbers();
+    });
+    rows.appendChild(row);
     feather();
+    updateSectionNumbers();
   }
 
   function collectKpiRows() {
-    return [...document.querySelectorAll('#kpiItemsEditor .kpis-item-row')].map((row) => {
-      const item = {};
-      row.querySelectorAll('[data-kpi-field]').forEach((field) => {
-        item[field.dataset.kpiField] = field.value;
+    const items = [];
+    document.querySelectorAll('#kpiItemsEditor .kpis-section-card').forEach((section, sectionIndex) => {
+      const sectionOrder = sectionIndex + 1;
+      const sectionTitle = cleanSectionTitle(section.dataset.section || section.querySelector('[data-section-title]')?.textContent, `Section ${sectionOrder}`);
+      const sectionDescription = section.querySelector('[data-section-description]')?.value || '';
+      section.querySelectorAll('.kpis-item-row').forEach((row, rowIndex) => {
+        const item = {
+          sectionOrder,
+          section: sectionTitle,
+          sectionDescription,
+          subsectionOrder: rowIndex + 1,
+        };
+        row.querySelectorAll('[data-kpi-field]').forEach((field) => {
+          item[field.dataset.kpiField] = field.value;
+        });
+        items.push(item);
       });
-      return item;
     });
+    return items;
   }
 
   function openStandardModal() {
     const form = $('standardForm');
     form?.reset();
-    if (form?.elements.academicYear) form.elements.academicYear.value = '2025-2026';
-    if (form?.elements.version) form.elements.version.value = '1';
+    setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
+    setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
+    initAcademicYearPicker();
     if ($('kpiItemsEditor')) $('kpiItemsEditor').innerHTML = '';
-    addKpiRow({ sectionOrder: 1, subsectionOrder: 1, targetPercent: 100 });
+    const section = addKpiSection('Section 1');
+    if (section) addKpiRow({ sectionElement: section, targetPercent: 100 });
     openModal('standard');
   }
 
@@ -419,6 +551,9 @@
     $('openHeroReviewBtn')?.addEventListener('click', openReviewModal);
     $('kpiRefreshBtn')?.addEventListener('click', openReviewModal);
     $('addKpiRowBtn')?.addEventListener('click', () => addKpiRow({ targetPercent: 100 }));
+    $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
+    $('academicYearFromSelect')?.addEventListener('change', syncAcademicYear);
+    $('academicYearToSelect')?.addEventListener('change', syncAcademicYear);
 
     document.querySelectorAll('[data-kpi-close]').forEach((element) => {
       element.addEventListener('click', () => closeModal(element.dataset.kpiClose));
@@ -432,16 +567,21 @@
     $('standardForm')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      syncAcademicYear();
+      const items = collectKpiRows();
+      if (!items.length) {
+        toast('Add at least one KPI row.');
+        return;
+      }
       await api('/api/kpis/standards', {
         method: 'POST',
         body: JSON.stringify({
           department: form.elements.department.value,
           rolePosition: form.elements.rolePosition.value,
           academicYear: form.elements.academicYear.value,
-          version: form.elements.version.value,
           title: form.elements.title.value,
           description: form.elements.description.value,
-          items: collectKpiRows(),
+          items,
         }),
       });
       closeModal('standard');
