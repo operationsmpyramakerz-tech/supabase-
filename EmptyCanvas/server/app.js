@@ -26076,6 +26076,13 @@ function _kpiNumber(value, fallback = 0) {
   const n = Number(String(value ?? "").replace(/%/g, "").replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : fallback;
 }
+function _kpiPerformanceRating(value) {
+  const score = Math.max(0, Math.min(100, _kpiNumber(value, 0)));
+  if (score >= 90) return "Excellent";
+  if (score >= 78) return "V.good";
+  if (score >= 66) return "Good";
+  return "Weak";
+}
 function _kpiText(value, fallback = "") {
   return String(value ?? fallback).replace(/\s+/g, " ").trim();
 }
@@ -26130,7 +26137,7 @@ function _kpiSummary(row = {}) {
     academicYear: String(row.academic_year || ""),
     finalPercentage: _kpiNumber(row.final_percentage, 0),
     totalWeightPercent: _kpiNumber(row.total_weight_percent, 0),
-    performanceRating: String(row.performance_rating || ""),
+    performanceRating: _kpiPerformanceRating(row.final_percentage),
     itemCount: Number(row.item_count || 0),
     completedItemCount: Number(row.completed_item_count || 0),
   };
@@ -26468,8 +26475,9 @@ app.patch("/api/kpis/reviews/:id/scores", requireAuth, requirePage("KPIs"), asyn
     for (const score of (Array.isArray(body.scores) ? body.scores : [])) {
       const scoreId = String(score.scoreId || score.score_id || "").trim();
       if (!scoreId) continue;
+      const scoreValue = score.score ?? score.actualPercent ?? score.actual_percent;
       await supabaseDb.updateById(KPI_SCORES_TABLE, scoreId, {
-        actual_percent: score.actualPercent === "" || score.actualPercent === null || typeof score.actualPercent === "undefined" ? null : Math.max(0, _kpiNumber(score.actualPercent, 0)),
+        actual_percent: scoreValue === "" || scoreValue === null || typeof scoreValue === "undefined" ? null : Math.max(0, _kpiNumber(scoreValue, 0)),
         evidence_text: _kpiLongText(score.evidenceText || score.evidence_text) || null,
         manager_notes: _kpiLongText(score.managerNotes || score.manager_notes) || null,
       });
