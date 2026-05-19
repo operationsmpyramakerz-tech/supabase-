@@ -457,29 +457,29 @@
     if (wrapper && !wrapper.querySelector('.kpis-section-card')) renderEmptyKpiEditor();
   }
 
-  function addKpiSection(title = '') {
+  function addKpiSection(title = '', description = '') {
     const wrapper = $('kpiItemsEditor');
     if (!wrapper) return null;
     wrapper.querySelector('.kpis-empty-editor')?.remove();
     const sectionIndex = wrapper.querySelectorAll('.kpis-section-card').length + 1;
     const sectionTitle = cleanSectionTitle(title, `Section ${sectionIndex}`);
+    const sectionDescription = String(description || '').trim();
     const section = document.createElement('section');
     section.className = 'kpis-section-card';
     section.dataset.section = sectionTitle;
+    section.dataset.sectionDescription = sectionDescription;
     section.dataset.sectionOrder = String(sectionIndex);
     section.innerHTML = `
       <div class="kpis-section-card__head">
         <div class="kpis-section-card__titleline">
           <span class="kpis-section-card__order" data-section-order-label>${sectionIndex}</span>
           <h4 data-section-title>${esc(sectionTitle)}</h4>
-        </div>
-        <div class="kpis-section-card__actions">
-          <button class="kpis-btn kpis-btn--ghost" type="button" data-add-row-to-section><i data-feather="plus"></i><span>Add row</span></button>
-          <button class="kpis-btn kpis-btn--ghost kpis-icon-only" type="button" data-remove-section title="Remove section"><i data-feather="trash-2"></i></button>
+          <button class="kpis-section-delete" type="button" data-remove-section>Delete section</button>
         </div>
       </div>
-      <label>Section description<textarea class="kpis-textarea" data-section-description rows="2"></textarea></label>
+      ${sectionDescription ? `<p class="kpis-section-card__description" data-section-description>${esc(sectionDescription)}</p>` : '<p class="kpis-section-card__description is-empty" data-section-description></p>'}
       <div class="kpis-section-rows" data-section-rows></div>
+      <div class="kpis-section-card__footer"><button class="kpis-btn kpis-btn--ghost" type="button" data-add-row-to-section><i data-feather="plus"></i><span>Add row</span></button></div>
     `;
     section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section, targetPercent: 10 }));
     section.querySelector('[data-remove-section]')?.addEventListener('click', () => {
@@ -496,13 +496,15 @@
     return new Promise((resolve) => {
       const dialog = $('sectionTitleDialog');
       const input = $('sectionTitleInput');
+      const description = $('sectionDescriptionInput');
       if (!dialog || !input) {
         const title = window.prompt('Enter section title');
-        resolve(title);
+        resolve(title === null ? null : { title, description: '' });
         return;
       }
       sectionTitleResolver = resolve;
       input.value = '';
+      if (description) description.value = '';
       dialog.hidden = false;
       dialog.setAttribute('aria-hidden', 'false');
       window.setTimeout(() => input.focus(), 50);
@@ -523,9 +525,11 @@
   }
 
   async function promptAndAddSection() {
-    const title = await openSectionTitleDialog();
-    if (title === null) return;
-    addKpiSection(title);
+    const sectionData = await openSectionTitleDialog();
+    if (sectionData === null) return;
+    const title = typeof sectionData === 'object' ? sectionData.title : sectionData;
+    const description = typeof sectionData === 'object' ? sectionData.description : '';
+    addKpiSection(title, description);
   }
 
   function addKpiRow(value = {}) {
@@ -548,9 +552,9 @@
         <label>Subsection<input class="kpis-input" data-kpi-field="subsection" value="${esc(value.subsection || '')}" /></label>
         <label>Weight<input class="kpis-input" data-kpi-field="weightPercent" type="number" min="0" step="0.01" value="${esc(value.weightPercent ?? '')}" /></label>
         <label>Target<input class="kpis-input" data-kpi-field="targetPercent" type="number" min="0" step="0.01" value="${esc(value.targetPercent ?? 10)}" /></label>
-        <button class="kpis-btn kpis-btn--ghost kpis-icon-only" data-remove-kpi-row type="button" title="Remove row"><i data-feather="trash-2"></i></button>
       </div>
       <label>Subsection description<textarea class="kpis-textarea" data-kpi-field="subsectionDescription" rows="2">${esc(value.subsectionDescription || '')}</textarea></label>
+      <div class="kpis-row-actions"><button class="kpis-row-delete" data-remove-kpi-row type="button"><i data-feather="trash-2"></i><span>Delete row</span></button></div>
     `;
     row.querySelector('[data-remove-kpi-row]')?.addEventListener('click', () => {
       row.remove();
@@ -566,7 +570,8 @@
     document.querySelectorAll('#kpiItemsEditor .kpis-section-card').forEach((section, sectionIndex) => {
       const sectionOrder = sectionIndex + 1;
       const sectionTitle = cleanSectionTitle(section.dataset.section || section.querySelector('[data-section-title]')?.textContent, `Section ${sectionOrder}`);
-      const sectionDescription = section.querySelector('[data-section-description]')?.value || '';
+      const descriptionElement = section.querySelector('[data-section-description]');
+      const sectionDescription = section.dataset.sectionDescription || descriptionElement?.value || descriptionElement?.textContent || '';
       section.querySelectorAll('.kpis-item-row').forEach((row, rowIndex) => {
         const item = {
           sectionOrder,
@@ -753,8 +758,8 @@
     $('kpiRefreshBtn')?.addEventListener('click', openReviewModal);
     $('openReviewFiltersBtn')?.addEventListener('click', () => { enhanceReviewFilterControls(); openModal('reviewFilters'); });
     $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
-    $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog($('sectionTitleInput')?.value || ''));
-    $('sectionTitleInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeSectionTitleDialog(event.currentTarget.value || ''); } });
+    $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog({ title: $('sectionTitleInput')?.value || '', description: $('sectionDescriptionInput')?.value || '' }));
+    $('sectionTitleInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeSectionTitleDialog({ title: event.currentTarget.value || '', description: $('sectionDescriptionInput')?.value || '' }); } });
     document.querySelectorAll('[data-section-title-cancel]').forEach((element) => element.addEventListener('click', () => closeSectionTitleDialog(null)));
     document.addEventListener('click', () => closeEnhancedSelects());
     $('academicYearFromSelect')?.addEventListener('change', syncAcademicYear);
