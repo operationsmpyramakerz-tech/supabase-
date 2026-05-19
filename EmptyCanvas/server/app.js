@@ -26210,8 +26210,9 @@ async function _kpiFindOrCreateReview({ standardId, teamMemberId, teamMemberName
 app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const [memberRows, standardRows] = await Promise.all([
+    const [memberRows, departmentRows, standardRows] = await Promise.all([
       _sbSelectTeamMembersRows().catch(() => []),
+      _sbSelectDepartmentRows().catch(() => []),
       supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&order=department.asc,role_position.asc,version.desc&limit=1000`).catch((error) => {
         if (_kpiMissingSchema(error)) return [];
         throw error;
@@ -26239,8 +26240,19 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
       photoUrl: "",
       email: "",
     };
-    const departments = Array.from(new Set([...users.map((u) => u.department), ...standards.map((s) => s.department)].map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
-    const positions = Array.from(new Set([...users.map((u) => u.position), ...standards.map((s) => s.rolePosition)].map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
+    const departmentNamesFromTable = (Array.isArray(departmentRows) ? departmentRows : [])
+      .map((row) => _sbDepartmentNameFromRow(row))
+      .map((name) => String(name || "").trim())
+      .filter(Boolean);
+    const departmentsSource = departmentNamesFromTable.length
+      ? departmentNamesFromTable
+      : [...users.map((u) => u.department), ...standards.map((s) => s.department)];
+    const positionNamesFromTeamMembers = users.map((u) => u.position);
+    const positionsSource = positionNamesFromTeamMembers.some((name) => String(name || "").trim())
+      ? positionNamesFromTeamMembers
+      : standards.map((s) => s.rolePosition);
+    const departments = Array.from(new Set(departmentsSource.map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
+    const positions = Array.from(new Set(positionsSource.map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
     res.json({ ok: true, users, standards, departments, positions, currentUser });
   } catch (error) {
     console.error("[kpis] meta failed", error);
