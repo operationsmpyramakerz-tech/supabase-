@@ -26048,9 +26048,11 @@ async function detectOrderIdPropName() {
 // -----------------------------------------------------------------------------
 const KPI_STANDARD_TABLE = "kpi_standards";
 const KPI_STANDARD_ITEMS_TABLE = "kpi_standard_items";
+const KPI_STANDARD_SECTIONS_TABLE = "kpi_standard_sections";
 const KPI_REVIEWS_TABLE = "kpi_employee_reviews";
 const KPI_SCORES_TABLE = "kpi_employee_scores";
 const KPI_SCORE_DETAILS_VIEW = "kpi_employee_score_details_view";
+const KPI_STANDARD_ITEMS_VIEW = "kpi_standard_items_view";
 const KPI_REVIEW_SUMMARY_VIEW = "kpi_employee_review_summary_view";
 const KPI_MONTHLY_GRAPH_VIEW = "kpi_employee_monthly_graph_view";
 
@@ -26091,7 +26093,8 @@ function _kpiStandard(row = {}) {
     department: String(row.department || ""),
     rolePosition: String(row.role_position || row.rolePosition || ""),
     academicYear: String(row.academic_year || row.academicYear || ""),
-    version: Number(row.version || 1),
+    yearStart: Number(row.year_start || row.yearStart || 0),
+    yearEnd: Number(row.year_end || row.yearEnd || 0),
     description: String(row.description || ""),
     isActive: _sbBool(row.is_active ?? row.isActive, true),
   };
@@ -26099,7 +26102,8 @@ function _kpiStandard(row = {}) {
 function _kpiItem(row = {}) {
   return {
     id: String(row.id || row.item_id || ""),
-    standardId: String(row.standard_id || ""),
+    standardId: String(row.standard_id || row.standardId || ""),
+    sectionId: String(row.section_id || row.sectionId || ""),
     sectionOrder: Number(row.section_order || 0),
     section: String(row.section || ""),
     sectionDescription: String(row.section_description || ""),
@@ -26169,6 +26173,8 @@ async function _kpiCreator(req) {
   };
 }
 async function _kpiStandardItems(standardId) {
+  const viewRows = await supabaseDb.request(`/${KPI_STANDARD_ITEMS_VIEW || "kpi_standard_items_view"}?select=*&standard_id=eq.${_sbRestFilterValue(standardId)}&item_is_active=eq.true&order=sort_order.asc&limit=1000`).catch(() => null);
+  if (Array.isArray(viewRows)) return viewRows.map(_kpiItem);
   const rows = await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(standardId)}&is_active=eq.true&order=section_order.asc,subsection_order.asc&limit=1000`);
   return (Array.isArray(rows) ? rows : []).map(_kpiItem);
 }
@@ -26213,7 +26219,7 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
     const [memberRows, departmentRows, standardRows] = await Promise.all([
       _sbSelectTeamMembersRows().catch(() => []),
       _sbSelectDepartmentRows().catch(() => []),
-      supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&order=department.asc,role_position.asc,version.desc&limit=1000`).catch((error) => {
+      supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&order=department.asc,role_position.asc,academic_year.desc&limit=1000`).catch((error) => {
         if (_kpiMissingSchema(error)) return [];
         throw error;
       }),
@@ -26266,7 +26272,7 @@ app.get("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, res
     const id = String(req.query.id || "").trim();
     const department = String(req.query.department || "").trim();
     const rolePosition = String(req.query.rolePosition || req.query.position || "").trim();
-    const params = ["select=*", "order=department.asc,role_position.asc,version.desc", "limit=1000"];
+    const params = ["select=*", "order=department.asc,role_position.asc,academic_year.desc", "limit=1000"];
     if (id) params.push(`id=eq.${_sbRestFilterValue(id)}`);
     if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
     if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
@@ -26288,45 +26294,95 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
     const department = _kpiText(body.department);
     const rolePosition = _kpiText(body.rolePosition || body.position);
     const academicYear = _kpiText(body.academicYear, "2025-2026") || "2025-2026";
-    const version = Math.max(1, Math.round(_kpiNumber(body.version, 1)));
-    const title = _kpiText(body.title) || `${department} ${rolePosition} KPIs ${academicYear}`;
+    const yearMatch = academicYear.match(/(\d{4})\D+(\d{4})/);
+    const yearStart = Math.max(2000, Math.min(2100, Math.round(_kpiNumber(body.yearStart, yearMatch ? Number(yearMatch[1]) : new Date().getFullYear()))));
+    const yearEnd = Math.max(yearStart, Math.min(2101, Math.round(_kpiNumber(body.yearEnd, yearMatch ? Number(yearMatch[2]) : yearStart + 1))));
+    const normalizedAcademicYear = `${yearStart}-${yearEnd}`;
+    const title = _kpiText(body.title) || `${department} ${rolePosition} KPIs ${normalizedAcademicYear}`;
     const itemsInput = Array.isArray(body.items) ? body.items : [];
     if (!department || !rolePosition) return res.status(400).json({ ok: false, message: "Department and role/position are required." });
-    if (!itemsInput.length) return res.status(400).json({ ok: false, message: "Add at least one KPI row." });
+    if (!itemsInput.length) return res.status(400).json({ ok: false, message: "Add at least one KPI row inside a section." });
     const creator = await _kpiCreator(req);
     const payload = {
       title,
       department,
       role_position: rolePosition,
-      academic_year: academicYear,
-      version,
+      academic_year: normalizedAcademicYear,
+      year_start: yearStart,
+      year_end: yearEnd,
       description: _kpiLongText(body.description) || null,
       is_active: body.isActive === undefined ? true : _sbBool(body.isActive, true),
       created_by_team_member_id: creator.id || null,
       created_by_name: creator.name || null,
     };
-    const existing = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&academic_year=eq.${_sbRestFilterValue(academicYear)}&version=eq.${_sbRestFilterValue(version)}&limit=1`);
+    const existing = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&year_start=eq.${_sbRestFilterValue(yearStart)}&year_end=eq.${_sbRestFilterValue(yearEnd)}&limit=1`);
     let standard = Array.isArray(existing) ? existing[0] || null : null;
     standard = standard?.id ? await supabaseDb.updateById(KPI_STANDARD_TABLE, standard.id, payload) : await supabaseDb.insert(KPI_STANDARD_TABLE, payload);
     const standardId = standard.id;
-    await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?standard_id=eq.${_sbRestFilterValue(standardId)}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: { is_active: false } });
+
+    await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?standard_id=eq.${_sbRestFilterValue(standardId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: { is_active: false },
+    }).catch(() => null);
+    await supabaseDb.request(`/${KPI_STANDARD_SECTIONS_TABLE}?standard_id=eq.${_sbRestFilterValue(standardId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: { is_active: false },
+    }).catch(() => null);
+
+    const sections = [];
+    const sectionMap = new Map();
+    for (const raw of itemsInput) {
+      const sectionOrder = Math.max(1, Math.round(_kpiNumber(raw.sectionOrder, sections.length + 1)));
+      const sectionTitle = _kpiText(raw.section) || `Section ${sectionOrder}`;
+      const key = String(sectionOrder);
+      if (!sectionMap.has(key)) {
+        const row = {
+          standard_id: standardId,
+          section_order: sectionOrder,
+          title: sectionTitle,
+          description: _kpiLongText(raw.sectionDescription) || null,
+          is_active: true,
+        };
+        sectionMap.set(key, row);
+        sections.push(row);
+      }
+    }
+
+    const savedSectionRows = sections.length
+      ? await supabaseDb.request(`/${KPI_STANDARD_SECTIONS_TABLE}?on_conflict=standard_id,section_order`, {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+          body: sections,
+        })
+      : [];
+    const sectionIdByOrder = new Map((Array.isArray(savedSectionRows) ? savedSectionRows : []).map((row) => [String(row.section_order), row.id]));
+
     const itemRows = itemsInput.map((raw, index) => {
       const sectionOrder = Math.max(1, Math.round(_kpiNumber(raw.sectionOrder, index + 1)));
       const subsectionOrder = Math.max(1, Math.round(_kpiNumber(raw.subsectionOrder, index + 1)));
       return {
         standard_id: standardId,
+        section_id: sectionIdByOrder.get(String(sectionOrder)) || null,
         section_order: sectionOrder,
         section: _kpiText(raw.section) || `Section ${sectionOrder}`,
         section_description: _kpiLongText(raw.sectionDescription) || null,
         subsection_order: subsectionOrder,
         subsection: _kpiText(raw.subsection) || `KPI ${index + 1}`,
         subsection_description: _kpiLongText(raw.subsectionDescription) || null,
-        weight_percent: Math.max(0, Math.min(100, _kpiNumber(raw.weightPercent, 0))),
-        target_percent: Math.max(0, Math.min(100, _kpiNumber(raw.targetPercent, 100))),
+        weight_percent: Math.max(0, _kpiNumber(raw.weightPercent, 0)),
+        target_percent: Math.max(0, _kpiNumber(raw.targetPercent, 10)),
         is_active: true,
       };
-    });
-    const savedItems = await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?on_conflict=standard_id,section_order,subsection_order`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: itemRows });
+    }).filter((row) => row.section_id);
+    const savedItems = itemRows.length
+      ? await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?on_conflict=section_id,subsection_order`, {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+          body: itemRows,
+        })
+      : [];
     res.json({ ok: true, standard: _kpiStandard(standard), items: (Array.isArray(savedItems) ? savedItems : []).map(_kpiItem) });
   } catch (error) {
     console.error("[kpis] save standard failed", error);
@@ -26405,7 +26461,7 @@ app.patch("/api/kpis/reviews/:id/scores", requireAuth, requirePage("KPIs"), asyn
       const scoreId = String(score.scoreId || score.score_id || "").trim();
       if (!scoreId) continue;
       await supabaseDb.updateById(KPI_SCORES_TABLE, scoreId, {
-        actual_percent: score.actualPercent === "" || score.actualPercent === null || typeof score.actualPercent === "undefined" ? null : Math.max(0, Math.min(200, _kpiNumber(score.actualPercent, 0))),
+        actual_percent: score.actualPercent === "" || score.actualPercent === null || typeof score.actualPercent === "undefined" ? null : Math.max(0, _kpiNumber(score.actualPercent, 0)),
         evidence_text: _kpiLongText(score.evidenceText || score.evidence_text) || null,
         manager_notes: _kpiLongText(score.managerNotes || score.manager_notes) || null,
       });
