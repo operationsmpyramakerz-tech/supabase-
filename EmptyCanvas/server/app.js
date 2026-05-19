@@ -26301,7 +26301,7 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
     const title = _kpiText(body.title) || `${department} ${rolePosition} KPIs ${normalizedAcademicYear}`;
     const itemsInput = Array.isArray(body.items) ? body.items : [];
     if (!department || !rolePosition) return res.status(400).json({ ok: false, message: "Department and role/position are required." });
-    if (!itemsInput.length) return res.status(400).json({ ok: false, message: "Add at least one KPI row inside a section." });
+    if (!itemsInput.length) return res.status(400).json({ ok: false, message: "Add at least one KPI subsection inside a section." });
     const creator = await _kpiCreator(req);
     const payload = {
       title,
@@ -26350,14 +26350,16 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
       }
     }
 
-    const savedSectionRows = sections.length
-      ? await supabaseDb.request(`/${KPI_STANDARD_SECTIONS_TABLE}?on_conflict=standard_id,section_order`, {
-          method: "POST",
-          headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-          body: sections,
-        })
-      : [];
-    const sectionIdByOrder = new Map((Array.isArray(savedSectionRows) ? savedSectionRows : []).map((row) => [String(row.section_order), row.id]));
+    const savedSectionRows = [];
+    for (const sectionPayload of sections) {
+      const existingSectionRows = await supabaseDb.request(`/${KPI_STANDARD_SECTIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(standardId)}&section_order=eq.${_sbRestFilterValue(sectionPayload.section_order)}&limit=1`);
+      const existingSection = Array.isArray(existingSectionRows) ? existingSectionRows[0] || null : null;
+      const savedSection = existingSection?.id
+        ? await supabaseDb.updateById(KPI_STANDARD_SECTIONS_TABLE, existingSection.id, sectionPayload)
+        : await supabaseDb.insert(KPI_STANDARD_SECTIONS_TABLE, sectionPayload);
+      if (savedSection?.id) savedSectionRows.push(savedSection);
+    }
+    const sectionIdByOrder = new Map(savedSectionRows.map((row) => [String(row.section_order), row.id]));
 
     const itemRows = itemsInput.map((raw, index) => {
       const sectionOrder = Math.max(1, Math.round(_kpiNumber(raw.sectionOrder, index + 1)));
@@ -26372,18 +26374,21 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
         subsection: _kpiText(raw.subsection) || `KPI ${index + 1}`,
         subsection_description: _kpiLongText(raw.subsectionDescription) || null,
         weight_percent: Math.max(0, _kpiNumber(raw.weightPercent, 0)),
-        target_percent: Math.max(0, _kpiNumber(raw.targetPercent, 10)),
+        target_percent: 100,
         is_active: true,
       };
     }).filter((row) => row.section_id);
-    const savedItems = itemRows.length
-      ? await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?on_conflict=section_id,subsection_order`, {
-          method: "POST",
-          headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-          body: itemRows,
-        })
-      : [];
-    res.json({ ok: true, standard: _kpiStandard(standard), items: (Array.isArray(savedItems) ? savedItems : []).map(_kpiItem) });
+
+    const savedItems = [];
+    for (const itemPayload of itemRows) {
+      const existingItemRows = await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?select=*&section_id=eq.${_sbRestFilterValue(itemPayload.section_id)}&subsection_order=eq.${_sbRestFilterValue(itemPayload.subsection_order)}&limit=1`);
+      const existingItem = Array.isArray(existingItemRows) ? existingItemRows[0] || null : null;
+      const savedItem = existingItem?.id
+        ? await supabaseDb.updateById(KPI_STANDARD_ITEMS_TABLE, existingItem.id, itemPayload)
+        : await supabaseDb.insert(KPI_STANDARD_ITEMS_TABLE, itemPayload);
+      if (savedItem?.id) savedItems.push(savedItem);
+    }
+    res.json({ ok: true, standard: _kpiStandard(standard), items: savedItems.map(_kpiItem), sections: _kpiSections(savedItems.map(_kpiItem)) });
   } catch (error) {
     console.error("[kpis] save standard failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
