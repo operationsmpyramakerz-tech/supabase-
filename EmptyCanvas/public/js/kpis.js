@@ -10,10 +10,13 @@
     selectedReviewId: '',
     selectedEmployeeId: '',
     currentUser: null,
+    standardAdminPassword: '',
+    reviewAdminPassword: '',
   };
 
   const enhancedSelects = new Map();
   let sectionTitleResolver = null;
+  let adminPasswordResolver = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -313,18 +316,18 @@
     if (!body) return;
 
     if (!state.reviews.length) {
-      body.innerHTML = '<tr><td colspan="6">No KPI reviews found.</td></tr>';
+      body.innerHTML = '<tr><td colspan="5">No KPI reviews found.</td></tr>';
       return;
     }
 
     body.innerHTML = state.reviews
       .map(
-        (review) => `<tr><td><strong>${esc(review.teamMemberName || '—')}</strong><div class="muted">${esc(review.standardTitle || '—')}</div></td><td>${esc(review.department || '—')}</td><td>${esc(review.rolePosition || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><strong>${num(review.finalPercentage, 0).toFixed(1)}%</strong><div class="muted">${esc(review.performanceRating || performanceRating(review.finalPercentage))}</div></td><td><div class="kpis-row-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-open-review="${esc(review.reviewId)}">Open</button></div></td></tr>`,
+        (review) => `<tr><td><strong>${esc(review.teamMemberName || '—')}</strong><div class="muted">${esc(review.standardTitle || '—')}</div></td><td>${esc(review.department || '—')}</td><td>${esc(review.rolePosition || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><div class="kpis-row-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-open-review="${esc(review.reviewId)}">Open</button></div></td></tr>`,
       )
       .join('');
 
     body.querySelectorAll('[data-open-review]').forEach((button) => {
-      button.addEventListener('click', () => openScoreModal(button.dataset.openReview));
+      button.addEventListener('click', () => handleOpenReview(button.dataset.openReview).catch((error) => toast(error.message)));
     });
   }
 
@@ -449,6 +452,89 @@
     renderStandards();
     await Promise.all([loadReviews(), loadGraph()]);
     updateReviewStandardOptions();
+  }
+
+
+  function openAdminPasswordDialog({ title = 'Admin password required', message = 'Enter the admin password to continue.' } = {}) {
+    return new Promise((resolve) => {
+      const dialog = $('adminPasswordDialog');
+      const input = $('adminPasswordInput');
+      const titleNode = $('adminPasswordDialogTitle');
+      const messageNode = $('adminPasswordDialogMessage');
+      if (!dialog || !input) {
+        const password = window.prompt(message);
+        resolve(password === null ? null : password);
+        return;
+      }
+      adminPasswordResolver = resolve;
+      if (titleNode) titleNode.textContent = title;
+      if (messageNode) messageNode.textContent = message;
+      input.value = '';
+      dialog.hidden = false;
+      dialog.setAttribute('aria-hidden', 'false');
+      window.setTimeout(() => input.focus(), 50);
+    });
+  }
+
+  function closeAdminPasswordDialog(value = null) {
+    const dialog = $('adminPasswordDialog');
+    if (dialog) {
+      dialog.hidden = true;
+      dialog.setAttribute('aria-hidden', 'true');
+    }
+    if (adminPasswordResolver) {
+      const resolver = adminPasswordResolver;
+      adminPasswordResolver = null;
+      resolver(value);
+    }
+  }
+
+  async function requestAdminPassword({ title, message } = {}) {
+    const password = await openAdminPasswordDialog({ title, message });
+    if (password === null) return '';
+    const clean = String(password || '').trim();
+    if (!clean) {
+      toast('Admin password is required.');
+      return '';
+    }
+    await api('/api/kpis/admin/verify', {
+      method: 'POST',
+      body: JSON.stringify({ password: clean }),
+    });
+    return clean;
+  }
+
+  async function openStandardModalWithAdmin() {
+    const password = await requestAdminPassword({
+      title: 'Admin password required',
+      message: 'Enter the admin password to create a KPI standard.',
+    });
+    if (!password) return;
+    state.standardAdminPassword = password;
+    openStandardModal();
+  }
+
+  async function openReviewModalWithAdmin() {
+    const password = await requestAdminPassword({
+      title: 'Admin password required',
+      message: 'Enter the admin password to create or open an employee KPI review.',
+    });
+    if (!password) return;
+    state.reviewAdminPassword = password;
+    openReviewModal();
+  }
+
+  async function handleOpenReview(id) {
+    const review = state.reviews.find((item) => String(item.reviewId) === String(id));
+    let adminPassword = '';
+    if (review && !isCurrentUserReview(review)) {
+      adminPassword = await requestAdminPassword({
+        title: 'Admin password required',
+        message: 'This KPI review belongs to another user. Enter the admin password to open it.',
+      });
+      if (!adminPassword) return;
+    }
+    await openScoreModal(id, { adminPassword });
   }
 
   function openModal(name) {
@@ -749,8 +835,9 @@
     return [...map.values()];
   }
 
-  async function openScoreModal(id) {
-    const data = await api(`/api/kpis/reviews/${encodeURIComponent(id)}`);
+  async function openScoreModal(id, options = {}) {
+    const query = options.adminPassword ? `?adminPassword=${encodeURIComponent(options.adminPassword)}` : '';
+    const data = await api(`/api/kpis/reviews/${encodeURIComponent(id)}${query}`);
     const summary = data.summary || {};
     const details = data.details || [];
     state.selectedReviewId = id;
@@ -808,16 +895,19 @@
   }
 
   function bind() {
-    $('openStandardBtn')?.addEventListener('click', openStandardModal);
-    $('openStandardBtn2')?.addEventListener('click', openStandardModal);
-    $('openReviewBtn')?.addEventListener('click', openReviewModal);
-    $('openHeroReviewBtn')?.addEventListener('click', openReviewModal);
-    $('kpiRefreshBtn')?.addEventListener('click', openReviewModal);
+    $('openStandardBtn')?.addEventListener('click', () => openStandardModalWithAdmin().catch((error) => toast(error.message)));
+    $('openStandardBtn2')?.addEventListener('click', () => openStandardModalWithAdmin().catch((error) => toast(error.message)));
+    $('openReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message)));
+    $('openHeroReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message)));
+    $('kpiRefreshBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message)));
     $('openReviewFiltersBtn')?.addEventListener('click', () => { enhanceReviewFilterControls(); openModal('reviewFilters'); });
     $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
     $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog({ title: $('sectionTitleInput')?.value || '', description: $('sectionDescriptionInput')?.value || '' }));
     $('sectionTitleInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeSectionTitleDialog({ title: event.currentTarget.value || '', description: $('sectionDescriptionInput')?.value || '' }); } });
     document.querySelectorAll('[data-section-title-cancel]').forEach((element) => element.addEventListener('click', () => closeSectionTitleDialog(null)));
+    $('confirmAdminPasswordBtn')?.addEventListener('click', () => closeAdminPasswordDialog($('adminPasswordInput')?.value || ''));
+    $('adminPasswordInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeAdminPasswordDialog(event.currentTarget.value || ''); } });
+    document.querySelectorAll('[data-admin-password-cancel]').forEach((element) => element.addEventListener('click', () => closeAdminPasswordDialog(null)));
     document.addEventListener('click', () => closeEnhancedSelects());
     $('academicYearFromSelect')?.addEventListener('change', syncAcademicYear);
     $('academicYearToSelect')?.addEventListener('change', syncAcademicYear);
@@ -871,9 +961,11 @@
             title: form.elements.title.value,
             description: form.elements.description.value,
             items,
+            adminPassword: state.standardAdminPassword,
           }),
         });
         await loadMeta();
+        state.standardAdminPassword = '';
         closeModal('standard');
         toast('KPI standard saved successfully.');
       } catch (error) {
@@ -898,6 +990,7 @@
         teamMemberName: employee?.name || '',
         reviewMonth: `${form.elements.reviewMonth.value}-01`,
         standardId: form.elements.standardId.value,
+        adminPassword: state.reviewAdminPassword,
       };
       try {
         setButtonLoading(submitButton, true, 'Opening...');
@@ -906,6 +999,7 @@
         await loadReviews();
         await loadGraph();
         await openScoreModal(data.reviewId);
+        state.reviewAdminPassword = '';
         closeModal('review');
       } catch (error) {
         toast(error.message || 'Failed to create KPI review.');
@@ -936,7 +1030,7 @@
     loadMeta()
       .catch((error) => {
         const message = error?.message || 'Failed to load KPIs.';
-        if ($('kpiReviewsBody')) $('kpiReviewsBody').innerHTML = `<tr><td colspan="7">${esc(message)}</td></tr>`;
+        if ($('kpiReviewsBody')) $('kpiReviewsBody').innerHTML = `<tr><td colspan="5">${esc(message)}</td></tr>`;
         if ($('kpiStandardsList')) $('kpiStandardsList').innerHTML = `<div class="kpis-chart-empty">${esc(message)}</div>`;
         renderChart([]);
       })
