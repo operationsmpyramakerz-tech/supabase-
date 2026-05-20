@@ -166,3 +166,96 @@
   .kpis-review-panel .kpis-modal-head{padding-right:58px}
   .kpis-review-form .kpis-modal-actions{display:grid;grid-template-columns:1fr;gap:10px}
 }
+
+/* KPI refinements: view-only review page, unified badges, and centered close buttons */
+.kpis-close{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0!important;
+  line-height:0!important;
+}
+.kpis-close i,
+.kpis-close svg{
+  display:block!important;
+  margin:auto!important;
+  flex:0 0 auto!important;
+}
+.kpis-score-section__number{
+  background:#fff7ed!important;
+  color:#c2410c!important;
+  border:1px solid #fed7aa!important;
+  box-shadow:none!important;
+}
+.kpis-score-subcard--readonly{
+  cursor:default;
+}
+.kpis-score-readonly-grid{
+  display:grid;
+  grid-template-columns:1fr 150px;
+  gap:12px;
+}
+.kpis-score-readonly-card{
+  border:1px solid #e5e7eb;
+  border-radius:20px;
+  background:linear-gradient(180deg,#fff,#f8fafc);
+  padding:14px;
+}
+.kpis-score-readonly-card span,
+.kpis-score-readonly-notes span{
+  display:block;
+  color:#64748b;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  font-size:11px;
+  font-weight:950;
+  margin-bottom:7px;
+}
+.kpis-score-readonly-card strong{
+  display:block;
+  color:#0f172a;
+  font-size:22px;
+  line-height:1.1;
+}
+.kpis-score-readonly-notes{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.kpis-score-readonly-notes>div{
+  border:1px solid #e5e7eb;
+  border-radius:20px;
+  background:#fff;
+  padding:14px;
+  min-height:76px;
+}
+.kpis-score-readonly-notes p{
+  margin:0;
+  color:#0f172a;
+  font-weight:800;
+  line-height:1.45;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+#scoreForm.is-read-only .kpis-score-editor{
+  margin-bottom:0;
+}
+#scoreForm.is-read-only .kpis-score-subcard__head{
+  align-items:center;
+}
+#scoreForm .kpis-modal-actions[hidden]{
+  display:none!important;
+}
+@media(max-width:768px){
+  .kpis-score-readonly-grid,
+  .kpis-score-readonly-notes{
+    grid-template-columns:1fr;
+  }
+}
+.kpis-section-card__order,
+.kpis-standard-detail-section__head span{
+  background:linear-gradient(135deg,#fb923c,#ea580c)!important;
+  color:#fff!important;
+  border:0!important;
+  box-shadow:0 10px 20px rgba(249,115,22,.22)!important;
+}
