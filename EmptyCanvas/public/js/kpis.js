@@ -534,7 +534,7 @@
       });
       if (!adminPassword) return;
     }
-    await openScoreModal(id, { adminPassword });
+    await openScoreModal(id, { adminPassword, readOnly: true });
   }
 
   function openModal(name) {
@@ -837,6 +837,7 @@
 
   async function openScoreModal(id, options = {}) {
     const query = options.adminPassword ? `?adminPassword=${encodeURIComponent(options.adminPassword)}` : '';
+    const readOnly = Boolean(options.readOnly);
     const data = await api(`/api/kpis/reviews/${encodeURIComponent(id)}${query}`);
     const summary = data.summary || {};
     const details = data.details || [];
@@ -846,9 +847,19 @@
       updateScore(summary);
     }
 
+    const form = $('scoreForm');
+    if (form) {
+      form.dataset.readOnly = readOnly ? 'true' : 'false';
+      form.classList.toggle('is-read-only', readOnly);
+      const actions = form.querySelector('.kpis-modal-actions');
+      if (actions) actions.hidden = readOnly;
+    }
+
     if ($('scoreModalKicker')) $('scoreModalKicker').textContent = `${fmtMonth(summary.reviewMonth)} KPI review`;
     if ($('scoreModalTitle')) $('scoreModalTitle').textContent = summary.teamMemberName || 'Employee KPI review';
-    if ($('scoreModalSub')) $('scoreModalSub').textContent = `${summary.department || '—'} / ${summary.rolePosition || '—'} / ${summary.standardTitle || '—'}`;
+    if ($('scoreModalSub')) $('scoreModalSub').textContent = readOnly
+      ? `${summary.department || '—'} / ${summary.rolePosition || '—'} / ${summary.standardTitle || '—'} — View only`
+      : `${summary.department || '—'} / ${summary.rolePosition || '—'} / ${summary.standardTitle || '—'}`;
 
     const wrapper = $('scoreItemsEditor');
     if (wrapper) {
@@ -858,28 +869,35 @@
             .map((item) => {
               const scoreValue = item.actualPercent === null ? '' : item.actualPercent;
               const percentValue = scoreValue === '' ? 0 : scoreToPercentage(scoreValue, item.weightPercent);
-              return `<article class="kpis-score-subcard" data-score-id="${esc(item.scoreId)}" data-weight="${esc(item.weightPercent)}">
+              const scoreLabel = scoreValue === '' ? '—' : num(scoreValue, 0).toFixed(1);
+              const evidence = String(item.evidenceText || '').trim();
+              const managerNotes = String(item.managerNotes || '').trim();
+              const readOnlyBody = `<div class="kpis-score-readonly-grid"><div class="kpis-score-readonly-card"><span>Score</span><strong>${esc(scoreLabel)}</strong></div><div class="kpis-score-readonly-card"><span>KPI %</span><strong>${percentValue.toFixed(1)}%</strong></div></div><div class="kpis-score-readonly-notes"><div><span>Evidence</span><p>${evidence ? esc(evidence) : '—'}</p></div><div><span>Manager notes</span><p>${managerNotes ? esc(managerNotes) : '—'}</p></div></div>`;
+              const editBody = `<div class="kpis-score-subcard__body">
+                  <label class="kpis-score-input-card"><span>Score</span><input class="kpis-input" data-score-field="actualPercent" type="number" min="0" max="${esc(item.weightPercent || 0)}" step="0.01" value="${scoreValue === '' ? '' : esc(scoreValue)}" /></label>
+                  <div class="kpis-score-percent-card"><span>KPI %</span><strong data-score-percent>${percentValue.toFixed(1)}%</strong></div>
+                </div>
+                <div class="kpis-score-notes kpis-score-notes--modern"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div>`;
+              return `<article class="kpis-score-subcard${readOnly ? ' kpis-score-subcard--readonly' : ''}" data-score-id="${esc(item.scoreId)}" data-weight="${esc(item.weightPercent)}">
                 <div class="kpis-score-subcard__head">
                   <div class="kpis-score-subcard__title"><span>${esc(String(item.subsectionOrder || '—'))}</span><div><h4>${esc(item.subsection || 'KPI subsection')}</h4>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div></div>
                   <div class="kpis-score-weight-pill"><span>Weight</span><strong>${num(item.weightPercent, 0).toFixed(1)}</strong></div>
                 </div>
-                <div class="kpis-score-subcard__body">
-                  <label class="kpis-score-input-card"><span>Score</span><input class="kpis-input" data-score-field="actualPercent" type="number" min="0" max="${esc(item.weightPercent || 0)}" step="0.01" value="${scoreValue === '' ? '' : esc(scoreValue)}" /></label>
-                  <div class="kpis-score-percent-card"><span>KPI %</span><strong data-score-percent>${percentValue.toFixed(1)}%</strong></div>
-                </div>
-                <div class="kpis-score-notes kpis-score-notes--modern"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div>
+                ${readOnly ? readOnlyBody : editBody}
               </article>`;
             })
             .join('')}</div></div>`,
         )
         .join('');
-      wrapper.querySelectorAll('[data-score-field="actualPercent"]').forEach((input) => {
-        input.addEventListener('input', () => {
-          const card = input.closest('[data-score-id]');
-          const percent = card?.querySelector('[data-score-percent]');
-          if (percent) percent.textContent = `${scoreToPercentage(input.value, card?.dataset.weight).toFixed(1)}%`;
+      if (!readOnly) {
+        wrapper.querySelectorAll('[data-score-field="actualPercent"]').forEach((input) => {
+          input.addEventListener('input', () => {
+            const card = input.closest('[data-score-id]');
+            const percent = card?.querySelector('[data-score-percent]');
+            if (percent) percent.textContent = `${scoreToPercentage(input.value, card?.dataset.weight).toFixed(1)}%`;
+          });
         });
-      });
+      }
     }
     openModal('score');
   }
@@ -1011,6 +1029,7 @@
 
     $('scoreForm')?.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (event.currentTarget?.dataset.readOnly === 'true') return;
       if (!state.selectedReviewId) return;
       await api(`/api/kpis/reviews/${encodeURIComponent(state.selectedReviewId)}/scores`, {
         method: 'PATCH',
