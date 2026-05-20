@@ -26179,6 +26179,24 @@ async function _kpiCreator(req) {
     name: _sbString(_sbValueForLabel(row || {}, "Name")) || String(req?.session?.username || "").trim(),
   };
 }
+function _kpiAdminPasswordFromReq(req) {
+  return String(req?.body?.adminPassword || req?.body?.admin_password || req?.query?.adminPassword || req?.query?.admin_password || "").trim();
+}
+async function _kpiVerifyAdminPasswordFromReq(req) {
+  const password = _kpiAdminPasswordFromReq(req);
+  if (!password) return { ok: false, status: 403, message: "Admin password is required." };
+  const ok = await verifyAdminPassword(password);
+  return ok ? { ok: true } : { ok: false, status: 401, message: "Invalid admin password." };
+}
+async function _kpiReviewBelongsToCurrentUser(req, summary = {}) {
+  const current = await _kpiCreator(req).catch(() => null);
+  const currentId = String(current?.id || "").trim();
+  const reviewUserId = String(summary?.teamMemberId || summary?.team_member_id || "").trim();
+  if (currentId && reviewUserId && currentId === reviewUserId) return true;
+  const currentName = String(current?.name || "").trim().toLowerCase();
+  const reviewName = String(summary?.teamMemberName || summary?.team_member_name || "").trim().toLowerCase();
+  return Boolean(currentName && reviewName && currentName === reviewName);
+}
 async function _kpiStandardItems(standardId) {
   const viewRows = await supabaseDb.request(`/${KPI_STANDARD_ITEMS_VIEW || "kpi_standard_items_view"}?select=*&standard_id=eq.${_sbRestFilterValue(standardId)}&item_is_active=eq.true&order=sort_order.asc&limit=1000`).catch(() => null);
   if (Array.isArray(viewRows)) return viewRows.map(_kpiItem);
@@ -26219,6 +26237,20 @@ async function _kpiFindOrCreateReview({ standardId, teamMemberId, teamMemberName
   await _kpiEnsureScores(review.id, standardId);
   return review;
 }
+
+app.post("/api/kpis/admin/verify", requireAuth, requirePage("KPIs"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const password = String(req.body?.password || req.body?.adminPassword || "").trim();
+    if (!password) return res.status(400).json({ ok: false, message: "Admin password is required." });
+    const ok = await verifyAdminPassword(password);
+    if (!ok) return res.status(401).json({ ok: false, message: "Invalid admin password." });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[kpis] admin verify failed", error);
+    return res.status(500).json({ ok: false, message: "Failed to verify admin password." });
+  }
+});
 
 app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => {
   res.set("Cache-Control", "no-store");
@@ -26298,6 +26330,8 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
   res.set("Cache-Control", "no-store");
   try {
     const body = req.body || {};
+    const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
+    if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
     const department = _kpiText(body.department);
     const rolePosition = _kpiText(body.rolePosition || body.position);
     const academicYear = _kpiText(body.academicYear, "2025-2026") || "2025-2026";
@@ -26398,7 +26432,7 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
     res.json({ ok: true, standard: _kpiStandard(standard), items: savedItems.map(_kpiItem), sections: _kpiSections(savedItems.map(_kpiItem)) });
   } catch (error) {
     console.error("[kpis] save standard failed", error);
-    res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
+    res.status(Number(error?.status || error?.statusCode) || 500).json({ ok: false, message: _kpiErrorMessage(error) });
   }
 });
 
@@ -26406,6 +26440,8 @@ app.post("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res)
   res.set("Cache-Control", "no-store");
   try {
     const body = req.body || {};
+    const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
+    if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
     const standardId = String(body.standardId || body.standard_id || "").trim();
     let teamMemberId = String(body.teamMemberId || body.team_member_id || "").trim();
     let teamMemberName = _kpiText(body.teamMemberName || body.team_member_name);
@@ -26425,7 +26461,7 @@ app.post("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res)
     res.json({ ok: true, reviewId: review.id, review, details: (Array.isArray(details) ? details : []).map(_kpiScore) });
   } catch (error) {
     console.error("[kpis] create review failed", error);
-    res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
+    res.status(Number(error?.status || error?.statusCode) || 500).json({ ok: false, message: _kpiErrorMessage(error) });
   }
 });
 
@@ -26459,11 +26495,16 @@ app.get("/api/kpis/reviews/:id", requireAuth, requirePage("KPIs"), async (req, r
   try {
     const id = String(req.params.id || "").trim();
     const summaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(id)}&limit=1`).catch(() => []);
+    const summary = _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {});
+    if (summary.reviewId && !(await _kpiReviewBelongsToCurrentUser(req, summary))) {
+      const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
+      if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
+    }
     const detailRows = await supabaseDb.request(`/${KPI_SCORE_DETAILS_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(id)}&order=sort_order.asc&limit=1000`);
-    res.json({ ok: true, summary: _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {}), details: (Array.isArray(detailRows) ? detailRows : []).map(_kpiScore) });
+    res.json({ ok: true, summary, details: (Array.isArray(detailRows) ? detailRows : []).map(_kpiScore) });
   } catch (error) {
     console.error("[kpis] get review failed", error);
-    res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
+    res.status(Number(error?.status || error?.statusCode) || 500).json({ ok: false, message: _kpiErrorMessage(error) });
   }
 });
 
