@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginBtn = loginForm.querySelector('.login-btn');
   const recoveryBtn = forgotPasswordForm ? forgotPasswordForm.querySelector('.recovery-btn') : null;
   const signupBtn = signupForm ? signupForm.querySelector('.signup-submit-btn') : null;
+  const loginHeaderTitle = document.querySelector('.login-header h1');
+  const loginHeaderSubtitle = document.querySelector('.login-header p');
+  let authModeSwitching = false;
 
   function sanitizeMessage(message) {
     const value = String(message || '').trim();
@@ -67,10 +70,24 @@ document.addEventListener('DOMContentLoaded', function () {
     setButtonLoading(signupBtn, loading, 'Sending request...', 'Send sign up request');
   }
 
+  function setHeaderCopy(mode) {
+    if (!loginHeaderTitle || !loginHeaderSubtitle) return;
+    loginHeaderTitle.textContent = 'Operations';
+    if (mode === 'signup') {
+      loginHeaderSubtitle.textContent = 'Create your sign up request';
+    } else if (mode === 'recovery') {
+      loginHeaderSubtitle.textContent = 'Recover your password';
+    } else {
+      loginHeaderSubtitle.textContent = 'Please sign in to continue';
+    }
+  }
+
   function showForgotMode() {
     hideError();
-    document.body.classList.remove('auth-signup-mode');
+    authModeSwitching = false;
+    document.body.classList.remove('auth-signup-mode', 'auth-transitioning-to-signup');
     document.body.classList.add('auth-recovery-mode');
+    setHeaderCopy('recovery');
     loginForm.hidden = true;
     if (signupForm) signupForm.hidden = true;
     if (forgotPasswordForm) forgotPasswordForm.hidden = false;
@@ -82,25 +99,37 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showLoginMode() {
     hideError();
-    document.body.classList.remove('auth-recovery-mode', 'auth-signup-mode');
+    authModeSwitching = false;
+    document.body.classList.remove('auth-recovery-mode', 'auth-signup-mode', 'auth-transitioning-to-signup');
+    setHeaderCopy('login');
     if (forgotPasswordForm) forgotPasswordForm.hidden = true;
     if (signupForm) signupForm.hidden = true;
     loginForm.hidden = false;
+    if (showSignupBtn) showSignupBtn.disabled = false;
     const usernameInput = document.getElementById('username');
     if (usernameInput) setTimeout(() => usernameInput.focus(), 50);
   }
 
   function showSignupMode() {
+    if (!signupForm || authModeSwitching) return;
     hideError();
-    document.body.classList.remove('auth-recovery-mode');
-    document.body.classList.add('auth-signup-mode');
-    loginForm.hidden = true;
+    authModeSwitching = true;
+    document.body.classList.remove('auth-recovery-mode', 'auth-signup-mode');
+    document.body.classList.add('auth-transitioning-to-signup');
     if (forgotPasswordForm) forgotPasswordForm.hidden = true;
-    if (signupForm) {
+    if (showSignupBtn) showSignupBtn.disabled = true;
+
+    window.setTimeout(() => {
+      loginForm.hidden = true;
       signupForm.hidden = false;
       signupForm.reset();
-      setTimeout(() => document.getElementById('signupUsername')?.focus(), 50);
-    }
+      setHeaderCopy('signup');
+      document.body.classList.remove('auth-transitioning-to-signup');
+      document.body.classList.add('auth-signup-mode');
+      if (showSignupBtn) showSignupBtn.disabled = false;
+      authModeSwitching = false;
+      setTimeout(() => document.getElementById('signupUsername')?.focus(), 80);
+    }, 880);
   }
 
   loginForm.addEventListener('submit', async function (event) {
