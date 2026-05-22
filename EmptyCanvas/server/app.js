@@ -7463,6 +7463,184 @@ async function _sendPasswordRecoveryEmail({ to, name, password }) {
   throw err;
 }
 
+
+// Sign up request helpers
+function _signupRequestsTable() {
+  return String(process.env.SUPABASE_SIGNUP_REQUESTS_TABLE || 'team_member_signup_requests').trim() || 'team_member_signup_requests';
+}
+
+function _normalizeSignupText(value, maxLen = 255) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function _normalizeSignupPhone(value) {
+  return String(value || '').replace(/\s+/g, '').trim().slice(0, 40);
+}
+
+function _signupToken(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function _serializeSignupRequest(row = {}, { includePassword = false } = {}) {
+  const payload = {
+    id: String(_sbGet(row, ['id', 'ID']) || ''),
+    username: _sbString(_sbGet(row, ['username', 'name', 'Name'])),
+    employeeCode: _sbString(_sbGet(row, ['employee_code', 'employeeCode', 'Employee Code', 'code'])),
+    phone: _sbString(_sbGet(row, ['phone', 'Phone'])),
+    email: _sbString(_sbGet(row, ['email', 'Email'])),
+    status: _sbString(_sbGet(row, ['status'])) || 'pending',
+    department: _sbString(_sbGet(row, ['department', 'Department'])),
+    position: _sbString(_sbGet(row, ['position', 'Position'])),
+    reviewedBy: _sbString(_sbGet(row, ['reviewed_by', 'reviewedBy'])),
+    reviewedAt: _sbString(_sbGet(row, ['reviewed_at', 'reviewedAt'])),
+    createdAt: _sbString(_sbGet(row, ['created_at', 'createdAt'])) || new Date().toISOString(),
+  };
+  if (includePassword) payload.password = _sbString(_sbGet(row, ['password', 'Password']));
+  return payload;
+}
+
+async function _sbSelectSignupRequests({ status = 'pending' } = {}) {
+  if (!_sbTeamMembersEnabled()) {
+    const err = new Error('Supabase is required for sign up requests.');
+    err.status = 500;
+    throw err;
+  }
+  const table = _signupRequestsTable();
+  const params = ['select=*', 'order=created_at.desc', 'limit=1000'];
+  const cleanStatus = String(status || 'pending').trim().toLowerCase();
+  if (cleanStatus && cleanStatus !== 'all') params.push(`status=eq.${encodeURIComponent(cleanStatus)}`);
+  const rows = await supabaseDb.request(`/${encodeURIComponent(table)}?${params.join('&')}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbGetSignupRequestById(id) {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return null;
+  return await supabaseDb.selectById(_signupRequestsTable(), cleanId);
+}
+
+async function _signupFindExistingAccount({ username, email, employeeCode }) {
+  const rows = await _sbSelectTeamMembersRows().catch(() => []);
+  const wantedName = _signupToken(username);
+  const wantedEmail = _normalizeRecoveryEmail(email);
+  const wantedCode = _signupToken(employeeCode);
+  return (rows || []).find((row) => {
+    const rowName = _signupToken(_sbValueForLabel(row, 'Name'));
+    const rowEmail = _normalizeRecoveryEmail(_sbValueForLabel(row, 'Email'));
+    const rowCode = _signupToken(_sbValueForLabel(row, 'Employee Code'));
+    return (!!wantedName && rowName === wantedName) || (!!wantedEmail && rowEmail === wantedEmail) || (!!wantedCode && rowCode === wantedCode);
+  }) || null;
+}
+
+async function _signupFindPendingDuplicate({ username, email, employeeCode }) {
+  const rows = await _sbSelectSignupRequests({ status: 'pending' }).catch(() => []);
+  const wantedName = _signupToken(username);
+  const wantedEmail = _normalizeRecoveryEmail(email);
+  const wantedCode = _signupToken(employeeCode);
+  return (rows || []).find((row) => {
+    const item = _serializeSignupRequest(row, { includePassword: false });
+    return (!!wantedName && _signupToken(item.username) === wantedName) ||
+      (!!wantedEmail && _normalizeRecoveryEmail(item.email) === wantedEmail) ||
+      (!!wantedCode && _signupToken(item.employeeCode) === wantedCode);
+  }) || null;
+}
+
+function _signupBuildTeamMemberRow(requestRow = {}, { department = '', position = '' } = {}, rows = []) {
+  const request = _serializeSignupRequest(requestRow, { includePassword: true });
+  const fields = {
+    Name: request.username,
+    Password: request.password,
+    'Employee Code': request.employeeCode,
+    Phone: request.phone,
+    Email: request.email,
+    Department: department,
+    Position: position,
+  };
+
+  let writeRow = {};
+  try { writeRow = _sbBuildWriteRowFromFields(fields, rows || []); } catch { writeRow = {}; }
+
+  const keys = _sbAllColumnKeys(rows || []);
+  const setIfColumnExists = (label, aliases, value) => {
+    const actual = _sbFindKey(keys, aliases);
+    if (actual && typeof writeRow[actual] === 'undefined') writeRow[actual] = value || null;
+  };
+  setIfColumnExists('Name', ['Name', 'name', 'username', 'full_name'], request.username);
+  setIfColumnExists('Password', ['Password', 'password', 'passcode', 'pin'], request.password);
+  setIfColumnExists('Employee Code', ['Employee Code', 'employee_code', 'employeeCode', 'code'], request.employeeCode);
+  setIfColumnExists('Phone', ['Phone', 'phone', 'mobile'], request.phone);
+  setIfColumnExists('Email', ['Email', 'email', 'mail'], request.email);
+  setIfColumnExists('Department', ['Department', 'department'], department);
+  setIfColumnExists('Position', ['Position', 'position', 'role'], position);
+
+  if (!Object.keys(writeRow).length) {
+    writeRow = {
+      name: request.username,
+      password: request.password,
+      employee_code: request.employeeCode,
+      phone: request.phone,
+      email: request.email,
+      department,
+      position,
+    };
+  }
+  return writeRow;
+}
+
+function _buildSignupStatusEmail({ to, name, status, department, position }) {
+  const approved = String(status || '').toLowerCase() === 'approved';
+  const safeName = String(name || 'Team Member').trim() || 'Team Member';
+  const subject = approved
+    ? 'Operations Dashboard Sign Up Request Approved'
+    : 'Operations Dashboard Sign Up Request Rejected';
+  const headline = approved ? 'Your request was approved' : 'Your request was rejected';
+  const statusLabel = approved ? 'Approved' : 'Rejected';
+  const statusColor = approved ? '#059669' : '#dc2626';
+  const mainText = approved
+    ? 'Your Operations Dashboard sign up request was approved. You can now sign in using your registered username and password.'
+    : 'Your Operations Dashboard sign up request was rejected. Please contact your administrator for more information.';
+  const details = approved && (department || position)
+    ? `Department: ${department || '-'}\nPosition: ${position || '-'}`
+    : '';
+  const text = [
+    `Hello ${safeName},`,
+    '',
+    mainText,
+    '',
+    `Request status: ${statusLabel}`,
+    details,
+  ].filter(Boolean).join('\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;padding:24px;">
+      <div style="border:1px solid #fed7aa;border-radius:18px;padding:22px;background:#fff7ed;">
+        <h2 style="margin:0 0 10px;color:#111827;">Operations Dashboard Sign Up Request</h2>
+        <p style="margin:0 0 14px;color:#374151;">Hello ${escapeHtml(safeName)},</p>
+        <p style="margin:0 0 14px;color:#374151;">${escapeHtml(mainText)}</p>
+        <div style="background:#ffffff;border:1px solid #fdba74;border-radius:14px;padding:16px;margin:18px 0;">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#9a3412;font-weight:700;margin-bottom:6px;">Request Status</div>
+          <div style="font-size:22px;font-weight:800;color:${statusColor};word-break:break-word;">${escapeHtml(statusLabel)}</div>
+          ${approved ? `<div style="margin-top:12px;color:#374151;font-size:14px;">
+            <div><strong>Department:</strong> ${escapeHtml(department || '-')}</div>
+            <div><strong>Position:</strong> ${escapeHtml(position || '-')}</div>
+          </div>` : ''}
+        </div>
+        <p style="margin:0;color:#6b7280;font-size:13px;">This email was sent automatically by Operations Hub.</p>
+      </div>
+    </div>`;
+  return { to, subject, text, html };
+}
+
+async function _sendSignupStatusEmail({ to, name, status, department, position }) {
+  const email = _buildSignupStatusEmail({ to, name, status, department, position });
+  const sentWithResend = await _sendEmailWithResend(email);
+  if (sentWithResend) return { provider: 'resend' };
+  const sentWithSmtp = await _sendEmailWithSmtp(email);
+  if (sentWithSmtp) return { provider: 'smtp' };
+  const err = new Error('Email service is not configured. Add RESEND_API_KEY or SMTP settings.');
+  err.status = 500;
+  throw err;
+}
+
 async function _sbFindTeamMemberByEmail(email) {
   const wanted = _normalizeRecoveryEmail(email);
   if (!wanted) return null;
@@ -7480,6 +7658,61 @@ async function _notionFindTeamMemberByEmail(email) {
   });
   return response?.results?.[0] || null;
 }
+
+
+app.post('/api/signup-request', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ ok: false, error: 'Supabase is required for sign up requests.' });
+    }
+
+    const username = _normalizeSignupText(req.body?.username, 120);
+    const password = String(req.body?.password || '').trim();
+    const repeatPassword = String(req.body?.repeatPassword || req.body?.confirmPassword || '').trim();
+    const employeeCode = _normalizeSignupText(req.body?.employeeCode || req.body?.employee_code, 80);
+    const phone = _normalizeSignupPhone(req.body?.phone);
+    const email = _normalizeRecoveryEmail(req.body?.email);
+
+    if (!username) return res.status(400).json({ ok: false, error: 'Username is required.' });
+    if (!password || password.length < 4) return res.status(400).json({ ok: false, error: 'Password must be at least 4 characters.' });
+    if (repeatPassword && password !== repeatPassword) return res.status(400).json({ ok: false, error: 'Passwords do not match.' });
+    if (!employeeCode) return res.status(400).json({ ok: false, error: 'Employee code is required.' });
+    if (!phone) return res.status(400).json({ ok: false, error: 'Phone is required.' });
+    if (!email) return res.status(400).json({ ok: false, error: 'Please enter a valid email.' });
+
+    const existingAccount = await _signupFindExistingAccount({ username, email, employeeCode });
+    if (existingAccount) {
+      return res.status(409).json({ ok: false, error: 'This username, email, or employee code already exists.' });
+    }
+
+    const pendingDuplicate = await _signupFindPendingDuplicate({ username, email, employeeCode });
+    if (pendingDuplicate) {
+      return res.status(409).json({ ok: false, error: 'A pending sign up request already exists for this username, email, or employee code.' });
+    }
+
+    const created = await supabaseDb.insert(_signupRequestsTable(), {
+      username,
+      password,
+      employee_code: employeeCode,
+      phone,
+      email,
+      status: 'pending',
+    });
+
+    return res.json({ ok: true, request: _serializeSignupRequest(created), message: 'Your sign up request was sent successfully.' });
+  } catch (error) {
+    console.error('POST /api/signup-request error:', error?.details || error?.body || error);
+    const raw = String(error?.message || 'Failed to submit sign up request.');
+    const tableMissing = /team_member_signup_requests|schema cache|Could not find the table|relation .* does not exist|42P01|PGRST205/i.test(raw);
+    return res.status(error?.status || 500).json({
+      ok: false,
+      error: tableMissing
+        ? 'Sign up requests table is not installed. Run the signup requests SQL migration first.'
+        : raw,
+    });
+  }
+});
 
 app.post("/api/forgot-password", async (req, res) => {
   const email = _normalizeRecoveryEmail(req.body?.email);
@@ -16382,6 +16615,131 @@ app.post(
     } catch (error) {
       console.error("POST /api/user-access/admin/verify error:", error?.body || error);
       return res.status(500).json({ ok: false, error: "Failed to verify Admin password." });
+    }
+  },
+);
+
+
+// User Access & Data — Sign up requests
+app.get(
+  '/api/user-access/signup-requests',
+  requireAuth,
+  async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const status = String(req.query?.status || 'pending').trim().toLowerCase() || 'pending';
+      const rows = await _sbSelectSignupRequests({ status });
+      return res.json({ ok: true, requests: rows.map((row) => _serializeSignupRequest(row)), source: 'supabase' });
+    } catch (error) {
+      console.error('GET /api/user-access/signup-requests error:', error?.details || error?.body || error);
+      const raw = String(error?.message || 'Failed to load sign up requests.');
+      const tableMissing = /team_member_signup_requests|schema cache|Could not find the table|relation .* does not exist|42P01|PGRST205/i.test(raw);
+      return res.status(error?.status || 500).json({
+        ok: false,
+        error: tableMissing ? 'Sign up requests table is not installed. Run the signup requests SQL migration first.' : raw,
+      });
+    }
+  },
+);
+
+app.post(
+  '/api/user-access/signup-requests/:id/approve',
+  requireAuth,
+  async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      if (!_sbTeamMembersEnabled()) {
+        return res.status(500).json({ ok: false, error: 'Supabase is required for sign up approvals.' });
+      }
+      const requestId = String(req.params?.id || '').trim();
+      const department = _normalizeSignupText(req.body?.department, 120);
+      const position = _normalizeSignupText(req.body?.position, 160);
+      if (!requestId) return res.status(400).json({ ok: false, error: 'Missing sign up request ID.' });
+      if (!department) return res.status(400).json({ ok: false, error: 'Department is required.' });
+      if (!position) return res.status(400).json({ ok: false, error: 'Position is required.' });
+
+      const requestRow = await _sbGetSignupRequestById(requestId);
+      if (!requestRow) return res.status(404).json({ ok: false, error: 'Sign up request was not found.' });
+      const request = _serializeSignupRequest(requestRow, { includePassword: true });
+      if (_signupToken(request.status) !== 'pending') {
+        return res.status(409).json({ ok: false, error: `This request is already ${request.status}.` });
+      }
+
+      const existingAccount = await _signupFindExistingAccount({ username: request.username, email: request.email, employeeCode: request.employeeCode });
+      if (existingAccount) {
+        return res.status(409).json({ ok: false, error: 'A team member with this username, email, or employee code already exists.' });
+      }
+
+      const rows = await _sbSelectTeamMembersRows().catch(() => []);
+      const writeRow = _signupBuildTeamMemberRow(requestRow, { department, position }, rows || []);
+      const createdMember = await supabaseDb.insert(_sbTeamMembersTable(), writeRow);
+      const memberId = String(_sbGet(createdMember || {}, ['id', 'ID']) || '').trim();
+
+      const reviewedBy = String(req.session?.username || 'Admin').trim() || 'Admin';
+      const updatedRequest = await supabaseDb.updateById(_signupRequestsTable(), requestId, {
+        status: 'approved',
+        department,
+        position,
+        reviewed_by: reviewedBy,
+        reviewed_at: new Date().toISOString(),
+        approved_team_member_id: memberId || null,
+      });
+
+      await cacheDel(USER_ACCESS_CACHE_KEY);
+      await cacheDel('cache:api:user-access:team-members:supabase:v1');
+
+      let emailWarning = '';
+      try {
+        await _sendSignupStatusEmail({ to: request.email, name: request.username, status: 'approved', department, position });
+      } catch (emailError) {
+        emailWarning = emailError?.message || 'Approved, but email could not be sent.';
+        console.error('Sign up approval email error:', emailError?.details || emailError);
+      }
+
+      const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows([...(rows || []), createdMember || {}]), [...(rows || []), createdMember || {}]);
+      const member = _sbSerializeTeamMemberRow(createdMember || writeRow, editableFields);
+      return res.json({ ok: true, request: _serializeSignupRequest(updatedRequest), member, emailWarning });
+    } catch (error) {
+      console.error('POST /api/user-access/signup-requests/:id/approve error:', error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to approve sign up request.' });
+    }
+  },
+);
+
+app.post(
+  '/api/user-access/signup-requests/:id/reject',
+  requireAuth,
+  async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const requestId = String(req.params?.id || '').trim();
+      if (!requestId) return res.status(400).json({ ok: false, error: 'Missing sign up request ID.' });
+      const requestRow = await _sbGetSignupRequestById(requestId);
+      if (!requestRow) return res.status(404).json({ ok: false, error: 'Sign up request was not found.' });
+      const request = _serializeSignupRequest(requestRow, { includePassword: true });
+      if (_signupToken(request.status) !== 'pending') {
+        return res.status(409).json({ ok: false, error: `This request is already ${request.status}.` });
+      }
+
+      const reviewedBy = String(req.session?.username || 'Admin').trim() || 'Admin';
+      const updatedRequest = await supabaseDb.updateById(_signupRequestsTable(), requestId, {
+        status: 'rejected',
+        reviewed_by: reviewedBy,
+        reviewed_at: new Date().toISOString(),
+      });
+
+      let emailWarning = '';
+      try {
+        await _sendSignupStatusEmail({ to: request.email, name: request.username, status: 'rejected' });
+      } catch (emailError) {
+        emailWarning = emailError?.message || 'Rejected, but email could not be sent.';
+        console.error('Sign up rejection email error:', emailError?.details || emailError);
+      }
+
+      return res.json({ ok: true, request: _serializeSignupRequest(updatedRequest), emailWarning });
+    } catch (error) {
+      console.error('POST /api/user-access/signup-requests/:id/reject error:', error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to reject sign up request.' });
     }
   },
 );
