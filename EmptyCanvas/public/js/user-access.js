@@ -30,6 +30,9 @@
     departmentModalMode: 'create',
     departmentTargetId: '',
     moveMemberId: '',
+    signupRequests: [],
+    signupRequestsLoading: false,
+    signupApproveRequestId: '',
     };
 
   const els = {};
@@ -1303,6 +1306,214 @@
     });
   }
 
+
+  function signupRequestById(id) {
+    const clean = String(id || '').trim();
+    return (state.signupRequests || []).find((item) => String(item.id || '') === clean) || null;
+  }
+
+  function allMembersList() {
+    return (state.departments || []).flatMap((department) => Array.isArray(department.members) ? department.members : []);
+  }
+
+  function positionOptions() {
+    const set = new Set();
+    allMembersList().forEach((member) => {
+      const position = String(member?.position || '').trim();
+      if (position) set.add(position);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  function renderSignupRequestsCount() {
+    if (!els.signupRequestsCount) return;
+    const count = (state.signupRequests || []).filter((item) => String(item.status || 'pending').toLowerCase() === 'pending').length;
+    els.signupRequestsCount.hidden = count <= 0;
+    els.signupRequestsCount.textContent = String(count);
+  }
+
+  async function loadSignupRequests({ silent = false } = {}) {
+    if (state.signupRequestsLoading) return;
+    state.signupRequestsLoading = true;
+    if (!silent && els.signupRequestsList) {
+      els.signupRequestsList.innerHTML = '<div class="ua-loading-inline"><span></span> Loading requests...</div>';
+    }
+    try {
+      const res = await fetch('/api/user-access/signup-requests?status=pending&_=' + Date.now(), {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load sign up requests.');
+      state.signupRequests = Array.isArray(data.requests) ? data.requests : [];
+      renderSignupRequestsCount();
+      renderSignupRequestsList();
+    } catch (error) {
+      if (els.signupRequestsList) {
+        els.signupRequestsList.innerHTML = `<div class="ua-empty ua-empty--requests">${escapeHTML(error?.message || 'Failed to load sign up requests.')}</div>`;
+      }
+      toast('error', 'Requests failed', error?.message || 'Failed to load sign up requests.');
+    } finally {
+      state.signupRequestsLoading = false;
+    }
+  }
+
+  function renderSignupRequestsList() {
+    if (!els.signupRequestsList) return;
+    const requests = (state.signupRequests || []).filter((item) => String(item.status || 'pending').toLowerCase() === 'pending');
+    if (!requests.length) {
+      els.signupRequestsList.innerHTML = '<div class="ua-signup-empty"><i data-feather="check-circle"></i><strong>No pending requests</strong><span>All sign up requests are handled.</span></div>';
+      hydrateIcons(els.signupRequestsList);
+      return;
+    }
+    els.signupRequestsList.innerHTML = requests.map((request) => {
+      const created = request.createdAt ? new Date(request.createdAt) : null;
+      const createdLabel = created && !Number.isNaN(created.getTime()) ? created.toLocaleDateString('en-GB') : '';
+      return `
+        <article class="ua-signup-request-card" data-request-id="${escapeHTML(request.id)}">
+          <div class="ua-signup-request-main">
+            <div class="ua-signup-request-avatar"><i data-feather="user"></i></div>
+            <div class="ua-signup-request-text">
+              <strong title="${escapeHTML(request.username || 'Unnamed')}">${escapeHTML(request.username || 'Unnamed')}</strong>
+              <span>Employee code: ${escapeHTML(request.employeeCode || '-')}</span>
+              <small>${escapeHTML([request.email, request.phone, createdLabel].filter(Boolean).join(' • '))}</small>
+            </div>
+          </div>
+          <div class="ua-signup-request-actions">
+            <button type="button" class="ua-btn ua-btn--approve" data-action="approve-signup" data-request-id="${escapeHTML(request.id)}">
+              <i data-feather="check"></i><span>Approve</span>
+            </button>
+            <button type="button" class="ua-btn ua-btn--reject" data-action="reject-signup" data-request-id="${escapeHTML(request.id)}">
+              <i data-feather="x"></i><span>Reject</span>
+            </button>
+          </div>
+        </article>
+      `;
+    }).join('');
+    hydrateIcons(els.signupRequestsList);
+  }
+
+  function openSignupRequestsModal() {
+    if (!els.signupRequestsModal) return;
+    els.signupRequestsModal.hidden = false;
+    els.signupRequestsModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    hydrateIcons(els.signupRequestsModal);
+    loadSignupRequests();
+  }
+
+  function closeSignupRequestsModal() {
+    if (!els.signupRequestsModal) return;
+    els.signupRequestsModal.hidden = true;
+    els.signupRequestsModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('ua-modal-open');
+  }
+
+  function openSignupApproveModal(requestId) {
+    const request = signupRequestById(requestId);
+    if (!request || !els.signupApproveModal) return;
+    state.signupApproveRequestId = String(request.id || '');
+    if (els.signupApproveSubtitle) {
+      els.signupApproveSubtitle.textContent = `${request.username || 'User'} • ${request.employeeCode || 'No code'}`;
+    }
+    if (els.signupApproveDepartment) {
+      const departments = (state.departments || [])
+        .filter((department) => departmentName(department).toLowerCase() !== 'no department')
+        .sort((a, b) => departmentName(a).localeCompare(departmentName(b)));
+      els.signupApproveDepartment.innerHTML = '<option value="">Choose department</option>' + departments
+        .map((department) => `<option value="${escapeHTML(departmentName(department))}">${escapeHTML(departmentName(department))}</option>`)
+        .join('');
+    }
+    if (els.signupApprovePositionOptions) {
+      els.signupApprovePositionOptions.innerHTML = positionOptions().map((position) => `<option value="${escapeHTML(position)}"></option>`).join('');
+    }
+    if (els.signupApprovePosition) els.signupApprovePosition.value = '';
+    if (els.signupApproveError) els.signupApproveError.textContent = '';
+    els.signupApproveModal.hidden = false;
+    els.signupApproveModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('ua-modal-open');
+    hydrateIcons(els.signupApproveModal);
+    setTimeout(() => els.signupApproveDepartment?.focus(), 50);
+  }
+
+  function closeSignupApproveModal() {
+    if (!els.signupApproveModal) return;
+    els.signupApproveModal.hidden = true;
+    els.signupApproveModal.setAttribute('aria-hidden', 'true');
+    state.signupApproveRequestId = '';
+    if (els.signupApproveError) els.signupApproveError.textContent = '';
+    document.body.classList.remove('ua-modal-open');
+  }
+
+  function setSignupApproveSaving(saving) {
+    if (els.signupApproveSave) {
+      els.signupApproveSave.disabled = !!saving;
+      els.signupApproveSave.classList.toggle('is-loading', !!saving);
+    }
+    if (els.signupApproveCancel) els.signupApproveCancel.disabled = !!saving;
+    if (els.signupApproveDepartment) els.signupApproveDepartment.disabled = !!saving;
+    if (els.signupApprovePosition) els.signupApprovePosition.disabled = !!saving;
+  }
+
+  async function submitSignupApprove(event) {
+    event.preventDefault();
+    const requestId = String(state.signupApproveRequestId || '').trim();
+    const department = String(els.signupApproveDepartment?.value || '').trim();
+    const position = String(els.signupApprovePosition?.value || '').trim();
+    if (!requestId) return;
+    if (!department || !position) {
+      if (els.signupApproveError) els.signupApproveError.textContent = 'Please select department and position.';
+      return;
+    }
+    setSignupApproveSaving(true);
+    try {
+      const res = await fetch(`/api/user-access/signup-requests/${encodeURIComponent(requestId)}/approve`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department, position }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to approve request.');
+      closeSignupApproveModal();
+      toast('success', 'Request approved', data.emailWarning ? `Approved, but email warning: ${data.emailWarning}` : 'The user was added and notified by email.');
+      await Promise.all([loadMembers({ force: true, keepDepartment: true }), loadSignupRequests({ silent: true })]);
+    } catch (error) {
+      if (els.signupApproveError) els.signupApproveError.textContent = error?.message || 'Failed to approve request.';
+      toast('error', 'Approval failed', error?.message || 'Failed to approve request.');
+    } finally {
+      setSignupApproveSaving(false);
+    }
+  }
+
+  async function rejectSignupRequest(requestId) {
+    const request = signupRequestById(requestId);
+    if (!request) return;
+    const ok = await openConfirmDialog({
+      title: 'Reject sign up request?',
+      message: `Reject ${request.username || 'this user'} sign up request?`,
+      confirmLabel: 'Reject',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/user-access/signup-requests/${encodeURIComponent(request.id)}/reject`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to reject request.');
+      toast('success', 'Request rejected', data.emailWarning ? `Rejected, but email warning: ${data.emailWarning}` : 'The user was notified by email.');
+      await loadSignupRequests({ silent: true });
+    } catch (error) {
+      toast('error', 'Reject failed', error?.message || 'Failed to reject request.');
+    }
+  }
+
   function ensureInfoDialog() {
     if (els.infoModal) return;
     const overlay = document.createElement('div');
@@ -2416,6 +2627,7 @@
     els.refreshBtn?.addEventListener('click', () => loadMembers({ force: true, keepDepartment: true }));
     els.backBtn?.addEventListener('click', () => backToDepartments());
     els.addMemberBtn?.addEventListener('click', () => openPasswordModal('', 'create'));
+    els.signupRequestsBtn?.addEventListener('click', openSignupRequestsModal);
     els.addDepartmentBtn?.addEventListener('click', () => openPasswordModal('', 'create-department'));
     els.departmentForm?.addEventListener('submit', submitDepartmentForm);
     els.departmentCancelBtn?.addEventListener('click', closeDepartmentModal);
@@ -2429,6 +2641,25 @@
     els.moveMemberClose?.addEventListener('click', closeMoveMemberModal);
     els.moveMemberModal?.addEventListener('click', (event) => {
       if (event.target === els.moveMemberModal) closeMoveMemberModal();
+    });
+
+    els.signupRequestsClose?.addEventListener('click', closeSignupRequestsModal);
+    els.signupRequestsModal?.addEventListener('click', (event) => {
+      if (event.target === els.signupRequestsModal) closeSignupRequestsModal();
+    });
+    els.signupRequestsList?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-action][data-request-id]');
+      if (!btn) return;
+      const requestId = btn.getAttribute('data-request-id') || '';
+      const action = btn.getAttribute('data-action') || '';
+      if (action === 'approve-signup') openSignupApproveModal(requestId);
+      if (action === 'reject-signup') rejectSignupRequest(requestId);
+    });
+    els.signupApproveForm?.addEventListener('submit', submitSignupApprove);
+    els.signupApproveCancel?.addEventListener('click', closeSignupApproveModal);
+    els.signupApproveClose?.addEventListener('click', closeSignupApproveModal);
+    els.signupApproveModal?.addEventListener('click', (event) => {
+      if (event.target === els.signupApproveModal) closeSignupApproveModal();
     });
 
     els.passwordForm?.addEventListener('submit', submitAdminPassword);
@@ -2452,6 +2683,8 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
+      if (els.signupApproveModal && !els.signupApproveModal.hidden) return closeSignupApproveModal();
+      if (els.signupRequestsModal && !els.signupRequestsModal.hidden) return closeSignupRequestsModal();
       if (els.svAccessModal && !els.svAccessModal.hidden) return closeSvAccessModal();
       if (els.pageAccessModal && !els.pageAccessModal.hidden) return closePageAccessModal();
       if (els.departmentModal && !els.departmentModal.hidden) return closeDepartmentModal();
@@ -2483,8 +2716,24 @@
     els.membersSubtitle = $('uaMembersSubtitle');
     els.backBtn = $('uaBackToDepartments');
     els.addMemberBtn = $('uaAddMemberBtn');
+    els.signupRequestsBtn = $('uaSignupRequestsBtn');
+    els.signupRequestsCount = $('uaSignupRequestsCount');
     els.addDepartmentBtn = $('uaAddDepartmentBtn');
     els.editActiveDeptBtn = $('uaEditActiveDepartmentBtn');
+
+    els.signupRequestsModal = $('uaSignupRequestsModal');
+    els.signupRequestsList = $('uaSignupRequestsList');
+    els.signupRequestsClose = $('uaSignupRequestsClose');
+    els.signupApproveModal = $('uaSignupApproveModal');
+    els.signupApproveForm = $('uaSignupApproveForm');
+    els.signupApproveClose = $('uaSignupApproveClose');
+    els.signupApproveCancel = $('uaSignupApproveCancel');
+    els.signupApproveSave = $('uaSignupApproveSave');
+    els.signupApproveSubtitle = $('uaSignupApproveSubtitle');
+    els.signupApproveDepartment = $('uaSignupApproveDepartment');
+    els.signupApprovePosition = $('uaSignupApprovePosition');
+    els.signupApprovePositionOptions = $('uaSignupPositionOptions');
+    els.signupApproveError = $('uaSignupApproveError');
 
     els.departmentModal = $('uaDepartmentModal');
     els.departmentForm = $('uaDepartmentForm');

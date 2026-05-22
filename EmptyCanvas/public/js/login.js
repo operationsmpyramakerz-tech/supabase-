@@ -3,10 +3,14 @@ document.addEventListener('DOMContentLoaded', function () {
   const forgotPasswordForm = document.getElementById('forgotPasswordForm');
   const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
   const backToLoginBtn = document.getElementById('backToLoginBtn');
+  const signupForm = document.getElementById('signupForm');
+  const showSignupBtn = document.getElementById('showSignupBtn');
+  const backFromSignupBtn = document.getElementById('backFromSignupBtn');
   const recoveryEmailInput = document.getElementById('recoveryEmail');
   const errorMessage = document.getElementById('error-message');
   const loginBtn = loginForm.querySelector('.login-btn');
   const recoveryBtn = forgotPasswordForm ? forgotPasswordForm.querySelector('.recovery-btn') : null;
+  const signupBtn = signupForm ? signupForm.querySelector('.signup-submit-btn') : null;
 
   function sanitizeMessage(message) {
     const value = String(message || '').trim();
@@ -59,9 +63,16 @@ document.addEventListener('DOMContentLoaded', function () {
     setButtonLoading(recoveryBtn, loading, 'Sending...', 'Send Password');
   }
 
+  function setSignupLoading(loading) {
+    setButtonLoading(signupBtn, loading, 'Sending request...', 'Send sign up request');
+  }
+
   function showForgotMode() {
     hideError();
+    document.body.classList.remove('auth-signup-mode');
+    document.body.classList.add('auth-recovery-mode');
     loginForm.hidden = true;
+    if (signupForm) signupForm.hidden = true;
     if (forgotPasswordForm) forgotPasswordForm.hidden = false;
     if (recoveryEmailInput) {
       recoveryEmailInput.value = '';
@@ -71,10 +82,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function showLoginMode() {
     hideError();
+    document.body.classList.remove('auth-recovery-mode', 'auth-signup-mode');
     if (forgotPasswordForm) forgotPasswordForm.hidden = true;
+    if (signupForm) signupForm.hidden = true;
     loginForm.hidden = false;
     const usernameInput = document.getElementById('username');
     if (usernameInput) setTimeout(() => usernameInput.focus(), 50);
+  }
+
+  function showSignupMode() {
+    hideError();
+    document.body.classList.remove('auth-recovery-mode');
+    document.body.classList.add('auth-signup-mode');
+    loginForm.hidden = true;
+    if (forgotPasswordForm) forgotPasswordForm.hidden = true;
+    if (signupForm) {
+      signupForm.hidden = false;
+      signupForm.reset();
+      setTimeout(() => document.getElementById('signupUsername')?.focus(), 50);
+    }
   }
 
   loginForm.addEventListener('submit', async function (event) {
@@ -118,6 +144,63 @@ document.addEventListener('DOMContentLoaded', function () {
       setLoading(false);
     }
   });
+
+  if (showSignupBtn) {
+    showSignupBtn.addEventListener('click', showSignupMode);
+  }
+
+  if (backFromSignupBtn) {
+    backFromSignupBtn.addEventListener('click', showLoginMode);
+  }
+
+  if (signupForm) {
+    signupForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      hideError();
+
+      const formData = new FormData(signupForm);
+      const payload = {
+        username: String(formData.get('username') || '').trim(),
+        password: String(formData.get('password') || '').trim(),
+        repeatPassword: String(formData.get('repeatPassword') || '').trim(),
+        employeeCode: String(formData.get('employeeCode') || '').trim(),
+        phone: String(formData.get('phone') || '').trim(),
+        email: String(formData.get('email') || '').trim(),
+      };
+
+      if (!payload.username || !payload.password || !payload.repeatPassword || !payload.employeeCode || !payload.phone || !payload.email) {
+        showError('Please fill all sign up fields.');
+        return;
+      }
+      if (payload.password !== payload.repeatPassword) {
+        showError('Passwords do not match.');
+        return;
+      }
+
+      setSignupLoading(true);
+      try {
+        const response = await fetch('/api/signup-request', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result.ok) {
+          signupForm.reset();
+          showSuccess(result.message || 'Your sign up request was sent successfully.');
+        } else {
+          showError(result.error || 'Could not send sign up request.');
+        }
+      } catch (error) {
+        console.error('Sign up request error:', error);
+        showError('Network error. Please check your connection and try again.');
+      } finally {
+        setSignupLoading(false);
+      }
+    });
+  }
 
   if (forgotPasswordBtn) {
     forgotPasswordBtn.addEventListener('click', showForgotMode);
@@ -170,6 +253,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('username').addEventListener('input', hideError);
   document.getElementById('password').addEventListener('input', hideError);
   if (recoveryEmailInput) recoveryEmailInput.addEventListener('input', hideError);
+  if (signupForm) signupForm.querySelectorAll('input').forEach((input) => input.addEventListener('input', hideError));
 
   // Toggle show/hide password
   const pwdInput = document.getElementById('password');
