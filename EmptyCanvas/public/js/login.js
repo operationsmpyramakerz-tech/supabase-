@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function setHeaderCopy(mode) {
     if (!loginHeaderTitle || !loginHeaderSubtitle) return;
-    loginHeaderTitle.textContent = 'Operations';
+    loginHeaderTitle.textContent = 'Pyramakerz';
     if (mode === 'signup') {
       loginHeaderSubtitle.textContent = 'Create your sign up request';
     } else if (mode === 'recovery') {
@@ -93,7 +93,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (forgotPasswordForm) forgotPasswordForm.hidden = false;
     if (recoveryEmailInput) {
       recoveryEmailInput.value = '';
-      setTimeout(() => recoveryEmailInput.focus(), 50);
     }
   }
 
@@ -107,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function () {
     loginForm.hidden = false;
     if (showSignupBtn) showSignupBtn.disabled = false;
     const usernameInput = document.getElementById('username');
-    if (usernameInput) setTimeout(() => usernameInput.focus(), 50);
+    if (usernameInput) usernameInput.blur();
   }
 
   function showSignupMode() {
@@ -128,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
       document.body.classList.add('auth-signup-mode');
       if (showSignupBtn) showSignupBtn.disabled = false;
       authModeSwitching = false;
-      setTimeout(() => document.getElementById('signupUsername')?.focus(), 80);
+      document.activeElement?.blur?.();
     }, 880);
   }
 
