@@ -184,6 +184,10 @@
         <button type="submit" class="login-btn">
           <span>Sign In</span>
         </button>
+
+        <button type="button" id="showSignupBtn" class="signup-link-btn">
+          <span>Create a new account</span>
+        </button>
       </form>
 
       <form id="forgotPasswordForm" class="login-form forgot-form" hidden>
@@ -212,11 +216,96 @@
         <button type="button" id="backToLoginBtn" class="back-login-link">Back to login</button>
       </form>
 
+      <form id="signupForm" class="login-form signup-form" hidden>
+        <div class="forgot-copy signup-copy">
+          <h2>Sign Up Request</h2>
+          <p>Send your account details to the admin team for approval.</p>
+        </div>
+
+        <div class="form-group">
+          <div class="input-with-icon">
+            <span class="input-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <input type="text" id="signupUsername" name="username" required placeholder="Username" autocomplete="username" />
+          </div>
+        </div>
+
+        <div class="form-group signup-password-grid">
+          <div class="input-with-icon">
+            <span class="input-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </span>
+            <input type="password" id="signupPassword" name="password" required placeholder="Password" autocomplete="new-password" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="input-with-icon">
+            <span class="input-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </span>
+            <input type="password" id="signupRepeatPassword" name="repeatPassword" required placeholder="Repeat password" autocomplete="new-password" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="input-with-icon">
+            <span class="input-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16" />
+                <path d="M10 11h4" />
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+              </svg>
+            </span>
+            <input type="text" id="signupEmployeeCode" name="employeeCode" required placeholder="Employee code" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="input-with-icon">
+            <span class="input-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.89.68 2.78a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.11-.45c.89.33 1.82.55 2.78.68A2 2 0 0 1 22 16.92z" />
+              </svg>
+            </span>
+            <input type="tel" id="signupPhone" name="phone" required placeholder="Phone" autocomplete="tel" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="input-with-icon">
+            <span class="input-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+            </span>
+            <input type="email" id="signupEmail" name="email" required placeholder="Email" autocomplete="email" />
+          </div>
+        </div>
+
+        <button type="submit" class="login-btn signup-submit-btn">
+          <span>Send sign up request</span>
+        </button>
+
+        <button type="button" id="backFromSignupBtn" class="back-login-link">Back to login</button>
+      </form>
+
       <div id="error-message" class="error-message" style="display: none;"></div>
     </div>
   </div>
 
   <!-- الـ JS بتاعك الأصلي 100% بدون أي تعديل -->
-  <script src="/js/login.js?v=hide-internal-provider-v1"></script>
+  <script src="/js/login.js?v=signup-requests-v1"></script>
 </body>
 </html>
