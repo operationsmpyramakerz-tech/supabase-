@@ -336,3 +336,154 @@ body.auth-signup-mode .login-container {
     padding: 18px 0;
   }
 }
+
+/* Sign up transition refinement */
+.login-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-header {
+  position: relative;
+  z-index: 2;
+}
+
+.signup-logo-burst {
+  position: absolute;
+  left: 50%;
+  top: 28px;
+  width: 82px;
+  height: 82px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+}
+
+.signup-logo-burst i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #EA580C;
+  box-shadow: 0 0 0 5px rgba(234, 88, 12, 0.12), 0 0 20px rgba(234, 88, 12, 0.35);
+  opacity: 0;
+}
+
+.signup-logo-burst i:nth-child(2n) { background: #111827; }
+.signup-logo-burst i:nth-child(3n) { background: #F97316; }
+.signup-logo-burst i:nth-child(1) { --x: -58px; --y: -28px; }
+.signup-logo-burst i:nth-child(2) { --x: 52px; --y: -34px; }
+.signup-logo-burst i:nth-child(3) { --x: -68px; --y: 22px; }
+.signup-logo-burst i:nth-child(4) { --x: 68px; --y: 20px; }
+.signup-logo-burst i:nth-child(5) { --x: -28px; --y: -64px; }
+.signup-logo-burst i:nth-child(6) { --x: 28px; --y: -62px; }
+.signup-logo-burst i:nth-child(7) { --x: -42px; --y: 58px; }
+.signup-logo-burst i:nth-child(8) { --x: 42px; --y: 58px; }
+
+.signup-link-btn {
+  background: #020617;
+  color: #ffffff;
+  border-color: #020617;
+  min-height: 48px;
+  box-shadow: 0 18px 32px rgba(2, 6, 23, 0.16);
+}
+
+.signup-link-btn:hover {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+  box-shadow: 0 20px 38px rgba(2, 6, 23, 0.2);
+}
+
+.signup-link-btn:disabled {
+  opacity: 0.82;
+  cursor: wait;
+  transform: none;
+}
+
+body.auth-signup-mode .login-card,
+body.auth-recovery-mode .login-card,
+body.auth-transitioning-to-signup .login-card {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+body.auth-transitioning-to-signup .login-logo {
+  animation: signupLogoSpinFireworks 0.95s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+
+body.auth-transitioning-to-signup .signup-logo-burst {
+  opacity: 1;
+}
+
+body.auth-transitioning-to-signup .signup-logo-burst i {
+  animation: signupFireworkDot 0.82s cubic-bezier(0.17, 0.84, 0.44, 1) both;
+}
+
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(2) { animation-delay: 0.04s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(3) { animation-delay: 0.07s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(4) { animation-delay: 0.1s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(5) { animation-delay: 0.13s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(6) { animation-delay: 0.16s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(7) { animation-delay: 0.19s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(8) { animation-delay: 0.22s; }
+
+body.auth-transitioning-to-signup #loginForm {
+  animation: loginDataDropAway 0.78s cubic-bezier(0.7, 0, 0.84, 0) both;
+}
+
+body.auth-transitioning-to-signup .login-header h1,
+body.auth-transitioning-to-signup .login-header p {
+  animation: loginTextSoftFade 0.56s ease both;
+}
+
+body.auth-signup-mode .signup-form {
+  animation: signupDataDropIn 0.72s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+body.auth-signup-mode .login-logo {
+  animation: logoFloat 3s infinite ease-in-out;
+}
+
+@keyframes signupLogoSpinFireworks {
+  0% { transform: translateY(0) rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+  42% { transform: translateY(-16px) rotate(220deg) scale(1.12); filter: drop-shadow(0 16px 26px rgba(234, 88, 12, 0.32)); }
+  72% { transform: translateY(24px) rotate(430deg) scale(0.96); }
+  100% { transform: translateY(0) rotate(720deg) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+}
+
+@keyframes signupFireworkDot {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
+  20% { opacity: 1; }
+  70% { opacity: 1; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x) * 1.16), calc(-50% + var(--y) * 1.16 + 14px)) scale(0.55); }
+}
+
+@keyframes loginDataDropAway {
+  0% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  62% { opacity: 0.28; transform: translateY(38px) scale(0.98); filter: blur(2px); }
+  100% { opacity: 0; transform: translateY(90px) scale(0.94); filter: blur(7px); }
+}
+
+@keyframes loginTextSoftFade {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0.15; transform: translateY(-10px); }
+}
+
+@keyframes signupDataDropIn {
+  from { opacity: 0; transform: translateY(-46px) scale(0.97); filter: blur(5px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@media (max-width: 480px) {
+  .signup-logo-burst {
+    top: 22px;
+  }
+
+  .signup-link-btn {
+    min-height: 50px;
+  }
+}
