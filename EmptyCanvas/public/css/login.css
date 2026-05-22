@@ -229,3 +229,110 @@ body {
   font-size: 0.9rem;
   line-height: 1.45;
 }
+
+/* Sign up request flow */
+.signup-link-btn {
+  width: 100%;
+  margin-top: 0.85rem;
+  border: 1.5px solid rgba(234, 88, 12, 0.22);
+  background: #fff7ed;
+  color: #c2410c;
+  min-height: 46px;
+  border-radius: 12px;
+  font-size: 0.98rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.signup-link-btn:hover {
+  transform: translateY(-2px);
+  background: #ffedd5;
+  box-shadow: 0 14px 28px rgba(234, 88, 12, 0.12);
+}
+
+.signup-form {
+  animation: signupSweepIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-signup-mode .login-card {
+  animation: signupCardGlow 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.signup-copy {
+  position: relative;
+  overflow: hidden;
+}
+
+.signup-copy::after {
+  content: "";
+  position: absolute;
+  inset: -40% auto auto -30%;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(234, 88, 12, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.signup-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.signup-form input {
+  border-radius: 14px;
+  min-height: 50px;
+  font-weight: 650;
+}
+
+.signup-submit-btn {
+  border-radius: 14px;
+  min-height: 50px;
+  box-shadow: 0 16px 34px rgba(234, 88, 12, 0.24);
+}
+
+@keyframes signupSweepIn {
+  from {
+    opacity: 0;
+    transform: translateX(42px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes signupCardGlow {
+  0% { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08); }
+  45% { box-shadow: 0 26px 58px rgba(234, 88, 12, 0.18), 0 0 0 1px rgba(234, 88, 12, 0.12); }
+  100% { box-shadow: 0 22px 46px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(234, 88, 12, 0.08); }
+}
+
+@media (max-width: 480px) {
+  .signup-form .forgot-copy {
+    padding: 0.85rem;
+  }
+
+  .signup-form input {
+    min-height: 48px;
+  }
+}
+
+body.auth-signup-mode,
+body.auth-recovery-mode {
+  overflow-y: auto;
+  align-items: flex-start;
+  padding: 32px 0;
+}
+
+body.auth-signup-mode .login-container {
+  max-width: 460px;
+}
+
+@media (max-width: 480px) {
+  body.auth-signup-mode,
+  body.auth-recovery-mode {
+    padding: 18px 0;
+  }
+}
