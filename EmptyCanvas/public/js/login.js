@@ -11,8 +11,8 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginBtn = loginForm.querySelector('.login-btn');
   const recoveryBtn = forgotPasswordForm ? forgotPasswordForm.querySelector('.recovery-btn') : null;
   const signupBtn = signupForm ? signupForm.querySelector('.signup-submit-btn') : null;
-  const loginHeaderTitle = document.querySelector('.login-header h1');
-  const loginHeaderSubtitle = document.querySelector('.login-header p');
+  const loginHeaderTitle = document.querySelector('.login-brand-title');
+  const loginHeaderSubtitle = document.querySelector('.login-subtitle');
   let authModeSwitching = false;
 
   function sanitizeMessage(message) {
@@ -71,15 +71,8 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function setHeaderCopy(mode) {
-    if (!loginHeaderTitle || !loginHeaderSubtitle) return;
-    loginHeaderTitle.textContent = 'Pyramakerz';
-    if (mode === 'signup') {
-      loginHeaderSubtitle.textContent = 'Create your sign up request';
-    } else if (mode === 'recovery') {
-      loginHeaderSubtitle.textContent = 'Recover your password';
-    } else {
-      loginHeaderSubtitle.textContent = 'Please sign in to continue';
-    }
+    if (loginHeaderTitle) loginHeaderTitle.textContent = 'Pyramakerz';
+    if (loginHeaderSubtitle) loginHeaderSubtitle.textContent = '';
   }
 
   function showForgotMode() {
@@ -93,6 +86,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (forgotPasswordForm) forgotPasswordForm.hidden = false;
     if (recoveryEmailInput) {
       recoveryEmailInput.value = '';
+      recoveryEmailInput.blur();
     }
   }
 
@@ -127,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
       document.body.classList.add('auth-signup-mode');
       if (showSignupBtn) showSignupBtn.disabled = false;
       authModeSwitching = false;
-      document.activeElement?.blur?.();
+      document.getElementById('signupUsername')?.blur?.();
     }, 880);
   }
 
