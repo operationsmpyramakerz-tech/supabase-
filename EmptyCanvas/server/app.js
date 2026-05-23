@@ -12949,6 +12949,8 @@ app.post(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (!(await _requireB2BAdminPassword(req, res))) return;
+
       const row = _sbBuildB2BSchoolWriteRow(req.body || {});
       const explicitId = String(req?.body?.id || req?.body?.fields?.id || '').trim();
       if (explicitId) {
@@ -12995,6 +12997,8 @@ app.patch(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (!(await _requireB2BAdminPassword(req, res))) return;
+
       const existing = await _sbFindB2BSchoolById(id);
       if (!existing) return res.status(404).json({ error: "School not found." });
 
@@ -13026,6 +13030,8 @@ app.delete(
     res.set("Cache-Control", "no-store");
 
     try {
+      if (!(await _requireB2BAdminPassword(req, res))) return;
+
       const existing = await _sbFindB2BSchoolById(id);
       if (!existing) return res.status(404).json({ error: "School not found." });
 
@@ -13148,40 +13154,35 @@ app.get(
   },
 );
 
-// ===== B2B — Verify Admin password (Team Members DB) =====
-// Frontend uses this to protect "Make inventory" / "Finish inventory" actions.
+// ===== B2B — Verify Admin password =====
+// Frontend uses this to protect B2B folder changes and inventory actions.
+async function _requireB2BAdminPassword(req, res) {
+  const password = String(req?.body?.adminPassword || req?.body?.password || '').trim();
+  if (!password) {
+    res.status(400).json({ error: 'Admin password is required.' });
+    return false;
+  }
+
+  const ok = await verifyAdminPassword(password);
+  if (!ok) {
+    res.status(401).json({ error: 'Invalid Admin password.' });
+    return false;
+  }
+
+  return true;
+}
+
 app.post(
   "/api/b2b/admin/verify",
   requireAuth,
   requirePage("B2B"),
   async (req, res) => {
-    if (!teamMembersDatabaseId) {
-      return res
-        .status(500)
-        .json({ error: "Team_Members database ID is not configured." });
-    }
-
-    const password = String(req?.body?.password || "").trim();
-    if (!password) return res.status(400).json({ error: "Missing password." });
-
     res.set("Cache-Control", "no-store");
-
     try {
-      const response = await notion.databases.query({
-        database_id: teamMembersDatabaseId,
-        page_size: 1,
-        filter: { property: "Name", title: { equals: "Admin" } },
-      });
+      const password = String(req?.body?.password || req?.body?.adminPassword || "").trim();
+      if (!password) return res.status(400).json({ error: "Missing password." });
 
-      const admin = response?.results?.[0] || null;
-      if (!admin) return res.status(404).json({ error: "Admin user not found." });
-
-      const storedPassword = _extractPropText(admin?.properties?.Password);
-      if (storedPassword === null || typeof storedPassword === "undefined") {
-        return res.status(500).json({ error: "Admin password is not set." });
-      }
-
-      const ok = String(storedPassword) === password;
+      const ok = await verifyAdminPassword(password);
       if (!ok) return res.status(401).json({ error: "Invalid password." });
 
       return res.json({ ok: true });
