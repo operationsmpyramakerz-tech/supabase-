@@ -2427,3 +2427,152 @@
     width: 100%;
   }
 }
+
+/* Users Center refinements: compact home header, protected request tabs, mobile department title row */
+.ua-section-head--folders-actions-only {
+  justify-content: stretch;
+  margin-bottom: 18px;
+}
+
+.ua-section-head--folders-actions-only .ua-folder-actions {
+  width: 100%;
+  justify-content: stretch;
+}
+
+.ua-section-head--folders-actions-only .ua-count-pill,
+.ua-section-head--folders-actions-only .ua-dept-btn {
+  width: 100%;
+}
+
+.ua-signup-request-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 28px 16px;
+}
+
+.ua-signup-request-tabs button {
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: #f8fafc;
+  color: #667085;
+  min-height: 42px;
+  border-radius: 14px;
+  font: inherit;
+  font-weight: 950;
+  cursor: pointer;
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.ua-signup-request-tabs button.is-active {
+  background: #050917;
+  color: #fff;
+  border-color: #050917;
+  box-shadow: 0 14px 28px rgba(5, 9, 23, 0.16);
+}
+
+.ua-signup-request-tabs button:hover {
+  transform: translateY(-1px);
+}
+
+.ua-signup-request-card--approved {
+  border-color: rgba(16, 185, 129, 0.20);
+  background: linear-gradient(135deg, #ffffff, #f0fdf4);
+}
+
+.ua-signup-request-card--rejected {
+  border-color: rgba(220, 38, 38, 0.18);
+  background: linear-gradient(135deg, #ffffff, #fff1f2);
+}
+
+.ua-signup-request-review {
+  color: #344054 !important;
+}
+
+.ua-signup-request-status {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 950;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.ua-signup-request-status svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 3;
+}
+
+.ua-signup-request-status--approved {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.ua-signup-request-status--rejected {
+  background: #fff1f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.ua-section-head--members {
+  align-items: center;
+}
+
+.ua-member-heading-left {
+  flex-direction: row;
+  align-items: center;
+}
+
+.ua-member-heading-left > div {
+  min-width: 0;
+}
+
+.ua-member-heading-left h3 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 760px) {
+  .ua-section-head--members {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ua-section-head--members .ua-member-heading-left {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .ua-section-head--members {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .ua-section-head--members .ua-member-heading-left {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  .ua-signup-request-tabs {
+    padding: 0 22px 14px;
+    gap: 6px;
+  }
+
+  .ua-signup-request-tabs button {
+    min-height: 40px;
+    font-size: 13px;
+  }
+
+  .ua-signup-request-status {
+    width: 100%;
+  }
+}
