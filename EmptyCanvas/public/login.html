@@ -142,7 +142,7 @@
         <img src="/images/logo.png" alt="Logo" class="login-logo" />
         <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" class="login-wordmark" />
         <h1 class="login-brand-title">Pyramakerz</h1>
-        <p>Please sign in to continue</p>
+        <p class="login-subtitle" aria-hidden="true"></p>
       </div>
 
       <form id="loginForm" class="login-form">
@@ -189,8 +189,9 @@
           <span>Sign In</span>
         </button>
 
-        <button type="button" id="showSignupBtn" class="signup-link-btn">
-          <span>Sign Up</span>
+        <button type="button" id="showSignupBtn" class="signup-inline-prompt">
+          <span class="signup-prompt-text">Don&apos;t have an account?</span>
+          <span class="signup-prompt-action">Sign up</span>
         </button>
       </form>
 
@@ -310,6 +311,6 @@
   </div>
 
   <!-- الـ JS بتاعك الأصلي 100% بدون أي تعديل -->
-  <script src="/js/login.js?v=pyramakerz-login-v1"></script>
+  <script src="/js/login.js?v=signup-flow-v2"></script>
 </body>
 </html>
