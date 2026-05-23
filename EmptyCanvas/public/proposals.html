@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=mobile-global-scroll-dock-balance-v1" rel="stylesheet" />
   <link href="/css/products.css?v=proposals-page-v1" rel="stylesheet" />
-  <link href="/css/proposals.css?v=proposals-permissions-order-v2" rel="stylesheet" />
+  <link href="/css/proposals.css?v=proposal-folders-main-actions-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page proposals-page">
@@ -97,26 +97,22 @@
                 <i data-feather="box"></i><span>Kits</span>
               </button>
             </div>
+            <div class="proposals-main-create-actions">
+              <button type="button" class="products-add-btn proposals-create-btn" id="createProposalBtn" data-create-label-proposal="Create New Proposal">
+                <i data-feather="folder-plus"></i><span>Create New Proposal</span>
+              </button>
+              <button type="button" class="products-add-btn proposals-create-btn" id="createKitBtn" hidden>
+                <i data-feather="box"></i><span>Create New Kit</span>
+              </button>
+            </div>
           </header>
 
           <section class="proposals-panel" id="proposalsPanel" role="tabpanel">
-            <div class="proposals-section-toolbar proposals-create-row">
-              <span aria-hidden="true"></span>
-              <button type="button" class="products-add-btn" id="createProposalBtn">
-                <i data-feather="folder-plus"></i><span>Create New Proposal</span>
-              </button>
-            </div>
             <div class="products-proposals-list" id="proposalsList"></div>
             <section class="products-proposal-detail" id="proposalDetail" hidden></section>
           </section>
 
           <section class="proposals-panel" id="kitsPanel" role="tabpanel" hidden>
-            <div class="proposals-section-toolbar proposals-create-row">
-              <span aria-hidden="true"></span>
-              <button type="button" class="products-add-btn" id="createKitBtn">
-                <i data-feather="folder-plus"></i><span>Create New Kit</span>
-              </button>
-            </div>
             <div class="products-proposals-list" id="kitsList"></div>
             <section class="products-proposal-detail" id="kitDetail" hidden></section>
           </section>
@@ -204,6 +200,6 @@
   </div>
 
   <script src="/js/common-ui.js?v=users-center-access-v1"></script>
-  <script src="/js/proposals.js?v=hide-internal-provider-v1"></script>
+  <script src="/js/proposals.js?v=proposal-folders-main-actions-v1"></script>
 </body>
 </html>

@@ -18,7 +18,166 @@
   <!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
   <style>
     body.permissions-loading .sidebar li { display: none !important; }
-  </style>
+  
+
+    .b2b-head-copy[aria-hidden="true"]{
+      display:none !important;
+    }
+
+    .b2b-admin-password-modal{
+      position:fixed;
+      inset:0;
+      z-index:10080;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:clamp(16px, 4vw, 28px);
+    }
+
+    .b2b-admin-password-modal.is-open{
+      display:flex;
+    }
+
+    .b2b-admin-password-modal__backdrop{
+      position:absolute;
+      inset:0;
+      background:rgba(15,23,42,.58);
+      backdrop-filter:blur(18px);
+    }
+
+    .b2b-admin-password-modal__dialog{
+      position:relative;
+      width:min(100%, 520px);
+      border-radius:32px;
+      border:1px solid rgba(15,23,42,.08);
+      background:linear-gradient(180deg,#fff,#f8fafc);
+      box-shadow:0 35px 90px rgba(15,23,42,.28);
+      padding:28px;
+      color:#0f172a;
+    }
+
+    .b2b-admin-password-modal__close{
+      position:absolute;
+      top:18px;
+      right:18px;
+      width:48px;
+      height:48px;
+      border-radius:16px;
+      border:1px solid rgba(15,23,42,.08);
+      background:#fff;
+      display:grid;
+      place-items:center;
+      font-size:30px;
+      line-height:1;
+      font-weight:800;
+      color:#0f172a;
+      cursor:pointer;
+    }
+
+    .b2b-admin-password-modal__icon{
+      width:64px;
+      height:64px;
+      display:grid;
+      place-items:center;
+      border-radius:22px;
+      border:1px solid rgba(234,88,12,.14);
+      background:#fff7ed;
+      color:#c2410c;
+      margin-bottom:18px;
+    }
+
+    .b2b-admin-password-modal__icon svg{
+      width:28px;
+      height:28px;
+    }
+
+    .b2b-admin-password-modal__copy span{
+      display:block;
+      margin-bottom:8px;
+      color:#c2410c;
+      font-size:.78rem;
+      font-weight:950;
+      letter-spacing:.1em;
+    }
+
+    .b2b-admin-password-modal__copy h3{
+      margin:0;
+      font-size:clamp(1.55rem, 3.5vw, 2.2rem);
+      line-height:1.1;
+      font-weight:950;
+    }
+
+    .b2b-admin-password-modal__copy p{
+      margin:10px 0 22px;
+      color:#64748b;
+      font-weight:750;
+      line-height:1.55;
+    }
+
+    .b2b-admin-password-modal__field{
+      display:grid;
+      gap:9px;
+      font-weight:900;
+      color:#475569;
+      margin-bottom:12px;
+    }
+
+    .b2b-admin-password-modal__field input{
+      width:100%;
+      min-height:58px;
+      border-radius:18px;
+      border:1px solid rgba(15,23,42,.12);
+      background:#fff;
+      padding:0 18px;
+      font:inherit;
+      font-weight:850;
+      color:#0f172a;
+      outline:none;
+    }
+
+    .b2b-admin-password-modal__field input:focus{
+      border-color:#fb923c;
+      box-shadow:0 0 0 5px rgba(251,146,60,.16);
+    }
+
+    .b2b-admin-password-modal__error{
+      min-height:22px;
+      color:#dc2626;
+      font-weight:800;
+      margin-bottom:14px;
+    }
+
+    .b2b-admin-password-modal__actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .b2b-admin-password-modal__btn{
+      min-height:56px;
+      border-radius:18px;
+      border:0;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .b2b-admin-password-modal__btn--light{
+      background:#fff;
+      border:1px solid rgba(15,23,42,.08);
+      color:#0f172a;
+    }
+
+    .b2b-admin-password-modal__btn--dark{
+      background:#050914;
+      color:#fff;
+      box-shadow:0 18px 32px rgba(15,23,42,.2);
+    }
+
+    .b2b-admin-password-modal__btn:disabled{
+      opacity:.65;
+      cursor:not-allowed;
+    }
+</style>
   <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1"/>
   <link href="/css/ui-redesign.css?v=bidi-mixed-v1" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
@@ -1109,9 +1268,7 @@
         <section class="card b2b-card-shell">
           <div class="b2b-section-head">
             <div class="card-header">
-              <div class="b2b-head-copy">
-                <h2><i data-feather="folder"></i>School folders</h2>
-              </div>
+              <div class="b2b-head-copy" aria-hidden="true"></div>
               <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
                 <i data-feather="plus-circle"></i>
                 <span>Add</span>
@@ -1130,6 +1287,6 @@
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=b2b-download-options-v1"></script>
-<script src="/js/b2b.js?v=b2b-download-options-v1"></script>
+<script src="/js/b2b.js?v=b2b-admin-folders-v1"></script>
 </body>
 </html>
