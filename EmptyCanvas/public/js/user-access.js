@@ -32,6 +32,8 @@
     moveMemberId: '',
     signupRequests: [],
     signupRequestsLoading: false,
+    signupRequestsStatus: 'pending',
+    signupRequestsPendingCount: 0,
     signupApproveRequestId: '',
     };
 
@@ -1325,19 +1327,31 @@
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
 
+  function signupStatusLabel(value) {
+    const status = String(value || 'pending').toLowerCase();
+    if (status === 'approved') return 'Approved';
+    if (status === 'rejected') return 'Rejected';
+    return 'Pending';
+  }
+
   function renderSignupRequestsCount() {
     if (!els.signupRequestsCount) return;
-    const count = (state.signupRequests || []).filter((item) => String(item.status || 'pending').toLowerCase() === 'pending').length;
+    const count = Number(state.signupRequestsPendingCount || 0);
     els.signupRequestsCount.hidden = count <= 0;
     els.signupRequestsCount.textContent = String(count);
   }
 
-  async function loadSignupRequests({ silent = false } = {}) {
-    if (state.signupRequestsLoading) return;
-    state.signupRequestsLoading = true;
-    if (!silent && els.signupRequestsList) {
-      els.signupRequestsList.innerHTML = '<div class="ua-loading-inline"><span></span> Loading requests...</div>';
-    }
+  function syncSignupStatusTabs() {
+    if (!els.signupRequestsModal) return;
+    const status = String(state.signupRequestsStatus || 'pending').toLowerCase();
+    els.signupRequestsModal.querySelectorAll('[data-signup-status]').forEach((btn) => {
+      const isActive = String(btn.getAttribute('data-signup-status') || '').toLowerCase() === status;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-selected', String(isActive));
+    });
+  }
+
+  async function refreshSignupPendingCount() {
     try {
       const res = await fetch('/api/user-access/signup-requests?status=pending&_=' + Date.now(), {
         credentials: 'same-origin',
@@ -1345,7 +1359,37 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load sign up requests.');
+      const pending = Array.isArray(data.requests) ? data.requests : [];
+      state.signupRequestsPendingCount = pending.length;
+      if (String(state.signupRequestsStatus || 'pending').toLowerCase() === 'pending') {
+        state.signupRequests = pending;
+        renderSignupRequestsList();
+      }
+      renderSignupRequestsCount();
+    } catch (error) {
+      if (!state.signupRequestsPendingCount) state.signupRequestsPendingCount = 0;
+      renderSignupRequestsCount();
+    }
+  }
+
+  async function loadSignupRequests({ silent = false, status } = {}) {
+    if (state.signupRequestsLoading) return;
+    const cleanStatus = String(status || state.signupRequestsStatus || 'pending').trim().toLowerCase() || 'pending';
+    state.signupRequestsStatus = ['pending', 'approved', 'rejected', 'all'].includes(cleanStatus) ? cleanStatus : 'pending';
+    state.signupRequestsLoading = true;
+    syncSignupStatusTabs();
+    if (!silent && els.signupRequestsList) {
+      els.signupRequestsList.innerHTML = '<div class="ua-loading-inline"><span></span> Loading requests...</div>';
+    }
+    try {
+      const res = await fetch(`/api/user-access/signup-requests?status=${encodeURIComponent(state.signupRequestsStatus)}&_=${Date.now()}`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load sign up requests.');
       state.signupRequests = Array.isArray(data.requests) ? data.requests : [];
+      if (state.signupRequestsStatus === 'pending') state.signupRequestsPendingCount = state.signupRequests.length;
       renderSignupRequestsCount();
       renderSignupRequestsList();
     } catch (error) {
@@ -1360,33 +1404,50 @@
 
   function renderSignupRequestsList() {
     if (!els.signupRequestsList) return;
-    const requests = (state.signupRequests || []).filter((item) => String(item.status || 'pending').toLowerCase() === 'pending');
+    const status = String(state.signupRequestsStatus || 'pending').toLowerCase();
+    const requests = Array.isArray(state.signupRequests) ? state.signupRequests : [];
     if (!requests.length) {
-      els.signupRequestsList.innerHTML = '<div class="ua-signup-empty"><i data-feather="check-circle"></i><strong>No pending requests</strong><span>All sign up requests are handled.</span></div>';
+      const label = signupStatusLabel(status).toLowerCase();
+      const icon = status === 'rejected' ? 'x-circle' : 'check-circle';
+      els.signupRequestsList.innerHTML = `<div class="ua-signup-empty"><i data-feather="${icon}"></i><strong>No ${escapeHTML(label)} requests</strong><span>No sign up requests found in this status.</span></div>`;
       hydrateIcons(els.signupRequestsList);
       return;
     }
     els.signupRequestsList.innerHTML = requests.map((request) => {
+      const currentStatus = String(request.status || status || 'pending').toLowerCase();
       const created = request.createdAt ? new Date(request.createdAt) : null;
       const createdLabel = created && !Number.isNaN(created.getTime()) ? created.toLocaleDateString('en-GB') : '';
+      const reviewed = request.reviewedAt ? new Date(request.reviewedAt) : null;
+      const reviewedLabel = reviewed && !Number.isNaN(reviewed.getTime()) ? reviewed.toLocaleDateString('en-GB') : '';
+      const details = [request.email, request.phone, createdLabel].filter(Boolean).join(' • ');
+      const reviewDetails = [request.department, request.position, reviewedLabel].filter(Boolean).join(' • ');
+      const actions = currentStatus === 'pending' ? `
+        <div class="ua-signup-request-actions">
+          <button type="button" class="ua-btn ua-btn--approve" data-action="approve-signup" data-request-id="${escapeHTML(request.id)}">
+            <i data-feather="check"></i><span>Approve</span>
+          </button>
+          <button type="button" class="ua-btn ua-btn--reject" data-action="reject-signup" data-request-id="${escapeHTML(request.id)}">
+            <i data-feather="x"></i><span>Reject</span>
+          </button>
+        </div>
+      ` : `
+        <div class="ua-signup-request-status ua-signup-request-status--${escapeHTML(currentStatus)}">
+          <i data-feather="${currentStatus === 'approved' ? 'check-circle' : 'x-circle'}"></i>
+          <span>${escapeHTML(signupStatusLabel(currentStatus))}</span>
+        </div>
+      `;
       return `
-        <article class="ua-signup-request-card" data-request-id="${escapeHTML(request.id)}">
+        <article class="ua-signup-request-card ua-signup-request-card--${escapeHTML(currentStatus)}" data-request-id="${escapeHTML(request.id)}">
           <div class="ua-signup-request-main">
             <div class="ua-signup-request-avatar"><i data-feather="user"></i></div>
             <div class="ua-signup-request-text">
               <strong title="${escapeHTML(request.username || 'Unnamed')}">${escapeHTML(request.username || 'Unnamed')}</strong>
               <span>Employee code: ${escapeHTML(request.employeeCode || '-')}</span>
-              <small>${escapeHTML([request.email, request.phone, createdLabel].filter(Boolean).join(' • '))}</small>
+              <small>${escapeHTML(details)}</small>
+              ${reviewDetails ? `<small class="ua-signup-request-review">${escapeHTML(reviewDetails)}</small>` : ''}
             </div>
           </div>
-          <div class="ua-signup-request-actions">
-            <button type="button" class="ua-btn ua-btn--approve" data-action="approve-signup" data-request-id="${escapeHTML(request.id)}">
-              <i data-feather="check"></i><span>Approve</span>
-            </button>
-            <button type="button" class="ua-btn ua-btn--reject" data-action="reject-signup" data-request-id="${escapeHTML(request.id)}">
-              <i data-feather="x"></i><span>Reject</span>
-            </button>
-          </div>
+          ${actions}
         </article>
       `;
     }).join('');
@@ -1398,8 +1459,9 @@
     els.signupRequestsModal.hidden = false;
     els.signupRequestsModal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('ua-modal-open');
+    syncSignupStatusTabs();
     hydrateIcons(els.signupRequestsModal);
-    loadSignupRequests();
+    loadSignupRequests({ status: state.signupRequestsStatus || 'pending' });
   }
 
   function closeSignupRequestsModal() {
@@ -1478,7 +1540,7 @@
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to approve request.');
       closeSignupApproveModal();
       toast('success', 'Request approved', data.emailWarning ? `Approved, but email warning: ${data.emailWarning}` : 'The user was added and notified by email.');
-      await Promise.all([loadMembers({ force: true, keepDepartment: true }), loadSignupRequests({ silent: true })]);
+      await Promise.all([loadMembers({ force: true, keepDepartment: true }), refreshSignupPendingCount(), loadSignupRequests({ silent: true, status: state.signupRequestsStatus || 'pending' })]);
     } catch (error) {
       if (els.signupApproveError) els.signupApproveError.textContent = error?.message || 'Failed to approve request.';
       toast('error', 'Approval failed', error?.message || 'Failed to approve request.');
@@ -1508,7 +1570,7 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to reject request.');
       toast('success', 'Request rejected', data.emailWarning ? `Rejected, but email warning: ${data.emailWarning}` : 'The user was notified by email.');
-      await loadSignupRequests({ silent: true });
+      await Promise.all([refreshSignupPendingCount(), loadSignupRequests({ silent: true, status: state.signupRequestsStatus || 'pending' })]);
     } catch (error) {
       toast('error', 'Reject failed', error?.message || 'Failed to reject request.');
     }
@@ -1629,7 +1691,7 @@
 
   function openPasswordModal(memberId, action = 'edit') {
     if (!els.passwordModal) return;
-    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department']);
+    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests']);
     state.pendingEditMemberId = String(memberId || '');
     state.pendingPasswordAction = allowedActions.has(action) ? action : 'edit';
     if (els.passwordInput) els.passwordInput.value = '';
@@ -1705,6 +1767,8 @@
         await deleteMember(targetId);
       } else if (action === 'delete-department') {
         await deleteDepartment(targetId);
+      } else if (action === 'signup-requests') {
+        openSignupRequestsModal();
       }
     } catch (error) {
       if (els.passwordError) els.passwordError.textContent = error?.message || 'Invalid Admin password.';
@@ -2627,7 +2691,7 @@
     els.refreshBtn?.addEventListener('click', () => loadMembers({ force: true, keepDepartment: true }));
     els.backBtn?.addEventListener('click', () => backToDepartments());
     els.addMemberBtn?.addEventListener('click', () => openPasswordModal('', 'create'));
-    els.signupRequestsBtn?.addEventListener('click', openSignupRequestsModal);
+    els.signupRequestsBtn?.addEventListener('click', () => openPasswordModal('', 'signup-requests'));
     els.addDepartmentBtn?.addEventListener('click', () => openPasswordModal('', 'create-department'));
     els.departmentForm?.addEventListener('submit', submitDepartmentForm);
     els.departmentCancelBtn?.addEventListener('click', closeDepartmentModal);
@@ -2645,6 +2709,12 @@
 
     els.signupRequestsClose?.addEventListener('click', closeSignupRequestsModal);
     els.signupRequestsModal?.addEventListener('click', (event) => {
+      const statusBtn = event.target.closest('[data-signup-status]');
+      if (statusBtn) {
+        event.preventDefault();
+        const status = statusBtn.getAttribute('data-signup-status') || 'pending';
+        return loadSignupRequests({ status });
+      }
       if (event.target === els.signupRequestsModal) closeSignupRequestsModal();
     });
     els.signupRequestsList?.addEventListener('click', (event) => {
@@ -2783,6 +2853,7 @@
 
     bindEvents();
     loadMembers();
+    refreshSignupPendingCount();
   }
 
   document.addEventListener('DOMContentLoaded', init);
