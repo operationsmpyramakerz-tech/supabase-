@@ -7,7 +7,12 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: url('/images/login-background.jpg') center/cover no-repeat, linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
+  background-color: #f8fafc;
+  background-image: url('/images/login-background.png'), linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -37,7 +42,7 @@ body {
 
 .login-logo {
   height: 60px;
-  margin-bottom: 1rem;
+  margin-bottom: 0.78rem;
 }
 
 .login-header h1 {
@@ -495,9 +500,9 @@ body.auth-signup-mode .login-logo {
 
 .login-wordmark {
   display: block;
-  width: min(250px, 78%);
+  width: min(125px, 48%);
   height: auto;
-  margin: 0.1rem auto 0.35rem;
+  margin: 0.1rem auto 0.3rem;
   object-fit: contain;
 }
 
@@ -571,30 +576,32 @@ body.auth-transitioning-to-signup .login-wordmark {
   body {
     align-items: center;
     padding: 0;
+    background-position: center center;
+    background-size: cover;
   }
 
   .login-container {
-    max-width: 344px;
-    padding: 0.7rem;
+    max-width: 320px;
+    padding: 0.55rem;
   }
 
   .login-card {
     border-radius: 14px;
-    padding: 1.45rem 1.45rem 1.35rem;
+    padding: 1.18rem 1.1rem 1.08rem;
   }
 
   .login-logo {
-    height: 46px;
-    margin-bottom: 0.55rem;
+    height: 40px;
+    margin-bottom: 0.45rem;
   }
 
   .login-wordmark {
-    width: min(205px, 74%);
-    margin-bottom: 0.25rem;
+    width: min(102px, 42%);
+    margin-bottom: 0.2rem;
   }
 
   .login-header {
-    margin-bottom: 1.2rem;
+    margin-bottom: 0.95rem;
   }
 
   .form-group {
@@ -602,27 +609,28 @@ body.auth-transitioning-to-signup .login-wordmark {
   }
 
   .form-group input {
-    min-height: 46px;
-    padding-top: 0.72rem;
-    padding-bottom: 0.72rem;
-    font-size: 0.95rem;
+    min-height: 42px;
+    padding-top: 0.62rem;
+    padding-bottom: 0.62rem;
+    font-size: 0.9rem;
     border-radius: 10px;
   }
 
   .forgot-password-link {
-    margin: -0.15rem 0 0.9rem;
-    font-size: 0.9rem;
+    margin: -0.08rem 0 0.72rem;
+    font-size: 0.86rem;
   }
 
   .login-btn {
-    min-height: 46px;
+    min-height: 42px;
     border-radius: 10px;
-    padding: 0.72rem 1rem;
+    padding: 0.64rem 1rem;
+    font-size: 0.94rem;
   }
 
   .signup-inline-prompt {
-    margin-top: 0.85rem;
-    font-size: 0.9rem;
+    margin-top: 0.72rem;
+    font-size: 0.84rem;
   }
 
   body.auth-signup-mode,
@@ -632,22 +640,22 @@ body.auth-transitioning-to-signup .login-wordmark {
 
   body.auth-recovery-mode .login-container,
   body.auth-signup-mode .login-container {
-    max-width: 356px;
+    max-width: 336px;
   }
 
   body.auth-recovery-mode .login-card,
   body.auth-signup-mode .login-card {
-    padding: 1.45rem;
+    padding: 1.18rem;
   }
 
   body.auth-signup-mode .login-logo,
   body.auth-recovery-mode .login-logo {
-    height: 44px;
+    height: 40px;
   }
 
   body.auth-signup-mode .login-wordmark,
   body.auth-recovery-mode .login-wordmark {
-    width: min(205px, 74%);
+    width: min(102px, 42%);
   }
 
   .forgot-copy {
