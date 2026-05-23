@@ -207,7 +207,7 @@
     const name = String(item?.name || (kind === 'kit' ? 'Untitled Kit' : 'Untitled Proposal')).trim();
     const count = Number(item?.itemsCount || 0) || 0;
     const createdBy = String(item?.createdBy || '').trim();
-    const badge = kind === 'kit' ? 'KIT' : 'Q';
+    const badge = kind === 'kit' ? 'K' : 'Q';
     return `
       <article class="products-proposal-folder" data-folder-kind="${escapeHTML(kind)}" data-id="${escapeHTML(id)}" data-can-edit="${canEditItem(item) ? '1' : '0'}" data-name="${escapeHTML(name)}">
         <button type="button" class="proposal-folder-menu-btn" data-action="toggle-${kind}-menu" data-id="${escapeHTML(id)}" aria-label="Actions for ${escapeHTML(name)}"><span class="proposal-menu-dots" aria-hidden="true">•••</span></button>
@@ -217,7 +217,12 @@
           <button type="button" class="is-danger" data-action="delete-${kind}" data-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
         </div>
         <button type="button" class="products-proposal-folder__main" data-action="open-${kind}" data-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(name)}">
-          <span class="products-proposal-folder__icon"><i data-feather="folder"></i><small>${escapeHTML(badge)}</small></span>
+          <span class="proposal-folder-figure" aria-hidden="true">
+            <span class="proposal-folder-figure__paper proposal-folder-figure__paper--left"></span>
+            <span class="proposal-folder-figure__paper proposal-folder-figure__paper--right"></span>
+            <span class="proposal-folder-figure__back"></span>
+            <span class="proposal-folder-figure__front"><small>${escapeHTML(badge)}</small></span>
+          </span>
           <strong>${escapeHTML(name)}</strong>
           <span>${formatNumber(count)} component${count === 1 ? '' : 's'}</span>
           ${createdBy ? `<em>Created by ${escapeHTML(createdBy)}</em>` : ''}
@@ -459,6 +464,8 @@
     const isKits = state.tab === 'kits';
     els.proposalsPanel.hidden = isKits;
     els.kitsPanel.hidden = !isKits;
+    if (els.createProposalBtn) els.createProposalBtn.hidden = isKits;
+    if (els.createKitBtn) els.createKitBtn.hidden = !isKits;
     document.querySelectorAll('.proposals-tab').forEach((btn) => {
       const active = btn.getAttribute('data-tab') === state.tab;
       btn.classList.toggle('is-active', active);
@@ -510,6 +517,7 @@
   async function openProposalDetail(id, options = {}) {
     const proposalId = String(id || '').trim();
     if (!proposalId) return;
+    document.body.classList.add('proposal-detail-open');
     if (els.proposalsList) els.proposalsList.hidden = true;
     if (els.proposalDetail) {
       els.proposalDetail.hidden = false;
@@ -530,6 +538,7 @@
   async function openKitDetail(id, options = {}) {
     const kitId = String(id || '').trim();
     if (!kitId) return;
+    document.body.classList.add('proposal-detail-open');
     if (els.kitsList) els.kitsList.hidden = true;
     if (els.kitDetail) {
       els.kitDetail.hidden = false;
@@ -548,6 +557,7 @@
   }
 
   function backToProposals() {
+    document.body.classList.remove('proposal-detail-open');
     state.activeProposal = null;
     state.proposalItems = [];
     state.proposalEditMode = false;
@@ -558,6 +568,7 @@
   }
 
   function backToKits() {
+    document.body.classList.remove('proposal-detail-open');
     state.activeKit = null;
     state.kitItems = [];
     state.kitEditMode = false;

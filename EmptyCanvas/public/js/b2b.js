@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let allSchools = [];
   let activeEditId = null;
   let activeEditName = '';
+  let activeAdminPassword = '';
   let modalUi = null;
   let stocktakingColumnOptions = [];
   let stocktakingColumnOptionsPromise = null;
@@ -23,6 +24,110 @@ document.addEventListener('DOMContentLoaded', () => {
     const end = current + 15;
     return Array.from({ length: end - start + 1 }, (_, index) => String(start + index));
   })();
+
+
+
+  function ensureAdminPasswordModal() {
+    let modal = document.querySelector('[data-b2b-admin-password-modal]');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'b2b-admin-password-modal';
+    modal.dataset.b2bAdminPasswordModal = 'true';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+      <div class="b2b-admin-password-modal__backdrop" data-admin-cancel></div>
+      <div class="b2b-admin-password-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="b2bAdminPasswordTitle">
+        <button class="b2b-admin-password-modal__close" type="button" data-admin-cancel aria-label="Close"><span aria-hidden="true">×</span></button>
+        <div class="b2b-admin-password-modal__icon"><i data-feather="shield"></i></div>
+        <div class="b2b-admin-password-modal__copy">
+          <span>ADMIN CONFIRMATION</span>
+          <h3 id="b2bAdminPasswordTitle" data-admin-title>Admin password required</h3>
+          <p data-admin-message>Enter the Admin password to continue.</p>
+        </div>
+        <label class="b2b-admin-password-modal__field">
+          <span>Admin password</span>
+          <input type="password" autocomplete="current-password" placeholder="Enter Admin password" data-admin-input />
+        </label>
+        <div class="b2b-admin-password-modal__error" data-admin-error aria-live="polite"></div>
+        <div class="b2b-admin-password-modal__actions">
+          <button type="button" class="b2b-admin-password-modal__btn b2b-admin-password-modal__btn--light" data-admin-cancel>Cancel</button>
+          <button type="button" class="b2b-admin-password-modal__btn b2b-admin-password-modal__btn--dark" data-admin-confirm>Continue</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    if (window.feather) feather.replace();
+    return modal;
+  }
+
+  function requestAdminPassword({ title = 'Admin password required', message = 'Enter the Admin password to continue.' } = {}) {
+    const modal = ensureAdminPasswordModal();
+    const titleEl = modal.querySelector('[data-admin-title]');
+    const messageEl = modal.querySelector('[data-admin-message]');
+    const input = modal.querySelector('[data-admin-input]');
+    const error = modal.querySelector('[data-admin-error]');
+    const confirm = modal.querySelector('[data-admin-confirm]');
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = message;
+    if (input) input.value = '';
+    if (error) error.textContent = '';
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+
+    return new Promise((resolve) => {
+      const cleanup = (value) => {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        modal.querySelectorAll('[data-admin-cancel]').forEach((node) => node.removeEventListener('click', onCancel));
+        if (confirm) confirm.removeEventListener('click', onConfirm);
+        if (input) input.removeEventListener('keydown', onKeydown);
+        document.removeEventListener('keydown', onDocKeydown);
+        resolve(value);
+      };
+      const onCancel = () => cleanup(null);
+      const onDocKeydown = (event) => { if (event.key === 'Escape') cleanup(null); };
+      const onKeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); onConfirm(); } };
+      const onConfirm = async () => {
+        const password = String(input?.value || '').trim();
+        if (!password) { if (error) error.textContent = 'Please enter the Admin password.'; return; }
+        if (error) error.textContent = '';
+        if (confirm) { confirm.disabled = true; confirm.textContent = 'Checking...'; }
+        try {
+          const response = await fetch('/api/b2b/admin/verify', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || 'Invalid Admin password.');
+          }
+          cleanup(password);
+        } catch (err) {
+          if (error) error.textContent = err?.message || 'Failed to verify Admin password.';
+        } finally {
+          if (confirm) { confirm.disabled = false; confirm.textContent = 'Continue'; }
+        }
+      };
+      modal.querySelectorAll('[data-admin-cancel]').forEach((node) => node.addEventListener('click', onCancel));
+      if (confirm) confirm.addEventListener('click', onConfirm);
+      if (input) { input.addEventListener('keydown', onKeydown); setTimeout(() => input.focus({ preventScroll: true }), 80); }
+      document.addEventListener('keydown', onDocKeydown);
+    });
+  }
+
+  async function requireAdminForAction(actionLabel) {
+    const password = await requestAdminPassword({
+      title: 'Admin password required',
+      message: `Enter the Admin password to ${actionLabel}.`,
+    });
+    if (!password) return null;
+    activeAdminPassword = password;
+    return password;
+  }
 
   const FIELD_GROUPS = [
     {
@@ -236,21 +341,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const editBtn = card.querySelector('[data-edit-school]');
         if (editBtn) {
-          editBtn.addEventListener('click', (event) => {
+          editBtn.addEventListener('click', async (event) => {
             event.preventDefault();
             event.stopPropagation();
             closeActionMenus();
+            const password = await requireAdminForAction(`edit ${schoolName || 'this school'}`);
+            if (!password) return;
             openEditModal(school.id, schoolName);
           });
         }
 
         const deleteBtn = card.querySelector('[data-delete-school]');
         if (deleteBtn) {
-          deleteBtn.addEventListener('click', (event) => {
+          deleteBtn.addEventListener('click', async (event) => {
             event.preventDefault();
             event.stopPropagation();
             closeActionMenus();
-            deleteSchool(school.id, schoolName);
+            const password = await requireAdminForAction(`delete ${schoolName || 'this school'}`);
+            if (!password) return;
+            deleteSchool(school.id, schoolName, password);
           });
         }
 
@@ -910,6 +1019,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.remove('modal-open');
     activeEditId = null;
     activeEditName = '';
+    activeAdminPassword = '';
     setModalError('');
   }
 
@@ -941,6 +1051,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const openAddModal = async () => {
     activeEditId = null;
+    const password = await requireAdminForAction('add a B2B school');
+    if (!password) return;
     await ensureStocktakingColumnOptions();
     openModal({ mode: 'add', values: {} });
   };
@@ -1040,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', () => {
         values = await uploadPendingContractFile(ui.form, values);
         ui.submit.textContent = mode === 'edit' ? 'Saving...' : 'Adding...';
       }
-      const savePayload = { fields: values };
+      const savePayload = { fields: values, adminPassword: activeAdminPassword };
       if (Object.prototype.hasOwnProperty.call(values, 'stocktaking_column')) {
         savePayload.stocktaking_column = values.stocktaking_column;
       }
@@ -1127,7 +1239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function deleteSchool(id, schoolName = '') {
+  async function deleteSchool(id, schoolName = '', adminPassword = '') {
     const cleanId = String(id || '').trim();
     if (!cleanId) return;
     const confirmed = await requestDeleteConfirmation(schoolName || 'this school');
@@ -1137,6 +1249,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch(`/api/b2b/schools/${encodeURIComponent(cleanId)}`, {
         method: 'DELETE',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPassword }),
       });
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
