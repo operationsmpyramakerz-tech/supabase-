@@ -1184,7 +1184,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------- Page cache (speed) ----------
   // Cache the requested orders list in sessionStorage to avoid re-fetching / re-rendering
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
-  const REQ_CACHE_KEY = "cache:ops:requestedOrders:v3";
+  const REQ_CACHE_KEY = isMaintenancePage
+    ? "cache:ops:requestedOrders:v4:maintenance"
+    : "cache:ops:requestedOrders:v4:all-system";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
   function readRequestedCache() {
@@ -3121,8 +3123,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // Operations Orders tabs must represent one workflow bucket only.
     // The old Notion logic used formulas/filters; after Supabase migration the UI
     // must do the same split locally instead of grouping several statuses together.
-    // All mirrors Current Orders: show every non-archived order in one list.
+    // All mirrors Current Orders: show every non-archived order in one list, across
+    // the whole system. Other operations tabs stay scoped to S.V-approved orders.
     if (currentTab === "all") return true;
+
+    const approvalValues = (g.items || [])
+      .map((it) => norm(it?.svApproval || it?.svApprovalName || ""))
+      .filter(Boolean);
+    const hasApprovalData = approvalValues.length > 0;
+    const isApprovedForOperations = !hasApprovalData || approvalValues.some((value) => value === "approved");
+    if (!isApprovedForOperations) return false;
+
     if (currentTab === "not-started") return idx < 3;
     if (currentTab === "remaining") return !isMaintenanceOrder && idx === 3 && !!g?.hasRemaining;
     if (currentTab === "received") return idx === 3 && (isMaintenanceOrder || !!g?.hasReceived);
@@ -5162,6 +5173,11 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
     try {
       const url = new URL("/api/orders/requested", window.location.origin);
+      if (!isMaintenancePage) {
+        // Operations Orders All tab must include every order in the system.
+        // The frontend keeps non-All tabs scoped to approved operations orders.
+        url.searchParams.set("scope", "all-system");
+      }
       try {
         const params = new URLSearchParams(window.location.search || "");
         if (params.get("_fresh") === "1" || params.has("_refresh")) {
