@@ -1186,7 +1186,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
   const REQ_CACHE_KEY = isMaintenancePage
     ? "cache:ops:requestedOrders:v4:maintenance"
-    : "cache:ops:requestedOrders:v4:all-system";
+    : "cache:ops:requestedOrders:v5:approved-tab";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
   function readRequestedCache() {
@@ -2625,6 +2625,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (idx >= 5) return "archive";
     if (idx >= 4) return "delivered";
     if (idx >= 3) return "received";
+    if (idx === 2) return "approved";
     return "not-started";
   }
 
@@ -2633,7 +2634,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tab = norm(url.searchParams.get("tab"));
     const allowed = isMaintenancePage
       ? new Set(["received", "delivered"])
-      : new Set(["all", "not-started", "remaining", "received", "delivered", "archive"]);
+      : new Set(["all", "not-started", "approved", "remaining", "received", "delivered", "archive"]);
     if (allowed.has(tab)) return tab;
     return isMaintenancePage ? "received" : "all";
   }
@@ -2669,7 +2670,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Stage alone is not enough because Operations Orders splits the
   // post-review workflow into separate operational buckets:
-  // - Not Started: order is approved and ready for operations (In progress)
+  // - Not Started: orders still under supervision
+  // - Approved: S.V-approved orders in progress
   // - Remaining: shipped/received-by-operations but still has remaining qty
   // - Received: shipped/received-by-operations and no remaining qty
   // - Delivered: arrived/delivered/final status
@@ -2679,6 +2681,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (idx >= 5) return "archive";
     if (idx >= 4) return "delivered";
     if (idx >= 3) return g?.hasRemaining ? "remaining" : "received";
+    if (idx === 2) return "approved";
     return "not-started";
   }
 
@@ -3132,9 +3135,14 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter(Boolean);
     const hasApprovalData = approvalValues.length > 0;
     const isApprovedForOperations = !hasApprovalData || approvalValues.some((value) => value === "approved");
+
+    // Not Started now means orders still under supervision.
+    if (currentTab === "not-started") return idx === 1;
+
     if (!isApprovedForOperations) return false;
 
-    if (currentTab === "not-started") return idx < 3;
+    // Approved now means S.V-approved orders that moved to In progress.
+    if (currentTab === "approved") return idx === 2;
     if (currentTab === "remaining") return !isMaintenanceOrder && idx === 3 && !!g?.hasRemaining;
     if (currentTab === "received") return idx === 3 && (isMaintenanceOrder || !!g?.hasReceived);
     if (currentTab === "delivered") return idx === 4;
@@ -3506,13 +3514,13 @@ document.addEventListener("DOMContentLoaded", () => {
     setRowHidden(modalMeta, !hasVisibleMetaRow);
 
     // Actions visibility
-    // - Not Started: show "Received by operations" only before shipping
+    // - Approved: show "Received by operations" for S.V-approved In progress orders
     // - Remaining: show it again so operations can add another receipt number
     if (shippedBtn) {
       const showShippedBtn = !isMaintenancePage && (
         isMaintenanceOrder
-          ? currentTab === "not-started" && stage.idx < 3
-          : ((currentTab === "not-started" && stage.idx < 3) || currentTab === "remaining")
+          ? currentTab === "approved" && stage.idx === 2
+          : ((currentTab === "approved" && stage.idx === 2) || currentTab === "remaining")
       );
       shippedBtn.style.display = showShippedBtn ? "inline-flex" : "none";
       shippedBtn.dataset.mode = isMaintenanceOrder ? "maintenance" : "requested";
@@ -3568,7 +3576,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const canLogMaintenance = isMaintenanceOrder && (
         isMaintenancePage
           ? stageIdx >= 4
-          : currentTab === "not-started"
+          : currentTab === "approved"
       );
       logMaintenanceBtn.style.display = canLogMaintenance ? "inline-flex" : "none";
     }
@@ -3582,7 +3590,7 @@ document.addEventListener("DOMContentLoaded", () => {
       modalItems.innerHTML = "";
       const frag = document.createDocumentFragment();
 
-      const canEditQty = !isMaintenanceOrder && (currentTab === "not-started" || currentTab === "remaining");
+      const canEditQty = !isMaintenanceOrder && (currentTab === "approved" || currentTab === "remaining");
 
       if (isRemainingTab && items.length === 0) {
         const empty = document.createElement("div");
@@ -5069,12 +5077,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       writeRequestedCache(allItems);
       groups = buildGroups(allItems);
-      currentTab = "not-started";
+      currentTab = "approved";
       closeDownloadMenu();
       closeOrderModal({ restoreFocus: false });
       updateTabUI();
       render();
-      toast("success", "UnArchived", "Order returned to Not Started.");
+      toast("success", "UnArchived", "Order returned to Approved.");
     } catch (e) {
       console.error(e);
       alert(e.message || "Failed to unarchive order.");
