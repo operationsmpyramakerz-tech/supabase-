@@ -1462,6 +1462,8 @@ if (document.querySelector('.sidebar')) {
     'kpis': 'a[href="/kpis"]',
     'kpi': 'a[href="/kpis"]',
     'key performance indicators': 'a[href="/kpis"]',
+    'history': 'a[href="/history"]',
+    'system history': 'a[href="/history"]',
     'messages': 'a[href="/messages"]',
     'emails': 'a[href="/messages"]',
     'email': 'a[href="/messages"]',
@@ -1514,6 +1516,16 @@ if (document.querySelector('.sidebar')) {
     if (!el) return;
     try { el.style.removeProperty('display'); } catch { el.style.display = ''; }
     el.removeAttribute('aria-hidden');
+  }
+
+  function syncUserMenuPageAccess(allowed){
+    const hasHistoryAccess = hasAllowedPage(allowed || [], ['History', 'System History', '/history']);
+    try {
+      document.querySelectorAll('[data-user-menu-action="history"]').forEach((item) => {
+        if (hasHistoryAccess) showEl(item);
+        else hideEl(item);
+      });
+    } catch {}
   }
 
   // أظهر المسموح وأخفِ غير المسموح (حتمي)
@@ -1593,6 +1605,9 @@ if (document.querySelector('.sidebar')) {
         }
       });
     } catch {}
+
+    // User-menu items must follow the same Allowed Pages logic.
+    syncUserMenuPageAccess(allowed);
 
   }
 
@@ -3146,6 +3161,9 @@ function initUserMenuWidget() {
       </div>
     `;
     document.body.appendChild(panel);
+    try { syncUserMenuPageAccess(getCachedAllowedPages() || []); } catch {}
+  } else {
+    try { syncUserMenuPageAccess(getCachedAllowedPages() || []); } catch {}
   }
 
   // Keep the header section (avatar + name + position) in sync with the account info.
