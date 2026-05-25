@@ -48,6 +48,11 @@
     return time && time !== '—' ? `${date} - ${time}` : date;
   }
 
+  function entityLabelForCard(row){
+    const label = String(row?.entityLabel || row?.entityId || '').trim();
+    return label || '—';
+  }
+
   function dateKey(value){
     if (!value) return '';
     const d = new Date(value);
@@ -207,11 +212,12 @@
     const visibleRows = rows.slice(0, visibleLimit);
     const canShowMore = rows.length > visibleRows.length;
 
-    const cards = visibleRows.map((row, index) => `
-      <div class="history-row" role="button" tabindex="0" data-history-index="${index}" aria-label="Open ${escapeHTML(row.actionLabel || 'history action')}">
+    const cards = visibleRows.map((row) => `
+      <div class="history-row" aria-label="${escapeHTML(row.actionLabel || 'history action')}">
         <span class="history-row-icon"><i data-feather="${escapeHTML(iconFor(row))}"></i></span>
         <span class="history-row-main">
           <span class="history-row-title">${escapeHTML(row.actionLabel || 'Action')}</span>
+          <span class="history-row-entity">${escapeHTML(entityLabelForCard(row))}</span>
         </span>
         <span class="history-row-meta">
           <span class="history-row-date">${escapeHTML(formatCardDateTime(row.createdAt))}</span>
@@ -584,12 +590,6 @@
       return;
     }
 
-    const rowBtn = event.target.closest('[data-history-index]');
-    if (rowBtn) {
-      const idx = Number(rowBtn.dataset.historyIndex);
-      if (Number.isFinite(idx) && state.rows[idx]) openDetails(state.rows[idx]);
-      return;
-    }
     if (event.target.closest('[data-history-close]')) closeDetails();
     if (event.target.closest('[data-history-filter-close]')) closeFilterModal();
   });
@@ -599,11 +599,6 @@
       closeDetails();
       closeFilterModal();
       return;
-    }
-    if ((event.key === 'Enter' || event.key === ' ') && event.target?.matches?.('[data-history-index]')) {
-      event.preventDefault();
-      const idx = Number(event.target.dataset.historyIndex);
-      if (Number.isFinite(idx) && state.rows[idx]) openDetails(state.rows[idx]);
     }
   });
 
