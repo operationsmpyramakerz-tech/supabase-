@@ -102,6 +102,11 @@
           <span class="order-status-tab__icon"><i data-feather="pause-circle"></i></span>
           <span class="order-status-tab__label">Not Started</span>
         </a>
+        <a class="tab-portfolio order-status-tab" data-tab="approved" role="tab" aria-selected="false"
+           href="/orders/requested?tab=approved">
+          <span class="order-status-tab__icon"><i data-feather="check-square"></i></span>
+          <span class="order-status-tab__label">Approved</span>
+        </a>
         <a class="tab-portfolio order-status-tab" data-tab="remaining" role="tab" aria-selected="false"
            href="/orders/requested?tab=remaining">
           <span class="order-status-tab__icon"><i data-feather="clock"></i></span>
@@ -622,6 +627,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=users-center-access-v1"></script>
-<script src="/js/requested-orders.js?v=ops-all-tab-v1"></script>
+<script src="/js/requested-orders.js?v=ops-approved-tab-v1"></script>
 </body>
 </html>
