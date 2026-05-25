@@ -967,3 +967,67 @@
     font-size:.82rem;
   }
 }
+
+
+/* v6 - readonly history cards, compact entity label, round creator icon */
+.history-row{
+  cursor:default !important;
+}
+.history-row:hover{
+  transform:none !important;
+}
+.history-row-entity{
+  display:block;
+  margin-top:.18rem;
+  color:#7b8494;
+  font-size:.76rem;
+  line-height:1.08;
+  font-weight:850;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.history-person-btn{
+  width:40px !important;
+  height:40px !important;
+  min-width:40px !important;
+  max-width:40px !important;
+  flex:0 0 40px !important;
+  aspect-ratio:1 / 1;
+  padding:0 !important;
+  border-radius:50% !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  line-height:1 !important;
+  overflow:hidden;
+}
+.history-person-btn svg{
+  width:18px !important;
+  height:18px !important;
+  display:block;
+  flex:0 0 auto;
+}
+.history-page-chip{
+  flex-direction:row !important;
+}
+@media (max-width:760px){
+  .history-row{
+    min-height:100px;
+  }
+  .history-row-entity{
+    font-size:.72rem;
+    max-width:100%;
+  }
+  .history-person-btn{
+    width:38px !important;
+    height:38px !important;
+    min-width:38px !important;
+    max-width:38px !important;
+    flex-basis:38px !important;
+  }
+  .history-person-btn svg{
+    width:17px !important;
+    height:17px !important;
+  }
+}
