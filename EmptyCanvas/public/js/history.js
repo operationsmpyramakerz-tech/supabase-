@@ -63,32 +63,80 @@
     try { if (window.feather) window.feather.replace(); } catch {}
   }
 
-  function setSelectOptions(select, values, fallbackLabel){
-    if (!select) return;
-    const current = select.value || '';
+  function choiceRefs(type){
+    const prefix = type === 'actor' ? 'historyActorFilter' : 'historyPageFilter';
+    return {
+      input: $(prefix),
+      button: $(`${prefix}Button`),
+      menu: $(`${prefix}Menu`),
+      fallback: type === 'actor' ? 'All users' : 'All pages',
+    };
+  }
+
+  function updateChoiceLabel(type){
+    const refs = choiceRefs(type);
+    const label = refs.button?.querySelector('.history-choice-label');
+    if (label) label.textContent = refs.input?.value || refs.fallback;
+  }
+
+  function closeChoiceMenus(exceptType){
+    ['page', 'actor'].forEach((type) => {
+      if (type === exceptType) return;
+      const refs = choiceRefs(type);
+      if (refs.menu) refs.menu.hidden = true;
+      refs.button?.classList.remove('is-open');
+    });
+  }
+
+  function setChoiceOptions(type, values, fallbackLabel){
+    const refs = choiceRefs(type);
+    if (!refs.input || !refs.menu) return;
+    const current = refs.input.value || '';
     const unique = Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)))
       .sort((a, b) => a.localeCompare(b));
-    select.innerHTML = `<option value="">${escapeHTML(fallbackLabel)}</option>` + unique.map((value) => (
-      `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`
-    )).join('');
-    if (current && unique.includes(current)) select.value = current;
+    refs.menu.innerHTML = [
+      `<button type="button" class="history-choice-option" data-history-choice-type="${escapeHTML(type)}" data-history-choice-value=""><span>${escapeHTML(fallbackLabel)}</span><i data-feather="check"></i></button>`,
+      ...unique.map((value) => `<button type="button" class="history-choice-option" data-history-choice-type="${escapeHTML(type)}" data-history-choice-value="${escapeHTML(value)}"><span>${escapeHTML(value)}</span><i data-feather="check"></i></button>`),
+    ].join('');
+    if (current && unique.includes(current)) refs.input.value = current;
+    else if (current && !unique.includes(current)) refs.input.value = '';
+    updateChoiceLabel(type);
+    updateChoiceSelected(type);
+  }
+
+  function updateChoiceSelected(type){
+    const refs = choiceRefs(type);
+    if (!refs.menu || !refs.input) return;
+    const current = refs.input.value || '';
+    refs.menu.querySelectorAll('[data-history-choice-value]').forEach((option) => {
+      option.classList.toggle('is-selected', String(option.dataset.historyChoiceValue || '') === current);
+    });
+  }
+
+  function toggleChoice(type){
+    const refs = choiceRefs(type);
+    if (!refs.menu || !refs.button) return;
+    const willOpen = refs.menu.hidden;
+    closeChoiceMenus(willOpen ? type : undefined);
+    refs.menu.hidden = !willOpen;
+    refs.button.classList.toggle('is-open', willOpen);
+    if (willOpen) updateChoiceSelected(type);
+    try { if (window.feather) window.feather.replace(); } catch {}
+  }
+
+  function setChoiceValue(type, value){
+    const refs = choiceRefs(type);
+    if (!refs.input) return;
+    refs.input.value = String(value || '');
+    updateChoiceLabel(type);
+    updateChoiceSelected(type);
+    closeChoiceMenus();
   }
 
   function syncFilterOptions(){
     const rows = state.allRows || [];
-    setSelectOptions($('historyPageFilter'), rows.map((row) => row.pageName || 'System'), 'All pages');
-    setSelectOptions($('historyActorFilter'), rows.map((row) => row.actorName || 'System'), 'All users');
-
-    const dates = Array.from(new Set(rows.map((row) => dateKey(row.createdAt)).filter(Boolean))).sort().reverse();
-    const dateSelect = $('historyDateFilter');
-    if (dateSelect) {
-      const current = dateSelect.value || '';
-      dateSelect.innerHTML = '<option value="">All dates</option>' + dates.map((value) => {
-        const label = formatShortDate(value);
-        return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
-      }).join('');
-      if (current && dates.includes(current)) dateSelect.value = current;
-    }
+    setChoiceOptions('page', rows.map((row) => row.pageName || 'System'), 'All pages');
+    setChoiceOptions('actor', rows.map((row) => row.actorName || 'System'), 'All users');
   }
 
   function updateActiveFilterText(){
@@ -227,6 +275,10 @@
     if ($('historyPageFilter')) $('historyPageFilter').value = state.filters.page || '';
     if ($('historyActorFilter')) $('historyActorFilter').value = state.filters.actor || '';
     if ($('historyDateFilter')) $('historyDateFilter').value = state.filters.date || '';
+    updateChoiceLabel('page');
+    updateChoiceLabel('actor');
+    updateChoiceSelected('page');
+    updateChoiceSelected('actor');
     modal.hidden = false;
     document.body.classList.add('history-modal-open');
     try { if (window.feather) window.feather.replace(); } catch {}
@@ -235,10 +287,25 @@
   function closeFilterModal(){
     const modal = $('historyFilterModal');
     if (modal) modal.hidden = true;
+    closeChoiceMenus();
     document.body.classList.remove('history-modal-open');
   }
 
   document.addEventListener('click', (event) => {
+    const choiceToggle = event.target.closest('[data-history-choice-toggle]');
+    if (choiceToggle) {
+      toggleChoice(choiceToggle.dataset.historyChoiceToggle);
+      return;
+    }
+
+    const choiceOption = event.target.closest('[data-history-choice-type][data-history-choice-value]');
+    if (choiceOption) {
+      setChoiceValue(choiceOption.dataset.historyChoiceType, choiceOption.dataset.historyChoiceValue || '');
+      return;
+    }
+
+    if (!event.target.closest('.history-choice-field')) closeChoiceMenus();
+
     const rowBtn = event.target.closest('[data-history-index]');
     if (rowBtn) {
       const idx = Number(rowBtn.dataset.historyIndex);
@@ -260,6 +327,11 @@
   $('historyFilterOpenBtn')?.addEventListener('click', openFilterModal);
   $('historyApplyFilters')?.addEventListener('click', () => { applyFiltersFromControls(); closeFilterModal(); });
   $('historyClearFilters')?.addEventListener('click', () => { clearFilters(); closeFilterModal(); });
+  $('historyDateFilter')?.addEventListener('click', (event) => {
+    try {
+      if (typeof event.currentTarget.showPicker === 'function') event.currentTarget.showPicker();
+    } catch {}
+  });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadHistory);
   else loadHistory();
