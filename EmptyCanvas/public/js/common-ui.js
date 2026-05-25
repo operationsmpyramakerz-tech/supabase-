@@ -3117,6 +3117,11 @@ function initUserMenuWidget() {
           <span class="umi-label">User Profile</span>
         </button>
 
+        <button type="button" class="user-menu-item" data-user-menu-action="history">
+          <span class="umi-ico"><i data-feather="clock"></i></span>
+          <span class="umi-label">History</span>
+        </button>
+
         <button type="button" class="user-menu-item" data-user-menu-action="how">
           <span class="umi-ico"><i data-feather="activity"></i></span>
           <span class="umi-label">How it works</span>
@@ -3580,6 +3585,15 @@ function initUserMenuWidget() {
           window.OpsShell.navigate('/account', { pushHistory: true });
         } else {
           window.location.href = "/account";
+        }
+        return;
+      }
+
+      if (action === "history") {
+        if (window.OpsShell && typeof window.OpsShell.navigate === 'function') {
+          window.OpsShell.navigate('/history', { pushHistory: true });
+        } else {
+          window.location.href = "/history";
         }
         return;
       }
@@ -4186,6 +4200,7 @@ function deriveOpsShellTitle(path) {
     ['/expenses', 'Expenses'],
     ['/b2b', 'B2B'],
     ['/account', 'Account'],
+    ['/history', 'History'],
     ['/how-it-works', 'How it works'],
   ];
   const found = map.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
