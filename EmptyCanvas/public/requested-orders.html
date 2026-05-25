@@ -92,7 +92,12 @@
   <div class="orders-toolbar" aria-label="Operations orders tools">
     <div class="orders-toolbar__scroll">
       <div id="reqTabs" class="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
-        <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="true"
+        <a class="tab-portfolio order-status-tab" data-tab="all" role="tab" aria-selected="true"
+           href="/orders/requested?tab=all">
+          <span class="order-status-tab__icon"><i data-feather="layers"></i></span>
+          <span class="order-status-tab__label">All</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="false"
            href="/orders/requested?tab=not-started">
           <span class="order-status-tab__icon"><i data-feather="pause-circle"></i></span>
           <span class="order-status-tab__label">Not Started</span>
@@ -617,6 +622,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=users-center-access-v1"></script>
-<script src="/js/requested-orders.js?v=ops-edit-details-v1"></script>
+<script src="/js/requested-orders.js?v=ops-all-tab-v1"></script>
 </body>
 </html>
