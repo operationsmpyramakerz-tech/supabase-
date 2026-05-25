@@ -706,3 +706,120 @@
     max-height:220px;
   }
 }
+
+/* v4 - compact activity cards without second metadata line */
+.history-list{
+  gap:.65rem;
+}
+.history-row{
+  padding:.78rem .86rem;
+  border-radius:20px;
+  gap:.72rem;
+  min-height:82px;
+}
+.history-row-icon{
+  width:44px;
+  height:44px;
+  border-radius:16px;
+}
+.history-row-icon svg{
+  width:20px;
+  height:20px;
+}
+.history-row-title{
+  font-size:1rem;
+}
+.history-row-sub{
+  display:none !important;
+}
+.history-row-meta{
+  gap:.38rem;
+  align-items:end;
+}
+.history-row-date{
+  font-size:.9rem;
+  line-height:1.1;
+}
+.history-page-chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:.38rem;
+  max-width:100%;
+}
+.history-page-person{
+  width:34px;
+  height:34px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  background:#000;
+  color:#fff;
+  box-shadow:0 10px 22px rgba(0,0,0,.14);
+}
+.history-page-person svg{
+  width:17px;
+  height:17px;
+  stroke:#fff;
+}
+.history-page-pill{
+  padding:.38rem .64rem;
+  font-size:.76rem;
+  max-width:170px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+@media (max-width: 760px){
+  .history-list{
+    gap:.62rem;
+  }
+  .history-row{
+    grid-template-columns:auto minmax(0,1fr);
+    padding:.78rem;
+    gap:.65rem;
+    min-height:108px;
+  }
+  .history-row-icon{
+    width:42px;
+    height:42px;
+  }
+  .history-row-title{
+    font-size:.96rem;
+    white-space:normal;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
+  .history-row-meta{
+    grid-column:1 / -1;
+    text-align:left;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:.65rem;
+  }
+  .history-row-date{
+    font-size:.86rem;
+    font-weight:900;
+  }
+  .history-page-chip{
+    min-width:0;
+    justify-content:flex-end;
+  }
+  .history-page-person{
+    width:32px;
+    height:32px;
+  }
+  .history-page-person svg{
+    width:16px;
+    height:16px;
+  }
+  .history-page-pill{
+    max-width:138px;
+    font-size:.74rem;
+    padding:.35rem .56rem;
+  }
+}
