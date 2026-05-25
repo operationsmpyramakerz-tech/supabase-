@@ -2631,9 +2631,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const tab = norm(url.searchParams.get("tab"));
     const allowed = isMaintenancePage
       ? new Set(["received", "delivered"])
-      : new Set(["not-started", "remaining", "received", "delivered", "archive"]);
+      : new Set(["all", "not-started", "remaining", "received", "delivered", "archive"]);
     if (allowed.has(tab)) return tab;
-    return isMaintenancePage ? "received" : "not-started";
+    return isMaintenancePage ? "received" : "all";
   }
 
   function normalizeTypeFilterValue(value) {
@@ -2971,7 +2971,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------- Rendering ----------
   let allItems = [];
   let groups = [];
-  let currentTab = "not-started";
+  let currentTab = isMaintenancePage ? "received" : "all";
   let currentTypeFilter = "all";
   let activeGroup = null;
   let lastFocus = null;
@@ -3121,6 +3121,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // Operations Orders tabs must represent one workflow bucket only.
     // The old Notion logic used formulas/filters; after Supabase migration the UI
     // must do the same split locally instead of grouping several statuses together.
+    // All mirrors Current Orders: show every non-archived order in one list.
+    if (currentTab === "all") return true;
     if (currentTab === "not-started") return idx < 3;
     if (currentTab === "remaining") return !isMaintenanceOrder && idx === 3 && !!g?.hasRemaining;
     if (currentTab === "received") return idx === 3 && (isMaintenanceOrder || !!g?.hasReceived);
