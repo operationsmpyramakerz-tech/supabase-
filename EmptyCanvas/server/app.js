@@ -418,6 +418,153 @@ app.use((req, res, next) => {
   next();
 });
 
+
+
+// -----------------------------------------------------------------------------
+// System History / Audit Log
+// -----------------------------------------------------------------------------
+const HISTORY_TABLE = String(process.env.SUPABASE_HISTORY_TABLE || 'operation_history').trim() || 'operation_history';
+const HISTORY_ENABLED = String(process.env.OPERATION_HISTORY_DISABLED || '').trim().toLowerCase() !== 'true';
+const HISTORY_REDACT_KEYS = new Set(['password', 'repeatpassword', 'repeat_password', 'currentpassword', 'newpassword', 'adminpassword', 'token', 'secret', 'apikey', 'api_key', 'authorization', 'cookie', 'session', 'service_role_key']);
+
+function _historyNormalizeKey(key) { return String(key || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); }
+
+function _historyCompactValue(value, depth = 0) {
+  if (value === null || typeof value === 'undefined') return value;
+  if (depth > 4) return '[nested]';
+  if (typeof value === 'string') return value.length > 700 ? `${value.slice(0, 700)}…` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(0, 30).map((item) => _historyCompactValue(item, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, val] of Object.entries(value)) {
+      const normKey = _historyNormalizeKey(key);
+      out[key] = (HISTORY_REDACT_KEYS.has(normKey) || /password|token|secret|cookie|authorization|base64|image|photo/i.test(String(key)))
+        ? '[redacted]'
+        : _historyCompactValue(val, depth + 1);
+      if (Object.keys(out).length >= 80) break;
+    }
+    return out;
+  }
+  return String(value);
+}
+
+function _historyTitleCase(value = '') {
+  return String(value || '').replace(/^\/+|\/+$/g, '').replace(/^api\//, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase()) || 'System';
+}
+
+function _historyResolvePage(pathname = '') {
+  const raw = String(pathname || '').split('?')[0] || '';
+  const pathOnly = raw.startsWith('/api/') ? `/${raw.slice(5)}` : raw;
+  const tests = [
+    [/^\/orders\/requested|^\/requested-orders|^\/orders\/assigned|^\/logistics/i, 'Operations Orders', 'operations_orders'],
+    [/^\/orders\/sv-orders|^\/orders\/sv|^\/orders\/review/i, 'Orders Review', 'orders_review'],
+    [/^\/orders\/new|^\/submit-order|^\/orders\/draft/i, 'Create New Order', 'create_order'],
+    [/^\/orders(\/|$)|^\/current-orders/i, 'Current Orders', 'current_orders'],
+    [/^\/stocktaking/i, 'Stocktaking', 'stocktaking'],
+    [/^\/products|^\/components/i, 'Products', 'products'],
+    [/^\/proposals|^\/kits/i, 'Proposals', 'proposals'],
+    [/^\/expenses\/users/i, 'Expenses Users', 'expenses_users'],
+    [/^\/expenses/i, 'Expenses', 'expenses'],
+    [/^\/b2b/i, 'B2B', 'b2b'],
+    [/^\/tasks/i, 'Tasks', 'tasks'],
+    [/^\/kpis/i, 'KPIs', 'kpis'],
+    [/^\/messages|^\/emails/i, 'Mail', 'mail'],
+    [/^\/user-access|^\/signup-requests|^\/signup-request/i, 'Users Center', 'users_center'],
+    [/^\/account|^\/forgot-password|^\/login|^\/logout/i, 'Account', 'account'],
+    [/^\/history/i, 'History', 'history'],
+    [/^\/how-it-works/i, 'How it works', 'how_it_works'],
+  ];
+  for (const [re, name, key] of tests) if (re.test(pathOnly)) return { pageName: name, pageKey: key };
+  const fallback = _historyTitleCase(pathOnly);
+  return { pageName: fallback, pageKey: _historyNormalizeKey(fallback) || 'system' };
+}
+
+function _historyResolveAction(method = '', pathname = '', body = {}) {
+  const upper = String(method || '').toUpperCase();
+  const raw = String(pathname || '').split('?')[0];
+  const bodyAction = String(body?.action || body?.status || body?.type || '').trim();
+  const last = raw.split('/').filter(Boolean).pop() || raw;
+  let verb = 'Action';
+  if (upper === 'POST') verb = 'Created';
+  if (upper === 'PATCH' || upper === 'PUT') verb = 'Updated';
+  if (upper === 'DELETE') verb = 'Deleted';
+  if (/login/i.test(raw)) verb = 'Signed in';
+  if (/logout/i.test(raw)) verb = 'Signed out';
+  if (/verify/i.test(raw)) verb = 'Verified';
+  if (/approve/i.test(raw)) verb = 'Approved';
+  if (/reject/i.test(raw)) verb = 'Rejected';
+  if (/archive/i.test(raw)) verb = 'Archived';
+  if (/unarchive/i.test(raw)) verb = 'Unarchived';
+  if (/upload/i.test(raw)) verb = 'Uploaded';
+  if (/read-all|read$/i.test(raw)) verb = 'Marked read';
+  if (bodyAction) verb = bodyAction.replace(/[-_]+/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+  return { actionKey: _historyNormalizeKey(`${upper}_${last || 'action'}`) || 'action', actionLabel: `${verb} ${_historyTitleCase(last)}`.trim() };
+}
+
+function _historyResolveEntity(req) {
+  const params = req?.params && typeof req.params === 'object' ? req.params : {};
+  const body = req?.body && typeof req.body === 'object' ? req.body : {};
+  const query = req?.query && typeof req.query === 'object' ? req.query : {};
+  const id = params.id || params.orderId || params.schoolId || params.memberId || body.id || body.orderId || body.schoolId || body.memberId || query.id || '';
+  const label = body.name || body.title || body.orderNumber || body.order_number || body.schoolName || body.username || body.team_member_name || '';
+  const pathParts = String(req?.path || '').split('/').filter(Boolean);
+  return { entityType: String(pathParts[1] || pathParts[0] || 'record').slice(0, 80), entityId: id ? String(id).slice(0, 160) : null, entityLabel: label ? String(label).slice(0, 220) : null };
+}
+
+function _historyClientIp(req) { return String(req.get?.('x-forwarded-for') || '').split(',')[0].trim() || req.ip || req.socket?.remoteAddress || null; }
+
+async function _historyInsert(row) {
+  if (!HISTORY_ENABLED || !supabaseDb.isConfigured()) return;
+  try { await supabaseDb.insert(HISTORY_TABLE, row); }
+  catch (error) {
+    const msg = String(error?.message || '');
+    if (!/operation_history|schema cache|Could not find the table|relation .* does not exist|PGRST205|42P01/i.test(msg)) console.warn('[history] failed to insert audit row:', error?.details || error);
+  }
+}
+
+function historyAuditMiddleware(req, res, next) {
+  const method = String(req.method || '').toUpperCase();
+  const shouldLog = HISTORY_ENABLED && req.path && req.path.startsWith('/api/') && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)
+    && !/^\/api\/history(\/|$)/i.test(req.path) && !/^\/api\/supabase\//i.test(req.path) && !/^\/api\/session-diagnostics$/i.test(req.path);
+  if (!shouldLog) return next();
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    const status = Number(res.statusCode || 0);
+    if (!status || status >= 400) return;
+    const page = _historyResolvePage(req.path || req.originalUrl || '');
+    const action = _historyResolveAction(method, req.path || req.originalUrl || '', req.body || {});
+    const entity = _historyResolveEntity(req);
+    const account = req.session?.accountCache && typeof req.session.accountCache === 'object' ? req.session.accountCache : {};
+    const row = {
+      actor_team_member_id: String(req.session?.userSupabaseId || req.session?.userNotionId || '').trim() || null,
+      actor_name: String(account.name || req.session?.username || req.body?.username || 'System').trim() || 'System',
+      actor_department: String(account.department || '').trim() || null,
+      actor_position: String(account.position || '').trim() || null,
+      page_key: page.pageKey,
+      page_name: page.pageName,
+      action_key: action.actionKey,
+      action_label: action.actionLabel,
+      entity_type: entity.entityType,
+      entity_id: entity.entityId,
+      entity_label: entity.entityLabel,
+      method,
+      path: String(req.originalUrl || req.path || '').slice(0, 500),
+      status_code: status,
+      duration_ms: Math.max(0, Date.now() - startedAt),
+      request_query: _historyCompactValue(req.query || {}),
+      request_body: _historyCompactValue(req.body || {}),
+      details: { route: String(req.route?.path || '').slice(0, 200) || null, referer: String(req.get?.('referer') || '').slice(0, 500) || null },
+      ip_address: _historyClientIp(req),
+      user_agent: String(req.get?.('user-agent') || '').slice(0, 700) || null,
+    };
+    setTimeout(() => { _historyInsert(row).catch(() => {}); }, 0);
+  });
+  next();
+}
+
+app.use(historyAuditMiddleware);
+
 // ----------------------------------------------------------------------------
 // Performance: Shared cache (Redis + in-memory) to reduce repeated Notion calls
 // ----------------------------------------------------------------------------
@@ -7196,6 +7343,11 @@ app.get("/account", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "account.html"));
 });
 
+// History page — available from the top-right user menu
+app.get("/history", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "history.html"));
+});
+
 // How it works (help page — available for all authenticated users)
 app.get("/how-it-works", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "how-it-works.html"));
@@ -7220,7 +7372,98 @@ app.get(
     res.sendFile(path.join(__dirname, "..", "public", "expenses-users.html"));
   }
 );;
+
 // --- API Routes ---
+
+function _historyReadValue(row = {}, keys = []) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== null && typeof row[key] !== 'undefined') return row[key];
+  }
+  return null;
+}
+
+function _historySerializeRow(row = {}) {
+  const createdAt = _historyReadValue(row, ['created_at', 'createdAt']) || null;
+  return {
+    id: _historyReadValue(row, ['id', 'ID']),
+    actorId: _historyReadValue(row, ['actor_team_member_id', 'actorTeamMemberId']) || '',
+    actorName: _historyReadValue(row, ['actor_name', 'actorName']) || 'System',
+    actorDepartment: _historyReadValue(row, ['actor_department', 'actorDepartment']) || '',
+    actorPosition: _historyReadValue(row, ['actor_position', 'actorPosition']) || '',
+    pageKey: _historyReadValue(row, ['page_key', 'pageKey']) || '',
+    pageName: _historyReadValue(row, ['page_name', 'pageName']) || 'System',
+    actionKey: _historyReadValue(row, ['action_key', 'actionKey']) || '',
+    actionLabel: _historyReadValue(row, ['action_label', 'actionLabel']) || 'Action',
+    entityType: _historyReadValue(row, ['entity_type', 'entityType']) || '',
+    entityId: _historyReadValue(row, ['entity_id', 'entityId']) || '',
+    entityLabel: _historyReadValue(row, ['entity_label', 'entityLabel']) || '',
+    method: _historyReadValue(row, ['method']) || '',
+    path: _historyReadValue(row, ['path']) || '',
+    statusCode: _historyReadValue(row, ['status_code', 'statusCode']) || null,
+    durationMs: _historyReadValue(row, ['duration_ms', 'durationMs']) || null,
+    requestQuery: _historyReadValue(row, ['request_query', 'requestQuery']) || {},
+    requestBody: _historyReadValue(row, ['request_body', 'requestBody']) || {},
+    details: _historyReadValue(row, ['details']) || {},
+    ipAddress: _historyReadValue(row, ['ip_address', 'ipAddress']) || '',
+    userAgent: _historyReadValue(row, ['user_agent', 'userAgent']) || '',
+    createdAt,
+  };
+}
+
+app.get('/api/history', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) {
+      return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    }
+
+    const limitRaw = Number(req.query?.limit || 80);
+    const safeLimit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 80));
+    const params = {
+      select: '*',
+      order: 'created_at.desc,id.desc',
+      limit: safeLimit,
+    };
+
+    const page = String(req.query?.page || '').trim();
+    const actor = String(req.query?.actor || '').trim();
+    const action = String(req.query?.action || '').trim();
+    const from = String(req.query?.from || '').trim();
+    const to = String(req.query?.to || '').trim();
+
+    if (page) params.page_name = `ilike.*${page.replace(/[*,]/g, '')}*`;
+    if (actor) params.actor_name = `ilike.*${actor.replace(/[*,]/g, '')}*`;
+    if (action) params.action_label = `ilike.*${action.replace(/[*,]/g, '')}*`;
+    if (/^\d{4}-\d{2}-\d{2}/.test(from)) params.created_at = `gte.${from}`;
+    if (/^\d{4}-\d{2}-\d{2}/.test(to)) params.created_at = params.created_at ? `${params.created_at}&created_at=lte.${to}` : `lte.${to}`;
+
+    // If both from/to are supplied the helper cannot express duplicate keys in params,
+    // so fall back to a direct REST query string for this narrow case.
+    let rows;
+    if (from && to && /^\d{4}-\d{2}-\d{2}/.test(from) && /^\d{4}-\d{2}-\d{2}/.test(to)) {
+      const qs = new URLSearchParams({ select: '*', order: 'created_at.desc,id.desc', limit: String(safeLimit) });
+      if (page) qs.set('page_name', `ilike.*${page.replace(/[*,]/g, '')}*`);
+      if (actor) qs.set('actor_name', `ilike.*${actor.replace(/[*,]/g, '')}*`);
+      if (action) qs.set('action_label', `ilike.*${action.replace(/[*,]/g, '')}*`);
+      qs.append('created_at', `gte.${from}`);
+      qs.append('created_at', `lte.${to}`);
+      rows = await supabaseDb.request(`/${encodeURIComponent(HISTORY_TABLE)}?${qs.toString()}`);
+    } else {
+      rows = await supabaseDb.select(HISTORY_TABLE, params);
+    }
+
+    return res.json({ ok: true, rows: (Array.isArray(rows) ? rows : []).map(_historySerializeRow) });
+  } catch (error) {
+    console.error('GET /api/history error:', error?.details || error);
+    const msg = String(error?.message || 'Failed to load history.');
+    return res.status(error?.status || 500).json({
+      ok: false,
+      error: /operation_history|schema cache|Could not find the table|relation .* does not exist|PGRST205|42P01/i.test(msg)
+        ? 'History table is not installed. Run the history SQL migration first.'
+        : msg,
+    });
+  }
+});
 
 // Forgot password / password recovery helpers
 function _normalizeRecoveryEmail(value) {
