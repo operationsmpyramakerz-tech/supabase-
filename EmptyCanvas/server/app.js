@@ -7477,7 +7477,7 @@ app.get('/api/history', requireAuth, requirePage("History"), async (req, res) =>
     }
 
     const limitRaw = Number(req.query?.limit || 80);
-    const safeLimit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 80));
+    const safeLimit = Math.max(1, Math.min(1000, Number.isFinite(limitRaw) ? limitRaw : 80));
     const params = {
       select: '*',
       order: 'created_at.desc,id.desc',
