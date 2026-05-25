@@ -1883,6 +1883,7 @@ const ALL_PAGES = [
   "Proposals",
   "Tasks",
   "KPIs",
+  "History",
   "Mail",
   "B2B",
   "Expenses",
@@ -1914,6 +1915,7 @@ function normalizePages(names = []) {
   if (set.has("proposals") || set.has("quotation proposals") || set.has("saved quotations") || set.has("kits")) out.push("Proposals");
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
+  if (set.has("history") || set.has("system history") || set.has("audit history") || set.has("audit log") || set.has("system audit") || set.has("/history")) out.push("History");
   if (set.has("mail") || set.has("email") || set.has("emails") || set.has("messages") || set.has("message") || set.has("massage")) out.push("Mail");
   if (set.has("b2b")) out.push("B2B");
   if (set.has("expenses")) out.push("Expenses");
@@ -3125,6 +3127,8 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     tasks: "Tasks",
     kpis: "KPIs",
     kpi: "KPIs",
+    history: "History",
+    "system-history": "History",
     messages: "Mail",
     message: "Mail",
     emails: "Mail",
@@ -6319,6 +6323,11 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
+  if (set.has("History")) {
+    set.add("History");
+    set.add("System History");
+    set.add("/history");
+  }
   if (set.has("Mail") || set.has("Messages") || set.has("Emails")) {
     set.add("Mail");
     set.add("Email");
@@ -6376,6 +6385,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Products")) return "/products";
   if (list.includes("Proposals")) return "/proposals";
   if (list.includes("Tasks")) return "/tasks";
+  if (list.includes("History")) return "/history";
   if (list.includes("Mail") || list.includes("Messages") || list.includes("Emails")) return "/messages";
   if (list.includes("B2B")) return "/b2b";
   if (list.includes("Expenses Users")) return "/expenses/users";
