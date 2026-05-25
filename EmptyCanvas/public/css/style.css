@@ -496,15 +496,15 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
    ================================= */
 .co-cards{
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .co-card{
   background: #fff;
   border: 1px solid #E5E7EB;
-  border-radius: 26px;
-  padding: 14px 16px;
-  box-shadow: 0 16px 36px rgba(0,0,0,.08);
+  border-radius: 23px;
+  padding: 12px 14px;
+  box-shadow: 0 14px 30px rgba(0,0,0,.075);
   cursor: pointer;
   user-select: none;
 }
@@ -521,13 +521,13 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 .co-top{
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .co-thumb{
-  width: 62px;
-  height: 62px;
-  border-radius: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   background: #F3F4F6;
   overflow: hidden;
   flex-shrink: 0;
@@ -556,15 +556,15 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 }
 
 .co-thumb--order-type svg{
-  width: 30px;
-  height: 30px;
+  width: 27px;
+  height: 27px;
   stroke-width: 2.2;
 }
 
 .co-main{ flex: 1; min-width: 0; }
 
 .co-title{
-  font-size: 21px;
+  font-size: 19px;
   font-weight: 900;
   color: #000000;
   line-height: 1.2;
@@ -579,7 +579,7 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 
 /* Replaces the big price line: show the creator name under the date */
 .co-createdby{
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 900;
   color: #000000;
   line-height: 1.1;
@@ -607,24 +607,29 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 .co-divider{
   height: 1px;
   background: #E5E7EB;
-  margin: 12px 0;
+  margin: 10px 0;
 }
 
 .co-bottom{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
+.co-est{
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .co-est-label{
-  font-size: 16px;
+  font-size: 14px;
   color: #9CA3AF;
 }
 
 .co-est-value{
-  font-size: 30px;
+  font-size: 27px;
   font-weight: 900;
   color: #000000;
   line-height: 1.1;
@@ -641,7 +646,7 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 .co-actions{
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   margin-left: auto;
 }
 
@@ -650,20 +655,20 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 14px 22px;
+  padding: 11px 17px;
   border-radius: 999px;
   background: var(--tag-bg, #000000);
   color: var(--tag-fg, #fff);
   border: 1px solid var(--tag-border, transparent);
   font-weight: 900;
-  font-size: 14px;
-  letter-spacing: .2px;
+  font-size: 13px;
+  letter-spacing: .1px;
   white-space: nowrap;
 }
 
 .co-right-ico{
-  width: 52px;
-  height: 52px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   background: #000000;
   color: #fff;
@@ -673,8 +678,8 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 }
 
 .co-right-ico svg{
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
 }
 
 .co-creator-btn{
@@ -1008,14 +1013,24 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
 }
 
 @media (max-width: 520px){
-  .co-card{ padding: 12px 12px; border-radius: 22px; }
-  .co-thumb{ width: 56px; height: 56px; border-radius: 16px; }
-  .co-title{ font-size: 18px; }
-  .co-price{ font-size: 32px; }
-  .co-est-value{ font-size: 24px; }
-  .co-right-ico{ width: 46px; height: 46px; }
-  .co-status-btn{ padding: 12px 18px; }
-  .co-createdby{ font-size: 20px; }
+  .co-cards{ gap: 10px; }
+  .co-card{ padding: 10px 11px; border-radius: 20px; }
+  .co-top{ gap: 10px; }
+  .co-thumb{ width: 50px; height: 50px; border-radius: 15px; }
+  .co-thumb--order-type svg{ width: 24px; height: 24px; }
+  .co-title{ font-size: 17px; }
+  .co-sub{ font-size: 12px; margin-top: 3px; }
+  .co-price{ font-size: 30px; }
+  .co-qty{ font-size: 15px; margin-left: 4px; }
+  .co-divider{ margin: 9px 0; }
+  .co-bottom{ gap: 8px; }
+  .co-est-label{ font-size: 13px; }
+  .co-est-value{ font-size: 23px; margin-top: 4px; }
+  .co-right-ico{ width: 42px; height: 42px; }
+  .co-right-ico svg{ width: 18px; height: 18px; }
+  .co-actions{ gap: 8px; }
+  .co-status-btn{ padding: 9px 13px; font-size: 12px; letter-spacing: 0; }
+  .co-createdby{ font-size: 19px; margin-top: 8px; }
 }
 
 /* =================================
