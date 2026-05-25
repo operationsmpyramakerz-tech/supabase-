@@ -187,16 +187,13 @@
         <span class="history-row-icon"><i data-feather="${escapeHTML(iconFor(row))}"></i></span>
         <span class="history-row-main">
           <span class="history-row-title">${escapeHTML(row.actionLabel || 'Action')}</span>
-          <span class="history-row-sub">
-            <b>${escapeHTML(row.actorName || 'System')}</b>
-            <span>•</span>
-            <span>${escapeHTML(row.pageName || 'System')}</span>
-            ${row.entityLabel ? `<span>•</span><span>${escapeHTML(row.entityLabel)}</span>` : ''}
-          </span>
         </span>
         <span class="history-row-meta">
-          <span>${escapeHTML(formatShortDate(row.createdAt))}</span>
-          <span class="history-page-pill">${escapeHTML(row.pageName || 'System')}</span>
+          <span class="history-row-date">${escapeHTML(formatShortDate(row.createdAt))}</span>
+          <span class="history-page-chip">
+            <span class="history-page-person" aria-hidden="true"><i data-feather="user"></i></span>
+            <span class="history-page-pill">${escapeHTML(row.pageName || 'System')}</span>
+          </span>
         </span>
       </button>
     `).join('');
