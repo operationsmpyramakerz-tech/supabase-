@@ -3979,8 +3979,11 @@ async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
   return list.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
 }
 
-async function _sbRequestedOrdersList() {
-  const rows = await _sbSelectOrdersRows({ approvedOnly: true });
+async function _sbRequestedOrdersList({ includeAllSystem = false } = {}) {
+  // Operations Orders now has an All tab that must show every order in the system,
+  // not only the orders already approved for operations. Other consumers can keep
+  // the old approved-only behavior by omitting includeAllSystem.
+  const rows = await _sbSelectOrdersRows({ approvedOnly: !includeAllSystem });
   return rows.map(_sbSerializeOrderRow);
 }
 
@@ -4144,6 +4147,8 @@ async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {},
 async function _sbInvalidateOrdersCaches(req = null) {
   const keys = [
     "cache:api:orders:requested:supabase:v1",
+    "cache:api:orders:requested:supabase:v2:approved",
+    "cache:api:orders:requested:supabase:v2:all-system",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
   ];
@@ -17261,13 +17266,19 @@ app.get(
 
     res.set("Cache-Control", "no-store");
     try {
+      const requestedScope = String(req.query?.scope || req.query?.view || "").trim().toLowerCase();
+      const includeAllSystem = ["all", "all-system", "system", "system-all"].includes(requestedScope)
+        || String(req.query?.allSystem || req.query?.includeAllSystem || "") === "1";
+
       if (_sbOrdersEnabled()) {
-        const cacheKey = "cache:api:orders:requested:supabase:v1";
+        const cacheKey = includeAllSystem
+          ? "cache:api:orders:requested:supabase:v2:all-system"
+          : "cache:api:orders:requested:supabase:v2:approved";
         const forceFresh =
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
-        const load = async () => _sbRequestedOrdersList();
+        const load = async () => _sbRequestedOrdersList({ includeAllSystem });
         const data = forceFresh
           ? await (async () => {
               await cacheDel(cacheKey);
@@ -17281,7 +17292,9 @@ app.get(
       }
 
       // Cache version is bumped when response logic/shape changes.
-      const cacheKey = "cache:api:orders:requested:v7";
+      const cacheKey = includeAllSystem
+        ? "cache:api:orders:requested:v8:all-system"
+        : "cache:api:orders:requested:v8:approved";
       const forceFresh =
         String(req.query?._fresh || "") === "1" ||
         !!req.query?._refresh ||
@@ -17555,7 +17568,7 @@ app.get(
           start_cursor: startCursor,
           sorts: [{ timestamp: "created_time", direction: "descending" }],
         };
-        if (svApprovalQueryFilter) queryPayload.filter = svApprovalQueryFilter;
+        if (!includeAllSystem && svApprovalQueryFilter) queryPayload.filter = svApprovalQueryFilter;
 
         const resp = await notion.databases.query(queryPayload);
 
@@ -17572,7 +17585,7 @@ app.get(
             props["SV Approval"]?.select?.name ||
             props["SV Approval"]?.status?.name ||
             "";
-          if (svApproval !== "Approved") continue;
+          if (!includeAllSystem && svApproval !== "Approved") continue;
 
           // Product info
           const productRel = props.Product?.relation;
