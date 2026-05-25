@@ -483,7 +483,26 @@ function _historyResolvePage(pathname = '') {
 function _historyResolveAction(method = '', pathname = '', body = {}) {
   const upper = String(method || '').toUpperCase();
   const raw = String(pathname || '').split('?')[0];
+  const apiPath = raw.startsWith('/api/') ? raw : `/api${raw.startsWith('/') ? raw : `/${raw}`}`;
   const bodyAction = String(body?.action || body?.status || body?.type || '').trim();
+
+  const exactActions = [
+    [/^\/api\/submit-order$/i, 'create_order', 'Created order'],
+    [/^\/api\/logout$/i, 'logout', 'Signed out'],
+    [/^\/api\/forgot-password$/i, 'password_recovery', 'Requested password recovery'],
+    [/^\/api\/signup-request$/i, 'signup_request', 'Created sign up request'],
+    [/^\/api\/signup-requests\/[^/]+\/approve$/i, 'approve_signup_request', 'Approved sign up request'],
+    [/^\/api\/signup-requests\/[^/]+\/reject$/i, 'reject_signup_request', 'Rejected sign up request'],
+    [/^\/api\/user-access\/team-members\/[^/]+\/access$/i, 'update_page_access', 'Updated page access'],
+    [/^\/api\/b2b\/schools$/i, 'create_b2b_school', upper === 'POST' ? 'Created B2B school' : 'Updated B2B schools'],
+    [/^\/api\/products\/proposals$/i, 'proposal', upper === 'POST' ? 'Created proposal' : 'Updated proposal'],
+    [/^\/api\/products\/kits$/i, 'kit', upper === 'POST' ? 'Created kit' : 'Updated kit'],
+    [/^\/api\/kpis\/standards$/i, 'kpi_standard', upper === 'POST' ? 'Created KPI standard' : 'Updated KPI standard'],
+    [/^\/api\/kpis\/reviews$/i, 'kpi_review', upper === 'POST' ? 'Created KPI review' : 'Updated KPI review'],
+  ];
+  const matched = exactActions.find(([re]) => re.test(apiPath));
+  if (matched) return { actionKey: matched[1], actionLabel: matched[2] };
+
   const last = raw.split('/').filter(Boolean).pop() || raw;
   let verb = 'Action';
   if (upper === 'POST') verb = 'Created';
@@ -512,6 +531,35 @@ function _historyResolveEntity(req) {
   return { entityType: String(pathParts[1] || pathParts[0] || 'record').slice(0, 80), entityId: id ? String(id).slice(0, 160) : null, entityLabel: label ? String(label).slice(0, 220) : null };
 }
 
+function _historyShouldSkipRequest(req) {
+  const path = String(req?.path || '').split('?')[0];
+  const method = String(req?.method || '').toUpperCase();
+  const noisy = [
+    /^\/api\/order-draft(\/|$)/i,
+    /^\/api\/account\/verify-password$/i,
+    /^\/api\/b2b\/admin\/verify$/i,
+    /^\/api\/kpis\/admin\/verify$/i,
+    /^\/api\/notifications\/read/i,
+    /^\/api\/messages\/presence/i,
+    /^\/api\/push\//i,
+  ];
+  if (noisy.some((re) => re.test(path))) return true;
+  // Avoid logging intermediate wizard saves as separate business actions.
+  if (method === 'POST' && /^\/api\/.*\/draft/i.test(path)) return true;
+  return false;
+}
+
+function _historyShouldExposeRow(row = {}) {
+  const path = String(row.path || row.Path || '').split('?')[0];
+  if (/^\/api\/order-draft(\/|$)/i.test(path)) return false;
+  if (/^\/api\/account\/verify-password$/i.test(path)) return false;
+  if (/^\/api\/b2b\/admin\/verify$/i.test(path)) return false;
+  if (/^\/api\/kpis\/admin\/verify$/i.test(path)) return false;
+  if (/^\/api\/notifications\/read/i.test(path)) return false;
+  if (/^\/api\/messages\/presence/i.test(path)) return false;
+  return true;
+}
+
 function _historyClientIp(req) { return String(req.get?.('x-forwarded-for') || '').split(',')[0].trim() || req.ip || req.socket?.remoteAddress || null; }
 
 async function _historyInsert(row) {
@@ -526,7 +574,8 @@ async function _historyInsert(row) {
 function historyAuditMiddleware(req, res, next) {
   const method = String(req.method || '').toUpperCase();
   const shouldLog = HISTORY_ENABLED && req.path && req.path.startsWith('/api/') && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)
-    && !/^\/api\/history(\/|$)/i.test(req.path) && !/^\/api\/supabase\//i.test(req.path) && !/^\/api\/session-diagnostics$/i.test(req.path);
+    && !/^\/api\/history(\/|$)/i.test(req.path) && !/^\/api\/supabase\//i.test(req.path) && !/^\/api\/session-diagnostics$/i.test(req.path)
+    && !_historyShouldSkipRequest(req);
   if (!shouldLog) return next();
   const startedAt = Date.now();
   res.on('finish', () => {
@@ -7344,7 +7393,7 @@ app.get("/account", requireAuth, (req, res) => {
 });
 
 // History page — available from the top-right user menu
-app.get("/history", requireAuth, (req, res) => {
+app.get("/history", requireAuth, requirePage("History"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "history.html"));
 });
 
@@ -7410,7 +7459,7 @@ function _historySerializeRow(row = {}) {
   };
 }
 
-app.get('/api/history', requireAuth, async (req, res) => {
+app.get('/api/history', requireAuth, requirePage("History"), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) {
@@ -7452,7 +7501,7 @@ app.get('/api/history', requireAuth, async (req, res) => {
       rows = await supabaseDb.select(HISTORY_TABLE, params);
     }
 
-    return res.json({ ok: true, rows: (Array.isArray(rows) ? rows : []).map(_historySerializeRow) });
+    return res.json({ ok: true, rows: (Array.isArray(rows) ? rows : []).filter(_historyShouldExposeRow).map(_historySerializeRow) });
   } catch (error) {
     console.error('GET /api/history error:', error?.details || error);
     const msg = String(error?.message || 'Failed to load history.');
