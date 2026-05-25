@@ -15,7 +15,7 @@
   <style>body.permissions-loading .sidebar li { display: none !important; }</style>
   <link href="/css/style.css?v=history-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=history-v1" rel="stylesheet" />
-  <link href="/css/history.css?v=history-v1" rel="stylesheet" />
+  <link href="/css/history.css?v=history-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-history">
@@ -92,29 +92,17 @@
           <button type="button" class="history-refresh-btn" id="historyRefreshBtn"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
         </section>
 
-        <section class="history-filters card" aria-label="History filters">
-          <label>
-            <span>Page</span>
-            <input id="historyPageFilter" type="search" placeholder="All pages" autocomplete="off" />
-          </label>
-          <label>
-            <span>User</span>
-            <input id="historyActorFilter" type="search" placeholder="All users" autocomplete="off" />
-          </label>
-          <label>
-            <span>Action</span>
-            <input id="historyActionFilter" type="search" placeholder="All actions" autocomplete="off" />
-          </label>
-          <button type="button" class="history-filter-apply" id="historyApplyFilters"><i data-feather="sliders"></i><span>Apply</span></button>
-        </section>
-
         <section class="history-list-card card">
           <div class="history-list-head">
             <div>
               <p class="history-kicker">RECENT ACTIVITY</p>
               <h2>System actions</h2>
+              <p class="history-active-filters" id="historyActiveFilters">No filters applied</p>
             </div>
-            <span class="history-count" id="historyCount">0 records</span>
+            <div class="history-list-actions">
+              <button type="button" class="history-filter-open" id="historyFilterOpenBtn"><i data-feather="sliders"></i><span>Filter by</span></button>
+              <span class="history-count" id="historyCount">0 records</span>
+            </div>
           </div>
           <div class="history-list" id="historyList" aria-live="polite">
             <div class="history-empty history-loading"><i data-feather="loader"></i><span>Loading history...</span></div>
@@ -122,6 +110,34 @@
         </section>
       </main>
     </div>
+  </div>
+
+
+  <div class="history-filter-modal" id="historyFilterModal" hidden>
+    <div class="history-filter-backdrop" data-history-filter-close></div>
+    <section class="history-filter-card" role="dialog" aria-modal="true" aria-labelledby="historyFilterTitle">
+      <button type="button" class="history-modal-close history-filter-close" data-history-filter-close aria-label="Close"><i data-feather="x"></i></button>
+      <p class="history-kicker">FILTER BY</p>
+      <h2 id="historyFilterTitle">History filters</h2>
+      <div class="history-filter-fields">
+        <label class="history-modern-field">
+          <span>Page name</span>
+          <select id="historyPageFilter"><option value="">All pages</option></select>
+        </label>
+        <label class="history-modern-field">
+          <span>User name</span>
+          <select id="historyActorFilter"><option value="">All users</option></select>
+        </label>
+        <label class="history-modern-field">
+          <span>Date</span>
+          <select id="historyDateFilter"><option value="">All dates</option></select>
+        </label>
+      </div>
+      <div class="history-filter-actions">
+        <button type="button" class="history-clear-filters" id="historyClearFilters"><i data-feather="x-circle"></i><span>Clear</span></button>
+        <button type="button" class="history-filter-apply" id="historyApplyFilters"><i data-feather="sliders"></i><span>Apply</span></button>
+      </div>
+    </section>
   </div>
 
   <div class="history-modal" id="historyModal" hidden>
@@ -135,7 +151,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=history-menu-v1"></script>
-  <script src="/js/history.js?v=history-v1"></script>
+  <script src="/js/common-ui.js?v=history-menu-v2"></script>
+  <script src="/js/history.js?v=history-v2"></script>
 </body>
 </html>
