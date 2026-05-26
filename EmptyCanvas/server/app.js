@@ -521,14 +521,108 @@ function _historyResolveAction(method = '', pathname = '', body = {}) {
   return { actionKey: _historyNormalizeKey(`${upper}_${last || 'action'}`) || 'action', actionLabel: `${verb} ${_historyTitleCase(last)}`.trim() };
 }
 
+function _historySafeText(value) {
+  if (value === null || typeof value === 'undefined') return '';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'string') return value.trim();
+  return '';
+}
+
+function _historyFirstValue(source = {}, keys = []) {
+  if (!source || typeof source !== 'object') return '';
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const value = _historySafeText(source[key]);
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function _historyFirstArrayValue(source = {}, keys = []) {
+  if (!source || typeof source !== 'object') return '';
+  for (const key of keys) {
+    const value = source[key];
+    if (Array.isArray(value)) {
+      const clean = value.map((item) => _historySafeText(item)).filter(Boolean);
+      if (clean.length) return clean.slice(0, 4).join(', ');
+    }
+  }
+  return '';
+}
+
+function _historyNormalizeOrderLabel(value) {
+  const raw = _historySafeText(value);
+  if (!raw) return '';
+  const ord = raw.match(/\bORD[-\s_]*([0-9]+)\b/i);
+  if (ord) return `ORD-${ord[1]}`;
+  const plain = raw.match(/^\s*([0-9]{1,8})\s*$/);
+  if (plain) return `ORD-${plain[1]}`;
+  return raw.slice(0, 220);
+}
+
 function _historyResolveEntity(req) {
   const params = req?.params && typeof req.params === 'object' ? req.params : {};
   const body = req?.body && typeof req.body === 'object' ? req.body : {};
   const query = req?.query && typeof req.query === 'object' ? req.query : {};
-  const id = params.id || params.orderId || params.schoolId || params.memberId || body.id || body.orderId || body.schoolId || body.memberId || query.id || '';
-  const label = body.name || body.title || body.orderNumber || body.order_number || body.schoolName || body.username || body.team_member_name || '';
   const pathParts = String(req?.path || '').split('/').filter(Boolean);
-  return { entityType: String(pathParts[1] || pathParts[0] || 'record').slice(0, 80), entityId: id ? String(id).slice(0, 160) : null, entityLabel: label ? String(label).slice(0, 220) : null };
+  const routeLabel = String(pathParts.slice(1).join('/') || pathParts[0] || '').replace(/^api\//i, '');
+  const id = _historyFirstValue(params, ['orderId', 'id', 'schoolId', 'memberId', 'productId', 'proposalId', 'kitId', 'reviewId', 'standardId'])
+    || _historyFirstValue(body, ['orderId', 'order_id', 'id', 'schoolId', 'school_id', 'memberId', 'member_id', 'productId', 'product_id', 'proposalId', 'proposal_id', 'kitId', 'kit_id', 'reviewId', 'review_id', 'standardId', 'standard_id'])
+    || _historyFirstArrayValue(body, ['orderIds', 'order_ids', 'ids'])
+    || _historyFirstValue(query, ['orderId', 'id']);
+
+  const label = _historyFirstValue(body, [
+    'orderNumber', 'order_number', 'orderIdLabel', 'orderLabel',
+    'name', 'title', 'productName', 'product_name', 'schoolName', 'school_name',
+    'username', 'team_member_name', 'memberName', 'departmentName', 'position',
+    'reason', 'receiptNumber', 'receipt_number', 'employeeCode', 'employee_code',
+    'amount', 'total', 'value'
+  ]);
+
+  let entityType = String(pathParts[1] || pathParts[0] || 'record').slice(0, 80);
+  if (/order/i.test(routeLabel) || _historyFirstArrayValue(body, ['orderIds', 'order_ids'])) entityType = 'order';
+  else if (/product|component/i.test(routeLabel)) entityType = 'product';
+  else if (/expense/i.test(routeLabel)) entityType = 'expense';
+  else if (/user-access|team-members|signup/i.test(routeLabel)) entityType = 'team_member';
+  else if (/b2b|school/i.test(routeLabel)) entityType = 'school';
+  else if (/kpi/i.test(routeLabel)) entityType = 'kpi';
+
+  return {
+    entityType,
+    entityId: id ? String(id).slice(0, 220) : null,
+    entityLabel: label ? String(label).slice(0, 220) : null,
+  };
+}
+
+function _historySetEntity(res, entity = {}) {
+  if (!res || !entity || typeof entity !== 'object') return;
+  res.locals.historyEntity = {
+    entityType: _historySafeText(entity.entityType).slice(0, 80) || undefined,
+    entityId: _historySafeText(entity.entityId).slice(0, 220) || undefined,
+    entityLabel: _historySafeText(entity.entityLabel).slice(0, 220) || undefined,
+  };
+}
+
+function _historyOrderLabelFromItem(item = {}) {
+  if (!item || typeof item !== 'object') return '';
+  return _historySafeText(item.orderId)
+    || (Number.isFinite(Number(item.orderIdNumber)) ? `ORD-${Number(item.orderIdNumber)}` : '')
+    || (Number.isFinite(Number(item.order_number)) ? `ORD-${Number(item.order_number)}` : '')
+    || _historyNormalizeOrderLabel(item.orderNumber || item.order_number || '');
+}
+
+function _historySetOrderEntity(res, items = [], fallbackIds = []) {
+  const list = Array.isArray(items) ? items : (items ? [items] : []);
+  const labels = Array.from(new Set(list.map(_historyOrderLabelFromItem).filter(Boolean)));
+  const ids = Array.from(new Set([
+    ...list.map((item) => _historySafeText(item?.id)).filter(Boolean),
+    ...(Array.isArray(fallbackIds) ? fallbackIds : [fallbackIds]).map(_historySafeText).filter(Boolean),
+  ]));
+  let label = '';
+  if (labels.length === 1) label = labels[0];
+  else if (labels.length > 1) label = `${labels.slice(0, 3).join(', ')}${labels.length > 3 ? ` +${labels.length - 3}` : ''}`;
+  _historySetEntity(res, { entityType: 'order', entityId: ids.slice(0, 10).join(', '), entityLabel: label });
 }
 
 function _historyShouldSkipRequest(req) {
@@ -583,7 +677,7 @@ function historyAuditMiddleware(req, res, next) {
     if (!status || status >= 400) return;
     const page = _historyResolvePage(req.path || req.originalUrl || '');
     const action = _historyResolveAction(method, req.path || req.originalUrl || '', req.body || {});
-    const entity = _historyResolveEntity(req);
+    const entity = (res.locals && res.locals.historyEntity) ? res.locals.historyEntity : _historyResolveEntity(req);
     const account = req.session?.accountCache && typeof req.session.accountCache === 'object' ? req.session.accountCache : {};
     const row = {
       actor_team_member_id: String(req.session?.userSupabaseId || req.session?.userNotionId || '').trim() || null,
@@ -7441,7 +7535,146 @@ function _historyReadValue(row = {}, keys = []) {
   return null;
 }
 
-function _historySerializeRow(row = {}) {
+function _historyRowIsOrderRelated(row = {}) {
+  const page = String(_historyReadValue(row, ['page_name', 'pageName']) || '').toLowerCase();
+  const path = String(_historyReadValue(row, ['path']) || '').toLowerCase();
+  const entityType = String(_historyReadValue(row, ['entity_type', 'entityType']) || '').toLowerCase();
+  const action = String(_historyReadValue(row, ['action_label', 'actionLabel']) || '').toLowerCase();
+  return /order/.test(page) || /order|submit-order|sv-orders|requested-orders|current-orders/.test(path) || /order/.test(entityType) || /order|approval/.test(action);
+}
+
+function _historyValueFromObject(source = {}, keys = []) {
+  if (!source || typeof source !== 'object') return '';
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+    const value = source[key];
+    if (Array.isArray(value)) {
+      const clean = value.map((item) => _historySafeText(item)).filter(Boolean);
+      if (clean.length) return clean.slice(0, 4).join(', ');
+    } else if (value && typeof value === 'object') {
+      const nested = _historyValueFromObject(value, keys);
+      if (nested) return nested;
+    } else {
+      const text = _historySafeText(value);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+function _historyOrderIdsFromRow(row = {}) {
+  const out = new Set();
+  const add = (value) => {
+    if (value === null || typeof value === 'undefined') return;
+    if (Array.isArray(value)) return value.forEach(add);
+    const raw = _historySafeText(value);
+    if (!raw) return;
+    raw.split(/[\s,]+/).map((part) => part.trim()).filter(Boolean).forEach((part) => {
+      if (/^\d+$/.test(part)) out.add(part);
+    });
+  };
+  add(_historyReadValue(row, ['entity_id', 'entityId']));
+  const body = _historyReadValue(row, ['request_body', 'requestBody']) || {};
+  add(body.orderIds);
+  add(body.order_ids);
+  add(body.orderId);
+  add(body.order_id);
+  add(body.id);
+  return Array.from(out);
+}
+
+function _historyOrderLabelFromMap(row = {}, orderMap = null) {
+  if (!orderMap || !_historyRowIsOrderRelated(row)) return '';
+  const labels = _historyOrderIdsFromRow(row).map((id) => orderMap.get(String(id))).filter(Boolean);
+  const unique = Array.from(new Set(labels));
+  if (!unique.length) return '';
+  return `${unique.slice(0, 4).join(', ')}${unique.length > 4 ? ` +${unique.length - 4}` : ''}`;
+}
+
+function _historySmartEntityLabel(row = {}, context = {}) {
+  const orderLabel = _historyOrderLabelFromMap(row, context.orderMap);
+  if (orderLabel) return orderLabel;
+
+  const body = _historyReadValue(row, ['request_body', 'requestBody']) || {};
+  const rawLabel = _historySafeText(_historyReadValue(row, ['entity_label', 'entityLabel']));
+  const page = String(_historyReadValue(row, ['page_name', 'pageName']) || '').toLowerCase();
+  const entityType = String(_historyReadValue(row, ['entity_type', 'entityType']) || '').toLowerCase();
+
+  const bodyLabel = _historyValueFromObject(body, [
+    'orderNumber', 'order_number', 'orderIdLabel', 'orderLabel',
+    'name', 'title', 'productName', 'product_name', 'schoolName', 'school_name',
+    'username', 'team_member_name', 'memberName', 'departmentName', 'position',
+    'reason', 'receiptNumber', 'receipt_number', 'employeeCode', 'employee_code',
+    'reviewMonth', 'review_month', 'standardTitle', 'standard_title',
+    'amount', 'total', 'value'
+  ]);
+
+  if (bodyLabel) return String(bodyLabel).slice(0, 220);
+  if (rawLabel) return rawLabel.slice(0, 220);
+
+  const rawId = _historySafeText(_historyReadValue(row, ['entity_id', 'entityId']));
+  if (rawId && !/hard-refresh|refresh/i.test(`${page} ${entityType}`)) return rawId.slice(0, 220);
+  return '';
+}
+
+async function _historyBuildOrderMap(rows = []) {
+  const map = new Map();
+  if (!_sbOrdersEnabled() || !supabaseDb.isConfigured()) return map;
+  const ids = Array.from(new Set((rows || [])
+    .filter(_historyRowIsOrderRelated)
+    .flatMap(_historyOrderIdsFromRow)
+    .filter((id) => /^\d+$/.test(String(id)))));
+  if (!ids.length) return map;
+  try {
+    const inList = ids.map((id) => `"${String(id).replace(/"/g, '\"')}"`).join(',');
+    const qs = new URLSearchParams({ select: 'id,order_number,reason,product_name', limit: String(Math.max(1000, ids.length)) });
+    qs.set('id', `in.(${inList})`);
+    const orderRows = await supabaseDb.request(`/${encodeURIComponent(_sbOrdersTable())}?${qs.toString()}`);
+    for (const row of Array.isArray(orderRows) ? orderRows : []) {
+      const id = _historySafeText(row?.id);
+      const num = Number(row?.order_number);
+      const label = Number.isFinite(num) ? `ORD-${num}` : (_historySafeText(row?.reason) || _historySafeText(row?.product_name) || id);
+      if (id && label) map.set(id, label);
+    }
+  } catch (error) {
+    console.warn('[history] order entity enrichment skipped:', error?.message || error);
+  }
+  return map;
+}
+
+function _historySingularPageLabel(pageName = '') {
+  const label = String(pageName || '').trim() || 'record';
+  const map = {
+    'Products': 'product',
+    'Expenses': 'expense',
+    'Expenses Users': 'expense',
+    'Users Center': 'user',
+    'B2B': 'school',
+    'Proposals': 'proposal',
+    'KPIs': 'KPI',
+    'Stocktaking': 'stock item',
+    'Create New Order': 'order',
+    'Current Orders': 'order',
+    'Operations Orders': 'order',
+    'Orders Review': 'order',
+    'Maintenance Orders': 'maintenance order',
+    'Tasks': 'task',
+    'Mail': 'message',
+  };
+  return map[label] || label.replace(/s$/i, '').toLowerCase();
+}
+
+function _historySmartActionLabel(row = {}) {
+  const raw = _historySafeText(_historyReadValue(row, ['action_label', 'actionLabel'])) || 'Action';
+  const pageName = _historySafeText(_historyReadValue(row, ['page_name', 'pageName']));
+  const numeric = raw.match(/^(Created|Updated|Deleted|Archived|Unarchived|Approved|Rejected)\s+\d+$/i);
+  if (numeric && pageName) return `${numeric[1]} ${_historySingularPageLabel(pageName)}`;
+  if (/^Created\s+Submit\s+Order$/i.test(raw)) return 'Created order';
+  if (/^Updated\s+Update\s+Approval$/i.test(raw)) return 'Updated approval';
+  return raw;
+}
+
+function _historySerializeRow(row = {}, context = {}) {
   const createdAt = _historyReadValue(row, ['created_at', 'createdAt']) || null;
   return {
     id: _historyReadValue(row, ['id', 'ID']),
@@ -7452,10 +7685,10 @@ function _historySerializeRow(row = {}) {
     pageKey: _historyReadValue(row, ['page_key', 'pageKey']) || '',
     pageName: _historyReadValue(row, ['page_name', 'pageName']) || 'System',
     actionKey: _historyReadValue(row, ['action_key', 'actionKey']) || '',
-    actionLabel: _historyReadValue(row, ['action_label', 'actionLabel']) || 'Action',
+    actionLabel: _historySmartActionLabel(row),
     entityType: _historyReadValue(row, ['entity_type', 'entityType']) || '',
     entityId: _historyReadValue(row, ['entity_id', 'entityId']) || '',
-    entityLabel: _historyReadValue(row, ['entity_label', 'entityLabel']) || '',
+    entityLabel: _historySmartEntityLabel(row, context),
     method: _historyReadValue(row, ['method']) || '',
     path: _historyReadValue(row, ['path']) || '',
     statusCode: _historyReadValue(row, ['status_code', 'statusCode']) || null,
@@ -7511,7 +7744,9 @@ app.get('/api/history', requireAuth, requirePage("History"), async (req, res) =>
       rows = await supabaseDb.select(HISTORY_TABLE, params);
     }
 
-    return res.json({ ok: true, rows: (Array.isArray(rows) ? rows : []).filter(_historyShouldExposeRow).map(_historySerializeRow) });
+    const visibleRows = (Array.isArray(rows) ? rows : []).filter(_historyShouldExposeRow);
+    const orderMap = await _historyBuildOrderMap(visibleRows);
+    return res.json({ ok: true, rows: visibleRows.map((row) => _historySerializeRow(row, { orderMap })) });
   } catch (error) {
     console.error('GET /api/history error:', error?.details || error);
     const msg = String(error?.message || 'Failed to load history.');
@@ -7521,6 +7756,29 @@ app.get('/api/history', requireAuth, requirePage("History"), async (req, res) =>
         ? 'History table is not installed. Run the history SQL migration first.'
         : msg,
     });
+  }
+});
+
+app.delete('/api/history/clear', requireAuth, requirePage("History"), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) {
+      return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    }
+    const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
+    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
+    const ok = await verifyAdminPassword(adminPassword);
+    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+
+    await supabaseDb.request(`/${encodeURIComponent(HISTORY_TABLE)}?id=not.is.null`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' },
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('DELETE /api/history/clear error:', error?.details || error);
+    const msg = String(error?.message || 'Failed to clear history.');
+    return res.status(error?.status || 500).json({ ok: false, error: msg });
   }
 });
 
@@ -23289,6 +23547,7 @@ if (_sbOrdersEnabled() && _sbProductsEnabled() && !req.session.editingOrder) {
     req.session.recentOrders = (req.session.recentOrders || []).concat(recentOrders);
     if (req.session.recentOrders.length > 50) req.session.recentOrders = req.session.recentOrders.slice(-50);
     _clearOrderDraftForType(req.session, orderType);
+    _historySetOrderEntity(res, createdItems);
     return res.json({
       success: true,
       message: "Order submitted and saved to Supabase successfully!",
@@ -23309,6 +23568,7 @@ if (_sbOrdersEnabled() && req.session?.editingOrder?.source === "supabase") {
     }));
     const updatedItems = await _sbApplyOrderEditFromSession(req, signedProducts, orderType, 1);
     _clearOrderDraftForType(req.session, orderType);
+    _historySetOrderEntity(res, updatedItems);
     return res.json({
       success: true,
       message: "Order updated in Supabase successfully!",
