@@ -4,6 +4,7 @@
   const state = {
     tables: [],
     selected: null,
+    deleteMode: 'table',
     pendingPassword: '',
     loading: false,
     deleting: false,
@@ -53,7 +54,7 @@
     if (!grid) return;
     const tables = Array.isArray(state.tables) ? state.tables : [];
     if (count) count.textContent = `${tables.length} table${tables.length === 1 ? '' : 's'}`;
-    if (!tables.length) return renderEmpty('No backup tables found.', 'database');
+    if (!tables.length) return renderEmpty('No database tables found.', 'database');
 
     grid.innerHTML = tables.map((item) => `
       <article class="backup-table-card" data-backup-key="${escapeHTML(item.key)}">
@@ -64,11 +65,11 @@
             <span class="backup-card-module">${escapeHTML(item.moduleName || 'System')}</span>
           </div>
         </div>
-        <p class="backup-card-desc">${escapeHTML(item.description || 'Download or delete this table data.')}</p>
+        <p class="backup-card-desc">${escapeHTML(item.description || 'Export or delete this table data.')}</p>
         <div class="backup-table-name" title="${escapeHTML(item.tableName || '')}"><i data-feather="database"></i><code>${escapeHTML(item.tableName || 'table')}</code></div>
         <div class="backup-card-actions">
           <a class="backup-download-btn" href="/api/backup/tables/${encodeURIComponent(item.key)}/download" download>
-            <i data-feather="download"></i><span>Back up CSV</span>
+            <i data-feather="download"></i><span>Export CSV</span>
           </a>
           <button type="button" class="backup-delete-btn" data-backup-delete="${escapeHTML(item.key)}">
             <i data-feather="trash-2"></i><span>Delete data</span>
@@ -81,18 +82,18 @@
 
   async function loadTables(){
     setLoading(true);
-    renderEmpty('Loading backup tables...', 'loader');
+    renderEmpty('Loading database tables...', 'loader');
     try {
       const res = await fetch('/api/backup/tables', { credentials: 'include', cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to load backup tables.');
+      if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to load database tables.');
       state.tables = Array.isArray(data.tables) ? data.tables : [];
       renderTables();
     } catch (error) {
-      console.error('Backup tables load failed:', error);
+      console.error('Database tables load failed:', error);
       state.tables = [];
-      renderEmpty(error.message || 'Failed to load backup tables.', 'alert-triangle');
-      showToast(error.message || 'Failed to load backup tables.', 'danger');
+      renderEmpty(error.message || 'Failed to load database tables.', 'alert-triangle');
+      showToast(error.message || 'Failed to load database tables.', 'danger');
     } finally {
       setLoading(false);
     }
@@ -125,13 +126,32 @@
     const item = findTable(key);
     if (!item) return;
     state.selected = item;
+    state.deleteMode = 'table';
     state.pendingPassword = '';
     setDeleteError('');
     const title = $('backupDeleteTitle');
     const copy = $('backupDeleteCopy');
     const input = $('backupDeletePassword');
     if (title) title.textContent = `Delete ${item.pageName || item.tableName}?`;
-    if (copy) copy.textContent = `This will permanently delete all data from the "${item.tableName}" Supabase table. Download a CSV back up first if needed.`;
+    if (copy) copy.textContent = `This will permanently delete all data from the "${item.tableName}" Supabase table. Export a CSV first if needed.`;
+    if (input) input.value = '';
+    const modal = $('backupDeleteModal');
+    if (modal) modal.hidden = false;
+    document.body.classList.add('backup-modal-open');
+    try { if (window.feather) window.feather.replace(); } catch {}
+    setTimeout(() => { try { input?.focus({ preventScroll:true }); } catch {} }, 60);
+  }
+
+  function openDeleteAllModal(){
+    state.selected = { key: '__all__', pageName: 'all system data', tableName: 'all database tables', isAll: true };
+    state.deleteMode = 'all';
+    state.pendingPassword = '';
+    setDeleteError('');
+    const title = $('backupDeleteTitle');
+    const copy = $('backupDeleteCopy');
+    const input = $('backupDeletePassword');
+    if (title) title.textContent = 'Delete all data?';
+    if (copy) copy.textContent = 'This will permanently delete all rows from all database tables. Export all data first if needed.';
     if (input) input.value = '';
     const modal = $('backupDeleteModal');
     if (modal) modal.hidden = false;
@@ -161,8 +181,13 @@
     const item = state.selected || {};
     const title = $('backupFinalTitle');
     const copy = $('backupFinalCopy');
-    if (title) title.textContent = `Delete ${item.pageName || 'table data'}?`;
-    if (copy) copy.textContent = `Confirm deleting all rows from "${item.tableName || 'this table'}". This action cannot be undone.`;
+    if (item.isAll || state.deleteMode === 'all') {
+      if (title) title.textContent = 'Delete all database data?';
+      if (copy) copy.textContent = 'Confirm deleting all rows from all database tables. This action cannot be undone.';
+    } else {
+      if (title) title.textContent = `Delete ${item.pageName || 'table data'}?`;
+      if (copy) copy.textContent = `Confirm deleting all rows from "${item.tableName || 'this table'}". This action cannot be undone.`;
+    }
     const finalModal = $('backupFinalModal');
     if (finalModal) finalModal.hidden = false;
     document.body.classList.add('backup-modal-open');
@@ -174,6 +199,7 @@
     const modal = $('backupFinalModal');
     if (modal) modal.hidden = true;
     state.pendingPassword = '';
+    state.deleteMode = 'table';
     setDeleting(false);
     const firstModal = $('backupDeleteModal');
     if (!firstModal || firstModal.hidden) document.body.classList.remove('backup-modal-open');
@@ -190,36 +216,44 @@
     }
     setDeleting(true);
     try {
-      const res = await fetch(`/api/backup/tables/${encodeURIComponent(item.key)}`, {
+      const isAll = !!item.isAll || state.deleteMode === 'all';
+      const url = isAll ? '/api/backup/delete-all' : `/api/backup/tables/${encodeURIComponent(item.key)}`;
+      const res = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminPassword: password }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to delete table data.');
+      if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to delete data.');
       closeFinalModal();
       state.selected = null;
-      showToast('Table data deleted successfully.');
+      state.deleteMode = 'table';
+      showToast(isAll ? 'All database data deleted successfully.' : 'Table data deleted successfully.');
       await loadTables();
     } catch (error) {
       console.error('Backup delete failed:', error);
       closeFinalModal();
-      if (item) openDeleteModal(item.key);
-      setDeleteError(error.message || 'Failed to delete table data.');
-      showToast(error.message || 'Failed to delete table data.', 'danger');
+      if (item?.isAll || state.deleteMode === 'all') openDeleteAllModal();
+      else if (item) openDeleteModal(item.key);
+      setDeleteError(error.message || 'Failed to delete data.');
+      showToast(error.message || 'Failed to delete data.', 'danger');
     } finally {
       setDeleting(false);
     }
   }
 
   function bindEvents(){
-    $('backupRefreshBtn')?.addEventListener('click', loadTables);
     document.addEventListener('click', (event) => {
       const deleteBtn = event.target.closest?.('[data-backup-delete]');
       if (deleteBtn) {
         event.preventDefault();
         openDeleteModal(deleteBtn.dataset.backupDelete || '');
+        return;
+      }
+      if (event.target.closest?.('[data-backup-delete-all]')) {
+        event.preventDefault();
+        openDeleteAllModal();
         return;
       }
       if (event.target.closest?.('[data-backup-delete-close]')) {
