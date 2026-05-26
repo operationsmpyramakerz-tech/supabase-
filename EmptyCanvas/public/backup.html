@@ -11,11 +11,11 @@
   <script src="/pwa-register.js" defer></script>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Back up</title>
+  <title>Database</title>
   <style>body.permissions-loading .sidebar li { display: none !important; }</style>
-  <link href="/css/style.css?v=backup-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=backup-v1" rel="stylesheet" />
-  <link href="/css/backup.css?v=backup-v1" rel="stylesheet" />
+  <link href="/css/style.css?v=database-v2" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=database-v2" rel="stylesheet" />
+  <link href="/css/backup.css?v=database-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-backup">
@@ -65,7 +65,7 @@
               <span class="greeting-avatar"><img src="/images/greeting-icon.png" alt="Hi icon" /></span>
               <div class="greet-text">
                 <div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
-                <div class="greet-sub">Supabase backups</div>
+                <div class="greet-sub">System database</div>
               </div>
             </div>
           </div>
@@ -77,7 +77,7 @@
           </div>
         </div>
         <div class="header-row2">
-          <h1 class="page-title">Back up</h1>
+          <h1 class="page-title">Database</h1>
         </div>
       </header>
 
@@ -86,23 +86,30 @@
           <span class="backup-hero-icon"><i data-feather="database"></i></span>
           <div>
             <p class="backup-kicker">SYSTEM DATA</p>
-            <h2>Back up</h2>
-            <p>Download CSV copies from Supabase tables or clear table data with admin approval.</p>
+            <h2>Database</h2>
+            <p>Export CSV copies from Supabase tables or clear table data with admin approval.</p>
           </div>
-          <button type="button" class="backup-refresh-btn" id="backupRefreshBtn"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
+          <div class="backup-hero-actions">
+            <a class="backup-export-all-btn" id="backupExportAllBtn" href="/api/backup/export-all" download>
+              <i data-feather="download-cloud"></i><span>Export all data</span>
+            </a>
+            <button type="button" class="backup-delete-all-btn" id="backupDeleteAllBtn" data-backup-delete-all>
+              <i data-feather="trash-2"></i><span>Delete all data</span>
+            </button>
+          </div>
         </section>
 
         <section class="backup-list-card card">
           <div class="backup-list-head">
             <div>
               <p class="backup-kicker">DATABASE TABLES</p>
-              <h2>Back up records</h2>
-              <p class="backup-muted">Choose a card, download its CSV file, or delete the data inside its table.</p>
+              <h2>Database records</h2>
+              <p class="backup-muted">Choose a card, export its CSV file, or delete the data inside its table.</p>
             </div>
             <span class="backup-count" id="backupCount">0 tables</span>
           </div>
           <div class="backup-grid" id="backupGrid" aria-live="polite">
-            <div class="backup-empty"><i data-feather="loader"></i><span>Loading backup tables...</span></div>
+            <div class="backup-empty"><i data-feather="loader"></i><span>Loading database tables...</span></div>
           </div>
         </section>
       </main>
@@ -116,11 +123,11 @@
       <div class="backup-delete-head">
         <span class="backup-delete-icon"><i data-feather="trash-2"></i></span>
         <div>
-          <p class="backup-kicker">DELETE TABLE DATA</p>
+          <p class="backup-kicker">DELETE DATA</p>
           <h2 id="backupDeleteTitle">Delete table data?</h2>
         </div>
       </div>
-      <p class="backup-delete-copy" id="backupDeleteCopy">This will permanently delete data from this Supabase table.</p>
+      <p class="backup-delete-copy" id="backupDeleteCopy">This will permanently delete data from Supabase.</p>
       <label class="backup-field">
         <span>Admin password</span>
         <input id="backupDeletePassword" type="password" autocomplete="off" placeholder="Enter admin password" />
@@ -149,7 +156,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=sidebar-order-v1"></script>
-  <script src="/js/backup.js?v=backup-v1"></script>
+  <script src="/js/common-ui.js?v=database-page-v2"></script>
+  <script src="/js/backup.js?v=database-v2"></script>
 </body>
 </html>
