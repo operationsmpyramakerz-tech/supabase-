@@ -15,7 +15,7 @@
   <style>body.permissions-loading .sidebar li { display: none !important; }</style>
   <link href="/css/style.css?v=history-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=history-v1" rel="stylesheet" />
-  <link href="/css/history.css?v=history-v8" rel="stylesheet" />
+  <link href="/css/history.css?v=history-v9" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-history">
@@ -92,7 +92,15 @@
             <div class="history-list-actions">
               <button type="button" class="history-filter-open" id="historyFilterOpenBtn"><i data-feather="sliders"></i><span>Filter by</span></button>
               <span class="history-count" id="historyCount">0 records</span>
-              <button type="button" class="history-delete-btn" id="historyDeleteBtn" aria-label="Delete all history" title="Delete all history"><i data-feather="trash-2"></i></button>
+              <button type="button" class="history-delete-btn" id="historyDeleteBtn" aria-label="Delete all history" title="Delete all history">
+                <svg class="history-delete-btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M3 6h18"></path>
+                  <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"></path>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                  <path d="M10 11v6"></path>
+                  <path d="M14 11v6"></path>
+                </svg>
+              </button>
             </div>
           </div>
           <div class="history-list" id="historyList" aria-live="polite">
@@ -145,11 +153,23 @@
   <div class="history-confirm-modal" id="historyClearModal" hidden>
     <div class="history-confirm-backdrop" data-history-clear-close></div>
     <section class="history-confirm-card" role="dialog" aria-modal="true" aria-labelledby="historyClearTitle">
-      <button type="button" class="history-modal-close history-confirm-close" data-history-clear-close aria-label="Close"><i data-feather="x"></i></button>
-      <span class="history-confirm-icon history-confirm-icon--danger"><i data-feather="trash-2"></i></span>
-      <p class="history-kicker">DELETE HISTORY</p>
-      <h2 id="historyClearTitle">Clear all history records?</h2>
+      <button type="button" class="history-modal-close history-confirm-close" data-history-clear-close aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+      </button>
+      <div class="history-confirm-head">
+        <span class="history-confirm-icon history-confirm-icon--danger">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18"></path><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+        </span>
+        <div class="history-confirm-title-wrap">
+          <p class="history-kicker">DELETE HISTORY</p>
+          <h2 id="historyClearTitle">Clear all history records?</h2>
+        </div>
+      </div>
       <p class="history-confirm-copy">This will permanently delete all saved system actions. Enter the admin password to confirm.</p>
+      <div class="history-confirm-warning" role="alert">
+        <i data-feather="alert-triangle"></i>
+        <span>Confirmation: this action cannot be undone.</span>
+      </div>
       <label class="history-confirm-field">
         <span>Admin password</span>
         <input id="historyClearPassword" type="password" autocomplete="off" placeholder="Enter admin password" />
@@ -157,13 +177,16 @@
       <p class="history-confirm-error" id="historyClearError" hidden></p>
       <div class="history-confirm-actions">
         <button type="button" class="history-confirm-cancel" data-history-clear-close>Cancel</button>
-        <button type="button" class="history-confirm-delete" id="historyClearConfirmBtn"><i data-feather="trash-2"></i><span>Delete history</span></button>
+        <button type="button" class="history-confirm-delete" id="historyClearConfirmBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6h18"></path><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+          <span>Delete history</span>
+        </button>
       </div>
     </section>
   </div>
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=history-menu-v2"></script>
-  <script src="/js/history.js?v=history-v8"></script>
+  <script src="/js/history.js?v=history-v9"></script>
 </body>
 </html>
