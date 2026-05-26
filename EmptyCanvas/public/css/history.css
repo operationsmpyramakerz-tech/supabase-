@@ -1084,3 +1084,203 @@
     white-space:nowrap;
   }
 }
+
+/* v8 - full red clear-history action + modern confirmation modal */
+.history-delete-btn{
+  background:#dc2626 !important;
+  color:#fff !important;
+  border:1px solid rgba(255,255,255,.38) !important;
+  box-shadow:0 18px 36px rgba(220,38,38,.24) !important;
+}
+.history-delete-btn:hover,
+.history-delete-btn:focus-visible{
+  background:#b91c1c !important;
+  box-shadow:0 22px 44px rgba(220,38,38,.32) !important;
+}
+.history-delete-btn svg{
+  stroke:#fff !important;
+  color:#fff !important;
+}
+.history-delete-btn.is-loading svg,
+.history-confirm-delete.is-loading svg{
+  animation:historySpin .8s linear infinite;
+}
+
+.history-confirm-modal[hidden]{ display:none !important; }
+.history-confirm-modal{
+  position:fixed;
+  inset:0;
+  z-index:1000003;
+  display:grid;
+  place-items:center;
+  padding:1rem;
+}
+.history-confirm-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(15,23,42,.58);
+  backdrop-filter:blur(10px);
+}
+.history-confirm-card{
+  position:relative;
+  width:min(560px, 94vw);
+  background:rgba(255,255,255,.98);
+  border:1px solid rgba(255,255,255,.75);
+  border-radius:30px;
+  box-shadow:0 34px 90px rgba(0,0,0,.28);
+  padding:clamp(1.2rem, 3vw, 1.8rem);
+  overflow:hidden;
+}
+.history-confirm-card::after{
+  content:"";
+  position:absolute;
+  inset:auto -18% -40% 30%;
+  height:160px;
+  background:radial-gradient(circle, rgba(220,38,38,.16), transparent 64%);
+  pointer-events:none;
+}
+.history-confirm-card > *{ position:relative; z-index:1; }
+.history-confirm-icon{
+  width:66px;
+  height:66px;
+  border-radius:24px;
+  display:grid;
+  place-items:center;
+  margin-bottom:.85rem;
+}
+.history-confirm-icon--danger{
+  background:#fee2e2;
+  color:#dc2626;
+  border:1px solid rgba(220,38,38,.18);
+  box-shadow:0 16px 34px rgba(220,38,38,.12);
+}
+.history-confirm-icon svg{
+  width:28px;
+  height:28px;
+  stroke:currentColor;
+}
+.history-confirm-card h2{
+  margin:0;
+  max-width:calc(100% - 3.4rem);
+  color:#0b1020;
+  font-size:clamp(1.8rem, 6vw, 2.45rem);
+  line-height:1.05;
+  font-weight:950;
+  letter-spacing:-.03em;
+}
+.history-confirm-copy{
+  margin:.65rem 0 1rem;
+  color:#64748b;
+  font-weight:800;
+  line-height:1.55;
+}
+.history-confirm-field{
+  display:grid;
+  gap:.45rem;
+  padding:.95rem;
+  border:1px solid #e5e7eb;
+  border-radius:22px;
+  background:linear-gradient(180deg,#fff,#f8fafc);
+  box-shadow:0 12px 28px rgba(15,23,42,.04);
+}
+.history-confirm-field span{
+  color:#4b5563;
+  font-weight:950;
+  letter-spacing:.045em;
+  text-transform:uppercase;
+  font-size:.72rem;
+}
+.history-confirm-field input{
+  width:100%;
+  min-height:54px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:18px;
+  background:#fff;
+  color:#0b1020;
+  font-weight:900;
+  padding:0 1rem;
+  outline:0;
+}
+.history-confirm-field input:focus{
+  border-color:rgba(220,38,38,.42);
+  box-shadow:0 0 0 4px rgba(220,38,38,.1);
+}
+.history-confirm-error{
+  margin:.8rem 0 0;
+  padding:.8rem .95rem;
+  border-radius:18px;
+  border:1px solid rgba(220,38,38,.22);
+  background:#fff1f2;
+  color:#b91c1c;
+  font-weight:900;
+}
+.history-confirm-actions{
+  display:grid;
+  grid-template-columns:1fr 1.35fr;
+  gap:.75rem;
+  margin-top:1rem;
+}
+.history-confirm-cancel,
+.history-confirm-delete{
+  min-height:54px;
+  border-radius:18px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.55rem;
+  font-weight:950;
+  cursor:pointer;
+}
+.history-confirm-cancel{
+  border:1px solid #e5e7eb;
+  background:#fff;
+  color:#0b1020;
+  box-shadow:0 12px 28px rgba(15,23,42,.06);
+}
+.history-confirm-delete{
+  border:0;
+  background:#dc2626;
+  color:#fff;
+  box-shadow:0 18px 38px rgba(220,38,38,.25);
+}
+.history-confirm-delete:hover,
+.history-confirm-delete:focus-visible{
+  background:#b91c1c;
+  outline:none;
+}
+.history-confirm-delete:disabled{
+  opacity:.72;
+  cursor:not-allowed;
+}
+.history-confirm-delete svg,
+.history-confirm-delete span{
+  color:#fff;
+  stroke:#fff;
+}
+.history-confirm-close{
+  width:46px !important;
+  height:46px !important;
+  border-radius:16px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  padding:0 !important;
+}
+
+@media (max-width:760px){
+  .history-confirm-modal{
+    padding:1rem;
+  }
+  .history-confirm-card{
+    width:min(94vw, 560px);
+    border-radius:28px;
+    padding:1.05rem;
+  }
+  .history-confirm-actions{
+    grid-template-columns:1fr;
+  }
+  .history-delete-btn{
+    width:46px;
+    height:46px;
+  }
+}
