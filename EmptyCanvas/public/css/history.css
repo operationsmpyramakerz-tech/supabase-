@@ -1467,3 +1467,35 @@
     grid-template-columns:1fr !important;
   }
 }
+
+
+/* v10 - force visible white delete icon inside the red history clear button */
+.history-delete-btn{
+  position:relative !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  background:#dc2626 !important;
+  color:#fff !important;
+}
+.history-delete-btn::after{
+  content:"";
+  position:absolute;
+  z-index:3;
+  left:50%;
+  top:50%;
+  width:23px;
+  height:23px;
+  transform:translate(-50%, -50%);
+  background-color:#fff;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.45' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6'/%3E%3Cpath d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/%3E%3Cpath d='M10 11v6'/%3E%3Cpath d='M14 11v6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.45' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6'/%3E%3Cpath d='M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'/%3E%3Cpath d='M10 11v6'/%3E%3Cpath d='M14 11v6'/%3E%3C/svg%3E") center / contain no-repeat;
+  pointer-events:none;
+}
+.history-delete-btn .history-delete-btn-icon{
+  opacity:0 !important;
+  visibility:hidden !important;
+}
+.history-delete-btn.is-loading::after{
+  animation:historySpin .8s linear infinite;
+}
