@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Back up</title>
+  <style>body.permissions-loading .sidebar li { display: none !important; }</style>
+  <link href="/css/style.css?v=backup-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=backup-v1" rel="stylesheet" />
+  <link href="/css/backup.css?v=backup-v1" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading page-backup">
+  <script>
+    (function() {
+      try {
+        if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+          document.body.classList.add('sidebar-mini');
+        }
+      } catch(e) {}
+    })();
+  </script>
+
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Dashboard</h2>
+        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+          <i data-feather="chevrons-left"></i>
+        </button>
+      </div>
+      <nav class="sidebar-nav">
+        <ul class="nav-list">
+          <li><a class="nav-link" href="/home"><i data-feather="home"></i><span class="nav-label">Home</span></a></li>
+          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses Users</span></a></li>
+          <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+          <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+          <li><a class="nav-link" href="/history"><i data-feather="clock"></i><span class="nav-label">History</span></a></li>
+          <li><a class="nav-link active" href="/backup"><i data-feather="database"></i><span class="nav-label">Back up</span></a></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header">
+        <div class="header-row1">
+          <div class="left">
+            <div class="greeting-pill" aria-live="polite">
+              <span class="greeting-avatar"><img src="/images/greeting-icon.png" alt="Hi icon" /></span>
+              <div class="greet-text">
+                <div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+                <div class="greet-sub">Supabase backups</div>
+              </div>
+            </div>
+          </div>
+          <div class="right topbar-right">
+            <a class="account-mini" href="/account" title="My account" aria-label="My account">
+              <span class="ico-circle"><img src="/images/logo.png" alt="Logo" /></span>
+              <span class="label">My account</span>
+            </a>
+          </div>
+        </div>
+        <div class="header-row2">
+          <h1 class="page-title">Back up</h1>
+        </div>
+      </header>
+
+      <main class="backup-page-shell">
+        <section class="backup-hero card">
+          <span class="backup-hero-icon"><i data-feather="database"></i></span>
+          <div>
+            <p class="backup-kicker">SYSTEM DATA</p>
+            <h2>Back up</h2>
+            <p>Download CSV copies from Supabase tables or clear table data with admin approval.</p>
+          </div>
+          <button type="button" class="backup-refresh-btn" id="backupRefreshBtn"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
+        </section>
+
+        <section class="backup-list-card card">
+          <div class="backup-list-head">
+            <div>
+              <p class="backup-kicker">DATABASE TABLES</p>
+              <h2>Back up records</h2>
+              <p class="backup-muted">Choose a card, download its CSV file, or delete the data inside its table.</p>
+            </div>
+            <span class="backup-count" id="backupCount">0 tables</span>
+          </div>
+          <div class="backup-grid" id="backupGrid" aria-live="polite">
+            <div class="backup-empty"><i data-feather="loader"></i><span>Loading backup tables...</span></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="backup-delete-modal" id="backupDeleteModal" hidden>
+    <div class="backup-modal-backdrop" data-backup-delete-close></div>
+    <section class="backup-delete-card" role="dialog" aria-modal="true" aria-labelledby="backupDeleteTitle">
+      <button type="button" class="backup-modal-close" data-backup-delete-close aria-label="Close"><i data-feather="x"></i></button>
+      <div class="backup-delete-head">
+        <span class="backup-delete-icon"><i data-feather="trash-2"></i></span>
+        <div>
+          <p class="backup-kicker">DELETE TABLE DATA</p>
+          <h2 id="backupDeleteTitle">Delete table data?</h2>
+        </div>
+      </div>
+      <p class="backup-delete-copy" id="backupDeleteCopy">This will permanently delete data from this Supabase table.</p>
+      <label class="backup-field">
+        <span>Admin password</span>
+        <input id="backupDeletePassword" type="password" autocomplete="off" placeholder="Enter admin password" />
+      </label>
+      <p class="backup-error" id="backupDeleteError" hidden></p>
+      <div class="backup-delete-actions">
+        <button type="button" class="backup-cancel-btn" data-backup-delete-close>Cancel</button>
+        <button type="button" class="backup-delete-next-btn" id="backupDeleteNextBtn"><i data-feather="trash-2"></i><span>Delete data</span></button>
+      </div>
+    </section>
+  </div>
+
+  <div class="backup-final-modal" id="backupFinalModal" hidden>
+    <div class="backup-modal-backdrop" data-backup-final-close></div>
+    <section class="backup-final-card" role="dialog" aria-modal="true" aria-labelledby="backupFinalTitle">
+      <button type="button" class="backup-modal-close" data-backup-final-close aria-label="Close"><i data-feather="x"></i></button>
+      <span class="backup-final-icon"><i data-feather="alert-triangle"></i></span>
+      <p class="backup-kicker">FINAL CONFIRMATION</p>
+      <h2 id="backupFinalTitle">Confirm delete?</h2>
+      <p id="backupFinalCopy">This action cannot be undone.</p>
+      <div class="backup-final-actions">
+        <button type="button" class="backup-cancel-btn" data-backup-final-close>Cancel</button>
+        <button type="button" class="backup-final-confirm-btn" id="backupFinalConfirmBtn"><i data-feather="check"></i><span>Confirm</span></button>
+      </div>
+    </section>
+  </div>
+
+  <script>if (window.feather) feather.replace();</script>
+  <script src="/js/common-ui.js?v=backup-v1"></script>
+  <script src="/js/backup.js?v=backup-v1"></script>
+</body>
+</html>
