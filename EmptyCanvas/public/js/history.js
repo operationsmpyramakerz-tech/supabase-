@@ -271,6 +271,27 @@
     }
   }
 
+  function showHistoryToast(message = '', variant = 'success') {
+    const clean = String(message || '').trim();
+    if (!clean) return;
+    let toast = document.getElementById('historyToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'historyToast';
+      toast.className = 'history-toast';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
+      document.body.appendChild(toast);
+    }
+    toast.className = `history-toast history-toast--${variant || 'success'} is-visible`;
+    toast.innerHTML = `<i data-feather="${variant === 'danger' ? 'alert-circle' : 'check-circle'}"></i><span>${escapeHTML(clean)}</span>`;
+    try { if (window.feather) window.feather.replace(); } catch {}
+    window.clearTimeout(showHistoryToast._timer);
+    showHistoryToast._timer = window.setTimeout(() => {
+      toast.classList.remove('is-visible');
+    }, 2800);
+  }
+
   function setClearHistoryError(message = ''){
     const el = $('historyClearError');
     if (!el) return;
@@ -334,9 +355,11 @@
       updateActiveFilterText();
       renderRows();
       closeClearHistoryModal();
+      showHistoryToast('History records deleted successfully.');
     } catch (error) {
       console.error('Clear history failed:', error);
       setClearHistoryError(error.message || 'Failed to delete history.');
+      showHistoryToast(error.message || 'Failed to delete history.', 'danger');
     } finally {
       setLoading(false);
       setClearHistorySubmitting(false);
