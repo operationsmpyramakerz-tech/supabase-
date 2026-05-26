@@ -15,7 +15,7 @@
   <style>body.permissions-loading .sidebar li { display: none !important; }</style>
   <link href="/css/style.css?v=history-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=history-v1" rel="stylesheet" />
-  <link href="/css/history.css?v=history-v6" rel="stylesheet" />
+  <link href="/css/history.css?v=history-v7" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-history">
@@ -92,6 +92,7 @@
             <div class="history-list-actions">
               <button type="button" class="history-filter-open" id="historyFilterOpenBtn"><i data-feather="sliders"></i><span>Filter by</span></button>
               <span class="history-count" id="historyCount">0 records</span>
+              <button type="button" class="history-delete-btn" id="historyDeleteBtn" aria-label="Delete all history" title="Delete all history"><i data-feather="trash-2"></i></button>
             </div>
           </div>
           <div class="history-list" id="historyList" aria-live="polite">
@@ -142,6 +143,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=history-menu-v2"></script>
-  <script src="/js/history.js?v=history-v6"></script>
+  <script src="/js/history.js?v=history-v7"></script>
 </body>
 </html>
