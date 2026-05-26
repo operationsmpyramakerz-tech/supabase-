@@ -2023,7 +2023,7 @@ function normalizePages(names = []) {
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
   if (set.has("history") || set.has("system history") || set.has("audit history") || set.has("audit log") || set.has("system audit") || set.has("/history")) out.push("History");
-  if (set.has("backup") || set.has("back up") || set.has("system backup") || set.has("data backup") || set.has("/backup")) out.push("Backup");
+  if (set.has("backup") || set.has("back up") || set.has("database") || set.has("system database") || set.has("system backup") || set.has("data backup") || set.has("/backup")) out.push("Backup");
   if (set.has("mail") || set.has("email") || set.has("emails") || set.has("messages") || set.has("message") || set.has("massage")) out.push("Mail");
   if (set.has("b2b")) out.push("B2B");
   if (set.has("expenses")) out.push("Expenses");
@@ -3239,6 +3239,8 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     "system-history": "History",
     backup: "Backup",
     "back-up": "Backup",
+    database: "Backup",
+    "system-database": "Backup",
     "system-backup": "Backup",
     messages: "Mail",
     message: "Mail",
@@ -6442,6 +6444,8 @@ function expandAllowedForUI(list = []) {
   if (set.has("Backup")) {
     set.add("Backup");
     set.add("Back up");
+    set.add("Database");
+    set.add("System Database");
     set.add("System Backup");
     set.add("/backup");
   }
@@ -7525,10 +7529,8 @@ app.get("/history", requireAuth, requirePage("History"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "history.html"));
 });
 
-// Back up page — available from the top-right user menu when the Backup page
-// is enabled in the user's Allowed Pages.
-const BACKUP_ACCESS_PAGE = "Backup";
-app.get("/backup", requireAuth, requirePage(BACKUP_ACCESS_PAGE), (req, res) => {
+// Database page — available from the top-right user menu under History
+app.get("/backup", requireAuth, requirePage("Backup"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "backup.html"));
 });
 
@@ -7815,7 +7817,7 @@ app.delete('/api/history/clear', requireAuth, requirePage("History"), async (req
 });
 
 // -----------------------------------------------------------------------------
-// Back up — CSV export and table data clearing
+// Database — CSV/ZIP export and table data clearing
 // -----------------------------------------------------------------------------
 function _backupCleanTableName(value = '') {
   const table = String(value || '').trim();
@@ -7903,6 +7905,108 @@ function _backupRowsToCsv(rows = []) {
   ].join('\n');
 }
 
+function _backupSafeZipName(value = '', fallback = 'file') {
+  const clean = String(value || '').trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return clean || fallback;
+}
+
+function _backupDosDateTime(input = new Date()) {
+  const d = input instanceof Date ? input : new Date(input);
+  const year = Math.max(1980, d.getFullYear());
+  return {
+    time: ((d.getHours() & 0x1f) << 11) | ((d.getMinutes() & 0x3f) << 5) | (Math.floor(d.getSeconds() / 2) & 0x1f),
+    date: (((year - 1980) & 0x7f) << 9) | (((d.getMonth() + 1) & 0x0f) << 5) | (d.getDate() & 0x1f),
+  };
+}
+
+function _backupCrc32(buffer) {
+  const data = Buffer.isBuffer(buffer) ? buffer : Buffer.from(String(buffer || ''));
+  if (!_backupCrc32.table) {
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i += 1) {
+      let c = i;
+      for (let j = 0; j < 8; j += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      table[i] = c >>> 0;
+    }
+    _backupCrc32.table = table;
+  }
+  let crc = 0xffffffff;
+  for (const byte of data) crc = _backupCrc32.table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function _backupBuildZip(files = []) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  const now = new Date();
+  const { time, date } = _backupDosDateTime(now);
+
+  for (const file of files || []) {
+    const name = String(file?.name || '').replace(/^\/+/, '') || 'file.txt';
+    const nameBuffer = Buffer.from(name, 'utf8');
+    const data = Buffer.isBuffer(file?.data) ? file.data : Buffer.from(String(file?.data ?? ''), 'utf8');
+    const crc = _backupCrc32(data);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(time, 10);
+    local.writeUInt16LE(date, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuffer.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, nameBuffer, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(time, 12);
+    central.writeUInt16LE(date, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuffer.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, nameBuffer);
+
+    offset += local.length + nameBuffer.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, end], offset + centralSize + end.length);
+}
+
+function _backupIsMissingTableError(error) {
+  const msg = String(error?.message || error?.details?.message || error?.details || error || '');
+  return /Could not find the table|relation .* does not exist|table .* does not exist|PGRST205|42P01/i.test(msg);
+}
+
 async function _backupSelectAllRows(tableName) {
   const table = _backupCleanTableName(tableName);
   if (!table) {
@@ -7953,7 +8057,7 @@ async function _backupDeleteAllRows(tableName) {
   });
 }
 
-app.get('/api/backup/tables', requireAuth, requirePage(BACKUP_ACCESS_PAGE), async (req, res) => {
+app.get('/api/backup/tables', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -7973,7 +8077,89 @@ app.get('/api/backup/tables', requireAuth, requirePage(BACKUP_ACCESS_PAGE), asyn
   }
 });
 
-app.get('/api/backup/tables/:key/download', requireAuth, requirePage(BACKUP_ACCESS_PAGE), async (req, res) => {
+app.get('/api/backup/export-all', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).send('Supabase is not configured.');
+    const files = [];
+    const errors = [];
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+
+    for (const item of _backupCatalog()) {
+      try {
+        const rows = await _backupSelectAllRows(item.tableName);
+        const csv = _backupRowsToCsv(rows);
+        const moduleName = _backupSafeZipName(item.moduleName || 'system', 'system');
+        const tableName = _backupSafeZipName(item.tableName || item.key, item.key || 'table');
+        files.push({
+          name: `${moduleName}/${tableName}.csv`,
+          data: Buffer.from(`\uFEFF${csv}`, 'utf8'),
+        });
+      } catch (error) {
+        const message = error?.message || 'Failed to export table.';
+        errors.push(`${item.tableName || item.key}: ${message}`);
+        if (!_backupIsMissingTableError(error)) console.warn('[backup] export-all table failed:', item.tableName, error?.details || error);
+      }
+    }
+
+    if (errors.length) {
+      files.push({
+        name: '_export-errors.txt',
+        data: Buffer.from(errors.join('\n'), 'utf8'),
+      });
+    }
+    if (!files.length) {
+      files.push({ name: 'README.txt', data: Buffer.from('No database tables were available to export.', 'utf8') });
+    }
+
+    const zip = _backupBuildZip(files);
+    const filename = `database-export-${stamp}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(zip);
+  } catch (error) {
+    console.error('GET /api/backup/export-all error:', error?.details || error);
+    return res.status(error?.status || 500).send(error?.message || 'Failed to export all database data.');
+  }
+});
+
+app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
+    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
+    const ok = await verifyAdminPassword(adminPassword);
+    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+
+    const items = _backupCatalog();
+    const deletedTables = [];
+    const skippedTables = [];
+    _historySetEntity(res, { entityType: 'database', entityId: 'all', entityLabel: 'All database tables' });
+
+    for (const item of [...items].reverse()) {
+      try {
+        await _backupDeleteAllRows(item.tableName);
+        deletedTables.push(item.tableName);
+      } catch (error) {
+        if (_backupIsMissingTableError(error)) {
+          skippedTables.push(item.tableName);
+          continue;
+        }
+        error.message = `Failed to delete data from ${item.tableName}: ${error.message || 'Unknown error'}`;
+        throw error;
+      }
+    }
+
+    return res.json({ ok: true, deletedTables, skippedTables });
+  } catch (error) {
+    console.error('DELETE /api/backup/delete-all error:', error?.details || error);
+    const msg = String(error?.message || 'Failed to delete all database data.');
+    return res.status(error?.status || 500).json({ ok: false, error: msg });
+  }
+});
+
+app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).send('Supabase is not configured.');
@@ -7992,7 +8178,7 @@ app.get('/api/backup/tables/:key/download', requireAuth, requirePage(BACKUP_ACCE
   }
 });
 
-app.delete('/api/backup/tables/:key', requireAuth, requirePage(BACKUP_ACCESS_PAGE), async (req, res) => {
+app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
