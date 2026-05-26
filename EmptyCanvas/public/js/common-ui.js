@@ -1526,7 +1526,10 @@ if (document.querySelector('.sidebar')) {
 
   function syncUserMenuPageAccess(allowed){
     const hasHistoryAccess = hasAllowedPage(allowed || [], ['History', 'System History', '/history']);
-    const hasBackupAccess = hasAllowedPage(allowed || [], ['Backup', 'Back up', 'System Backup', '/backup']);
+    // Back up is a history-side utility in the top-right user menu.
+    // Show it for users who can open History, even if older permission data
+    // does not yet contain the newly-added Backup page option.
+    const hasBackupAccess = hasHistoryAccess || hasAllowedPage(allowed || [], ['Backup', 'Back up', 'System Backup', '/backup']);
     try {
       document.querySelectorAll('[data-user-menu-action="history"]').forEach((item) => {
         if (hasHistoryAccess) showEl(item);
@@ -2028,6 +2031,8 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/b2b', label: 'B2B', icon: 'folder' });
   ensureLink({ href: '/tasks', label: 'Tasks', icon: 'check-square' });
   ensureLink({ href: '/kpis', label: 'KPIs', icon: 'bar-chart-2', beforeHref: '/user-access' });
+  ensureLink({ href: '/history', label: 'History', icon: 'clock', beforeHref: '/user-access' });
+  ensureLink({ href: '/backup', label: 'Back up', icon: 'database', beforeHref: '/user-access' });
 
   syncMobileDockStructure();
 
