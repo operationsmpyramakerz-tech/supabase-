@@ -671,6 +671,17 @@ function historyAuditMiddleware(req, res, next) {
     && !/^\/api\/history(\/|$)/i.test(req.path) && !/^\/api\/supabase\//i.test(req.path) && !/^\/api\/session-diagnostics$/i.test(req.path)
     && !_historyShouldSkipRequest(req);
   if (!shouldLog) return next();
+
+  // Capture actor details before the route runs. This is important for logout,
+  // because the session is destroyed before the response finishes.
+  const accountSnapshot = req.session?.accountCache && typeof req.session.accountCache === 'object' ? { ...req.session.accountCache } : {};
+  const actorSnapshot = {
+    id: String(req.session?.userSupabaseId || req.session?.userNotionId || '').trim() || null,
+    name: String(accountSnapshot.name || req.session?.username || req.body?.username || 'System').trim() || 'System',
+    department: String(accountSnapshot.department || '').trim() || null,
+    position: String(accountSnapshot.position || '').trim() || null,
+  };
+
   const startedAt = Date.now();
   res.on('finish', () => {
     const status = Number(res.statusCode || 0);
@@ -678,12 +689,11 @@ function historyAuditMiddleware(req, res, next) {
     const page = _historyResolvePage(req.path || req.originalUrl || '');
     const action = _historyResolveAction(method, req.path || req.originalUrl || '', req.body || {});
     const entity = (res.locals && res.locals.historyEntity) ? res.locals.historyEntity : _historyResolveEntity(req);
-    const account = req.session?.accountCache && typeof req.session.accountCache === 'object' ? req.session.accountCache : {};
     const row = {
-      actor_team_member_id: String(req.session?.userSupabaseId || req.session?.userNotionId || '').trim() || null,
-      actor_name: String(account.name || req.session?.username || req.body?.username || 'System').trim() || 'System',
-      actor_department: String(account.department || '').trim() || null,
-      actor_position: String(account.position || '').trim() || null,
+      actor_team_member_id: actorSnapshot.id,
+      actor_name: actorSnapshot.name,
+      actor_department: actorSnapshot.department,
+      actor_position: actorSnapshot.position,
       page_key: page.pageKey,
       page_name: page.pageName,
       action_key: action.actionKey,
