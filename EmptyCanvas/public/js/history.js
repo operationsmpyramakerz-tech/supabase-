@@ -8,6 +8,7 @@
     loading: false,
     visibleLimit: PAGE_SIZE,
     filters: { page: '', actor: '', date: '' },
+    pendingClearHistoryPassword: '',
   };
 
   const creatorProfileCache = new Map();
@@ -306,14 +307,25 @@
     btn.disabled = !!isSubmitting;
     btn.classList.toggle('is-loading', !!isSubmitting);
     const label = btn.querySelector('span');
-    if (label) label.textContent = isSubmitting ? 'Deleting...' : 'Delete history';
+    if (label) label.textContent = isSubmitting ? 'Checking...' : 'Delete history';
+  }
+
+  function setFinalDeleteSubmitting(isSubmitting){
+    const btn = $('historyFinalDeleteConfirmBtn');
+    if (!btn) return;
+    btn.disabled = !!isSubmitting;
+    btn.classList.toggle('is-loading', !!isSubmitting);
+    const label = btn.querySelector('span');
+    if (label) label.textContent = isSubmitting ? 'Deleting...' : 'Confirm';
   }
 
   function openClearHistoryModal(){
     const modal = $('historyClearModal');
     if (!modal) return;
+    state.pendingClearHistoryPassword = '';
     setClearHistoryError('');
     setClearHistorySubmitting(false);
+    setFinalDeleteSubmitting(false);
     const input = $('historyClearPassword');
     if (input) input.value = '';
     modal.hidden = false;
@@ -327,17 +339,46 @@
     if (modal) modal.hidden = true;
     setClearHistoryError('');
     setClearHistorySubmitting(false);
-    document.body.classList.remove('history-modal-open');
+    const finalModal = $('historyFinalDeleteModal');
+    if (!finalModal || finalModal.hidden) document.body.classList.remove('history-modal-open');
   }
 
-  async function clearAllHistory(){
+  function openFinalDeleteModal(){
     const cleanPassword = String($('historyClearPassword')?.value || '').trim();
     if (!cleanPassword) {
       setClearHistoryError('Admin password is required.');
       return;
     }
+    state.pendingClearHistoryPassword = cleanPassword;
+    setClearHistoryError('');
+    const firstModal = $('historyClearModal');
+    if (firstModal) firstModal.hidden = true;
+    const finalModal = $('historyFinalDeleteModal');
+    if (finalModal) finalModal.hidden = false;
+    document.body.classList.add('history-modal-open');
+    setFinalDeleteSubmitting(false);
+    try { if (window.feather) window.feather.replace(); } catch {}
+  }
+
+  function closeFinalDeleteModal(){
+    const modal = $('historyFinalDeleteModal');
+    if (modal) modal.hidden = true;
+    state.pendingClearHistoryPassword = '';
+    setFinalDeleteSubmitting(false);
+    const firstModal = $('historyClearModal');
+    if (!firstModal || firstModal.hidden) document.body.classList.remove('history-modal-open');
+  }
+
+  async function clearAllHistory(){
+    const cleanPassword = String(state.pendingClearHistoryPassword || '').trim();
+    if (!cleanPassword) {
+      closeFinalDeleteModal();
+      openClearHistoryModal();
+      setClearHistoryError('Admin password is required.');
+      return;
+    }
     setLoading(true);
-    setClearHistorySubmitting(true);
+    setFinalDeleteSubmitting(true);
     setClearHistoryError('');
     try {
       const res = await fetch('/api/history/clear', {
@@ -351,18 +392,22 @@
       state.allRows = [];
       state.rows = [];
       state.visibleLimit = PAGE_SIZE;
+      state.pendingClearHistoryPassword = '';
       syncFilterOptions();
       updateActiveFilterText();
       renderRows();
+      closeFinalDeleteModal();
       closeClearHistoryModal();
       showHistoryToast('History records deleted successfully.');
     } catch (error) {
       console.error('Clear history failed:', error);
+      closeFinalDeleteModal();
+      openClearHistoryModal();
       setClearHistoryError(error.message || 'Failed to delete history.');
       showHistoryToast(error.message || 'Failed to delete history.', 'danger');
     } finally {
       setLoading(false);
-      setClearHistorySubmitting(false);
+      setFinalDeleteSubmitting(false);
     }
   }
 
@@ -694,6 +739,7 @@
     if (event.target.closest('[data-history-close]')) closeDetails();
     if (event.target.closest('[data-history-filter-close]')) closeFilterModal();
     if (event.target.closest('[data-history-clear-close]')) closeClearHistoryModal();
+    if (event.target.closest('[data-history-final-close]')) closeFinalDeleteModal();
   });
 
   document.addEventListener('keydown', (event) => {
@@ -701,17 +747,19 @@
       closeDetails();
       closeFilterModal();
       closeClearHistoryModal();
+      closeFinalDeleteModal();
       return;
     }
   });
 
   $('historyRefreshBtn')?.addEventListener('click', loadHistory);
   $('historyDeleteBtn')?.addEventListener('click', openClearHistoryModal);
-  $('historyClearConfirmBtn')?.addEventListener('click', clearAllHistory);
+  $('historyClearConfirmBtn')?.addEventListener('click', openFinalDeleteModal);
+  $('historyFinalDeleteConfirmBtn')?.addEventListener('click', clearAllHistory);
   $('historyClearPassword')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      clearAllHistory();
+      openFinalDeleteModal();
     }
   });
   $('historyFilterOpenBtn')?.addEventListener('click', openFilterModal);
