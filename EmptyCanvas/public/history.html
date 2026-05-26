@@ -15,7 +15,7 @@
   <style>body.permissions-loading .sidebar li { display: none !important; }</style>
   <link href="/css/style.css?v=history-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=history-v1" rel="stylesheet" />
-  <link href="/css/history.css?v=history-v7" rel="stylesheet" />
+  <link href="/css/history.css?v=history-v8" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-history">
@@ -141,8 +141,29 @@
     </section>
   </div>
 
+
+  <div class="history-confirm-modal" id="historyClearModal" hidden>
+    <div class="history-confirm-backdrop" data-history-clear-close></div>
+    <section class="history-confirm-card" role="dialog" aria-modal="true" aria-labelledby="historyClearTitle">
+      <button type="button" class="history-modal-close history-confirm-close" data-history-clear-close aria-label="Close"><i data-feather="x"></i></button>
+      <span class="history-confirm-icon history-confirm-icon--danger"><i data-feather="trash-2"></i></span>
+      <p class="history-kicker">DELETE HISTORY</p>
+      <h2 id="historyClearTitle">Clear all history records?</h2>
+      <p class="history-confirm-copy">This will permanently delete all saved system actions. Enter the admin password to confirm.</p>
+      <label class="history-confirm-field">
+        <span>Admin password</span>
+        <input id="historyClearPassword" type="password" autocomplete="off" placeholder="Enter admin password" />
+      </label>
+      <p class="history-confirm-error" id="historyClearError" hidden></p>
+      <div class="history-confirm-actions">
+        <button type="button" class="history-confirm-cancel" data-history-clear-close>Cancel</button>
+        <button type="button" class="history-confirm-delete" id="historyClearConfirmBtn"><i data-feather="trash-2"></i><span>Delete history</span></button>
+      </div>
+    </section>
+  </div>
+
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=history-menu-v2"></script>
-  <script src="/js/history.js?v=history-v7"></script>
+  <script src="/js/history.js?v=history-v8"></script>
 </body>
 </html>
