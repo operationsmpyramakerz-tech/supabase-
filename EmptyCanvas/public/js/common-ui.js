@@ -616,6 +616,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Users Center', 'User Access & Data', 'User Access and Data', 'User Access', 'Team Members', '/user-access'])) {
       urls.push('/api/user-access/team-members');
     }
+    if (hasAllowedPage(allowedPages, ['Backup', 'Back up', 'System Backup', '/backup'])) {
+      urls.push('/api/backup/tables');
+    }
 
     return Array.from(new Set(urls));
   }
@@ -1464,6 +1467,9 @@ if (document.querySelector('.sidebar')) {
     'key performance indicators': 'a[href="/kpis"]',
     'history': 'a[href="/history"]',
     'system history': 'a[href="/history"]',
+    'backup': 'a[href="/backup"]',
+    'back up': 'a[href="/backup"]',
+    'system backup': 'a[href="/backup"]',
     'messages': 'a[href="/messages"]',
     'emails': 'a[href="/messages"]',
     'email': 'a[href="/messages"]',
@@ -1520,9 +1526,14 @@ if (document.querySelector('.sidebar')) {
 
   function syncUserMenuPageAccess(allowed){
     const hasHistoryAccess = hasAllowedPage(allowed || [], ['History', 'System History', '/history']);
+    const hasBackupAccess = hasAllowedPage(allowed || [], ['Backup', 'Back up', 'System Backup', '/backup']);
     try {
       document.querySelectorAll('[data-user-menu-action="history"]').forEach((item) => {
         if (hasHistoryAccess) showEl(item);
+        else hideEl(item);
+      });
+      document.querySelectorAll('[data-user-menu-action="backup"]').forEach((item) => {
+        if (hasBackupAccess) showEl(item);
         else hideEl(item);
       });
     } catch {}
@@ -3137,6 +3148,11 @@ function initUserMenuWidget() {
           <span class="umi-label">History</span>
         </button>
 
+        <button type="button" class="user-menu-item" data-user-menu-action="backup">
+          <span class="umi-ico"><i data-feather="database"></i></span>
+          <span class="umi-label">Back up</span>
+        </button>
+
         <button type="button" class="user-menu-item" data-user-menu-action="how">
           <span class="umi-ico"><i data-feather="activity"></i></span>
           <span class="umi-label">How it works</span>
@@ -3612,6 +3628,15 @@ function initUserMenuWidget() {
           window.OpsShell.navigate('/history', { pushHistory: true });
         } else {
           window.location.href = "/history";
+        }
+        return;
+      }
+
+      if (action === "backup") {
+        if (window.OpsShell && typeof window.OpsShell.navigate === 'function') {
+          window.OpsShell.navigate('/backup', { pushHistory: true });
+        } else {
+          window.location.href = "/backup";
         }
         return;
       }
@@ -4219,6 +4244,7 @@ function deriveOpsShellTitle(path) {
     ['/b2b', 'B2B'],
     ['/account', 'Account'],
     ['/history', 'History'],
+    ['/backup', 'Back up'],
     ['/how-it-works', 'How it works'],
   ];
   const found = map.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
