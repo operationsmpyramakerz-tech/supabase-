@@ -50,7 +50,11 @@
 
   function entityLabelForCard(row){
     const label = String(row?.entityLabel || row?.entityId || '').trim();
-    return label || '—';
+    if (label) return label;
+    const action = String(row?.actionLabel || '').toLowerCase();
+    const actor = String(row?.actorName || '').trim();
+    if ((action.includes('signed out') || action.includes('signed in')) && actor) return actor;
+    return '—';
   }
 
   function dateKey(value){
@@ -267,17 +271,53 @@
     }
   }
 
+  function setClearHistoryError(message = ''){
+    const el = $('historyClearError');
+    if (!el) return;
+    const clean = String(message || '').trim();
+    el.textContent = clean;
+    el.hidden = !clean;
+  }
+
+  function setClearHistorySubmitting(isSubmitting){
+    const btn = $('historyClearConfirmBtn');
+    if (!btn) return;
+    btn.disabled = !!isSubmitting;
+    btn.classList.toggle('is-loading', !!isSubmitting);
+    const label = btn.querySelector('span');
+    if (label) label.textContent = isSubmitting ? 'Deleting...' : 'Delete history';
+  }
+
+  function openClearHistoryModal(){
+    const modal = $('historyClearModal');
+    if (!modal) return;
+    setClearHistoryError('');
+    setClearHistorySubmitting(false);
+    const input = $('historyClearPassword');
+    if (input) input.value = '';
+    modal.hidden = false;
+    document.body.classList.add('history-modal-open');
+    try { if (window.feather) window.feather.replace(); } catch {}
+    setTimeout(() => { try { input?.focus({ preventScroll: true }); } catch {} }, 60);
+  }
+
+  function closeClearHistoryModal(){
+    const modal = $('historyClearModal');
+    if (modal) modal.hidden = true;
+    setClearHistoryError('');
+    setClearHistorySubmitting(false);
+    document.body.classList.remove('history-modal-open');
+  }
+
   async function clearAllHistory(){
-    const adminPassword = window.prompt('Enter admin password to delete all history records:');
-    if (adminPassword === null) return;
-    const cleanPassword = String(adminPassword || '').trim();
+    const cleanPassword = String($('historyClearPassword')?.value || '').trim();
     if (!cleanPassword) {
-      window.alert('Admin password is required.');
+      setClearHistoryError('Admin password is required.');
       return;
     }
-    const confirmed = window.confirm('Delete all history records? This action cannot be undone.');
-    if (!confirmed) return;
     setLoading(true);
+    setClearHistorySubmitting(true);
+    setClearHistoryError('');
     try {
       const res = await fetch('/api/history/clear', {
         method: 'DELETE',
@@ -293,12 +333,13 @@
       syncFilterOptions();
       updateActiveFilterText();
       renderRows();
-      window.alert('History deleted successfully.');
+      closeClearHistoryModal();
     } catch (error) {
       console.error('Clear history failed:', error);
-      window.alert(error.message || 'Failed to delete history.');
+      setClearHistoryError(error.message || 'Failed to delete history.');
     } finally {
       setLoading(false);
+      setClearHistorySubmitting(false);
     }
   }
 
@@ -629,18 +670,27 @@
 
     if (event.target.closest('[data-history-close]')) closeDetails();
     if (event.target.closest('[data-history-filter-close]')) closeFilterModal();
+    if (event.target.closest('[data-history-clear-close]')) closeClearHistoryModal();
   });
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeDetails();
       closeFilterModal();
+      closeClearHistoryModal();
       return;
     }
   });
 
   $('historyRefreshBtn')?.addEventListener('click', loadHistory);
-  $('historyDeleteBtn')?.addEventListener('click', clearAllHistory);
+  $('historyDeleteBtn')?.addEventListener('click', openClearHistoryModal);
+  $('historyClearConfirmBtn')?.addEventListener('click', clearAllHistory);
+  $('historyClearPassword')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      clearAllHistory();
+    }
+  });
   $('historyFilterOpenBtn')?.addEventListener('click', openFilterModal);
   $('historyApplyFilters')?.addEventListener('click', () => { applyFiltersFromControls(); closeFilterModal(); });
   $('historyClearFilters')?.addEventListener('click', () => { clearFilters(); closeFilterModal(); });
