@@ -1465,11 +1465,6 @@ if (document.querySelector('.sidebar')) {
     'kpis': 'a[href="/kpis"]',
     'kpi': 'a[href="/kpis"]',
     'key performance indicators': 'a[href="/kpis"]',
-    'history': 'a[href="/history"]',
-    'system history': 'a[href="/history"]',
-    'backup': 'a[href="/backup"]',
-    'back up': 'a[href="/backup"]',
-    'system backup': 'a[href="/backup"]',
     'messages': 'a[href="/messages"]',
     'emails': 'a[href="/messages"]',
     'email': 'a[href="/messages"]',
@@ -1525,11 +1520,8 @@ if (document.querySelector('.sidebar')) {
   }
 
   function syncUserMenuPageAccess(allowed){
-    const hasHistoryAccess = hasAllowedPage(allowed || [], ['History', 'System History', '/history']);
-    // Back up is a history-side utility in the top-right user menu.
-    // Show it for users who can open History, even if older permission data
-    // does not yet contain the newly-added Backup page option.
-    const hasBackupAccess = hasHistoryAccess || hasAllowedPage(allowed || [], ['Backup', 'Back up', 'System Backup', '/backup']);
+    const hasHistoryAccess = hasAllowedPage(allowed || [], ['History', 'System History', 'Audit History', '/history']);
+    const hasBackupAccess = hasAllowedPage(allowed || [], ['Backup', 'Back up', 'System Backup', 'Data Backup', '/backup']);
     try {
       document.querySelectorAll('[data-user-menu-action="history"]').forEach((item) => {
         if (hasHistoryAccess) showEl(item);
@@ -1620,6 +1612,9 @@ if (document.querySelector('.sidebar')) {
       });
     } catch {}
 
+    // History and Back up are profile-menu utilities only, never sidebar items.
+    removeSidebarUtilityLinks();
+
     // User-menu items must follow the same Allowed Pages logic.
     syncUserMenuPageAccess(allowed);
 
@@ -1668,6 +1663,124 @@ if (document.querySelector('.sidebar')) {
 
       hydratePendingFeatherIcons();
     }
+
+  const SIDEBAR_NAV_ITEMS = [
+    { href: '/home', label: 'Home', icon: 'home' },
+    { href: '/orders', label: 'Current Orders', icon: 'list' },
+    { href: '/orders/requested', label: 'Operations Orders', icon: 'users' },
+    { href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' },
+    { href: '/orders/new', label: 'Create New Order', icon: 'shopping-cart' },
+    { href: '/stocktaking', label: 'Stocktaking', icon: 'archive' },
+    { href: '/products', label: 'Products', icon: 'package' },
+    { href: '/proposals', label: 'Proposals', icon: 'file-text' },
+    { href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' },
+    { href: '/expenses', label: 'Expenses', icon: 'dollar-sign' },
+    { href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' },
+    { href: '/b2b', label: 'B2B', icon: 'folder' },
+    { href: '/tasks', label: 'Tasks', icon: 'check-square' },
+    { href: '/kpis', label: 'KPIs', icon: 'bar-chart-2' },
+    { href: '/user-access', label: 'Users Center', icon: 'shield' },
+  ];
+
+  function getSidebarNavList(){
+    return document.querySelector('.sidebar-nav .mobile-dock-pages-clip > .nav-list')
+      || document.querySelector('.sidebar .nav-list, .sidebar nav ul, .sidebar ul');
+  }
+
+  function sameSidebarHref(a, href){
+    if (!a) return false;
+    try {
+      const current = new URL(a.getAttribute('href') || '', window.location.origin).pathname.replace(/\/+$/, '') || '/';
+      const target = new URL(href, window.location.origin).pathname.replace(/\/+$/, '') || '/';
+      return current === target;
+    } catch {
+      return String(a.getAttribute('href') || '').replace(/\/+$/, '') === String(href || '').replace(/\/+$/, '');
+    }
+  }
+
+  function ensureSidebarNavItem(nav, item){
+    if (!nav || !item || !item.href) return null;
+    let link = Array.from(nav.querySelectorAll('a[href]')).find((a) => sameSidebarHref(a, item.href));
+    let li = link ? (link.closest('li') || link.parentElement) : null;
+
+    if (!li || String(li.tagName || '').toUpperCase() !== 'LI') {
+      li = document.createElement('li');
+      link = document.createElement('a');
+      li.appendChild(link);
+    }
+
+    const wasActive = link.classList.contains('active');
+    link.className = wasActive ? 'nav-link active' : 'nav-link';
+    link.href = item.href;
+    link.innerHTML = `<i data-feather="${item.icon}"></i><span class="nav-label">${item.label}</span>`;
+    return li;
+  }
+
+  function unwrapMobileDockForSidebarOrder(){
+    const sidebar = document.querySelector('.sidebar');
+    const nav = sidebar?.querySelector('.sidebar-nav');
+    if (!sidebar || !nav || !nav.classList.contains('mobile-dock-structured')) return getSidebarNavList();
+
+    const homeRail = nav.querySelector(':scope > .mobile-dock-home-rail');
+    const pagesClip = nav.querySelector(':scope > .mobile-dock-pages-clip');
+    const pagesList = pagesClip?.querySelector(':scope > .nav-list') || nav.querySelector(':scope > .nav-list');
+    const homeLi = homeRail?.querySelector(':scope > li');
+
+    if (pagesClip && pagesList && pagesClip.parentNode === nav) {
+      nav.insertBefore(pagesList, homeRail || pagesClip);
+    }
+    if (homeLi && pagesList) {
+      pagesList.insertBefore(homeLi, pagesList.firstChild);
+    }
+
+    try { homeRail?.remove(); } catch {}
+    try { pagesClip?.remove(); } catch {}
+
+    try { pagesList?.classList.remove('mobile-dock-pages-list'); } catch {}
+    nav.classList.remove('mobile-dock-structured');
+    sidebar.classList.remove('mobile-dock-structured-host');
+    return pagesList || getSidebarNavList();
+  }
+
+  function normalizeSidebarNavigation(){
+    const nav = unwrapMobileDockForSidebarOrder();
+    if (!nav) return;
+
+    const allowedHrefs = new Set(SIDEBAR_NAV_ITEMS.map((item) => item.href));
+    Array.from(nav.querySelectorAll(':scope > li')).forEach((li) => {
+      const link = li.querySelector('a[href]');
+      const href = link ? String(link.getAttribute('href') || '').replace(/\/+$/, '') || '/' : '';
+      if (!allowedHrefs.has(href)) {
+        try { li.remove(); } catch {}
+      }
+    });
+
+    SIDEBAR_NAV_ITEMS.forEach((item) => {
+      const li = ensureSidebarNavItem(nav, item);
+      if (li && li.parentNode !== nav) nav.appendChild(li);
+      else if (li) nav.appendChild(li);
+    });
+
+    try {
+      document.querySelectorAll('.sidebar a[href="/history"], .sidebar a[href="/backup"], .sidebar a[href="/messages"], .sidebar a[href="/emails"]').forEach((link) => {
+        const li = link.closest('li');
+        if (li) li.remove();
+        else link.remove();
+      });
+    } catch {}
+
+    hydratePendingFeatherIcons();
+  }
+
+  function removeSidebarUtilityLinks(){
+    try {
+      document.querySelectorAll('.sidebar a[href="/history"], .sidebar a[href="/backup"]').forEach((link) => {
+        const li = link.closest('li');
+        if (li) li.remove();
+        else link.remove();
+      });
+    } catch {}
+  }
 
 
   function removeSidebarMailLinks(){
@@ -1748,8 +1861,9 @@ if (document.querySelector('.sidebar')) {
 
   // Rename sidebar labels (display-only) without changing routes
   function renameSidebarLabels(){
-    // Emails are intentionally not displayed in the sidebar.
+    // Emails, History and Back up are intentionally not displayed in the sidebar.
     try { removeSidebarMailLinks(); } catch {}
+    try { removeSidebarUtilityLinks(); } catch {}
 
     // Operations Orders (was: Operations Requested Orders)
     document
@@ -2018,21 +2132,11 @@ if (document.querySelector('.sidebar')) {
   ensureDashboardHeaderLayout();
   initMobileHeaderAutoHide();
 
-  // لو عندك لينكات بتتعمل inject في صفحات معينة:
-    // Home should appear for everyone (not tied to permissions)
-  ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
-  ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
-  ensureLink({ href: '/proposals', label: 'Proposals', icon: 'file-text', beforeHref: '/orders/sv-orders' });
+  // Normalize the sidebar once on every page so the navigation order is identical.
+  // History and Back up stay in the top-right user profile menu only.
+  normalizeSidebarNavigation();
   removeSidebarMailLinks();
-  ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
-  ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
-  ensureLink({ href: '/expenses/users', label: 'Expenses by User', icon: 'credit-card' });
-  ensureLink({ href: '/user-access', label: 'Users Center', icon: 'shield' });
-  ensureLink({ href: '/b2b', label: 'B2B', icon: 'folder' });
-  ensureLink({ href: '/tasks', label: 'Tasks', icon: 'check-square' });
-  ensureLink({ href: '/kpis', label: 'KPIs', icon: 'bar-chart-2', beforeHref: '/user-access' });
-  ensureLink({ href: '/history', label: 'History', icon: 'clock', beforeHref: '/user-access' });
-  ensureLink({ href: '/backup', label: 'Back up', icon: 'database', beforeHref: '/user-access' });
+  removeSidebarUtilityLinks();
 
   syncMobileDockStructure();
 
@@ -2051,6 +2155,8 @@ if (document.querySelector('.sidebar')) {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       applyInitial();
+      normalizeSidebarNavigation();
+      removeSidebarUtilityLinks();
       syncMobileDockStructure();
     }, 150);
   });
