@@ -7525,8 +7525,11 @@ app.get("/history", requireAuth, requirePage("History"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "history.html"));
 });
 
-// Back up page — available from the top-right user menu under History
-app.get("/backup", requireAuth, requirePage("Backup"), (req, res) => {
+// Back up page — available from the top-right user menu under History.
+// History is accepted as a fallback because older user/page-access data may not
+// contain the newly-added Backup permission yet.
+const BACKUP_ACCESS_PAGES = ["Backup", "History"];
+app.get("/backup", requireAuth, requirePage(BACKUP_ACCESS_PAGES), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "backup.html"));
 });
 
@@ -7951,7 +7954,7 @@ async function _backupDeleteAllRows(tableName) {
   });
 }
 
-app.get('/api/backup/tables', requireAuth, requirePage('Backup'), async (req, res) => {
+app.get('/api/backup/tables', requireAuth, requirePage(BACKUP_ACCESS_PAGES), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -7971,7 +7974,7 @@ app.get('/api/backup/tables', requireAuth, requirePage('Backup'), async (req, re
   }
 });
 
-app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), async (req, res) => {
+app.get('/api/backup/tables/:key/download', requireAuth, requirePage(BACKUP_ACCESS_PAGES), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).send('Supabase is not configured.');
@@ -7990,7 +7993,7 @@ app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), 
   }
 });
 
-app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async (req, res) => {
+app.delete('/api/backup/tables/:key', requireAuth, requirePage(BACKUP_ACCESS_PAGES), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
