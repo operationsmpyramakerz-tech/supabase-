@@ -468,6 +468,7 @@ function _historyResolvePage(pathname = '') {
     [/^\/expenses/i, 'Expenses', 'expenses'],
     [/^\/b2b/i, 'B2B', 'b2b'],
     [/^\/tasks/i, 'Tasks', 'tasks'],
+    [/^\/backup/i, 'Backup', 'backup'],
     [/^\/kpis/i, 'KPIs', 'kpis'],
     [/^\/messages|^\/emails/i, 'Mail', 'mail'],
     [/^\/user-access|^\/signup-requests|^\/signup-request/i, 'Users Center', 'users_center'],
@@ -499,6 +500,7 @@ function _historyResolveAction(method = '', pathname = '', body = {}) {
     [/^\/api\/products\/kits$/i, 'kit', upper === 'POST' ? 'Created kit' : 'Updated kit'],
     [/^\/api\/kpis\/standards$/i, 'kpi_standard', upper === 'POST' ? 'Created KPI standard' : 'Updated KPI standard'],
     [/^\/api\/kpis\/reviews$/i, 'kpi_review', upper === 'POST' ? 'Created KPI review' : 'Updated KPI review'],
+    [/^\/api\/backup\/tables\/[^/]+$/i, 'backup_table', upper === 'DELETE' ? 'Deleted backup table data' : 'Updated backup table'],
   ];
   const matched = exactActions.find(([re]) => re.test(apiPath));
   if (matched) return { actionKey: matched[1], actionLabel: matched[2] };
@@ -1988,6 +1990,7 @@ const ALL_PAGES = [
   "Tasks",
   "KPIs",
   "History",
+  "Backup",
   "Mail",
   "B2B",
   "Expenses",
@@ -2020,6 +2023,7 @@ function normalizePages(names = []) {
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
   if (set.has("history") || set.has("system history") || set.has("audit history") || set.has("audit log") || set.has("system audit") || set.has("/history")) out.push("History");
+  if (set.has("backup") || set.has("back up") || set.has("system backup") || set.has("data backup") || set.has("/backup")) out.push("Backup");
   if (set.has("mail") || set.has("email") || set.has("emails") || set.has("messages") || set.has("message") || set.has("massage")) out.push("Mail");
   if (set.has("b2b")) out.push("B2B");
   if (set.has("expenses")) out.push("Expenses");
@@ -3233,6 +3237,9 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     kpi: "KPIs",
     history: "History",
     "system-history": "History",
+    backup: "Backup",
+    "back-up": "Backup",
+    "system-backup": "Backup",
     messages: "Mail",
     message: "Mail",
     emails: "Mail",
@@ -6432,6 +6439,12 @@ function expandAllowedForUI(list = []) {
     set.add("System History");
     set.add("/history");
   }
+  if (set.has("Backup")) {
+    set.add("Backup");
+    set.add("Back up");
+    set.add("System Backup");
+    set.add("/backup");
+  }
   if (set.has("Mail") || set.has("Messages") || set.has("Emails")) {
     set.add("Mail");
     set.add("Email");
@@ -6490,6 +6503,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Proposals")) return "/proposals";
   if (list.includes("Tasks")) return "/tasks";
   if (list.includes("History")) return "/history";
+  if (list.includes("Backup")) return "/backup";
   if (list.includes("Mail") || list.includes("Messages") || list.includes("Emails")) return "/messages";
   if (list.includes("B2B")) return "/b2b";
   if (list.includes("Expenses Users")) return "/expenses/users";
@@ -7511,6 +7525,11 @@ app.get("/history", requireAuth, requirePage("History"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "history.html"));
 });
 
+// Back up page — available from the top-right user menu under History
+app.get("/backup", requireAuth, requirePage("Backup"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "backup.html"));
+});
+
 // How it works (help page — available for all authenticated users)
 app.get("/how-it-works", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "how-it-works.html"));
@@ -7788,6 +7807,206 @@ app.delete('/api/history/clear', requireAuth, requirePage("History"), async (req
   } catch (error) {
     console.error('DELETE /api/history/clear error:', error?.details || error);
     const msg = String(error?.message || 'Failed to clear history.');
+    return res.status(error?.status || 500).json({ ok: false, error: msg });
+  }
+
+});
+
+// -----------------------------------------------------------------------------
+// Back up — CSV export and table data clearing
+// -----------------------------------------------------------------------------
+function _backupCleanTableName(value = '') {
+  const table = String(value || '').trim();
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(table) ? table : '';
+}
+
+function _backupCatalog() {
+  const rawItems = [
+    { key: 'orders', pageName: 'Orders', tableName: _sbOrdersTable(), moduleName: 'Orders', icon: 'shopping-cart', description: 'Current, operations, review, maintenance, and created order records.' },
+    { key: 'stocktaking', pageName: 'Stocktaking', tableName: _sbStocktakingTable(), moduleName: 'Inventory', icon: 'archive', description: 'Inventory and stocktaking records.' },
+    { key: 'products', pageName: 'Products', tableName: _sbProductsTable(), moduleName: 'Inventory', icon: 'package', description: 'Products and components records.' },
+    { key: 'product-tags', pageName: 'Product Tags', tableName: _sbProductTagsTable(), moduleName: 'Inventory', icon: 'tag', description: 'Product tags and grouping data.' },
+    { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
+    { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
+    { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
+    { key: 'proposal-items', pageName: 'Proposal Items', tableName: _sbProductProposalItemsTable(), moduleName: 'Proposals', icon: 'list', description: 'Components saved inside proposals.' },
+    { key: 'kits', pageName: 'Kits', tableName: _sbProductKitsTable(), moduleName: 'Proposals', icon: 'box', description: 'Saved kit folders.' },
+    { key: 'kit-items', pageName: 'Kit Items', tableName: _sbProductKitItemsTable(), moduleName: 'Proposals', icon: 'layers', description: 'Components saved inside kits.' },
+    { key: 'tasks', pageName: 'Tasks', tableName: _sbTasksTable(), moduleName: 'Tasks', icon: 'check-square', description: 'Task cards and assignments.' },
+    { key: 'task-checkpoints', pageName: 'Task Checkpoints', tableName: _sbTaskCheckpointsTable(), moduleName: 'Tasks', icon: 'check-circle', description: 'Task checklist/checkpoint records.' },
+    { key: 'kpi-standards', pageName: 'KPI Standards', tableName: KPI_STANDARD_TABLE, moduleName: 'KPIs', icon: 'target', description: 'KPI standard headers.' },
+    { key: 'kpi-sections', pageName: 'KPI Sections', tableName: KPI_STANDARD_SECTIONS_TABLE, moduleName: 'KPIs', icon: 'columns', description: 'KPI standard sections.' },
+    { key: 'kpi-items', pageName: 'KPI Items', tableName: KPI_STANDARD_ITEMS_TABLE, moduleName: 'KPIs', icon: 'list', description: 'KPI standard subsections/items.' },
+    { key: 'kpi-reviews', pageName: 'KPI Reviews', tableName: KPI_REVIEWS_TABLE, moduleName: 'KPIs', icon: 'trending-up', description: 'Employee monthly KPI reviews.' },
+    { key: 'kpi-scores', pageName: 'KPI Scores', tableName: KPI_SCORES_TABLE, moduleName: 'KPIs', icon: 'bar-chart-2', description: 'Employee KPI score rows.' },
+    { key: 'team-members', pageName: 'Team Members', tableName: _sbTeamMembersTable(), moduleName: 'Users Center', icon: 'users', description: 'User profiles, access data, and account information.', sensitive: true },
+    { key: 'team-departments', pageName: 'Team Departments', tableName: _sbTeamMemberDepartmentsTable(), moduleName: 'Users Center', icon: 'folder', description: 'Department folders.' },
+    { key: 'team-sv-schools', pageName: 'Team S.V Schools', tableName: _sbTeamMemberSvSchoolsTable(), moduleName: 'Users Center', icon: 'award', description: 'Supervisor school visibility assignments.' },
+    { key: 'page-access', pageName: 'Page Access', tableName: 'team_member_page_access', moduleName: 'Users Center', icon: 'shield', description: 'Per-user page access permissions.', sensitive: true },
+    { key: 'signup-requests', pageName: 'Sign up Requests', tableName: _signupRequestsTable(), moduleName: 'Users Center', icon: 'user-plus', description: 'Pending, approved, and rejected account requests.' },
+    { key: 'messages-chats', pageName: 'Mail Chats', tableName: _sbMessagesChatsTable(), moduleName: 'Mail', icon: 'message-circle', description: 'Mail/chat threads.' },
+    { key: 'messages', pageName: 'Mail Messages', tableName: _sbMessagesTable(), moduleName: 'Mail', icon: 'mail', description: 'Individual mail/chat messages.' },
+    { key: 'message-labels', pageName: 'Mail Labels', tableName: _sbMessagesLabelsTable(), moduleName: 'Mail', icon: 'tag', description: 'Mail labels.' },
+    { key: 'message-chat-labels', pageName: 'Mail Chat Labels', tableName: _sbMessagesChatLabelsTable(), moduleName: 'Mail', icon: 'bookmark', description: 'Labels assigned to mail threads.' },
+    { key: 'message-reactions', pageName: 'Mail Reactions', tableName: _sbMessagesReactionsTable(), moduleName: 'Mail', icon: 'smile', description: 'Message reactions.' },
+    { key: 'message-presence', pageName: 'Mail Presence', tableName: _sbMessagesPresenceTable(), moduleName: 'Mail', icon: 'radio', description: 'Mail presence state.' },
+    { key: 'history', pageName: 'History', tableName: HISTORY_TABLE, moduleName: 'System', icon: 'clock', description: 'System audit/history records.', sensitive: true },
+  ];
+
+  const seen = new Set();
+  return rawItems
+    .map((item) => ({ ...item, tableName: _backupCleanTableName(item.tableName) }))
+    .filter((item) => item.key && item.tableName)
+    .filter((item) => {
+      const id = `${item.key}:${item.tableName}`;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+}
+
+function _backupFindCatalogItem(key = '') {
+  const clean = String(key || '').trim();
+  return _backupCatalog().find((item) => item.key === clean) || null;
+}
+
+function _backupCsvCell(value) {
+  if (value === null || typeof value === 'undefined') return '';
+  let text = '';
+  if (typeof value === 'object') {
+    try { text = JSON.stringify(value); } catch { text = String(value); }
+  } else {
+    text = String(value);
+  }
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function _backupRowsToCsv(rows = []) {
+  const columns = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    for (const key of Object.keys(row || {})) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        columns.push(key);
+      }
+    }
+  }
+  if (!columns.length) return '';
+  return [
+    columns.map(_backupCsvCell).join(','),
+    ...rows.map((row) => columns.map((key) => _backupCsvCell(row?.[key])).join(',')),
+  ].join('\n');
+}
+
+async function _backupSelectAllRows(tableName) {
+  const table = _backupCleanTableName(tableName);
+  if (!table) {
+    const err = new Error('Invalid table name.');
+    err.status = 400;
+    throw err;
+  }
+  const pageSize = 1000;
+  const maxRows = 50000;
+  const rows = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const query = new URLSearchParams({ select: '*', limit: String(pageSize), offset: String(offset) });
+    const chunk = await supabaseDb.request(`/${encodeURIComponent(table)}?${query.toString()}`);
+    const list = Array.isArray(chunk) ? chunk : [];
+    rows.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function _backupDeleteAllRows(tableName) {
+  const table = _backupCleanTableName(tableName);
+  if (!table) {
+    const err = new Error('Invalid table name.');
+    err.status = 400;
+    throw err;
+  }
+
+  try {
+    await supabaseDb.request(`/${encodeURIComponent(table)}?id=not.is.null`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' },
+    });
+    return;
+  } catch (firstError) {
+    const msg = String(firstError?.message || firstError?.details?.message || firstError?.details || '');
+    if (!/column|schema cache|does not exist|PGRST204|42703/i.test(msg)) throw firstError;
+  }
+
+  const sampleQuery = new URLSearchParams({ select: '*', limit: '1' });
+  const sample = await supabaseDb.request(`/${encodeURIComponent(table)}?${sampleQuery.toString()}`);
+  const firstRow = Array.isArray(sample) ? sample[0] || null : null;
+  const fallbackColumn = Object.keys(firstRow || {}).find((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key));
+  if (!fallbackColumn) return;
+  await supabaseDb.request(`/${encodeURIComponent(table)}?${encodeURIComponent(fallbackColumn)}=not.is.null`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' },
+  });
+}
+
+app.get('/api/backup/tables', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const tables = _backupCatalog().map((item) => ({
+      key: item.key,
+      pageName: item.pageName,
+      tableName: item.tableName,
+      moduleName: item.moduleName,
+      icon: item.icon,
+      description: item.description,
+      sensitive: !!item.sensitive,
+    }));
+    return res.json({ ok: true, tables });
+  } catch (error) {
+    console.error('GET /api/backup/tables error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to load backup tables.' });
+  }
+});
+
+app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).send('Supabase is not configured.');
+    const item = _backupFindCatalogItem(req.params?.key);
+    if (!item) return res.status(404).send('Backup table was not found.');
+    const rows = await _backupSelectAllRows(item.tableName);
+    const csv = _backupRowsToCsv(rows);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const filename = `${item.tableName}-${stamp}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(`\uFEFF${csv}`);
+  } catch (error) {
+    console.error('GET /api/backup/tables/:key/download error:', error?.details || error);
+    return res.status(error?.status || 500).send(error?.message || 'Failed to download CSV backup.');
+  }
+});
+
+app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const item = _backupFindCatalogItem(req.params?.key);
+    if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
+    const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
+    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
+    const ok = await verifyAdminPassword(adminPassword);
+    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+
+    _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
+    await _backupDeleteAllRows(item.tableName);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('DELETE /api/backup/tables/:key error:', error?.details || error);
+    const msg = String(error?.message || 'Failed to delete table data.');
     return res.status(error?.status || 500).json({ ok: false, error: msg });
   }
 });
