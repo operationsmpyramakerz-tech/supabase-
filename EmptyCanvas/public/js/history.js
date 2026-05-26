@@ -79,6 +79,8 @@
     state.loading = !!isLoading;
     const btn = $('historyRefreshBtn');
     if (btn) btn.classList.toggle('is-loading', state.loading);
+    const deleteBtn = $('historyDeleteBtn');
+    if (deleteBtn) deleteBtn.classList.toggle('is-loading', state.loading);
   }
 
   function renderEmpty(message, icon='inbox'){
@@ -260,6 +262,41 @@
       syncFilterOptions();
       updateActiveFilterText();
       renderEmpty(error.message || 'Failed to load history.', 'alert-triangle');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function clearAllHistory(){
+    const adminPassword = window.prompt('Enter admin password to delete all history records:');
+    if (adminPassword === null) return;
+    const cleanPassword = String(adminPassword || '').trim();
+    if (!cleanPassword) {
+      window.alert('Admin password is required.');
+      return;
+    }
+    const confirmed = window.confirm('Delete all history records? This action cannot be undone.');
+    if (!confirmed) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/history/clear', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminPassword: cleanPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to delete history.');
+      state.allRows = [];
+      state.rows = [];
+      state.visibleLimit = PAGE_SIZE;
+      syncFilterOptions();
+      updateActiveFilterText();
+      renderRows();
+      window.alert('History deleted successfully.');
+    } catch (error) {
+      console.error('Clear history failed:', error);
+      window.alert(error.message || 'Failed to delete history.');
     } finally {
       setLoading(false);
     }
@@ -603,6 +640,7 @@
   });
 
   $('historyRefreshBtn')?.addEventListener('click', loadHistory);
+  $('historyDeleteBtn')?.addEventListener('click', clearAllHistory);
   $('historyFilterOpenBtn')?.addEventListener('click', openFilterModal);
   $('historyApplyFilters')?.addEventListener('click', () => { applyFiltersFromControls(); closeFilterModal(); });
   $('historyClearFilters')?.addEventListener('click', () => { clearFilters(); closeFilterModal(); });
