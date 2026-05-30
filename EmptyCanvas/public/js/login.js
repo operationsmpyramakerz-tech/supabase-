@@ -15,6 +15,33 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginHeaderSubtitle = document.querySelector('.login-subtitle');
   let authModeSwitching = false;
 
+
+  const cardThemeButtons = Array.from(document.querySelectorAll('[data-card-theme]'));
+  const CARD_THEME_KEY = 'pyramakerz-login-card-theme';
+  const allowedCardThemes = new Set(['white', 'orange', 'navy', 'black']);
+
+  function applyLoginCardTheme(theme, persist = true) {
+    const nextTheme = allowedCardThemes.has(theme) ? theme : 'white';
+    document.body.dataset.loginCardTheme = nextTheme;
+    cardThemeButtons.forEach((button) => {
+      const isSelected = button.dataset.cardTheme === nextTheme;
+      button.setAttribute('aria-pressed', String(isSelected));
+    });
+    if (persist) {
+      try { localStorage.setItem(CARD_THEME_KEY, nextTheme); } catch {}
+    }
+  }
+
+  let savedCardTheme = 'white';
+  try { savedCardTheme = localStorage.getItem(CARD_THEME_KEY) || 'white'; } catch {}
+  applyLoginCardTheme(savedCardTheme, false);
+
+  cardThemeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      applyLoginCardTheme(button.dataset.cardTheme || 'white');
+    });
+  });
+
   function sanitizeMessage(message) {
     const value = String(message || '').trim();
     if (!value) return value;
