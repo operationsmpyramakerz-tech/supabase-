@@ -8,7 +8,7 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: #f8fafc;
-  background-image: url('/images/login-background.png'), linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
+  background-image: url('/images/login-background-desktop.png'), linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
   background-position: center center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -570,6 +570,15 @@ body.auth-transitioning-to-signup .login-header h1,
 body.auth-transitioning-to-signup .login-header p,
 body.auth-transitioning-to-signup .login-wordmark {
   animation: loginTextSoftFade 0.56s ease both;
+}
+
+@media (max-width: 768px), (orientation: portrait) {
+  body {
+    background-image: url('/images/login-background-mobile.png'), linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
+    background-position: center center;
+    background-size: cover;
+    background-attachment: scroll;
+  }
 }
 
 @media (max-width: 480px) {
