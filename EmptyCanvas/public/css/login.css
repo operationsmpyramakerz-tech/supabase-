@@ -1163,28 +1163,44 @@ body::after,
 }
 
 .theme-block-white {
-  top: -15vh;
-  height: 47vh;
-  left: -4vw;
-  right: -4vw;
+  top: -24vh;
+  height: 34vh;
+  left: -5vw;
+  right: -5vw;
   background: #ffffff;
 }
 
 .theme-block-orange {
-  top: 38vh;
-  height: 20vh;
   background: var(--brand);
 }
 
+.theme-block-orange-top {
+  top: 25vh;
+  height: 16.5vh;
+}
+
+.theme-block-orange-bottom {
+  top: 45.5vh;
+  height: 16.5vh;
+}
+
 .theme-block-navy {
-  top: 63vh;
-  height: 21vh;
   background: #101f3a;
 }
 
+.theme-block-navy-top {
+  top: 66vh;
+  height: 17vh;
+}
+
+.theme-block-navy-bottom {
+  top: 86vh;
+  height: 17vh;
+}
+
 .theme-block-black {
-  top: 89vh;
-  height: 28vh;
+  top: 98vh;
+  height: 29vh;
   left: 0;
   right: 0;
   background: #000000;
@@ -1308,25 +1324,35 @@ body[data-login-card-theme="black"] .login-wordmark {
   }
 
   .theme-block-white {
-    top: -14vh;
-    height: 47vh;
+    top: -25vh;
+    height: 34vh;
     left: -5vw;
     right: -5vw;
   }
 
-  .theme-block-orange {
-    top: 38.5vh;
-    height: 20.5vh;
+  .theme-block-orange-top {
+    top: 24vh;
+    height: 16.5vh;
   }
 
-  .theme-block-navy {
+  .theme-block-orange-bottom {
+    top: 44vh;
+    height: 16.5vh;
+  }
+
+  .theme-block-navy-top {
     top: 64vh;
-    height: 21.5vh;
+    height: 17vh;
+  }
+
+  .theme-block-navy-bottom {
+    top: 84vh;
+    height: 17vh;
   }
 
   .theme-block-black {
-    top: 89vh;
-    height: 30vh;
+    top: 96vh;
+    height: 31vh;
     left: 0;
     right: 0;
   }
