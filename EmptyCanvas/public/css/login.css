@@ -970,3 +970,142 @@ body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(8) { animation-
     transition-duration: 0.001ms !important;
   }
 }
+
+/* --- Code-only STEAM illustration layout matching the approved mockup --- */
+.steam-background {
+  background:
+    radial-gradient(circle at 21% 32%, rgba(147, 197, 253, 0.12), transparent 16%),
+    radial-gradient(circle at 88% 82%, rgba(147, 197, 253, 0.16), transparent 13%),
+    radial-gradient(circle at 69% 18%, rgba(249, 115, 22, 0.08), transparent 17%);
+}
+
+.steam-icon {
+  opacity: 0.96;
+  color: #2f3744;
+  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.06));
+}
+
+.steam-icon path,
+.steam-icon rect,
+.steam-icon circle,
+.steam-icon ellipse {
+  stroke-width: 2.35;
+}
+
+.steam-icon .ruler-fill {
+  fill: rgba(251, 191, 36, 0.28);
+  stroke: #d97706;
+}
+
+.steam-icon .cup-fill {
+  fill: rgba(147, 197, 253, 0.44);
+  stroke: #2563eb;
+}
+
+.steam-icon .leaf-fill {
+  fill: rgba(219, 234, 254, 0.62);
+  stroke: #64748b;
+}
+
+.steam-icon .pencil-fill {
+  fill: rgba(249, 115, 22, 0.32);
+  stroke: var(--brand-strong);
+}
+
+.steam-paths {
+  opacity: 0.72;
+}
+
+.icon-atom { left: 11%; top: 5%; width: clamp(92px, 10vw, 142px); }
+.icon-cap { left: 44%; top: 6.5%; width: clamp(92px, 10vw, 142px); }
+.icon-gear { left: 64%; top: 5.5%; width: clamp(58px, 5.5vw, 84px); }
+.icon-chip { right: 8%; top: 8%; width: clamp(90px, 9.5vw, 138px); }
+.icon-cube { left: 23%; top: 17.5%; width: clamp(86px, 8.5vw, 126px); }
+.icon-lightbulb { left: 50%; top: 20%; width: clamp(64px, 6.5vw, 94px); }
+.icon-printer { right: 7%; top: 26.5%; width: clamp(170px, 19vw, 270px); }
+.icon-microscope { left: 6%; top: 29.5%; width: clamp(110px, 11vw, 165px); }
+.icon-flask { left: 29%; top: 39%; width: clamp(78px, 7.5vw, 112px); }
+.icon-robot { left: 45%; top: 38%; width: clamp(108px, 10vw, 150px); }
+.icon-laser { right: 3.5%; top: 42%; width: clamp(170px, 17vw, 250px); }
+.icon-compass { left: 6%; top: 42.5%; width: clamp(78px, 7.5vw, 112px); }
+.icon-books { left: 5%; bottom: 30%; width: clamp(130px, 13vw, 190px); }
+.icon-set-square { right: 8%; bottom: 25.5%; width: clamp(82px, 8vw, 122px); animation-delay: -2.5s; }
+.icon-pencil-cup { right: 5.5%; bottom: 4.8%; width: clamp(102px, 10vw, 150px); animation-delay: -4.1s; }
+.icon-nut { right: 20%; bottom: 21.5%; width: clamp(46px, 4.5vw, 68px); animation-delay: -1.6s; }
+.icon-bottom-beaker { left: 5%; bottom: 8%; width: clamp(88px, 8.5vw, 126px); animation-delay: -3.4s; }
+
+.orb-a { left: 17%; top: 23%; width: 170px; height: 170px; }
+.orb-b { right: 24%; top: 35%; width: 92px; height: 92px; }
+.orb-c { left: -2%; bottom: 4%; width: 230px; height: 230px; }
+.orb-d { right: 4%; bottom: 5%; width: 132px; height: 132px; }
+.dot-a { left: 15%; top: 57%; }
+.dot-b { left: 63%; top: 19%; }
+.dot-c { right: 15%; top: 61%; }
+.dot-d { left: 73%; bottom: 8%; }
+
+.login-card {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+@media (max-width: 760px) {
+  .steam-paths {
+    inset: -2% -24%;
+    width: 148%;
+    height: 106%;
+  }
+
+  .steam-icon {
+    animation-duration: 8.5s;
+  }
+
+  .icon-atom { left: 12%; top: 4.7%; width: 93px; }
+  .icon-cap { left: 44%; right: auto; top: 6.4%; width: 92px; }
+  .icon-gear { left: 65%; right: auto; top: 5.8%; width: 58px; }
+  .icon-chip { right: 5.5%; top: 8.2%; width: 89px; }
+  .icon-cube { left: 22%; top: 17.6%; width: 82px; }
+  .icon-lightbulb { left: 49%; top: 20.1%; width: 63px; }
+  .icon-printer { right: 5.5%; top: 27.2%; width: 176px; }
+  .icon-microscope { left: 5.5%; top: 31%; width: 112px; }
+  .icon-flask { left: 30%; top: 39.5%; width: 76px; }
+  .icon-robot { left: 45%; top: 37.8%; width: 105px; }
+  .icon-laser { right: 2%; top: 42.5%; bottom: auto; width: 168px; }
+  .icon-compass { left: 6%; top: 43.5%; bottom: auto; width: 78px; }
+  .icon-books { left: 5%; bottom: 30.5%; width: 128px; }
+  .icon-set-square { right: 7%; bottom: 26%; width: 84px; }
+  .icon-pencil-cup { right: 5%; bottom: 4.4%; width: 107px; }
+  .icon-nut { right: 20%; bottom: 22.3%; width: 49px; }
+  .icon-bottom-beaker { left: 5%; bottom: 9%; width: 90px; }
+
+  .orb-a { left: 15%; top: 23%; width: 135px; height: 135px; }
+  .orb-b { right: 18%; top: 35%; width: 84px; height: 84px; }
+  .orb-c { left: -6%; bottom: 3.5%; width: 190px; height: 190px; }
+  .orb-d { right: 3%; bottom: 5%; width: 122px; height: 122px; }
+}
+
+@media (max-width: 520px) {
+  .login-container {
+    width: min(100%, 438px);
+  }
+
+  .login-card {
+    padding: 32px 24px 25px;
+  }
+
+  .icon-atom { left: 9%; top: 5.5%; width: 80px; }
+  .icon-cap { left: 42%; top: 7%; width: 82px; }
+  .icon-gear { left: 66%; top: 6.7%; width: 50px; }
+  .icon-chip { right: 4%; top: 9.8%; width: 78px; }
+  .icon-cube { left: 20%; top: 19.5%; width: 74px; }
+  .icon-lightbulb { left: 49%; top: 22.2%; width: 56px; }
+  .icon-printer { right: 2%; top: 29%; width: 150px; }
+  .icon-microscope { left: 3%; top: 33%; width: 92px; }
+  .icon-flask { left: 28%; top: 41%; width: 63px; }
+  .icon-robot { left: 43%; top: 39.5%; width: 86px; }
+  .icon-laser { right: -2%; top: 44%; width: 142px; }
+  .icon-compass { left: 4%; top: 45%; width: 64px; }
+  .icon-books { left: 4%; bottom: 31%; width: 111px; }
+  .icon-set-square { right: 4%; bottom: 27%; width: 72px; }
+  .icon-pencil-cup { right: 3%; bottom: 5%; width: 94px; }
+  .icon-nut { right: 20%; bottom: 23.5%; width: 42px; }
+  .icon-bottom-beaker { left: 4%; bottom: 9.5%; width: 78px; }
+}
