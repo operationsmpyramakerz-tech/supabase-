@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#FFFFFF" />
+  <meta name="theme-color" content="#0B0C10" />
+
   <link rel="icon" href="/icons/icon-192.png" />
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
+
   <script src="/pwa-register.js" defer></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,284 +18,227 @@
   <link rel="stylesheet" href="/css/login.css" />
 </head>
 <body class="permissions-loading">
-  <div class="page-noise" aria-hidden="true"></div>
+  <main class="login-shell" aria-label="Pyramakerz login page">
+    <section class="login-stage">
+      <aside class="login-visual" aria-hidden="true">
+        <div class="visual-glow visual-glow--orange"></div>
+        <div class="visual-glow visual-glow--navy"></div>
 
-  <main class="auth-stage">
-    <section class="auth-showcase" aria-label="Overview">
-      <div class="showcase-topbar">
-        <div class="showcase-logo-chip">
-          <img src="/images/logo.png" alt="" />
-        </div>
-        <span class="showcase-badge">Operations System</span>
-      </div>
-
-      <div class="showcase-copy">
-        <p class="showcase-eyebrow">Welcome back</p>
-        <h1>Keep your operations clear, calm, and under control.</h1>
-        <p class="showcase-description">
-          Orders, stocktaking, expenses, tasks, and team access all in one clean workspace.
-        </p>
-      </div>
-
-      <div class="showcase-illustration" aria-hidden="true">
-        <svg viewBox="0 0 760 430" role="presentation">
-          <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="564" cy="95" r="23" stroke="#8d8d8d" stroke-width="2" />
-            <line x1="564" y1="95" x2="564" y2="78" stroke="#8d8d8d" stroke-width="2" />
-            <line x1="564" y1="95" x2="579" y2="95" stroke="#8d8d8d" stroke-width="2" />
-
-            <path d="M79 123c11-18 37-26 57-18 10 4 20 10 27 20" stroke="#8d8d8d" stroke-width="2" />
-            <path d="M126 132c15-23 48-29 70-12" stroke="#8d8d8d" stroke-width="2" />
-            <path d="M194 182c25 1 41-15 39-35" stroke="#111111" stroke-width="4" />
-            <path d="M53 170c14 2 24 13 29 28" stroke="#111111" stroke-width="4" />
-            <circle cx="139" cy="108" r="28" stroke="#111111" stroke-width="4" />
-            <path d="M105 166c14-20 55-24 74 0" stroke="#111111" stroke-width="4" />
-            <path d="M123 183l-14 72" stroke="#111111" stroke-width="4" />
-            <path d="M161 183l22 78" stroke="#111111" stroke-width="4" />
-            <path d="M108 219l52 12" stroke="#111111" stroke-width="4" />
-            <path d="M106 255l-10 110" stroke="#111111" stroke-width="4" />
-            <path d="M181 261l12 104" stroke="#111111" stroke-width="4" />
-            <path d="M89 367h38" stroke="#111111" stroke-width="4" />
-            <path d="M177 367h43" stroke="#111111" stroke-width="4" />
-            <path d="M131 183l3 64" stroke="#f59e0b" stroke-width="10" />
-            <path d="M145 183l-3 64" stroke="#f59e0b" stroke-width="10" />
-
-            <circle cx="259" cy="123" r="28" stroke="#111111" stroke-width="4" />
-            <path d="M226 178c15-21 58-21 73 0" stroke="#111111" stroke-width="4" />
-            <path d="M246 204l-6 69" stroke="#111111" stroke-width="4" />
-            <path d="M280 203l8 71" stroke="#111111" stroke-width="4" />
-            <path d="M241 275l-3 94" stroke="#111111" stroke-width="4" />
-            <path d="M287 275l3 94" stroke="#111111" stroke-width="4" />
-            <path d="M219 371h41" stroke="#111111" stroke-width="4" />
-            <path d="M273 371h43" stroke="#111111" stroke-width="4" />
-            <rect x="239" y="259" width="48" height="38" rx="3" stroke="#f59e0b" stroke-width="8" />
-            <line x1="251" y1="267" x2="251" y2="289" stroke="#ffffff" stroke-width="6" />
-
-            <circle cx="433" cy="195" r="27" stroke="#111111" stroke-width="4" />
-            <path d="M394 257c18-20 61-20 79 0" stroke="#111111" stroke-width="4" />
-            <rect x="349" y="245" width="164" height="16" fill="#111111" stroke="#111111" stroke-width="4" />
-            <line x1="375" y1="262" x2="368" y2="368" stroke="#111111" stroke-width="4" />
-            <line x1="489" y1="262" x2="498" y2="368" stroke="#111111" stroke-width="4" />
-            <rect x="364" y="213" width="67" height="43" rx="5" fill="#fbbf24" stroke="#f59e0b" stroke-width="4" />
-            <circle cx="399" cy="235" r="6" fill="#ffffff" stroke="#ffffff" stroke-width="3" />
-            <rect x="518" y="246" width="72" height="12" fill="#111111" stroke="#111111" stroke-width="4" />
-            <rect x="521" y="230" width="66" height="16" rx="2" stroke="#111111" stroke-width="4" />
-            <line x1="536" y1="230" x2="536" y2="218" stroke="#111111" stroke-width="4" />
-            <line x1="552" y1="230" x2="552" y2="218" stroke="#111111" stroke-width="4" />
-            <line x1="568" y1="230" x2="568" y2="218" stroke="#111111" stroke-width="4" />
-            <line x1="584" y1="230" x2="584" y2="218" stroke="#111111" stroke-width="4" />
-            <line x1="516" y1="258" x2="511" y2="368" stroke="#111111" stroke-width="4" />
-            <line x1="588" y1="258" x2="594" y2="368" stroke="#111111" stroke-width="4" />
-            <path d="M401 369h58" stroke="#111111" stroke-width="4" />
-
-            <rect x="559" y="95" width="162" height="104" rx="8" stroke="#111111" stroke-width="4" />
-            <line x1="620" y1="95" x2="620" y2="199" stroke="#111111" stroke-width="4" />
-            <line x1="670" y1="95" x2="670" y2="199" stroke="#111111" stroke-width="4" />
-            <line x1="559" y1="128" x2="721" y2="128" stroke="#111111" stroke-width="4" />
-            <circle cx="589" cy="120" r="15" fill="#111111" stroke="#111111" stroke-width="4" />
-            <path d="M589 120a15 15 0 0 1 15-15" stroke="#f59e0b" stroke-width="7" />
-            <circle cx="685" cy="120" r="15" fill="#f59e0b" stroke="#f59e0b" stroke-width="4" />
-            <path d="M685 120a15 15 0 0 1 15 15" stroke="#111111" stroke-width="7" />
-            <line x1="589" y1="146" x2="635" y2="146" stroke="#8d8d8d" stroke-width="4" />
-            <line x1="685" y1="146" x2="713" y2="146" stroke="#8d8d8d" stroke-width="4" />
-            <line x1="589" y1="159" x2="627" y2="159" stroke="#c5c5c5" stroke-width="4" />
-            <line x1="685" y1="159" x2="709" y2="159" stroke="#c5c5c5" stroke-width="4" />
-            <line x1="586" y1="188" x2="586" y2="141" stroke="#111111" stroke-width="10" />
-            <line x1="622" y1="188" x2="622" y2="158" stroke="#111111" stroke-width="10" />
-            <line x1="657" y1="188" x2="657" y2="131" stroke="#111111" stroke-width="10" />
-            <line x1="692" y1="188" x2="692" y2="149" stroke="#111111" stroke-width="10" />
-            <line x1="705" y1="188" x2="705" y2="125" stroke="#111111" stroke-width="10" />
-
-            <circle cx="169" cy="327" r="7" fill="#111111" stroke="#111111" stroke-width="3" />
-            <circle cx="213" cy="90" r="7" fill="#ffffff" stroke="#111111" stroke-width="2" />
-            <circle cx="689" cy="294" r="10" fill="#ffffff" stroke="#111111" stroke-width="3" />
-            <path d="M688 294l6-6" stroke="#111111" stroke-width="3" />
-            <path d="M689 294l8 8" stroke="#111111" stroke-width="3" />
-            <path d="M710 254h18" stroke="#111111" stroke-width="3" />
-            <path d="M719 245v18" stroke="#111111" stroke-width="3" />
-          </g>
-
-          <g fill="#111111">
-            <path d="M72 59c9 0 15 6 15 15v16l14-10c8-6 20 0 20 11v19c0 9-7 16-16 16H74c-9 0-16-7-16-16V75c0-9 6-16 14-16z" opacity="0.06"/>
-            <path d="M702 78c10 0 18 8 18 18v16l16-11c9-7 21 0 21 11v21c0 10-8 18-18 18h-37c-10 0-18-8-18-18V96c0-10 8-18 18-18z" opacity="0.04"/>
-          </g>
-        </svg>
-      </div>
-    </section>
-
-    <section class="login-container">
-      <div class="login-card">
-        <div class="login-header">
-          <img src="/images/logo.png" alt="Logo" class="login-logo" />
-          <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" class="login-wordmark" />
-          <h1 class="login-brand-title">Pyramakerz</h1>
-          <p class="login-subtitle">Operations Portal</p>
+        <div class="visual-header">
+          <span class="visual-logo-pill">
+            <img src="/images/logo.png" alt="" />
+          </span>
+          <span class="visual-kicker">Operations System</span>
         </div>
 
-        <form id="loginForm" class="login-form">
-          <div class="form-group">
-            <label for="username">Username</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21a8 8 0 0 0-16 0" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </span>
-              <input type="text" id="username" name="username" required placeholder="Enter your username" autocomplete="username" />
+        <div class="visual-copy">
+          <span class="visual-eyebrow">Welcome Back</span>
+          <h2>Control your workflow from one clean dashboard.</h2>
+          <p>Orders, stocktaking, expenses, tasks, and team access are ready after sign in.</p>
+        </div>
+
+        <div class="visual-dashboard-card">
+          <div class="visual-card-head">
+            <span>Today overview</span>
+            <strong>Live</strong>
+          </div>
+          <div class="visual-progress visual-progress--orange"><span style="width: 74%"></span></div>
+          <div class="visual-progress visual-progress--navy"><span style="width: 52%"></span></div>
+          <div class="visual-progress visual-progress--soft"><span style="width: 88%"></span></div>
+        </div>
+
+        <div class="visual-actions">
+          <span>Orders</span>
+          <span>Inventory</span>
+          <span>KPIs</span>
+        </div>
+      </aside>
+
+      <section class="login-panel" aria-label="Authentication forms">
+        <div class="login-card">
+          <div class="login-header">
+            <span class="signup-logo-burst" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </span>
+            <img src="/images/logo.png" alt="Pyramakerz logo" class="login-logo" />
+            <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" class="login-wordmark" />
+            <h1 class="login-brand-title">Pyramakerz</h1>
+            <p class="login-subtitle">Sign in to continue</p>
+          </div>
+
+          <form id="loginForm" class="login-form">
+            <div class="form-group">
+              <label for="username">Username</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21a8 8 0 0 0-16 0" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </span>
+                <input type="text" id="username" name="username" required placeholder="Username" autocomplete="username" />
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="password">Password</label>
-            <div class="password-wrapper input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </span>
-              <input type="password" id="password" name="password" required placeholder="Enter your password" autocomplete="current-password" />
-              <button type="button" id="togglePassword" class="toggle-password" aria-label="Show password" aria-pressed="false">
-                <svg class="icon-eye" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg class="icon-eye-off" style="display:none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/>
-                  <path d="M1 1l22 22"/>
-                  <path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/>
-                </svg>
-              </button>
+            <div class="form-group">
+              <label for="password">Password</label>
+              <div class="password-wrapper input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <input type="password" id="password" name="password" required placeholder="Password" autocomplete="current-password" />
+                <button type="button" id="togglePassword" class="toggle-password" aria-label="Show password" aria-pressed="false">
+                  <svg class="icon-eye" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg class="icon-eye-off" style="display:none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94" />
+                    <path d="M1 1l22 22" />
+                    <path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <button type="button" id="forgotPasswordBtn" class="forgot-password-link">Forgot password?</button>
+            <button type="button" id="forgotPasswordBtn" class="forgot-password-link">Forgot password?</button>
 
-          <button type="submit" class="login-btn"><span>Sign In</span></button>
+            <button type="submit" class="login-btn">
+              <span>Sign In</span>
+            </button>
 
-          <button type="button" id="showSignupBtn" class="signup-inline-prompt">
-            <span class="signup-prompt-text">Don't have an account?</span>
-            <span class="signup-prompt-action">Sign up</span>
-          </button>
-        </form>
+            <button type="button" id="showSignupBtn" class="signup-inline-prompt">
+              <span class="signup-prompt-text">Don&apos;t have an account?</span>
+              <span class="signup-prompt-action">Sign up</span>
+            </button>
+          </form>
 
-        <form id="forgotPasswordForm" class="login-form forgot-form" hidden>
-          <div class="forgot-copy">
-            <h2>Password Recovery</h2>
-            <p>Enter your registered email and we will send the saved password to your inbox.</p>
-          </div>
-
-          <div class="form-group">
-            <label for="recoveryEmail">Email</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
-                  <path d="m3 7 9 6 9-6" />
-                </svg>
-              </span>
-              <input type="email" id="recoveryEmail" name="email" required placeholder="Enter your email" autocomplete="email" />
+          <form id="forgotPasswordForm" class="login-form forgot-form" hidden>
+            <div class="forgot-copy">
+              <h2>Password Recovery</h2>
+              <p>Enter your registered email and we will send the saved password to your inbox.</p>
             </div>
-          </div>
 
-          <button type="submit" class="login-btn recovery-btn"><span>Send Password</span></button>
-          <button type="button" id="backToLoginBtn" class="back-login-link">Back to login</button>
-        </form>
-
-        <form id="signupForm" class="login-form signup-form" hidden>
-          <div class="forgot-copy signup-copy">
-            <h2>Sign Up Request</h2>
-            <p>Send your account details to the admin team for approval.</p>
-          </div>
-
-          <div class="form-group">
-            <label for="signupUsername">Username</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21a8 8 0 0 0-16 0" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </span>
-              <input type="text" id="signupUsername" name="username" required placeholder="Username" autocomplete="username" />
+            <div class="form-group">
+              <label for="recoveryEmail">Email</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+                    <path d="m3 7 9 6 9-6" />
+                  </svg>
+                </span>
+                <input type="email" id="recoveryEmail" name="email" required placeholder="Enter your email" autocomplete="email" />
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="signupPassword">Password</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </span>
-              <input type="password" id="signupPassword" name="password" required placeholder="Password" autocomplete="new-password" />
+            <button type="submit" class="login-btn recovery-btn">
+              <span>Send Password</span>
+            </button>
+
+            <button type="button" id="backToLoginBtn" class="back-login-link">Back to login</button>
+          </form>
+
+          <form id="signupForm" class="login-form signup-form" hidden>
+            <div class="forgot-copy signup-copy">
+              <h2>Sign Up Request</h2>
+              <p>Send your account details to the admin team for approval.</p>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="signupRepeatPassword">Repeat password</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </span>
-              <input type="password" id="signupRepeatPassword" name="repeatPassword" required placeholder="Repeat password" autocomplete="new-password" />
+            <div class="form-group">
+              <label for="signupUsername">Username</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21a8 8 0 0 0-16 0" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </span>
+                <input type="text" id="signupUsername" name="username" required placeholder="Username" autocomplete="username" />
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="signupEmployeeCode">Employee code</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 7h16" />
-                  <path d="M10 11h4" />
-                  <rect x="4" y="3" width="16" height="18" rx="2" />
-                </svg>
-              </span>
-              <input type="text" id="signupEmployeeCode" name="employeeCode" required placeholder="Employee code" autocomplete="off" />
+            <div class="form-group signup-password-grid">
+              <label for="signupPassword">Password</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <input type="password" id="signupPassword" name="password" required placeholder="Password" autocomplete="new-password" />
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="signupPhone">Phone</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.89.68 2.78a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.11-.45c.89.33 1.82.55 2.78.68A2 2 0 0 1 22 16.92z" />
-                </svg>
-              </span>
-              <input type="tel" id="signupPhone" name="phone" required placeholder="Phone" autocomplete="tel" />
+            <div class="form-group">
+              <label for="signupRepeatPassword">Repeat password</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </span>
+                <input type="password" id="signupRepeatPassword" name="repeatPassword" required placeholder="Repeat password" autocomplete="new-password" />
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="signupEmail">Email</label>
-            <div class="input-with-icon">
-              <span class="input-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
-                  <path d="m3 7 9 6 9-6" />
-                </svg>
-              </span>
-              <input type="email" id="signupEmail" name="email" required placeholder="Email" autocomplete="email" />
+            <div class="form-group">
+              <label for="signupEmployeeCode">Employee code</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 7h16" />
+                    <path d="M10 11h4" />
+                    <rect x="4" y="3" width="16" height="18" rx="2" />
+                  </svg>
+                </span>
+                <input type="text" id="signupEmployeeCode" name="employeeCode" required placeholder="Employee code" autocomplete="off" />
+              </div>
             </div>
-          </div>
 
-          <button type="submit" class="login-btn signup-submit-btn"><span>Send sign up request</span></button>
-          <button type="button" id="backFromSignupBtn" class="back-login-link">Back to login</button>
-        </form>
+            <div class="form-group">
+              <label for="signupPhone">Phone</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.89.68 2.78a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.11-.45c.89.33 1.82.55 2.78.68A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                </span>
+                <input type="tel" id="signupPhone" name="phone" required placeholder="Phone" autocomplete="tel" />
+              </div>
+            </div>
 
-        <div id="error-message" class="error-message" style="display: none;"></div>
-      </div>
+            <div class="form-group">
+              <label for="signupEmail">Email</label>
+              <div class="input-with-icon">
+                <span class="input-icon" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+                    <path d="m3 7 9 6 9-6" />
+                  </svg>
+                </span>
+                <input type="email" id="signupEmail" name="email" required placeholder="Email" autocomplete="email" />
+              </div>
+            </div>
+
+            <button type="submit" class="login-btn signup-submit-btn">
+              <span>Send sign up request</span>
+            </button>
+
+            <button type="button" id="backFromSignupBtn" class="back-login-link">Back to login</button>
+          </form>
+
+          <div id="error-message" class="error-message" style="display: none;"></div>
+        </div>
+      </section>
     </section>
   </main>
 
-  <script src="/js/login.js?v=notion-soft-redesign-v1"></script>
+  <script src="/js/login.js?v=signup-flow-v2"></script>
 </body>
 </html>
