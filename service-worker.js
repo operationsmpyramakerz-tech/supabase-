@@ -1,6 +1,6 @@
 // Bump this value whenever we change static assets (CSS/JS/images)
 // so existing installs don't keep serving stale cached files.
-const CACHE_NAME = "ops-cache-database-page-v2";
+const CACHE_NAME = "ops-cache-login-bg-v1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
