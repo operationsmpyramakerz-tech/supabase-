@@ -7934,9 +7934,16 @@ function _backupCsvCell(value) {
   return text;
 }
 
-function _backupRowsToCsv(rows = []) {
+function _backupRowsToCsv(rows = [], preferredColumns = []) {
   const columns = [];
   const seen = new Set();
+  for (const key of preferredColumns || []) {
+    const clean = String(key || '').trim();
+    if (clean && !seen.has(clean)) {
+      seen.add(clean);
+      columns.push(clean);
+    }
+  }
   for (const row of rows || []) {
     for (const key of Object.keys(row || {})) {
       if (!seen.has(key)) {
@@ -7950,6 +7957,266 @@ function _backupRowsToCsv(rows = []) {
     columns.map(_backupCsvCell).join(','),
     ...rows.map((row) => columns.map((key) => _backupCsvCell(row?.[key])).join(',')),
   ].join('\n');
+}
+
+function _backupCsvError(message, status = 400) {
+  const err = new Error(message || 'Invalid CSV file.');
+  err.status = status;
+  return err;
+}
+
+function _backupParseCsv(csvText = '') {
+  const input = String(csvText || '').replace(/^\uFEFF/, '');
+  if (!input.trim()) throw _backupCsvError('CSV file is empty.');
+
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+
+  function pushCell() {
+    row.push(cell);
+    cell = '';
+  }
+  function pushRow() {
+    rows.push(row);
+    row = [];
+  }
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (input[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === ',') {
+      pushCell();
+      continue;
+    }
+    if (ch === '\n') {
+      pushCell();
+      pushRow();
+      continue;
+    }
+    if (ch === '\r') {
+      if (input[i + 1] === '\n') i += 1;
+      pushCell();
+      pushRow();
+      continue;
+    }
+    cell += ch;
+  }
+
+  if (inQuotes) throw _backupCsvError('CSV file has an unclosed quoted value.');
+  pushCell();
+  pushRow();
+
+  while (rows.length && rows[rows.length - 1].every((value) => !String(value || '').trim())) rows.pop();
+  if (!rows.length) throw _backupCsvError('CSV file is empty.');
+
+  const headers = rows[0].map((value) => String(value || '').replace(/^\uFEFF/, '').trim());
+  if (!headers.length || headers.every((value) => !value)) throw _backupCsvError('CSV header row is missing.');
+
+  const seen = new Set();
+  for (const header of headers) {
+    if (!header) throw _backupCsvError('CSV contains an empty column header.');
+    const key = header.toLowerCase();
+    if (seen.has(key)) throw _backupCsvError(`CSV contains duplicate column header: ${header}`);
+    seen.add(key);
+  }
+
+  const records = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    const current = rows[index] || [];
+    if (current.every((value) => !String(value || '').trim())) continue;
+    if (current.length > headers.length && current.slice(headers.length).some((value) => String(value || '').trim())) {
+      throw _backupCsvError(`CSV row ${index + 1} has more values than the header row.`);
+    }
+    const record = {};
+    headers.forEach((header, columnIndex) => {
+      record[header] = current[columnIndex] ?? '';
+    });
+    records.push(record);
+  }
+
+  if (!records.length) throw _backupCsvError('CSV file has headers but no data rows to import.');
+  return { headers, records };
+}
+
+let _backupSchemaCache = null;
+let _backupSchemaCacheAt = 0;
+
+function _backupNormalizeColumnInfo(name, raw = {}) {
+  const columnName = String(name || '').trim();
+  if (!columnName) return null;
+  const type = String(raw?.type || raw?.format || raw?.['x-postgrest-type'] || raw?.['x-pg-type'] || '').trim().toLowerCase();
+  const format = String(raw?.format || '').trim().toLowerCase();
+  return { name: columnName, type, format, raw: raw || {} };
+}
+
+function _backupExtractSchemaColumns(openApi, tableName = '') {
+  const table = String(tableName || '').trim();
+  if (!openApi || typeof openApi !== 'object' || !table) return [];
+  const schemas = {
+    ...(openApi.definitions && typeof openApi.definitions === 'object' ? openApi.definitions : {}),
+    ...(openApi.components?.schemas && typeof openApi.components.schemas === 'object' ? openApi.components.schemas : {}),
+  };
+  const entries = Object.entries(schemas);
+  const lower = table.toLowerCase();
+  const match = entries.find(([key]) => String(key).toLowerCase() === lower)
+    || entries.find(([key]) => String(key).toLowerCase() === `public.${lower}`)
+    || entries.find(([key]) => String(key).toLowerCase().replace(/^public[._]/, '') === lower);
+  const schema = match?.[1] || null;
+  const props = schema?.properties && typeof schema.properties === 'object' ? schema.properties : null;
+  if (!props) return [];
+  return Object.entries(props).map(([name, raw]) => _backupNormalizeColumnInfo(name, raw)).filter(Boolean);
+}
+
+async function _backupGetOpenApiSchema() {
+  const now = Date.now();
+  if (_backupSchemaCache && now - _backupSchemaCacheAt < 5 * 60 * 1000) return _backupSchemaCache;
+  try {
+    const data = await supabaseDb.request('/');
+    _backupSchemaCache = data && typeof data === 'object' ? data : null;
+    _backupSchemaCacheAt = now;
+    return _backupSchemaCache;
+  } catch (error) {
+    console.warn('[backup] unable to read Supabase OpenAPI schema:', error?.details || error?.message || error);
+    _backupSchemaCache = null;
+    _backupSchemaCacheAt = now;
+    return null;
+  }
+}
+
+async function _backupGetTableColumns(tableName) {
+  const table = _backupCleanTableName(tableName);
+  if (!table) throw _backupCsvError('Invalid table name.');
+
+  const openApi = await _backupGetOpenApiSchema();
+  const schemaColumns = _backupExtractSchemaColumns(openApi, table);
+  if (schemaColumns.length) return { columns: schemaColumns, source: 'schema' };
+
+  const sampleQuery = new URLSearchParams({ select: '*', limit: '1' });
+  const sample = await supabaseDb.request(`/${encodeURIComponent(table)}?${sampleQuery.toString()}`);
+  const firstRow = Array.isArray(sample) ? sample[0] || null : null;
+  const sampleColumns = Object.keys(firstRow || {}).map((name) => _backupNormalizeColumnInfo(name, {})).filter(Boolean);
+  if (sampleColumns.length) return { columns: sampleColumns, source: 'sample' };
+
+  return { columns: [], source: 'probe' };
+}
+
+async function _backupProbeCsvColumns(tableName, headers = []) {
+  const table = _backupCleanTableName(tableName);
+  if (!table) throw _backupCsvError('Invalid table name.');
+  const safeHeaders = (headers || []).map((header) => String(header || '').trim());
+  if (!safeHeaders.length) throw _backupCsvError('CSV header row is missing.');
+  if (safeHeaders.some((header) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(header))) {
+    throw _backupCsvError('CSV headers must be valid Supabase column names.');
+  }
+  const query = new URLSearchParams({ select: safeHeaders.join(','), limit: '0' });
+  await supabaseDb.request(`/${encodeURIComponent(table)}?${query.toString()}`);
+}
+
+function _backupValidateCsvMatchesTable(headers = [], columnInfo = [], tableName = '') {
+  const csvHeaders = (headers || []).map((header) => String(header || '').trim()).filter(Boolean);
+  const tableColumns = (columnInfo || []).map((column) => String(column?.name || '').trim()).filter(Boolean);
+  if (!tableColumns.length) return { exact: false, missing: [], extra: [] };
+
+  const csvSet = new Set(csvHeaders.map((header) => header.toLowerCase()));
+  const tableSet = new Set(tableColumns.map((column) => column.toLowerCase()));
+  const missing = tableColumns.filter((column) => !csvSet.has(column.toLowerCase()));
+  const extra = csvHeaders.filter((header) => !tableSet.has(header.toLowerCase()));
+  if (missing.length || extra.length) {
+    const parts = [];
+    if (missing.length) parts.push(`missing column(s): ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ', ...' : ''}`);
+    if (extra.length) parts.push(`extra column(s): ${extra.slice(0, 8).join(', ')}${extra.length > 8 ? ', ...' : ''}`);
+    throw _backupCsvError(`CSV does not match the actual "${tableName}" table: ${parts.join('; ')}.`);
+  }
+  return { exact: true, missing: [], extra: [] };
+}
+
+function _backupColumnTypeToken(column = {}) {
+  return String(column?.type || column?.format || column?.raw?.format || '').toLowerCase();
+}
+
+function _backupCoerceCsvValue(value, column = {}) {
+  const raw = String(value ?? '');
+  const trimmed = raw.trim();
+  const type = _backupColumnTypeToken(column);
+  if (trimmed === '') return null;
+
+  if (/json|object/.test(type)) {
+    try { return JSON.parse(raw); } catch { return raw; }
+  }
+  if (/array/.test(type)) {
+    try { return JSON.parse(raw); } catch { return raw; }
+  }
+  if (/boolean|bool/.test(type)) {
+    if (/^(true|t|yes|y|1)$/i.test(trimmed)) return true;
+    if (/^(false|f|no|n|0)$/i.test(trimmed)) return false;
+    return raw;
+  }
+  if (/integer|int2|int4|int8|bigint|smallint/.test(type)) {
+    if (/^-?\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+    return raw;
+  }
+  if (/number|numeric|decimal|real|double|float/.test(type)) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : raw;
+  }
+  return raw;
+}
+
+function _backupRecordsToPayload(records = [], headers = [], columnInfo = []) {
+  const byName = new Map((columnInfo || []).map((column) => [String(column?.name || '').toLowerCase(), column]));
+  return (records || []).map((record) => {
+    const out = {};
+    for (const header of headers || []) {
+      const column = byName.get(String(header || '').toLowerCase()) || { name: header };
+      out[header] = _backupCoerceCsvValue(record?.[header], column);
+    }
+    return out;
+  });
+}
+
+async function _backupPreferredColumns(tableName) {
+  try {
+    const schema = await _backupGetTableColumns(tableName);
+    return (schema.columns || []).map((column) => String(column?.name || '').trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function _backupInsertRows(tableName, rows = []) {
+  const table = _backupCleanTableName(tableName);
+  if (!table) throw _backupCsvError('Invalid table name.');
+  const list = Array.isArray(rows) ? rows : [];
+  const batchSize = 500;
+  for (let i = 0; i < list.length; i += batchSize) {
+    const chunk = list.slice(i, i + batchSize);
+    if (!chunk.length) continue;
+    await supabaseDb.request(`/${encodeURIComponent(table)}`, {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: chunk,
+    });
+  }
+  return list.length;
 }
 
 function _backupSafeZipName(value = '', fallback = 'file') {
@@ -8135,7 +8402,8 @@ app.get('/api/backup/export-all', requireAuth, requirePage('Backup'), async (req
     for (const item of _backupCatalog()) {
       try {
         const rows = await _backupSelectAllRows(item.tableName);
-        const csv = _backupRowsToCsv(rows);
+        const preferredColumns = await _backupPreferredColumns(item.tableName);
+        const csv = _backupRowsToCsv(rows, preferredColumns);
         const moduleName = _backupSafeZipName(item.moduleName || 'system', 'system');
         const tableName = _backupSafeZipName(item.tableName || item.key, item.key || 'table');
         files.push({
@@ -8213,7 +8481,8 @@ app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), 
     const item = _backupFindCatalogItem(req.params?.key);
     if (!item) return res.status(404).send('Backup table was not found.');
     const rows = await _backupSelectAllRows(item.tableName);
-    const csv = _backupRowsToCsv(rows);
+    const preferredColumns = await _backupPreferredColumns(item.tableName);
+    const csv = _backupRowsToCsv(rows, preferredColumns);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     const filename = `${item.tableName}-${stamp}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -8222,6 +8491,46 @@ app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), 
   } catch (error) {
     console.error('GET /api/backup/tables/:key/download error:', error?.details || error);
     return res.status(error?.status || 500).send(error?.message || 'Failed to download CSV backup.');
+  }
+});
+
+app.post('/api/backup/tables/:key/import', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const item = _backupFindCatalogItem(req.params?.key);
+    if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
+
+    const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
+    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
+    const ok = await verifyAdminPassword(adminPassword);
+    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+
+    const csvText = String(req.body?.csvText || req.body?.csv || '');
+    const parsed = _backupParseCsv(csvText);
+    const schema = await _backupGetTableColumns(item.tableName);
+
+    if (schema.columns.length) {
+      _backupValidateCsvMatchesTable(parsed.headers, schema.columns, item.tableName);
+    } else {
+      await _backupProbeCsvColumns(item.tableName, parsed.headers);
+    }
+
+    const payload = _backupRecordsToPayload(parsed.records, parsed.headers, schema.columns);
+    _historySetEntity(res, { entityType: 'backup_table_import', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
+    const importedRows = await _backupInsertRows(item.tableName, payload);
+
+    return res.json({
+      ok: true,
+      tableName: item.tableName,
+      importedRows,
+      schemaValidated: schema.source !== 'probe',
+      schemaSource: schema.source,
+    });
+  } catch (error) {
+    console.error('POST /api/backup/tables/:key/import error:', error?.details || error);
+    const msg = String(error?.message || 'Failed to import CSV data.');
+    return res.status(error?.status || 500).json({ ok: false, error: msg });
   }
 });
 

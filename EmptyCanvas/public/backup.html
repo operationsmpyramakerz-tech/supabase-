@@ -13,9 +13,9 @@
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
   <title>Database</title>
   <style>body.permissions-loading .sidebar li { display: none !important; }</style>
-  <link href="/css/style.css?v=database-v2" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=database-v2" rel="stylesheet" />
-  <link href="/css/backup.css?v=database-v2" rel="stylesheet" />
+  <link href="/css/style.css?v=database-v3" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=database-v3" rel="stylesheet" />
+  <link href="/css/backup.css?v=database-v3" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-backup">
@@ -87,7 +87,7 @@
           <div>
             <p class="backup-kicker">SYSTEM DATA</p>
             <h2>Database</h2>
-            <p>Export CSV copies from Supabase tables or clear table data with admin approval.</p>
+            <p>Export, import, or clear Supabase table data safely.</p>
           </div>
           <div class="backup-hero-actions">
             <a class="backup-export-all-btn" id="backupExportAllBtn" href="/api/backup/export-all" download>
@@ -103,8 +103,7 @@
           <div class="backup-list-head">
             <div>
               <p class="backup-kicker">DATABASE TABLES</p>
-              <h2>Database records</h2>
-              <p class="backup-muted">Choose a card, export its CSV file, or delete the data inside its table.</p>
+              <h2>Tables</h2>
             </div>
             <span class="backup-count" id="backupCount">0 tables</span>
           </div>
@@ -155,8 +154,38 @@
     </section>
   </div>
 
+
+  <div class="backup-import-modal" id="backupImportModal" hidden>
+    <div class="backup-modal-backdrop" data-backup-import-close></div>
+    <section class="backup-import-card" role="dialog" aria-modal="true" aria-labelledby="backupImportTitle">
+      <button type="button" class="backup-modal-close" data-backup-import-close aria-label="Close"><i data-feather="x"></i></button>
+      <div class="backup-import-head">
+        <span class="backup-import-icon"><i data-feather="upload-cloud"></i></span>
+        <div>
+          <p class="backup-kicker">IMPORT CSV</p>
+          <h2 id="backupImportTitle">Import CSV</h2>
+          <p id="backupImportTable" class="backup-import-table"></p>
+        </div>
+      </div>
+      <label class="backup-field backup-file-field">
+        <span>CSV file</span>
+        <input id="backupImportFile" type="file" accept=".csv,text/csv" />
+      </label>
+      <label class="backup-field">
+        <span>Admin password</span>
+        <input id="backupImportPassword" type="password" autocomplete="off" placeholder="Enter admin password" />
+      </label>
+      <p class="backup-import-note"><i data-feather="shield"></i><span>The CSV header must match the selected Supabase table columns.</span></p>
+      <p class="backup-error" id="backupImportError" hidden></p>
+      <div class="backup-import-actions">
+        <button type="button" class="backup-cancel-btn" data-backup-import-close>Cancel</button>
+        <button type="button" class="backup-import-confirm-btn" id="backupImportConfirmBtn"><i data-feather="upload"></i><span>Import CSV</span></button>
+      </div>
+    </section>
+  </div>
+
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=database-page-v2"></script>
-  <script src="/js/backup.js?v=database-v2"></script>
+  <script src="/js/common-ui.js?v=database-page-v3"></script>
+  <script src="/js/backup.js?v=database-v3"></script>
 </body>
 </html>
