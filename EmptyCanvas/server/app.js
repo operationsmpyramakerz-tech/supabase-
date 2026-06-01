@@ -1204,35 +1204,10 @@ async function getProductInfoCached(productPageId) {
     return { name: "Unknown Product", idCode: null, unitPrice: null, image: null, url: null };
   }
 
-  const rawId = String(productPageId || "").trim();
-
-  // Supabase-first: most migrated order/product flows now pass numeric row IDs.
-  // Keep the Notion lookup below as a fallback for legacy UUID IDs.
-  if (_sbProductsEnabled()) {
-    const key = `cache:supabase:productInfo:${cacheKeySafe(rawId)}:v1`;
-    const sbInfo = await cacheGetOrSet(key, _PRODUCT_INFO_TTL_SEC, async () => {
-      try {
-        const row = await supabaseDb.selectById(_sbProductsTable(), rawId);
-        if (!row) return null;
-        const product = _sbSerializeProductRow(row);
-        return {
-          name: product.name || "Unknown Product",
-          idCode: product.displayId || null,
-          unitPrice: product.unitPrice ?? null,
-          image: product.imageUrl || null,
-          url: product.url || null,
-        };
-      } catch {
-        return null;
-      }
-    });
-    if (sbInfo) return sbInfo;
-  }
-
-  const key = `cache:notion:productInfo:${rawId}:v2`;
+  const key = `cache:notion:productInfo:${productPageId}:v2`;
   return await cacheGetOrSet(key, _PRODUCT_INFO_TTL_SEC, async () => {
     try {
-      const productPage = await notion.pages.retrieve({ page_id: rawId });
+      const productPage = await notion.pages.retrieve({ page_id: productPageId });
       const props = productPage.properties || {};
 
       const name =
@@ -3319,6 +3294,53 @@ async function _sbSelectRawPageAccessForMember(teamMemberId) {
   if (!_sbTeamMembersEnabled() || !id) return [];
   const rows = await supabaseDb.request(`/team_member_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
   return Array.isArray(rows) ? rows : [];
+}
+
+function _adminAccessPageCandidates(row = {}) {
+  const page = _sbSerializeAppPage(row || {});
+  const labels = [
+    ..._sbLegacyAllowedPagesFromAppPage(page),
+    page.pageName,
+    page.pageKey,
+    page.routePath,
+    page.routePattern,
+    _sbGet(row, ["page_name", "pageName", "name"]),
+    _sbGet(row, ["page_key", "pageKey"]),
+    _sbGet(row, ["route_path", "routePath"]),
+  ].filter(Boolean);
+  return expandAllowedForUI(normalizePages(labels));
+}
+
+async function currentUserHasPageAdminAccess(req, pageNameOrNames) {
+  try {
+    const memberId = String(req?.session?.userSupabaseId || "").trim();
+    if (!_sbTeamMembersEnabled() || !memberId) return false;
+    const required = expandAllowedForUI(normalizePages(Array.isArray(pageNameOrNames) ? pageNameOrNames : [pageNameOrNames]));
+    if (!required.length) return false;
+    const rows = await _sbSelectPageAccessViewForMember(memberId).catch(() => []);
+    const requiredKeys = new Set(required.map((name) => norm(name)).filter(Boolean));
+    for (const row of rows || []) {
+      const enabled = _sbBool(_sbGet(row, ["is_enabled", "isEnabled"]), false);
+      const level = String(_sbGet(row, ["access_level", "accessLevel"]) || "user").trim().toLowerCase();
+      if (!enabled || level !== "admin") continue;
+      const candidates = _adminAccessPageCandidates(row);
+      if (candidates.some((name) => requiredKeys.has(norm(name)))) return true;
+    }
+  } catch (error) {
+    console.warn("[admin-access] page admin bypass check failed:", error?.message || error);
+  }
+  return false;
+}
+
+async function verifyAdminPasswordOrPageAdmin(req, pageNameOrNames, inputPassword) {
+  if (await currentUserHasPageAdminAccess(req, pageNameOrNames)) {
+    return { ok: true, bypassed: true };
+  }
+  const password = String(inputPassword || "").trim();
+  if (!password) return { ok: false, status: 400, error: "Admin password is required." };
+  const ok = await verifyAdminPassword(password);
+  if (!ok) return { ok: false, status: 401, error: "Invalid admin password." };
+  return { ok: true, bypassed: false };
 }
 
 async function _sbResolveAllowedPagesForTeamMember(row = {}) {
@@ -5621,7 +5643,10 @@ function _sbProposalCurrentUserOwns(row = {}, req = null) {
 async function _sbAssertProposalOwnerOrAdmin(row = {}, req = null, body = {}) {
   if (_sbProposalCurrentUserOwns(row, req)) return true;
   const adminPassword = String(body?.adminPassword || body?.admin_password || req?.query?.adminPassword || "").trim();
-  if (adminPassword && await verifyAdminPassword(adminPassword)) return true;
+  if (adminPassword) {
+    const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "Proposals", adminPassword);
+    if (adminCheck.ok) return true;
+  }
   const err = new Error("Admin password is required to modify a folder created by another user.");
   err.status = 403;
   throw err;
@@ -7112,28 +7137,6 @@ function isSparePartsTagName(value) {
 }
 
 async function listSparePartsComponents() {
-  // Supabase-first: products are now the canonical source after migration.
-  // We keep the Notion branch below for legacy deployments only.
-  if (_sbProductsEnabled()) {
-    try {
-      const list = await _sbProductsList();
-      const out = (Array.isArray(list) ? list : [])
-        .map((product) => ({
-          id: String(product?.id || "").trim(),
-          name: String(product?.name || "").trim(),
-          tags: Array.isArray(product?.tags) ? product.tags : _sbSplitValues(product?.tags),
-        }))
-        .filter((product) => product.id && product.name && product.tags.some(isSparePartsTagName));
-      out.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, {
-        sensitivity: "base",
-        numeric: true,
-      }));
-      return out;
-    } catch (error) {
-      console.warn("[supabase] spare-parts list failed, falling back to Notion:", error?.message || error);
-    }
-  }
-
   if (!componentsDatabaseId) return [];
 
   const out = [];
@@ -7846,9 +7849,8 @@ app.delete('/api/history/clear', requireAuth, requirePage("History"), async (req
       return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
     }
     const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
-    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+    const adminCheck = await verifyAdminPasswordOrPageAdmin(req, 'History', adminPassword);
+    if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ ok: false, error: adminCheck.error || 'Invalid admin password.' });
 
     await supabaseDb.request(`/${encodeURIComponent(HISTORY_TABLE)}?id=not.is.null`, {
       method: 'DELETE',
@@ -7934,16 +7936,9 @@ function _backupCsvCell(value) {
   return text;
 }
 
-function _backupRowsToCsv(rows = [], preferredColumns = []) {
+function _backupRowsToCsv(rows = []) {
   const columns = [];
   const seen = new Set();
-  for (const key of preferredColumns || []) {
-    const clean = String(key || '').trim();
-    if (clean && !seen.has(clean)) {
-      seen.add(clean);
-      columns.push(clean);
-    }
-  }
   for (const row of rows || []) {
     for (const key of Object.keys(row || {})) {
       if (!seen.has(key)) {
@@ -7957,266 +7952,6 @@ function _backupRowsToCsv(rows = [], preferredColumns = []) {
     columns.map(_backupCsvCell).join(','),
     ...rows.map((row) => columns.map((key) => _backupCsvCell(row?.[key])).join(',')),
   ].join('\n');
-}
-
-function _backupCsvError(message, status = 400) {
-  const err = new Error(message || 'Invalid CSV file.');
-  err.status = status;
-  return err;
-}
-
-function _backupParseCsv(csvText = '') {
-  const input = String(csvText || '').replace(/^\uFEFF/, '');
-  if (!input.trim()) throw _backupCsvError('CSV file is empty.');
-
-  const rows = [];
-  let row = [];
-  let cell = '';
-  let inQuotes = false;
-
-  function pushCell() {
-    row.push(cell);
-    cell = '';
-  }
-  function pushRow() {
-    rows.push(row);
-    row = [];
-  }
-
-  for (let i = 0; i < input.length; i += 1) {
-    const ch = input[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (input[i + 1] === '"') {
-          cell += '"';
-          i += 1;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cell += ch;
-      }
-      continue;
-    }
-
-    if (ch === '"') {
-      inQuotes = true;
-      continue;
-    }
-    if (ch === ',') {
-      pushCell();
-      continue;
-    }
-    if (ch === '\n') {
-      pushCell();
-      pushRow();
-      continue;
-    }
-    if (ch === '\r') {
-      if (input[i + 1] === '\n') i += 1;
-      pushCell();
-      pushRow();
-      continue;
-    }
-    cell += ch;
-  }
-
-  if (inQuotes) throw _backupCsvError('CSV file has an unclosed quoted value.');
-  pushCell();
-  pushRow();
-
-  while (rows.length && rows[rows.length - 1].every((value) => !String(value || '').trim())) rows.pop();
-  if (!rows.length) throw _backupCsvError('CSV file is empty.');
-
-  const headers = rows[0].map((value) => String(value || '').replace(/^\uFEFF/, '').trim());
-  if (!headers.length || headers.every((value) => !value)) throw _backupCsvError('CSV header row is missing.');
-
-  const seen = new Set();
-  for (const header of headers) {
-    if (!header) throw _backupCsvError('CSV contains an empty column header.');
-    const key = header.toLowerCase();
-    if (seen.has(key)) throw _backupCsvError(`CSV contains duplicate column header: ${header}`);
-    seen.add(key);
-  }
-
-  const records = [];
-  for (let index = 1; index < rows.length; index += 1) {
-    const current = rows[index] || [];
-    if (current.every((value) => !String(value || '').trim())) continue;
-    if (current.length > headers.length && current.slice(headers.length).some((value) => String(value || '').trim())) {
-      throw _backupCsvError(`CSV row ${index + 1} has more values than the header row.`);
-    }
-    const record = {};
-    headers.forEach((header, columnIndex) => {
-      record[header] = current[columnIndex] ?? '';
-    });
-    records.push(record);
-  }
-
-  if (!records.length) throw _backupCsvError('CSV file has headers but no data rows to import.');
-  return { headers, records };
-}
-
-let _backupSchemaCache = null;
-let _backupSchemaCacheAt = 0;
-
-function _backupNormalizeColumnInfo(name, raw = {}) {
-  const columnName = String(name || '').trim();
-  if (!columnName) return null;
-  const type = String(raw?.type || raw?.format || raw?.['x-postgrest-type'] || raw?.['x-pg-type'] || '').trim().toLowerCase();
-  const format = String(raw?.format || '').trim().toLowerCase();
-  return { name: columnName, type, format, raw: raw || {} };
-}
-
-function _backupExtractSchemaColumns(openApi, tableName = '') {
-  const table = String(tableName || '').trim();
-  if (!openApi || typeof openApi !== 'object' || !table) return [];
-  const schemas = {
-    ...(openApi.definitions && typeof openApi.definitions === 'object' ? openApi.definitions : {}),
-    ...(openApi.components?.schemas && typeof openApi.components.schemas === 'object' ? openApi.components.schemas : {}),
-  };
-  const entries = Object.entries(schemas);
-  const lower = table.toLowerCase();
-  const match = entries.find(([key]) => String(key).toLowerCase() === lower)
-    || entries.find(([key]) => String(key).toLowerCase() === `public.${lower}`)
-    || entries.find(([key]) => String(key).toLowerCase().replace(/^public[._]/, '') === lower);
-  const schema = match?.[1] || null;
-  const props = schema?.properties && typeof schema.properties === 'object' ? schema.properties : null;
-  if (!props) return [];
-  return Object.entries(props).map(([name, raw]) => _backupNormalizeColumnInfo(name, raw)).filter(Boolean);
-}
-
-async function _backupGetOpenApiSchema() {
-  const now = Date.now();
-  if (_backupSchemaCache && now - _backupSchemaCacheAt < 5 * 60 * 1000) return _backupSchemaCache;
-  try {
-    const data = await supabaseDb.request('/');
-    _backupSchemaCache = data && typeof data === 'object' ? data : null;
-    _backupSchemaCacheAt = now;
-    return _backupSchemaCache;
-  } catch (error) {
-    console.warn('[backup] unable to read Supabase OpenAPI schema:', error?.details || error?.message || error);
-    _backupSchemaCache = null;
-    _backupSchemaCacheAt = now;
-    return null;
-  }
-}
-
-async function _backupGetTableColumns(tableName) {
-  const table = _backupCleanTableName(tableName);
-  if (!table) throw _backupCsvError('Invalid table name.');
-
-  const openApi = await _backupGetOpenApiSchema();
-  const schemaColumns = _backupExtractSchemaColumns(openApi, table);
-  if (schemaColumns.length) return { columns: schemaColumns, source: 'schema' };
-
-  const sampleQuery = new URLSearchParams({ select: '*', limit: '1' });
-  const sample = await supabaseDb.request(`/${encodeURIComponent(table)}?${sampleQuery.toString()}`);
-  const firstRow = Array.isArray(sample) ? sample[0] || null : null;
-  const sampleColumns = Object.keys(firstRow || {}).map((name) => _backupNormalizeColumnInfo(name, {})).filter(Boolean);
-  if (sampleColumns.length) return { columns: sampleColumns, source: 'sample' };
-
-  return { columns: [], source: 'probe' };
-}
-
-async function _backupProbeCsvColumns(tableName, headers = []) {
-  const table = _backupCleanTableName(tableName);
-  if (!table) throw _backupCsvError('Invalid table name.');
-  const safeHeaders = (headers || []).map((header) => String(header || '').trim());
-  if (!safeHeaders.length) throw _backupCsvError('CSV header row is missing.');
-  if (safeHeaders.some((header) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(header))) {
-    throw _backupCsvError('CSV headers must be valid Supabase column names.');
-  }
-  const query = new URLSearchParams({ select: safeHeaders.join(','), limit: '0' });
-  await supabaseDb.request(`/${encodeURIComponent(table)}?${query.toString()}`);
-}
-
-function _backupValidateCsvMatchesTable(headers = [], columnInfo = [], tableName = '') {
-  const csvHeaders = (headers || []).map((header) => String(header || '').trim()).filter(Boolean);
-  const tableColumns = (columnInfo || []).map((column) => String(column?.name || '').trim()).filter(Boolean);
-  if (!tableColumns.length) return { exact: false, missing: [], extra: [] };
-
-  const csvSet = new Set(csvHeaders.map((header) => header.toLowerCase()));
-  const tableSet = new Set(tableColumns.map((column) => column.toLowerCase()));
-  const missing = tableColumns.filter((column) => !csvSet.has(column.toLowerCase()));
-  const extra = csvHeaders.filter((header) => !tableSet.has(header.toLowerCase()));
-  if (missing.length || extra.length) {
-    const parts = [];
-    if (missing.length) parts.push(`missing column(s): ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ', ...' : ''}`);
-    if (extra.length) parts.push(`extra column(s): ${extra.slice(0, 8).join(', ')}${extra.length > 8 ? ', ...' : ''}`);
-    throw _backupCsvError(`CSV does not match the actual "${tableName}" table: ${parts.join('; ')}.`);
-  }
-  return { exact: true, missing: [], extra: [] };
-}
-
-function _backupColumnTypeToken(column = {}) {
-  return String(column?.type || column?.format || column?.raw?.format || '').toLowerCase();
-}
-
-function _backupCoerceCsvValue(value, column = {}) {
-  const raw = String(value ?? '');
-  const trimmed = raw.trim();
-  const type = _backupColumnTypeToken(column);
-  if (trimmed === '') return null;
-
-  if (/json|object/.test(type)) {
-    try { return JSON.parse(raw); } catch { return raw; }
-  }
-  if (/array/.test(type)) {
-    try { return JSON.parse(raw); } catch { return raw; }
-  }
-  if (/boolean|bool/.test(type)) {
-    if (/^(true|t|yes|y|1)$/i.test(trimmed)) return true;
-    if (/^(false|f|no|n|0)$/i.test(trimmed)) return false;
-    return raw;
-  }
-  if (/integer|int2|int4|int8|bigint|smallint/.test(type)) {
-    if (/^-?\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
-    return raw;
-  }
-  if (/number|numeric|decimal|real|double|float/.test(type)) {
-    const n = Number(trimmed);
-    return Number.isFinite(n) ? n : raw;
-  }
-  return raw;
-}
-
-function _backupRecordsToPayload(records = [], headers = [], columnInfo = []) {
-  const byName = new Map((columnInfo || []).map((column) => [String(column?.name || '').toLowerCase(), column]));
-  return (records || []).map((record) => {
-    const out = {};
-    for (const header of headers || []) {
-      const column = byName.get(String(header || '').toLowerCase()) || { name: header };
-      out[header] = _backupCoerceCsvValue(record?.[header], column);
-    }
-    return out;
-  });
-}
-
-async function _backupPreferredColumns(tableName) {
-  try {
-    const schema = await _backupGetTableColumns(tableName);
-    return (schema.columns || []).map((column) => String(column?.name || '').trim()).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-async function _backupInsertRows(tableName, rows = []) {
-  const table = _backupCleanTableName(tableName);
-  if (!table) throw _backupCsvError('Invalid table name.');
-  const list = Array.isArray(rows) ? rows : [];
-  const batchSize = 500;
-  for (let i = 0; i < list.length; i += batchSize) {
-    const chunk = list.slice(i, i + batchSize);
-    if (!chunk.length) continue;
-    await supabaseDb.request(`/${encodeURIComponent(table)}`, {
-      method: 'POST',
-      headers: { Prefer: 'return=minimal' },
-      body: chunk,
-    });
-  }
-  return list.length;
 }
 
 function _backupSafeZipName(value = '', fallback = 'file') {
@@ -8402,8 +8137,7 @@ app.get('/api/backup/export-all', requireAuth, requirePage('Backup'), async (req
     for (const item of _backupCatalog()) {
       try {
         const rows = await _backupSelectAllRows(item.tableName);
-        const preferredColumns = await _backupPreferredColumns(item.tableName);
-        const csv = _backupRowsToCsv(rows, preferredColumns);
+        const csv = _backupRowsToCsv(rows);
         const moduleName = _backupSafeZipName(item.moduleName || 'system', 'system');
         const tableName = _backupSafeZipName(item.tableName || item.key, item.key || 'table');
         files.push({
@@ -8443,9 +8177,8 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
   try {
     if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
     const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
-    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+    const adminCheck = await verifyAdminPasswordOrPageAdmin(req, 'Backup', adminPassword);
+    if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ ok: false, error: adminCheck.error || 'Invalid admin password.' });
 
     const items = _backupCatalog();
     const deletedTables = [];
@@ -8481,8 +8214,7 @@ app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), 
     const item = _backupFindCatalogItem(req.params?.key);
     if (!item) return res.status(404).send('Backup table was not found.');
     const rows = await _backupSelectAllRows(item.tableName);
-    const preferredColumns = await _backupPreferredColumns(item.tableName);
-    const csv = _backupRowsToCsv(rows, preferredColumns);
+    const csv = _backupRowsToCsv(rows);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     const filename = `${item.tableName}-${stamp}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -8494,46 +8226,6 @@ app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), 
   }
 });
 
-app.post('/api/backup/tables/:key/import', requireAuth, requirePage('Backup'), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const item = _backupFindCatalogItem(req.params?.key);
-    if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
-
-    const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
-    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
-
-    const csvText = String(req.body?.csvText || req.body?.csv || '');
-    const parsed = _backupParseCsv(csvText);
-    const schema = await _backupGetTableColumns(item.tableName);
-
-    if (schema.columns.length) {
-      _backupValidateCsvMatchesTable(parsed.headers, schema.columns, item.tableName);
-    } else {
-      await _backupProbeCsvColumns(item.tableName, parsed.headers);
-    }
-
-    const payload = _backupRecordsToPayload(parsed.records, parsed.headers, schema.columns);
-    _historySetEntity(res, { entityType: 'backup_table_import', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
-    const importedRows = await _backupInsertRows(item.tableName, payload);
-
-    return res.json({
-      ok: true,
-      tableName: item.tableName,
-      importedRows,
-      schemaValidated: schema.source !== 'probe',
-      schemaSource: schema.source,
-    });
-  } catch (error) {
-    console.error('POST /api/backup/tables/:key/import error:', error?.details || error);
-    const msg = String(error?.message || 'Failed to import CSV data.');
-    return res.status(error?.status || 500).json({ ok: false, error: msg });
-  }
-});
-
 app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -8541,9 +8233,8 @@ app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async 
     const item = _backupFindCatalogItem(req.params?.key);
     if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
     const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
-    if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
-    if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
+    const adminCheck = await verifyAdminPasswordOrPageAdmin(req, 'Backup', adminPassword);
+    if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ ok: false, error: adminCheck.error || 'Invalid admin password.' });
 
     _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
     await _backupDeleteAllRows(item.tableName);
@@ -14496,17 +14187,11 @@ app.get(
 // Frontend uses this to protect B2B folder changes and inventory actions.
 async function _requireB2BAdminPassword(req, res) {
   const password = String(req?.body?.adminPassword || req?.body?.password || '').trim();
-  if (!password) {
-    res.status(400).json({ error: 'Admin password is required.' });
+  const adminCheck = await verifyAdminPasswordOrPageAdmin(req, 'B2B', password);
+  if (!adminCheck.ok) {
+    res.status(adminCheck.status || 401).json({ error: adminCheck.error || 'Invalid Admin password.' });
     return false;
   }
-
-  const ok = await verifyAdminPassword(password);
-  if (!ok) {
-    res.status(401).json({ error: 'Invalid Admin password.' });
-    return false;
-  }
-
   return true;
 }
 
@@ -14518,12 +14203,10 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       const password = String(req?.body?.password || req?.body?.adminPassword || "").trim();
-      if (!password) return res.status(400).json({ error: "Missing password." });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, 'B2B', password);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid password." });
 
-      const ok = await verifyAdminPassword(password);
-      if (!ok) return res.status(401).json({ error: "Invalid password." });
-
-      return res.json({ ok: true });
+      return res.json({ ok: true, bypassed: !!adminCheck.bypassed });
     } catch (e) {
       console.error("Error verifying Admin password:", e?.body || e);
       return res.status(500).json({ error: "Failed to verify password." });
@@ -17943,14 +17626,12 @@ app.post(
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      const password = String(req.body?.password || "").trim();
-      if (!password) return res.status(400).json({ ok: false, error: "Admin password is required." });
-
-      const ok = await verifyAdminPassword(password);
-      if (!ok) return res.status(401).json({ ok: false, error: "Invalid Admin password." });
+      const password = String(req.body?.password || req.body?.adminPassword || "").trim();
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, USER_ACCESS_PAGE_ALIASES, password);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ ok: false, error: adminCheck.error || "Invalid Admin password." });
 
       req.session.userAccessAdminVerifiedUntil = Date.now() + 5 * 60 * 1000;
-      return res.json({ ok: true });
+      return res.json({ ok: true, bypassed: !!adminCheck.bypassed });
     } catch (error) {
       console.error("POST /api/user-access/admin/verify error:", error?.body || error);
       return res.status(500).json({ ok: false, error: "Failed to verify Admin password." });
@@ -19765,9 +19446,8 @@ app.post(
         return res.status(400).json({ error: "orderIds required" });
       }
       const pwd = String(adminPassword || "").trim();
-      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-      const adminOk = await verifyAdminPassword(pwd);
-      if (!adminOk) return res.status(401).json({ error: "Invalid admin password" });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, ["Requested Orders", "Operations Orders"], pwd);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
 
       const ids = orderIds
         .map((x) => String(x || "").trim())
@@ -19926,34 +19606,26 @@ app.get(
     res.set("Cache-Control", "no-store");
 
     try {
-      let resolutionMethods = [
-        { name: "In-facility", color: "green" },
-        { name: "Not Applicable", color: "purple" },
-        { name: "On-site", color: "brown" },
-        { name: "Remote", color: "yellow" },
-      ];
+      const dbProps = await getOrdersDBProps();
+      const resolutionMethodPropName = await detectResolutionMethodPropName();
+      const resolutionMethodMeta = resolutionMethodPropName
+        ? dbProps?.[resolutionMethodPropName] || null
+        : null;
 
-      // Legacy Notion schema can still provide configured select/status colors.
-      // If it is not configured anymore, keep the stable Supabase-safe defaults above.
-      if (ordersDatabaseId) {
-        try {
-          const dbProps = await getOrdersDBProps();
-          const resolutionMethodPropName = await detectResolutionMethodPropName();
-          const resolutionMethodMeta = resolutionMethodPropName
-            ? dbProps?.[resolutionMethodPropName] || null
-            : null;
+      let resolutionMethods = notionSelectOrStatusOptions(resolutionMethodMeta)
+        .map((opt) => ({
+          name: String(opt?.name || "").trim(),
+          color: opt?.color || null,
+        }))
+        .filter((opt) => opt.name);
 
-          const fromSchema = notionSelectOrStatusOptions(resolutionMethodMeta)
-            .map((opt) => ({
-              name: String(opt?.name || "").trim(),
-              color: opt?.color || null,
-            }))
-            .filter((opt) => opt.name);
-
-          if (fromSchema.length) resolutionMethods = fromSchema;
-        } catch (schemaError) {
-          console.warn("maintenance-form-options: Notion schema unavailable, using Supabase-safe defaults.", schemaError?.message || schemaError);
-        }
+      if (!resolutionMethods.length) {
+        resolutionMethods = [
+          { name: "In-facility", color: "green" },
+          { name: "Not Applicable", color: "purple" },
+          { name: "On-site", color: "brown" },
+          { name: "Remote", color: "yellow" },
+        ];
       }
 
       const spareParts = await listSparePartsComponents();
@@ -19961,10 +19633,9 @@ app.get(
       return res.json({
         resolutionMethods,
         spareParts,
-        source: _sbProductsEnabled() ? "supabase" : "notion",
       });
     } catch (e) {
-      console.error("maintenance-form-options error:", e?.details || e?.body || e);
+      console.error("maintenance-form-options error:", e?.body || e);
       return res.status(500).json({ error: "Failed to load maintenance form options" });
     }
   },
@@ -19996,75 +19667,6 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
-
-      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        const resolutionMethodText = String(resolutionMethod || "").trim();
-        const actualIssueDescriptionText = String(actualIssueDescription || "")
-          .replace(/\r\n/g, "\n")
-          .trim();
-        const repairActionText = String(repairAction || "")
-          .replace(/\r\n/g, "\n")
-          .trim();
-
-        const rawSparePartTokens = toUniqueStringArray(
-          Array.isArray(sparePartIds) && sparePartIds.length ? sparePartIds : sparePartId,
-        );
-        const requestedSparePartNames = toUniqueStringArray(
-          [
-            ...rawSparePartTokens.filter((value) => !/^\d+$/.test(String(value || "").trim()) && !looksLikeNotionId(value)),
-            ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
-          ],
-          { splitComma: true },
-        );
-
-        const spareNames = [...requestedSparePartNames];
-        const spareIds = rawSparePartTokens.map((value) => String(value || "").trim()).filter(Boolean);
-        if (spareIds.length) {
-          const catalog = await listSparePartsComponents().catch(() => []);
-          const byId = new Map((catalog || []).map((item) => [String(item?.id || "").trim(), String(item?.name || "").trim()]));
-          for (const spareId of spareIds) {
-            const fromCatalog = byId.get(spareId);
-            if (fromCatalog) spareNames.push(fromCatalog);
-            else if (/^\d+$/.test(spareId)) {
-              const info = await getProductInfoCached(spareId).catch(() => null);
-              if (info?.name && info.name !== "Unknown Product") spareNames.push(String(info.name).trim());
-            }
-          }
-        }
-
-        const normalizedSparePartNames = toUniqueStringArray(spareNames, { splitComma: true });
-        const sparePartText = normalizedSparePartNames.join(", ");
-        const normalizedSparePartIds = toUniqueStringArray(spareIds);
-
-        const patch = { updated_at: new Date().toISOString() };
-        if (resolutionMethodText) patch.resolution_method = resolutionMethodText;
-        if (actualIssueDescriptionText) patch.actual_issue_description = actualIssueDescriptionText;
-        if (repairActionText) patch.repair_action = repairActionText;
-        if (sparePartText) patch.spare_parts_replaced = sparePartText;
-
-        if (Object.keys(patch).length <= 1) {
-          return res.status(400).json({ error: "No maintenance details were provided." });
-        }
-
-        await Promise.all(
-          ids.map((id) => _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, patch, [])),
-        );
-        await _sbInvalidateOrdersCaches(req).catch(() => {});
-        await cacheDel("cache:api:orders:requested:supabase:v2:approved").catch(() => {});
-        await cacheDel("cache:api:orders:requested:supabase:v2:all-system").catch(() => {});
-
-        return res.json({
-          success: true,
-          source: "supabase",
-          resolutionMethod: resolutionMethodText || null,
-          actualIssueDescription: actualIssueDescriptionText || null,
-          repairAction: repairActionText || null,
-          sparePartsReplacedIds: normalizedSparePartIds,
-          sparePartsReplacedId: normalizedSparePartIds[0] || null,
-          sparePartsReplacedNames: normalizedSparePartNames,
-          sparePartsReplacedName: sparePartText || null,
-        });
-      }
 
       const dbProps = await getOrdersDBProps();
 
@@ -23808,41 +23410,6 @@ app.get(
   requirePage("Create New Order"),
   async (req, res) => {
     try {
-      if (_sbOrdersEnabled()) {
-        const key = "cache:api:order-types:supabase:v1";
-        const payload = await cacheGetOrSet(key, 10 * 60, async () => {
-          const defaults = ["Request Products", "Withdraw Products", "Request Maintenance"];
-          const seen = new Map();
-          const addOption = (value) => {
-            const label = _canonicalOrderTypeLabel(value) || String(value || "").trim();
-            if (!label) return;
-            const key = _normKeyOrderType(label);
-            if (key && !seen.has(key)) seen.set(key, label);
-          };
-
-          defaults.forEach(addOption);
-
-          try {
-            const rows = await supabaseDb.selectAll(_sbOrdersTable(), {
-              limit: 5000,
-              order: "id.desc",
-            });
-            for (const row of Array.isArray(rows) ? rows : []) {
-              addOption(_sbOrderText(_sbOrderGet(row, ORDER_TYPE_PROP_CANDIDATES)));
-            }
-          } catch (error) {
-            console.warn("/api/order-types Supabase load failed; using defaults:", error?.message || error);
-          }
-
-          return {
-            options: Array.from(seen.values()),
-            source: { database: "supabase", table: _sbOrdersTable(), property: "order_type", type: "text" },
-          };
-        });
-
-        return res.json(payload);
-      }
-
       const key = "cache:api:order-types:v1";
 
       const payload = await cacheGetOrSet(key, 10 * 60, async () => {
@@ -24957,13 +24524,9 @@ async function _notionUpdateCurrentOrderStatus(ids = [], desired = "In progress"
 
 async function _verifyCurrentOrderActionPassword(req, res) {
   const pwd = String(req.body?.adminPassword || "").trim();
-  if (!pwd) {
-    res.status(400).json({ error: "adminPassword required" });
-    return false;
-  }
-  const ok = await verifyAdminPassword(pwd);
-  if (!ok) {
-    res.status(401).json({ error: "Invalid admin password" });
+  const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "Current Orders", pwd);
+  if (!adminCheck.ok) {
+    res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
     return false;
   }
   return true;
@@ -25082,12 +24645,8 @@ app.post(
       }
 
       const pwd = String(adminPassword || "").trim();
-      if (!pwd) {
-        return res.status(400).json({ error: "adminPassword required" });
-      }
-
-      const ok = await verifyAdminPassword(pwd);
-      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "Current Orders", pwd);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
 
       if (_sbOrdersEnabled() && _sbProductsEnabled()) {
         try {
@@ -25246,10 +24805,8 @@ app.post(
       }
 
       const pwd = String(adminPassword || "").trim();
-      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-
-      const ok = await verifyAdminPassword(pwd);
-      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, ["Operations Orders", "Requested Orders"], pwd);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
 
       if (!_sbOrdersEnabled() || !_sbProductsEnabled()) {
         return res.status(500).json({ error: "Supabase orders/products are not configured." });
@@ -25279,10 +24836,8 @@ app.post(
       }
 
       const pwd = String(adminPassword || "").trim();
-      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-
-      const ok = await verifyAdminPassword(pwd);
-      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, ["Operations Orders", "Requested Orders"], pwd);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
 
       const ids = orderIds
         .map((x) => String(x || "").trim())
@@ -25339,9 +24894,8 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       const pwd = String(adminPassword || "").trim();
-      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-      const ok = await verifyAdminPassword(pwd);
-      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, ["Operations Orders", "Requested Orders"], pwd);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
         const rows = await _sbOrderRowsByIds(ids);
@@ -25385,9 +24939,8 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       const pwd = String(adminPassword || "").trim();
-      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-      const ok = await verifyAdminPassword(pwd);
-      if (!ok) return res.status(401).json({ error: "Invalid admin password" });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, ["Operations Orders", "Requested Orders"], pwd);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
 
       if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(String(id)))) {
         return res.status(400).json({ error: "Operations edit details is available for Supabase orders only." });
@@ -28004,9 +27557,10 @@ function _kpiAdminPasswordFromReq(req) {
 }
 async function _kpiVerifyAdminPasswordFromReq(req) {
   const password = _kpiAdminPasswordFromReq(req);
-  if (!password) return { ok: false, status: 403, message: "Admin password is required." };
-  const ok = await verifyAdminPassword(password);
-  return ok ? { ok: true } : { ok: false, status: 401, message: "Invalid admin password." };
+  const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "KPIs", password);
+  return adminCheck.ok
+    ? { ok: true, bypassed: !!adminCheck.bypassed }
+    : { ok: false, status: adminCheck.status || 401, message: adminCheck.error || "Invalid admin password." };
 }
 async function _kpiReviewBelongsToCurrentUser(req, summary = {}) {
   const current = await _kpiCreator(req).catch(() => null);
@@ -28062,10 +27616,9 @@ app.post("/api/kpis/admin/verify", requireAuth, requirePage("KPIs"), async (req,
   res.set("Cache-Control", "no-store");
   try {
     const password = String(req.body?.password || req.body?.adminPassword || "").trim();
-    if (!password) return res.status(400).json({ ok: false, message: "Admin password is required." });
-    const ok = await verifyAdminPassword(password);
-    if (!ok) return res.status(401).json({ ok: false, message: "Invalid admin password." });
-    return res.json({ ok: true });
+    const adminCheck = await verifyAdminPasswordOrPageAdmin(req, 'KPIs', password);
+    if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ ok: false, message: adminCheck.error || "Invalid admin password." });
+    return res.json({ ok: true, bypassed: !!adminCheck.bypassed });
   } catch (error) {
     console.error("[kpis] admin verify failed", error);
     return res.status(500).json({ ok: false, message: "Failed to verify admin password." });
@@ -30175,10 +29728,8 @@ app.patch(
       const payload = req.body?.expense || {};
 
       if (!expenseId) return res.status(400).json({ success: false, error: "Missing expense ID." });
-      if (!adminPassword) return res.status(400).json({ success: false, error: "Admin password is required." });
-
-      const ok = await verifyAdminPassword(adminPassword);
-      if (!ok) return res.status(401).json({ success: false, error: "Invalid Admin password." });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "Expenses Users", adminPassword);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ success: false, error: adminCheck.error || "Invalid Admin password." });
 
       const { updated } = await _sbPatchExpenseRowFromUserPayload(expenseId, payload);
       await _sbClearExpensesCaches(req, { id: updated?.user_id || updated?.employee_code || updated?.team_member_name || "" });
@@ -30206,10 +29757,8 @@ app.delete(
       const adminPassword = String(req.body?.adminPassword || "").trim();
 
       if (!expenseId) return res.status(400).json({ success: false, error: "Missing expense ID." });
-      if (!adminPassword) return res.status(400).json({ success: false, error: "Admin password is required." });
-
-      const ok = await verifyAdminPassword(adminPassword);
-      if (!ok) return res.status(401).json({ success: false, error: "Invalid Admin password." });
+      const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "Expenses Users", adminPassword);
+      if (!adminCheck.ok) return res.status(adminCheck.status || 401).json({ success: false, error: adminCheck.error || "Invalid Admin password." });
 
       const row = await supabaseDb.selectById(_sbExpensesTable(), expenseId);
       if (!row) return res.status(404).json({ success: false, error: "Expense not found." });
@@ -31210,13 +30759,9 @@ function _normalizeSVOrderActionIds(orderIds = []) {
 
 async function _verifySVOrderActionPassword(req, res) {
   const pwd = String(req.body?.adminPassword || "").trim();
-  if (!pwd) {
-    res.status(400).json({ error: "adminPassword required" });
-    return false;
-  }
-  const ok = await verifyAdminPassword(pwd);
-  if (!ok) {
-    res.status(401).json({ error: "Invalid admin password" });
+  const adminCheck = await verifyAdminPasswordOrPageAdmin(req, "Orders Review", pwd);
+  if (!adminCheck.ok) {
+    res.status(adminCheck.status || 401).json({ error: adminCheck.error || "Invalid admin password" });
     return false;
   }
   return true;
@@ -32099,40 +31644,11 @@ const _PUSH_SUBS_TTL_SECONDS = 60 * 60 * 24 * 365; // keep subscriptions 1 year
 const _NOTIF_MEM = new Map(); // key -> data
 const _PUSH_MEM = new Map(); // key -> data
 
-function _notificationScopedUserKey(userId) {
-  const raw = String(userId || "").trim();
-  if (!raw) return "";
-  return looksLikeNotionId(raw) ? normalizeNotionId(raw) : cacheKeySafe(raw);
-}
-
 function _notifKey(userId) {
-  return `notif:user:${_notificationScopedUserKey(userId)}`;
+  return `notif:user:${normalizeNotionId(userId)}`;
 }
 function _subsKey(userId) {
-  return `push:subs:${_notificationScopedUserKey(userId)}`;
-}
-
-async function _resolveNotificationUserId(req, { allowNotionLookup = false } = {}) {
-  const sessionSupabaseId = String(req?.session?.userSupabaseId || "").trim();
-  if (sessionSupabaseId) return sessionSupabaseId;
-
-  const sessionNotionId = String(req?.session?.userNotionId || "").trim();
-  if (sessionNotionId) return sessionNotionId;
-
-  if (_sbTeamMembersEnabled()) {
-    const row = await _sbFindSessionTeamMember(req).catch(() => null);
-    const id = String(_sbGet(row || {}, ["id", "ID"]) || "").trim();
-    if (id) {
-      try { req.session.userSupabaseId = id; } catch {}
-      return id;
-    }
-  }
-
-  if (allowNotionLookup) {
-    return await getSessionUserNotionId(req);
-  }
-
-  return "";
+  return `push:subs:${normalizeNotionId(userId)}`;
 }
 
 function _randId(prefix = "n") {
@@ -32318,8 +31834,7 @@ async function _sendPushToUser(userId, payload) {
 app.get("/api/notifications", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const userId = req.session?.userNotionId;
     const limit = Math.max(1, Math.min(80, Number(req.query.limit) || 25));
     const data = await _loadUserNotifications(userId);
     const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
@@ -32334,8 +31849,7 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
 app.post("/api/notifications/read", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const userId = req.session?.userNotionId;
     const id = String(req.body?.id || "").trim();
     if (!id) return res.status(400).json({ success: false, error: "Missing id" });
     const changed = await _markNotificationRead(userId, id);
@@ -32349,8 +31863,7 @@ app.post("/api/notifications/read", requireAuth, async (req, res) => {
 app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const userId = req.session?.userNotionId;
     const changed = await _markAllNotificationsRead(userId);
     res.json({ success: true, changed });
   } catch (e) {
@@ -32365,7 +31878,7 @@ app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
  */
 app.get("/api/notifications/test", requireAuth, async (req, res) => {
   try {
-    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
+    const userId = await getSessionUserNotionId(req);
     if (!userId) return res.status(404).json({ error: "User not found" });
 
     const notif = {
@@ -32404,8 +31917,7 @@ app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
 app.post("/api/push/subscribe", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const userId = req.session?.userNotionId;
     const sub = req.body?.subscription || req.body;
     const out = await _upsertPushSubscription(userId, sub);
     if (!out.ok) return res.status(400).json({ success: false, error: out.error });
@@ -32419,8 +31931,7 @@ app.post("/api/push/subscribe", requireAuth, async (req, res) => {
 app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const userId = req.session?.userNotionId;
     const endpoint = String(req.body?.endpoint || "").trim();
     const out = await _removePushSubscription(userId, endpoint);
     if (!out.ok) return res.status(400).json({ success: false, error: out.error });
@@ -32485,74 +31996,8 @@ app.get("/api/cron/notifications", async (req, res) => {
       return out;
     }
 
-    function _cronSafeDateMs(value) {
-      const ms = Date.parse(String(value || ""));
-      return Number.isFinite(ms) ? ms : 0;
-    }
-
-    function _sbCronRowUpdatedAt(row = {}) {
-      return _cronSafeDateMs(
-        _sbGet(row, [
-          "updated_at",
-          "updated time",
-          "Updated time",
-          "last_edited_time",
-          "notion_last_edited_time",
-          "created_at",
-          "created time",
-          "Created time",
-          "notion_created_time",
-        ]),
-      );
-    }
-
-    async function _sbCronRowsEditedSince(table, afterIso, { limit = 5000 } = {}) {
-      if (!supabaseDb?.isConfigured?.() || !table) return [];
-      const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 5000));
-      let rows = [];
-      try {
-        rows = await supabaseDb.selectAll(table, { limit: safeLimit, order: "updated_at.desc" });
-      } catch (firstError) {
-        try {
-          rows = await supabaseDb.selectAll(table, { limit: safeLimit, order: "id.desc" });
-        } catch (fallbackError) {
-          throw firstError || fallbackError;
-        }
-      }
-      const cutoff = _cronSafeDateMs(afterIso);
-      return (Array.isArray(rows) ? rows : []).filter((row) => _sbCronRowUpdatedAt(row) > cutoff);
-    }
-
-    function _cronMatchUsersByName(usersList = [], rawNames = []) {
-      const wanted = new Set(_sbSplitValues(rawNames).map(norm).filter(Boolean));
-      if (!wanted.size) return [];
-      return (Array.isArray(usersList) ? usersList : [])
-        .filter((user) => wanted.has(norm(user?.name)))
-        .map((user) => String(user?.id || "").trim())
-        .filter(Boolean);
-    }
-
     // Load team members → allowed pages map
     async function loadUsersAllowedPages() {
-      if (_sbTeamMembersEnabled()) {
-        try {
-          return await cacheGetOrSet("cache:notif:teamMembers:supabase:v1", 5 * 60, async () => {
-            const rows = await _sbSelectTeamMembersRows();
-            return (Array.isArray(rows) ? rows : [])
-              .map((row) => {
-                const id = String(_sbGet(row, ["id", "ID"]) || "").trim();
-                const name = _sbString(_sbValueForLabel(row, "Name"));
-                const allowedPages = _sbExtractAllowedPages(row);
-                const dept = _sbString(_sbValueForLabel(row, "Department"));
-                return { id, name, allowedPages, department: dept, source: "supabase" };
-              })
-              .filter((user) => user.id);
-          });
-        } catch (error) {
-          console.warn("[cron] Supabase team members load failed; falling back to Notion:", error?.message || error);
-        }
-      }
-
       if (!teamMembersDatabaseId) return [];
       return await cacheGetOrSet("cache:notif:teamMembers:v1", 5 * 60, async () => {
         const all = [];
@@ -32575,7 +32020,7 @@ app.get("/api/cron/notifications", async (req, res) => {
           const name = props?.Name?.title?.[0]?.plain_text || "";
           const allowedPages = extractAllowedPages(props);
           const dept = props?.Department?.select?.name || props?.Department?.multi_select?.[0]?.name || "";
-          return { id: page.id, name, allowedPages, department: dept, source: "notion" };
+          return { id: page.id, name, allowedPages, department: dept };
         });
       });
     }
@@ -32593,74 +32038,7 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Tasks: notify assignees ----
     let tasksChanged = [];
-    let tasksSupabaseFailed = false;
-    if (_sbTasksEnabled()) {
-      try {
-        tasksChanged = await _sbCronRowsEditedSince(_sbTasksTable(), lastIso, { limit: 5000 });
-
-        for (const row of tasksChanged) {
-          const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
-          const title =
-            _sbTaskText(row, ["title", "Title", "name", "Name", "subject", "Subject", "task", "Task"]) ||
-            "Task";
-          const assigneeIds = _sbSplitValues(
-            _sbGet(row, [
-              "assignee_id",
-              "assignee_ids",
-              "assignee_to_id",
-              "assignee_to_ids",
-              "assigned_to_id",
-              "assigned_to_ids",
-              "Assignee ID",
-              "Assignee IDs",
-              "Assigned To ID",
-              "Assigned To IDs",
-            ]),
-          );
-          const assigneeNames = _sbSplitValues(
-            _sbGet(row, [
-              "assignee",
-              "assignees",
-              "assignee_name",
-              "assignee_names",
-              "assignee_to",
-              "assigned_to",
-              "Assignee",
-              "Assignees",
-              "Assigned To",
-              "Assignee Names",
-            ]),
-          );
-          const targetIds = toUniqueStringArray([
-            ...assigneeIds,
-            ..._cronMatchUsersByName(users, assigneeNames),
-          ]);
-
-          if (!targetIds.length) continue;
-
-          const ts = _sbCronRowUpdatedAt(row) || Date.now();
-          for (const uid of targetIds) {
-            const id = `task:sb:${rowId || cacheKeySafe(title)}:${ts}`;
-            await _addNotification(uid, {
-              id,
-              type: "task",
-              title: "Task updated",
-              body: title,
-              url: "/tasks",
-              ts,
-              read: false,
-            });
-            bump(uid, "tasks");
-          }
-        }
-      } catch (e) {
-        console.warn("[cron] Supabase tasks check failed; falling back to Notion:", e?.message || e);
-        tasksSupabaseFailed = true;
-        tasksChanged = [];
-      }
-    }
-
-    if (!tasksChanged.length && (!_sbTasksEnabled() || tasksSupabaseFailed) && tasksDatabaseId) {
+    if (tasksDatabaseId) {
       try {
         const schema = await getTasksSchemaCached();
         const assigneeProp = schema.assigneeProp;
@@ -32698,70 +32076,7 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Expenses: notify owner ----
     let expensesChanged = [];
-    let expensesSupabaseFailed = false;
-    if (_sbExpensesEnabled()) {
-      try {
-        expensesChanged = await _sbCronRowsEditedSince(_sbExpensesTable(), lastIso, { limit: 5000 });
-        for (const row of expensesChanged) {
-          const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
-          const reason =
-            _sbString(_sbGet(row, ["reason", "Reason", "description", "Description", "title", "Title"])) ||
-            "Expense updated";
-          const userIds = _sbSplitValues(
-            _sbGet(row, [
-              "team_member_id",
-              "team_member_ids",
-              "member_id",
-              "member_ids",
-              "user_id",
-              "user_ids",
-              "Team Member ID",
-              "Team Member IDs",
-              "User ID",
-              "User IDs",
-            ]),
-          );
-          const userNames = _sbSplitValues(
-            _sbGet(row, [
-              "team_member",
-              "team_member_name",
-              "team_member_names",
-              "member",
-              "member_name",
-              "payment_by",
-              "Payment By",
-              "Team Member",
-              "Team Member Name",
-            ]),
-          );
-          const targetIds = toUniqueStringArray([
-            ...userIds,
-            ..._cronMatchUsersByName(users, userNames),
-          ]);
-
-          const ts = _sbCronRowUpdatedAt(row) || Date.now();
-          for (const uid of targetIds) {
-            const id = `exp:sb:${rowId || cacheKeySafe(reason)}:${ts}`;
-            await _addNotification(uid, {
-              id,
-              type: "expense",
-              title: "Expense updated",
-              body: reason,
-              url: "/expenses",
-              ts,
-              read: false,
-            });
-            bump(uid, "expenses");
-          }
-        }
-      } catch (e) {
-        console.warn("[cron] Supabase expenses check failed; falling back to Notion:", e?.message || e);
-        expensesSupabaseFailed = true;
-        expensesChanged = [];
-      }
-    }
-
-    if (!expensesChanged.length && (!_sbExpensesEnabled() || expensesSupabaseFailed) && expensesDatabaseId) {
+    if (expensesDatabaseId) {
       try {
         expensesChanged = await queryEditedSince(expensesDatabaseId, lastIso, 300);
         for (const page of expensesChanged) {
@@ -32793,18 +32108,7 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Orders DB: notify users who can see orders pages ----
     let ordersChangedCount = 0;
-    let ordersSupabaseFailed = false;
-    if (_sbOrdersEnabled()) {
-      try {
-        const changed = await _sbCronRowsEditedSince(_sbOrdersTable(), lastIso, { limit: 5000 });
-        ordersChangedCount = changed.length;
-      } catch (e) {
-        console.warn("[cron] Supabase orders check failed; falling back to Notion:", e?.message || e);
-        ordersSupabaseFailed = true;
-      }
-    }
-
-    if (!ordersChangedCount && (!_sbOrdersEnabled() || ordersSupabaseFailed) && ordersDatabaseId) {
+    if (ordersDatabaseId) {
       try {
         const changed = await queryEditedSince(ordersDatabaseId, lastIso, 300);
         ordersChangedCount = changed.length;
@@ -32825,7 +32129,7 @@ app.get("/api/cron/notifications", async (req, res) => {
         const canSee = allowed.some((p) => orderPages.has(p));
         if (!canSee) continue;
 
-        const id = `orders:${nowIso}:${_notificationScopedUserKey(u.id)}`;
+        const id = `orders:${nowIso}:${normalizeNotionId(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "orders",
@@ -32841,18 +32145,7 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Stocktaking DB: notify users who can see Stocktaking ----
     let stockChangedCount = 0;
-    let stockSupabaseFailed = false;
-    if (_sbStocktakingEnabled()) {
-      try {
-        const changed = await _sbCronRowsEditedSince(_sbStocktakingTable(), lastIso, { limit: 5000 });
-        stockChangedCount = changed.length;
-      } catch (e) {
-        console.warn("[cron] Supabase stocktaking check failed; falling back to Notion:", e?.message || e);
-        stockSupabaseFailed = true;
-      }
-    }
-
-    if (!stockChangedCount && (!_sbStocktakingEnabled() || stockSupabaseFailed) && stocktakingDatabaseId) {
+    if (stocktakingDatabaseId) {
       try {
         const changed = await queryEditedSince(stocktakingDatabaseId, lastIso, 200);
         stockChangedCount = changed.length;
@@ -32866,7 +32159,7 @@ app.get("/api/cron/notifications", async (req, res) => {
         const allowed = Array.isArray(u.allowedPages) ? u.allowedPages : [];
         if (!allowed.includes("Stocktaking")) continue;
 
-        const id = `stock:${nowIso}:${_notificationScopedUserKey(u.id)}`;
+        const id = `stock:${nowIso}:${normalizeNotionId(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "stock",
