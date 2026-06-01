@@ -8156,8 +8156,18 @@ function _backupColumnTypeToken(column = {}) {
   return String(column?.type || column?.format || column?.raw?.format || '').toLowerCase();
 }
 
-function _backupCoerceCsvValue(value, column = {}) {
+function _backupUnprotectCsvFormulaValue(value = '') {
   const raw = String(value ?? '');
+  // Database CSV export prefixes cells that start with =, +, -, or @ using a
+  // leading apostrophe to prevent spreadsheet formula execution. Undo that
+  // protection during import before Supabase type coercion, otherwise negative
+  // numeric values such as '-3 are sent to numeric columns as invalid strings.
+  if (/^'[=+\-@]/.test(raw)) return raw.slice(1);
+  return raw;
+}
+
+function _backupCoerceCsvValue(value, column = {}) {
+  const raw = _backupUnprotectCsvFormulaValue(value);
   const trimmed = raw.trim();
   const type = _backupColumnTypeToken(column);
   if (trimmed === '') return null;
