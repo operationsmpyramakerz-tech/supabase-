@@ -1204,10 +1204,35 @@ async function getProductInfoCached(productPageId) {
     return { name: "Unknown Product", idCode: null, unitPrice: null, image: null, url: null };
   }
 
-  const key = `cache:notion:productInfo:${productPageId}:v2`;
+  const rawId = String(productPageId || "").trim();
+
+  // Supabase-first: most migrated order/product flows now pass numeric row IDs.
+  // Keep the Notion lookup below as a fallback for legacy UUID IDs.
+  if (_sbProductsEnabled()) {
+    const key = `cache:supabase:productInfo:${cacheKeySafe(rawId)}:v1`;
+    const sbInfo = await cacheGetOrSet(key, _PRODUCT_INFO_TTL_SEC, async () => {
+      try {
+        const row = await supabaseDb.selectById(_sbProductsTable(), rawId);
+        if (!row) return null;
+        const product = _sbSerializeProductRow(row);
+        return {
+          name: product.name || "Unknown Product",
+          idCode: product.displayId || null,
+          unitPrice: product.unitPrice ?? null,
+          image: product.imageUrl || null,
+          url: product.url || null,
+        };
+      } catch {
+        return null;
+      }
+    });
+    if (sbInfo) return sbInfo;
+  }
+
+  const key = `cache:notion:productInfo:${rawId}:v2`;
   return await cacheGetOrSet(key, _PRODUCT_INFO_TTL_SEC, async () => {
     try {
-      const productPage = await notion.pages.retrieve({ page_id: productPageId });
+      const productPage = await notion.pages.retrieve({ page_id: rawId });
       const props = productPage.properties || {};
 
       const name =
@@ -7087,6 +7112,28 @@ function isSparePartsTagName(value) {
 }
 
 async function listSparePartsComponents() {
+  // Supabase-first: products are now the canonical source after migration.
+  // We keep the Notion branch below for legacy deployments only.
+  if (_sbProductsEnabled()) {
+    try {
+      const list = await _sbProductsList();
+      const out = (Array.isArray(list) ? list : [])
+        .map((product) => ({
+          id: String(product?.id || "").trim(),
+          name: String(product?.name || "").trim(),
+          tags: Array.isArray(product?.tags) ? product.tags : _sbSplitValues(product?.tags),
+        }))
+        .filter((product) => product.id && product.name && product.tags.some(isSparePartsTagName));
+      out.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      }));
+      return out;
+    } catch (error) {
+      console.warn("[supabase] spare-parts list failed, falling back to Notion:", error?.message || error);
+    }
+  }
+
   if (!componentsDatabaseId) return [];
 
   const out = [];
@@ -19570,26 +19617,34 @@ app.get(
     res.set("Cache-Control", "no-store");
 
     try {
-      const dbProps = await getOrdersDBProps();
-      const resolutionMethodPropName = await detectResolutionMethodPropName();
-      const resolutionMethodMeta = resolutionMethodPropName
-        ? dbProps?.[resolutionMethodPropName] || null
-        : null;
+      let resolutionMethods = [
+        { name: "In-facility", color: "green" },
+        { name: "Not Applicable", color: "purple" },
+        { name: "On-site", color: "brown" },
+        { name: "Remote", color: "yellow" },
+      ];
 
-      let resolutionMethods = notionSelectOrStatusOptions(resolutionMethodMeta)
-        .map((opt) => ({
-          name: String(opt?.name || "").trim(),
-          color: opt?.color || null,
-        }))
-        .filter((opt) => opt.name);
+      // Legacy Notion schema can still provide configured select/status colors.
+      // If it is not configured anymore, keep the stable Supabase-safe defaults above.
+      if (ordersDatabaseId) {
+        try {
+          const dbProps = await getOrdersDBProps();
+          const resolutionMethodPropName = await detectResolutionMethodPropName();
+          const resolutionMethodMeta = resolutionMethodPropName
+            ? dbProps?.[resolutionMethodPropName] || null
+            : null;
 
-      if (!resolutionMethods.length) {
-        resolutionMethods = [
-          { name: "In-facility", color: "green" },
-          { name: "Not Applicable", color: "purple" },
-          { name: "On-site", color: "brown" },
-          { name: "Remote", color: "yellow" },
-        ];
+          const fromSchema = notionSelectOrStatusOptions(resolutionMethodMeta)
+            .map((opt) => ({
+              name: String(opt?.name || "").trim(),
+              color: opt?.color || null,
+            }))
+            .filter((opt) => opt.name);
+
+          if (fromSchema.length) resolutionMethods = fromSchema;
+        } catch (schemaError) {
+          console.warn("maintenance-form-options: Notion schema unavailable, using Supabase-safe defaults.", schemaError?.message || schemaError);
+        }
       }
 
       const spareParts = await listSparePartsComponents();
@@ -19597,9 +19652,10 @@ app.get(
       return res.json({
         resolutionMethods,
         spareParts,
+        source: _sbProductsEnabled() ? "supabase" : "notion",
       });
     } catch (e) {
-      console.error("maintenance-form-options error:", e?.body || e);
+      console.error("maintenance-form-options error:", e?.details || e?.body || e);
       return res.status(500).json({ error: "Failed to load maintenance form options" });
     }
   },
@@ -19631,6 +19687,75 @@ app.post(
         .map((x) => (looksLikeNotionId(x) ? toHyphenatedUUID(x) : x));
 
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const resolutionMethodText = String(resolutionMethod || "").trim();
+        const actualIssueDescriptionText = String(actualIssueDescription || "")
+          .replace(/\r\n/g, "\n")
+          .trim();
+        const repairActionText = String(repairAction || "")
+          .replace(/\r\n/g, "\n")
+          .trim();
+
+        const rawSparePartTokens = toUniqueStringArray(
+          Array.isArray(sparePartIds) && sparePartIds.length ? sparePartIds : sparePartId,
+        );
+        const requestedSparePartNames = toUniqueStringArray(
+          [
+            ...rawSparePartTokens.filter((value) => !/^\d+$/.test(String(value || "").trim()) && !looksLikeNotionId(value)),
+            ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
+          ],
+          { splitComma: true },
+        );
+
+        const spareNames = [...requestedSparePartNames];
+        const spareIds = rawSparePartTokens.map((value) => String(value || "").trim()).filter(Boolean);
+        if (spareIds.length) {
+          const catalog = await listSparePartsComponents().catch(() => []);
+          const byId = new Map((catalog || []).map((item) => [String(item?.id || "").trim(), String(item?.name || "").trim()]));
+          for (const spareId of spareIds) {
+            const fromCatalog = byId.get(spareId);
+            if (fromCatalog) spareNames.push(fromCatalog);
+            else if (/^\d+$/.test(spareId)) {
+              const info = await getProductInfoCached(spareId).catch(() => null);
+              if (info?.name && info.name !== "Unknown Product") spareNames.push(String(info.name).trim());
+            }
+          }
+        }
+
+        const normalizedSparePartNames = toUniqueStringArray(spareNames, { splitComma: true });
+        const sparePartText = normalizedSparePartNames.join(", ");
+        const normalizedSparePartIds = toUniqueStringArray(spareIds);
+
+        const patch = { updated_at: new Date().toISOString() };
+        if (resolutionMethodText) patch.resolution_method = resolutionMethodText;
+        if (actualIssueDescriptionText) patch.actual_issue_description = actualIssueDescriptionText;
+        if (repairActionText) patch.repair_action = repairActionText;
+        if (sparePartText) patch.spare_parts_replaced = sparePartText;
+
+        if (Object.keys(patch).length <= 1) {
+          return res.status(400).json({ error: "No maintenance details were provided." });
+        }
+
+        await Promise.all(
+          ids.map((id) => _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, patch, [])),
+        );
+        await _sbInvalidateOrdersCaches(req).catch(() => {});
+        await cacheDel("cache:api:orders:requested:supabase:v2:approved").catch(() => {});
+        await cacheDel("cache:api:orders:requested:supabase:v2:all-system").catch(() => {});
+
+        return res.json({
+          success: true,
+          source: "supabase",
+          resolutionMethod: resolutionMethodText || null,
+          actualIssueDescription: actualIssueDescriptionText || null,
+          repairAction: repairActionText || null,
+          sparePartsReplacedIds: normalizedSparePartIds,
+          sparePartsReplacedId: normalizedSparePartIds[0] || null,
+          sparePartsReplacedNames: normalizedSparePartNames,
+          sparePartsReplacedName: sparePartText || null,
+        });
+      }
 
       const dbProps = await getOrdersDBProps();
 
@@ -23374,6 +23499,41 @@ app.get(
   requirePage("Create New Order"),
   async (req, res) => {
     try {
+      if (_sbOrdersEnabled()) {
+        const key = "cache:api:order-types:supabase:v1";
+        const payload = await cacheGetOrSet(key, 10 * 60, async () => {
+          const defaults = ["Request Products", "Withdraw Products", "Request Maintenance"];
+          const seen = new Map();
+          const addOption = (value) => {
+            const label = _canonicalOrderTypeLabel(value) || String(value || "").trim();
+            if (!label) return;
+            const key = _normKeyOrderType(label);
+            if (key && !seen.has(key)) seen.set(key, label);
+          };
+
+          defaults.forEach(addOption);
+
+          try {
+            const rows = await supabaseDb.selectAll(_sbOrdersTable(), {
+              limit: 5000,
+              order: "id.desc",
+            });
+            for (const row of Array.isArray(rows) ? rows : []) {
+              addOption(_sbOrderText(_sbOrderGet(row, ORDER_TYPE_PROP_CANDIDATES)));
+            }
+          } catch (error) {
+            console.warn("/api/order-types Supabase load failed; using defaults:", error?.message || error);
+          }
+
+          return {
+            options: Array.from(seen.values()),
+            source: { database: "supabase", table: _sbOrdersTable(), property: "order_type", type: "text" },
+          };
+        });
+
+        return res.json(payload);
+      }
+
       const key = "cache:api:order-types:v1";
 
       const payload = await cacheGetOrSet(key, 10 * 60, async () => {
@@ -31630,11 +31790,40 @@ const _PUSH_SUBS_TTL_SECONDS = 60 * 60 * 24 * 365; // keep subscriptions 1 year
 const _NOTIF_MEM = new Map(); // key -> data
 const _PUSH_MEM = new Map(); // key -> data
 
+function _notificationScopedUserKey(userId) {
+  const raw = String(userId || "").trim();
+  if (!raw) return "";
+  return looksLikeNotionId(raw) ? normalizeNotionId(raw) : cacheKeySafe(raw);
+}
+
 function _notifKey(userId) {
-  return `notif:user:${normalizeNotionId(userId)}`;
+  return `notif:user:${_notificationScopedUserKey(userId)}`;
 }
 function _subsKey(userId) {
-  return `push:subs:${normalizeNotionId(userId)}`;
+  return `push:subs:${_notificationScopedUserKey(userId)}`;
+}
+
+async function _resolveNotificationUserId(req, { allowNotionLookup = false } = {}) {
+  const sessionSupabaseId = String(req?.session?.userSupabaseId || "").trim();
+  if (sessionSupabaseId) return sessionSupabaseId;
+
+  const sessionNotionId = String(req?.session?.userNotionId || "").trim();
+  if (sessionNotionId) return sessionNotionId;
+
+  if (_sbTeamMembersEnabled()) {
+    const row = await _sbFindSessionTeamMember(req).catch(() => null);
+    const id = String(_sbGet(row || {}, ["id", "ID"]) || "").trim();
+    if (id) {
+      try { req.session.userSupabaseId = id; } catch {}
+      return id;
+    }
+  }
+
+  if (allowNotionLookup) {
+    return await getSessionUserNotionId(req);
+  }
+
+  return "";
 }
 
 function _randId(prefix = "n") {
@@ -31820,7 +32009,8 @@ async function _sendPushToUser(userId, payload) {
 app.get("/api/notifications", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = req.session?.userNotionId;
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
     const limit = Math.max(1, Math.min(80, Number(req.query.limit) || 25));
     const data = await _loadUserNotifications(userId);
     const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
@@ -31835,7 +32025,8 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
 app.post("/api/notifications/read", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = req.session?.userNotionId;
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
     const id = String(req.body?.id || "").trim();
     if (!id) return res.status(400).json({ success: false, error: "Missing id" });
     const changed = await _markNotificationRead(userId, id);
@@ -31849,7 +32040,8 @@ app.post("/api/notifications/read", requireAuth, async (req, res) => {
 app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = req.session?.userNotionId;
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
     const changed = await _markAllNotificationsRead(userId);
     res.json({ success: true, changed });
   } catch (e) {
@@ -31864,7 +32056,7 @@ app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
  */
 app.get("/api/notifications/test", requireAuth, async (req, res) => {
   try {
-    const userId = await getSessionUserNotionId(req);
+    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
     if (!userId) return res.status(404).json({ error: "User not found" });
 
     const notif = {
@@ -31903,7 +32095,8 @@ app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
 app.post("/api/push/subscribe", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = req.session?.userNotionId;
+    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
     const sub = req.body?.subscription || req.body;
     const out = await _upsertPushSubscription(userId, sub);
     if (!out.ok) return res.status(400).json({ success: false, error: out.error });
@@ -31917,7 +32110,8 @@ app.post("/api/push/subscribe", requireAuth, async (req, res) => {
 app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const userId = req.session?.userNotionId;
+    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
     const endpoint = String(req.body?.endpoint || "").trim();
     const out = await _removePushSubscription(userId, endpoint);
     if (!out.ok) return res.status(400).json({ success: false, error: out.error });
@@ -31982,8 +32176,74 @@ app.get("/api/cron/notifications", async (req, res) => {
       return out;
     }
 
+    function _cronSafeDateMs(value) {
+      const ms = Date.parse(String(value || ""));
+      return Number.isFinite(ms) ? ms : 0;
+    }
+
+    function _sbCronRowUpdatedAt(row = {}) {
+      return _cronSafeDateMs(
+        _sbGet(row, [
+          "updated_at",
+          "updated time",
+          "Updated time",
+          "last_edited_time",
+          "notion_last_edited_time",
+          "created_at",
+          "created time",
+          "Created time",
+          "notion_created_time",
+        ]),
+      );
+    }
+
+    async function _sbCronRowsEditedSince(table, afterIso, { limit = 5000 } = {}) {
+      if (!supabaseDb?.isConfigured?.() || !table) return [];
+      const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 5000));
+      let rows = [];
+      try {
+        rows = await supabaseDb.selectAll(table, { limit: safeLimit, order: "updated_at.desc" });
+      } catch (firstError) {
+        try {
+          rows = await supabaseDb.selectAll(table, { limit: safeLimit, order: "id.desc" });
+        } catch (fallbackError) {
+          throw firstError || fallbackError;
+        }
+      }
+      const cutoff = _cronSafeDateMs(afterIso);
+      return (Array.isArray(rows) ? rows : []).filter((row) => _sbCronRowUpdatedAt(row) > cutoff);
+    }
+
+    function _cronMatchUsersByName(usersList = [], rawNames = []) {
+      const wanted = new Set(_sbSplitValues(rawNames).map(norm).filter(Boolean));
+      if (!wanted.size) return [];
+      return (Array.isArray(usersList) ? usersList : [])
+        .filter((user) => wanted.has(norm(user?.name)))
+        .map((user) => String(user?.id || "").trim())
+        .filter(Boolean);
+    }
+
     // Load team members → allowed pages map
     async function loadUsersAllowedPages() {
+      if (_sbTeamMembersEnabled()) {
+        try {
+          return await cacheGetOrSet("cache:notif:teamMembers:supabase:v1", 5 * 60, async () => {
+            const rows = await _sbSelectTeamMembersRows();
+            return (Array.isArray(rows) ? rows : [])
+              .map((row) => {
+                const id = String(_sbGet(row, ["id", "ID"]) || "").trim();
+                const name = _sbString(_sbValueForLabel(row, "Name"));
+                const allowedPages = _sbExtractAllowedPages(row);
+                const dept = _sbString(_sbValueForLabel(row, "Department"));
+                return { id, name, allowedPages, department: dept, source: "supabase" };
+              })
+              .filter((user) => user.id);
+          });
+        } catch (error) {
+          console.warn("[cron] Supabase team members load failed; falling back to Notion:", error?.message || error);
+        }
+      }
+
       if (!teamMembersDatabaseId) return [];
       return await cacheGetOrSet("cache:notif:teamMembers:v1", 5 * 60, async () => {
         const all = [];
@@ -32006,7 +32266,7 @@ app.get("/api/cron/notifications", async (req, res) => {
           const name = props?.Name?.title?.[0]?.plain_text || "";
           const allowedPages = extractAllowedPages(props);
           const dept = props?.Department?.select?.name || props?.Department?.multi_select?.[0]?.name || "";
-          return { id: page.id, name, allowedPages, department: dept };
+          return { id: page.id, name, allowedPages, department: dept, source: "notion" };
         });
       });
     }
@@ -32024,7 +32284,74 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Tasks: notify assignees ----
     let tasksChanged = [];
-    if (tasksDatabaseId) {
+    let tasksSupabaseFailed = false;
+    if (_sbTasksEnabled()) {
+      try {
+        tasksChanged = await _sbCronRowsEditedSince(_sbTasksTable(), lastIso, { limit: 5000 });
+
+        for (const row of tasksChanged) {
+          const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+          const title =
+            _sbTaskText(row, ["title", "Title", "name", "Name", "subject", "Subject", "task", "Task"]) ||
+            "Task";
+          const assigneeIds = _sbSplitValues(
+            _sbGet(row, [
+              "assignee_id",
+              "assignee_ids",
+              "assignee_to_id",
+              "assignee_to_ids",
+              "assigned_to_id",
+              "assigned_to_ids",
+              "Assignee ID",
+              "Assignee IDs",
+              "Assigned To ID",
+              "Assigned To IDs",
+            ]),
+          );
+          const assigneeNames = _sbSplitValues(
+            _sbGet(row, [
+              "assignee",
+              "assignees",
+              "assignee_name",
+              "assignee_names",
+              "assignee_to",
+              "assigned_to",
+              "Assignee",
+              "Assignees",
+              "Assigned To",
+              "Assignee Names",
+            ]),
+          );
+          const targetIds = toUniqueStringArray([
+            ...assigneeIds,
+            ..._cronMatchUsersByName(users, assigneeNames),
+          ]);
+
+          if (!targetIds.length) continue;
+
+          const ts = _sbCronRowUpdatedAt(row) || Date.now();
+          for (const uid of targetIds) {
+            const id = `task:sb:${rowId || cacheKeySafe(title)}:${ts}`;
+            await _addNotification(uid, {
+              id,
+              type: "task",
+              title: "Task updated",
+              body: title,
+              url: "/tasks",
+              ts,
+              read: false,
+            });
+            bump(uid, "tasks");
+          }
+        }
+      } catch (e) {
+        console.warn("[cron] Supabase tasks check failed; falling back to Notion:", e?.message || e);
+        tasksSupabaseFailed = true;
+        tasksChanged = [];
+      }
+    }
+
+    if (!tasksChanged.length && (!_sbTasksEnabled() || tasksSupabaseFailed) && tasksDatabaseId) {
       try {
         const schema = await getTasksSchemaCached();
         const assigneeProp = schema.assigneeProp;
@@ -32062,7 +32389,70 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Expenses: notify owner ----
     let expensesChanged = [];
-    if (expensesDatabaseId) {
+    let expensesSupabaseFailed = false;
+    if (_sbExpensesEnabled()) {
+      try {
+        expensesChanged = await _sbCronRowsEditedSince(_sbExpensesTable(), lastIso, { limit: 5000 });
+        for (const row of expensesChanged) {
+          const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+          const reason =
+            _sbString(_sbGet(row, ["reason", "Reason", "description", "Description", "title", "Title"])) ||
+            "Expense updated";
+          const userIds = _sbSplitValues(
+            _sbGet(row, [
+              "team_member_id",
+              "team_member_ids",
+              "member_id",
+              "member_ids",
+              "user_id",
+              "user_ids",
+              "Team Member ID",
+              "Team Member IDs",
+              "User ID",
+              "User IDs",
+            ]),
+          );
+          const userNames = _sbSplitValues(
+            _sbGet(row, [
+              "team_member",
+              "team_member_name",
+              "team_member_names",
+              "member",
+              "member_name",
+              "payment_by",
+              "Payment By",
+              "Team Member",
+              "Team Member Name",
+            ]),
+          );
+          const targetIds = toUniqueStringArray([
+            ...userIds,
+            ..._cronMatchUsersByName(users, userNames),
+          ]);
+
+          const ts = _sbCronRowUpdatedAt(row) || Date.now();
+          for (const uid of targetIds) {
+            const id = `exp:sb:${rowId || cacheKeySafe(reason)}:${ts}`;
+            await _addNotification(uid, {
+              id,
+              type: "expense",
+              title: "Expense updated",
+              body: reason,
+              url: "/expenses",
+              ts,
+              read: false,
+            });
+            bump(uid, "expenses");
+          }
+        }
+      } catch (e) {
+        console.warn("[cron] Supabase expenses check failed; falling back to Notion:", e?.message || e);
+        expensesSupabaseFailed = true;
+        expensesChanged = [];
+      }
+    }
+
+    if (!expensesChanged.length && (!_sbExpensesEnabled() || expensesSupabaseFailed) && expensesDatabaseId) {
       try {
         expensesChanged = await queryEditedSince(expensesDatabaseId, lastIso, 300);
         for (const page of expensesChanged) {
@@ -32094,7 +32484,18 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Orders DB: notify users who can see orders pages ----
     let ordersChangedCount = 0;
-    if (ordersDatabaseId) {
+    let ordersSupabaseFailed = false;
+    if (_sbOrdersEnabled()) {
+      try {
+        const changed = await _sbCronRowsEditedSince(_sbOrdersTable(), lastIso, { limit: 5000 });
+        ordersChangedCount = changed.length;
+      } catch (e) {
+        console.warn("[cron] Supabase orders check failed; falling back to Notion:", e?.message || e);
+        ordersSupabaseFailed = true;
+      }
+    }
+
+    if (!ordersChangedCount && (!_sbOrdersEnabled() || ordersSupabaseFailed) && ordersDatabaseId) {
       try {
         const changed = await queryEditedSince(ordersDatabaseId, lastIso, 300);
         ordersChangedCount = changed.length;
@@ -32115,7 +32516,7 @@ app.get("/api/cron/notifications", async (req, res) => {
         const canSee = allowed.some((p) => orderPages.has(p));
         if (!canSee) continue;
 
-        const id = `orders:${nowIso}:${normalizeNotionId(u.id)}`;
+        const id = `orders:${nowIso}:${_notificationScopedUserKey(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "orders",
@@ -32131,7 +32532,18 @@ app.get("/api/cron/notifications", async (req, res) => {
 
     // ---- Stocktaking DB: notify users who can see Stocktaking ----
     let stockChangedCount = 0;
-    if (stocktakingDatabaseId) {
+    let stockSupabaseFailed = false;
+    if (_sbStocktakingEnabled()) {
+      try {
+        const changed = await _sbCronRowsEditedSince(_sbStocktakingTable(), lastIso, { limit: 5000 });
+        stockChangedCount = changed.length;
+      } catch (e) {
+        console.warn("[cron] Supabase stocktaking check failed; falling back to Notion:", e?.message || e);
+        stockSupabaseFailed = true;
+      }
+    }
+
+    if (!stockChangedCount && (!_sbStocktakingEnabled() || stockSupabaseFailed) && stocktakingDatabaseId) {
       try {
         const changed = await queryEditedSince(stocktakingDatabaseId, lastIso, 200);
         stockChangedCount = changed.length;
@@ -32145,7 +32557,7 @@ app.get("/api/cron/notifications", async (req, res) => {
         const allowed = Array.isArray(u.allowedPages) ? u.allowedPages : [];
         if (!allowed.includes("Stocktaking")) continue;
 
-        const id = `stock:${nowIso}:${normalizeNotionId(u.id)}`;
+        const id = `stock:${nowIso}:${_notificationScopedUserKey(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "stock",
