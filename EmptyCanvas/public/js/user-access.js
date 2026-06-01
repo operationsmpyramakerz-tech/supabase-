@@ -475,6 +475,32 @@
     return `${summary.enabledCount} enabled page${summary.enabledCount === 1 ? '' : 's'}${adminPart}`;
   }
 
+  function currentPageAccessSummary() {
+    try {
+      const cached = sessionStorage.getItem('ops.currentPageAccess') || sessionStorage.getItem('currentPageAccess') || '{}';
+      const parsed = JSON.parse(cached);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function isCurrentUserPageAdmin(pageNames = ['Users Center', 'User Access & Data', 'User Access']) {
+    const summary = currentPageAccessSummary();
+    const names = Array.isArray(pageNames) ? pageNames : [pageNames];
+    const wanted = names.map(pageToken).filter(Boolean);
+    const rows = Array.isArray(summary.rows) ? summary.rows : Array.isArray(summary.pages) ? summary.pages : [];
+    return rows.some((row) => {
+      const enabled = !!(row?.isEnabled ?? row?.is_enabled ?? row?.enabled);
+      const level = String(row?.accessLevel || row?.access_level || 'user').toLowerCase();
+      if (!enabled || level !== 'admin') return false;
+      const candidates = [row?.pageName, row?.page_name, row?.pageKey, row?.page_key, row?.routePath, row?.route_path]
+        .map(pageToken)
+        .filter(Boolean);
+      return wanted.some((name) => candidates.includes(name));
+    });
+  }
+
   function updatePageAccessSummaryText() {
     const summary = els.formBody?.querySelector('[data-page-access-summary]');
     if (summary) summary.textContent = pageAccessSummaryText(state.formMemberSnapshot);
@@ -660,8 +686,8 @@
       <div class="ua-form-field ${config.wide === false ? '' : 'ua-form-field--wide'} ua-form-field--modern-select${extraClass}"${extraAttrs}>
         <span>${label}</span>
         <div class="ua-modern-select" data-modern-select data-field-label="${label}">
-          <input type="hidden" data-field-name="${fieldName}" data-field-type="${escapeHTML(type)}" value="${hiddenValue}">
-          <button type="button" class="ua-modern-select-button ${selected ? 'has-value' : ''}" data-modern-select-button aria-haspopup="listbox" aria-expanded="false">
+          <input type="hidden" data-modern-select-input data-field-name="${fieldName}" data-field-type="${escapeHTML(type)}" value="${hiddenValue}">
+          <button type="button" class="ua-modern-select-button ${selected ? 'has-value' : ''}" data-modern-select-button data-modern-placeholder="${escapeHTML(placeholder)}" aria-haspopup="listbox" aria-expanded="false">
             <span data-modern-select-text>${escapeHTML(text)}</span>
             <i data-feather="chevron-down"></i>
           </button>
@@ -675,7 +701,7 @@
   }
 
   function closeModernSelects(except = null) {
-    els.formBody?.querySelectorAll('[data-modern-select]').forEach((widget) => {
+    document.querySelectorAll('[data-modern-select]').forEach((widget) => {
       if (except && widget === except) return;
       widget.classList.remove('is-open');
       const menu = widget.querySelector('[data-modern-select-menu]');
@@ -685,23 +711,34 @@
     });
   }
 
-  function setModernSelectValue(widget, value) {
+  function setModernSelectValue(widget, value, displayText = '') {
     if (!widget) return;
     const clean = String(value || '').trim();
-    const hidden = widget.querySelector('input[type="hidden"][data-field-name]');
+    const hidden = widget.querySelector('input[type="hidden"][data-modern-select-input], input[type="hidden"][data-field-name]');
+    const nativeId = widget.getAttribute('data-modern-native-for') || '';
+    const nativeSelect = nativeId ? document.getElementById(nativeId) : null;
     const text = widget.querySelector('[data-modern-select-text]');
     const button = widget.querySelector('[data-modern-select-button]');
-    const placeholder = text?.textContent || 'Select';
-    if (hidden) hidden.value = clean;
-    if (text) text.textContent = clean || placeholder;
-    if (button) button.classList.toggle('has-value', !!clean);
+    const placeholder = button?.getAttribute('data-modern-placeholder') || 'Select';
+    let label = String(displayText || '').trim();
     widget.querySelectorAll('[data-modern-select-value]').forEach((option) => {
       const selected = String(option.getAttribute('data-modern-select-value') || '') === clean;
       option.classList.toggle('is-selected', selected);
       option.querySelectorAll('[data-modern-check], [data-feather="check"], svg').forEach((icon) => icon.remove());
-      if (selected) option.insertAdjacentHTML('beforeend', '<i data-modern-check data-feather="check"></i>');
+      if (selected) {
+        label = label || String(option.querySelector('span')?.textContent || clean).trim();
+        option.insertAdjacentHTML('beforeend', '<i data-modern-check data-feather="check"></i>');
+      }
     });
+    if (hidden) hidden.value = clean;
+    if (nativeSelect) {
+      nativeSelect.value = clean;
+      nativeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (text) text.textContent = clean ? (label || clean) : placeholder;
+    if (button) button.classList.toggle('has-value', !!clean);
     closeModernSelects();
+    widget.dispatchEvent(new CustomEvent('ua:modern-select-change', { bubbles: true, detail: { value: clean, label: label || clean } }));
     hydrateIcons(widget);
   }
 
@@ -720,6 +757,87 @@
         <span>${escapeHTML(clean)}</span>
       </button>
     `);
+  }
+
+  function syncModernNativeSelect(select, placeholder = 'Select') {
+    if (!select) return null;
+    if (!select.id) select.id = `uaNativeSelect_${Math.random().toString(36).slice(2)}`;
+    const field = select.closest('.ua-form-field') || select.parentElement;
+    if (!field) return null;
+    select.classList.add('ua-native-select-hidden');
+    select.required = false;
+    select.setAttribute('aria-hidden', 'true');
+
+    let widget = field.querySelector(`[data-modern-native-for="${cssEscapeValue(select.id)}"]`);
+    if (!widget) {
+      widget = document.createElement('div');
+      widget.className = 'ua-modern-select ua-modern-select--native';
+      widget.setAttribute('data-modern-select', '');
+      widget.setAttribute('data-modern-native-for', select.id);
+      select.insertAdjacentElement('afterend', widget);
+    }
+
+    const options = Array.from(select.options || []);
+    const selectedOption = options.find((option) => option.value === select.value) || options[0] || null;
+    const selectedValue = String(select.value || '').trim();
+    const selectedLabel = selectedValue ? String(selectedOption?.textContent || selectedValue).trim() : '';
+    const optionsHtml = options.length
+      ? options.map((option) => {
+          const value = String(option.value || '').trim();
+          const label = String(option.textContent || value || placeholder).trim();
+          const disabled = option.disabled ? ' disabled aria-disabled="true"' : '';
+          const selected = value === selectedValue;
+          return `
+            <button type="button" class="ua-modern-option ${selected ? 'is-selected' : ''}" data-modern-select-value="${escapeHTML(value)}"${disabled}>
+              <span>${escapeHTML(label)}</span>
+              ${selected ? '<i data-modern-check data-feather="check"></i>' : ''}
+            </button>
+          `;
+        }).join('')
+      : '<div class="ua-modern-option-empty">No options available.</div>';
+
+    widget.innerHTML = `
+      <button type="button" class="ua-modern-select-button ${selectedValue ? 'has-value' : ''}" data-modern-select-button data-modern-placeholder="${escapeHTML(placeholder)}" aria-haspopup="listbox" aria-expanded="false" ${select.disabled ? 'disabled' : ''}>
+        <span data-modern-select-text>${escapeHTML(selectedLabel || placeholder)}</span>
+        <i data-feather="chevron-down"></i>
+      </button>
+      <div class="ua-modern-select-menu" data-modern-select-menu role="listbox" hidden>
+        ${optionsHtml}
+      </div>
+    `;
+    hydrateIcons(widget);
+    return widget;
+  }
+
+  function handleModernSelectClick(event) {
+    const selectButton = event.target.closest('[data-modern-select-button]');
+    if (selectButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (selectButton.disabled) return true;
+      const widget = selectButton.closest('[data-modern-select]');
+      const menu = widget?.querySelector('[data-modern-select-menu]');
+      const isOpen = !!widget?.classList.contains('is-open');
+      closeModernSelects(widget);
+      if (widget && menu) {
+        widget.classList.toggle('is-open', !isOpen);
+        menu.hidden = isOpen;
+        selectButton.setAttribute('aria-expanded', String(!isOpen));
+      }
+      return true;
+    }
+
+    const selectOption = event.target.closest('[data-modern-select-value]');
+    if (selectOption) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (selectOption.disabled || selectOption.getAttribute('aria-disabled') === 'true') return true;
+      const widget = selectOption.closest('[data-modern-select]');
+      setModernSelectValue(widget, selectOption.getAttribute('data-modern-select-value') || '', selectOption.querySelector('span')?.textContent || '');
+      return true;
+    }
+
+    return false;
   }
 
   function fileLinksFromValue(value) {
@@ -1206,11 +1324,12 @@
     }
     if (els.moveMemberError) els.moveMemberError.textContent = '';
     els.moveDepartmentSelect.innerHTML = departmentOptionsForMove(member);
+    syncModernNativeSelect(els.moveDepartmentSelect, 'Choose department');
     els.moveMemberModal.hidden = false;
     els.moveMemberModal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('ua-modal-open');
     hydrateIcons(els.moveMemberModal);
-    setTimeout(() => els.moveDepartmentSelect?.focus(), 50);
+    setTimeout(() => els.moveMemberModal?.querySelector('[data-modern-native-for="uaMoveDepartmentSelect"] [data-modern-select-button]')?.focus(), 50);
   }
 
   function closeMoveMemberModal() {
@@ -1228,7 +1347,10 @@
       els.moveMemberSaveBtn.classList.toggle('is-loading', !!saving);
     }
     if (els.moveMemberCancelBtn) els.moveMemberCancelBtn.disabled = !!saving;
-    if (els.moveDepartmentSelect) els.moveDepartmentSelect.disabled = !!saving;
+    if (els.moveDepartmentSelect) {
+      els.moveDepartmentSelect.disabled = !!saving;
+      syncModernNativeSelect(els.moveDepartmentSelect, 'Choose department');
+    }
   }
 
   async function submitMoveMemberForm(event) {
@@ -1485,6 +1607,7 @@
       els.signupApproveDepartment.innerHTML = '<option value="">Choose department</option>' + departments
         .map((department) => `<option value="${escapeHTML(departmentName(department))}">${escapeHTML(departmentName(department))}</option>`)
         .join('');
+      syncModernNativeSelect(els.signupApproveDepartment, 'Choose department');
     }
     if (els.signupApprovePositionOptions) {
       els.signupApprovePositionOptions.innerHTML = positionOptions().map((position) => `<option value="${escapeHTML(position)}"></option>`).join('');
@@ -1495,7 +1618,7 @@
     els.signupApproveModal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('ua-modal-open');
     hydrateIcons(els.signupApproveModal);
-    setTimeout(() => els.signupApproveDepartment?.focus(), 50);
+    setTimeout(() => els.signupApproveModal?.querySelector('[data-modern-native-for="uaSignupApproveDepartment"] [data-modern-select-button]')?.focus(), 50);
   }
 
   function closeSignupApproveModal() {
@@ -1513,7 +1636,10 @@
       els.signupApproveSave.classList.toggle('is-loading', !!saving);
     }
     if (els.signupApproveCancel) els.signupApproveCancel.disabled = !!saving;
-    if (els.signupApproveDepartment) els.signupApproveDepartment.disabled = !!saving;
+    if (els.signupApproveDepartment) {
+      els.signupApproveDepartment.disabled = !!saving;
+      syncModernNativeSelect(els.signupApproveDepartment, 'Choose department');
+    }
     if (els.signupApprovePosition) els.signupApprovePosition.disabled = !!saving;
   }
 
@@ -1689,6 +1815,57 @@
     }
   }
 
+  async function executeAdminProtectedAction(action = 'edit', targetId = '') {
+    const cleanAction = String(action || 'edit');
+    const cleanTargetId = String(targetId || '');
+    const member = state.membersById.get(cleanTargetId);
+    if (cleanAction === 'create') {
+      openFormModal('create');
+    } else if (cleanAction === 'create-department') {
+      openDepartmentModal('create');
+    } else if (cleanAction === 'edit-department') {
+      const department = departmentById(cleanTargetId);
+      if (department && canEditDepartment(department)) openDepartmentModal('edit', department);
+    } else if (cleanAction === 'edit' && member) {
+      openFormModal('edit', member);
+    } else if (cleanAction === 'move' && member) {
+      openMoveMemberModal(member);
+    } else if (cleanAction === 'delete-member') {
+      await deleteMember(cleanTargetId);
+    } else if (cleanAction === 'delete-department') {
+      await deleteDepartment(cleanTargetId);
+    } else if (cleanAction === 'signup-requests') {
+      openSignupRequestsModal();
+    }
+  }
+
+  async function runAdminProtectedAction(memberId = '', action = 'edit') {
+    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests']);
+    const cleanAction = allowedActions.has(action) ? action : 'edit';
+    const cleanTargetId = String(memberId || '');
+
+    if (isCurrentUserPageAdmin()) {
+      await executeAdminProtectedAction(cleanAction, cleanTargetId);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/user-access/admin/verify', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok && data?.bypassed) {
+        await executeAdminProtectedAction(cleanAction, cleanTargetId);
+        return;
+      }
+    } catch {}
+
+    openPasswordModal(cleanTargetId, cleanAction);
+  }
+
   function openPasswordModal(memberId, action = 'edit') {
     if (!els.passwordModal) return;
     const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests']);
@@ -1750,26 +1927,8 @@
 
       const action = state.pendingPasswordAction;
       const targetId = state.pendingEditMemberId;
-      const member = state.membersById.get(targetId);
       closePasswordModal();
-      if (action === 'create') {
-        openFormModal('create');
-      } else if (action === 'create-department') {
-        openDepartmentModal('create');
-      } else if (action === 'edit-department') {
-        const department = departmentById(targetId);
-        if (department && canEditDepartment(department)) openDepartmentModal('edit', department);
-      } else if (action === 'edit' && member) {
-        openFormModal('edit', member);
-      } else if (action === 'move' && member) {
-        openMoveMemberModal(member);
-      } else if (action === 'delete-member') {
-        await deleteMember(targetId);
-      } else if (action === 'delete-department') {
-        await deleteDepartment(targetId);
-      } else if (action === 'signup-requests') {
-        openSignupRequestsModal();
-      }
+      await executeAdminProtectedAction(action, targetId);
     } catch (error) {
       if (els.passwordError) els.passwordError.textContent = error?.message || 'Invalid Admin password.';
       toast('error', 'Access denied', error?.message || 'Invalid Admin password.');
@@ -2095,8 +2254,6 @@
     }
     els.pageAccessList.innerHTML = rows.map((row) => {
       const enabled = !!row.isEnabled;
-      const userSelected = row.accessLevel === 'admin' ? '' : 'selected';
-      const adminSelected = row.accessLevel === 'admin' ? 'selected' : '';
       return `
         <div class="ua-page-access-row ${enabled ? '' : 'is-disabled'}" data-page-id="${escapeHTML(row.pageId)}" data-page-key="${escapeHTML(row.pageKey)}">
           <div class="ua-page-access-name">
@@ -2104,10 +2261,23 @@
             <small>${escapeHTML(row.moduleName)}${row.routePath ? ` • ${escapeHTML(row.routePath)}` : ''}</small>
           </div>
           <div>
-            <select data-pa-level aria-label="Access type for ${escapeHTML(row.pageName)}">
-              <option value="user" ${userSelected}>User</option>
-              <option value="admin" ${adminSelected}>Admin</option>
-            </select>
+            <div class="ua-modern-select ua-modern-select--compact ua-page-access-level" data-modern-select>
+              <input type="hidden" data-modern-select-input data-pa-level value="${escapeHTML(row.accessLevel === 'admin' ? 'admin' : 'user')}">
+              <button type="button" class="ua-modern-select-button has-value" data-modern-select-button data-modern-placeholder="Select access" aria-haspopup="listbox" aria-expanded="false" aria-label="Access type for ${escapeHTML(row.pageName)}">
+                <span data-modern-select-text>${row.accessLevel === 'admin' ? 'Admin' : 'User'}</span>
+                <i data-feather="chevron-down"></i>
+              </button>
+              <div class="ua-modern-select-menu" data-modern-select-menu role="listbox" hidden>
+                <button type="button" class="ua-modern-option ${row.accessLevel === 'admin' ? '' : 'is-selected'}" data-modern-select-value="user">
+                  <span>User</span>
+                  ${row.accessLevel === 'admin' ? '' : '<i data-modern-check data-feather="check"></i>'}
+                </button>
+                <button type="button" class="ua-modern-option ${row.accessLevel === 'admin' ? 'is-selected' : ''}" data-modern-select-value="admin">
+                  <span>Admin</span>
+                  ${row.accessLevel === 'admin' ? '<i data-modern-check data-feather="check"></i>' : ''}
+                </button>
+              </div>
+            </div>
           </div>
           <div class="ua-page-access-enable">
             <label class="ua-switch" title="Enable ${escapeHTML(row.pageName)}">
@@ -2118,6 +2288,7 @@
         </div>
       `;
     }).join('');
+    hydrateIcons(els.pageAccessList);
   }
 
   async function loadPageAccessRowsForCurrentForm() {
@@ -2571,25 +2742,7 @@
   }
 
   function handleFormBodyClick(event) {
-    const selectButton = event.target.closest('[data-modern-select-button]');
-    if (selectButton) {
-      const widget = selectButton.closest('[data-modern-select]');
-      const menu = widget?.querySelector('[data-modern-select-menu]');
-      const isOpen = !!widget?.classList.contains('is-open');
-      closeModernSelects(widget);
-      if (widget && menu) {
-        widget.classList.toggle('is-open', !isOpen);
-        menu.hidden = isOpen;
-        selectButton.setAttribute('aria-expanded', String(!isOpen));
-      }
-      return;
-    }
-
-    const selectOption = event.target.closest('[data-modern-select-value]');
-    if (selectOption) {
-      setModernSelectValue(selectOption.closest('[data-modern-select]'), selectOption.getAttribute('data-modern-select-value') || '');
-      return;
-    }
+    if (handleModernSelectClick(event)) return;
 
     const pageAccessOpen = event.target.closest('[data-page-access-open]');
     if (pageAccessOpen) return openPageAccessModal();
@@ -2643,7 +2796,7 @@
         event.stopPropagation();
         if (editBtn.disabled) return;
         const department = departmentById(editBtn.getAttribute('data-dept-id') || '');
-        if (department && canEditDepartment(department)) openPasswordModal(department.id, 'edit-department');
+        if (department && canEditDepartment(department)) runAdminProtectedAction(department.id, 'edit-department');
         return;
       }
       const deleteBtn = event.target.closest('[data-action="delete-department"][data-dept-id]');
@@ -2652,7 +2805,7 @@
         event.stopPropagation();
         if (deleteBtn.disabled) return;
         const department = departmentById(deleteBtn.getAttribute('data-dept-id') || '');
-        if (department && canEditDepartment(department)) openPasswordModal(department.id, 'delete-department');
+        if (department && canEditDepartment(department)) runAdminProtectedAction(department.id, 'delete-department');
         return;
       }
       const card = event.target.closest('.ua-folder[data-dept-id]');
@@ -2677,10 +2830,10 @@
       if (!id) return;
       if (action === 'toggle-member-menu') return toggleMemberMenu(id);
       closeMemberMenus();
-      if (action === 'edit') openPasswordModal(id);
+      if (action === 'edit') runAdminProtectedAction(id, 'edit');
       if (action === 'message') handleMessage(id);
-      if (action === 'move-member') openPasswordModal(id, 'move');
-      if (action === 'delete-member') openPasswordModal(id, 'delete-member');
+      if (action === 'move-member') runAdminProtectedAction(id, 'move');
+      if (action === 'delete-member') runAdminProtectedAction(id, 'delete-member');
     });
 
     els.searchInput?.addEventListener('input', () => {
@@ -2690,9 +2843,9 @@
 
     els.refreshBtn?.addEventListener('click', () => loadMembers({ force: true, keepDepartment: true }));
     els.backBtn?.addEventListener('click', () => backToDepartments());
-    els.addMemberBtn?.addEventListener('click', () => openPasswordModal('', 'create'));
-    els.signupRequestsBtn?.addEventListener('click', () => openPasswordModal('', 'signup-requests'));
-    els.addDepartmentBtn?.addEventListener('click', () => openPasswordModal('', 'create-department'));
+    els.addMemberBtn?.addEventListener('click', () => runAdminProtectedAction('', 'create'));
+    els.signupRequestsBtn?.addEventListener('click', () => runAdminProtectedAction('', 'signup-requests'));
+    els.addDepartmentBtn?.addEventListener('click', () => runAdminProtectedAction('', 'create-department'));
     els.departmentForm?.addEventListener('submit', submitDepartmentForm);
     els.departmentCancelBtn?.addEventListener('click', closeDepartmentModal);
     els.departmentClose?.addEventListener('click', closeDepartmentModal);
@@ -2743,7 +2896,8 @@
     els.formBody?.addEventListener('click', handleFormBodyClick);
     els.formBody?.addEventListener('change', handleFormBodyChange);
     document.addEventListener('click', (event) => {
-      if (!els.formBody || !els.formBody.contains(event.target)) closeModernSelects();
+      if (handleModernSelectClick(event)) return;
+      if (!event.target.closest('[data-modern-select]')) closeModernSelects();
     });
     els.formCancelBtn?.addEventListener('click', closeFormModal);
     els.formClose?.addEventListener('click', closeFormModal);
