@@ -2576,3 +2576,85 @@
     width: 100%;
   }
 }
+
+/* Users Center modern dropdown polish */
+.ua-native-select-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.ua-modern-select--native,
+.ua-page-access-level {
+  width: 100%;
+}
+
+.ua-modern-select--compact .ua-modern-select-button,
+.ua-page-access-level .ua-modern-select-button {
+  min-height: 46px;
+  border-radius: 16px;
+  padding: 0 12px 0 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.ua-page-access-level .ua-modern-select-button span,
+.ua-modern-select--native .ua-modern-select-button span {
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.ua-page-access-level .ua-modern-select-menu,
+.ua-modern-select--native .ua-modern-select-menu {
+  z-index: 80;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 52px rgba(15, 23, 42, 0.20);
+}
+
+.ua-page-access-row:has(.ua-modern-select.is-open) {
+  position: relative;
+  z-index: 6;
+  opacity: 1;
+}
+
+.ua-modal--page-access .ua-page-access-list {
+  padding-bottom: 90px;
+}
+
+.ua-page-access-row select {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .ua-page-access-head {
+    display: none;
+  }
+
+  .ua-page-access-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .ua-page-access-enable {
+    justify-content: space-between;
+  }
+
+  .ua-page-access-enable::before {
+    content: "Enable";
+    color: #7b8494;
+    font-size: 12px;
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .ua-modern-select-menu {
+    max-height: min(260px, 42vh);
+  }
+}
