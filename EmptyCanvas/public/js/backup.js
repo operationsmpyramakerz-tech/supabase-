@@ -254,13 +254,25 @@
     }, 1200);
   }
 
+  async function readResponseError(res, fallback = 'Request failed.'){
+    const statusText = `${res.status || ''}${res.statusText ? ` ${res.statusText}` : ''}`.trim();
+    const contentType = String(res.headers.get('Content-Type') || '').toLowerCase();
+    let message = '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      message = String(data.error || data.message || data.details || '').trim();
+    } else {
+      message = String(await res.text().catch(() => '') || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    return message || (statusText ? `${fallback} (${statusText})` : fallback);
+  }
+
   async function exportBeforeDelete(isAll, item){
     const url = isAll ? '/api/backup/export-all' : `/api/backup/tables/${encodeURIComponent(item.key)}/download`;
     const fallback = isAll ? `database-export-${Date.now()}.zip` : `${item.tableName || 'table'}-${Date.now()}.csv`;
     const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(text || 'Export failed, so delete was stopped.');
+      throw new Error(await readResponseError(res, 'Export failed, so delete was stopped.'));
     }
     const blob = await res.blob();
     if (!blob || blob.size === 0) throw new Error('Export file is empty, so delete was stopped.');
@@ -364,11 +376,15 @@
       const res = await fetch(`/api/backup/tables/${encodeURIComponent(item.key)}/import`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminPassword: password, filename: file.name || '', csvText }),
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'X-Admin-Password': encodeURIComponent(password),
+          'X-CSV-Filename': encodeURIComponent(file.name || ''),
+        },
+        body: csvText,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) throw new Error(data.error || 'Failed to import CSV data.');
+      const data = res.ok ? await res.json().catch(() => ({})) : {};
+      if (!res.ok || data.ok === false) throw new Error(res.ok ? (data.error || 'Failed to import CSV data.') : await readResponseError(res, 'Failed to import CSV data.'));
       closeImportModal();
       showToast(`Imported ${Number(data.importedRows || 0).toLocaleString()} row${Number(data.importedRows || 0) === 1 ? '' : 's'} into ${data.tableName || item.tableName}.`);
       await loadTables();
