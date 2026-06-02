@@ -1018,6 +1018,107 @@ body.sidebar-collapsed .sidebar-toggle svg{ transform:rotate(180deg); }
   .co-createdby{ font-size: 20px; }
 }
 
+
+/* Operations Orders compact cards: keep the status pill next to the estimate total on mobile. */
+body.operations-orders-page #requested-list{
+  gap: 10px;
+}
+
+body.operations-orders-page #requested-list .co-card{
+  border-radius: 22px;
+  padding: 12px 14px;
+  box-shadow: 0 14px 30px rgba(0,0,0,.075);
+}
+
+body.operations-orders-page #requested-list .co-top{
+  gap: 12px;
+}
+
+body.operations-orders-page #requested-list .co-thumb{
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+}
+
+body.operations-orders-page #requested-list .co-title{
+  font-size: 19px;
+}
+
+body.operations-orders-page #requested-list .co-sub{
+  font-size: 12px;
+}
+
+body.operations-orders-page #requested-list .co-createdby{
+  font-size: 21px;
+  margin-top: 7px;
+}
+
+body.operations-orders-page #requested-list .co-qty{
+  font-size: 16px;
+}
+
+body.operations-orders-page #requested-list .co-divider{
+  margin: 9px 0;
+}
+
+body.operations-orders-page #requested-list .co-bottom{
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+body.operations-orders-page #requested-list .co-est{
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.operations-orders-page #requested-list .co-est-label{
+  font-size: 14px;
+}
+
+body.operations-orders-page #requested-list .co-est-value{
+  font-size: 26px;
+  margin-top: 4px;
+}
+
+body.operations-orders-page #requested-list .co-actions{
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+body.operations-orders-page #requested-list .co-status-btn{
+  padding: 10px 15px;
+  font-size: 12.5px;
+  letter-spacing: .1px;
+}
+
+body.operations-orders-page #requested-list .co-right-ico{
+  width: 44px;
+  height: 44px;
+}
+
+body.operations-orders-page #requested-list .co-right-ico svg{
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 520px){
+  body.operations-orders-page #requested-list .co-card{ padding: 10px 12px; border-radius: 20px; }
+  body.operations-orders-page #requested-list .co-thumb{ width: 52px; height: 52px; border-radius: 15px; }
+  body.operations-orders-page #requested-list .co-top{ gap: 10px; }
+  body.operations-orders-page #requested-list .co-title{ font-size: 17px; }
+  body.operations-orders-page #requested-list .co-sub{ font-size: 11.5px; margin-top: 3px; }
+  body.operations-orders-page #requested-list .co-createdby{ font-size: 18px; margin-top: 6px; }
+  body.operations-orders-page #requested-list .co-qty{ font-size: 15px; margin-left: 4px; }
+  body.operations-orders-page #requested-list .co-divider{ margin: 8px 0; }
+  body.operations-orders-page #requested-list .co-bottom{ gap: 7px; }
+  body.operations-orders-page #requested-list .co-est-label{ font-size: 13px; }
+  body.operations-orders-page #requested-list .co-est-value{ font-size: 21px; margin-top: 3px; letter-spacing: -0.03em; }
+  body.operations-orders-page #requested-list .co-actions{ gap: 6px; }
+  body.operations-orders-page #requested-list .co-right-ico{ width: 40px; height: 40px; }
+  body.operations-orders-page #requested-list .co-right-ico svg{ width: 17px; height: 17px; }
+  body.operations-orders-page #requested-list .co-status-btn{ padding: 9px 12px; font-size: 11.2px; letter-spacing: 0; }
+}
+
 /* =================================
    Current Orders — Order Details Modal
    ================================= */
@@ -1206,18 +1307,18 @@ body.co-modal-open{ overflow: hidden; }
   min-height: 64px;
   margin-top: 16px;
   padding: 14px 18px;
-  background-color: #FFFFFF;
+  background-color: #020617;
   background-image:
-    radial-gradient(circle at 11% 22%, transparent 0 8px, rgba(34, 197, 94, 0.18) 8.8px 10.8px, transparent 11.6px),
-    radial-gradient(circle at 29% 66%, transparent 0 6px, rgba(148, 163, 184, 0.16) 6.8px 8.4px, transparent 9.2px),
-    radial-gradient(circle at 58% 26%, transparent 0 7px, rgba(203, 213, 225, 0.16) 7.8px 9.6px, transparent 10.2px),
-    radial-gradient(circle at 84% 30%, transparent 0 9px, rgba(34, 197, 94, 0.14) 9.8px 11.8px, transparent 12.8px),
-    radial-gradient(circle at 74% 74%, transparent 0 7px, rgba(148, 163, 184, 0.16) 7.8px 9.6px, transparent 10.4px),
-    radial-gradient(circle at 94% 72%, transparent 0 11px, rgba(203, 213, 225, 0.16) 11.8px 13.8px, transparent 14.6px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
-  border: 1px solid rgba(229, 231, 235, 0.92);
+    radial-gradient(circle at 11% 22%, transparent 0 8px, rgba(190, 242, 100, 0.18) 8.8px 10.8px, transparent 11.6px),
+    radial-gradient(circle at 29% 66%, transparent 0 6px, rgba(148, 163, 184, 0.18) 6.8px 8.4px, transparent 9.2px),
+    radial-gradient(circle at 58% 26%, transparent 0 7px, rgba(203, 213, 225, 0.12) 7.8px 9.6px, transparent 10.2px),
+    radial-gradient(circle at 84% 30%, transparent 0 9px, rgba(190, 242, 100, 0.16) 9.8px 11.8px, transparent 12.8px),
+    radial-gradient(circle at 74% 74%, transparent 0 7px, rgba(148, 163, 184, 0.18) 7.8px 9.6px, transparent 10.4px),
+    radial-gradient(circle at 94% 72%, transparent 0 11px, rgba(203, 213, 225, 0.14) 11.8px 13.8px, transparent 14.6px),
+    linear-gradient(180deg, #050A16 0%, #000000 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 22px;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.18);
   overflow: hidden;
   isolation: isolate;
 }
@@ -1239,7 +1340,7 @@ body.co-modal-open{ overflow: hidden; }
   left: 14px;
   font-size: 30px;
   letter-spacing: 34px;
-  color: rgba(148, 163, 184, 0.15);
+  color: rgba(203, 213, 225, 0.18);
   transform: rotate(-8deg);
 }
 
@@ -1249,7 +1350,7 @@ body.co-modal-open{ overflow: hidden; }
   bottom: 6px;
   font-size: 24px;
   letter-spacing: 20px;
-  color: rgba(34, 197, 94, 0.14);
+  color: rgba(190, 242, 100, 0.18);
   transform: rotate(7deg);
 }
 
@@ -1268,9 +1369,10 @@ body.co-modal-open{ overflow: hidden; }
   max-width: 100%;
   margin: 0;
   padding: 12px 18px;
-  color: #000000 !important;
+  color: #FFFFFF !important;
   background: transparent;
   border-radius: 0;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
   font-size: 16px;
   font-weight: 900;
   line-height: 1.35;
@@ -2235,12 +2337,13 @@ body.co-modal-open{ overflow: hidden; }
     margin-top: 14px;
     border-radius: 18px;
     padding: 12px 14px;
+    background-color: #020617;
     background-image:
-      radial-gradient(circle at 12% 24%, transparent 0 7px, rgba(34, 197, 94, 0.16) 7.8px 9.6px, transparent 10.4px),
-      radial-gradient(circle at 34% 68%, transparent 0 5px, rgba(148, 163, 184, 0.14) 5.8px 7.2px, transparent 8px),
-      radial-gradient(circle at 64% 24%, transparent 0 6px, rgba(203, 213, 225, 0.16) 6.8px 8.4px, transparent 9px),
-      radial-gradient(circle at 88% 70%, transparent 0 8px, rgba(34, 197, 94, 0.12) 8.8px 10.8px, transparent 11.6px),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+      radial-gradient(circle at 12% 24%, transparent 0 7px, rgba(190, 242, 100, 0.17) 7.8px 9.6px, transparent 10.4px),
+      radial-gradient(circle at 34% 68%, transparent 0 5px, rgba(148, 163, 184, 0.16) 5.8px 7.2px, transparent 8px),
+      radial-gradient(circle at 64% 24%, transparent 0 6px, rgba(203, 213, 225, 0.12) 6.8px 8.4px, transparent 9px),
+      radial-gradient(circle at 88% 70%, transparent 0 8px, rgba(190, 242, 100, 0.13) 8.8px 10.8px, transparent 11.6px),
+      linear-gradient(180deg, #050A16 0%, #000000 100%);
   }
 
   body.order-modal-fit-screen .co-meta-row--reason::before{
@@ -2253,7 +2356,7 @@ body.co-modal-open{ overflow: hidden; }
     transform: rotate(-7deg);
     font-size: 22px;
     letter-spacing: 18px;
-    color: rgba(148, 163, 184, 0.13);
+    color: rgba(203, 213, 225, 0.16);
   }
 
   body.order-modal-fit-screen .co-meta-row--reason::after{
@@ -2262,7 +2365,7 @@ body.co-modal-open{ overflow: hidden; }
     bottom: 6px;
     font-size: 18px;
     letter-spacing: 14px;
-    color: rgba(34, 197, 94, 0.12);
+    color: rgba(190, 242, 100, 0.14);
     transform: rotate(6deg);
   }
 
