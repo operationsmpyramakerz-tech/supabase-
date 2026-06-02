@@ -2623,9 +2623,9 @@ function initNotificationsWidget() {
     });
   });
 
-  // Initial badge load + polling
+  // Initial badge load + live polling
   refreshNotifications(false);
-  setInterval(() => refreshNotifications(false), 60 * 1000);
+  setInterval(() => refreshNotifications(false), 1000);
 }
 
 
@@ -3809,9 +3809,14 @@ async function refreshNotifications(renderList) {
   const listEl = document.getElementById("notifList");
 
   try {
-    const resp = await fetch("/api/notifications?limit=60", {
+    const resp = await fetch(`/api/notifications/refresh?limit=60&_=${Date.now()}`, {
       credentials: "include",
-      headers: { "Accept": "application/json" },
+      cache: "no-store",
+      headers: {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+      },
     });
 
     const data = await resp.json().catch(() => ({}));
