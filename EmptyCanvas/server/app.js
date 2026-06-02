@@ -8495,6 +8495,150 @@ async function _backupDeleteAllRows(tableName) {
   });
 }
 
+function _backupIsTeamMembersTable(tableName = '') {
+  return _backupCleanTableName(tableName).toLowerCase() === _backupCleanTableName(_sbTeamMembersTable()).toLowerCase();
+}
+
+function _backupFindColumnByAliases(columns = [], aliases = []) {
+  const list = Array.isArray(columns) ? columns : [];
+  for (const alias of aliases || []) {
+    const hit = list.find((column) => _sbCanon(column?.name) === _sbCanon(alias));
+    if (hit?.name) return hit;
+  }
+  return null;
+}
+
+function _backupColumnAcceptsJson(column = {}) {
+  const token = `${String(column?.type || '')} ${String(column?.format || '')} ${String(column?.raw?.format || '')} ${String(column?.raw?.['x-pg-type'] || '')} ${String(column?.raw?.['x-postgrest-type'] || '')}`.toLowerCase();
+  return /json|jsonb/.test(token);
+}
+
+function _backupSetPayloadValue(payload, column, value, { jsonValue = null } = {}) {
+  if (!column?.name) return;
+  payload[column.name] = jsonValue !== null && _backupColumnAcceptsJson(column) ? jsonValue : value;
+}
+
+async function _backupBuildDefaultAdminMemberPayload() {
+  let columns = [];
+  try {
+    const schema = await _backupGetTableColumns(_sbTeamMembersTable());
+    columns = Array.isArray(schema?.columns) ? schema.columns : [];
+  } catch (error) {
+    console.warn('[backup] could not inspect team_members schema before recreating Admin:', error?.message || error);
+  }
+
+  const payload = {};
+  const nameCol = _backupFindColumnByAliases(columns, ['Name', 'name', 'username', 'full_name']);
+  const passwordCol = _backupFindColumnByAliases(columns, ['Password', 'password', 'passcode', 'pin']);
+  const positionCol = _backupFindColumnByAliases(columns, ['Position', 'position', 'role']);
+  const allowedCol = _backupFindColumnByAliases(columns, ['Allowed Pages', 'allowed_pages', 'Pages', 'pages', 'access_pages']);
+
+  _backupSetPayloadValue(payload, nameCol, 'Admin');
+  _backupSetPayloadValue(payload, passwordCol, '1234');
+  _backupSetPayloadValue(payload, positionCol, 'Admin');
+  _backupSetPayloadValue(payload, allowedCol, JSON.stringify(ALL_PAGES), { jsonValue: ALL_PAGES });
+
+  if (!Object.keys(payload).length) {
+    return { Name: 'Admin', Password: '1234', Position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) };
+  }
+  if (!nameCol) payload.Name = 'Admin';
+  if (!passwordCol) payload.Password = '1234';
+  return payload;
+}
+
+function _backupDefaultAdminFallbackPayloads() {
+  return [
+    { Name: 'Admin', Password: '1234', Position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) },
+    { name: 'Admin', password: '1234', position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) },
+    { username: 'Admin', password: '1234', position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) },
+  ];
+}
+
+async function _backupInsertDefaultAdminMember() {
+  const table = _sbTeamMembersTable();
+  const attempts = [await _backupBuildDefaultAdminMemberPayload(), ..._backupDefaultAdminFallbackPayloads()];
+  const seen = new Set();
+  let lastError = null;
+
+  for (const attempt of attempts) {
+    let payload = { ...(attempt || {}) };
+    const signature = JSON.stringify(Object.keys(payload).sort().map((key) => [key, payload[key]]));
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+
+    for (let retry = 0; retry < 8; retry += 1) {
+      try {
+        const created = await supabaseDb.insert(table, payload);
+        if (created) return created;
+      } catch (error) {
+        lastError = error;
+        const unsupported = _backupUnsupportedInsertColumn(error);
+        if (unsupported && Object.keys(payload).some((key) => key.toLowerCase() === unsupported.toLowerCase())) {
+          payload = _backupCloneRowsWithoutColumn([payload], unsupported)[0] || {};
+          if (Object.keys(payload).length) continue;
+        }
+        break;
+      }
+    }
+  }
+
+  const err = new Error(`Failed to create the default Admin user after deleting Team Members: ${lastError?.message || 'Unknown error'}`);
+  err.status = lastError?.status || 500;
+  err.details = lastError?.details || lastError;
+  throw err;
+}
+
+async function _backupGrantAllPageAccessToDefaultAdmin(adminRow = {}) {
+  const adminId = String(_sbGet(adminRow, ['id', 'ID']) ?? '').trim();
+  if (!adminId) return { granted: false, reason: 'missing-admin-id' };
+
+  try {
+    const pages = await _sbSelectAppPages({ assignableOnly: true });
+    const entries = (pages || []).map((page) => ({
+      pageId: page.pageId || page.id,
+      pageKey: page.pageKey,
+      accessLevel: 'admin',
+      isEnabled: true,
+    }));
+    if (!entries.length) return { granted: false, reason: 'no-app-pages' };
+    await _sbSavePageAccessForMember(adminId, entries, { teamMemberName: 'Admin', grantedBy: 'System' });
+    return { granted: true, count: entries.length };
+  } catch (error) {
+    // Legacy deployments may not have app_pages / team_member_page_access yet.
+    // The fallback Allowed Pages column on the Admin row still keeps the account usable.
+    console.warn('[backup] could not create page-access rows for default Admin:', error?.message || error);
+    return { granted: false, reason: error?.message || 'page-access-unavailable' };
+  }
+}
+
+async function _backupEnsureDefaultAdminUser() {
+  if (!_sbTeamMembersEnabled()) return { ensured: false, reason: 'supabase-disabled' };
+
+  let admin = await _sbFindTeamMemberByName('Admin').catch(() => null);
+  if (!admin) {
+    admin = await _backupInsertDefaultAdminMember();
+  } else {
+    try {
+      const table = _sbTeamMembersTable();
+      const adminId = String(_sbGet(admin, ['id', 'ID']) ?? '').trim();
+      const patch = await _backupBuildDefaultAdminMemberPayload();
+      if (adminId && Object.keys(patch).length) {
+        admin = await supabaseDb.updateById(table, adminId, patch) || admin;
+      }
+    } catch (error) {
+      console.warn('[backup] could not refresh default Admin credentials:', error?.message || error);
+    }
+  }
+
+  const access = await _backupGrantAllPageAccessToDefaultAdmin(admin);
+  return {
+    ensured: true,
+    id: String(_sbGet(admin, ['id', 'ID']) ?? ''),
+    username: 'Admin',
+    access,
+  };
+}
+
 app.get('/api/backup/tables', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -8574,12 +8718,14 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
     const items = _backupCatalog();
     const deletedTables = [];
     const skippedTables = [];
+    let teamMembersWasDeleted = false;
     _historySetEntity(res, { entityType: 'database', entityId: 'all', entityLabel: 'All database tables' });
 
     for (const item of [...items].reverse()) {
       try {
         await _backupDeleteAllRows(item.tableName);
         deletedTables.push(item.tableName);
+        if (_backupIsTeamMembersTable(item.tableName)) teamMembersWasDeleted = true;
       } catch (error) {
         if (_backupIsMissingTableError(error)) {
           skippedTables.push(item.tableName);
@@ -8590,7 +8736,8 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
       }
     }
 
-    return res.json({ ok: true, deletedTables, skippedTables });
+    const defaultAdmin = teamMembersWasDeleted ? await _backupEnsureDefaultAdminUser() : null;
+    return res.json({ ok: true, deletedTables, skippedTables, defaultAdmin });
   } catch (error) {
     console.error('DELETE /api/backup/delete-all error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete all database data.');
@@ -8678,7 +8825,8 @@ app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async 
 
     _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
     await _backupDeleteAllRows(item.tableName);
-    return res.json({ ok: true });
+    const defaultAdmin = _backupIsTeamMembersTable(item.tableName) ? await _backupEnsureDefaultAdminUser() : null;
+    return res.json({ ok: true, defaultAdmin });
   } catch (error) {
     console.error('DELETE /api/backup/tables/:key error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete table data.');
