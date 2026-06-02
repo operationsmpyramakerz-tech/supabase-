@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-login-bg-v1";
+const CACHE_NAME = "ops-cache-notifications-v2";
 
 const PRECACHE_URLS = [
   "/pwa-start",
@@ -104,12 +104,17 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Operations";
   const body = data.body || "New update available";
   const url = data.url || "/home";
+  const tag = data.tag || data.id || `ops-${Date.now()}`;
 
   const options = {
     body,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    data: { url },
+    tag,
+    renotify: true,
+    timestamp: Date.now(),
+    vibrate: [80, 40, 80],
+    data: { url, id: data.id || "", type: data.type || "" },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
