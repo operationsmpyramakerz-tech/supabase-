@@ -2462,8 +2462,8 @@ function initNotificationsWidget() {
     <div class="notif-center-shell">
       <div class="notif-center-card">
         <div class="notif-center-head">
-          <div class="notif-center-title">AI Notification Center</div>
-          <button type="button" class="notif-center-seeall" id="notifSeeAllBtn">See All</button>
+          <div class="notif-center-title">Notification</div>
+          <button type="button" class="notif-center-markall" id="notifMarkAllReadBtn">Mark all as read</button>
         </div>
 
         <div class="notif-center-tabs" role="tablist" aria-label="Notification filters">
@@ -2474,6 +2474,10 @@ function initNotificationsWidget() {
 
         <div class="notif-panel__list" id="notifList">
           <div class="notif-empty">Loading…</div>
+        </div>
+
+        <div class="notif-center-footer">
+          <button type="button" class="notif-center-seeall" id="notifSeeAllBtn">See All</button>
         </div>
       </div>
     </div>
@@ -2581,8 +2585,10 @@ function initNotificationsWidget() {
     try { window.__opsCloseUserMenu && window.__opsCloseUserMenu(); } catch {}
     try { window.__opsCloseFloatingSearch && window.__opsCloseFloatingSearch(); } catch {}
 
-    if (panel.hidden) await openNotifPanel();
-    else closeNotifPanel();
+    if (panel.hidden) {
+      try { ensureOpsPushNotificationsEnabled({ ask: true, quiet: true }); } catch {}
+      await openNotifPanel();
+    } else closeNotifPanel();
   });
 
   document.addEventListener("click", (e) => {
@@ -2604,9 +2610,23 @@ function initNotificationsWidget() {
     e.stopPropagation();
     const st = getNotifState();
     st.showAll = !st.showAll;
-    syncNotifSeeAll();
     const listEl = document.getElementById('notifList');
     if (listEl) renderNotificationsList(listEl, Array.isArray(st.items) ? st.items : []);
+  });
+
+  document.getElementById("notifMarkAllReadBtn")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    if (btn) btn.disabled = true;
+    await markAllRead();
+    try {
+      const st = getNotifState();
+      st.items = (Array.isArray(st.items) ? st.items : []).map((item) => item ? { ...item, read: true } : item);
+      const listEl = document.getElementById('notifList');
+      if (listEl) renderNotificationsList(listEl, st.items);
+    } catch {}
+    try { await refreshNotifications(false); } catch {}
   });
 
   // Tabs
@@ -2625,6 +2645,7 @@ function initNotificationsWidget() {
 
   // Initial badge load + live polling
   refreshNotifications(false);
+  try { ensureOpsPushNotificationsEnabled({ ask: false, quiet: true }); } catch {}
   setInterval(() => refreshNotifications(false), 1000);
 }
 
@@ -3755,11 +3776,29 @@ function syncNotifTabs(){
   });
 }
 
-function syncNotifSeeAll(){
+function syncNotifActions(scopedItems) {
   const st = getNotifState();
-  const btn = document.getElementById('notifSeeAllBtn');
-  if (!btn) return;
-  btn.textContent = st.showAll ? 'Collapse' : 'See All';
+  const seeAllBtn = document.getElementById('notifSeeAllBtn');
+  const markAllBtn = document.getElementById('notifMarkAllReadBtn');
+  const scoped = Array.isArray(scopedItems) ? scopedItems : [];
+
+  if (seeAllBtn) {
+    const canExpand = scoped.length > 3;
+    seeAllBtn.textContent = st.showAll ? 'Collapse' : 'See All';
+    seeAllBtn.disabled = !canExpand;
+    seeAllBtn.classList.toggle('is-disabled', !canExpand);
+  }
+
+  if (markAllBtn) {
+    const all = Array.isArray(st.items) ? st.items : [];
+    const unread = all.reduce((count, item) => count + (item && !item.read ? 1 : 0), 0);
+    markAllBtn.disabled = unread <= 0;
+    markAllBtn.classList.toggle('is-disabled', unread <= 0);
+  }
+}
+
+function syncNotifSeeAll(){
+  syncNotifActions();
 }
 
 function notifScope(ts){
@@ -3857,21 +3896,14 @@ function renderNotificationsList(listEl, items) {
     ? items.filter((n) => notifScope(n?.ts) === scope)
     : [];
 
+  syncNotifActions(scoped);
+
   if (!scoped.length) {
     listEl.innerHTML = window.OpsNoData?.html({ compact: true }) || `<div class="notif-empty">Sorry, No data available</div>`;
     return;
   }
 
   const visible = st.showAll ? scoped : scoped.slice(0, 3);
-
-  // Disable "See All" when there isn't anything more to show
-  const seeAllBtn = document.getElementById('notifSeeAllBtn');
-  if (seeAllBtn) {
-    const canExpand = scoped.length > 3;
-    seeAllBtn.disabled = !canExpand;
-    seeAllBtn.style.opacity = canExpand ? '1' : '0.55';
-    seeAllBtn.style.cursor = canExpand ? 'pointer' : 'default';
-  }
 
   listEl.innerHTML = "";
   for (const n of visible) {
@@ -3880,6 +3912,7 @@ function renderNotificationsList(listEl, items) {
     row.className = 'notif-row' + (n && !n.read ? ' is-unread' : '');
     row.dataset.id = n.id || '';
     row.dataset.url = (n && n.url) ? String(n.url) : '';
+    row.setAttribute('aria-label', `${n?.title || 'Notification'}${n && !n.read ? ', unread' : ''}. Swipe right to mark as read.`);
 
     const title = escapeHtml(n?.title || 'Update');
     const body = escapeHtml(n?.body || '');
@@ -3889,6 +3922,7 @@ function renderNotificationsList(listEl, items) {
     const showDot = !(n && n.read);
 
     row.innerHTML = `
+      <div class="notif-row__swipe-hint" aria-hidden="true"><i data-feather="check"></i><span>Read</span></div>
       <div class="notif-row__ico"><i data-feather="${escapeAttr(icon)}"></i></div>
       <div class="notif-row__content">
         <div class="notif-row__title">
@@ -3900,32 +3934,20 @@ function renderNotificationsList(listEl, items) {
       <div class="notif-row__time">${escapeHtml(time)}</div>
     `;
 
+    bindNotificationSwipe(row);
+
     row.addEventListener('click', async () => {
+      if (row.dataset.suppressClick === '1') {
+        row.dataset.suppressClick = '0';
+        return;
+      }
+
       const id = row.dataset.id;
       const url = row.dataset.url;
 
       if (id) {
-        try {
-          await fetch('/api/notifications/read', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id }),
-          });
-        } catch {}
-
-        // optimistic local update
-        try {
-          const s = getNotifState();
-          s.items = (Array.isArray(s.items) ? s.items : []).map((x) => {
-            if (!x || x.id !== id) return x;
-            return { ...x, read: true };
-          });
-        } catch {}
+        await markNotificationRowRead(row, id);
       }
-
-      // Refresh badge in the background
-      try { refreshNotifications(false); } catch {}
 
       // Close the dropdown
       const panel = document.getElementById('notifPanel');
@@ -3944,6 +3966,115 @@ function renderNotificationsList(listEl, items) {
   }
 }
 
+async function markNotificationRowRead(row, id) {
+  const cleanId = String(id || row?.dataset?.id || '').trim();
+  if (!cleanId) return false;
+
+  try {
+    await fetch('/api/notifications/read', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: cleanId }),
+    });
+  } catch {}
+
+  try {
+    const s = getNotifState();
+    s.items = (Array.isArray(s.items) ? s.items : []).map((x) => {
+      if (!x || String(x.id) !== cleanId) return x;
+      return { ...x, read: true };
+    });
+    syncNotifActions((Array.isArray(s.items) ? s.items : []).filter((n) => notifScope(n?.ts) === (s.activeTab || 'today')));
+  } catch {}
+
+  if (row) {
+    row.classList.remove('is-unread', 'is-swiping');
+    row.classList.add('is-swipe-read');
+    row.style.removeProperty('--notif-swipe-x');
+    row.querySelector('.notif-dot')?.classList.add('is-hidden');
+    row.setAttribute('aria-label', `${row.textContent || 'Notification'}, read`);
+    setTimeout(() => row.classList.remove('is-swipe-read'), 450);
+  }
+
+  try { refreshNotifications(false); } catch {}
+  return true;
+}
+
+function bindNotificationSwipe(row) {
+  if (!row || row.dataset.swipeBound === '1') return;
+  row.dataset.swipeBound = '1';
+
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let active = false;
+  let dragging = false;
+  let pointerId = null;
+
+  const reset = () => {
+    row.classList.remove('is-swiping');
+    row.style.removeProperty('--notif-swipe-x');
+    active = false;
+    dragging = false;
+    pointerId = null;
+  };
+
+  row.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    startX = event.clientX;
+    startY = event.clientY;
+    currentX = startX;
+    active = true;
+    dragging = false;
+    pointerId = event.pointerId;
+    try { row.setPointerCapture(pointerId); } catch {}
+  });
+
+  row.addEventListener('pointermove', (event) => {
+    if (!active) return;
+    currentX = event.clientX;
+    const dx = currentX - startX;
+    const dy = event.clientY - startY;
+    if (dx > 8 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+      dragging = true;
+      row.classList.add('is-swiping');
+      row.style.setProperty('--notif-swipe-x', `${Math.min(dx, 110)}px`);
+      try { event.preventDefault(); } catch {}
+    }
+  }, { passive: false });
+
+  const finish = async (event) => {
+    if (!active) return;
+    const dx = (event?.clientX || currentX) - startX;
+    const dy = (event?.clientY || startY) - startY;
+    const shouldMarkRead = dx >= 72 && Math.abs(dx) > Math.abs(dy) * 1.15;
+
+    try { if (pointerId !== null) row.releasePointerCapture(pointerId); } catch {}
+
+    if (dragging) {
+      row.dataset.suppressClick = '1';
+      setTimeout(() => { if (row.dataset.suppressClick === '1') row.dataset.suppressClick = '0'; }, 350);
+      try { event?.preventDefault?.(); } catch {}
+    }
+
+    if (shouldMarkRead) {
+      row.style.setProperty('--notif-swipe-x', '118px');
+      await markNotificationRowRead(row, row.dataset.id || '');
+      reset();
+      return;
+    }
+
+    reset();
+  };
+
+  row.addEventListener('pointerup', finish);
+  row.addEventListener('pointercancel', reset);
+  row.addEventListener('lostpointercapture', () => {
+    if (active && !dragging) reset();
+  });
+}
+
 async function markAllRead() {
   try {
     await fetch("/api/notifications/read-all", {
@@ -3953,6 +4084,70 @@ async function markAllRead() {
       body: "{}",
     });
   } catch {}
+}
+
+// -------------------
+// Push subscription helpers
+// -------------------
+async function ensureOpsPushNotificationsEnabled(options = {}) {
+  const ask = !!options.ask;
+  const quiet = options.quiet !== false;
+
+  try {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      return { ok: false, reason: "unsupported" };
+    }
+
+    let permission = Notification.permission;
+    if (permission === "default" && ask) {
+      permission = await Notification.requestPermission();
+    }
+
+    if (permission !== "granted") {
+      return { ok: false, reason: permission || "not-granted" };
+    }
+
+    const keyResp = await fetch("/api/push/vapid-public-key", {
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Accept": "application/json", "Cache-Control": "no-cache" },
+    });
+    const keyData = await keyResp.json().catch(() => ({}));
+    const publicKey = String(keyData?.publicKey || "").trim();
+    if (!keyResp.ok || !keyData?.enabled || !publicKey) {
+      return { ok: false, reason: "server-disabled" };
+    }
+
+    let registration = null;
+    try {
+      registration = await navigator.serviceWorker.ready;
+    } catch {
+      registration = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+    }
+
+    try { await registration.update(); } catch {}
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: subscription.toJSON ? subscription.toJSON() : subscription }),
+    });
+
+    window.__opsPushNotificationsEnabled = true;
+    return { ok: true };
+  } catch (error) {
+    if (!quiet) console.warn("[notifications] push enable failed", error);
+    return { ok: false, reason: "error" };
+  }
 }
 
 // -------------------
