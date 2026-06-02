@@ -3922,16 +3922,18 @@ function renderNotificationsList(listEl, items) {
     const showDot = !(n && n.read);
 
     row.innerHTML = `
-      <div class="notif-row__swipe-hint" aria-hidden="true"><i data-feather="check"></i><span>Read</span></div>
-      <div class="notif-row__ico"><i data-feather="${escapeAttr(icon)}"></i></div>
-      <div class="notif-row__content">
-        <div class="notif-row__title">
-          <span class="notif-dot ${showDot ? '' : 'is-hidden'}" aria-hidden="true"></span>
-          ${title}
+      <div class="notif-row__swipe-hint" aria-hidden="true"><i data-feather="check-circle"></i><span>Mark read</span></div>
+      <div class="notif-row__surface">
+        <div class="notif-row__ico"><i data-feather="${escapeAttr(icon)}"></i></div>
+        <div class="notif-row__content">
+          <div class="notif-row__title">
+            <span class="notif-dot ${showDot ? '' : 'is-hidden'}" aria-hidden="true"></span>
+            <span class="notif-row__title-text">${title}</span>
+          </div>
+          ${body ? `<div class="notif-row__body">${body}</div>` : ''}
         </div>
-        ${body ? `<div class="notif-row__body">${body}</div>` : ''}
+        <div class="notif-row__time">${escapeHtml(time)}</div>
       </div>
-      <div class="notif-row__time">${escapeHtml(time)}</div>
     `;
 
     bindNotificationSwipe(row);
