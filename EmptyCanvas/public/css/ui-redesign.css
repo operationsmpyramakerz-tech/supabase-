@@ -3176,3 +3176,93 @@ input.ops-auto-dir-rtl{
   }
 }
 
+
+/* Notification center update: Mark all in header, See All under cards, swipe-to-read */
+.notif-center-markall{
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #0B1020;
+  color: #FFFFFF;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 900;
+  font-size: 12px;
+  box-shadow: 0 12px 26px rgba(15,23,42,0.14);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notif-center-markall:hover{ filter: brightness(1.04); }
+.notif-center-markall:disabled,
+.notif-center-markall.is-disabled{
+  opacity: .52;
+  cursor: default;
+  filter: none;
+}
+.notif-center-footer{
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(15,23,42,0.06);
+}
+.notif-center-footer .notif-center-seeall{
+  min-width: 148px;
+  justify-content: center;
+  cursor: pointer;
+}
+.notif-center-footer .notif-center-seeall:disabled,
+.notif-center-footer .notif-center-seeall.is-disabled{
+  opacity: .52;
+  cursor: default;
+  filter: none;
+}
+.notif-row{
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+  transform: translateX(var(--notif-swipe-x, 0px));
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+  border-radius: 16px;
+}
+.notif-row.is-swiping{
+  transition: none;
+  background: rgba(34, 197, 94, 0.09);
+  box-shadow: inset 4px 0 0 rgba(34, 197, 94, 0.35);
+}
+.notif-row.is-swipe-read{
+  background: rgba(34, 197, 94, 0.12);
+}
+.notif-row__swipe-hint{
+  position: absolute;
+  inset: 0 auto 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #16A34A;
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px);
+  transition: opacity .15s ease, transform .15s ease;
+}
+.notif-row.is-swiping .notif-row__swipe-hint{
+  opacity: 1;
+  transform: translateX(0);
+}
+.notif-row__swipe-hint svg{
+  width: 16px;
+  height: 16px;
+  stroke-width: 3;
+}
+@media (max-width: 480px){
+  .notif-center-head{
+    gap: 10px;
+  }
+  .notif-center-title{
+    font-size: 15px;
+  }
+  .notif-center-markall{
+    padding: 8px 10px;
+    font-size: 11.5px;
+  }
+}
