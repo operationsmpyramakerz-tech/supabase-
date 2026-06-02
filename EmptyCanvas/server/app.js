@@ -7387,9 +7387,7 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
 }
 
 // Authentication middleware
-function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) return next();
-
+function _authRequiredResponse(req, res) {
   // API calls should not silently render the login page. Returning JSON makes
   // debugging and frontend handling clearer, while normal page routes still
   // redirect to /login.
@@ -7405,6 +7403,91 @@ function requireAuth(req, res, next) {
   }
 
   return res.redirect("/login");
+}
+
+function _forceLogoutRemovedTeamMember(req, res) {
+  const isApi = String(req.path || "").startsWith("/api/");
+  const send = () => {
+    try { res.clearCookie("connect.sid"); } catch {}
+    if (isApi) {
+      res.set("Cache-Control", "no-store");
+      return res.status(401).json({
+        ok: false,
+        authenticated: false,
+        code: "USER_REMOVED",
+        message: "Your account data was removed. Please log in again.",
+        redirect: "/login",
+      });
+    }
+    return res.redirect("/login");
+  };
+
+  try {
+    if (req.session && typeof req.session.destroy === "function") {
+      return req.session.destroy(() => send());
+    }
+  } catch {}
+  return send();
+}
+
+async function _refreshSupabaseSessionFromTeamMember(req, row) {
+  if (!row || !req?.session) return;
+  try {
+    const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+    if (rowId) req.session.userSupabaseId = rowId;
+    const { accountPayload, allowedNormalized, allowedUI } = await _sbAccountPayloadWithAccess(row, req.session.username || "");
+    req.session.username = accountPayload.username || req.session.username || "";
+    req.session.allowedPages = allowedNormalized;
+    req.session.accountCache = { ...accountPayload, allowedPages: allowedUI };
+    req.session.accountCacheTs = Date.now();
+  } catch (error) {
+    console.warn("[auth] could not refresh Supabase session permissions:", error?.message || error);
+  }
+}
+
+async function _validateSupabaseSessionTeamMember(req, res, next) {
+  try {
+    const session = req.session || {};
+    const shouldValidate =
+      _sbTeamMembersEnabled() &&
+      session.authenticated &&
+      (session.userSupabaseId || (!session.userNotionId && session.username));
+
+    if (!shouldValidate) return next();
+
+    const sessionId = String(session.userSupabaseId || "").trim();
+    let row = null;
+
+    if (sessionId) {
+      row = await _sbFindTeamMemberById(sessionId).catch((error) => {
+        console.warn("[auth] Supabase team member lookup by id failed:", error?.message || error);
+        return undefined;
+      });
+      if (typeof row === "undefined") return next();
+      if (!row) return _forceLogoutRemovedTeamMember(req, res);
+    } else {
+      row = await _sbFindTeamMemberByName(session.username).catch((error) => {
+        console.warn("[auth] Supabase team member lookup by username failed:", error?.message || error);
+        return undefined;
+      });
+      if (typeof row === "undefined") return next();
+      if (!row) return _forceLogoutRemovedTeamMember(req, res);
+    }
+
+    await _refreshSupabaseSessionFromTeamMember(req, row);
+    return next();
+  } catch (error) {
+    console.warn("[auth] Supabase session validation skipped:", error?.message || error);
+    return next();
+  }
+}
+
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) {
+    return _validateSupabaseSessionTeamMember(req, res, next);
+  }
+
+  return _authRequiredResponse(req, res);
 }
 
 // Page-Access middleware
@@ -8465,12 +8548,73 @@ async function _backupSelectAllRows(tableName) {
   return rows;
 }
 
-async function _backupDeleteAllRows(tableName) {
+function _backupIsTeamMembersTable(tableName = '') {
+  return _backupCleanTableName(tableName).toLowerCase() === _backupCleanTableName(_sbTeamMembersTable()).toLowerCase();
+}
+
+function _backupIsPageAccessTable(tableName = '') {
+  return _backupCleanTableName(tableName).toLowerCase() === 'team_member_page_access';
+}
+
+function _backupIsTeamSvSchoolsTable(tableName = '') {
+  try {
+    return _backupCleanTableName(tableName).toLowerCase() === _backupCleanTableName(_sbTeamMemberSvSchoolsTable()).toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+async function _backupCurrentTeamMemberId(req) {
+  if (!_sbTeamMembersEnabled()) return '';
+  const sessionId = String(req?.session?.userSupabaseId || '').trim();
+  if (sessionId) {
+    const row = await _sbFindTeamMemberById(sessionId).catch(() => null);
+    if (row) return String(_sbGet(row, ['id', 'ID']) ?? sessionId).trim() || sessionId;
+    return '';
+  }
+  const sessionRow = await _sbFindSessionTeamMember(req).catch(() => null);
+  return String(_sbGet(sessionRow || {}, ['id', 'ID']) ?? '').trim();
+}
+
+async function _backupDeleteRowsExceptValue(table, column, keepValue) {
+  const cleanTable = _backupCleanTableName(table);
+  const cleanColumn = _backupCleanTableName(column);
+  const value = String(keepValue || '').trim();
+  if (!cleanTable || !cleanColumn || !value) return false;
+
+  await supabaseDb.request(`/${encodeURIComponent(cleanTable)}?${encodeURIComponent(cleanColumn)}=neq.${_sbRestFilterValue(value)}`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' },
+  });
+  return true;
+}
+
+async function _backupDeleteAllRows(tableName, options = {}) {
   const table = _backupCleanTableName(tableName);
   if (!table) {
     const err = new Error('Invalid table name.');
     err.status = 400;
     throw err;
+  }
+
+  const preserveTeamMemberId = String(options?.preserveTeamMemberId || '').trim();
+  if (preserveTeamMemberId) {
+    try {
+      if (_backupIsTeamMembersTable(table)) {
+        await _backupDeleteRowsExceptValue(table, 'id', preserveTeamMemberId);
+        return;
+      }
+      if (_backupIsPageAccessTable(table) || _backupIsTeamSvSchoolsTable(table)) {
+        await _backupDeleteRowsExceptValue(table, 'team_member_id', preserveTeamMemberId);
+        return;
+      }
+    } catch (preserveError) {
+      const msg = String(preserveError?.message || preserveError?.details?.message || preserveError?.details || '');
+      if (!/column|schema cache|does not exist|PGRST204|42703/i.test(msg)) throw preserveError;
+      // If a preserve column is unavailable in an old deployment, continue with
+      // the normal delete path below. The default Admin fallback still protects
+      // application access after Team Members is cleared.
+    }
   }
 
   try {
@@ -8493,10 +8637,6 @@ async function _backupDeleteAllRows(tableName) {
     method: 'DELETE',
     headers: { Prefer: 'return=minimal' },
   });
-}
-
-function _backupIsTeamMembersTable(tableName = '') {
-  return _backupCleanTableName(tableName).toLowerCase() === _backupCleanTableName(_sbTeamMembersTable()).toLowerCase();
 }
 
 function _backupFindColumnByAliases(columns = [], aliases = []) {
@@ -8718,12 +8858,13 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
     const items = _backupCatalog();
     const deletedTables = [];
     const skippedTables = [];
+    const preservedTeamMemberId = await _backupCurrentTeamMemberId(req);
     let teamMembersWasDeleted = false;
     _historySetEntity(res, { entityType: 'database', entityId: 'all', entityLabel: 'All database tables' });
 
     for (const item of [...items].reverse()) {
       try {
-        await _backupDeleteAllRows(item.tableName);
+        await _backupDeleteAllRows(item.tableName, { preserveTeamMemberId: preservedTeamMemberId });
         deletedTables.push(item.tableName);
         if (_backupIsTeamMembersTable(item.tableName)) teamMembersWasDeleted = true;
       } catch (error) {
@@ -8737,7 +8878,7 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
     }
 
     const defaultAdmin = teamMembersWasDeleted ? await _backupEnsureDefaultAdminUser() : null;
-    return res.json({ ok: true, deletedTables, skippedTables, defaultAdmin });
+    return res.json({ ok: true, deletedTables, skippedTables, preservedTeamMemberId, defaultAdmin });
   } catch (error) {
     console.error('DELETE /api/backup/delete-all error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete all database data.');
@@ -8824,9 +8965,10 @@ app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async 
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
-    await _backupDeleteAllRows(item.tableName);
+    const preservedTeamMemberId = _backupIsTeamMembersTable(item.tableName) ? await _backupCurrentTeamMemberId(req) : '';
+    await _backupDeleteAllRows(item.tableName, { preserveTeamMemberId });
     const defaultAdmin = _backupIsTeamMembersTable(item.tableName) ? await _backupEnsureDefaultAdminUser() : null;
-    return res.json({ ok: true, defaultAdmin });
+    return res.json({ ok: true, preservedTeamMemberId, defaultAdmin });
   } catch (error) {
     console.error('DELETE /api/backup/tables/:key error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete table data.');
