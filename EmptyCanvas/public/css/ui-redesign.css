@@ -3266,3 +3266,107 @@ input.ops-auto-dir-rtl{
     font-size: 11.5px;
   }
 }
+
+/* Notification swipe polish: keep the read action behind the card so labels never overlap. */
+.notif-panel__list{
+  overflow-x: hidden !important;
+}
+.notif-row{
+  position: relative !important;
+  display: block !important;
+  width: 100%;
+  min-height: 66px;
+  padding: 0 !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+  background: #F8FAFC !important;
+  text-align: left;
+  transform: none !important;
+  touch-action: pan-y;
+  isolation: isolate;
+}
+.notif-row + .notif-row{
+  margin-top: 8px;
+  border-top: 0 !important;
+}
+.notif-row__surface{
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 8px;
+  border-radius: 18px;
+  background: #FFFFFF;
+  border: 1px solid rgba(226,232,240,0.86);
+  box-shadow: 0 8px 18px rgba(15,23,42,0.035);
+  transform: translateX(var(--notif-swipe-x, 0px));
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+  box-sizing: border-box;
+}
+.notif-row.is-unread .notif-row__surface{
+  background: #FFFFFF;
+}
+.notif-row.is-swiping{
+  background: rgba(34, 197, 94, 0.10) !important;
+  box-shadow: none !important;
+}
+.notif-row.is-swiping .notif-row__surface{
+  transition: none;
+  box-shadow: 0 12px 24px rgba(15,23,42,0.08);
+}
+.notif-row.is-swipe-read .notif-row__surface{
+  background: rgba(240, 253, 244, 0.96);
+  border-color: rgba(34, 197, 94, 0.26);
+}
+.notif-row__swipe-hint{
+  position: absolute !important;
+  z-index: 1 !important;
+  inset: 0 auto 0 0 !important;
+  width: 104px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px 0 10px;
+  color: #15803D;
+  background: linear-gradient(90deg, rgba(34,197,94,0.18), rgba(34,197,94,0.05));
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.notif-row__swipe-hint svg{
+  width: 17px;
+  height: 17px;
+  stroke-width: 3;
+  flex: 0 0 auto;
+}
+.notif-row__content{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.notif-row__title{
+  min-width: 0;
+  max-width: 100%;
+}
+.notif-row__title-text{
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-row__time{
+  flex: 0 0 auto;
+}
+@media (max-width: 480px){
+  .notif-row{ min-height: 64px; }
+  .notif-row__surface{ padding: 11px 7px; gap: 10px; }
+  .notif-row__swipe-hint{ width: 96px; font-size: 11.5px; }
+}

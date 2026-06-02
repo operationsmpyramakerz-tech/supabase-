@@ -8873,3 +8873,277 @@ body.order-modal-fit-screen .co-item-right:has(.sv-review-item-actions) .co-item
   z-index: 45 !important;
 }
 
+
+/* Unified compact order cards across Current Orders, Operations Orders, Orders Review, and Maintenance Orders. */
+body.order-modal-fit-screen #orders-list,
+body.operations-orders-page #requested-list,
+body[data-orders-view="maintenance"] #requested-list,
+body.page-maintenance-orders #requested-list,
+body.page-orders-maintenance #requested-list,
+body.order-modal-fit-screen #sv-list{
+  gap: 10px;
+}
+
+body.order-modal-fit-screen #orders-list .co-card,
+body.operations-orders-page #requested-list .co-card,
+body[data-orders-view="maintenance"] #requested-list .co-card,
+body.page-maintenance-orders #requested-list .co-card,
+body.page-orders-maintenance #requested-list .co-card,
+body.order-modal-fit-screen #sv-list .co-card{
+  border-radius: 22px;
+  padding: 12px 14px;
+  box-shadow: 0 14px 30px rgba(0,0,0,.075);
+}
+
+body.order-modal-fit-screen #orders-list .co-top,
+body.operations-orders-page #requested-list .co-top,
+body[data-orders-view="maintenance"] #requested-list .co-top,
+body.page-maintenance-orders #requested-list .co-top,
+body.page-orders-maintenance #requested-list .co-top,
+body.order-modal-fit-screen #sv-list .co-top{
+  gap: 12px;
+}
+
+body.order-modal-fit-screen #orders-list .co-thumb,
+body.operations-orders-page #requested-list .co-thumb,
+body[data-orders-view="maintenance"] #requested-list .co-thumb,
+body.page-maintenance-orders #requested-list .co-thumb,
+body.page-orders-maintenance #requested-list .co-thumb,
+body.order-modal-fit-screen #sv-list .co-thumb{
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+}
+
+body.order-modal-fit-screen #orders-list .co-title,
+body.operations-orders-page #requested-list .co-title,
+body[data-orders-view="maintenance"] #requested-list .co-title,
+body.page-maintenance-orders #requested-list .co-title,
+body.page-orders-maintenance #requested-list .co-title,
+body.order-modal-fit-screen #sv-list .co-title{
+  font-size: 19px;
+}
+
+body.order-modal-fit-screen #orders-list .co-sub,
+body.operations-orders-page #requested-list .co-sub,
+body[data-orders-view="maintenance"] #requested-list .co-sub,
+body.page-maintenance-orders #requested-list .co-sub,
+body.page-orders-maintenance #requested-list .co-sub,
+body.order-modal-fit-screen #sv-list .co-sub{
+  font-size: 12px;
+}
+
+body.order-modal-fit-screen #orders-list .co-createdby,
+body.operations-orders-page #requested-list .co-createdby,
+body[data-orders-view="maintenance"] #requested-list .co-createdby,
+body.page-maintenance-orders #requested-list .co-createdby,
+body.page-orders-maintenance #requested-list .co-createdby,
+body.order-modal-fit-screen #sv-list .co-createdby{
+  font-size: 21px;
+  margin-top: 7px;
+}
+
+body.order-modal-fit-screen #orders-list .co-qty,
+body.operations-orders-page #requested-list .co-qty,
+body[data-orders-view="maintenance"] #requested-list .co-qty,
+body.page-maintenance-orders #requested-list .co-qty,
+body.page-orders-maintenance #requested-list .co-qty,
+body.order-modal-fit-screen #sv-list .co-qty{
+  font-size: 16px;
+}
+
+body.order-modal-fit-screen #orders-list .co-divider,
+body.operations-orders-page #requested-list .co-divider,
+body[data-orders-view="maintenance"] #requested-list .co-divider,
+body.page-maintenance-orders #requested-list .co-divider,
+body.page-orders-maintenance #requested-list .co-divider,
+body.order-modal-fit-screen #sv-list .co-divider{
+  margin: 9px 0;
+}
+
+body.order-modal-fit-screen #orders-list .co-bottom,
+body.operations-orders-page #requested-list .co-bottom,
+body[data-orders-view="maintenance"] #requested-list .co-bottom,
+body.page-maintenance-orders #requested-list .co-bottom,
+body.page-orders-maintenance #requested-list .co-bottom,
+body.order-modal-fit-screen #sv-list .co-bottom{
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+body.order-modal-fit-screen #orders-list .co-est,
+body.operations-orders-page #requested-list .co-est,
+body[data-orders-view="maintenance"] #requested-list .co-est,
+body.page-maintenance-orders #requested-list .co-est,
+body.page-orders-maintenance #requested-list .co-est,
+body.order-modal-fit-screen #sv-list .co-est{
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.order-modal-fit-screen #orders-list .co-est-label,
+body.operations-orders-page #requested-list .co-est-label,
+body[data-orders-view="maintenance"] #requested-list .co-est-label,
+body.page-maintenance-orders #requested-list .co-est-label,
+body.page-orders-maintenance #requested-list .co-est-label,
+body.order-modal-fit-screen #sv-list .co-est-label{
+  font-size: 14px;
+}
+
+body.order-modal-fit-screen #orders-list .co-est-value,
+body.operations-orders-page #requested-list .co-est-value,
+body[data-orders-view="maintenance"] #requested-list .co-est-value,
+body.page-maintenance-orders #requested-list .co-est-value,
+body.page-orders-maintenance #requested-list .co-est-value,
+body.order-modal-fit-screen #sv-list .co-est-value{
+  font-size: 26px;
+  margin-top: 4px;
+}
+
+body.order-modal-fit-screen #orders-list .co-actions,
+body.operations-orders-page #requested-list .co-actions,
+body[data-orders-view="maintenance"] #requested-list .co-actions,
+body.page-maintenance-orders #requested-list .co-actions,
+body.page-orders-maintenance #requested-list .co-actions,
+body.order-modal-fit-screen #sv-list .co-actions{
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+body.order-modal-fit-screen #orders-list .co-status-btn,
+body.operations-orders-page #requested-list .co-status-btn,
+body[data-orders-view="maintenance"] #requested-list .co-status-btn,
+body.page-maintenance-orders #requested-list .co-status-btn,
+body.page-orders-maintenance #requested-list .co-status-btn,
+body.order-modal-fit-screen #sv-list .co-status-btn{
+  padding: 10px 15px;
+  font-size: 12.5px;
+  letter-spacing: .1px;
+}
+
+body.order-modal-fit-screen #orders-list .co-right-ico,
+body.operations-orders-page #requested-list .co-right-ico,
+body[data-orders-view="maintenance"] #requested-list .co-right-ico,
+body.page-maintenance-orders #requested-list .co-right-ico,
+body.page-orders-maintenance #requested-list .co-right-ico,
+body.order-modal-fit-screen #sv-list .co-right-ico{
+  width: 44px;
+  height: 44px;
+}
+
+body.order-modal-fit-screen #orders-list .co-right-ico svg,
+body.operations-orders-page #requested-list .co-right-ico svg,
+body[data-orders-view="maintenance"] #requested-list .co-right-ico svg,
+body.page-maintenance-orders #requested-list .co-right-ico svg,
+body.page-orders-maintenance #requested-list .co-right-ico svg,
+body.order-modal-fit-screen #sv-list .co-right-ico svg{
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 520px){
+  body.order-modal-fit-screen #orders-list .co-card,
+  body.operations-orders-page #requested-list .co-card,
+  body[data-orders-view="maintenance"] #requested-list .co-card,
+  body.page-maintenance-orders #requested-list .co-card,
+  body.page-orders-maintenance #requested-list .co-card,
+  body.order-modal-fit-screen #sv-list .co-card{ padding: 10px 12px; border-radius: 20px; }
+
+  body.order-modal-fit-screen #orders-list .co-thumb,
+  body.operations-orders-page #requested-list .co-thumb,
+  body[data-orders-view="maintenance"] #requested-list .co-thumb,
+  body.page-maintenance-orders #requested-list .co-thumb,
+  body.page-orders-maintenance #requested-list .co-thumb,
+  body.order-modal-fit-screen #sv-list .co-thumb{ width: 52px; height: 52px; border-radius: 15px; }
+
+  body.order-modal-fit-screen #orders-list .co-top,
+  body.operations-orders-page #requested-list .co-top,
+  body[data-orders-view="maintenance"] #requested-list .co-top,
+  body.page-maintenance-orders #requested-list .co-top,
+  body.page-orders-maintenance #requested-list .co-top,
+  body.order-modal-fit-screen #sv-list .co-top{ gap: 10px; }
+
+  body.order-modal-fit-screen #orders-list .co-title,
+  body.operations-orders-page #requested-list .co-title,
+  body[data-orders-view="maintenance"] #requested-list .co-title,
+  body.page-maintenance-orders #requested-list .co-title,
+  body.page-orders-maintenance #requested-list .co-title,
+  body.order-modal-fit-screen #sv-list .co-title{ font-size: 17px; }
+
+  body.order-modal-fit-screen #orders-list .co-sub,
+  body.operations-orders-page #requested-list .co-sub,
+  body[data-orders-view="maintenance"] #requested-list .co-sub,
+  body.page-maintenance-orders #requested-list .co-sub,
+  body.page-orders-maintenance #requested-list .co-sub,
+  body.order-modal-fit-screen #sv-list .co-sub{ font-size: 11.5px; margin-top: 3px; }
+
+  body.order-modal-fit-screen #orders-list .co-createdby,
+  body.operations-orders-page #requested-list .co-createdby,
+  body[data-orders-view="maintenance"] #requested-list .co-createdby,
+  body.page-maintenance-orders #requested-list .co-createdby,
+  body.page-orders-maintenance #requested-list .co-createdby,
+  body.order-modal-fit-screen #sv-list .co-createdby{ font-size: 18px; margin-top: 6px; }
+
+  body.order-modal-fit-screen #orders-list .co-qty,
+  body.operations-orders-page #requested-list .co-qty,
+  body[data-orders-view="maintenance"] #requested-list .co-qty,
+  body.page-maintenance-orders #requested-list .co-qty,
+  body.page-orders-maintenance #requested-list .co-qty,
+  body.order-modal-fit-screen #sv-list .co-qty{ font-size: 15px; margin-left: 4px; }
+
+  body.order-modal-fit-screen #orders-list .co-divider,
+  body.operations-orders-page #requested-list .co-divider,
+  body[data-orders-view="maintenance"] #requested-list .co-divider,
+  body.page-maintenance-orders #requested-list .co-divider,
+  body.page-orders-maintenance #requested-list .co-divider,
+  body.order-modal-fit-screen #sv-list .co-divider{ margin: 8px 0; }
+
+  body.order-modal-fit-screen #orders-list .co-bottom,
+  body.operations-orders-page #requested-list .co-bottom,
+  body[data-orders-view="maintenance"] #requested-list .co-bottom,
+  body.page-maintenance-orders #requested-list .co-bottom,
+  body.page-orders-maintenance #requested-list .co-bottom,
+  body.order-modal-fit-screen #sv-list .co-bottom{ gap: 7px; }
+
+  body.order-modal-fit-screen #orders-list .co-est-label,
+  body.operations-orders-page #requested-list .co-est-label,
+  body[data-orders-view="maintenance"] #requested-list .co-est-label,
+  body.page-maintenance-orders #requested-list .co-est-label,
+  body.page-orders-maintenance #requested-list .co-est-label,
+  body.order-modal-fit-screen #sv-list .co-est-label{ font-size: 13px; }
+
+  body.order-modal-fit-screen #orders-list .co-est-value,
+  body.operations-orders-page #requested-list .co-est-value,
+  body[data-orders-view="maintenance"] #requested-list .co-est-value,
+  body.page-maintenance-orders #requested-list .co-est-value,
+  body.page-orders-maintenance #requested-list .co-est-value,
+  body.order-modal-fit-screen #sv-list .co-est-value{ font-size: 21px; margin-top: 3px; letter-spacing: -0.03em; }
+
+  body.order-modal-fit-screen #orders-list .co-actions,
+  body.operations-orders-page #requested-list .co-actions,
+  body[data-orders-view="maintenance"] #requested-list .co-actions,
+  body.page-maintenance-orders #requested-list .co-actions,
+  body.page-orders-maintenance #requested-list .co-actions,
+  body.order-modal-fit-screen #sv-list .co-actions{ gap: 6px; }
+
+  body.order-modal-fit-screen #orders-list .co-right-ico,
+  body.operations-orders-page #requested-list .co-right-ico,
+  body[data-orders-view="maintenance"] #requested-list .co-right-ico,
+  body.page-maintenance-orders #requested-list .co-right-ico,
+  body.page-orders-maintenance #requested-list .co-right-ico,
+  body.order-modal-fit-screen #sv-list .co-right-ico{ width: 40px; height: 40px; }
+
+  body.order-modal-fit-screen #orders-list .co-right-ico svg,
+  body.operations-orders-page #requested-list .co-right-ico svg,
+  body[data-orders-view="maintenance"] #requested-list .co-right-ico svg,
+  body.page-maintenance-orders #requested-list .co-right-ico svg,
+  body.page-orders-maintenance #requested-list .co-right-ico svg,
+  body.order-modal-fit-screen #sv-list .co-right-ico svg{ width: 17px; height: 17px; }
+
+  body.order-modal-fit-screen #orders-list .co-status-btn,
+  body.operations-orders-page #requested-list .co-status-btn,
+  body[data-orders-view="maintenance"] #requested-list .co-status-btn,
+  body.page-maintenance-orders #requested-list .co-status-btn,
+  body.page-orders-maintenance #requested-list .co-status-btn,
+  body.order-modal-fit-screen #sv-list .co-status-btn{ padding: 9px 12px; font-size: 11.2px; letter-spacing: 0; }
+}
