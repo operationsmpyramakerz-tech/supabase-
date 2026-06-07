@@ -1410,6 +1410,21 @@ document.addEventListener('DOMContentLoaded', () => {
     return statusLabelForTab(statusTabForItem(item));
   }
 
+  function hasMixedApprovedRejectedStatus(items) {
+    const tabs = (Array.isArray(items) ? items : []).map(statusTabForItem);
+    return tabs.includes('approved') && tabs.includes('rejected');
+  }
+
+  function mixedApprovalStatusMarkup() {
+    return `
+      <span class="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected">
+        <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span>
+        <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span>
+      </span>
+    `;
+  }
+
+
   function groupDominantStatusTab(group) {
     const products = Array.isArray(group?.products) ? group.products : [];
     if (!products.length) return 'under-supervision';
@@ -1681,7 +1696,9 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(groupStatusLabel)}</span>
+          ${currentStatusTab === 'all' && hasMixedApprovedRejectedStatus(items)
+            ? mixedApprovalStatusMarkup()
+            : `<span class="co-status-btn" style="${statusStyle}">${escapeHTML(groupStatusLabel)}</span>`}
           <span class="co-right-ico" aria-hidden="true"><i data-feather="percent"></i></span>
         </div>
       </div>

@@ -1940,6 +1940,21 @@ document.addEventListener("DOMContentLoaded", () => {
     return "Not Started";
   }
 
+  function hasMixedOperationsApproval(items) {
+    const keys = (Array.isArray(items) ? items : [])
+      .map((it) => operationsApprovalKey(it?.operationsApproval || it?.operations_approval || ""));
+    return keys.includes("approved") && keys.includes("rejected");
+  }
+
+  function mixedApprovalStatusMarkup() {
+    return `
+      <span class="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected">
+        <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span>
+        <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span>
+      </span>
+    `;
+  }
+
   function operationApprovalStatusVars(value) {
     const key = operationsApprovalKey(value);
     if (key === "approved") return notionColorVars("green");
@@ -3561,7 +3576,9 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(cardStatusLabel)}</span>
+          ${!isMaintenancePage && currentTab === "all" && hasMixedOperationsApproval(g.items)
+            ? mixedApprovalStatusMarkup()
+            : `<span class="co-status-btn" style="${statusStyle}">${escapeHTML(cardStatusLabel)}</span>`}
           ${creatorButtonMarkup(creatorId, createdByRaw)}
         </div>
       </div>

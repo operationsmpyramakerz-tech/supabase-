@@ -1484,15 +1484,18 @@
     return approvals.includes("approved") && approvals.includes("rejected");
   }
 
+  function mixedApprovalStatusMarkup() {
+    return `
+      <span class="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected">
+        <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span>
+        <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span>
+      </span>
+    `;
+  }
+
   function cardApprovalStatusMarkup(group, displayStatus, statusVars) {
     if (TAB === "all" && !group?.isArchived && hasMixedApprovedRejected(group?.products)) {
-      return `
-        <span class="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected">
-          <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span>
-          <span class="sv-mixed-approval-pill__sep" aria-hidden="true">/</span>
-          <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span>
-        </span>
-      `;
+      return mixedApprovalStatusMarkup();
     }
     return `<span class="co-status-btn" style="--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};">${escapeHTML(displayStatus)}</span>`;
   }
