@@ -828,6 +828,119 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {}
   }
 
+  function currentPageHasHardRefreshParams() {
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      return params.get('_fresh') === '1' || params.has('_refresh');
+    } catch {
+      return false;
+    }
+  }
+
+  const __opsFreshLoadOverlayState = {
+    active: false,
+    accountReady: false,
+    shellExpected: false,
+    shellReady: true,
+    hideScheduled: false,
+    forceTimer: 0,
+  };
+
+  function maybeHideFreshLoadOverlay() {
+    try {
+      const state = __opsFreshLoadOverlayState;
+      if (!state.active || state.hideScheduled) return;
+      if (!state.accountReady) return;
+      if (state.shellExpected && !state.shellReady) return;
+
+      state.hideScheduled = true;
+      window.setTimeout(() => {
+        const finish = () => {
+          // Re-check at the exact closing moment because shellExpected may be
+          // discovered after accountReady scheduled the first hide attempt.
+          if (!state.active || !state.accountReady || (state.shellExpected && !state.shellReady)) {
+            state.hideScheduled = false;
+            maybeHideFreshLoadOverlay();
+            return;
+          }
+          try { clearTransientRefreshParams(); } catch {}
+          hideHardRefreshOverlay();
+          state.active = false;
+          state.hideScheduled = false;
+          if (state.forceTimer) {
+            try { window.clearTimeout(state.forceTimer); } catch {}
+            state.forceTimer = 0;
+          }
+          try { window.dispatchEvent(new CustomEvent('ops:hard-refresh-ready')); } catch {}
+        };
+
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
+        } else {
+          window.setTimeout(finish, 32);
+        }
+      }, 450);
+    } catch {}
+  }
+
+  function beginFreshLoadOverlayIfNeeded() {
+    try {
+      if (!currentPageHasHardRefreshParams()) return false;
+      const state = __opsFreshLoadOverlayState;
+      state.active = true;
+      state.accountReady = false;
+      state.shellExpected = false;
+      state.shellReady = true;
+      state.hideScheduled = false;
+      showHardRefreshOverlay('Loading fresh data…');
+
+      // Safety fallback: do not trap the user forever if an unexpected page script
+      // fails before it can report that the normal chrome is ready.
+      state.forceTimer = window.setTimeout(() => {
+        try {
+          state.accountReady = true;
+          state.shellReady = true;
+          maybeHideFreshLoadOverlay();
+        } catch {}
+      }, 15000);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function markFreshLoadAccountReady() {
+    try {
+      __opsFreshLoadOverlayState.accountReady = true;
+      maybeHideFreshLoadOverlay();
+    } catch {}
+  }
+
+  function setFreshLoadShellExpected(expected) {
+    try {
+      const state = __opsFreshLoadOverlayState;
+      if (!state.active) return;
+      state.shellExpected = !!expected;
+      state.shellReady = !expected;
+      maybeHideFreshLoadOverlay();
+    } catch {}
+  }
+
+  function markFreshLoadShellReady() {
+    try {
+      const state = __opsFreshLoadOverlayState;
+      if (!state.active) return;
+      state.shellReady = true;
+      maybeHideFreshLoadOverlay();
+    } catch {}
+  }
+
+  try {
+    window.__opsFreshLoadOverlayState = __opsFreshLoadOverlayState;
+    window.__opsFreshLoadOverlaySetShellExpected = setFreshLoadShellExpected;
+    window.__opsFreshLoadOverlayMarkShellReady = markFreshLoadShellReady;
+  } catch {}
+
   function getTopSameOriginLocation() {
     try {
       if (window.top && window.top !== window && window.top.location && window.top.location.origin === window.location.origin) {
@@ -1009,8 +1122,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (pageForcesFreshApiRequests()) {
+    // During the first page load after Hard Refresh, keep the overlay visible
+    // until the stable header/sidebar and persistent shell are ready. This
+    // prevents the user from seeing the temporary legacy Dashboard chrome.
+    beginFreshLoadOverlayIfNeeded();
+
     // Keep the fresh marker alive briefly so all page-specific API calls bypass
-    // client caches during the first reload after Hard Refresh.
+    // client caches during the first reload after Hard Refresh. The URL params
+    // are removed when the overlay closes; the marker stays for delayed APIs.
     window.setTimeout(() => {
       clearTransientRefreshParams();
       clearHardRefreshPending();
@@ -1967,7 +2086,9 @@ if (document.querySelector('.sidebar')) {
         document.body.classList.remove('permissions-loading');
         document.body.classList.add('permissions-ready');
       }
-    } catch {}
+    } catch {} finally {
+      markFreshLoadAccountReady();
+    }
   }
 
   // ====== Sidebar toggle ======
@@ -2189,7 +2310,27 @@ if (document.querySelector('.sidebar')) {
   if (window.feather) feather.replace();
 
   window.setTimeout(() => {
-    try { initOpsPersistentShellHost(); } catch (e) { console.warn('[ops-shell] init failed', e); }
+    try {
+      let shellExpected = false;
+      try {
+        shellExpected =
+          typeof shouldSkipOpsPersistentShellHostOnMobile === 'function' &&
+          typeof shouldSkipOpsPersistentShellHostForCurrentPage === 'function' &&
+          !shouldSkipOpsPersistentShellHostOnMobile() &&
+          !shouldSkipOpsPersistentShellHostForCurrentPage();
+      } catch {}
+
+      try { window.__opsFreshLoadOverlaySetShellExpected?.(shellExpected); } catch {}
+      initOpsPersistentShellHost();
+
+      // If the shell did not initialize, the normal page chrome is the final chrome.
+      if (!window.__opsShellHostInitialized) {
+        try { window.__opsFreshLoadOverlaySetShellExpected?.(false); } catch {}
+      }
+    } catch (e) {
+      try { window.__opsFreshLoadOverlaySetShellExpected?.(false); } catch {}
+      console.warn('[ops-shell] init failed', e);
+    }
   }, 0);
 });
 
@@ -4968,6 +5109,8 @@ function initOpsPersistentShellHost() {
     if (hostSearch && hostSearch.value) {
       applyOpsShellSearchToFrame(hostSearch.value);
     }
+
+    try { window.__opsFreshLoadOverlayMarkShellReady?.(); } catch {}
   };
 
   frame.addEventListener('load', () => {
