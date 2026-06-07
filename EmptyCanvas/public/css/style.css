@@ -1381,6 +1381,50 @@ body.co-modal-open{ overflow: hidden; }
   word-break: break-word;
 }
 
+.co-meta-row--reject-reason{
+  margin-top: 0;
+  background-color: #130304;
+  background-image:
+    radial-gradient(circle at 11% 22%, transparent 0 8px, rgba(248, 113, 113, 0.22) 8.8px 10.8px, transparent 11.6px),
+    radial-gradient(circle at 29% 66%, transparent 0 6px, rgba(252, 165, 165, 0.18) 6.8px 8.4px, transparent 9.2px),
+    radial-gradient(circle at 58% 26%, transparent 0 7px, rgba(248, 113, 113, 0.16) 7.8px 9.6px, transparent 10.2px),
+    radial-gradient(circle at 84% 30%, transparent 0 9px, rgba(239, 68, 68, 0.2) 9.8px 11.8px, transparent 12.8px),
+    radial-gradient(circle at 74% 74%, transparent 0 7px, rgba(252, 165, 165, 0.18) 7.8px 9.6px, transparent 10.4px),
+    radial-gradient(circle at 94% 72%, transparent 0 11px, rgba(248, 113, 113, 0.16) 11.8px 13.8px, transparent 14.6px),
+    linear-gradient(180deg, #1F0508 0%, #050000 100%);
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+.co-meta-row--reject-reason::before{
+  content: "!   ×   !";
+  color: rgba(248, 113, 113, 0.22);
+}
+
+.co-meta-row--reject-reason::after{
+  content: "×   !   ×";
+  color: rgba(239, 68, 68, 0.22);
+}
+
+.reject-reason-dialog{
+  max-width: min(440px, calc(100vw - 28px));
+}
+
+.reject-reason-icon{
+  color: #DC2626;
+  background: #FEE2E2;
+  border-color: #FECACA;
+}
+
+.reject-reason-input{
+  min-height: 112px;
+  resize: vertical;
+}
+
+.reject-reason-confirm{
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+}
+
 
 
 .co-inline-receipt-photos-btn{
