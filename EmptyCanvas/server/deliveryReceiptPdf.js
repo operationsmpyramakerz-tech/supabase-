@@ -125,6 +125,7 @@ async function pipeDeliveryReceiptPDF(
     thirdSignatureLabel = null,
     signatureLabels = null,
     showFooterSignature = true,
+    exportColumns = null,
   },
   stream,
 ) {
@@ -420,36 +421,47 @@ async function pipeDeliveryReceiptPDF(
   const cellPadX = 8;
   const tagBarH = 28;
 
-  // columns (sum == tableW)
-  // Default: ID | Component | Qty | Unit | Total
-  // When showCosts=false: ID | Component | Qty
-  const colWIdCode = Math.round(tableW * (showCosts ? 0.18 : 0.22));
-  const colWQty = Math.round(tableW * (showCosts ? 0.08 : 0.10));
-  const colWUnit = showCosts ? Math.round(tableW * 0.14) : 0;
-  const colWTotal = showCosts ? Math.round(tableW * 0.14) : 0;
-  const colWComponent = showCosts
-    ? (tableW - colWIdCode - colWQty - colWUnit - colWTotal)
-    : (tableW - colWIdCode - colWQty);
+  // Dynamic columns. If no explicit exportColumns are provided, keep the old defaults:
+  // ID | Component | Qty | Unit | Total, or ID | Component | Qty when showCosts=false.
+  const allColumnDefs = [
+    { key: "idCode", label: "ID Code", ratio: 0.16, align: "left" },
+    { key: "component", label: "Component", ratio: 0.38, align: "left" },
+    { key: "qty", label: "Qty", ratio: 0.09, align: "right" },
+    { key: "reason", label: "Reason", ratio: 0.20, align: "left" },
+    { key: "link", label: "Component link", ratio: 0.26, align: "left" },
+    { key: "unit", label: "Unit", ratio: 0.12, align: "right" },
+    { key: "total", label: "Total", ratio: 0.13, align: "right" },
+  ];
+  const defByKey = new Map(allColumnDefs.map((col) => [col.key, col]));
+  const defaultKeys = showCosts
+    ? ["idCode", "component", "qty", "unit", "total"]
+    : ["idCode", "component", "qty"];
+  const rawExportKeys = Array.isArray(exportColumns)
+    ? exportColumns
+    : String(exportColumns || "").split(",");
+  let selectedKeys = rawExportKeys
+    .map((key) => String(key || "").trim())
+    .filter((key) => defByKey.has(key));
+  if (!selectedKeys.length) selectedKeys = defaultKeys.slice();
+  // The table needs at least one descriptive column, otherwise files are hard to read.
+  if (!selectedKeys.includes("component")) selectedKeys.unshift("component");
+  selectedKeys = Array.from(new Set(selectedKeys));
 
-  const columns = showCosts
-    ? [
-        { key: "idCode", label: "ID Code", width: colWIdCode, align: "left" },
-        { key: "component", label: "Component", width: colWComponent, align: "left" },
-        { key: "qty", label: "Qty", width: colWQty, align: "right" },
-        { key: "unit", label: "Unit", width: colWUnit, align: "right" },
-        { key: "total", label: "Total", width: colWTotal, align: "right" },
-      ]
-    : [
-        { key: "idCode", label: "ID Code", width: colWIdCode, align: "left" },
-        { key: "component", label: "Component", width: colWComponent, align: "left" },
-        { key: "qty", label: "Qty", width: colWQty, align: "right" },
-      ];
-
+  const selectedDefs = selectedKeys.map((key) => defByKey.get(key)).filter(Boolean);
+  const ratioSum = selectedDefs.reduce((sum, col) => sum + Number(col.ratio || 1), 0) || selectedDefs.length || 1;
   let accX = tableX;
-  columns.forEach((c) => {
-    c.x = accX;
-    accX += c.width;
+  let usedW = 0;
+  const columns = selectedDefs.map((def, idx) => {
+    const isLast = idx === selectedDefs.length - 1;
+    const width = isLast
+      ? Math.max(40, tableW - usedW)
+      : Math.max(44, Math.round(tableW * (Number(def.ratio || 1) / ratioSum)));
+    const col = { ...def, width, x: accX };
+    accX += width;
+    usedW += width;
+    return col;
   });
+  const showGrandTotalSummary = columns.some((col) => col.key === "unit" || col.key === "total");
 
   function drawTagBar(reason, count, tagColors) {
     const y = doc.y;
@@ -544,25 +556,22 @@ async function pipeDeliveryReceiptPDF(
     doc.font("Helvetica").fontSize(10).fillColor(COLORS.text);
 
     items.forEach((r, idx) => {
+      const componentLink = normalizeUrl(r.link || r.url || r.componentLink || r.href);
       const rowData = {
         idCode: String(r.idCode || ""),
         component: String(r.component || ""),
         qty: String(Number(r.qty) || 0),
-        ...(showCosts
-          ? {
-              unit: moneyGBP(r.unit),
-              total: moneyGBP(r.total),
-            }
-          : {}),
+        reason: String(r.reason || ""),
+        link: componentLink || String(r.link || r.url || r.componentLink || r.href || ""),
+        unit: moneyGBP(r.unit),
+        total: moneyGBP(r.total),
       };
 
-      const hId = doc.heightOfString(rowData.idCode, {
-        width: colWIdCode - cellPadX * 2,
-      });
-      const hComponent = doc.heightOfString(rowData.component, {
-        width: colWComponent - cellPadX * 2,
-      });
-      const rowH = Math.max(20, hId, hComponent) + 8;
+      const measuredHeights = columns.map((c) => doc.heightOfString(String(rowData[c.key] || ""), {
+        width: Math.max(1, c.width - cellPadX * 2),
+        align: c.align,
+      }));
+      const rowH = Math.max(20, ...measuredHeights) + 8;
 
       ensureSpace(rowH + 6, { onNewPage: drawGroupHeader });
 
@@ -587,7 +596,6 @@ async function pipeDeliveryReceiptPDF(
 
       // text
       doc.fillColor(COLORS.text).font("Helvetica").fontSize(10);
-      const componentLink = normalizeUrl(r.link || r.url || r.componentLink || r.href);
 
       columns.forEach((c) => {
         const opts = {
@@ -595,12 +603,12 @@ async function pipeDeliveryReceiptPDF(
           align: c.align,
         };
 
-        // Make component name clickable (open component URL)
-        if (c.key === "component" && componentLink) {
+        // Make component name and URL clickable when a valid URL exists.
+        if ((c.key === "component" || c.key === "link") && componentLink) {
           opts.link = componentLink;
         }
 
-        doc.text(rowData[c.key], c.x + cellPadX, y + 6, opts);
+        doc.text(String(rowData[c.key] || ""), c.x + cellPadX, y + 6, opts);
       });
 
       doc.y = y + rowH;
@@ -616,7 +624,7 @@ async function pipeDeliveryReceiptPDF(
 
   const { mL: sumML, contentW: sumContentW } = metrics();
   const sumW = 220;
-  const sumH = showCosts ? 54 : 34;
+  const sumH = showGrandTotalSummary ? 54 : 34;
   const sumX = sumML + sumContentW - sumW;
   const sumY = doc.y;
 
@@ -624,13 +632,13 @@ async function pipeDeliveryReceiptPDF(
 
   doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9);
   doc.text("Total quantity", sumX + 12, sumY + 10, { width: sumW - 24, align: "left" });
-  if (showCosts) {
+  if (showGrandTotalSummary) {
     doc.text("Grand total", sumX + 12, sumY + 30, { width: sumW - 24, align: "left" });
   }
 
   doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11);
   doc.text(String(Number(grandQty) || 0), sumX + 12, sumY + 8, { width: sumW - 24, align: "right" });
-  if (showCosts) {
+  if (showGrandTotalSummary) {
     doc.text(moneyGBP(grandTotal), sumX + 12, sumY + 28, { width: sumW - 24, align: "right" });
   }
 

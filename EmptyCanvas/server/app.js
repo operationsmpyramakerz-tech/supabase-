@@ -5089,6 +5089,68 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
   };
 }
 
+
+const ORDER_EXPORT_COLUMN_DEFS = [
+  { key: "idCode", label: "ID Code", width: 14 },
+  { key: "component", label: "Component", width: 36 },
+  { key: "qty", label: "Quantity", width: 12 },
+  { key: "reason", label: "Reason", width: 24 },
+  { key: "link", label: "Component link", width: 54 },
+  { key: "unit", label: "Unit cost", width: 14 },
+  { key: "total", label: "Total cost", width: 14 },
+];
+
+function _hasExplicitOrderExportColumns(columns) {
+  if (Array.isArray(columns)) return columns.length > 0;
+  return String(columns || "").split(",").map((x) => String(x || "").trim()).filter(Boolean).length > 0;
+}
+
+function _normalizeOrderExportColumns(columns, { tab = "" } = {}) {
+  const defs = new Map(ORDER_EXPORT_COLUMN_DEFS.map((col) => [col.key, col]));
+  const tabKey = String(tab || "").trim().toLowerCase();
+  const defaultKeys = (tabKey === "received" || tabKey === "delivered")
+    ? ["idCode", "component", "qty"]
+    : ["idCode", "component", "qty", "unit", "total"];
+  const raw = Array.isArray(columns) ? columns : String(columns || "").split(",");
+  let selected = raw
+    .map((key) => String(key || "").trim())
+    .filter((key) => defs.has(key));
+  if (!selected.length) selected = defaultKeys.slice();
+  if (!selected.includes("component")) selected.unshift("component");
+  return Array.from(new Set(selected));
+}
+
+function _selectedOrderExportColumnDefs(columns, opts = {}) {
+  const defs = new Map(ORDER_EXPORT_COLUMN_DEFS.map((col) => [col.key, col]));
+  return _normalizeOrderExportColumns(columns, opts)
+    .map((key) => defs.get(key))
+    .filter(Boolean);
+}
+
+function _orderExcelColumnName(index) {
+  let n = Math.max(1, Number(index) || 1);
+  let out = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+function _orderExportCellValue(row = {}, key = "") {
+  switch (key) {
+    case "idCode": return row.idCode || "";
+    case "component": return row.component || "";
+    case "qty": return Number(row.qty) || 0;
+    case "reason": return row.reason || "";
+    case "link": return row.link || row.url || row.componentLink || row.href || "";
+    case "unit": return row.unit === null || typeof row.unit === "undefined" ? "" : Number(row.unit);
+    case "total": return row.total === null || typeof row.total === "undefined" ? "" : Number(row.total);
+    default: return "";
+  }
+}
+
 function _sbSafeExportName(value = "order") {
   return String(value || "order")
     .replace(/[\\/:*?"<>|]/g, "-")
@@ -5096,9 +5158,10 @@ function _sbSafeExportName(value = "order") {
     .slice(0, 60);
 }
 
-async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "" } = {}) {
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null } = {}) {
   const tabKey = String(tab || "").trim().toLowerCase();
-  const hideCosts = tabKey === "received" || tabKey === "delivered";
+  const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
+  const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
   res.setHeader("Content-Type", "application/pdf");
@@ -5118,6 +5181,7 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "" } = {
     groupByReason: false,
     headerColorKey: payload.groupReason,
     showCosts: !hideCosts,
+    exportColumns: selectedExportColumns,
     documentTitle: payload.receiptView.documentTitle,
     recipientLabelLeft: payload.receiptView.recipientLabelLeft,
     thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
@@ -5152,9 +5216,13 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   }, res);
 }
 
-async function _sbPipeOrderExcel(req, res, orderIds = []) {
+async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "" } = {}) {
   const ExcelJS = require("exceljs");
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const selectedColumns = _selectedOrderExportColumnDefs(columns, { tab });
+  const columnCount = Math.max(1, selectedColumns.length);
+  const lastCol = _orderExcelColumnName(columnCount);
+
   const wb = new ExcelJS.Workbook();
   wb.creator = "Operations Hub";
   wb.created = new Date();
@@ -5218,18 +5286,19 @@ async function _sbPipeOrderExcel(req, res, orderIds = []) {
     reasonMap.get(reason).push(row);
   }
   const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
-  const headerCols = ["ID Code", "Component", "Quantity", "Reason", "Component link", "Unit cost", "Total cost"];
+  const headerCols = selectedColumns.map((col) => col.label);
 
   for (const reason of reasons) {
     const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
     const titleNum = titleRow.number;
-    ws.mergeCells(`A${titleNum}:G${titleNum}`);
-    for (let c = 1; c <= 7; c += 1) {
+    ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
+    for (let c = 1; c <= columnCount; c += 1) {
       const cell = ws.getRow(titleNum).getCell(c);
       cell.border = borderThin;
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
       cell.font = { bold: true, color: { argb: "FF5B21B6" } };
     }
+
     const header = ws.addRow(headerCols);
     header.font = { bold: true, color: { argb: "FF111827" } };
     header.eachCell((cell) => {
@@ -5237,24 +5306,20 @@ async function _sbPipeOrderExcel(req, res, orderIds = []) {
       cell.border = borderThin;
       cell.alignment = { vertical: "middle", wrapText: true };
     });
+
     const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
     for (const item of items) {
-      const r = ws.addRow([
-        item.idCode || "",
-        item.component || "",
-        Number(item.qty) || 0,
-        item.reason || "",
-        item.link || "",
-        Number(item.unit) || 0,
-        Number(item.total) || 0,
-      ]);
-      if (item.link) {
-        r.getCell(5).value = { text: item.link, hyperlink: item.link };
-        r.getCell(5).font = { color: { argb: "FF2563EB" }, underline: true };
-      }
-      r.getCell(3).numFmt = "0.######";
-      r.getCell(6).numFmt = '"£"#,##0.00';
-      r.getCell(7).numFmt = '"£"#,##0.00';
+      const values = selectedColumns.map((col) => _orderExportCellValue(item, col.key));
+      const r = ws.addRow(values);
+      selectedColumns.forEach((col, index) => {
+        const cell = r.getCell(index + 1);
+        if (col.key === "link" && values[index]) {
+          cell.value = { text: String(values[index]), hyperlink: String(values[index]) };
+          cell.font = { color: { argb: "FF2563EB" }, underline: true };
+        }
+        if (col.key === "qty") cell.numFmt = "0.######";
+        if (col.key === "unit" || col.key === "total") cell.numFmt = '"£"#,##0.00';
+      });
       r.eachCell((cell) => {
         cell.border = borderLight;
         cell.alignment = { vertical: "middle", wrapText: true };
@@ -5263,15 +5328,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = []) {
     ws.addRow([]);
   }
 
-  ws.columns = [
-    { width: 14 },
-    { width: 36 },
-    { width: 12 },
-    { width: 24 },
-    { width: 54 },
-    { width: 14 },
-    { width: 14 },
-  ];
+  ws.columns = selectedColumns.map((col) => ({ width: col.width || 16 }));
   ws.views = [{ state: "frozen", ySplit: 4 }];
   const fileName = `order_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
   const buf = await wb.xlsx.writeBuffer();
@@ -5280,6 +5337,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = []) {
   res.setHeader("Cache-Control", "no-store");
   res.send(Buffer.from(buf));
 }
+
 
 
 // -----------------------------------------------------------------------------
@@ -21625,7 +21683,7 @@ app.post(
   requirePage("Requested Orders"),
   async (req, res) => {
     try {
-      const { orderIds, tab } = req.body || {};
+      const { orderIds, tab, columns } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -21634,7 +21692,8 @@ app.post(
       // When exporting from the "Received" or "Delivered" tabs, hide cost columns (Unit / Total)
       // in the generated PDF.
       const tabKey = String(tab || "").trim().toLowerCase();
-      const hideCosts = tabKey === "received" || tabKey === "delivered";
+      const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
+      const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
 
       const ids = orderIds
         .map((x) => String(x || "").trim())
@@ -21644,7 +21703,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns });
       }
 
       const parseNumberProp = (prop) => {
@@ -21924,6 +21983,7 @@ app.post(
           headerColorKey: groupReason,
           // Hide unit/total columns for Received/Delivered exports
           showCosts: !hideCosts,
+          exportColumns: selectedExportColumns,
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
@@ -22209,7 +22269,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds } = req.body || {};
+      const { orderIds, columns } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -22222,7 +22282,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids);
+        return await _sbPipeOrderExcel(req, res, ids, { columns });
       }
 
       // Helpers
