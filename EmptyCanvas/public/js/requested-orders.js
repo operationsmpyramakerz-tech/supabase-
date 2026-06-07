@@ -1186,7 +1186,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
   const REQ_CACHE_KEY = isMaintenancePage
     ? "cache:ops:requestedOrders:v4:maintenance"
-    : "cache:ops:requestedOrders:v5:approved-tab";
+    : "cache:ops:requestedOrders:v6:operations-approval";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
   function readRequestedCache() {
@@ -1782,6 +1782,198 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.UI?.toast) {
       window.UI.toast({ type, title, message });
     }
+  }
+
+  let rejectReasonModal = null;
+  let rejectReasonLastFocus = null;
+  let pendingRejectReasonConfirm = null;
+
+  function ensureRejectReasonModal() {
+    if (rejectReasonModal) return rejectReasonModal;
+    rejectReasonModal = document.createElement("div");
+    rejectReasonModal.className = "co-submodal-overlay reject-reason-modal";
+    rejectReasonModal.setAttribute("aria-hidden", "true");
+    rejectReasonModal.hidden = true;
+    rejectReasonModal.innerHTML = `
+      <div class="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectReasonTitle" aria-describedby="rejectReasonSub">
+        <button type="button" class="co-submodal-close" data-reject-reason-close aria-label="Close reject reason dialog"><i data-feather="x"></i></button>
+        <div class="co-submodal-header req-edit-header">
+          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
+          <div>
+            <div class="co-submodal-title" id="rejectReasonTitle">Reject reason</div>
+            <div class="co-submodal-sub" id="rejectReasonSub">Write the reason before rejecting this order.</div>
+          </div>
+        </div>
+        <div class="co-submodal-body">
+          <label class="co-submodal-label" for="rejectReasonInput">Reason</label>
+          <textarea class="co-submodal-textarea reject-reason-input" id="rejectReasonInput" rows="4" placeholder="Write reject reason..."></textarea>
+          <div class="co-submodal-error" id="rejectReasonError" role="alert" aria-live="polite"></div>
+        </div>
+        <div class="co-submodal-actions">
+          <button type="button" class="ro-action-btn ro-action-btn--light" data-reject-reason-cancel>Cancel</button>
+          <button type="button" class="ro-action-btn ro-action-btn--dark reject-reason-confirm" data-reject-reason-confirm>Reject</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(rejectReasonModal);
+    rejectReasonModal.addEventListener("click", (event) => {
+      if (event.target === rejectReasonModal || event.target.closest("[data-reject-reason-close], [data-reject-reason-cancel]")) {
+        event.preventDefault();
+        closeRejectReasonModal();
+        return;
+      }
+      const confirmBtn = event.target.closest("[data-reject-reason-confirm]");
+      if (confirmBtn) {
+        event.preventDefault();
+        submitRejectReasonModal();
+      }
+    });
+    rejectReasonModal.querySelector("#rejectReasonInput")?.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        submitRejectReasonModal();
+      }
+    });
+    return rejectReasonModal;
+  }
+
+  function openRejectReasonModal({ title = "Reject reason", sub = "Write the reason before rejecting this order.", confirmText = "Reject", onConfirm } = {}) {
+    const modal = ensureRejectReasonModal();
+    rejectReasonLastFocus = document.activeElement;
+    pendingRejectReasonConfirm = typeof onConfirm === "function" ? onConfirm : null;
+    const titleEl = modal.querySelector("#rejectReasonTitle");
+    const subEl = modal.querySelector("#rejectReasonSub");
+    const input = modal.querySelector("#rejectReasonInput");
+    const error = modal.querySelector("#rejectReasonError");
+    const confirm = modal.querySelector("[data-reject-reason-confirm]");
+    if (titleEl) titleEl.textContent = title;
+    if (subEl) subEl.textContent = sub;
+    if (input) input.value = "";
+    if (error) error.textContent = "";
+    if (confirm) confirm.textContent = confirmText;
+    modal.hidden = false;
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    if (window.feather) window.feather.replace();
+    setTimeout(() => input?.focus?.(), 30);
+  }
+
+  function closeRejectReasonModal({ restoreFocus = true } = {}) {
+    if (!rejectReasonModal) return;
+    rejectReasonModal.classList.remove("is-open");
+    rejectReasonModal.setAttribute("aria-hidden", "true");
+    rejectReasonModal.hidden = true;
+    pendingRejectReasonConfirm = null;
+    if (restoreFocus && rejectReasonLastFocus?.focus) {
+      try { rejectReasonLastFocus.focus(); } catch {}
+    }
+  }
+
+  async function submitRejectReasonModal() {
+    const modal = ensureRejectReasonModal();
+    const input = modal.querySelector("#rejectReasonInput");
+    const error = modal.querySelector("#rejectReasonError");
+    const confirm = modal.querySelector("[data-reject-reason-confirm]");
+    const cancel = modal.querySelector("[data-reject-reason-cancel]");
+    const closeBtn = modal.querySelector("[data-reject-reason-close]");
+    const reason = String(input?.value || "").trim();
+    if (!reason) {
+      if (error) error.textContent = "Reject reason is required.";
+      try { input?.focus?.(); } catch {}
+      return;
+    }
+    if (!pendingRejectReasonConfirm) {
+      closeRejectReasonModal();
+      return;
+    }
+    try {
+      if (error) error.textContent = "";
+      if (confirm) { confirm.disabled = true; confirm.textContent = "Saving..."; }
+      if (cancel) cancel.disabled = true;
+      if (closeBtn) closeBtn.disabled = true;
+      await pendingRejectReasonConfirm(reason);
+      closeRejectReasonModal({ restoreFocus: false });
+    } catch (err) {
+      if (error) error.textContent = err?.message || "Failed to save reject reason.";
+    } finally {
+      if (confirm) { confirm.disabled = false; confirm.textContent = "Reject"; }
+      if (cancel) cancel.disabled = false;
+      if (closeBtn) closeBtn.disabled = false;
+    }
+  }
+
+  function collectRejectedReason(items) {
+    const reasons = Array.from(new Set((Array.isArray(items) ? items : [])
+      .map((it) => String(it?.rejectedReason || it?.rejected_reason || "").trim())
+      .filter(Boolean)));
+    return reasons.join("\n") || "";
+  }
+
+  function ensureRejectedReasonCard(metaEl, id = "reqModalRejectedReason") {
+    if (!metaEl) return null;
+    let row = metaEl.querySelector(`.co-meta-row--reject-reason #${id}`)?.closest?.(".co-meta-row");
+    if (row) return row;
+    row = document.createElement("div");
+    row.className = "co-meta-row co-meta-row--reason co-meta-row--reject-reason";
+    row.hidden = true;
+    row.innerHTML = `<span>Rejected reason</span><strong id="${id}">—</strong>`;
+    metaEl.appendChild(row);
+    return row;
+  }
+
+  function normalizeOperationsApproval(value) {
+    const key = norm(value).replace(/[_-]+/g, " ");
+    if (key === "approved") return "Approved";
+    if (key === "rejected") return "Rejected";
+    return "Not Started";
+  }
+
+  function operationsApprovalKey(value) {
+    return norm(normalizeOperationsApproval(value)).replace(/\s+/g, "-");
+  }
+
+  function summarizeOperationsApproval(items) {
+    const values = (Array.isArray(items) ? items : [])
+      .map((it) => normalizeOperationsApproval(it?.operationsApproval || it?.operations_approval || ""));
+    if (values.some((value) => value === "Rejected")) return "Rejected";
+    if (values.length && values.every((value) => value === "Approved")) return "Approved";
+    return "Not Started";
+  }
+
+  function operationApprovalStatusVars(value) {
+    const key = operationsApprovalKey(value);
+    if (key === "approved") return notionColorVars("green");
+    if (key === "rejected") return notionColorVars("red");
+    return notionColorVars("yellow");
+  }
+
+  async function setOperationsApproval(ids, decision, rejectedReason = "") {
+    const orderIds = (Array.isArray(ids) ? ids : [ids]).map((id) => String(id || "").trim()).filter(Boolean);
+    if (!orderIds.length) return;
+    const normalized = normalizeOperationsApproval(decision);
+    const res = await fetch("/api/orders/operations/approval", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: orderIds, decision: normalized, rejectedReason }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Failed to update operations approval.");
+
+    const reason = normalized === "Rejected" ? String(rejectedReason || "").trim() : "";
+    const idSet = new Set(orderIds.map(String));
+    allItems.forEach((it) => {
+      if (!idSet.has(String(it?.id || ""))) return;
+      it.operationsApproval = normalized;
+      it.rejectedReason = reason;
+    });
+    clearRequestedCache();
+    groups = buildGroups(allItems);
+    const updated = activeGroup ? groups.find((x) => x.groupId === activeGroup.groupId) : null;
+    render();
+    if (updated) openOrderModal(updated);
+    else closeOrderModal();
+    toast("success", normalized, normalized === "Rejected" ? "Reject reason saved." : "Order approved by operations.");
   }
 
   function closeModalMoreMenu() {
@@ -2640,7 +2832,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tab = norm(url.searchParams.get("tab"));
     const allowed = isMaintenancePage
       ? new Set(["received", "delivered"])
-      : new Set(["all", "not-started", "approved", "remaining", "received", "delivered", "archive"]);
+      : new Set(["all", "not-started", "reviewed", "approved", "rejected", "remaining", "received", "delivered", "archive"]);
     if (allowed.has(tab)) return tab;
     return isMaintenancePage ? "received" : "all";
   }
@@ -2677,17 +2869,22 @@ document.addEventListener("DOMContentLoaded", () => {
   // Stage alone is not enough because Operations Orders splits the
   // post-review workflow into separate operational buckets:
   // - Not Started: orders still under supervision
-  // - Approved: S.V-approved orders in progress
+  // - Reviewed: S.V-approved orders waiting for Operations approval
+  // - Approved: orders approved from Operations Orders
+  // - Rejected: orders rejected from Operations Orders
   // - Remaining: shipped/received-by-operations but still has remaining qty
   // - Received: shipped/received-by-operations and no remaining qty
   // - Delivered: arrived/delivered/final status
   // - Archive: archived orders
   function tabForGroup(g) {
     const idx = g?.stage?.idx || 1;
+    const opKey = operationsApprovalKey(g?.operationsApproval);
     if (idx >= 5) return "archive";
     if (idx >= 4) return "delivered";
     if (idx >= 3) return g?.hasRemaining ? "remaining" : "received";
-    if (idx === 2) return "approved";
+    if (opKey === "rejected") return "rejected";
+    if (opKey === "approved") return "approved";
+    if (idx === 2) return "reviewed";
     return "not-started";
   }
 
@@ -2967,6 +3164,8 @@ document.addEventListener("DOMContentLoaded", () => {
         hasRemaining,
         hasReceived,
         stage,
+        operationsApproval: summarizeOperationsApproval(itemsArr),
+        rejectedReason: collectRejectedReason(itemsArr),
         orderIdRange: computeOrderIdRange(itemsArr),
         operationsByName: operationsSummary(itemsArr),
         receiptNumber,
@@ -3149,8 +3348,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!isApprovedForOperations) return false;
 
-    // Approved now means S.V-approved orders that moved to In progress.
-    if (currentTab === "approved") return idx === 2;
+    const opKey = operationsApprovalKey(g?.operationsApproval);
+    if (currentTab === "reviewed") return idx === 2 && opKey !== "approved" && opKey !== "rejected";
+    if (currentTab === "approved") return idx === 2 && opKey === "approved";
+    if (currentTab === "rejected") return idx === 2 && opKey === "rejected";
+    if (opKey === "rejected") return false;
+
     if (currentTab === "remaining") return !isMaintenanceOrder && idx === 3 && !!g?.hasRemaining;
     if (currentTab === "received") return idx === 3 && (isMaintenanceOrder || !!g?.hasReceived);
     if (currentTab === "delivered") return idx === 4;
@@ -3302,7 +3505,10 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     const stage = g.stage || computeStage(g.items || []);
-    const statusVars = notionColorVars(stage.color);
+    const opKey = operationsApprovalKey(g.operationsApproval);
+    const showOperationsApprovalStatus = !isMaintenancePage && (currentTab === "approved" || currentTab === "rejected" || (stage.idx === 2 && (opKey === "approved" || opKey === "rejected")));
+    const cardStatusLabel = showOperationsApprovalStatus ? normalizeOperationsApproval(g.operationsApproval) : stage.label;
+    const statusVars = showOperationsApprovalStatus ? operationApprovalStatusVars(g.operationsApproval) : notionColorVars(stage.color);
     const statusStyle = `--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};`;
 
     const receivedBy = String(g.operationsByName || "").trim();
@@ -3355,7 +3561,7 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(stage.label)}</span>
+          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(cardStatusLabel)}</span>
           ${creatorButtonMarkup(creatorId, createdByRaw)}
         </div>
       </div>
@@ -3485,6 +3691,14 @@ document.addEventListener("DOMContentLoaded", () => {
       modalTotalPrice.textContent = fmtMoney(t);
     }
 
+    const rejectedReasonRow = ensureRejectedReasonCard(modalMeta, "reqModalRejectedReason");
+    const rejectedReasonText = collectRejectedReason(items);
+    if (rejectedReasonRow) {
+      const rejectedReasonValue = rejectedReasonRow.querySelector("#reqModalRejectedReason");
+      if (rejectedReasonValue) rejectedReasonValue.textContent = rejectedReasonText || "—";
+      rejectedReasonRow.hidden = !rejectedReasonText;
+    }
+
     // Extra fields: show for "Received" and later only
     // NOTE: User request: in "Not Started" tab hide Receipt/Received-by even if present.
     const shouldShowExtras = !isMaintenanceOrder && currentTab !== "not-started" && (stage?.idx || 1) >= 3;
@@ -3599,6 +3813,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const frag = document.createDocumentFragment();
 
       const canEditQty = !isMaintenanceOrder && (currentTab === "approved" || currentTab === "remaining");
+      const canOperationsReview = !isMaintenancePage && !isMaintenanceOrder && currentTab === "reviewed" && (stage?.idx || 1) === 2;
+
+      if (canOperationsReview && items.length) {
+        const bulk = document.createElement("div");
+        bulk.className = "co-item";
+        bulk.dataset.role = "operations-bulk-actions";
+        bulk.innerHTML = `
+          <div class="co-item-left"><div class="co-item-name">Bulk actions</div></div>
+          <div class="co-item-right">
+            <div class="btn-group sv-review-item-actions">
+              <button class="btn btn-success btn-xs req-ops-approve-all" type="button"><i data-feather="check"></i> Approve all</button>
+              <button class="btn btn-danger btn-xs req-ops-reject-all" type="button"><i data-feather="x"></i> Reject all</button>
+            </div>
+          </div>
+        `;
+        frag.appendChild(bulk);
+      }
 
       if (isRemainingTab && items.length === 0) {
         const empty = document.createElement("div");
@@ -3675,9 +3906,19 @@ document.addEventListener("DOMContentLoaded", () => {
                <i data-feather="edit-2"></i> Edit
              </button>`
           : "";
+        const opsReviewButtonsHTML = canOperationsReview
+          ? `<button class="btn btn-success btn-xs req-ops-approve" data-id="${escapeHTML(it.id)}" type="button" title="Approve">
+               <i data-feather="check"></i> Approve
+             </button>
+             <button class="btn btn-danger btn-xs req-ops-reject" data-id="${escapeHTML(it.id)}" type="button" title="Reject">
+               <i data-feather="x"></i> Reject
+             </button>`
+          : "";
 
-        const itemStatusLabel = displayWorkflowStatusLabel(String(it.status || stage.label || '—').trim() || '—');
-        const itemStatusVars = notionColorVars(it.statusColor || stage.color);
+        const itemStatusLabel = canOperationsReview
+          ? normalizeOperationsApproval(it.operationsApproval || "Not Started")
+          : displayWorkflowStatusLabel(String(it.status || stage.label || '—').trim() || '—');
+        const itemStatusVars = canOperationsReview ? operationApprovalStatusVars(it.operationsApproval) : notionColorVars(it.statusColor || stage.color);
         const itemStatusStyle = `--tag-bg:${itemStatusVars.bg};--tag-fg:${itemStatusVars.fg};--tag-border:${itemStatusVars.bd};`;
         const subLine = isMaintenanceOrder ? '' : `Unit: ${fmtMoney(unit)} · Total: ${fmtMoney(total)}`;
         const rightRowHtml = isMaintenanceOrder
@@ -3686,6 +3927,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="co-item-right-row">
               <div class="co-item-status" style="${itemStatusStyle}">${escapeHTML(itemStatusLabel)}</div>
               ${editBtnHTML}
+              ${opsReviewButtonsHTML}
             </div>
           `;
 
@@ -3737,6 +3979,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeMaintenanceReceiptModal({ restoreFocus: false });
     closeReceiptPhotosModal({ restoreFocus: false });
     closeEditPasswordModal({ restoreFocus: false });
+    closeRejectReasonModal({ restoreFocus: false });
     closeDownloadMenu();
 
     orderModal.classList.remove("is-open");
@@ -5676,6 +5919,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       return;
     }
 
+    if (rejectReasonModal?.classList.contains("is-open")) {
+      e.preventDefault();
+      closeRejectReasonModal();
+      return;
+    }
+
     if (isOpsEditOpen()) {
       e.preventDefault();
       closeOpsEditDetailsModal();
@@ -5725,6 +5974,51 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   });
 
   modalItems?.addEventListener("click", (e) => {
+    const opsApproveAll = e.target.closest("button.req-ops-approve-all");
+    if (opsApproveAll) {
+      e.preventDefault();
+      e.stopPropagation();
+      const ids = (activeGroup?.items || []).map((it) => it?.id).filter(Boolean);
+      setOperationsApproval(ids, "Approved").catch((err) => toast("error", "Failed", err?.message || "Failed to approve order."));
+      return;
+    }
+
+    const opsRejectAll = e.target.closest("button.req-ops-reject-all");
+    if (opsRejectAll) {
+      e.preventDefault();
+      e.stopPropagation();
+      const ids = (activeGroup?.items || []).map((it) => it?.id).filter(Boolean);
+      openRejectReasonModal({
+        title: "Reject all components",
+        sub: "Write the reason that will be saved for all rejected components.",
+        confirmText: "Reject all",
+        onConfirm: (reason) => setOperationsApproval(ids, "Rejected", reason),
+      });
+      return;
+    }
+
+    const opsApprove = e.target.closest("button.req-ops-approve");
+    if (opsApprove) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOperationsApproval([opsApprove.dataset.id], "Approved").catch((err) => toast("error", "Failed", err?.message || "Failed to approve component."));
+      return;
+    }
+
+    const opsReject = e.target.closest("button.req-ops-reject");
+    if (opsReject) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = opsReject.dataset.id;
+      openRejectReasonModal({
+        title: "Reject component",
+        sub: "Write the reason before rejecting this component.",
+        confirmText: "Reject",
+        onConfirm: (reason) => setOperationsApproval([id], "Rejected", reason),
+      });
+      return;
+    }
+
     const btn = e.target.closest("button.ro-edit");
     if (!btn) return;
     e.preventDefault();

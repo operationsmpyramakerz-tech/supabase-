@@ -710,6 +710,146 @@
   const toastOK  = (m) => (window.toast ? window.toast.success(m) : console.log("[OK]", m));
   const toastERR = (m) => (window.toast ? window.toast.error(m)   : console.error("[ERR]", m));
 
+
+  let rejectReasonModal = null;
+  let rejectReasonLastFocus = null;
+  let pendingRejectReasonConfirm = null;
+
+  function ensureRejectReasonModal() {
+    if (rejectReasonModal) return rejectReasonModal;
+    rejectReasonModal = document.createElement("div");
+    rejectReasonModal.className = "co-submodal-overlay reject-reason-modal";
+    rejectReasonModal.setAttribute("aria-hidden", "true");
+    rejectReasonModal.hidden = true;
+    rejectReasonModal.innerHTML = `
+      <div class="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectReasonTitle" aria-describedby="rejectReasonSub">
+        <button type="button" class="co-submodal-close" data-reject-reason-close aria-label="Close reject reason dialog"><i data-feather="x"></i></button>
+        <div class="co-submodal-header req-edit-header">
+          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
+          <div>
+            <div class="co-submodal-title" id="rejectReasonTitle">Reject reason</div>
+            <div class="co-submodal-sub" id="rejectReasonSub">Write the reason before rejecting this order.</div>
+          </div>
+        </div>
+        <div class="co-submodal-body">
+          <label class="co-submodal-label" for="rejectReasonInput">Reason</label>
+          <textarea class="co-submodal-textarea reject-reason-input" id="rejectReasonInput" rows="4" placeholder="Write reject reason..."></textarea>
+          <div class="co-submodal-error" id="rejectReasonError" role="alert" aria-live="polite"></div>
+        </div>
+        <div class="co-submodal-actions">
+          <button type="button" class="ro-action-btn ro-action-btn--light" data-reject-reason-cancel>Cancel</button>
+          <button type="button" class="ro-action-btn ro-action-btn--dark reject-reason-confirm" data-reject-reason-confirm>Reject</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(rejectReasonModal);
+
+    const close = () => closeRejectReasonModal();
+    rejectReasonModal.addEventListener("click", (event) => {
+      if (event.target === rejectReasonModal || event.target.closest("[data-reject-reason-close], [data-reject-reason-cancel]")) {
+        event.preventDefault();
+        close();
+        return;
+      }
+      const confirmBtn = event.target.closest("[data-reject-reason-confirm]");
+      if (confirmBtn) {
+        event.preventDefault();
+        submitRejectReasonModal();
+      }
+    });
+    rejectReasonModal.querySelector("#rejectReasonInput")?.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        submitRejectReasonModal();
+      }
+    });
+    return rejectReasonModal;
+  }
+
+  function openRejectReasonModal({ title = "Reject reason", sub = "Write the reason before rejecting this order.", confirmText = "Reject", onConfirm } = {}) {
+    const modal = ensureRejectReasonModal();
+    rejectReasonLastFocus = document.activeElement;
+    pendingRejectReasonConfirm = typeof onConfirm === "function" ? onConfirm : null;
+    const titleEl = modal.querySelector("#rejectReasonTitle");
+    const subEl = modal.querySelector("#rejectReasonSub");
+    const input = modal.querySelector("#rejectReasonInput");
+    const error = modal.querySelector("#rejectReasonError");
+    const confirm = modal.querySelector("[data-reject-reason-confirm]");
+    if (titleEl) titleEl.textContent = title;
+    if (subEl) subEl.textContent = sub;
+    if (input) input.value = "";
+    if (error) error.textContent = "";
+    if (confirm) confirm.textContent = confirmText;
+    modal.hidden = false;
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    if (window.feather) window.feather.replace();
+    setTimeout(() => input?.focus?.(), 30);
+  }
+
+  function closeRejectReasonModal({ restoreFocus = true } = {}) {
+    if (!rejectReasonModal) return;
+    rejectReasonModal.classList.remove("is-open");
+    rejectReasonModal.setAttribute("aria-hidden", "true");
+    rejectReasonModal.hidden = true;
+    pendingRejectReasonConfirm = null;
+    if (restoreFocus && rejectReasonLastFocus?.focus) {
+      try { rejectReasonLastFocus.focus(); } catch {}
+    }
+  }
+
+  async function submitRejectReasonModal() {
+    const modal = ensureRejectReasonModal();
+    const input = modal.querySelector("#rejectReasonInput");
+    const error = modal.querySelector("#rejectReasonError");
+    const confirm = modal.querySelector("[data-reject-reason-confirm]");
+    const cancel = modal.querySelector("[data-reject-reason-cancel]");
+    const closeBtn = modal.querySelector("[data-reject-reason-close]");
+    const reason = String(input?.value || "").trim();
+    if (!reason) {
+      if (error) error.textContent = "Reject reason is required.";
+      try { input?.focus?.(); } catch {}
+      return;
+    }
+    if (!pendingRejectReasonConfirm) {
+      closeRejectReasonModal();
+      return;
+    }
+    try {
+      if (error) error.textContent = "";
+      if (confirm) { confirm.disabled = true; confirm.textContent = "Saving..."; }
+      if (cancel) cancel.disabled = true;
+      if (closeBtn) closeBtn.disabled = true;
+      await pendingRejectReasonConfirm(reason);
+      closeRejectReasonModal({ restoreFocus: false });
+    } catch (err) {
+      if (error) error.textContent = err?.message || "Failed to save reject reason.";
+    } finally {
+      if (confirm) { confirm.disabled = false; confirm.textContent = "Reject"; }
+      if (cancel) cancel.disabled = false;
+      if (closeBtn) closeBtn.disabled = false;
+    }
+  }
+
+  function collectRejectedReason(items) {
+    const reasons = Array.from(new Set((Array.isArray(items) ? items : [])
+      .map((it) => String(it?.rejectedReason || it?.rejected_reason || "").trim())
+      .filter(Boolean)));
+    return reasons.join("\n") || "";
+  }
+
+  function ensureRejectedReasonCard(metaEl, id = "svModalRejectedReason") {
+    if (!metaEl) return null;
+    let row = metaEl.querySelector(`.co-meta-row--reject-reason #${id}`)?.closest?.(".co-meta-row");
+    if (row) return row;
+    row = document.createElement("div");
+    row.className = "co-meta-row co-meta-row--reason co-meta-row--reject-reason";
+    row.hidden = true;
+    row.innerHTML = `<span>Rejected reason</span><strong id="${id}">—</strong>`;
+    metaEl.appendChild(row);
+    return row;
+  }
+
   const SV_ORDER_ACTION_CONFIG = {
     edit: {
       title: "Edit review decision",
@@ -1592,6 +1732,7 @@
   function closeModal() {
     if (!modalOverlay) return;
     closeSvMoreMenu();
+    closeRejectReasonModal({ restoreFocus: false });
     modalOverlay.classList.remove("is-open");
     modalOverlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("co-modal-open");
@@ -1640,6 +1781,14 @@
     if (modalEls.date) modalEls.date.textContent = fmtCreated(group.latestCreated) || "—";
     if (modalEls.components) modalEls.components.textContent = String(modalItemsList.length);
     if (modalEls.totalPrice) modalEls.totalPrice.textContent = fmtMoney(group.totals?.estimateTotal ?? 0);
+
+    const rejectedReasonRow = ensureRejectedReasonCard(modalRows.meta, "svModalRejectedReason");
+    const rejectedReasonText = collectRejectedReason(modalItemsList);
+    if (rejectedReasonRow) {
+      const rejectedReasonValue = rejectedReasonRow.querySelector("#svModalRejectedReason");
+      if (rejectedReasonValue) rejectedReasonValue.textContent = rejectedReasonText || "—";
+      rejectedReasonRow.hidden = !rejectedReasonText;
+    }
 
     if (modalEls.items) {
       const items = (group.products || []).slice().sort((a, b) =>
@@ -2109,14 +2258,15 @@
 }
 
 // ===== Approve/Reject =====
-  async function setApproval(id, decision) {
+  async function setApproval(id, decision, rejectedReason = "") {
     try {
       const normalized = normalizeApproval(decision);
-      const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
+      const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized, rejectedReason });
 
       const idx = allItems.findIndex((x) => String(x.id) === String(id));
       if (idx >= 0) {
         allItems[idx].approval = normalized;
+        allItems[idx].rejectedReason = normalized === "Rejected" ? String(rejectedReason || "").trim() : "";
         if (data?.status) allItems[idx].status = data.status;
         if (data?.statusColor) allItems[idx].statusColor = data.statusColor;
       }
@@ -2130,7 +2280,7 @@
     }
   }
 
-  async function setBulkApproval(groupId, decision) {
+  async function setBulkApproval(groupId, decision, rejectedReason = "") {
     if (!groupId) return;
     const group = groupsById.get(groupId);
     if (!group) return;
@@ -2166,11 +2316,12 @@
         while (cursor < toUpdate.length) {
           const id = toUpdate[cursor++];
           try {
-            const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
+            const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized, rejectedReason });
 
             const idx = allItems.findIndex((x) => String(x.id) === String(id));
             if (idx >= 0) {
               allItems[idx].approval = normalized;
+              allItems[idx].rejectedReason = normalized === "Rejected" ? String(rejectedReason || "").trim() : "";
               if (data?.status) allItems[idx].status = data.status;
               if (data?.statusColor) allItems[idx].statusColor = data.statusColor;
             }
@@ -2426,7 +2577,14 @@ if (tabsWrap) {
           const gid = modalOverlay?.dataset?.groupId;
           if (!gid) return;
           if (btn.classList.contains("sv-approve-all")) setBulkApproval(gid, "Approved");
-          else setBulkApproval(gid, "Rejected");
+          else {
+            openRejectReasonModal({
+              title: "Reject all components",
+              sub: "Write the reason that will be saved for all rejected components.",
+              confirmText: "Reject all",
+              onConfirm: (reason) => setBulkApproval(gid, "Rejected", reason),
+            });
+          }
           return;
         }
 
@@ -2441,7 +2599,12 @@ if (tabsWrap) {
         } else if (btn.classList.contains("sv-reject")) {
           e.preventDefault();
           e.stopPropagation();
-          setApproval(id, "Rejected");
+          openRejectReasonModal({
+            title: "Reject component",
+            sub: "Write the reason before rejecting this component.",
+            confirmText: "Reject",
+            onConfirm: (reason) => setApproval(id, "Rejected", reason),
+          });
         }
       });
     }
@@ -2449,6 +2612,12 @@ if (tabsWrap) {
     // Escape closes open overlays
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (rejectReasonModal?.classList.contains("is-open")) {
+        e.preventDefault();
+        closeRejectReasonModal();
+        return;
+      }
+
       if (isReviewEditOpen()) {
         e.preventDefault();
         closeReviewEditModal();
