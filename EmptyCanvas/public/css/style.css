@@ -2223,14 +2223,27 @@ body.co-modal-open{ overflow: hidden; }
 }
 
 /* Requested Orders: inline Edit button (dark variant: black bg + white text) */
-.ro-edit-dark{
-  background: #111827;
-  color: #FFFFFF;
-  border: 1px solid #111827;
+.ro-edit-dark,
+.sv-edit.ro-edit-dark{
+  background: #111827 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #111827 !important;
   box-shadow: 0 10px 22px rgba(0,0,0,0.10);
 }
-.ro-edit-dark:hover{ background: #0B1220; }
-.ro-edit-dark:active{ background: #000000; }
+.ro-edit-dark:hover,
+.sv-edit.ro-edit-dark:hover{
+  background: #0B1220 !important;
+  color: #FFFFFF !important;
+}
+.ro-edit-dark:active,
+.sv-edit.ro-edit-dark:active{
+  background: #000000 !important;
+  color: #FFFFFF !important;
+}
+.ro-edit-dark i,
+.sv-edit.ro-edit-dark i{
+  color: inherit;
+}
 
 @media (max-width: 560px){
   .ro-action-btn{ flex: 1; }
