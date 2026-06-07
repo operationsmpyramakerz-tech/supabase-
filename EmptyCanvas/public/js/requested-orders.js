@@ -2587,16 +2587,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const STATUS_FLOW = [
     { key: "supervision", label: "Under Supervision", sub: "Your order is under supervision." },
     { key: "progress", label: "In progress", sub: "We are preparing your order." },
-    { key: "shipped", label: "Shipped", sub: "Your order is on the way." },
+    { key: "shipped", label: "Shipping", sub: "Your order is on the way." },
     { key: "arrived", label: "Arrived", sub: "Your order has arrived." },
     { key: "archive", label: "Archive", sub: "This order is archived." },
   ];
+
+  function displayWorkflowStatusLabel(status) {
+    const raw = String(status || "").trim();
+    if (!raw) return raw;
+    return /^(shipped|shipping)$/i.test(raw) ? "Shipping" : raw;
+  }
 
   function statusToIndex(status) {
     const s = norm(status);
     if (/archive|archived/.test(s)) return 5;
     if (/(arrived|delivered|received)/.test(s)) return 4;
-    if (/shipped/.test(s)) return 3;
+    if (/(shipped|shipping)/.test(s)) return 3;
     if (/(in\s*progress|preparing|processing)/.test(s)) return 2;
     if (/(under\s*supervision|order\s*placed|placed|pending|order\s*received)/.test(s)) return 1;
     return 1;
@@ -3670,7 +3676,7 @@ document.addEventListener("DOMContentLoaded", () => {
              </button>`
           : "";
 
-        const itemStatusLabel = String(it.status || stage.label || '—').trim() || '—';
+        const itemStatusLabel = displayWorkflowStatusLabel(String(it.status || stage.label || '—').trim() || '—');
         const itemStatusVars = notionColorVars(it.statusColor || stage.color);
         const itemStatusStyle = `--tag-bg:${itemStatusVars.bg};--tag-fg:${itemStatusVars.fg};--tag-border:${itemStatusVars.bd};`;
         const subLine = isMaintenanceOrder ? '' : `Unit: ${fmtMoney(unit)} · Total: ${fmtMoney(total)}`;

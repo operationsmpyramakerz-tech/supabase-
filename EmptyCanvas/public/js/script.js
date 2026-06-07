@@ -457,10 +457,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const STATUS_FLOW = [
     { label: 'Under Supervision', sub: 'Your order is under supervision.' },
     { label: 'In progress', sub: 'We are preparing your order.' },
-    { label: 'Shipped', sub: 'Your cargo is on delivery.' },
+    { label: 'Shipping', sub: 'Your cargo is on delivery.' },
     { label: 'Arrived', sub: 'Your order has arrived.' },
     { label: 'Archive', sub: 'This order is archived.' },
   ];
+
+  function displayWorkflowStatusLabel(status) {
+    const raw = String(status || '').trim();
+    if (!raw) return raw;
+    return /^(shipped|shipping)$/i.test(raw) ? 'Shipping' : raw;
+  }
 
   function statusToIndex(status) {
     const s = norm(status).replace(/[_-]+/g, ' ');
@@ -468,7 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Most advanced statuses first
     if (/(archive|archived)/.test(s)) return 5;
     if (/(arrived|delivered|received)/.test(s)) return 4;
-    if (/(shipped|on the way|delivering|prepared)/.test(s)) return 3;
+    if (/(shipped|shipping|on the way|delivering|prepared)/.test(s)) return 3;
     if (/(in progress|inprogress|progress)/.test(s)) return 2;
     if (/(under supervision|supervision|review|order placed|placed|pending|order received)/.test(s)) return 1;
     return 1;
@@ -598,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `<a class="co-item-link" href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><i data-feather="external-link"></i></a>`
             : '';
 
-          const approvalLabel = it.svApproval || it.status || '—';
+          const approvalLabel = it.svApproval || displayWorkflowStatusLabel(it.status) || '—';
           const approvalColor = it.svApprovalColor || it.statusColor;
           const sVars = approvalLabelColorVars(approvalLabel, approvalColor);
           const sStyle = `--tag-bg:${sVars.bg};--tag-fg:${sVars.fg};--tag-border:${sVars.bd};`;

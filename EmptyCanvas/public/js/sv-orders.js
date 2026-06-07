@@ -1275,30 +1275,43 @@
   const STATUS_FLOW = [
     { label: "Under Supervision", sub: "Your order is under supervision." },
     { label: "In progress", sub: "We are preparing your order." },
-    { label: "Shipped", sub: "Your cargo is on delivery." },
+    { label: "Shipping", sub: "Your cargo is on delivery." },
     { label: "Arrived", sub: "Your order has arrived." },
   ];
+
+  function displayWorkflowStatusLabel(status) {
+    const raw = String(status || "").trim();
+    if (!raw) return raw;
+    return /^(shipped|shipping)$/i.test(raw) ? "Shipping" : raw;
+  }
 
   function statusToIndex(status) {
     const s = norm(status).replace(/[_-]+/g, " ");
     if (/(archive|archived)/.test(s)) return 5;
     if (/(arrived|delivered|received)/.test(s)) return 4;
-    if (/(shipped|on the way|delivering|prepared)/.test(s)) return 3;
+    if (/(shipped|shipping|on the way|delivering|prepared)/.test(s)) return 3;
     if (/(in progress|inprogress|progress)/.test(s)) return 2;
     if (/(under supervision|supervision|review|order placed|placed|pending|order received)/.test(s)) return 1;
     return 1;
   }
 
   function computeStage(items) {
-    const idx = Math.max(
-      1,
-      ...(items || []).map((x) => statusToIndex(x?.status)),
-    );
-    const safe = Math.min(5, Math.max(1, idx));
+    let bestIdx = 1;
+    let bestColor = null;
+    for (const item of items || []) {
+      const idx = statusToIndex(item?.status);
+      if (idx > bestIdx) {
+        bestIdx = idx;
+        bestColor = item?.statusColor || null;
+      } else if (idx === bestIdx && !bestColor && item?.statusColor) {
+        bestColor = item.statusColor;
+      }
+    }
+    const safe = Math.min(5, Math.max(1, bestIdx));
     const meta = safe >= 5
       ? { label: "Archive", sub: "This order is archived." }
       : (STATUS_FLOW[safe - 1] || STATUS_FLOW[0]);
-    return { idx: safe, label: meta.label, sub: meta.sub };
+    return { idx: safe, label: meta.label, sub: meta.sub, color: bestColor };
   }
 
   function setSVProgress(idx) {
@@ -1498,10 +1511,19 @@
     const creatorName = String(group.createdByName || first.createdByName || '').trim() || '—';
     const creatorId = String(group.createdById || first.createdById || first.teamMemberId || '').trim();
 
+    const stage = computeStage(items);
+    const showOperationalStatus = TAB === "approved" && !group.isArchived;
+    const operationalColor = stage.color || first.statusColor || (stage.idx >= 4 ? 'green' : stage.idx >= 3 ? 'blue' : stage.idx >= 2 ? 'yellow' : 'orange');
     const statusVars = group.isArchived
       ? { bg: '#F3E8FF', fg: '#6B21A8', bd: '#E9D5FF' }
-      : notionColorVars(group.approvalColor);
-    const displayStatus = group.isArchived ? 'Archive' : (group.approval || 'Not Started');
+      : showOperationalStatus
+        ? notionColorVars(operationalColor)
+        : notionColorVars(group.approvalColor);
+    const displayStatus = group.isArchived
+      ? 'Archive'
+      : showOperationalStatus
+        ? displayWorkflowStatusLabel(stage.label || first.status || 'In progress')
+        : (group.approval || 'Not Started');
 
     const thumbHTML = orderTypeThumbMarkup(
       group.orderType || first.orderType,
