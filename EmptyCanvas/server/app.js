@@ -955,13 +955,17 @@ async function clearUserServerCaches(req, opts = {}) {
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v2`));
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v3`));
     tasks.push(cacheDel(`cache:api:expenses:${usernameKey}:v4`));
-    for (const tab of ["all", "not-started", "approved", "rejected"]) {
-      tasks.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:v2`));
+    for (const tab of ["all", "not-started", "approved", "rejected", "archive"]) {
+      for (const version of ["v2", "v3", "v4"]) {
+        tasks.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:${version}`));
+      }
     }
   }
 
   tasks.push(
     cacheDel("cache:api:orders:requested:v7"),
+    cacheDel("cache:api:orders:requested:supabase:v3:approved"),
+    cacheDel("cache:api:orders:requested:supabase:v3:all-system"),
     cacheDel("cache:api:expenses:users:v1"),
     cacheDel("cache:api:expenses:users:v2"),
     cacheDel("cache:api:expenses:types:v1"),
@@ -4235,6 +4239,8 @@ function _sbSerializeOrderRow(row = {}) {
     _sbOrderText(_sbOrderGet(row, ["team_member_name", "Teams Members", "teams_members", "Supervisor", "supervisor"])) || "";
   const createdById = _sbOrderOwnerId(row);
   const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
+  const operationsApproval = _sbOrderText(_sbOrderGet(row, ["operations_approval", "Operations Approval", "operation_approval", "Operation Approval"])) || null;
+  const rejectedReason = _sbOrderText(_sbOrderGet(row, ["rejected_reason", "Rejected Reason", "Reject Reason", "rejection_reason", "Rejection Reason"])) || null;
   const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
   const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
   const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
@@ -4297,6 +4303,8 @@ function _sbSerializeOrderRow(row = {}) {
     operationsByNames: operationsByName ? [operationsByName] : [],
     operationsById: "",
     operationsByName,
+    operationsApproval,
+    rejectedReason,
     receiptNumber: _sbOrderText(_sbOrderGet(row, ["receipt_number", "Receipt Number", "Store Receipt Number"])) || null,
     createdTime,
     createdById: createdById || createdByName,
@@ -4490,6 +4498,8 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:requested:supabase:v1",
     "cache:api:orders:requested:supabase:v2:approved",
     "cache:api:orders:requested:supabase:v2:all-system",
+    "cache:api:orders:requested:supabase:v3:approved",
+    "cache:api:orders:requested:supabase:v3:all-system",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
   ];
@@ -18801,8 +18811,8 @@ app.get(
 
       if (_sbOrdersEnabled()) {
         const cacheKey = includeAllSystem
-          ? "cache:api:orders:requested:supabase:v2:all-system"
-          : "cache:api:orders:requested:supabase:v2:approved";
+          ? "cache:api:orders:requested:supabase:v3:all-system"
+          : "cache:api:orders:requested:supabase:v3:approved";
         const forceFresh =
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
@@ -20114,6 +20124,69 @@ app.post(
   },
 );
 
+
+// Operations Orders: approve/reject after operations review.
+app.post(
+  "/api/orders/operations/approval",
+  requireAuth,
+  requirePage("Requested Orders"),
+  async (req, res) => {
+    try {
+      if (!_sbOrdersEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase orders are not configured" });
+      }
+
+      const ids = Array.from(new Set(
+        (Array.isArray(req.body?.ids) ? req.body.ids : Array.isArray(req.body?.orderIds) ? req.body.orderIds : [req.body?.id])
+          .map((x) => String(x || "").trim())
+          .filter(Boolean)
+      ));
+      const raw = String(req.body?.decision || req.body?.approval || "").trim().toLowerCase();
+      const decision = raw === "approved" ? "Approved" : raw === "rejected" ? "Rejected" : raw === "not started" || raw === "not-started" ? "Not Started" : null;
+      const rejectedReason = String(req.body?.rejectedReason ?? req.body?.reason ?? "").trim();
+
+      if (!ids.length || !decision) {
+        return res.status(400).json({ ok: false, error: "Invalid ids or decision" });
+      }
+      if (decision === "Rejected" && !rejectedReason) {
+        return res.status(400).json({ ok: false, error: "Rejected reason is required" });
+      }
+
+      const updated = [];
+      const failed = [];
+      for (const id of ids) {
+        if (!/^\d+$/.test(String(id))) {
+          failed.push({ id, error: "Unsupported order id" });
+          continue;
+        }
+        try {
+          const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+          if (!row) {
+            failed.push({ id, error: "Order not found" });
+            continue;
+          }
+          const patch = {
+            operations_approval: decision,
+            rejected_reason: decision === "Rejected" ? rejectedReason : null,
+          };
+          await supabaseDb.updateById(_sbOrdersTable(), id, patch);
+          updated.push({ id, decision, rejectedReason: decision === "Rejected" ? rejectedReason : null });
+        } catch (err) {
+          failed.push({ id, error: err?.message || String(err) });
+        }
+      }
+
+      await _sbInvalidateOrdersCaches(req).catch(() => {});
+      await clearSVOrdersRouteCaches(req).catch(() => {});
+
+      return res.json({ ok: failed.length === 0, decision, rejectedReason: decision === "Rejected" ? rejectedReason : null, updated, failed });
+    } catch (e) {
+      console.error("POST /api/orders/operations/approval error:", e?.body || e);
+      return res.status(500).json({ ok: false, error: "Failed to update operations approval" });
+    }
+  },
+);
+
 app.get(
   "/api/orders/requested/maintenance-form-options",
   requireAuth,
@@ -20248,6 +20321,8 @@ app.post(
         await _sbInvalidateOrdersCaches(req).catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v2:approved").catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v2:all-system").catch(() => {});
+        await cacheDel("cache:api:orders:requested:supabase:v3:approved").catch(() => {});
+        await cacheDel("cache:api:orders:requested:supabase:v3:all-system").catch(() => {});
 
         return res.json({
           success: true,
@@ -30694,7 +30769,7 @@ async function clearSVOrdersRouteCaches(req) {
   try {
     const usernameKey = cacheKeySafe(req?.session?.username || "");
     const keys = [];
-    for (const version of ["v2", "v3"]) {
+    for (const version of ["v2", "v3", "v4"]) {
       for (const tab of ["all", "not-started", "approved", "rejected", "archive"]) {
         keys.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:${version}`));
       }
@@ -30817,6 +30892,8 @@ function _sbSerializeSVOrderRow(row = {}) {
   const qtyBase = qtyRequested !== null ? qtyRequested : (qtyProgress !== null ? qtyProgress : 0);
   const qtyEdited = _sbOrderNum(_sbOrderGet(row, ["quantity_edited_by_supervisor", "Quantity Edited by supervisor", "quantity_edited", "edited_quantity"]));
   const approval = _sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]));
+  const rejectedReason = _sbOrderText(_sbOrderGet(row, ["rejected_reason", "Rejected Reason", "Reject Reason", "rejection_reason", "Rejection Reason"])) || null;
+  const operationsApproval = _sbOrderText(_sbOrderGet(row, ["operations_approval", "Operations Approval", "operation_approval", "Operation Approval"])) || null;
   const orderType = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || null;
   const createdByName = _sbOrderOwnerName(row);
   const ownerId = _sbOrderOwnerId(row);
@@ -30841,6 +30918,8 @@ function _sbSerializeSVOrderRow(row = {}) {
     status: _sbOrderText(_sbOrderGet(row, ["status", "Status"])) || "",
     approval,
     approvalColor: _sbSVApprovalColor(approval),
+    rejectedReason,
+    operationsApproval,
     orderType,
     orderTypeColor: _sbOrderTypeColor(orderType),
     createdTime: _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) || new Date().toISOString(),
@@ -31068,7 +31147,7 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
 
     const cacheTabKey = label === "__archive__" ? "archive" : (label ? String(label).toLowerCase().replace(/\s+/g, "-") : "all");
     const usernameKey = cacheKeySafe(req?.session?.username || "");
-    const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v3`;
+    const cacheKey = `cache:api:sv-orders:${usernameKey}:${cacheTabKey}:v4`;
 
     const items = await cacheGetOrSet(cacheKey, 30, async () => {
       // Supabase mode: use the normalized team_members.sv_school_member_ids
@@ -31337,13 +31416,21 @@ app.post(
         return res.status(400).json({ ok:false, error: "Invalid id or decision" });
       }
 
+      const rejectedReason = String(req.body?.rejectedReason ?? req.body?.reason ?? "").trim();
+      if (decision === "Rejected" && !rejectedReason) {
+        return res.status(400).json({ ok:false, error: "Rejected reason is required" });
+      }
+
       if (_sbOrdersEnabled() && /^\d+$/.test(String(pageId))) {
         const { row, allowed } = await _sbSVOrderRowIfAllowed(req, pageId);
         if (!row) return res.status(404).json({ ok:false, error: "Order not found" });
         if (!allowed) return res.status(403).json({ ok:false, error: "Not allowed" });
 
         const nextStatus = (decision === "Approved" || decision === "Rejected") ? "In progress" : null;
-        const patch = { sv_approval: decision };
+        const patch = {
+          sv_approval: decision,
+          rejected_reason: decision === "Rejected" ? rejectedReason : null,
+        };
         // Supabase replacement for the old Notion automation:
         // once the supervisor approves/rejects a component, the operational Status
         // must move from Under Supervision to In progress.
