@@ -7387,7 +7387,9 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
 }
 
 // Authentication middleware
-function _authRequiredResponse(req, res) {
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) return next();
+
   // API calls should not silently render the login page. Returning JSON makes
   // debugging and frontend handling clearer, while normal page routes still
   // redirect to /login.
@@ -7403,91 +7405,6 @@ function _authRequiredResponse(req, res) {
   }
 
   return res.redirect("/login");
-}
-
-function _forceLogoutRemovedTeamMember(req, res) {
-  const isApi = String(req.path || "").startsWith("/api/");
-  const send = () => {
-    try { res.clearCookie("connect.sid"); } catch {}
-    if (isApi) {
-      res.set("Cache-Control", "no-store");
-      return res.status(401).json({
-        ok: false,
-        authenticated: false,
-        code: "USER_REMOVED",
-        message: "Your account data was removed. Please log in again.",
-        redirect: "/login",
-      });
-    }
-    return res.redirect("/login");
-  };
-
-  try {
-    if (req.session && typeof req.session.destroy === "function") {
-      return req.session.destroy(() => send());
-    }
-  } catch {}
-  return send();
-}
-
-async function _refreshSupabaseSessionFromTeamMember(req, row) {
-  if (!row || !req?.session) return;
-  try {
-    const rowId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
-    if (rowId) req.session.userSupabaseId = rowId;
-    const { accountPayload, allowedNormalized, allowedUI } = await _sbAccountPayloadWithAccess(row, req.session.username || "");
-    req.session.username = accountPayload.username || req.session.username || "";
-    req.session.allowedPages = allowedNormalized;
-    req.session.accountCache = { ...accountPayload, allowedPages: allowedUI };
-    req.session.accountCacheTs = Date.now();
-  } catch (error) {
-    console.warn("[auth] could not refresh Supabase session permissions:", error?.message || error);
-  }
-}
-
-async function _validateSupabaseSessionTeamMember(req, res, next) {
-  try {
-    const session = req.session || {};
-    const shouldValidate =
-      _sbTeamMembersEnabled() &&
-      session.authenticated &&
-      (session.userSupabaseId || (!session.userNotionId && session.username));
-
-    if (!shouldValidate) return next();
-
-    const sessionId = String(session.userSupabaseId || "").trim();
-    let row = null;
-
-    if (sessionId) {
-      row = await _sbFindTeamMemberById(sessionId).catch((error) => {
-        console.warn("[auth] Supabase team member lookup by id failed:", error?.message || error);
-        return undefined;
-      });
-      if (typeof row === "undefined") return next();
-      if (!row) return _forceLogoutRemovedTeamMember(req, res);
-    } else {
-      row = await _sbFindTeamMemberByName(session.username).catch((error) => {
-        console.warn("[auth] Supabase team member lookup by username failed:", error?.message || error);
-        return undefined;
-      });
-      if (typeof row === "undefined") return next();
-      if (!row) return _forceLogoutRemovedTeamMember(req, res);
-    }
-
-    await _refreshSupabaseSessionFromTeamMember(req, row);
-    return next();
-  } catch (error) {
-    console.warn("[auth] Supabase session validation skipped:", error?.message || error);
-    return next();
-  }
-}
-
-function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) {
-    return _validateSupabaseSessionTeamMember(req, res, next);
-  }
-
-  return _authRequiredResponse(req, res);
 }
 
 // Page-Access middleware
@@ -8548,77 +8465,12 @@ async function _backupSelectAllRows(tableName) {
   return rows;
 }
 
-function _backupIsTeamMembersTable(tableName = '') {
-  return _backupCleanTableName(tableName).toLowerCase() === _backupCleanTableName(_sbTeamMembersTable()).toLowerCase();
-}
-
-function _backupIsPageAccessTable(tableName = '') {
-  return _backupCleanTableName(tableName).toLowerCase() === 'team_member_page_access';
-}
-
-function _backupIsTeamSvSchoolsTable(tableName = '') {
-  try {
-    return _backupCleanTableName(tableName).toLowerCase() === _backupCleanTableName(_sbTeamMemberSvSchoolsTable()).toLowerCase();
-  } catch {
-    return false;
-  }
-}
-
-function _backupNeedsTeamMemberPreserve(tableName = '') {
-  return _backupIsTeamMembersTable(tableName) || _backupIsPageAccessTable(tableName) || _backupIsTeamSvSchoolsTable(tableName);
-}
-
-async function _backupCurrentTeamMemberId(req) {
-  if (!_sbTeamMembersEnabled()) return '';
-  const sessionId = String(req?.session?.userSupabaseId || '').trim();
-  if (sessionId) {
-    const row = await _sbFindTeamMemberById(sessionId).catch(() => null);
-    if (row) return String(_sbGet(row, ['id', 'ID']) ?? sessionId).trim() || sessionId;
-    return '';
-  }
-  const sessionRow = await _sbFindSessionTeamMember(req).catch(() => null);
-  return String(_sbGet(sessionRow || {}, ['id', 'ID']) ?? '').trim();
-}
-
-async function _backupDeleteRowsExceptValue(table, column, keepValue) {
-  const cleanTable = _backupCleanTableName(table);
-  const cleanColumn = _backupCleanTableName(column);
-  const value = String(keepValue || '').trim();
-  if (!cleanTable || !cleanColumn || !value) return false;
-
-  await supabaseDb.request(`/${encodeURIComponent(cleanTable)}?${encodeURIComponent(cleanColumn)}=neq.${_sbRestFilterValue(value)}`, {
-    method: 'DELETE',
-    headers: { Prefer: 'return=minimal' },
-  });
-  return true;
-}
-
-async function _backupDeleteAllRows(tableName, options = {}) {
+async function _backupDeleteAllRows(tableName) {
   const table = _backupCleanTableName(tableName);
   if (!table) {
     const err = new Error('Invalid table name.');
     err.status = 400;
     throw err;
-  }
-
-  const preserveTeamMemberId = String(options?.preserveTeamMemberId || '').trim();
-  if (preserveTeamMemberId) {
-    try {
-      if (_backupIsTeamMembersTable(table)) {
-        await _backupDeleteRowsExceptValue(table, 'id', preserveTeamMemberId);
-        return;
-      }
-      if (_backupIsPageAccessTable(table) || _backupIsTeamSvSchoolsTable(table)) {
-        await _backupDeleteRowsExceptValue(table, 'team_member_id', preserveTeamMemberId);
-        return;
-      }
-    } catch (preserveError) {
-      const msg = String(preserveError?.message || preserveError?.details?.message || preserveError?.details || '');
-      if (!/column|schema cache|does not exist|PGRST204|42703/i.test(msg)) throw preserveError;
-      // If the preserve column is unavailable in an older deployment, continue
-      // with the normal delete path. The default Admin fallback still protects
-      // application access after Team Members is cleared.
-    }
   }
 
   try {
@@ -8641,146 +8493,6 @@ async function _backupDeleteAllRows(tableName, options = {}) {
     method: 'DELETE',
     headers: { Prefer: 'return=minimal' },
   });
-}
-
-function _backupFindColumnByAliases(columns = [], aliases = []) {
-  const list = Array.isArray(columns) ? columns : [];
-  for (const alias of aliases || []) {
-    const hit = list.find((column) => _sbCanon(column?.name) === _sbCanon(alias));
-    if (hit?.name) return hit;
-  }
-  return null;
-}
-
-function _backupColumnAcceptsJson(column = {}) {
-  const token = `${String(column?.type || '')} ${String(column?.format || '')} ${String(column?.raw?.format || '')} ${String(column?.raw?.['x-pg-type'] || '')} ${String(column?.raw?.['x-postgrest-type'] || '')}`.toLowerCase();
-  return /json|jsonb/.test(token);
-}
-
-function _backupSetPayloadValue(payload, column, value, { jsonValue = null } = {}) {
-  if (!column?.name) return;
-  payload[column.name] = jsonValue !== null && _backupColumnAcceptsJson(column) ? jsonValue : value;
-}
-
-async function _backupBuildDefaultAdminMemberPayload() {
-  let columns = [];
-  try {
-    const schema = await _backupGetTableColumns(_sbTeamMembersTable());
-    columns = Array.isArray(schema?.columns) ? schema.columns : [];
-  } catch (error) {
-    console.warn('[backup] could not inspect team_members schema before recreating Admin:', error?.message || error);
-  }
-
-  const payload = {};
-  const nameCol = _backupFindColumnByAliases(columns, ['Name', 'name', 'username', 'full_name']);
-  const passwordCol = _backupFindColumnByAliases(columns, ['Password', 'password', 'passcode', 'pin']);
-  const positionCol = _backupFindColumnByAliases(columns, ['Position', 'position', 'role']);
-  const allowedCol = _backupFindColumnByAliases(columns, ['Allowed Pages', 'allowed_pages', 'Pages', 'pages', 'access_pages']);
-
-  _backupSetPayloadValue(payload, nameCol, 'Admin');
-  _backupSetPayloadValue(payload, passwordCol, '1234');
-  _backupSetPayloadValue(payload, positionCol, 'Admin');
-  _backupSetPayloadValue(payload, allowedCol, JSON.stringify(ALL_PAGES), { jsonValue: ALL_PAGES });
-
-  if (!Object.keys(payload).length) {
-    return { Name: 'Admin', Password: '1234', Position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) };
-  }
-  if (!nameCol) payload.Name = 'Admin';
-  if (!passwordCol) payload.Password = '1234';
-  return payload;
-}
-
-function _backupDefaultAdminFallbackPayloads() {
-  return [
-    { Name: 'Admin', Password: '1234', Position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) },
-    { name: 'Admin', password: '1234', position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) },
-    { username: 'Admin', password: '1234', position: 'Admin', allowed_pages: JSON.stringify(ALL_PAGES) },
-  ];
-}
-
-async function _backupInsertDefaultAdminMember() {
-  const table = _sbTeamMembersTable();
-  const attempts = [await _backupBuildDefaultAdminMemberPayload(), ..._backupDefaultAdminFallbackPayloads()];
-  const seen = new Set();
-  let lastError = null;
-
-  for (const attempt of attempts) {
-    let payload = { ...(attempt || {}) };
-    const signature = JSON.stringify(Object.keys(payload).sort().map((key) => [key, payload[key]]));
-    if (seen.has(signature)) continue;
-    seen.add(signature);
-
-    for (let retry = 0; retry < 8; retry += 1) {
-      try {
-        const created = await supabaseDb.insert(table, payload);
-        if (created) return created;
-      } catch (error) {
-        lastError = error;
-        const unsupported = _backupUnsupportedInsertColumn(error);
-        if (unsupported && Object.keys(payload).some((key) => key.toLowerCase() === unsupported.toLowerCase())) {
-          payload = _backupCloneRowsWithoutColumn([payload], unsupported)[0] || {};
-          if (Object.keys(payload).length) continue;
-        }
-        break;
-      }
-    }
-  }
-
-  const err = new Error(`Failed to create the default Admin user after deleting Team Members: ${lastError?.message || 'Unknown error'}`);
-  err.status = lastError?.status || 500;
-  err.details = lastError?.details || lastError;
-  throw err;
-}
-
-async function _backupGrantAllPageAccessToDefaultAdmin(adminRow = {}) {
-  const adminId = String(_sbGet(adminRow, ['id', 'ID']) ?? '').trim();
-  if (!adminId) return { granted: false, reason: 'missing-admin-id' };
-
-  try {
-    const pages = await _sbSelectAppPages({ assignableOnly: true });
-    const entries = (pages || []).map((page) => ({
-      pageId: page.pageId || page.id,
-      pageKey: page.pageKey,
-      accessLevel: 'admin',
-      isEnabled: true,
-    }));
-    if (!entries.length) return { granted: false, reason: 'no-app-pages' };
-    await _sbSavePageAccessForMember(adminId, entries, { teamMemberName: 'Admin', grantedBy: 'System' });
-    return { granted: true, count: entries.length };
-  } catch (error) {
-    // Legacy deployments may not have app_pages / team_member_page_access yet.
-    // The fallback Allowed Pages column on the Admin row still keeps the account usable.
-    console.warn('[backup] could not create page-access rows for default Admin:', error?.message || error);
-    return { granted: false, reason: error?.message || 'page-access-unavailable' };
-  }
-}
-
-async function _backupEnsureDefaultAdminUser() {
-  if (!_sbTeamMembersEnabled()) return { ensured: false, reason: 'supabase-disabled' };
-
-  let admin = await _sbFindTeamMemberByName('Admin').catch(() => null);
-  if (!admin) {
-    admin = await _backupInsertDefaultAdminMember();
-  } else {
-    try {
-      const table = _sbTeamMembersTable();
-      const adminId = String(_sbGet(admin, ['id', 'ID']) ?? '').trim();
-      const patch = await _backupBuildDefaultAdminMemberPayload();
-      if (adminId && Object.keys(patch).length) {
-        admin = await supabaseDb.updateById(table, adminId, patch) || admin;
-      }
-    } catch (error) {
-      console.warn('[backup] could not refresh default Admin credentials:', error?.message || error);
-    }
-  }
-
-  const access = await _backupGrantAllPageAccessToDefaultAdmin(admin);
-  return {
-    ensured: true,
-    id: String(_sbGet(admin, ['id', 'ID']) ?? ''),
-    username: 'Admin',
-    access,
-  };
 }
 
 app.get('/api/backup/tables', requireAuth, requirePage('Backup'), async (req, res) => {
@@ -8862,15 +8574,12 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
     const items = _backupCatalog();
     const deletedTables = [];
     const skippedTables = [];
-    const preservedTeamMemberId = await _backupCurrentTeamMemberId(req);
-    let teamMembersWasDeleted = false;
     _historySetEntity(res, { entityType: 'database', entityId: 'all', entityLabel: 'All database tables' });
 
     for (const item of [...items].reverse()) {
       try {
-        await _backupDeleteAllRows(item.tableName, { preserveTeamMemberId: preservedTeamMemberId });
+        await _backupDeleteAllRows(item.tableName);
         deletedTables.push(item.tableName);
-        if (_backupIsTeamMembersTable(item.tableName)) teamMembersWasDeleted = true;
       } catch (error) {
         if (_backupIsMissingTableError(error)) {
           skippedTables.push(item.tableName);
@@ -8881,8 +8590,7 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
       }
     }
 
-    const defaultAdmin = teamMembersWasDeleted ? await _backupEnsureDefaultAdminUser() : null;
-    return res.json({ ok: true, deletedTables, skippedTables, preservedTeamMemberId, defaultAdmin });
+    return res.json({ ok: true, deletedTables, skippedTables });
   } catch (error) {
     console.error('DELETE /api/backup/delete-all error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete all database data.');
@@ -8969,10 +8677,8 @@ app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async 
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
-    const preserveTeamMemberId = _backupNeedsTeamMemberPreserve(item.tableName) ? await _backupCurrentTeamMemberId(req) : '';
-    await _backupDeleteAllRows(item.tableName, { preserveTeamMemberId });
-    const defaultAdmin = _backupIsTeamMembersTable(item.tableName) ? await _backupEnsureDefaultAdminUser() : null;
-    return res.json({ ok: true, preservedTeamMemberId: preserveTeamMemberId, defaultAdmin });
+    await _backupDeleteAllRows(item.tableName);
+    return res.json({ ok: true });
   } catch (error) {
     console.error('DELETE /api/backup/tables/:key error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete table data.');
@@ -31182,9 +30888,15 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
       const requestedRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
       const progressRaw = _sbOrderNum(_sbOrderGet(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
       const requested = roundOrderQty(requestedRaw !== null ? requestedRaw : (progressRaw !== null ? progressRaw : 0));
+      const orderTypeName = _sbOrderText(_sbOrderGet(row, ["order_type", "Order Type"])) || "";
+      const isWithdrawalQuantity = _normKeyOrderType(orderTypeName) === _normKeyOrderType("Withdraw Products")
+        || Number(requested) < 0
+        || Number(progressRaw) < 0;
+      const signedValue = isWithdrawalQuantity ? -Math.abs(value) : value;
       // Do not clamp to the requested quantity. The supervisor edit is an override
       // and may be higher/lower than the original request.
-      const newVal = roundOrderQty(value);
+      // Withdrawal orders must remain negative even if the reviewer types a positive value.
+      const newVal = roundOrderQty(signedValue);
       const editedVal = (Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested)) ? null : newVal;
 
       const receivedRaw = _sbOrderNum(_sbOrderGet(row, [
@@ -31246,7 +30958,14 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
     };
 
     const requested = roundQty(Number(pg?.properties?.[reqQtyProp]?.number ?? 0));
-    const newVal = roundQty(value);
+    let orderTypeName = "";
+    try {
+      const orderTypeProp = await detectOrderTypePropName();
+      orderTypeName = orderTypeProp ? notionPropPlainText(pg?.properties?.[orderTypeProp]) : "";
+    } catch {}
+    const isWithdrawalQuantity = _normKeyOrderType(orderTypeName) === _normKeyOrderType("Withdraw Products") || Number(requested) < 0;
+    const signedValue = isWithdrawalQuantity ? -Math.abs(value) : value;
+    const newVal = roundQty(signedValue);
     const editedVal = (Number.isFinite(requested) && roundQty(newVal) === roundQty(requested)) ? null : newVal;
 
     await notion.pages.update({
