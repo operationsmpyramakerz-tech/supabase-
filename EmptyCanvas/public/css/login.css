@@ -683,13 +683,11 @@ body.auth-transitioning-to-signup .login-wordmark {
 
 
 /* Icon-only after-login transition.
-   The login logo breaks into square tiles, flies apart, then reassembles before Home opens. */
+   The existing login logo animates in-place, then the app opens Home. */
 body.login-success-active {
   overflow: hidden !important;
 }
 
-
-/* Inline login-logo success transition: the real logo in the login card animates in-place. */
 .login-logo-stage {
   --inline-logo-size: 72px;
   position: relative;
@@ -699,6 +697,7 @@ body.login-success-active {
   height: var(--inline-logo-size);
   margin: 0 auto 0.78rem;
   isolation: isolate;
+  transform-origin: center;
 }
 
 .login-logo-stage .login-logo {
@@ -731,6 +730,18 @@ body.login-success-active {
   background-image: url('/images/logo.png');
   background-repeat: no-repeat;
   background-size: 400% 400%;
+  transform-origin: center;
+  will-change: transform, opacity, filter, clip-path;
+}
+
+.login-inline-logo-pulse-echo {
+  position: absolute;
+  inset: 0;
+  background-image: url('/images/logo.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  opacity: 0;
   transform-origin: center;
   will-change: transform, opacity, filter;
 }
@@ -772,40 +783,127 @@ body.login-inline-success-active .forgot-password-link {
 }
 
 body.login-inline-success-active .login-logo-stage.is-running {
-  animation: loginInlineLogoStage 2.05s cubic-bezier(.16, 1, .3, 1) both;
-}
-
-body.login-inline-success-active .login-logo-stage.is-running .login-logo {
-  opacity: 0;
-  animation: none !important;
-  transform: scale(.86);
-}
-
-body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-pieces {
-  opacity: 1;
-}
-
-body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-piece {
-  animation: loginInlineLogoPieceBreak 1.96s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
-}
-
-body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-ring {
-  animation: loginInlineLogoRing 1.95s cubic-bezier(.16, 1, .3, 1) both;
-}
-
-body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-flare--one {
-  animation: loginInlineLogoFlareOne 1.95s cubic-bezier(.16, 1, .3, 1) both;
-}
-
-body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-flare--two {
-  animation: loginInlineLogoFlareTwo 1.95s cubic-bezier(.16, 1, .3, 1) both;
+  animation: loginInlineStageHold 2.2s cubic-bezier(.16, 1, .3, 1) both;
 }
 
 body.login-inline-success-active .login-btn.loading::after {
   opacity: 0;
 }
 
-@keyframes loginInlineLogoStage {
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] {
+  animation-name: loginInlineExplodeStage;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-logo,
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-logo {
+  opacity: 0;
+  animation: none !important;
+  transform: scale(.86);
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-pieces,
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-pieces,
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-inline-logo-pieces {
+  opacity: 1;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-piece {
+  animation: loginInlineLogoPieceBreak 1.96s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-ring {
+  animation: loginInlineLogoRing 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-flare--one {
+  animation: loginInlineLogoFlareOne 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-flare--two {
+  animation: loginInlineLogoFlareTwo 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] {
+  animation: loginInlinePulseStage 1.92s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-logo {
+  opacity: 1;
+  animation: loginInlinePulseLogo 1.92s cubic-bezier(.16, 1, .3, 1) both !important;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-pieces {
+  display: block;
+  opacity: 1;
+  inset: 6px;
+  filter: none;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-pulse-echo {
+  animation: loginInlinePulseEcho 1.62s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-ring {
+  animation: loginInlinePulseRing 1.82s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-flare--one {
+  animation: loginInlineLogoFlareOne 1.70s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-flare--two {
+  animation: loginInlineLogoFlareTwo 1.70s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] {
+  animation: loginInlineLineStage 2.18s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-logo {
+  opacity: 0;
+  animation: loginInlineLineSolid 2.16s cubic-bezier(.16, 1, .3, 1) both !important;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-inline-logo-piece {
+  opacity: 0;
+  transform: translate(calc(var(--line-x, 1) * -2px), calc(var(--line-y, 1) * -2px)) scale(.98);
+  clip-path: inset(0 100% 0 0 round 1px);
+  animation: loginInlineLinePiece 1.82s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-inline-logo-ring {
+  animation: loginInlineLineRing 2.02s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] {
+  animation-name: loginInlineSlideStage;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-piece {
+  opacity: 0;
+  transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.96);
+  filter: blur(4px);
+  animation: loginInlineSlidePiece 1.98s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-ring {
+  animation: loginInlineSlideRing 2.0s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-flare--one {
+  animation: loginInlineSlideFlareOne 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-flare--two {
+  animation: loginInlineSlideFlareTwo 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+@keyframes loginInlineStageHold {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes loginInlineExplodeStage {
   0% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
   18% { transform: translateY(-4px) scale(1.10); filter: drop-shadow(0 16px 20px rgba(234, 88, 12, .18)); }
   46% { transform: translateY(0) scale(1.02) rotate(0deg); }
@@ -855,6 +953,139 @@ body.login-inline-success-active .login-btn.loading::after {
   34% { opacity: .85; transform: translate(-20px, 14px) scale(1); }
   72% { opacity: .75; transform: translate(8px, -8px) scale(.78); }
   100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@keyframes loginInlinePulseStage {
+  0% { transform: scale(.94) rotate(0deg); }
+  24% { transform: scale(1.14) rotate(-4deg); }
+  50% { transform: scale(1.28) rotate(4deg); }
+  72% { transform: scale(.98) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes loginInlinePulseLogo {
+  0% { transform: scale(.82); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  28% { transform: scale(1.10); filter: drop-shadow(0 0 18px rgba(234,88,12,.45)); }
+  54% { transform: scale(1.22); filter: drop-shadow(0 0 28px rgba(234,88,12,.62)); }
+  78% { transform: scale(.97); filter: drop-shadow(0 8px 16px rgba(234,88,12,.22)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlinePulseEcho {
+  0% { opacity: 0; transform: scale(.86); filter: blur(0); }
+  26% { opacity: .18; transform: scale(1.08); }
+  68% { opacity: .08; transform: scale(1.48); filter: blur(1px); }
+  100% { opacity: 0; transform: scale(1.72); filter: blur(2px); }
+}
+
+@keyframes loginInlinePulseRing {
+  0% { opacity: 0; transform: scale(.68) rotate(0deg); box-shadow: 0 0 0 0 rgba(234,88,12,.18); }
+  36% { opacity: .78; transform: scale(1.08) rotate(45deg); box-shadow: 0 0 0 16px rgba(234,88,12,.10); }
+  100% { opacity: 0; transform: scale(1.48) rotate(120deg); box-shadow: 0 0 0 28px rgba(234,88,12,0); }
+}
+
+@keyframes loginInlineLineStage {
+  0% { transform: scale(.96); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  58% { transform: scale(1.06); filter: drop-shadow(0 0 16px rgba(234,88,12,.28)); }
+  86% { transform: scale(1.02); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlineLinePiece {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0 round 1px);
+    transform: translate(calc(var(--line-x, 1) * -4px), calc(var(--line-y, 1) * -4px)) scale(.98);
+    filter: drop-shadow(0 0 0 rgba(234,88,12,0));
+  }
+  34% {
+    opacity: 1;
+    clip-path: inset(0 42% 0 0 round 1px);
+    transform: translate(0, 0) scale(1.02);
+    filter: drop-shadow(0 0 9px rgba(234,88,12,.38));
+  }
+  72%, 100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 0);
+    transform: translate(0, 0) scale(1);
+    filter: drop-shadow(0 0 0 rgba(234,88,12,0));
+  }
+}
+
+@keyframes loginInlineLineSolid {
+  0%, 72% { opacity: 0; transform: scale(.98); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  86% { opacity: 1; transform: scale(1.04); filter: drop-shadow(0 0 15px rgba(234,88,12,.28)); }
+  100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlineLineRing {
+  0% { opacity: 0; transform: scale(.82) rotate(45deg); }
+  50% { opacity: .46; transform: scale(1.05) rotate(45deg); }
+  100% { opacity: 0; transform: scale(1.30) rotate(45deg); }
+}
+
+@keyframes loginInlineSlideStage {
+  0% { transform: scale(.98); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  50% { transform: scale(1.08); filter: drop-shadow(0 18px 22px rgba(234,88,12,.18)); }
+  78% { transform: scale(.98); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlineSlidePiece {
+  0% {
+    opacity: 0;
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.95);
+    filter: blur(4px);
+  }
+  34% {
+    opacity: .96;
+    transform: translate(calc(var(--tx) * .26), calc(var(--ty) * .26)) rotate(calc(var(--rot) * .4)) scale(1.03);
+    filter: blur(1.4px);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(var(--sx), var(--sy)) rotate(calc(var(--rot) * -.18)) scale(1.05);
+    filter: blur(.2px);
+  }
+  86%, 100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes loginInlineSlideRing {
+  0% { opacity: 0; transform: scale(.72) rotate(-30deg); }
+  36% { opacity: .48; transform: scale(1.02) rotate(45deg); }
+  100% { opacity: 0; transform: scale(1.30) rotate(90deg); }
+}
+
+@keyframes loginInlineSlideFlareOne {
+  0% { opacity: 0; transform: translate(42px, -16px) scale(.3); }
+  38% { opacity: .82; transform: translate(16px, -7px) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@keyframes loginInlineSlideFlareTwo {
+  0% { opacity: 0; transform: translate(-38px, 18px) scale(.3); }
+  38% { opacity: .72; transform: translate(-14px, 8px) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@media (max-width: 480px) {
+  .login-logo-stage {
+    --inline-logo-size: 52px;
+    margin-bottom: 0.45rem;
+  }
+
+  .login-logo-stage .login-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .login-inline-logo-pieces {
+    inset: 6px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
