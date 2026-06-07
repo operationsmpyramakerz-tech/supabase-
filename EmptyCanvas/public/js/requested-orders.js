@@ -2780,12 +2780,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return roundQty(n);
   }
 
-  // Quantity shown in the UI. In "Not Started" we treat Quantity Progress as the primary value,
-  // and we only show a received override if Operations explicitly edited it.
+  // Quantity shown in the detail modal.
+  // All / Not Started must show the original requested quantity only.
+  // Received/remaining comparison values are only shown in later workflow tabs.
   function receivedQtyDisplay(it) {
+    if (currentTab === "all" || currentTab === "not-started") return null;
     const v = receivedQtyRaw(it);
     if (v === null || v === undefined) return null;
-    if (currentTab === "not-started" && !it?.quantityReceivedEdited) return null;
     return v;
   }
 
