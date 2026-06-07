@@ -1932,6 +1932,64 @@ document.addEventListener("DOMContentLoaded", () => {
     return norm(normalizeOperationsApproval(value)).replace(/\s+/g, "-");
   }
 
+  function svApprovalKey(value) {
+    const key = norm(String(value || "").trim()).replace(/[_.-]+/g, " ");
+    if (key.includes("reject")) return "rejected";
+    if (key.includes("approv")) return "approved";
+    return "not-started";
+  }
+
+  function itemRejectedReason(it) {
+    return String(it?.rejectedReason || it?.rejected_reason || "").trim();
+  }
+
+  function itemOpsDecisionKey(it) {
+    const opKey = operationsApprovalKey(it?.operationsApproval || it?.operations_approval || "");
+    const svKey = svApprovalKey(it?.svApproval || it?.svApprovalName || it?.sv_approval || "");
+    if (opKey === "rejected" || svKey === "rejected" || itemRejectedReason(it)) return "rejected";
+    if (svKey === "approved" || opKey === "approved" || statusToIndex(it?.status) === 2) return "approved";
+    return "not-started";
+  }
+
+  function hasMixedApprovedRejectedDecision(items) {
+    const keys = (Array.isArray(items) ? items : []).map(itemOpsDecisionKey);
+    return keys.includes("approved") && keys.includes("rejected");
+  }
+
+  function summarizeOpsCardStatus(items, stage) {
+    const list = Array.isArray(items) ? items : [];
+    const idx = stage?.idx || 1;
+    if (idx >= 5) return { label: "Archive", color: "purple" };
+    if (idx >= 4) return { label: "Arrived", color: "green" };
+    if (idx >= 3) return { label: "Shipping", color: "blue" };
+    const keys = list.map(itemOpsDecisionKey);
+    if (keys.includes("rejected")) return { label: "Rejected", color: "red" };
+    if (keys.includes("approved")) return { label: "Approved", color: "green" };
+    return { label: "Under Supervision", color: "orange" };
+  }
+
+  function itemOpsStatusLabel(it, fallbackStatus) {
+    const idx = statusToIndex(it?.status || fallbackStatus);
+    if (idx >= 5) return "Archive";
+    if (idx >= 4) return "Arrived";
+    if (idx >= 3) return "Shipping";
+    const key = itemOpsDecisionKey(it);
+    if (key === "rejected") return "Rejected";
+    if (key === "approved") return "Approved";
+    return displayWorkflowStatusLabel(String(it?.status || fallbackStatus || "Under Supervision").trim()) || "Under Supervision";
+  }
+
+  function itemOpsStatusColor(it, fallbackColor) {
+    const label = itemOpsStatusLabel(it, "");
+    const key = norm(label);
+    if (key === "approved") return "green";
+    if (key === "rejected") return "red";
+    if (key === "shipping") return "blue";
+    if (key === "arrived") return "green";
+    if (key === "archive") return "purple";
+    return fallbackColor || "orange";
+  }
+
   function summarizeOperationsApproval(items) {
     const values = (Array.isArray(items) ? items : [])
       .map((it) => normalizeOperationsApproval(it?.operationsApproval || it?.operations_approval || ""));
@@ -2839,7 +2897,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (idx >= 4) return "delivered";
     if (idx >= 3) return "received";
     if (idx === 2) return "approved";
-    return "not-started";
+    return "all";
   }
 
   function readTabFromUrl() {
@@ -2847,7 +2905,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tab = norm(url.searchParams.get("tab"));
     const allowed = isMaintenancePage
       ? new Set(["received", "delivered"])
-      : new Set(["all", "not-started", "reviewed", "approved", "rejected", "remaining", "received", "delivered", "archive"]);
+      : new Set(["all", "approved", "rejected", "remaining", "received", "delivered", "archive"]);
     if (allowed.has(tab)) return tab;
     return isMaintenancePage ? "received" : "all";
   }
@@ -2881,26 +2939,20 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch {}
   }
 
-  // Stage alone is not enough because Operations Orders splits the
-  // post-review workflow into separate operational buckets:
-  // - Not Started: orders still under supervision
-  // - Reviewed: S.V-approved orders waiting for Operations approval
-  // - Approved: orders approved from Operations Orders
-  // - Rejected: orders rejected from Operations Orders
-  // - Remaining: shipped/received-by-operations but still has remaining qty
-  // - Received: shipped/received-by-operations and no remaining qty
-  // - Delivered: arrived/delivered/final status
-  // - Archive: archived orders
+  // Stage alone is not enough because Operations Orders splits the workflow into:
+  // - Approved: components approved from Orders Review and waiting for operations handling
+  // - Rejected: components rejected from Orders Review or rejected later by Operations
+  // - Remaining / Shipping / Delivered / Archive: later operations stages
   function tabForGroup(g) {
     const idx = g?.stage?.idx || 1;
-    const opKey = operationsApprovalKey(g?.operationsApproval);
     if (idx >= 5) return "archive";
     if (idx >= 4) return "delivered";
     if (idx >= 3) return g?.hasRemaining ? "remaining" : "received";
-    if (opKey === "rejected") return "rejected";
-    if (opKey === "approved") return "approved";
-    if (idx === 2) return "reviewed";
-    return "not-started";
+    if (hasMixedApprovedRejectedDecision(g?.items)) return "all";
+    const decision = summarizeOpsCardStatus(g?.items, g?.stage);
+    if (norm(decision.label) === "rejected") return "rejected";
+    if (norm(decision.label) === "approved") return "approved";
+    return "all";
   }
 
   function updateTabUI() {
@@ -3345,29 +3397,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
 
-    // Operations Orders tabs must represent one workflow bucket only.
-    // The old Notion logic used formulas/filters; after Supabase migration the UI
-    // must do the same split locally instead of grouping several statuses together.
-    // All mirrors Current Orders: show every non-archived order in one list, across
-    // the whole system. Other operations tabs stay scoped to S.V-approved orders.
+    // All mirrors Current Orders: show every non-archived order in one list.
     if (currentTab === "all") return true;
 
-    const approvalValues = (g.items || [])
-      .map((it) => norm(it?.svApproval || it?.svApprovalName || ""))
-      .filter(Boolean);
-    const hasApprovalData = approvalValues.length > 0;
-    const isApprovedForOperations = !hasApprovalData || approvalValues.some((value) => value === "approved");
+    // Not Started and Reviewed were removed from Operations Orders; keep their routes empty
+    // if an old cached URL points to them.
+    if (currentTab === "not-started" || currentTab === "reviewed") return false;
 
-    // Not Started now means orders still under supervision.
-    if (currentTab === "not-started") return idx === 1;
+    const hasApprovedComponent = (g.items || []).some((it) => itemOpsDecisionKey(it) === "approved");
+    const hasRejectedComponent = (g.items || []).some((it) => itemOpsDecisionKey(it) === "rejected");
 
-    if (!isApprovedForOperations) return false;
-
-    const opKey = operationsApprovalKey(g?.operationsApproval);
-    if (currentTab === "reviewed") return idx === 2 && opKey !== "approved" && opKey !== "rejected";
-    if (currentTab === "approved") return idx === 2 && opKey === "approved";
-    if (currentTab === "rejected") return idx === 2 && opKey === "rejected";
-    if (opKey === "rejected") return false;
+    if (currentTab === "approved") return idx === 2 && hasApprovedComponent;
+    if (currentTab === "rejected") return idx === 2 && hasRejectedComponent;
+    if (hasRejectedComponent && !hasApprovedComponent) return false;
 
     if (currentTab === "remaining") return !isMaintenanceOrder && idx === 3 && !!g?.hasRemaining;
     if (currentTab === "received") return idx === 3 && (isMaintenanceOrder || !!g?.hasReceived);
@@ -3381,8 +3423,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return groupTypeKey(g) === currentTypeFilter;
   }
 
+  function getScopedGroupsForCurrentTab() {
+    if (!isMaintenancePage && (currentTab === "approved" || currentTab === "rejected")) {
+      const scopedItems = (allItems || []).filter((it) => {
+        const idx = statusToIndex(it?.status);
+        const decision = itemOpsDecisionKey(it);
+        if (currentTab === "approved") return idx === 2 && decision === "approved";
+        if (currentTab === "rejected") return idx === 2 && decision === "rejected";
+        return false;
+      });
+      return buildGroups(scopedItems);
+    }
+    return (groups || []).filter((g) => groupMatchesCurrentTab(g));
+  }
+
   function getTypeFilterOptions() {
-    const scopedGroups = (groups || []).filter((g) => groupMatchesCurrentTab(g));
+    const scopedGroups = getScopedGroupsForCurrentTab();
     const counts = new Map();
     for (const g of scopedGroups) {
       const key = groupTypeKey(g);
@@ -3500,8 +3556,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getFilteredGroups() {
     const q = norm(searchInput?.value || "");
-    return (groups || [])
-      .filter((g) => groupMatchesCurrentTab(g))
+    return getScopedGroupsForCurrentTab()
       .filter((g) => groupMatchesCurrentType(g))
       .filter((g) => groupMatchesQuery(g, q));
   }
@@ -3520,10 +3575,9 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     const stage = g.stage || computeStage(g.items || []);
-    const opKey = operationsApprovalKey(g.operationsApproval);
-    const showOperationsApprovalStatus = !isMaintenancePage && (currentTab === "approved" || currentTab === "rejected" || (stage.idx === 2 && (opKey === "approved" || opKey === "rejected")));
-    const cardStatusLabel = showOperationsApprovalStatus ? normalizeOperationsApproval(g.operationsApproval) : stage.label;
-    const statusVars = showOperationsApprovalStatus ? operationApprovalStatusVars(g.operationsApproval) : notionColorVars(stage.color);
+    const cardStatus = !isMaintenancePage ? summarizeOpsCardStatus(g.items || [], stage) : { label: stage.label, color: stage.color };
+    const cardStatusLabel = cardStatus.label || stage.label;
+    const statusVars = notionColorVars(cardStatus.color || stage.color);
     const statusStyle = `--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};`;
 
     const receivedBy = String(g.operationsByName || "").trim();
@@ -3576,7 +3630,7 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
 
         <div class="co-actions">
-          ${!isMaintenancePage && currentTab === "all" && hasMixedOperationsApproval(g.items)
+          ${!isMaintenancePage && currentTab === "all" && stage.idx === 2 && hasMixedApprovedRejectedDecision(g.items)
             ? mixedApprovalStatusMarkup()
             : `<span class="co-status-btn" style="${statusStyle}">${escapeHTML(cardStatusLabel)}</span>`}
           ${creatorButtonMarkup(creatorId, createdByRaw)}
@@ -3830,23 +3884,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const frag = document.createDocumentFragment();
 
       const canEditQty = !isMaintenanceOrder && (currentTab === "approved" || currentTab === "remaining");
-      const canOperationsReview = !isMaintenancePage && !isMaintenanceOrder && currentTab === "reviewed" && (stage?.idx || 1) === 2;
-
-      if (canOperationsReview && items.length) {
-        const bulk = document.createElement("div");
-        bulk.className = "co-item";
-        bulk.dataset.role = "operations-bulk-actions";
-        bulk.innerHTML = `
-          <div class="co-item-left"><div class="co-item-name">Bulk actions</div></div>
-          <div class="co-item-right">
-            <div class="btn-group sv-review-item-actions">
-              <button class="btn btn-success btn-xs req-ops-approve-all" type="button"><i data-feather="check"></i> Approve all</button>
-              <button class="btn btn-danger btn-xs req-ops-reject-all" type="button"><i data-feather="x"></i> Reject all</button>
-            </div>
-          </div>
-        `;
-        frag.appendChild(bulk);
-      }
+      const canOperationsReject = !isMaintenancePage && !isMaintenanceOrder && currentTab === "approved" && (stage?.idx || 1) === 2;
 
       if (isRemainingTab && items.length === 0) {
         const empty = document.createElement("div");
@@ -3923,19 +3961,16 @@ document.addEventListener("DOMContentLoaded", () => {
                <i data-feather="edit-2"></i> Edit
              </button>`
           : "";
-        const opsReviewButtonsHTML = canOperationsReview
-          ? `<button class="btn btn-success btn-xs req-ops-approve" data-id="${escapeHTML(it.id)}" type="button" title="Approve">
-               <i data-feather="check"></i> Approve
-             </button>
-             <button class="btn btn-danger btn-xs req-ops-reject" data-id="${escapeHTML(it.id)}" type="button" title="Reject">
+        const opsReviewButtonsHTML = canOperationsReject
+          ? `<button class="btn btn-danger btn-xs req-ops-reject" data-id="${escapeHTML(it.id)}" type="button" title="Reject">
                <i data-feather="x"></i> Reject
              </button>`
           : "";
 
-        const itemStatusLabel = canOperationsReview
-          ? normalizeOperationsApproval(it.operationsApproval || "Not Started")
+        const itemStatusLabel = !isMaintenanceOrder
+          ? itemOpsStatusLabel(it, stage.label || '—')
           : displayWorkflowStatusLabel(String(it.status || stage.label || '—').trim() || '—');
-        const itemStatusVars = canOperationsReview ? operationApprovalStatusVars(it.operationsApproval) : notionColorVars(it.statusColor || stage.color);
+        const itemStatusVars = !isMaintenanceOrder ? notionColorVars(itemOpsStatusColor(it, it.statusColor || stage.color)) : notionColorVars(it.statusColor || stage.color);
         const itemStatusStyle = `--tag-bg:${itemStatusVars.bg};--tag-fg:${itemStatusVars.fg};--tag-border:${itemStatusVars.bd};`;
         const subLine = isMaintenanceOrder ? '' : `Unit: ${fmtMoney(unit)} · Total: ${fmtMoney(total)}`;
         const rightRowHtml = isMaintenanceOrder
@@ -5629,7 +5664,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       clearRequestedCache();
       closeOrderModal();
-      currentTab = "not-started";
+      currentTab = "all";
       updateTabUI();
       await loadRequested();
 
