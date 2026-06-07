@@ -331,8 +331,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const APP_API_MAX_ENTRY_CHARS = 1_500_000;
   const HARD_REFRESH_MARKER_KEY = 'ops.hardRefresh.pendingAt';
   const POST_LOGIN_BOOT_MARKER_KEY = 'ops.postLogin.pendingAt';
+  const LOGIN_SPLASH_MARKER_KEY = 'ops.loginSplash.pendingAt';
   const HARD_REFRESH_BYPASS_MS = 90 * 1000;
   const POST_LOGIN_BOOT_BYPASS_MS = 90 * 1000;
+  const LOGIN_SPLASH_BYPASS_MS = 90 * 1000;
   const _nativeFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
   const _apiCacheInflight = new Map();
 
@@ -514,16 +516,35 @@ document.addEventListener('DOMContentLoaded', () => {
     return false;
   }
 
+  function hasRecentLoginSplashMarker() {
+    try {
+      const ts = Number(sessionStorage.getItem(LOGIN_SPLASH_MARKER_KEY) || 0);
+      if (!ts || !Number.isFinite(ts)) return false;
+      const age = Date.now() - ts;
+      if (age >= 0 && age <= LOGIN_SPLASH_BYPASS_MS) return true;
+      sessionStorage.removeItem(LOGIN_SPLASH_MARKER_KEY);
+    } catch {}
+    return false;
+  }
+
   function markPostLoginBootPending() {
     try { sessionStorage.setItem(POST_LOGIN_BOOT_MARKER_KEY, String(Date.now())); } catch {}
+  }
+
+  function markLoginSplashPending() {
+    try { sessionStorage.setItem(LOGIN_SPLASH_MARKER_KEY, String(Date.now())); } catch {}
   }
 
   function clearPostLoginBootPending() {
     try { sessionStorage.removeItem(POST_LOGIN_BOOT_MARKER_KEY); } catch {}
   }
 
+  function clearLoginSplashPending() {
+    try { sessionStorage.removeItem(LOGIN_SPLASH_MARKER_KEY); } catch {}
+  }
+
   function pageNeedsChromeBootOverlay() {
-    return currentPageHasHardRefreshParams() || hasRecentHardRefreshMarker() || hasRecentPostLoginBootMarker();
+    return currentPageHasHardRefreshParams() || hasRecentHardRefreshMarker() || hasRecentPostLoginBootMarker() || hasRecentLoginSplashMarker();
   }
 
   function markHardRefreshPending() {
@@ -790,6 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearAll: clearKnownClientDataCaches,
       markHardRefreshPending,
       markPostLoginBootPending,
+      markLoginSplashPending,
       prefetch: prefetchApiUrls,
       schedule: schedulePrefetchForAllowedPages,
     };
@@ -856,6 +878,57 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {}
   }
 
+  let __opsLoginSplashOverlay = null;
+
+  function ensureLoginSplashOverlay() {
+    let overlay = document.getElementById('opsLoginSplashOverlay');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = 'opsLoginSplashOverlay';
+    overlay.className = 'login-success-splash ops-login-splash';
+    overlay.hidden = true;
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.innerHTML = `
+      <div class="login-success-splash__aurora" aria-hidden="true"></div>
+      <div class="login-success-splash__center">
+        <span class="login-success-splash__ring" aria-hidden="true"></span>
+        <span class="login-success-splash__burst" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <span class="login-success-splash__logo-wrap">
+          <img src="/images/logo.png" alt="Pyramakerz" class="login-success-splash__logo" />
+        </span>
+        <span class="login-success-splash__wordmark">Pyramakerz</span>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  function showLoginSplashOverlay() {
+    try {
+      __opsLoginSplashOverlay = ensureLoginSplashOverlay();
+      __opsLoginSplashOverlay.hidden = false;
+      __opsLoginSplashOverlay.classList.add('is-active');
+      document.body.classList.add('login-success-active', 'ops-login-splash-active');
+    } catch {}
+  }
+
+  function hideLoginSplashOverlay() {
+    try {
+      const overlay = __opsLoginSplashOverlay || document.getElementById('opsLoginSplashOverlay');
+      if (overlay) overlay.hidden = true;
+      document.body.classList.remove('login-success-active', 'ops-login-splash-active');
+    } catch {}
+  }
+
+  function hideFreshBootOverlay() {
+    hideHardRefreshOverlay();
+    hideLoginSplashOverlay();
+  }
+
   function currentPageHasHardRefreshParams() {
     try {
       const params = new URLSearchParams(window.location.search || '');
@@ -897,8 +970,9 @@ document.addEventListener('DOMContentLoaded', () => {
           try { clearTransientRefreshParams(); } catch {}
           try { clearHardRefreshPending(); } catch {}
           try { clearPostLoginBootPending(); } catch {}
+          try { clearLoginSplashPending(); } catch {}
           try { document.body.classList.remove('ops-chrome-booting'); } catch {}
-          hideHardRefreshOverlay();
+          hideFreshBootOverlay();
           state.active = false;
           state.hideScheduled = false;
           if (state.forceTimer) {
@@ -921,16 +995,22 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (!pageNeedsChromeBootOverlay()) return false;
       const state = __opsFreshLoadOverlayState;
-      const isPostLogin = hasRecentPostLoginBootMarker() && !currentPageHasHardRefreshParams();
+      const hasHardRefreshBoot = currentPageHasHardRefreshParams() || hasRecentHardRefreshMarker();
+      const isLoginSplash = !hasHardRefreshBoot && hasRecentLoginSplashMarker();
+      const isPostLogin = !hasHardRefreshBoot && !isLoginSplash && hasRecentPostLoginBootMarker();
       state.active = true;
-      state.mode = isPostLogin ? 'login' : 'hard-refresh';
+      state.mode = isLoginSplash ? 'login-splash' : (isPostLogin ? 'login' : 'hard-refresh');
       state.accountReady = false;
       state.chromeReady = false;
       state.shellExpected = false;
       state.shellReady = true;
       state.hideScheduled = false;
       try { document.body.classList.add('ops-chrome-booting'); } catch {}
-      showHardRefreshOverlay(isPostLogin ? 'Loading dashboard…' : 'Loading fresh data…', isPostLogin ? 'Loading' : 'Hard Refresh');
+      if (isLoginSplash) {
+        showLoginSplashOverlay();
+      } else {
+        showHardRefreshOverlay(isPostLogin ? 'Loading dashboard…' : 'Loading fresh data…', isPostLogin ? 'Loading' : 'Hard Refresh');
+      }
 
       // Safety fallback: do not trap the user forever if an unexpected page script
       // fails before it can report that the normal chrome is ready.
@@ -1182,8 +1262,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const __opsFreshApiLoad = pageForcesFreshApiRequests();
   const __opsPostLoginBootLoad = hasRecentPostLoginBootMarker();
+  const __opsLoginSplashLoad = hasRecentLoginSplashMarker();
 
-  if (__opsFreshApiLoad || __opsPostLoginBootLoad) {
+  if (__opsFreshApiLoad || __opsPostLoginBootLoad || __opsLoginSplashLoad) {
     // During the first page load after Hard Refresh OR after Login, keep the
     // overlay visible until the stable header/sidebar and persistent shell are
     // ready. This prevents the user from seeing the temporary legacy Dashboard
@@ -1196,6 +1277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearHardRefreshPending();
       }
       if (__opsPostLoginBootLoad) clearPostLoginBootPending();
+      if (__opsLoginSplashLoad) clearLoginSplashPending();
     }, 60000);
   }
 

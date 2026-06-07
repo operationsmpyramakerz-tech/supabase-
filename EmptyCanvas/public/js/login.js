@@ -69,6 +69,90 @@ document.addEventListener('DOMContentLoaded', function () {
     errorMessage.textContent = '';
   }
 
+  const LOGIN_SPLASH_MARKER_KEY = 'ops.loginSplash.pendingAt';
+  const CHROME_CACHE_KEY = 'ops.ui.chrome.v1';
+  const ALLOWED_PAGES_KEY = 'allowedPages';
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  function waitForLoginSplashMinimum(startedAt, minMs = 1650) {
+    const elapsed = Date.now() - Number(startedAt || Date.now());
+    return sleep(Math.max(0, minMs - elapsed));
+  }
+
+  function warmChromeCacheFromAccount(account, fallbackUsername) {
+    const data = account && typeof account === 'object' ? account : {};
+    const name = String(data.name || data.username || fallbackUsername || '').trim();
+    const allowedPages = Array.isArray(data.allowedPages) ? data.allowedPages : [];
+
+    try { if (name) localStorage.setItem('username', name); } catch {}
+    try { if (allowedPages.length) sessionStorage.setItem(ALLOWED_PAGES_KEY, JSON.stringify(allowedPages)); } catch {}
+    try {
+      localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify({
+        name,
+        username: name,
+        position: String(data.position || '').trim(),
+        department: String(data.department || '').trim(),
+        email: String(data.email || '').trim(),
+        photoUrl: String(data.photoUrl || '').trim(),
+        allowedPages,
+        savedAt: Date.now(),
+      }));
+    } catch {}
+  }
+
+  async function fetchAccountForWarmCache(username) {
+    try {
+      const res = await fetch('/api/account?_login_check=' + Date.now(), {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!res.ok) return null;
+      const account = await res.json().catch(() => null);
+      warmChromeCacheFromAccount(account, username);
+      return account;
+    } catch {
+      return null;
+    }
+  }
+
+  function ensureLoginSuccessSplash() {
+    let splash = document.getElementById('loginSuccessSplash');
+    if (splash) return splash;
+
+    splash = document.createElement('div');
+    splash.id = 'loginSuccessSplash';
+    splash.className = 'login-success-splash';
+    splash.setAttribute('role', 'status');
+    splash.setAttribute('aria-live', 'polite');
+    splash.innerHTML = `
+      <div class="login-success-splash__aurora" aria-hidden="true"></div>
+      <div class="login-success-splash__center">
+        <span class="login-success-splash__ring" aria-hidden="true"></span>
+        <span class="login-success-splash__burst" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </span>
+        <span class="login-success-splash__logo-wrap">
+          <img src="/images/logo.png" alt="Pyramakerz" class="login-success-splash__logo" />
+        </span>
+        <span class="login-success-splash__wordmark">Pyramakerz</span>
+      </div>
+    `;
+    document.body.appendChild(splash);
+    return splash;
+  }
+
+  function showLoginSuccessSplash() {
+    const splash = ensureLoginSuccessSplash();
+    document.body.classList.add('login-success-active');
+    splash.hidden = false;
+    splash.classList.remove('is-leaving');
+    splash.classList.add('is-active');
+    return splash;
+  }
+
   function setButtonLoading(button, loading, loadingText, normalText) {
     if (!button) return;
     const label = button.querySelector('span');
@@ -173,19 +257,25 @@ document.addEventListener('DOMContentLoaded', function () {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // Save username from login form for greetings
-        try { localStorage.setItem('username', String(username || '')); } catch {}
+        const startedAt = Date.now();
+        const redirectTo = result.redirect || '/home';
 
-        // Verify that the session cookie was actually stored, then redirect.
-        try {
-          await fetch('/api/account?_login_check=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' });
-        } catch {}
+        // Show the branded full-screen login transition immediately on the login page.
+        // This keeps the user away from the half-built Home/sidebar view while the
+        // session and chrome cache are warming up.
+        showLoginSuccessSplash();
 
-        // The first dashboard page after login is a full document load. Keep the
-        // boot overlay visible there until the stable sidebar/main bar are ready,
-        // so the user never sees the temporary legacy Dashboard chrome.
-        try { sessionStorage.setItem('ops.postLogin.pendingAt', String(Date.now())); } catch {}
-        window.location.replace(result.redirect || '/home');
+        // Prime the next page with user/photo/permissions before we leave the login page.
+        const accountPromise = fetchAccountForWarmCache(username);
+        try { sessionStorage.setItem(LOGIN_SPLASH_MARKER_KEY, String(startedAt)); } catch {}
+        try { sessionStorage.removeItem('ops.postLogin.pendingAt'); } catch {}
+
+        await Promise.all([
+          accountPromise.catch(() => null),
+          waitForLoginSplashMinimum(startedAt),
+        ]);
+
+        window.location.replace(redirectTo);
       } else {
         showError(response.status === 401
           ? 'Invalid username or password.'
