@@ -688,6 +688,183 @@ body.login-success-active {
   overflow: hidden !important;
 }
 
+
+/* Inline login-logo success transition: the real logo in the login card animates in-place. */
+.login-logo-stage {
+  --inline-logo-size: 72px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--inline-logo-size);
+  height: var(--inline-logo-size);
+  margin: 0 auto 0.78rem;
+  isolation: isolate;
+}
+
+.login-logo-stage .login-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  margin: 0;
+  position: relative;
+  z-index: 3;
+  transform-origin: center;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.login-inline-logo-pieces {
+  position: absolute;
+  inset: 6px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 16px 24px rgba(194, 65, 12, .22));
+}
+
+.login-inline-logo-piece {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: url('/images/logo.png');
+  background-repeat: no-repeat;
+  background-size: 400% 400%;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+}
+
+.login-inline-logo-ring,
+.login-inline-logo-flare {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.login-inline-logo-ring {
+  z-index: 1;
+  inset: 4px;
+  border-radius: 26px;
+  border: 2px solid rgba(234, 88, 12, .24);
+  box-shadow:
+    0 0 0 0 rgba(234, 88, 12, .18),
+    inset 0 0 28px rgba(251, 146, 60, .08);
+}
+
+.login-inline-logo-flare {
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #EA580C;
+  box-shadow: 0 0 24px rgba(234, 88, 12, .38);
+}
+
+.login-inline-logo-flare--one { top: 5px; right: 12px; }
+.login-inline-logo-flare--two { left: 7px; bottom: 10px; width: 7px; height: 7px; background: #0F172A; }
+
+body.login-inline-success-active .login-card,
+body.login-inline-success-active .login-form,
+body.login-inline-success-active .signup-inline-prompt,
+body.login-inline-success-active .forgot-password-link {
+  pointer-events: none;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running {
+  animation: loginInlineLogoStage 2.05s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running .login-logo {
+  opacity: 0;
+  animation: none !important;
+  transform: scale(.86);
+}
+
+body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-pieces {
+  opacity: 1;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-piece {
+  animation: loginInlineLogoPieceBreak 1.96s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-ring {
+  animation: loginInlineLogoRing 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-flare--one {
+  animation: loginInlineLogoFlareOne 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running .login-inline-logo-flare--two {
+  animation: loginInlineLogoFlareTwo 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-btn.loading::after {
+  opacity: 0;
+}
+
+@keyframes loginInlineLogoStage {
+  0% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+  18% { transform: translateY(-4px) scale(1.10); filter: drop-shadow(0 16px 20px rgba(234, 88, 12, .18)); }
+  46% { transform: translateY(0) scale(1.02) rotate(0deg); }
+  74% { transform: translateY(-2px) scale(1.08); }
+  100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+}
+
+@keyframes loginInlineLogoPieceBreak {
+  0%, 14% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+  38% {
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.90);
+    opacity: .94;
+    filter: blur(.2px);
+  }
+  58% {
+    transform: translate(var(--rx), var(--ry)) rotate(calc(var(--rot) * -0.42)) scale(1.08);
+    opacity: 1;
+    filter: blur(0);
+  }
+  82%, 100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes loginInlineLogoRing {
+  0% { opacity: 0; transform: scale(.72) rotate(0deg); box-shadow: 0 0 0 0 rgba(234,88,12,.20); }
+  28% { opacity: .82; transform: scale(1.06) rotate(45deg); box-shadow: 0 0 0 12px rgba(234,88,12,.08); }
+  66% { opacity: .56; transform: scale(1.22) rotate(100deg); }
+  100% { opacity: 0; transform: scale(1.36) rotate(145deg); box-shadow: 0 0 0 26px rgba(234,88,12,0); }
+}
+
+@keyframes loginInlineLogoFlareOne {
+  0% { opacity: 0; transform: translate(0, 0) scale(.2); }
+  30% { opacity: 1; transform: translate(22px, -12px) scale(1); }
+  72% { opacity: .9; transform: translate(-9px, 9px) scale(.82); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@keyframes loginInlineLogoFlareTwo {
+  0% { opacity: 0; transform: translate(0, 0) scale(.2); }
+  34% { opacity: .85; transform: translate(-20px, 14px) scale(1); }
+  72% { opacity: .75; transform: translate(8px, -8px) scale(.78); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.login-inline-success-active .login-logo-stage.is-running,
+  body.login-inline-success-active .login-logo-stage.is-running * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 .login-success-splash {
   --logo-size: clamp(112px, 12vw, 156px);
   --logo-start-x: 50vw;
