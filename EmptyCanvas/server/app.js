@@ -3,7 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const net = require("net");
 const tls = require("tls");
-const crypto = require("crypto");
 const { Client } = require("@notionhq/client");
 const PDFDocument = require("pdfkit"); // PDF
 const { attachPageNumbers } = require("./pdfPageNumbers");
@@ -8565,6 +8564,10 @@ function _backupIsTeamSvSchoolsTable(tableName = '') {
   }
 }
 
+function _backupNeedsTeamMemberPreserve(tableName = '') {
+  return _backupIsTeamMembersTable(tableName) || _backupIsPageAccessTable(tableName) || _backupIsTeamSvSchoolsTable(tableName);
+}
+
 async function _backupCurrentTeamMemberId(req) {
   if (!_sbTeamMembersEnabled()) return '';
   const sessionId = String(req?.session?.userSupabaseId || '').trim();
@@ -8612,8 +8615,8 @@ async function _backupDeleteAllRows(tableName, options = {}) {
     } catch (preserveError) {
       const msg = String(preserveError?.message || preserveError?.details?.message || preserveError?.details || '');
       if (!/column|schema cache|does not exist|PGRST204|42703/i.test(msg)) throw preserveError;
-      // If a preserve column is unavailable in an old deployment, continue with
-      // the normal delete path below. The default Admin fallback still protects
+      // If the preserve column is unavailable in an older deployment, continue
+      // with the normal delete path. The default Admin fallback still protects
       // application access after Team Members is cleared.
     }
   }
@@ -8966,10 +8969,10 @@ app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async 
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
-    const preservedTeamMemberId = _backupIsTeamMembersTable(item.tableName) ? await _backupCurrentTeamMemberId(req) : '';
+    const preserveTeamMemberId = _backupNeedsTeamMemberPreserve(item.tableName) ? await _backupCurrentTeamMemberId(req) : '';
     await _backupDeleteAllRows(item.tableName, { preserveTeamMemberId });
     const defaultAdmin = _backupIsTeamMembersTable(item.tableName) ? await _backupEnsureDefaultAdminUser() : null;
-    return res.json({ ok: true, preservedTeamMemberId, defaultAdmin });
+    return res.json({ ok: true, preservedTeamMemberId: preserveTeamMemberId, defaultAdmin });
   } catch (error) {
     console.error('DELETE /api/backup/tables/:key error:', error?.details || error);
     const msg = String(error?.message || 'Failed to delete table data.');
@@ -32735,285 +32738,7 @@ async function _sendPushToUser(userId, payload) {
   return { ok: true, sent };
 }
 
-
-// ---- Live notification refresh (browser polling) ----
-// This replaces the old GitHub/Vercel cron dependency for normal usage.
-// Each refresh compares a Supabase snapshot with the previous refresh snapshot,
-// then creates in-app notifications for users who can access the changed page.
-const _NOTIF_LIVE_STATE_KEY = "notif:liveRefreshState:v3";
-const _NOTIF_LIVE_STATE_TTL_SECONDS = 60 * 60 * 24 * 30;
-const _NOTIF_LIVE_MIN_INTERVAL_MS = 900;
-let _notifLiveRefreshRunning = false;
-let _notifLiveRefreshLastLocalMs = 0;
-
-function _liveNotifStableStringify(value) {
-  if (value === null || value === undefined) return "null";
-  if (Array.isArray(value)) return `[${value.map((item) => _liveNotifStableStringify(item)).join(",")}]`;
-  if (typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => {
-      const v = value[key];
-      if (typeof v === "undefined" || typeof v === "function") return "";
-      return `${JSON.stringify(key)}:${_liveNotifStableStringify(v)}`;
-    }).filter(Boolean).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function _liveNotifHash(value) {
-  return crypto.createHash("sha1").update(_liveNotifStableStringify(value)).digest("hex");
-}
-
-function _liveNotifRowId(row, index = 0) {
-  const direct = _sbGet(row || {}, ["id", "ID", "uuid", "UUID", "notion_id", "page_id"]);
-  if (direct !== null && direct !== undefined && String(direct).trim()) return String(direct).trim();
-  return `row-${index}-${_liveNotifHash(row || {}).slice(0, 16)}`;
-}
-
-function _liveNotifBuildSnapshot(rows = []) {
-  const map = {};
-  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
-    const id = _liveNotifRowId(row, index);
-    map[id] = _liveNotifHash(row || {});
-  });
-  return { count: Object.keys(map).length, rows: map };
-}
-
-function _liveNotifDiffSnapshots(previous = {}, next = {}) {
-  const prevRows = previous && previous.rows && typeof previous.rows === "object" ? previous.rows : {};
-  const nextRows = next && next.rows && typeof next.rows === "object" ? next.rows : {};
-  let created = 0;
-  let updated = 0;
-  let deleted = 0;
-
-  for (const id of Object.keys(nextRows)) {
-    if (!Object.prototype.hasOwnProperty.call(prevRows, id)) created += 1;
-    else if (prevRows[id] !== nextRows[id]) updated += 1;
-  }
-  for (const id of Object.keys(prevRows)) {
-    if (!Object.prototype.hasOwnProperty.call(nextRows, id)) deleted += 1;
-  }
-
-  const total = created + updated + deleted;
-  return { created, updated, deleted, total };
-}
-
-function _liveNotifBody(diff = {}) {
-  const parts = [];
-  if (diff.created) parts.push(`${diff.created} new`);
-  if (diff.updated) parts.push(`${diff.updated} updated`);
-  if (diff.deleted) parts.push(`${diff.deleted} deleted`);
-  return parts.length ? `${parts.join(", ")} change(s) detected` : "New update detected";
-}
-
-async function _liveNotifFetchTableSnapshot(table) {
-  if (!supabaseDb?.isConfigured?.() || !table) return { count: 0, rows: {} };
-  let rows = [];
-  try {
-    rows = await supabaseDb.selectAll(table, { limit: 5000, order: "updated_at.desc,id.desc" });
-  } catch (firstError) {
-    try {
-      rows = await supabaseDb.selectAll(table, { limit: 5000, order: "id.desc" });
-    } catch (fallbackError) {
-      throw firstError || fallbackError;
-    }
-  }
-  return _liveNotifBuildSnapshot(rows);
-}
-
-function _liveNotifHasAccess(user, allowedPages = []) {
-  const userPages = new Set((Array.isArray(user?.allowedPages) ? user.allowedPages : []).map((p) => String(p || "").trim()));
-  return (Array.isArray(allowedPages) ? allowedPages : []).some((page) => userPages.has(page));
-}
-
-async function _liveNotifUsers() {
-  if (!_sbTeamMembersEnabled()) return [];
-  const rows = await _sbSelectTeamMembersRows();
-  const users = [];
-  for (const row of (Array.isArray(rows) ? rows : [])) {
-    const id = String(_sbGet(row, ["id", "ID"]) || "").trim();
-    if (!id) continue;
-    const name = _sbString(_sbValueForLabel(row, "Name"));
-    const allowedRaw = await _sbResolveAllowedPagesForTeamMember(row).catch(() => _sbExtractAllowedPages(row));
-    const allowedPages = expandAllowedForUI(allowedRaw);
-    users.push({ id, name, allowedPages, source: "supabase" });
-  }
-  return users;
-}
-
-function _liveNotifTableSpecs() {
-  const specs = [];
-  if (_sbOrdersEnabled()) {
-    specs.push({
-      key: "orders",
-      table: _sbOrdersTable(),
-      type: "orders",
-      title: "Operations orders updated",
-      url: "/orders/requested",
-      allowedPages: ["Current Orders", "Requested Orders", "Orders Review", "Maintenance Orders"],
-    });
-  }
-  if (_sbStocktakingEnabled()) {
-    specs.push({
-      key: "stocktaking",
-      table: _sbStocktakingTable(),
-      type: "stock",
-      title: "Stocktaking updated",
-      url: "/stocktaking",
-      allowedPages: ["Stocktaking"],
-    });
-  }
-  if (_sbProductsEnabled()) {
-    specs.push({
-      key: "products",
-      table: _sbProductsTable(),
-      type: "products",
-      title: "Products updated",
-      url: "/products",
-      allowedPages: ["Products", "Proposals"],
-    });
-  }
-  if (_sbTasksEnabled()) {
-    specs.push({
-      key: "tasks",
-      table: _sbTasksTable(),
-      type: "task",
-      title: "Tasks updated",
-      url: "/tasks",
-      allowedPages: ["Tasks"],
-    });
-  }
-  if (_sbExpensesEnabled()) {
-    specs.push({
-      key: "expenses",
-      table: _sbExpensesTable(),
-      type: "expense",
-      title: "Expenses updated",
-      url: "/expenses",
-      allowedPages: ["Expenses", "Expenses Users"],
-    });
-  }
-  if (typeof _sbMessagesEnabled === "function" && _sbMessagesEnabled()) {
-    specs.push({
-      key: "messages",
-      table: _sbMessagesTable(),
-      type: "mail",
-      title: "Mail updated",
-      url: "/messages",
-      allowedPages: ["Mail", "Messages"],
-    });
-  }
-  return specs.filter((spec) => spec.table);
-}
-
-async function _runLiveNotificationRefresh({ force = false } = {}) {
-  const nowMs = Date.now();
-  if (_notifLiveRefreshRunning) return { ok: true, skipped: true, reason: "running" };
-  if (!force && nowMs - _notifLiveRefreshLastLocalMs < _NOTIF_LIVE_MIN_INTERVAL_MS) {
-    return { ok: true, skipped: true, reason: "local-throttle" };
-  }
-
-  _notifLiveRefreshRunning = true;
-  _notifLiveRefreshLastLocalMs = nowMs;
-
-  try {
-    if (!supabaseDb?.isConfigured?.()) return { ok: true, skipped: true, reason: "supabase-disabled" };
-
-    const currentState = (await _storeGetJSON(_NOTIF_LIVE_STATE_KEY)) || {};
-    const lastRunMs = Number(currentState.lastRunMs || 0);
-    if (!force && lastRunMs && nowMs - lastRunMs < _NOTIF_LIVE_MIN_INTERVAL_MS) {
-      return { ok: true, skipped: true, reason: "shared-throttle" };
-    }
-
-    const previousTables = currentState.tables && typeof currentState.tables === "object" ? currentState.tables : {};
-    const nextTables = { ...previousTables };
-    const specs = _liveNotifTableSpecs();
-    const users = await _liveNotifUsers().catch((error) => {
-      console.warn("[notifications-live] failed to load users", error?.message || error);
-      return [];
-    });
-
-    const initialized = !!currentState.initialized;
-    const changed = [];
-    let usersNotified = 0;
-    let pushUsers = 0;
-
-    for (const spec of specs) {
-      let snapshot;
-      try {
-        snapshot = await _liveNotifFetchTableSnapshot(spec.table);
-      } catch (error) {
-        console.warn(`[notifications-live] ${spec.key} snapshot failed`, error?.message || error);
-        continue;
-      }
-
-      nextTables[spec.key] = snapshot;
-      const diff = _liveNotifDiffSnapshots(previousTables[spec.key], snapshot);
-      if (!initialized || diff.total <= 0) continue;
-
-      changed.push({ key: spec.key, table: spec.table, ...diff });
-      const body = _liveNotifBody(diff);
-      const targets = users.filter((user) => _liveNotifHasAccess(user, spec.allowedPages));
-      const notificationTs = Date.now();
-
-      for (const user of targets) {
-        const id = `live:${spec.key}:${notificationTs}:${_notificationScopedUserKey(user.id)}`;
-        await _addNotification(user.id, {
-          id,
-          type: spec.type,
-          title: spec.title,
-          body,
-          url: spec.url,
-          ts: notificationTs,
-          read: false,
-        });
-        usersNotified += 1;
-
-        const push = await _sendPushToUser(user.id, {
-          title: spec.title,
-          body,
-          url: spec.url,
-        }).catch(() => ({ ok: false }));
-        if (push?.ok && Number(push.sent || 0) > 0) pushUsers += 1;
-      }
-    }
-
-    await _storeSetJSON(_NOTIF_LIVE_STATE_KEY, {
-      initialized: true,
-      lastRunMs: nowMs,
-      tables: nextTables,
-    }, _NOTIF_LIVE_STATE_TTL_SECONDS);
-
-    return { ok: true, skipped: false, initialized, changed, usersNotified, pushUsers };
-  } finally {
-    _notifLiveRefreshRunning = false;
-  }
-}
-
 // ---- API: notifications list / read ----
-
-app.get("/api/notifications/refresh", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-
-    const refresh = await _runLiveNotificationRefresh({ force: String(req.query.force || "") === "1" });
-    const limit = Math.max(1, Math.min(80, Number(req.query.limit) || 60));
-    const data = await _loadUserNotifications(userId);
-    const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
-    const unreadCount = (data.items || []).reduce((acc, n) => acc + (n && !n.read ? 1 : 0), 0);
-
-    res.json({
-      success: true,
-      liveRefresh: refresh,
-      items,
-      unreadCount,
-    });
-  } catch (e) {
-    console.error("notifications live refresh error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to refresh notifications" });
-  }
-});
 
 app.get("/api/notifications", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
