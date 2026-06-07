@@ -79,6 +79,20 @@ body{
   }
 }
 
+/*
+  Tablet/Android Chrome hard refresh fix:
+  some browsers report 100dvh larger than the visible viewport immediately after
+  a hard refresh, so the bottom of the black shell can slide below the screen.
+  100svh is the stable/small viewport height and keeps the same bottom frame
+  visible before and after refresh.
+*/
+@supports (height: 100svh){
+  .app-container{
+    height: calc(100svh - 44px);
+    max-height: calc(100svh - 44px);
+  }
+}
+
 @media (max-width: 900px){
   .app-container{
     /*
