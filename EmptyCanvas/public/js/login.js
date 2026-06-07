@@ -180,6 +180,11 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
           await fetch('/api/account?_login_check=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' });
         } catch {}
+
+        // The first dashboard page after login is a full document load. Keep the
+        // boot overlay visible there until the stable sidebar/main bar are ready,
+        // so the user never sees the temporary legacy Dashboard chrome.
+        try { sessionStorage.setItem('ops.postLogin.pendingAt', String(Date.now())); } catch {}
         window.location.replace(result.redirect || '/home');
       } else {
         showError(response.status === 401

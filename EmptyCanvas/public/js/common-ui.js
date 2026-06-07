@@ -330,7 +330,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const APP_API_PRIME_PREFIX = `${APP_API_CACHE_NS}:prime:`;
   const APP_API_MAX_ENTRY_CHARS = 1_500_000;
   const HARD_REFRESH_MARKER_KEY = 'ops.hardRefresh.pendingAt';
+  const POST_LOGIN_BOOT_MARKER_KEY = 'ops.postLogin.pendingAt';
   const HARD_REFRESH_BYPASS_MS = 90 * 1000;
+  const POST_LOGIN_BOOT_BYPASS_MS = 90 * 1000;
   const _nativeFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
   const _apiCacheInflight = new Map();
 
@@ -499,6 +501,29 @@ document.addEventListener('DOMContentLoaded', () => {
       sessionStorage.removeItem(HARD_REFRESH_MARKER_KEY);
     } catch {}
     return false;
+  }
+
+  function hasRecentPostLoginBootMarker() {
+    try {
+      const ts = Number(sessionStorage.getItem(POST_LOGIN_BOOT_MARKER_KEY) || 0);
+      if (!ts || !Number.isFinite(ts)) return false;
+      const age = Date.now() - ts;
+      if (age >= 0 && age <= POST_LOGIN_BOOT_BYPASS_MS) return true;
+      sessionStorage.removeItem(POST_LOGIN_BOOT_MARKER_KEY);
+    } catch {}
+    return false;
+  }
+
+  function markPostLoginBootPending() {
+    try { sessionStorage.setItem(POST_LOGIN_BOOT_MARKER_KEY, String(Date.now())); } catch {}
+  }
+
+  function clearPostLoginBootPending() {
+    try { sessionStorage.removeItem(POST_LOGIN_BOOT_MARKER_KEY); } catch {}
+  }
+
+  function pageNeedsChromeBootOverlay() {
+    return currentPageHasHardRefreshParams() || hasRecentHardRefreshMarker() || hasRecentPostLoginBootMarker();
   }
 
   function markHardRefreshPending() {
@@ -764,6 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clear: clearAppApiCache,
       clearAll: clearKnownClientDataCaches,
       markHardRefreshPending,
+      markPostLoginBootPending,
       prefetch: prefetchApiUrls,
       schedule: schedulePrefetchForAllowedPages,
     };
@@ -802,10 +828,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return overlay;
   }
 
-  function showHardRefreshOverlay(message) {
+  function showHardRefreshOverlay(message, title) {
     try {
       __opsHardRefreshOverlay = ensureHardRefreshOverlay();
       const msg = __opsHardRefreshOverlay.querySelector('[data-hard-refresh-message]');
+      const heading = __opsHardRefreshOverlay.querySelector('.ops-hard-refresh-card__title');
+      if (heading && title) heading.textContent = title;
       if (msg) msg.textContent = message || 'Refreshing…';
       __opsHardRefreshOverlay.hidden = false;
       document.body.classList.add('ops-hard-refresh-active');
@@ -839,7 +867,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const __opsFreshLoadOverlayState = {
     active: false,
+    mode: '',
     accountReady: false,
+    chromeReady: false,
     shellExpected: false,
     shellReady: true,
     hideScheduled: false,
@@ -851,6 +881,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const state = __opsFreshLoadOverlayState;
       if (!state.active || state.hideScheduled) return;
       if (!state.accountReady) return;
+      if (!state.chromeReady) return;
       if (state.shellExpected && !state.shellReady) return;
 
       state.hideScheduled = true;
@@ -858,12 +889,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const finish = () => {
           // Re-check at the exact closing moment because shellExpected may be
           // discovered after accountReady scheduled the first hide attempt.
-          if (!state.active || !state.accountReady || (state.shellExpected && !state.shellReady)) {
+          if (!state.active || !state.accountReady || !state.chromeReady || (state.shellExpected && !state.shellReady)) {
             state.hideScheduled = false;
             maybeHideFreshLoadOverlay();
             return;
           }
           try { clearTransientRefreshParams(); } catch {}
+          try { clearHardRefreshPending(); } catch {}
+          try { clearPostLoginBootPending(); } catch {}
+          try { document.body.classList.remove('ops-chrome-booting'); } catch {}
           hideHardRefreshOverlay();
           state.active = false;
           state.hideScheduled = false;
@@ -885,20 +919,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function beginFreshLoadOverlayIfNeeded() {
     try {
-      if (!currentPageHasHardRefreshParams()) return false;
+      if (!pageNeedsChromeBootOverlay()) return false;
       const state = __opsFreshLoadOverlayState;
+      const isPostLogin = hasRecentPostLoginBootMarker() && !currentPageHasHardRefreshParams();
       state.active = true;
+      state.mode = isPostLogin ? 'login' : 'hard-refresh';
       state.accountReady = false;
+      state.chromeReady = false;
       state.shellExpected = false;
       state.shellReady = true;
       state.hideScheduled = false;
-      showHardRefreshOverlay('Loading fresh data…');
+      try { document.body.classList.add('ops-chrome-booting'); } catch {}
+      showHardRefreshOverlay(isPostLogin ? 'Loading dashboard…' : 'Loading fresh data…', isPostLogin ? 'Loading' : 'Hard Refresh');
 
       // Safety fallback: do not trap the user forever if an unexpected page script
       // fails before it can report that the normal chrome is ready.
       state.forceTimer = window.setTimeout(() => {
         try {
           state.accountReady = true;
+          state.chromeReady = true;
           state.shellReady = true;
           maybeHideFreshLoadOverlay();
         } catch {}
@@ -913,6 +952,25 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       __opsFreshLoadOverlayState.accountReady = true;
       maybeHideFreshLoadOverlay();
+    } catch {}
+  }
+
+  function markFreshLoadChromeReady() {
+    try {
+      const state = __opsFreshLoadOverlayState;
+      if (!state.active) return;
+      // Wait for two frames so the header/sidebar transforms, icon hydration,
+      // and permission display changes have actually painted before we remove
+      // the boot overlay.
+      const finish = () => {
+        state.chromeReady = true;
+        maybeHideFreshLoadOverlay();
+      };
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
+      } else {
+        window.setTimeout(finish, 40);
+      }
     } catch {}
   }
 
@@ -939,6 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.__opsFreshLoadOverlayState = __opsFreshLoadOverlayState;
     window.__opsFreshLoadOverlaySetShellExpected = setFreshLoadShellExpected;
     window.__opsFreshLoadOverlayMarkShellReady = markFreshLoadShellReady;
+    window.__opsFreshLoadOverlayMarkChromeReady = markFreshLoadChromeReady;
   } catch {}
 
   function getTopSameOriginLocation() {
@@ -1121,18 +1180,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }, true);
   }
 
-  if (pageForcesFreshApiRequests()) {
-    // During the first page load after Hard Refresh, keep the overlay visible
-    // until the stable header/sidebar and persistent shell are ready. This
-    // prevents the user from seeing the temporary legacy Dashboard chrome.
+  const __opsFreshApiLoad = pageForcesFreshApiRequests();
+  const __opsPostLoginBootLoad = hasRecentPostLoginBootMarker();
+
+  if (__opsFreshApiLoad || __opsPostLoginBootLoad) {
+    // During the first page load after Hard Refresh OR after Login, keep the
+    // overlay visible until the stable header/sidebar and persistent shell are
+    // ready. This prevents the user from seeing the temporary legacy Dashboard
+    // chrome while the app is still booting.
     beginFreshLoadOverlayIfNeeded();
 
-    // Keep the fresh marker alive briefly so all page-specific API calls bypass
-    // client caches during the first reload after Hard Refresh. The URL params
-    // are removed when the overlay closes; the marker stays for delayed APIs.
     window.setTimeout(() => {
-      clearTransientRefreshParams();
-      clearHardRefreshPending();
+      if (__opsFreshApiLoad) {
+        clearTransientRefreshParams();
+        clearHardRefreshPending();
+      }
+      if (__opsPostLoginBootLoad) clearPostLoginBootPending();
     }, 60000);
   }
 
@@ -2087,7 +2150,16 @@ if (document.querySelector('.sidebar')) {
         document.body.classList.add('permissions-ready');
       }
     } catch {} finally {
+      try {
+        ensureDashboardHeaderLayout();
+        ensureSidebarBranding();
+        syncMobileDockStructure();
+        renameSidebarLabels();
+        ensureNavTooltips();
+        if (window.feather) feather.replace();
+      } catch {}
       markFreshLoadAccountReady();
+      markFreshLoadChromeReady();
     }
   }
 
