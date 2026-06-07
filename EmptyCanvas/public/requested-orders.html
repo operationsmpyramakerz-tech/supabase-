@@ -218,12 +218,11 @@
       </div>
 
       <div class="co-modal-actions ro-actions ro-actions--right" id="reqModalActions">
-        <!-- Download action button: opens the modern export window -->
-        <div class="download-menu download-menu--button" id="reqDownloadMenuWrap">
-          <button type="button" class="ro-action-btn ro-action-btn--light download-menu__btn ops-download-trigger" id="reqDownloadMenuBtn" aria-haspopup="dialog" aria-expanded="false">
+        <!-- Download dropdown (single button like Current Orders) -->
+        <div class="download-menu" id="reqDownloadMenuWrap">
+          <button type="button" class="ro-action-btn ro-action-btn--light download-menu__btn" id="reqDownloadMenuBtn" aria-haspopup="menu" aria-expanded="false">
             <i data-feather="download"></i>
             <span>Download</span>
-            <i class="ops-download-trigger__arrow" data-feather="arrow-right"></i>
           </button>
 
           <div class="download-menu__panel" id="reqDownloadMenuPanel" role="menu" aria-label="Download options" hidden>
