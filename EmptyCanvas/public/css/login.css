@@ -680,3 +680,194 @@ body.auth-transitioning-to-signup .login-wordmark {
     font-size: 0.82rem;
   }
 }
+
+
+/* Branded after-login transition inspired by the provided splash animation. */
+body.login-success-active {
+  overflow: hidden !important;
+}
+
+.login-success-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 255, 255, 0.92) 0 14%, rgba(255, 237, 213, 0.88) 30%, transparent 56%),
+    linear-gradient(135deg, #FFF7ED 0%, #FB923C 42%, #EA580C 100%);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  animation: loginSplashFadeIn 0.26s ease-out forwards;
+}
+
+.login-success-splash[hidden] {
+  display: none !important;
+}
+
+.login-success-splash::before,
+.login-success-splash::after,
+.login-success-splash__aurora {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.login-success-splash::before {
+  width: 58vmax;
+  height: 58vmax;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 64%);
+  animation: loginSplashExpand 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash::after {
+  width: min(86vw, 620px);
+  height: min(86vw, 620px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 0 90px rgba(255, 255, 255, 0.16), 0 0 120px rgba(251, 146, 60, 0.25);
+  animation: loginSplashRing 1.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash__aurora {
+  inset: -20%;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.24), transparent 25%),
+    radial-gradient(circle at 82% 26%, rgba(15, 23, 42, 0.10), transparent 22%),
+    radial-gradient(circle at 65% 86%, rgba(255, 255, 255, 0.18), transparent 28%);
+  filter: blur(18px);
+  animation: loginSplashAurora 2.2s ease-in-out infinite alternate;
+}
+
+.login-success-splash__center {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  color: #FFFFFF;
+  transform: translateY(6px);
+  animation: loginSplashCenterPop 1.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash__ring {
+  position: absolute;
+  width: 148px;
+  height: 148px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.42);
+  border-top-color: rgba(15, 23, 42, 0.18);
+  animation: loginSplashSpin 1.25s linear infinite, loginSplashRingPulse 1.35s ease-out both;
+}
+
+.login-success-splash__burst {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  pointer-events: none;
+}
+
+.login-success-splash__burst i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.78);
+  opacity: 0;
+  animation: loginSplashParticle 1.1s cubic-bezier(0.17, 0.84, 0.44, 1) both;
+}
+.login-success-splash__burst i:nth-child(1){ --x:-72px; --y:-22px; animation-delay:.10s; }
+.login-success-splash__burst i:nth-child(2){ --x:68px; --y:-28px; animation-delay:.15s; }
+.login-success-splash__burst i:nth-child(3){ --x:-52px; --y:52px; animation-delay:.20s; }
+.login-success-splash__burst i:nth-child(4){ --x:58px; --y:48px; animation-delay:.25s; }
+.login-success-splash__burst i:nth-child(5){ --x:-12px; --y:-78px; animation-delay:.18s; }
+.login-success-splash__burst i:nth-child(6){ --x:14px; --y:78px; animation-delay:.28s; }
+.login-success-splash__burst i:nth-child(7){ --x:-88px; --y:8px; animation-delay:.32s; }
+.login-success-splash__burst i:nth-child(8){ --x:88px; --y:10px; animation-delay:.36s; }
+
+.login-success-splash__logo-wrap {
+  width: 92px;
+  height: 92px;
+  border-radius: 28px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 24px 70px rgba(124, 45, 18, 0.34), 0 0 0 10px rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  animation: loginSplashLogoPulse 1.25s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
+}
+
+.login-success-splash__logo {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  display: block;
+  animation: loginSplashLogoTilt 1.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash__wordmark {
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  text-shadow: 0 16px 38px rgba(124, 45, 18, 0.34);
+  opacity: 0;
+  animation: loginSplashTextIn 0.65s ease-out 0.42s forwards;
+}
+
+@keyframes loginSplashFadeIn { to { opacity: 1; } }
+@keyframes loginSplashExpand {
+  from { transform: scale(0.2); opacity: 0.4; }
+  to { transform: scale(1.1); opacity: 1; }
+}
+@keyframes loginSplashRing {
+  from { transform: scale(0.58); opacity: 0; }
+  42% { opacity: 1; }
+  to { transform: scale(1.05); opacity: 0.8; }
+}
+@keyframes loginSplashAurora {
+  from { transform: translate3d(-1%, -1%, 0) rotate(0deg); }
+  to { transform: translate3d(1.5%, 1%, 0) rotate(3deg); }
+}
+@keyframes loginSplashCenterPop {
+  from { opacity: 0; transform: translateY(24px) scale(0.84); filter: blur(8px); }
+  54% { opacity: 1; filter: blur(0); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes loginSplashSpin { to { transform: rotate(360deg); } }
+@keyframes loginSplashRingPulse {
+  from { opacity: 0; transform: scale(0.68); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes loginSplashParticle {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  22% { opacity: 1; }
+  74% { opacity: 1; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x) * 1.18), calc(-50% + var(--y) * 1.18)) scale(0.45); }
+}
+@keyframes loginSplashLogoPulse {
+  from { transform: scale(0.98); }
+  to { transform: scale(1.06); }
+}
+@keyframes loginSplashLogoTilt {
+  from { transform: rotate(-12deg) scale(0.78); opacity: 0; }
+  60% { transform: rotate(7deg) scale(1.08); opacity: 1; }
+  to { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+@keyframes loginSplashTextIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-success-splash,
+  .login-success-splash *,
+  .login-success-splash::before,
+  .login-success-splash::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
