@@ -2781,10 +2781,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Quantity shown in the detail modal.
-  // All / Not Started must show the original requested quantity only.
-  // Received/remaining comparison values are only shown in later workflow tabs.
+  // All / Not Started / Approved must show the original approved/requested quantity only.
+  // The value edited as "received by operations" is stored for the workflow action,
+  // but it should not replace the visible Qty until the later operations tabs.
   function receivedQtyDisplay(it) {
-    if (currentTab === "all" || currentTab === "not-started") return null;
+    if (currentTab === "all" || currentTab === "not-started" || currentTab === "approved") return null;
     const v = receivedQtyRaw(it);
     if (v === null || v === undefined) return null;
     return v;
