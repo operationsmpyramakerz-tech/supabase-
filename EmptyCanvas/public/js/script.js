@@ -16,10 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Prevent accidental double-execution (e.g. if the script is injected/loaded twice).
   // Double execution can cause racing fetches and UI flicker (orders appear then disappear)
   // and can also break card click behavior.
-  if (window.__CURRENT_ORDERS_UI_V7_LOADED__) return;
-  window.__CURRENT_ORDERS_UI_V7_LOADED__ = true;
+  if (window.__CURRENT_ORDERS_UI_V8_LOADED__) return;
+  window.__CURRENT_ORDERS_UI_V8_LOADED__ = true;
 
-  const CACHE_KEY = 'ordersDataV7';
+  const CACHE_KEY = 'ordersDataV8';
   const CACHE_TTL_MS = 30 * 1000;
 
   let allOrders = [];
@@ -334,9 +334,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function normalizeCurrentStatusTab(value) {
     let raw = norm(String(value || '').replace(/_/g, '-'));
-    if (raw === 'active' || raw === 'progress' || raw === 'inprogress') raw = 'in-progress';
+    if (raw === 'active' || raw === 'progress' || raw === 'inprogress' || raw === 'in-progress') raw = 'approved';
     if (raw === 'under-supervision' || raw === 'supervision' || raw === 'underreview') raw = 'under-supervision';
-    return new Set(['all', 'under-supervision', 'in-progress', 'shipped', 'arrived', 'archive']).has(raw) ? raw : 'all';
+    if (raw === 'reject') raw = 'rejected';
+    if (raw === 'approve') raw = 'approved';
+    return new Set(['all', 'under-supervision', 'approved', 'rejected', 'shipped', 'arrived', 'archive']).has(raw) ? raw : 'all';
   }
 
   function readStatusTabFromUrl() {
@@ -1350,13 +1352,39 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = url;
   }
 
+  function approvalTabValue(value) {
+    const key = norm(String(value || '').trim()).replace(/[_.-]+/g, ' ');
+    if (!key) return '';
+    if (key.includes('reject')) return 'rejected';
+    if (key.includes('approv')) return 'approved';
+    return '';
+  }
+
+  function groupApprovalTabForCurrentOrders(group) {
+    const products = Array.isArray(group?.products) ? group.products : [];
+    const hasRejected = products.some((item) => (
+      approvalTabValue(item?.operationsApproval) === 'rejected' ||
+      approvalTabValue(item?.svApproval) === 'rejected' ||
+      !!String(item?.rejectedReason || item?.rejected_reason || '').trim()
+    ));
+    if (hasRejected) return 'rejected';
+
+    const hasApproved = products.some((item) => approvalTabValue(item?.svApproval) === 'approved');
+    if (hasApproved) return 'approved';
+
+    return '';
+  }
+
   function statusTabForGroup(group) {
     const stage = group?.stage || computeStage(group?.products || []);
     const idx = Number(stage?.idx) || 1;
+    const approvalTab = groupApprovalTabForCurrentOrders(group);
+
     if (idx >= 5 || norm(stage?.label) === 'archive') return 'archive';
+    if (approvalTab === 'rejected') return 'rejected';
     if (idx >= 4) return 'arrived';
     if (idx >= 3) return 'shipped';
-    if (idx >= 2) return 'in-progress';
+    if (approvalTab === 'approved' || idx >= 2) return 'approved';
     return 'under-supervision';
   }
 
