@@ -9597,3 +9597,34 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
     font-size: 1rem;
   }
 }
+
+/* Orders Review: component status pill and rejected reason viewer */
+.sv-rejected-reason-trigger.co-item-status{
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.sv-rejected-reason-trigger.co-item-status:hover{
+  filter: brightness(.98);
+  transform: translateY(-1px);
+}
+
+.rejected-reason-view-text{
+  min-height: 92px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid #FECACA;
+  background:
+    radial-gradient(circle at 12% 30%, rgba(239,68,68,.22) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 22%, rgba(239,68,68,.18) 0 4px, transparent 5px),
+    linear-gradient(135deg, #1F0707 0%, #120405 100%);
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
