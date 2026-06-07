@@ -201,6 +201,19 @@ body.sidebar-collapsed .sidebar{
   justify-content: center !important;
 }
 
+/* Hide the legacy "Dashboard" text at CSS time, before common-ui.js runs.
+   This prevents the word from flashing during login and hard refresh boot. */
+.sidebar-header h2{
+  display: none !important;
+}
+
+/* Hide the temporary HTML header chrome while permissions/account data are loading.
+   common-ui.js removes permissions-loading only after the stable main bar and
+   sidebar have been rebuilt and permissions have been applied. */
+body.permissions-loading:not(.permissions-ready) .main-header{
+  visibility: hidden;
+}
+
 /* Hide the legacy chevrons button in the top header (we still keep the logo toggle clickable) */
 .sidebar-header #sidebar-toggle,
 .sidebar-header .sidebar-toggle{
@@ -2195,14 +2208,18 @@ body.ops-hard-refresh-active{
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.42), rgba(15, 23, 42, 0.36)),
-    rgba(15, 23, 42, 0.32);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.88), rgba(226, 232, 240, 0.78)),
+    rgba(248, 250, 252, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .ops-hard-refresh-overlay[hidden]{
   display: none !important;
+}
+
+body.ops-chrome-booting .app-container{
+  pointer-events: none;
 }
 
 .ops-hard-refresh-card{
