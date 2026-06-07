@@ -9634,10 +9634,14 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
 .co-status-btn.sv-mixed-approval-pill{
   position: relative;
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
+  justify-content: center;
   gap: 0;
   overflow: hidden;
-  padding: 0;
+  padding: 0 !important;
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
   border: 1px solid #D1D5DB;
   background: linear-gradient(105deg, #D1FAE5 0 49.5%, #FEE2E2 50% 100%);
   color: inherit;
@@ -9652,6 +9656,7 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   width: 2px;
   background: rgba(17, 24, 39, .16);
   transform: translateX(-50%) rotate(15deg);
+  transform-origin: center;
   z-index: 1;
   pointer-events: none;
 }
@@ -9661,20 +9666,32 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 1em;
+  padding: 10px 11px;
+  font-size: inherit;
   font-weight: 900;
   line-height: 1;
   background: transparent;
+  white-space: nowrap;
 }
 .sv-mixed-approval-pill__part--approved{
   color: #065F46;
-  padding-right: 16px;
+  padding-right: 13px;
 }
 .sv-mixed-approval-pill__part--rejected{
   color: #B91C1C;
-  padding-left: 16px;
+  padding-left: 13px;
 }
 .sv-mixed-approval-pill__sep{
   display: none;
+}
+@media (max-width: 520px){
+  .sv-mixed-approval-pill__part{
+    padding-top: 9px;
+    padding-bottom: 9px;
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+  .sv-mixed-approval-pill__part--approved{ padding-right: 11px; }
+  .sv-mixed-approval-pill__part--rejected{ padding-left: 11px; }
 }
