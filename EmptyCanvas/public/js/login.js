@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', function () {
   const signupBtn = signupForm ? signupForm.querySelector('.signup-submit-btn') : null;
   const loginHeaderTitle = document.querySelector('.login-brand-title');
   const loginHeaderSubtitle = document.querySelector('.login-subtitle');
+  const loginLogoStage = document.getElementById('loginLogoStage');
+  const loginInlineLogoPieces = document.getElementById('loginInlineLogoPieces');
   let authModeSwitching = false;
 
 
@@ -73,6 +75,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const CHROME_CACHE_KEY = 'ops.ui.chrome.v1';
   const ALLOWED_PAGES_KEY = 'allowedPages';
 
+  // Clear older full-screen login splash markers. The new login transition happens
+  // in-place on the logo icon inside the login card, then navigates when ready.
+  try {
+    sessionStorage.removeItem(LOGIN_SPLASH_MARKER_KEY);
+    sessionStorage.removeItem('ops.postLogin.pendingAt');
+  } catch {}
+
   function sleep(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
@@ -115,6 +124,51 @@ document.addEventListener('DOMContentLoaded', function () {
       return account;
     } catch {
       return null;
+    }
+  }
+
+
+  function buildInlineLoginLogoPiecesMarkup() {
+    const grid = 4;
+    const pieces = [];
+    for (let row = 0; row < grid; row += 1) {
+      for (let col = 0; col < grid; col += 1) {
+        const index = (row * grid) + col;
+        const cx = col - ((grid - 1) / 2);
+        const cy = row - ((grid - 1) / 2);
+        const distance = Math.max(Math.abs(cx), Math.abs(cy));
+        const spread = 30 + (distance * 16);
+        const tx = Math.round(cx * spread + (((index % 3) - 1) * 5));
+        const ty = Math.round(cy * spread + ((((index + 1) % 3) - 1) * 5));
+        const orbit = Math.round((index % 2 ? 1 : -1) * (18 + distance * 10));
+        const returnX = Math.round(tx * -0.18);
+        const returnY = Math.round(ty * -0.18);
+        const delay = (0.02 + ((row + col) * 0.022)).toFixed(3);
+        const bgX = grid === 1 ? 0 : (col / (grid - 1)) * 100;
+        const bgY = grid === 1 ? 0 : (row / (grid - 1)) * 100;
+        pieces.push(
+          `<span class="login-inline-logo-piece" style="--tx:${tx}px;--ty:${ty}px;--rx:${returnX}px;--ry:${returnY}px;--rot:${orbit}deg;--d:${delay}s;background-position:${bgX}% ${bgY}%;"></span>`
+        );
+      }
+    }
+    return pieces.join('');
+  }
+
+  function prepareInlineLoginLogoPieces() {
+    if (!loginInlineLogoPieces) return;
+    if (loginInlineLogoPieces.dataset.ready === '1') return;
+    loginInlineLogoPieces.innerHTML = buildInlineLoginLogoPiecesMarkup();
+    loginInlineLogoPieces.dataset.ready = '1';
+  }
+
+  function startInlineLoginLogoAnimation() {
+    prepareInlineLoginLogoPieces();
+    try { document.body.classList.add('login-inline-success-active'); } catch {}
+    if (loginLogoStage) {
+      loginLogoStage.classList.remove('is-running');
+      // Force a reflow so repeated failed/success attempts restart the animation cleanly.
+      void loginLogoStage.offsetWidth;
+      loginLogoStage.classList.add('is-running');
     }
   }
 
@@ -279,6 +333,7 @@ document.addEventListener('DOMContentLoaded', function () {
     event.preventDefault();
     hideError();
     setLoading(true);
+    let loginRedirecting = false;
 
     const formData = new FormData(loginForm);
     const username = formData.get('username');
@@ -298,20 +353,20 @@ document.addEventListener('DOMContentLoaded', function () {
       if (response.ok && result.success) {
         const startedAt = Date.now();
         const redirectTo = result.redirect || '/home';
+        loginRedirecting = true;
 
-        // Show the branded full-screen login transition immediately on the login page.
-        // This keeps the user away from the half-built Home/sidebar view while the
-        // session and chrome cache are warming up.
-        showLoginSuccessSplash();
+        // Run the transition on the existing login logo only. No separate splash page
+        // or full-screen animation is shown; the user stays on the login page until
+        // the account/chrome cache is warm enough to open Home cleanly.
+        startInlineLoginLogoAnimation();
 
-        // Prime the next page with user/photo/permissions before we leave the login page.
         const accountPromise = fetchAccountForWarmCache(username);
-        try { sessionStorage.setItem(LOGIN_SPLASH_MARKER_KEY, String(startedAt)); } catch {}
+        try { sessionStorage.removeItem(LOGIN_SPLASH_MARKER_KEY); } catch {}
         try { sessionStorage.removeItem('ops.postLogin.pendingAt'); } catch {}
 
         await Promise.all([
           accountPromise.catch(() => null),
-          waitForLoginSplashMinimum(startedAt),
+          waitForLoginSplashMinimum(startedAt, 2050),
         ]);
 
         window.location.replace(redirectTo);
@@ -324,7 +379,11 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error('Login error:', error);
       showError('Network error. Please check your connection and try again.');
     } finally {
-      setLoading(false);
+      if (!loginRedirecting) {
+        setLoading(false);
+        try { document.body.classList.remove('login-inline-success-active'); } catch {}
+        if (loginLogoStage) loginLogoStage.classList.remove('is-running');
+      }
     }
   });
 
