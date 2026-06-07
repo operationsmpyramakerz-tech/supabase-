@@ -3625,9 +3625,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const total = (isRemainingTab ? qtyRem : qtyEffective) * unit;
 
+        // Do not show the old crossed-out qty in All / Not Started / Approved.
+        // In Approved, an edited received qty should appear as a normal value only.
+        // The diff/strike visual remains reserved for the later workflow tabs.
         const showStrike =
           !isRemainingTab &&
           !isReceivedTab &&
+          currentTab !== "approved" &&
           qtyReceivedDisplay !== null &&
           qtyReceivedDisplay !== undefined &&
           qtyReceivedDisplay !== qtyBase;
