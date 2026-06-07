@@ -1232,13 +1232,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {}
 
     try { window.__opsCloseUserMenu && window.__opsCloseUserMenu(); } catch {}
-    showHardRefreshOverlay('Clearing browser cache…');
 
     try {
+      // Do not show a separate full-screen loader while clearing browser/Upstash
+      // cache. The only visible Hard Refresh loader should be the post-reload
+      // dashboard loader, where the sidebar/header shell is already present.
       await clearBrowserStorageForHardRefresh();
-      updateHardRefreshOverlay('Clearing Upstash cache…');
       await fetchHardRefreshEndpoint();
-      updateHardRefreshOverlay('Loading fresh data…');
       reloadFreshAfterHardRefresh();
     } catch (error) {
       console.error('Hard refresh failed:', error);
