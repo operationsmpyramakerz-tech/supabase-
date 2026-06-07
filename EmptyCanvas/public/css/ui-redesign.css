@@ -766,6 +766,46 @@ body.has-floating-search .main-header .searchbar{
 /* User (icon only trigger) */
 .main-header .account-mini .label{ display: none !important; }
 
+/* Keep the header avatar stable before the account API finishes loading.
+   The JS later converts account-mini into header-user, but both states must
+   look identical to avoid a different topbar after Hard Refresh. */
+.main-header a.account-mini{
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(15,23,42,0.06) !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 16px 36px rgba(15,23,42,0.10) !important;
+  color: #0F172A !important;
+  flex: 0 0 44px !important;
+  overflow: visible !important;
+}
+.main-header a.account-mini .ico-circle{
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  overflow: hidden !important;
+  background: #FFF7ED !important;
+  border: 2px solid #EA580C !important;
+  box-shadow: 0 0 0 4px rgba(234,88,12,0.14) !important;
+}
+.main-header a.account-mini .ico-circle img{
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
 .header-user{
   width: 44px;
   height: 44px;
