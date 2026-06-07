@@ -1547,6 +1547,7 @@
         decBtn.type = 'button';
         decBtn.textContent = '−';
         decBtn.setAttribute('aria-label', 'Decrease quantity');
+        decBtn.setAttribute('data-no-auto-busy', '');
 
         const qtyVal = document.createElement('div');
         qtyVal.className = 'qty-value';
@@ -1557,6 +1558,7 @@
         incBtn.type = 'button';
         incBtn.textContent = '+';
         incBtn.setAttribute('aria-label', 'Increase quantity');
+        incBtn.setAttribute('data-no-auto-busy', '');
 
         qtyCtl.appendChild(decBtn);
         qtyCtl.appendChild(qtyVal);
@@ -1643,6 +1645,7 @@
       decBtn.type = 'button';
       decBtn.textContent = '−';
       decBtn.setAttribute('aria-label', 'Decrease quantity');
+      decBtn.setAttribute('data-no-auto-busy', '');
 
       const qtyVal = document.createElement('div');
       qtyVal.className = 'qty-value';
@@ -1654,6 +1657,7 @@
       incBtn.type = 'button';
       incBtn.textContent = '+';
       incBtn.setAttribute('aria-label', 'Increase quantity');
+      incBtn.setAttribute('data-no-auto-busy', '');
 
       qtyCtl.appendChild(decBtn);
       qtyCtl.appendChild(qtyVal);
