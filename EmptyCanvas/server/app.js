@@ -5121,6 +5121,7 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "" } = {
     documentTitle: payload.receiptView.documentTitle,
     recipientLabelLeft: payload.receiptView.recipientLabelLeft,
     thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
+    signatureLabels: payload.receiptView.signatureLabels,
   }, res);
 }
 
@@ -6818,6 +6819,12 @@ function _receiptPresentationForOrderType(orderType) {
     filePrefix: isWithdraw ? "withdrawal_receipt" : "delivery_receipt",
     recipientLabelLeft: isWithdraw ? "Received from" : "Delivered to",
     thirdSignatureLabel: isWithdraw ? "Store keeper" : null,
+    // Footer signature order:
+    // - Withdrawal: Received from | Operations | Store keeper
+    // - Request Products: Store keeper | Operations | Delivered to
+    signatureLabels: isWithdraw
+      ? ["Received from", "Operations", "Store keeper"]
+      : ["Store keeper", "Operations", "Delivered to"],
   };
 }
 
@@ -21920,6 +21927,7 @@ app.post(
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
+          signatureLabels: receiptView.signatureLabels,
         },
         res,
       );
@@ -22996,6 +23004,7 @@ app.post(
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
+          signatureLabels: receiptView.signatureLabels,
           showFooterSignature: false,
         },
         res,

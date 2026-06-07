@@ -123,6 +123,7 @@ async function pipeDeliveryReceiptPDF(
     documentTitle = "Delivery Receipt",
     recipientLabelLeft = "Delivered to",
     thirdSignatureLabel = null,
+    signatureLabels = null,
     showFooterSignature = true,
   },
   stream,
@@ -211,13 +212,18 @@ async function pipeDeliveryReceiptPDF(
     doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(FOOTER.titleFont);
     doc.text("Handover confirmation", mL, titleY, { width: contentW, align: "left" });
 
-    const signatureLabels = [String(recipientLabelLeft || "Delivered to"), "Operations"];
-    if (String(thirdSignatureLabel || "").trim()) {
-      signatureLabels.push(String(thirdSignatureLabel).trim());
+    const customSignatureLabels = Array.isArray(signatureLabels)
+      ? signatureLabels.map((label) => String(label || "").trim()).filter(Boolean)
+      : [];
+    const footerSignatureLabels = customSignatureLabels.length
+      ? customSignatureLabels
+      : [String(recipientLabelLeft || "Delivered to"), "Operations"];
+    if (!customSignatureLabels.length && String(thirdSignatureLabel || "").trim()) {
+      footerSignatureLabels.push(String(thirdSignatureLabel).trim());
     }
 
     const gap = 16;
-    const boxCount = signatureLabels.length;
+    const boxCount = footerSignatureLabels.length;
     const boxW = (contentW - gap * Math.max(0, boxCount - 1)) / boxCount;
     const boxH = FOOTER.boxH;
 
@@ -248,7 +254,7 @@ async function pipeDeliveryReceiptPDF(
         .stroke();
     }
 
-    signatureLabels.forEach((label, index) => {
+    footerSignatureLabels.forEach((label, index) => {
       const x = mL + index * (boxW + gap);
       drawSignatureBox(label, x, boxesY);
     });
