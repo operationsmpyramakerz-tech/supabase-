@@ -559,6 +559,10 @@
     return String(type || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
+  function isWithdrawProductsType(type) {
+    return orderTypeKey(type) === 'withdrawproducts';
+  }
+
   function orderTypeHeaderTitle(type, notionColor, fallback = 'Order') {
     const key = orderTypeKey(type);
     if (key === 'requestproducts') return 'Request';
@@ -640,6 +644,12 @@
       .toFixed(QTY_DECIMALS)
       .replace(/\.0+$/, "")
       .replace(/(\.[0-9]*?)0+$/, "$1");
+  }
+
+  function normalizeReviewEditQtyForType(value, orderType, forceNegative = false) {
+    const rounded = roundQty(value);
+    if (!forceNegative && !isWithdrawProductsType(orderType)) return rounded;
+    return rounded === 0 ? 0 : -Math.abs(rounded);
   }
 
   function fmtDateOnly(createdTime) {
@@ -1751,11 +1761,13 @@
     popForId = id; popAnchor = btn;
 
     const it = allItems.find((x) => String(x.id) === String(id));
+    const itemOrderType = it?.orderType || activeGroup?.orderType || '';
     const edited = it && typeof it.quantityEdited === 'number' && Number.isFinite(it.quantityEdited)
       ? Number(it.quantityEdited)
       : null;
     const requestedQty = it ? roundQty(Number(it.quantity) || 0) : 0;
-    const currentVal = edited !== null ? edited : requestedQty;
+    const itemLooksWithdrawal = isWithdrawProductsType(itemOrderType) || requestedQty < 0 || (edited !== null && edited < 0);
+    const currentVal = normalizeReviewEditQtyForType(edited !== null ? edited : requestedQty, itemOrderType, itemLooksWithdrawal);
     popEl = document.createElement("div");
     popEl.className = "sv-qty-popover";
     popEl.innerHTML = `
@@ -1785,7 +1797,7 @@
 
     const clamp = (n) => {
       const raw = Number(n);
-      return Number.isFinite(raw) ? roundQty(raw) : 0;
+      return Number.isFinite(raw) ? normalizeReviewEditQtyForType(raw, itemOrderType, itemLooksWithdrawal) : 0;
     };
 
     decBtn.addEventListener("click", () => { input.value = fmtQty(clamp((Number(input.value) || 0) - 1)); });
@@ -1795,14 +1807,15 @@
     saveBtn.addEventListener("click", async () => {
       const v = clamp(input.value);
       try {
-        await http.post(`/api/sv-orders/${encodeURIComponent(id)}/quantity`, { value: v });
+        const result = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/quantity`, { value: v });
+        const savedValue = normalizeReviewEditQtyForType(result?.value ?? v, itemOrderType, itemLooksWithdrawal);
 
         // update in-memory
         const idx = allItems.findIndex((x) => String(x.id) === String(id));
         if (idx >= 0) {
           const req = Number(allItems[idx].quantity) || 0;
           // Compare using the same rounding to avoid floating point edge cases
-          allItems[idx].quantityEdited = (roundQty(v) === roundQty(req)) ? null : v;
+          allItems[idx].quantityEdited = (roundQty(savedValue) === roundQty(req)) ? null : savedValue;
         }
 
         writeSvCache(allItems, TAB);
