@@ -4874,15 +4874,12 @@ function initOpsPersistentShellHost() {
     return;
   }
 
-  // During the first load after Hard Refresh, do not boot the persistent
-  // iframe shell. The top window already reloads, and loading the same page
-  // again inside the iframe can show a second native loading/progress line
-  // across the mobile header on Android. The normal page stays fully usable;
-  // the shell is available again on the next regular page load.
-  if (shouldSkipOpsPersistentShellHostForFreshLoad()) {
-    restoreOpsPersistentShellHostNormalPage();
-    return;
-  }
+  // Important: keep the persistent shell enabled after Hard Refresh on
+  // tablet/desktop layouts. This preserves the same smooth in-app page
+  // transition behavior after refresh, so the sidebar/main bar do not rebuild
+  // or briefly show the legacy "Dashboard" header between pages.
+  // Fresh API/cache bypass is still handled by pageForcesFreshApiRequests(),
+  // so added/removed pages and fresh data continue to update correctly.
 
   // The Emails page already has its own full layout and mobile dock.
   // Creating a persistent iframe shell on a direct /messages refresh makes
