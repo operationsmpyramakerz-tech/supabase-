@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginLogoStage = document.getElementById('loginLogoStage');
   const loginInlineLogoPieces = document.getElementById('loginInlineLogoPieces');
   let authModeSwitching = false;
-  const LOGIN_LOGO_ANIMATION_VARIANT = 'explode';
+  const LOGIN_LOGO_ANIMATION_VARIANT = 'line';
   const LOGIN_LOGO_ANIMATION_MIN_MS = {
     explode: 2200,
     pulse: 1950,
