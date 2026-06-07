@@ -16,11 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Prevent accidental double-execution (e.g. if the script is injected/loaded twice).
   // Double execution can cause racing fetches and UI flicker (orders appear then disappear)
   // and can also break card click behavior.
-  if (window.__CURRENT_ORDERS_UI_V8_LOADED__) return;
-  window.__CURRENT_ORDERS_UI_V8_LOADED__ = true;
+  if (window.__CURRENT_ORDERS_UI_V9_LOADED__) return;
+  window.__CURRENT_ORDERS_UI_V9_LOADED__ = true;
 
-  const CACHE_KEY = 'ordersDataV8';
-  const CACHE_TTL_MS = 30 * 1000;
+  const CACHE_KEY = 'ordersDataV9ComponentStatusTabs';
+  const CACHE_TTL_MS = 0; // keep Current Orders status tabs fresh after review/operations actions
 
   let allOrders = [];
   let filtered = [];
@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ===== Order status flow (as requested) =====
   const STATUS_FLOW = [
     { label: 'Under Supervision', sub: 'Your order is under supervision.' },
-    { label: 'In progress', sub: 'We are preparing your order.' },
+    { label: 'Approved', sub: 'Your order was approved from orders review.' },
     { label: 'Shipping', sub: 'Your cargo is on delivery.' },
     { label: 'Arrived', sub: 'Your order has arrived.' },
     { label: 'Archive', sub: 'This order is archived.' },
@@ -467,7 +467,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function displayWorkflowStatusLabel(status) {
     const raw = String(status || '').trim();
     if (!raw) return raw;
-    return /^(shipped|shipping)$/i.test(raw) ? 'Shipping' : raw;
+    if (/^(shipped|shipping)$/i.test(raw)) return 'Shipping';
+    if (/^(in progress|inprogress|progress)$/i.test(raw)) return 'Approved';
+    return raw;
   }
 
   function statusToIndex(status) {
@@ -606,8 +608,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `<a class="co-item-link" href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><i data-feather="external-link"></i></a>`
             : '';
 
-          const approvalLabel = it.svApproval || displayWorkflowStatusLabel(it.status) || '—';
-          const approvalColor = it.svApprovalColor || it.statusColor;
+          const approvalLabel = currentOrderItemStatusLabel(it) || it.svApproval || displayWorkflowStatusLabel(it.status) || '—';
+          const approvalColor = statusColorForTab(statusTabForItem(it)) || it.svApprovalColor || it.statusColor;
           const sVars = approvalLabelColorVars(approvalLabel, approvalColor);
           const sStyle = `--tag-bg:${sVars.bg};--tag-fg:${sVars.fg};--tag-border:${sVars.bd};`;
 
@@ -1360,32 +1362,80 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   }
 
-  function groupApprovalTabForCurrentOrders(group) {
+  function itemHasRejectedReason(item) {
+    return !!String(item?.rejectedReason || item?.rejected_reason || '').trim();
+  }
+
+  // Current Orders filters are component-level, not whole-order-level:
+  // if ORD-X has one approved component and one rejected component, each component
+  // must appear only in its own tab while keeping the original order grouping inside that tab.
+  function statusTabForItem(item) {
+    const idx = statusToIndex(item?.status);
+    const svDecision = approvalTabValue(item?.svApproval || item?.sv_approval);
+    const operationsDecision = approvalTabValue(item?.operationsApproval || item?.operations_approval);
+
+    if (idx >= 5) return 'archive';
+    if (svDecision === 'rejected' || operationsDecision === 'rejected' || itemHasRejectedReason(item)) return 'rejected';
+    if (idx >= 4) return 'arrived';
+    if (idx >= 3) return 'shipped';
+    if (svDecision === 'approved' || operationsDecision === 'approved' || idx >= 2) return 'approved';
+    return 'under-supervision';
+  }
+
+  function statusLabelForTab(tab) {
+    switch (tab) {
+      case 'under-supervision': return 'Under Supervision';
+      case 'approved': return 'Approved';
+      case 'rejected': return 'Rejected';
+      case 'shipped': return 'Shipping';
+      case 'arrived': return 'Arrived';
+      case 'archive': return 'Archive';
+      default: return 'Order';
+    }
+  }
+
+  function statusColorForTab(tab) {
+    switch (tab) {
+      case 'approved': return 'green';
+      case 'rejected': return 'red';
+      case 'shipped': return 'blue';
+      case 'arrived': return 'green';
+      case 'archive': return 'purple';
+      case 'under-supervision': return 'orange';
+      default: return 'default';
+    }
+  }
+
+  function currentOrderItemStatusLabel(item) {
+    return statusLabelForTab(statusTabForItem(item));
+  }
+
+  function groupDominantStatusTab(group) {
     const products = Array.isArray(group?.products) ? group.products : [];
-    const hasRejected = products.some((item) => (
-      approvalTabValue(item?.operationsApproval) === 'rejected' ||
-      approvalTabValue(item?.svApproval) === 'rejected' ||
-      !!String(item?.rejectedReason || item?.rejected_reason || '').trim()
-    ));
-    if (hasRejected) return 'rejected';
+    if (!products.length) return 'under-supervision';
 
-    const hasApproved = products.some((item) => approvalTabValue(item?.svApproval) === 'approved');
-    if (hasApproved) return 'approved';
-
-    return '';
+    const tabs = products.map(statusTabForItem);
+    const allArchived = tabs.every((tab) => tab === 'archive');
+    if (allArchived) return 'archive';
+    if (tabs.includes('rejected')) return 'rejected';
+    if (tabs.includes('arrived')) return 'arrived';
+    if (tabs.includes('shipped')) return 'shipped';
+    if (tabs.includes('approved')) return 'approved';
+    return 'under-supervision';
   }
 
   function statusTabForGroup(group) {
-    const stage = group?.stage || computeStage(group?.products || []);
-    const idx = Number(stage?.idx) || 1;
-    const approvalTab = groupApprovalTabForCurrentOrders(group);
+    return groupDominantStatusTab(group);
+  }
 
-    if (idx >= 5 || norm(stage?.label) === 'archive') return 'archive';
-    if (approvalTab === 'rejected') return 'rejected';
-    if (idx >= 4) return 'arrived';
-    if (idx >= 3) return 'shipped';
-    if (approvalTab === 'approved' || idx >= 2) return 'approved';
-    return 'under-supervision';
+  function itemMatchesCurrentStatus(item) {
+    if (currentStatusTab === 'all') return true;
+    return statusTabForItem(item) === currentStatusTab;
+  }
+
+  function buildGroupsForCurrentStatus(list = allOrders) {
+    const scopedItems = (Array.isArray(list) ? list : []).filter((item) => itemMatchesCurrentStatus(item));
+    return buildGroups(scopedItems);
   }
 
   function groupTypeKey(group) {
@@ -1394,9 +1444,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function groupMatchesCurrentStatus(group) {
-    const tab = statusTabForGroup(group);
-    if (currentStatusTab === 'all') return tab !== 'archive';
-    return tab === currentStatusTab;
+    if (currentStatusTab === 'all') return true;
+    return statusTabForGroup(group) === currentStatusTab;
   }
 
   function groupMatchesCurrentType(group) {
@@ -1430,7 +1479,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getTypeFilterOptions(allGroups = []) {
-    const scoped = (allGroups || []).filter((group) => groupMatchesCurrentStatus(group));
+    const scoped = (allGroups || []);
     const counts = new Map();
     for (const group of scoped) {
       const key = groupTypeKey(group);
@@ -1531,15 +1580,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderCurrentOrders() {
-    const allGroups = buildGroups(allOrders);
-    groupsById = new Map((allGroups || []).map((g) => [g.groupId, g]));
+    const statusGroups = buildGroupsForCurrentStatus(allOrders);
+    groupsById = new Map((statusGroups || []).map((g) => [g.groupId, g]));
     setActiveStatusTabUI();
     updateCurrentOrdersToolbarUrl();
-    renderTypeFilterMenu(allGroups);
+    renderTypeFilterMenu(statusGroups);
 
     const q = norm(searchInput?.value || '');
-    const visibleGroups = (allGroups || [])
-      .filter((group) => groupMatchesCurrentStatus(group))
+    const visibleGroups = (statusGroups || [])
       .filter((group) => groupMatchesCurrentType(group))
       .filter((group) => groupMatchesSearch(group, q));
 
@@ -1585,8 +1633,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const created = fmtDateOnly(group.latestCreated);
     const stage = computeStage(items);
+    const groupStatusTab = currentStatusTab === 'all' ? groupDominantStatusTab(group) : currentStatusTab;
+    const groupStatusLabel = statusLabelForTab(groupStatusTab) || displayWorkflowStatusLabel(stage.label) || 'Order';
+    const groupStatusColor = statusColorForTab(groupStatusTab) || stage.color;
 
-    const statusVars = notionColorVars(stage.color);
+    const statusVars = notionColorVars(groupStatusColor);
     const statusStyle = `--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};`;
 
     const title = escapeHTML(group.orderIdRange || group.reason);
@@ -1630,7 +1681,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(stage.label)}</span>
+          <span class="co-status-btn" style="${statusStyle}">${escapeHTML(groupStatusLabel)}</span>
           <span class="co-right-ico" aria-hidden="true"><i data-feather="percent"></i></span>
         </div>
       </div>
@@ -1701,7 +1752,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      const response = await fetch('/api/orders', { credentials: 'include', cache: 'no-store' });
+      const response = await fetch('/api/orders?_fresh=1', { credentials: 'include', cache: 'no-store' });
       if (response.status === 401) {
         window.location.href = '/login';
         return;
@@ -1773,8 +1824,8 @@ document.addEventListener('DOMContentLoaded', () => {
     typeFilterBtn?.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const allGroups = buildGroups(allOrders);
-      toggleTypeFilterMenu(allGroups);
+      const statusGroups = buildGroupsForCurrentStatus(allOrders);
+      toggleTypeFilterMenu(statusGroups);
     });
 
     typeFilterPanel?.addEventListener('click', (e) => {
