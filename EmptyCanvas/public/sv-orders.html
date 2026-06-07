@@ -99,7 +99,12 @@
         <div class="orders-toolbar" aria-label="Orders review tools">
           <div class="orders-toolbar__scroll">
             <div id="svTabs" class="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Orders Review status">
-              <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="true"
+              <a class="tab-portfolio order-status-tab" data-tab="all" role="tab" aria-selected="true"
+                 href="/orders/sv-orders?tab=all">
+                <span class="order-status-tab__icon"><i data-feather="layers"></i></span>
+                <span class="order-status-tab__label">All</span>
+              </a>
+              <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="false"
                  href="/orders/sv-orders?tab=not-started">
                 <span class="order-status-tab__icon"><i data-feather="pause-circle"></i></span>
                 <span class="order-status-tab__label">Not Started</span>
@@ -290,14 +295,14 @@
   <script>
     // Activate the current tab visually
     (function(){
-      const tab = (new URLSearchParams(location.search).get('tab') || 'not-started').toLowerCase();
+      const tab = (new URLSearchParams(location.search).get('tab') || 'all').toLowerCase();
       document.querySelectorAll('#svTabs a.tab-portfolio').forEach(a => {
         const isActive = (a.dataset.tab || '').toLowerCase() === tab;
         a.classList.toggle('active', isActive);
         a.setAttribute('aria-selected', isActive ? 'true' : 'false');
         try {
           const u = new URL(a.getAttribute('href'), location.origin);
-          u.searchParams.set('tab', a.dataset.tab || 'not-started');
+          u.searchParams.set('tab', a.dataset.tab || 'all');
           a.setAttribute('href', u.pathname + '?' + u.searchParams.toString());
         } catch {}
       });
