@@ -3771,6 +3771,273 @@ document.addEventListener("DOMContentLoaded", () => {
     else closeDownloadMenu();
   }
 
+
+  const OPS_EXPORT_COLUMNS = [
+    { value: "idCode", label: "ID Code", checked: true },
+    { value: "component", label: "Component", checked: true },
+    { value: "qty", label: "Qty", checked: true },
+    { value: "reason", label: "Reason", checked: false },
+    { value: "link", label: "Component link", checked: false },
+    { value: "unit", label: "Unit cost", checked: true },
+    { value: "total", label: "Total cost", checked: true },
+  ];
+
+  function defaultOpsExportColumnsForTab(tab = currentTab) {
+    const tabKey = String(tab || "").trim().toLowerCase();
+    const hideCostByDefault = tabKey === "received" || tabKey === "delivered";
+    return OPS_EXPORT_COLUMNS.map((col) => ({
+      ...col,
+      checked: hideCostByDefault && (col.value === "unit" || col.value === "total") ? false : !!col.checked,
+    }));
+  }
+
+  const OperationsExportModal = (() => {
+    let ui = null;
+    let resolver = null;
+
+    const ensure = () => {
+      if (ui) return ui;
+      const modal = document.createElement("div");
+      modal.className = "ops-export-modal hidden";
+      modal.id = "opsExportModal";
+      modal.innerHTML = `
+        <div class="ops-export-modal__backdrop" data-ops-export-cancel></div>
+        <div class="ops-export-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="opsExportTitle">
+          <div class="ops-export-modal__header">
+            <div class="ops-export-modal__icon" aria-hidden="true"><i data-feather="download"></i></div>
+            <div>
+              <h3 class="ops-export-modal__title" id="opsExportTitle">Download order file</h3>
+              <p class="ops-export-modal__hint">Choose the file type and the columns that should appear in the file.</p>
+            </div>
+            <button class="ops-export-modal__close" type="button" aria-label="Close" data-ops-export-cancel>&times;</button>
+          </div>
+          <div class="ops-export-modal__body">
+            <div class="ops-export-field ops-export-filetype" data-ops-export-filetype-picker>
+              <span class="ops-export-field__label">File type</span>
+              <input type="hidden" data-ops-export-filetype value="pdf" />
+              <button class="ops-export-picker-button" type="button" data-ops-export-filetype-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-ops-export-filetype-summary>PDF</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-filetype__panel ops-export-floating-panel" data-ops-export-filetype-panel role="listbox" aria-label="File type" hidden>
+                <button class="ops-export-option is-selected" type="button" data-ops-export-filetype-option="pdf" role="option" aria-selected="true">
+                  <span>PDF</span>
+                  <i data-feather="check" aria-hidden="true"></i>
+                </button>
+                <button class="ops-export-option" type="button" data-ops-export-filetype-option="excel" role="option" aria-selected="false">
+                  <span>Excel</span>
+                  <i data-feather="check" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+            <div class="ops-export-field ops-export-multiselect" data-ops-export-column-picker>
+              <span class="ops-export-field__label">Columns</span>
+              <button class="ops-export-multiselect__button" type="button" data-ops-export-column-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-ops-export-column-summary>Columns selected</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-multiselect__panel ops-export-floating-panel" data-ops-export-column-panel role="listbox" aria-label="Columns" hidden>
+                <div class="ops-export-columns" data-ops-export-columns></div>
+              </div>
+            </div>
+            <div class="ops-export-modal__error" data-ops-export-error>Please choose at least one column.</div>
+          </div>
+          <div class="ops-export-modal__footer">
+            <button class="btn btn--light" type="button" data-ops-export-cancel>Cancel</button>
+            <button class="btn ops-export-confirm" type="button" data-ops-export-confirm>
+              <i data-feather="download"></i>
+              <span>Download</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const fileType = modal.querySelector("[data-ops-export-filetype]");
+      const columnsWrap = modal.querySelector("[data-ops-export-columns]");
+      const err = modal.querySelector("[data-ops-export-error]");
+      const confirm = modal.querySelector("[data-ops-export-confirm]");
+      const cancelEls = Array.from(modal.querySelectorAll("[data-ops-export-cancel]"));
+      const columnPicker = modal.querySelector("[data-ops-export-column-picker]");
+      const columnToggle = modal.querySelector("[data-ops-export-column-toggle]");
+      const columnPanel = modal.querySelector("[data-ops-export-column-panel]");
+      const columnSummary = modal.querySelector("[data-ops-export-column-summary]");
+      const fileTypePicker = modal.querySelector("[data-ops-export-filetype-picker]");
+      const fileTypeToggle = modal.querySelector("[data-ops-export-filetype-toggle]");
+      const fileTypePanel = modal.querySelector("[data-ops-export-filetype-panel]");
+      const fileTypeSummary = modal.querySelector("[data-ops-export-filetype-summary]");
+      const fileTypeOptions = Array.from(modal.querySelectorAll("[data-ops-export-filetype-option]"));
+
+      const checks = () => Array.from(columnsWrap?.querySelectorAll('input[type="checkbox"]') || []);
+
+      const positionFloatingPanel = (toggle, panel) => {
+        if (!toggle || !panel || panel.hidden) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        const rect = toggle.getBoundingClientRect();
+        const margin = 12;
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const panelWidth = Math.min(rect.width, Math.max(0, viewportWidth - (margin * 2)));
+        const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportWidth - panelWidth - margin));
+        const belowSpace = viewportHeight - rect.bottom - margin;
+        const aboveSpace = rect.top - margin;
+        const shouldOpenUp = belowSpace < 230 && aboveSpace > belowSpace;
+        const maxHeight = Math.max(160, Math.min(340, (shouldOpenUp ? aboveSpace : belowSpace) - 8));
+        panel.style.width = `${panelWidth}px`;
+        panel.style.left = `${left}px`;
+        panel.style.maxHeight = `${maxHeight}px`;
+        if (shouldOpenUp) {
+          panel.style.top = "auto";
+          panel.style.bottom = `${Math.max(margin, viewportHeight - rect.top + 8)}px`;
+        } else {
+          panel.style.top = `${Math.min(rect.bottom + 8, viewportHeight - margin)}px`;
+          panel.style.bottom = "auto";
+        }
+      };
+
+      const setFloatingPanelOpen = (toggle, panel, open) => {
+        if (!toggle || !panel) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        panel.hidden = !open;
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        toggle.classList.toggle("is-open", !!open);
+        if (open) {
+          positionFloatingPanel(toggle, panel);
+          requestAnimationFrame(() => positionFloatingPanel(toggle, panel));
+        }
+      };
+
+      const updateFileTypeSummary = () => {
+        const value = String(fileType?.value || "pdf").toLowerCase();
+        const label = value === "excel" ? "Excel" : "PDF";
+        if (fileTypeSummary) fileTypeSummary.textContent = label;
+        fileTypeOptions.forEach((option) => {
+          const selected = option.dataset.opsExportFiletypeOption === value;
+          option.classList.toggle("is-selected", selected);
+          option.setAttribute("aria-selected", selected ? "true" : "false");
+        });
+      };
+
+      const selectedLabels = () => checks()
+        .filter((x) => x.checked)
+        .map((x) => OPS_EXPORT_COLUMNS.find((col) => col.value === x.value)?.label || x.value);
+
+      const updateColumnSummary = () => {
+        const labels = selectedLabels();
+        if (columnSummary) columnSummary.textContent = labels.length ? labels.join(", ") : "Select columns";
+        if (err && labels.length) err.style.display = "none";
+      };
+
+      const setFileTypePanelOpen = (open) => {
+        if (open) setColumnPanelOpen(false);
+        setFloatingPanelOpen(fileTypeToggle, fileTypePanel, open);
+      };
+
+      const setColumnPanelOpen = (open) => {
+        if (open) setFileTypePanelOpen(false);
+        setFloatingPanelOpen(columnToggle, columnPanel, open);
+      };
+
+      const close = (value = null) => {
+        setFileTypePanelOpen(false);
+        setColumnPanelOpen(false);
+        modal.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+        if (resolver) {
+          const done = resolver;
+          resolver = null;
+          done(value);
+        }
+      };
+
+      const renderColumns = (columns) => {
+        if (!columnsWrap) return;
+        columnsWrap.innerHTML = columns.map((col) => `
+          <label class="ops-export-check" role="option">
+            <input type="checkbox" value="${escapeHTML(col.value)}" ${col.checked ? "checked" : ""} />
+            <span>${escapeHTML(col.label)}</span>
+          </label>
+        `).join("");
+        checks().forEach((input) => input.addEventListener("change", updateColumnSummary));
+      };
+
+      cancelEls.forEach((el) => el.addEventListener("click", () => close(null)));
+      modal.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        if (fileTypePanel && !fileTypePanel.hidden) return setFileTypePanelOpen(false);
+        if (columnPanel && !columnPanel.hidden) return setColumnPanelOpen(false);
+        close(null);
+      });
+      fileTypeToggle?.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setFileTypePanelOpen(!!fileTypePanel?.hidden);
+      });
+      fileTypePanel?.addEventListener("click", (e) => e.stopPropagation());
+      fileTypeOptions.forEach((option) => {
+        option.addEventListener("click", () => {
+          if (fileType) fileType.value = option.dataset.opsExportFiletypeOption || "pdf";
+          updateFileTypeSummary();
+          setFileTypePanelOpen(false);
+        });
+      });
+      columnToggle?.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setColumnPanelOpen(!!columnPanel?.hidden);
+      });
+      columnPanel?.addEventListener("click", (e) => e.stopPropagation());
+      document.addEventListener("click", (e) => {
+        if (modal.classList.contains("hidden")) return;
+        const target = e.target;
+        const insideFileType = fileTypePicker?.contains(target) || fileTypePanel?.contains(target);
+        const insideColumns = columnPicker?.contains(target) || columnPanel?.contains(target);
+        if (insideFileType || insideColumns) return;
+        setFileTypePanelOpen(false);
+        setColumnPanelOpen(false);
+      });
+      const repositionOpenPanels = () => {
+        if (modal.classList.contains("hidden")) return;
+        positionFloatingPanel(fileTypeToggle, fileTypePanel);
+        positionFloatingPanel(columnToggle, columnPanel);
+      };
+      window.addEventListener("resize", repositionOpenPanels);
+      window.addEventListener("scroll", repositionOpenPanels, true);
+      confirm?.addEventListener("click", () => {
+        const selected = checks().filter((x) => x.checked).map((x) => x.value);
+        if (!selected.length) {
+          if (err) err.style.display = "block";
+          setColumnPanelOpen(true);
+          return;
+        }
+        if (err) err.style.display = "none";
+        close({ fileType: String(fileType?.value || "pdf").toLowerCase(), columns: selected });
+      });
+
+      ui = { modal, fileType, fileTypeToggle, checks, err, renderColumns, updateFileTypeSummary, updateColumnSummary, setFileTypePanelOpen, setColumnPanelOpen };
+      if (window.feather) window.feather.replace();
+      return ui;
+    };
+
+    return {
+      open: ({ tab = currentTab } = {}) => new Promise((resolve) => {
+        const x = ensure();
+        resolver = resolve;
+        if (x.fileType) x.fileType.value = "pdf";
+        x.renderColumns(defaultOpsExportColumnsForTab(tab));
+        x.updateFileTypeSummary?.();
+        x.updateColumnSummary?.();
+        x.setFileTypePanelOpen?.(false);
+        x.setColumnPanelOpen?.(false);
+        if (x.err) x.err.style.display = "none";
+        x.modal.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        if (window.feather) window.feather.replace();
+        setTimeout(() => x.fileTypeToggle?.focus?.(), 30);
+      }),
+    };
+  })();
+
   // ---------- Delivered receipt photos viewer ----------
   function setReceiptPhotosButtonVisibility(group = activeGroup) {
     if (!receiptPhotosBtn) return;
@@ -4320,40 +4587,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ---------- Actions ----------
-  async function downloadExcel(g) {
-  if (!g || !g.orderIds || !g.orderIds.length) return;
-
-  if (excelBtn) {
-    excelBtn.disabled = true;
-    excelBtn.dataset.prevHtml = excelBtn.innerHTML;
-    excelBtn.textContent = "Preparing...";
+  function setMainDownloadBusy(isBusy) {
+    if (!downloadMenuBtn) return;
+    if (isBusy) {
+      downloadMenuBtn.disabled = true;
+      downloadMenuBtn.dataset.prevHtml = downloadMenuBtn.innerHTML;
+      downloadMenuBtn.innerHTML = '<i data-feather="loader"></i><span>Preparing...</span>';
+      downloadMenuBtn.classList.add('is-busy');
+    } else {
+      downloadMenuBtn.disabled = false;
+      downloadMenuBtn.classList.remove('is-busy');
+      const prev = downloadMenuBtn.dataset.prevHtml;
+      if (prev) downloadMenuBtn.innerHTML = prev;
+      delete downloadMenuBtn.dataset.prevHtml;
+    }
+    if (window.feather) window.feather.replace();
   }
 
-  try {
-    const res = await fetch("/api/orders/requested/export/excel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ orderIds: g.orderIds }),
-    });
-
-    if (res.status === 401) {
-      window.location.href = "/login";
-      return;
-    }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Failed to export Excel");
-    }
-
+  async function downloadBlob(res, fallbackName) {
     const blob = await res.blob();
-
-    // Try to extract filename from content-disposition
     const cd = res.headers.get("content-disposition") || "";
     const m = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-    const filename = decodeURIComponent((m && (m[1] || m[2])) || "operations_orders.xlsx");
-
+    const filename = decodeURIComponent((m && (m[1] || m[2])) || fallbackName);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -4362,38 +4617,48 @@ document.addEventListener("DOMContentLoaded", () => {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
 
-    toast("success", "Downloaded", "Excel exported successfully.");
-  } catch (e) {
-    console.error(e);
-    alert(e.message || "Failed to export Excel");
-  } finally {
-    if (excelBtn) {
-      excelBtn.disabled = false;
-      const prev = excelBtn.dataset.prevHtml;
-      if (prev) excelBtn.innerHTML = prev;
-      else excelBtn.textContent = "Download Excel";
+  async function downloadExcel(g, columns = null) {
+    if (!g || !g.orderIds || !g.orderIds.length) return;
+    setMainDownloadBusy(true);
+    try {
+      const res = await fetch("/api/orders/requested/export/excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ orderIds: g.orderIds, columns: Array.isArray(columns) ? columns : undefined, tab: currentTab }),
+      });
+
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to export Excel");
+      }
+
+      await downloadBlob(res, "operations_orders.xlsx");
+      toast("success", "Downloaded", "Excel exported successfully.");
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "Failed to export Excel");
+    } finally {
+      setMainDownloadBusy(false);
     }
   }
-}
 
-  async function downloadPdf(g) {
+  async function downloadPdf(g, columns = null) {
     if (!g || !g.orderIds || !g.orderIds.length) return;
-
-    if (pdfBtn) {
-      pdfBtn.disabled = true;
-      pdfBtn.dataset.prevHtml = pdfBtn.innerHTML;
-      pdfBtn.textContent = "Preparing...";
-    }
-
+    setMainDownloadBusy(true);
     try {
       const res = await fetch("/api/orders/requested/export/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        // Pass current tab so the server can adapt the PDF layout
-        // (e.g., hide cost columns for Received / Delivered tabs)
-        body: JSON.stringify({ orderIds: g.orderIds, tab: currentTab }),
+        body: JSON.stringify({ orderIds: g.orderIds, tab: currentTab, columns: Array.isArray(columns) ? columns : undefined }),
       });
 
       if (res.status === 401) {
@@ -4406,34 +4671,13 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(err.error || "Failed to export PDF");
       }
 
-      const blob = await res.blob();
-
-      // filename from content-disposition
-      const cd = res.headers.get("content-disposition") || "";
-      let filename = "order.pdf";
-      const m = cd.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^;\"]+)\"?/i);
-      if (m) filename = decodeURIComponent(m[1] || m[2] || filename);
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-
+      await downloadBlob(res, "order.pdf");
       toast("success", "Downloaded", "PDF downloaded.");
     } catch (e) {
       console.error(e);
       alert(e.message || "Failed to export PDF");
     } finally {
-      if (pdfBtn) {
-        pdfBtn.disabled = false;
-        const prev = pdfBtn.dataset.prevHtml;
-        if (prev) pdfBtn.innerHTML = prev;
-        else pdfBtn.textContent = "Download PDF";
-      }
+      setMainDownloadBusy(false);
     }
   }
 
@@ -5377,17 +5621,24 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (e.target === orderModal) closeOrderModal();
   });
 
-  // Download dropdown
-  if (downloadMenuBtn && downloadMenuPanel && downloadMenuWrap) {
-    downloadMenuBtn.addEventListener("click", (e) => {
+  // Download options modal
+  if (downloadMenuBtn) {
+    downloadMenuBtn.addEventListener("click", async (e) => {
       e.preventDefault();
-      toggleDownloadMenu();
+      closeDownloadMenu();
+      const opts = await OperationsExportModal.open({ tab: currentTab });
+      if (!opts) return;
+      if (opts.fileType === "excel" || opts.fileType === "xlsx") {
+        downloadExcel(activeGroup, opts.columns);
+      } else {
+        downloadPdf(activeGroup, opts.columns);
+      }
     });
 
-    // Click outside closes
+    // Legacy dropdown safety: close if old panel exists/open.
     document.addEventListener("click", (e) => {
       if (!downloadMenuPanel || downloadMenuPanel.hidden) return;
-      if (downloadMenuWrap.contains(e.target)) return;
+      if (downloadMenuWrap?.contains?.(e.target)) return;
       closeDownloadMenu();
     });
   }
