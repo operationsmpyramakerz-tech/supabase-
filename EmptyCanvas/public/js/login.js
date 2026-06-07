@@ -16,6 +16,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const loginLogoStage = document.getElementById('loginLogoStage');
   const loginInlineLogoPieces = document.getElementById('loginInlineLogoPieces');
   let authModeSwitching = false;
+  const LOGIN_LOGO_ANIMATION_VARIANT = 'explode';
+  const LOGIN_LOGO_ANIMATION_MIN_MS = {
+    explode: 2200,
+    pulse: 1950,
+    line: 2300,
+    slide: 2200,
+  }[LOGIN_LOGO_ANIMATION_VARIANT] || 2150;
+  if (loginLogoStage) loginLogoStage.dataset.logoAnimation = LOGIN_LOGO_ANIMATION_VARIANT;
+  try { document.body.dataset.loginLogoAnimation = LOGIN_LOGO_ANIMATION_VARIANT; } catch {}
+
 
 
   const cardThemeButtons = Array.from(document.querySelectorAll('[data-card-theme]'));
@@ -128,7 +138,15 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
 
-  function buildInlineLoginLogoPiecesMarkup() {
+function buildInlineLoginLogoPiecesMarkup() {
+    const variant = LOGIN_LOGO_ANIMATION_VARIANT;
+
+    if (variant === 'pulse') {
+      return [0, 1, 2].map((index) => (
+        `<span class="login-inline-logo-pulse-echo" style="--d:${(index * 0.16).toFixed(2)}s;"></span>`
+      )).join('');
+    }
+
     const grid = 4;
     const pieces = [];
     for (let row = 0; row < grid; row += 1) {
@@ -137,18 +155,36 @@ document.addEventListener('DOMContentLoaded', function () {
         const cx = col - ((grid - 1) / 2);
         const cy = row - ((grid - 1) / 2);
         const distance = Math.max(Math.abs(cx), Math.abs(cy));
-        const spread = 30 + (distance * 16);
-        const tx = Math.round(cx * spread + (((index % 3) - 1) * 5));
-        const ty = Math.round(cy * spread + ((((index + 1) % 3) - 1) * 5));
-        const orbit = Math.round((index % 2 ? 1 : -1) * (18 + distance * 10));
-        const returnX = Math.round(tx * -0.18);
-        const returnY = Math.round(ty * -0.18);
-        const delay = (0.02 + ((row + col) * 0.022)).toFixed(3);
+        const diagonalBias = (row - col) * 3;
         const bgX = grid === 1 ? 0 : (col / (grid - 1)) * 100;
         const bgY = grid === 1 ? 0 : (row / (grid - 1)) * 100;
-        pieces.push(
-          `<span class="login-inline-logo-piece" style="--tx:${tx}px;--ty:${ty}px;--rx:${returnX}px;--ry:${returnY}px;--rot:${orbit}deg;--d:${delay}s;background-position:${bgX}% ${bgY}%;"></span>`
-        );
+        let style = `background-position:${bgX}% ${bgY}%;`;
+
+        if (variant === 'line') {
+          const lineOrder = ((1.6 - distance) * 0.19) + ((row + col) * 0.025);
+          const revealX = cx < 0 ? -1 : 1;
+          const revealY = cy < 0 ? -1 : 1;
+          style += `--d:${(0.04 + lineOrder).toFixed(3)}s;--line-x:${revealX};--line-y:${revealY};`;
+        } else if (variant === 'slide') {
+          const fromX = Math.round((cx <= 0 ? -1 : 1) * (72 + Math.abs(cx) * 14) + diagonalBias);
+          const fromY = Math.round((cy <= 0 ? -1 : 1) * (42 + Math.abs(cy) * 10) - diagonalBias);
+          const settleX = Math.round(fromX * -0.10);
+          const settleY = Math.round(fromY * -0.10);
+          const rot = Math.round((cx - cy) * 7);
+          const delay = (0.03 + ((row + col) * 0.032)).toFixed(3);
+          style += `--tx:${fromX}px;--ty:${fromY}px;--sx:${settleX}px;--sy:${settleY}px;--rot:${rot}deg;--d:${delay}s;`;
+        } else {
+          const spread = 30 + (distance * 16);
+          const tx = Math.round(cx * spread + (((index % 3) - 1) * 5));
+          const ty = Math.round(cy * spread + ((((index + 1) % 3) - 1) * 5));
+          const orbit = Math.round((index % 2 ? 1 : -1) * (18 + distance * 10));
+          const returnX = Math.round(tx * -0.18);
+          const returnY = Math.round(ty * -0.18);
+          const delay = (0.02 + ((row + col) * 0.022)).toFixed(3);
+          style += `--tx:${tx}px;--ty:${ty}px;--rx:${returnX}px;--ry:${returnY}px;--rot:${orbit}deg;--d:${delay}s;`;
+        }
+
+        pieces.push(`<span class="login-inline-logo-piece" style="${style}"></span>`);
       }
     }
     return pieces.join('');
@@ -156,9 +192,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function prepareInlineLoginLogoPieces() {
     if (!loginInlineLogoPieces) return;
-    if (loginInlineLogoPieces.dataset.ready === '1') return;
+    if (loginInlineLogoPieces.dataset.ready === LOGIN_LOGO_ANIMATION_VARIANT) return;
     loginInlineLogoPieces.innerHTML = buildInlineLoginLogoPiecesMarkup();
-    loginInlineLogoPieces.dataset.ready = '1';
+    loginInlineLogoPieces.dataset.ready = LOGIN_LOGO_ANIMATION_VARIANT;
   }
 
   function startInlineLoginLogoAnimation() {
@@ -168,6 +204,7 @@ document.addEventListener('DOMContentLoaded', function () {
       loginLogoStage.classList.remove('is-running');
       // Force a reflow so repeated failed/success attempts restart the animation cleanly.
       void loginLogoStage.offsetWidth;
+      loginLogoStage.dataset.logoAnimation = LOGIN_LOGO_ANIMATION_VARIANT;
       loginLogoStage.classList.add('is-running');
     }
   }
@@ -366,7 +403,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         await Promise.all([
           accountPromise.catch(() => null),
-          waitForLoginSplashMinimum(startedAt, 2050),
+          waitForLoginSplashMinimum(startedAt, LOGIN_LOGO_ANIMATION_MIN_MS),
         ]);
 
         window.location.replace(redirectTo);
