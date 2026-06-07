@@ -276,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const KEY_MINI       = 'ui.sidebarMini';   // 1 = mini على الديسكتوب (legacy)
   const KEY_COLLAPSED  = 'ui.sidebarCollapsed'; // 1 = dashboard مغلق (drawer)
   const CACHE_ALLOWED  = 'allowedPages';     // sessionStorage key
+  const CHROME_CACHE_KEY = 'ops.ui.chrome.v1'; // localStorage key: stable header/sidebar during hard refresh
   const isMobile = () => window.innerWidth <= 768;
 
   // =====================================================
@@ -385,8 +386,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     } catch {}
 
-    // Keep UI preferences, but remove cached identity/API snapshots so the next load is fresh.
-    try { localStorage.removeItem('username'); } catch {}
+    // Keep UI chrome data (username/sidebar shape) so the header/sidebar do not jump
+    // while the fresh account request is loading after a hard refresh.
   }
 
   let __opsAuthRedirectScheduled = false;
@@ -406,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try { clearKnownClientDataCaches(); } catch {}
     try { sessionStorage.clear(); } catch {}
     try { localStorage.removeItem('username'); } catch {}
+    try { localStorage.removeItem(CHROME_CACHE_KEY); } catch {}
 
     const next = '/login';
     window.setTimeout(() => {
@@ -843,7 +845,48 @@ document.addEventListener('DOMContentLoaded', () => {
     loc.replace(url.toString());
   }
 
+  function readHardRefreshChromeSnapshot() {
+    const snapshot = { username: '', allowedPages: null, chromeCache: null };
+    try { snapshot.username = String(localStorage.getItem('username') || '').trim(); } catch {}
+    try {
+      const allowed = JSON.parse(sessionStorage.getItem(CACHE_ALLOWED) || 'null');
+      if (Array.isArray(allowed)) snapshot.allowedPages = allowed;
+    } catch {}
+    try {
+      const chrome = JSON.parse(localStorage.getItem(CHROME_CACHE_KEY) || 'null');
+      if (chrome && typeof chrome === 'object') {
+        snapshot.chromeCache = chrome;
+        if (!snapshot.username && chrome.name) snapshot.username = String(chrome.name || '').trim();
+        if (!snapshot.allowedPages && Array.isArray(chrome.allowedPages)) snapshot.allowedPages = chrome.allowedPages;
+      }
+    } catch {}
+    return snapshot;
+  }
+
+  function restoreHardRefreshChromeSnapshot(snapshot) {
+    const safe = snapshot && typeof snapshot === 'object' ? snapshot : {};
+    try {
+      if (safe.username) localStorage.setItem('username', safe.username);
+    } catch {}
+    try {
+      if (Array.isArray(safe.allowedPages)) sessionStorage.setItem(CACHE_ALLOWED, JSON.stringify(safe.allowedPages));
+    } catch {}
+    try {
+      if (safe.chromeCache && typeof safe.chromeCache === 'object') {
+        localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify({ ...safe.chromeCache, savedAt: Date.now() }));
+      } else if (safe.username || Array.isArray(safe.allowedPages)) {
+        localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify({
+          name: safe.username || '',
+          allowedPages: Array.isArray(safe.allowedPages) ? safe.allowedPages : [],
+          savedAt: Date.now()
+        }));
+      }
+    } catch {}
+  }
+
   async function clearBrowserStorageForHardRefresh() {
+    const chromeSnapshot = readHardRefreshChromeSnapshot();
+
     try {
       if (window.OpsAppCache && typeof window.OpsAppCache.clearAll === 'function') {
         window.OpsAppCache.clearAll();
@@ -855,7 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try { clearKnownClientDataCaches(); } catch {}
     try { sessionStorage.clear(); } catch {}
     markHardRefreshPending();
-    try { localStorage.removeItem('username'); } catch {}
+    restoreHardRefreshChromeSnapshot(chromeSnapshot);
 
     try {
       if (window.caches && typeof caches.keys === 'function') {
@@ -1645,6 +1688,62 @@ if (document.querySelector('.sidebar')) {
     document.querySelectorAll('[data-username]').forEach(el => el.textContent = n || 'User');
   };
 
+  function readChromeCache(){
+    try {
+      const data = JSON.parse(localStorage.getItem(CHROME_CACHE_KEY) || 'null');
+      return data && typeof data === 'object' ? data : null;
+    } catch { return null; }
+  }
+
+  function writeChromeCache(data = {}){
+    try {
+      const safe = data && typeof data === 'object' ? data : {};
+      const payload = {
+        name: String(safe.name || safe.username || localStorage.getItem('username') || '').trim(),
+        position: String(safe.position || '').trim(),
+        department: String(safe.department || '').trim(),
+        email: String(safe.email || '').trim(),
+        photoUrl: String(safe.photoUrl || '').trim(),
+        allowedPages: Array.isArray(safe.allowedPages) ? safe.allowedPages : (getCachedAllowedPages() || []),
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify(payload));
+    } catch {}
+  }
+
+  function primeChromeFromCache(){
+    const cachedChrome = readChromeCache();
+    const cachedName = String(cachedChrome?.name || getCachedName() || '').trim();
+    if (cachedName) {
+      try { localStorage.setItem('username', cachedName); } catch {}
+      renderGreeting(cachedName);
+      renderHeaderUser({ name: cachedName, photoUrl: cachedChrome?.photoUrl || '' });
+      try {
+        window.__opsUserInfo = Object.assign({}, window.__opsUserInfo || {}, {
+          name: cachedName,
+          position: cachedChrome?.position || '',
+          department: cachedChrome?.department || '',
+          email: cachedChrome?.email || '',
+          photoUrl: cachedChrome?.photoUrl || '',
+        });
+      } catch {}
+    }
+
+    const cachedAllowed = Array.isArray(cachedChrome?.allowedPages)
+      ? cachedChrome.allowedPages
+      : (getCachedAllowedPages() || []);
+
+    if (cachedAllowed.length) {
+      try { cacheAllowedPages(cachedAllowed); } catch {}
+      try { applyAllowedPages(cachedAllowed); } catch {}
+      try { window.__opsApplyMailAccess?.(cachedAllowed, window.__opsUserInfo || null); } catch {}
+      document.body.classList.remove('permissions-loading');
+      document.body.classList.add('permissions-ready');
+      return true;
+    }
+    return false;
+  }
+
   // ★ Inject links once so they exist for show/hide (لو مش موجودين في الـ HTML)
     function ensureLink({ href, label, icon, prepend = false, beforeHref = '' }) {
       const nav = document.querySelector('.sidebar .nav-list, .sidebar nav ul, .sidebar ul');
@@ -1774,18 +1873,23 @@ if (document.querySelector('.sidebar')) {
   }
 
   async function ensureGreetingAndPages(){
-    const cached = getCachedName();
+    const cachedChrome = readChromeCache();
+    const cached = getCachedName() || String(cachedChrome?.name || '').trim();
     if (cached) {
       renderGreeting(cached);
       // also prefill sidebar profile quickly from cache (then refresh from API)
       renderSidebarProfile({ name: cached });
       // also prefill header user (then refresh from API)
-      renderHeaderUser({ name: cached });
+      renderHeaderUser({ name: cached, photoUrl: cachedChrome?.photoUrl || '' });
 
       // Expose basic user info for other widgets (e.g., the profile dropdown header)
       try {
         window.__opsUserInfo = Object.assign({}, window.__opsUserInfo || {}, {
           name: cached,
+          position: cachedChrome?.position || window.__opsUserInfo?.position || '',
+          department: cachedChrome?.department || window.__opsUserInfo?.department || '',
+          email: cachedChrome?.email || window.__opsUserInfo?.email || '',
+          photoUrl: cachedChrome?.photoUrl || window.__opsUserInfo?.photoUrl || '',
         });
       } catch {}
     }
@@ -1836,8 +1940,18 @@ if (document.querySelector('.sidebar')) {
         } catch {}
       } catch {}
 
+      writeChromeCache({
+        name: name || cached || 'User',
+        position: data.position || '',
+        department: data.department || '',
+        photoUrl: data.photoUrl || '',
+        email: data.email || '',
+        allowedPages: Array.isArray(data.allowedPages) ? data.allowedPages : (getCachedAllowedPages() || []),
+      });
+
       if (Array.isArray(data.allowedPages)) {
         cacheAllowedPages(data.allowedPages);
+        writeChromeCache({ ...(window.__opsUserInfo || {}), allowedPages: data.allowedPages });
 
         // 🔒 اخفي الكل ثم أظهر المسموح
         applyAllowedPages([]);
@@ -2014,6 +2128,7 @@ if (document.querySelector('.sidebar')) {
       localStorage.removeItem(KEY_MINI);
       localStorage.removeItem(KEY_COLLAPSED);
       localStorage.removeItem('username');
+      localStorage.removeItem(CHROME_CACHE_KEY);
     } catch {}
     window.location.href = '/login';
   });
@@ -2044,6 +2159,11 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/b2b', label: 'B2B', icon: 'folder' });
   ensureLink({ href: '/tasks', label: 'Tasks', icon: 'check-square' });
   ensureLink({ href: '/kpis', label: 'KPIs', icon: 'bar-chart-2', beforeHref: '/user-access' });
+
+  // Apply cached chrome immediately so Hard Refresh does not show a different
+  // header/sidebar while /api/account is still loading. The server response below
+  // still refreshes the permissions, so added/removed pages continue to take effect.
+  primeChromeFromCache();
 
   syncMobileDockStructure();
 
@@ -3365,6 +3485,7 @@ function initUserMenuWidget() {
         localStorage.removeItem('ui.sidebarMini');
         localStorage.removeItem('ui.sidebarCollapsed');
         localStorage.removeItem('username');
+        localStorage.removeItem('ops.ui.chrome.v1');
       } catch {}
       window.location.href = '/login';
     }
