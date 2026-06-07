@@ -9628,3 +9628,40 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+
+/* Orders Review: combined status for orders that contain both approved and rejected components in All tab */
+body.order-modal-fit-screen #sv-list .sv-mixed-approval-pill{
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #D1D5DB;
+  background: transparent;
+}
+body.order-modal-fit-screen #sv-list .sv-mixed-approval-pill__part{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+body.order-modal-fit-screen #sv-list .sv-mixed-approval-pill__part--approved{
+  background: #D1FAE5;
+  color: #065F46;
+}
+body.order-modal-fit-screen #sv-list .sv-mixed-approval-pill__part--rejected{
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+body.order-modal-fit-screen #sv-list .sv-mixed-approval-pill__sep{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 4px;
+  background: linear-gradient(90deg, #D1FAE5 0 50%, #FEE2E2 50% 100%);
+  color: #111827;
+  font-weight: 950;
+}
