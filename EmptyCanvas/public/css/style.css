@@ -9160,3 +9160,349 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   body.page-orders-maintenance #requested-list .co-status-btn,
   body.order-modal-fit-screen #sv-list .co-status-btn{ padding: 9px 12px; font-size: 11.2px; letter-spacing: 0; }
 }
+
+/* =================================
+   Operations Orders export options modal
+   ================================= */
+.ops-export-modal.hidden { display: none !important; }
+
+.ops-export-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 6200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.ops-export-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.56);
+  backdrop-filter: blur(8px);
+}
+
+.ops-export-modal__dialog {
+  position: relative;
+  width: min(100%, 500px);
+  max-height: min(720px, calc(100vh - 2rem));
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.10), transparent 30%),
+    linear-gradient(180deg, #ffffff, #fbfdff);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+  animation: opsExportModalIn 160ms ease-out both;
+}
+
+@keyframes opsExportModalIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ops-export-modal__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: start;
+  padding: 1.25rem 1.25rem 0.95rem;
+}
+
+.ops-export-modal__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  background: rgba(249, 115, 22, 0.10);
+  color: #c2410c;
+  box-shadow: 0 12px 24px rgba(249, 115, 22, 0.12);
+}
+
+.ops-export-modal__title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.ops-export-modal__hint {
+  margin: 0.3rem 0 0;
+  color: #64748b;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.ops-export-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #0f172a;
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ops-export-modal__body {
+  display: grid;
+  gap: 1rem;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding: 0 1.25rem 1.15rem;
+}
+
+.ops-export-field {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.ops-export-field__label {
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ops-export-filetype,
+.ops-export-multiselect { position: relative; }
+
+.ops-export-picker-button,
+.ops-export-multiselect__button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 52px;
+  width: 100%;
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 900;
+  padding: 0.82rem 0.95rem;
+  outline: none;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 26px rgba(15, 23, 42, 0.05);
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease, background .16s ease;
+}
+
+.ops-export-picker-button:hover,
+.ops-export-multiselect__button:hover,
+.ops-export-picker-button.is-open,
+.ops-export-multiselect__button.is-open {
+  border-color: rgba(249, 115, 22, 0.36);
+  background:
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.08), transparent 35%),
+    linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.10), 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.ops-export-picker-button span,
+.ops-export-multiselect__button span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-export-picker-button svg,
+.ops-export-multiselect__button svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  transition: transform .16s ease;
+}
+
+.ops-export-picker-button.is-open svg,
+.ops-export-multiselect__button.is-open svg { transform: rotate(180deg); }
+
+.ops-export-floating-panel {
+  position: fixed !important;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  z-index: 6500;
+  min-width: 220px;
+  padding: 0.55rem;
+  border: 1px solid rgba(226, 232, 240, 0.94);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.10), transparent 34%),
+    rgba(255, 255, 255, 0.98);
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.24);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: opsExportFloatingPanelIn 140ms ease-out both;
+}
+
+.ops-export-floating-panel[hidden] { display: none !important; }
+
+@keyframes opsExportFloatingPanelIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ops-export-filetype__panel { display: grid; gap: 0.45rem; }
+
+.ops-export-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 48px;
+  padding: 0.78rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ops-export-option svg {
+  width: 17px;
+  height: 17px;
+  color: #f97316;
+  opacity: 0;
+}
+
+.ops-export-option:hover,
+.ops-export-option.is-selected {
+  border-color: rgba(251, 146, 60, 0.34);
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.ops-export-option.is-selected svg { opacity: 1; }
+
+.ops-export-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+
+.ops-export-check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 48px;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 850;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ops-export-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: #f97316;
+}
+
+.ops-export-check:hover {
+  border-color: rgba(251, 146, 60, 0.24);
+  background: #fffaf5;
+}
+
+.ops-export-check:has(input:checked) {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.ops-export-modal__error {
+  display: none;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #fecaca;
+  border-radius: 16px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.ops-export-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  padding: 1rem 1.25rem 1.25rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+  background: rgba(248, 250, 252, 0.66);
+}
+
+.ops-export-modal__footer .btn {
+  min-height: 42px;
+  border-radius: 14px;
+  font-weight: 900;
+}
+
+.ops-export-confirm {
+  border: 1px solid #050b18 !important;
+  background: #050b18 !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.22);
+}
+
+.download-menu__btn.is-busy {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+@media (max-width: 520px) {
+  .ops-export-modal {
+    align-items: center;
+    justify-content: center;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px)) 0.75rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .ops-export-modal__dialog {
+    width: 100%;
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 24px;
+  }
+
+  .ops-export-modal__header { padding: 1rem 1rem 0.8rem; }
+  .ops-export-modal__body {
+    max-height: calc(100vh - 210px);
+    padding: 0 1rem 1rem;
+  }
+
+  .ops-export-modal__footer { padding: 0.95rem 1rem 1rem; }
+  .ops-export-modal__footer .btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .ops-export-picker-button,
+  .ops-export-multiselect__button {
+    min-height: 56px;
+    border-radius: 21px;
+    font-size: 1rem;
+  }
+}
