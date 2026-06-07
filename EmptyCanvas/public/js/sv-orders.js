@@ -74,7 +74,7 @@
 
   // ===== Helpers =====
   const qs = new URLSearchParams(location.search);
-  let TAB = (qs.get("tab") || "not-started").toLowerCase();
+  let TAB = (qs.get("tab") || "all").toLowerCase();
   let currentTypeFilter = String(qs.get("type") || "all").toLowerCase().trim();
 
   const norm = (s) => String(s || "").toLowerCase().trim();
@@ -150,7 +150,7 @@
 
   // ===== Page cache (speed) =====
   // Keep a small per-tab cache so opening Orders Review does not always need a full refetch.
-  const SV_CACHE_PREFIX = "cache:svOrders:v5:";
+  const SV_CACHE_PREFIX = "cache:svOrders:v6:";
   const SV_CACHE_TTL_MS = 45 * 1000; // 45s
 
   function normalizeSvTab(tab) {
@@ -1479,6 +1479,24 @@
     return notionColorVars(fallbackColor || "yellow");
   }
 
+  function hasMixedApprovedRejected(items) {
+    const approvals = (Array.isArray(items) ? items : []).map((x) => approvalKey(normalizeApproval(x?.approval)));
+    return approvals.includes("approved") && approvals.includes("rejected");
+  }
+
+  function cardApprovalStatusMarkup(group, displayStatus, statusVars) {
+    if (TAB === "all" && !group?.isArchived && hasMixedApprovedRejected(group?.products)) {
+      return `
+        <span class="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected">
+          <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span>
+          <span class="sv-mixed-approval-pill__sep" aria-hidden="true">/</span>
+          <span class="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span>
+        </span>
+      `;
+    }
+    return `<span class="co-status-btn" style="--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};">${escapeHTML(displayStatus)}</span>`;
+  }
+
   function rejectedReasonForItem(item) {
     return String(item?.rejectedReason || item?.rejected_reason || "").trim();
   }
@@ -1770,7 +1788,7 @@
         </div>
 
         <div class="co-actions">
-          <span class="co-status-btn" style="--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};">${escapeHTML(displayStatus)}</span>
+          ${cardApprovalStatusMarkup(group, displayStatus, statusVars)}
           ${creatorButtonMarkup(creatorId, creatorName)}
         </div>
       </div>
@@ -2196,7 +2214,7 @@
       if (TAB === "archive") {
         const archived = !!g?.isArchived || (g?.products || []).some((item) => isArchiveStatus(item?.status));
         if (!archived) return false;
-      } else if (approvalKey(g.approval) !== TAB) {
+      } else if (TAB !== "all" && approvalKey(g.approval) !== TAB) {
         return false;
       }
       if (!groupMatchesCurrentType(g)) return false;
@@ -2247,6 +2265,7 @@
       const archived = isArchiveStatus(x?.status);
       if (TAB === 'archive') return archived;
       if (archived) return false;
+      if (TAB === 'all') return true;
       return approvalKey(normalizeApproval(x?.approval)) === TAB;
     });
     allGroups = buildGroups(itemsForTab);
@@ -2427,7 +2446,7 @@ if (tabsWrap) {
 
     e.preventDefault();
 
-    const targetTab = normalizeSvTab(a.dataset.tab || "not-started");
+    const targetTab = normalizeSvTab(a.dataset.tab || "all");
     if (!targetTab || targetTab === TAB) {
       syncTabsIndicator();
       return;
