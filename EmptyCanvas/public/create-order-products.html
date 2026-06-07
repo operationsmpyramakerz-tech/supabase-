@@ -335,6 +335,18 @@
     cursor: pointer;
   }
   .qty-btn:hover{ background: #f1f5f9; }
+  .qty-btn.is-auto-busy,
+  .qty-btn.is-busy{
+    opacity: 1 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+  .qty-btn.is-auto-busy::after,
+  .qty-btn.is-busy::after{
+    display: none !important;
+    content: none !important;
+    margin-left: 0 !important;
+  }
   .qty-value{
     width: 36px;
     text-align: center;
