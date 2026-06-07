@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
-  function waitForLoginSplashMinimum(startedAt, minMs = 1650) {
+  function waitForLoginSplashMinimum(startedAt, minMs = 2150) {
     const elapsed = Date.now() - Number(startedAt || Date.now());
     return sleep(Math.max(0, minMs - elapsed));
   }
@@ -118,6 +118,34 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function buildLoginLogoPiecesMarkup() {
+    const grid = 4;
+    const pieces = [];
+    for (let row = 0; row < grid; row += 1) {
+      for (let col = 0; col < grid; col += 1) {
+        const index = (row * grid) + col;
+        const cx = col - ((grid - 1) / 2);
+        const cy = row - ((grid - 1) / 2);
+        const spread = 44 + ((Math.abs(cx) + Math.abs(cy)) * 18);
+        const jitterX = ((index % 3) - 1) * 10;
+        const jitterY = (((index + 1) % 3) - 1) * 9;
+        const tx = Math.round((cx * spread) + jitterX);
+        const ty = Math.round((cy * spread) + jitterY);
+        const mx = Math.round(tx * 0.38);
+        const my = Math.round(ty * 0.38);
+        const rot = Math.round((cx * 18) - (cy * 16) + ((index % 2 ? 1 : -1) * 13));
+        const mrot = Math.round(rot * -0.35);
+        const delay = (0.03 + ((row + col) * 0.018)).toFixed(3);
+        const bgX = grid === 1 ? 0 : (col / (grid - 1)) * 100;
+        const bgY = grid === 1 ? 0 : (row / (grid - 1)) * 100;
+        pieces.push(
+          `<span class="login-success-splash__piece" style="--tx:${tx}px;--ty:${ty}px;--mx:${mx}px;--my:${my}px;--rot:${rot}deg;--mrot:${mrot}deg;--d:${delay}s;background-position:${bgX}% ${bgY}%;"></span>`
+        );
+      }
+    }
+    return pieces.join('');
+  }
+
   function ensureLoginSuccessSplash() {
     let splash = document.getElementById('loginSuccessSplash');
     if (splash) return splash;
@@ -128,24 +156,35 @@ document.addEventListener('DOMContentLoaded', function () {
     splash.setAttribute('role', 'status');
     splash.setAttribute('aria-live', 'polite');
     splash.innerHTML = `
-      <div class="login-success-splash__aurora" aria-hidden="true"></div>
-      <div class="login-success-splash__center">
-        <span class="login-success-splash__ring" aria-hidden="true"></span>
-        <span class="login-success-splash__burst" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <div class="login-success-splash__ambient" aria-hidden="true"></div>
+      <div class="login-success-splash__stage" aria-hidden="true">
+        <span class="login-success-splash__halo"></span>
+        <span class="login-success-splash__logo-grid">
+          ${buildLoginLogoPiecesMarkup()}
         </span>
-        <span class="login-success-splash__logo-wrap">
-          <img src="/images/logo.png" alt="Pyramakerz" class="login-success-splash__logo" />
-        </span>
-        <span class="login-success-splash__wordmark">Pyramakerz</span>
+        <img src="/images/logo.png" alt="" class="login-success-splash__solid-logo" />
       </div>
+      <span class="sr-only">Opening dashboard</span>
     `;
     document.body.appendChild(splash);
     return splash;
   }
 
+  function positionLoginSuccessSplashFromLogo(splash) {
+    try {
+      const sourceLogo = document.querySelector('.login-logo');
+      const rect = sourceLogo && sourceLogo.getBoundingClientRect ? sourceLogo.getBoundingClientRect() : null;
+      if (!rect || !rect.width || !rect.height) return;
+      const targetSize = Math.max(96, Math.min(window.innerWidth || 0, window.innerHeight || 0, 152));
+      splash.style.setProperty('--logo-start-x', `${Math.round(rect.left + (rect.width / 2))}px`);
+      splash.style.setProperty('--logo-start-y', `${Math.round(rect.top + (rect.height / 2))}px`);
+      splash.style.setProperty('--logo-start-scale', String(Math.max(0.28, Math.min(0.86, rect.width / targetSize))));
+    } catch {}
+  }
+
   function showLoginSuccessSplash() {
     const splash = ensureLoginSuccessSplash();
+    positionLoginSuccessSplashFromLogo(splash);
     document.body.classList.add('login-success-active');
     splash.hidden = false;
     splash.classList.remove('is-leaving');

@@ -880,6 +880,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let __opsLoginSplashOverlay = null;
 
+  function buildLoginLogoPiecesMarkup() {
+    const grid = 4;
+    const pieces = [];
+    for (let row = 0; row < grid; row += 1) {
+      for (let col = 0; col < grid; col += 1) {
+        const index = (row * grid) + col;
+        const cx = col - ((grid - 1) / 2);
+        const cy = row - ((grid - 1) / 2);
+        const spread = 44 + ((Math.abs(cx) + Math.abs(cy)) * 18);
+        const jitterX = ((index % 3) - 1) * 10;
+        const jitterY = (((index + 1) % 3) - 1) * 9;
+        const tx = Math.round((cx * spread) + jitterX);
+        const ty = Math.round((cy * spread) + jitterY);
+        const mx = Math.round(tx * 0.38);
+        const my = Math.round(ty * 0.38);
+        const rot = Math.round((cx * 18) - (cy * 16) + ((index % 2 ? 1 : -1) * 13));
+        const mrot = Math.round(rot * -0.35);
+        const delay = (0.03 + ((row + col) * 0.018)).toFixed(3);
+        const bgX = grid === 1 ? 0 : (col / (grid - 1)) * 100;
+        const bgY = grid === 1 ? 0 : (row / (grid - 1)) * 100;
+        pieces.push(
+          `<span class="login-success-splash__piece" style="--tx:${tx}px;--ty:${ty}px;--mx:${mx}px;--my:${my}px;--rot:${rot}deg;--mrot:${mrot}deg;--d:${delay}s;background-position:${bgX}% ${bgY}%;"></span>`
+        );
+      }
+    }
+    return pieces.join('');
+  }
+
   function ensureLoginSplashOverlay() {
     let overlay = document.getElementById('opsLoginSplashOverlay');
     if (overlay) return overlay;
@@ -891,17 +919,15 @@ document.addEventListener('DOMContentLoaded', () => {
     overlay.setAttribute('role', 'status');
     overlay.setAttribute('aria-live', 'polite');
     overlay.innerHTML = `
-      <div class="login-success-splash__aurora" aria-hidden="true"></div>
-      <div class="login-success-splash__center">
-        <span class="login-success-splash__ring" aria-hidden="true"></span>
-        <span class="login-success-splash__burst" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <div class="login-success-splash__ambient" aria-hidden="true"></div>
+      <div class="login-success-splash__stage" aria-hidden="true">
+        <span class="login-success-splash__halo"></span>
+        <span class="login-success-splash__logo-grid">
+          ${buildLoginLogoPiecesMarkup()}
         </span>
-        <span class="login-success-splash__logo-wrap">
-          <img src="/images/logo.png" alt="Pyramakerz" class="login-success-splash__logo" />
-        </span>
-        <span class="login-success-splash__wordmark">Pyramakerz</span>
+        <img src="/images/logo.png" alt="" class="login-success-splash__solid-logo" />
       </div>
+      <span class="sr-only">Opening dashboard</span>
     `;
     document.body.appendChild(overlay);
     return overlay;
