@@ -74,7 +74,7 @@
 
   // ===== Helpers =====
   const qs = new URLSearchParams(location.search);
-  let TAB = (qs.get("tab") || "not-started").toLowerCase();
+  let TAB = (qs.get("tab") || "all").toLowerCase();
   let currentTypeFilter = String(qs.get("type") || "all").toLowerCase().trim();
 
   const norm = (s) => String(s || "").toLowerCase().trim();
@@ -150,7 +150,7 @@
 
   // ===== Page cache (speed) =====
   // Keep a small per-tab cache so opening Orders Review does not always need a full refetch.
-  const SV_CACHE_PREFIX = "cache:svOrders:v5:";
+  const SV_CACHE_PREFIX = "cache:svOrders:v6:";
   const SV_CACHE_TTL_MS = 45 * 1000; // 45s
 
   function normalizeSvTab(tab) {
@@ -831,66 +831,6 @@
     }
   }
 
-  let rejectedReasonViewModal = null;
-  let rejectedReasonViewLastFocus = null;
-
-  function ensureRejectedReasonViewModal() {
-    if (rejectedReasonViewModal) return rejectedReasonViewModal;
-    rejectedReasonViewModal = document.createElement("div");
-    rejectedReasonViewModal.className = "co-submodal-overlay reject-reason-view-modal";
-    rejectedReasonViewModal.setAttribute("aria-hidden", "true");
-    rejectedReasonViewModal.hidden = true;
-    rejectedReasonViewModal.innerHTML = `
-      <div class="co-submodal-dialog reject-reason-dialog reject-reason-view-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectedReasonViewTitle" aria-describedby="rejectedReasonViewSub">
-        <button type="button" class="co-submodal-close" data-rejected-reason-view-close aria-label="Close rejected reason"><i data-feather="x"></i></button>
-        <div class="co-submodal-header req-edit-header">
-          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
-          <div>
-            <div class="co-submodal-title" id="rejectedReasonViewTitle">Rejected reason</div>
-            <div class="co-submodal-sub" id="rejectedReasonViewSub">The saved reason for this rejected component.</div>
-          </div>
-        </div>
-        <div class="co-submodal-body">
-          <div class="rejected-reason-view-text" id="rejectedReasonViewText">—</div>
-        </div>
-        <div class="co-submodal-actions">
-          <button type="button" class="ro-action-btn ro-action-btn--dark" data-rejected-reason-view-close>Close</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(rejectedReasonViewModal);
-
-    rejectedReasonViewModal.addEventListener("click", (event) => {
-      if (event.target === rejectedReasonViewModal || event.target.closest("[data-rejected-reason-view-close]")) {
-        event.preventDefault();
-        closeRejectedReasonViewModal();
-      }
-    });
-    return rejectedReasonViewModal;
-  }
-
-  function openRejectedReasonViewModal(reason) {
-    const modal = ensureRejectedReasonViewModal();
-    rejectedReasonViewLastFocus = document.activeElement;
-    const text = modal.querySelector("#rejectedReasonViewText");
-    if (text) text.textContent = String(reason || "").trim() || "No rejected reason saved.";
-    modal.hidden = false;
-    modal.classList.add("is-open");
-    modal.setAttribute("aria-hidden", "false");
-    if (window.feather) window.feather.replace();
-    setTimeout(() => modal.querySelector("[data-rejected-reason-view-close]")?.focus?.(), 30);
-  }
-
-  function closeRejectedReasonViewModal({ restoreFocus = true } = {}) {
-    if (!rejectedReasonViewModal) return;
-    rejectedReasonViewModal.classList.remove("is-open");
-    rejectedReasonViewModal.setAttribute("aria-hidden", "true");
-    rejectedReasonViewModal.hidden = true;
-    if (restoreFocus && rejectedReasonViewLastFocus?.focus) {
-      try { rejectedReasonViewLastFocus.focus(); } catch {}
-    }
-  }
-
   function collectRejectedReason(items) {
     const reasons = Array.from(new Set((Array.isArray(items) ? items : [])
       .map((it) => String(it?.rejectedReason || it?.rejected_reason || "").trim())
@@ -1245,7 +1185,7 @@
     const approval = approvalKey(group?.approval || "Not Started");
 
     const showEdit = !archived && (approval === "approved" || approval === "rejected" || TAB === "approved" || TAB === "rejected");
-    const showArchive = !archived && (TAB === "not-started" || TAB === "approved" || TAB === "rejected");
+    const showArchive = !archived && (TAB === "all" || TAB === "not-started" || TAB === "approved" || TAB === "rejected");
     const showUnarchive = archived || TAB === "archive";
     const hasAny = showEdit || showArchive || showUnarchive;
 
@@ -1469,29 +1409,6 @@
     if (k === "rejected") return `<span class="sv-approval-pill" style="--tag-bg:#FEE2E2;--tag-fg:#B91C1C;--tag-border:#FECACA;">Rejected</span>`;
     // Not Started should be yellow like Notion
     return `<span class="sv-approval-pill" style="--tag-bg:#FEF3C7;--tag-fg:#92400E;--tag-border:#FDE68A;">Not Started</span>`;
-  }
-
-  function approvalColorVars(label, fallbackColor) {
-    const k = approvalKey(label);
-    if (k === "approved") return { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" };
-    if (k === "rejected") return { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" };
-    if (k === "archive") return { bg: "#F3E8FF", fg: "#6B21A8", bd: "#E9D5FF" };
-    return notionColorVars(fallbackColor || "yellow");
-  }
-
-  function rejectedReasonForItem(item) {
-    return String(item?.rejectedReason || item?.rejected_reason || "").trim();
-  }
-
-  function itemApprovalStatusMarkup(item) {
-    const label = normalizeApproval(item?.approval);
-    const vars = approvalColorVars(label, item?.approvalColor);
-    const style = `--tag-bg:${vars.bg};--tag-fg:${vars.fg};--tag-border:${vars.bd};`;
-    if (approvalKey(label) === "rejected") {
-      const reason = rejectedReasonForItem(item);
-      return `<button type="button" class="co-item-status sv-rejected-reason-trigger" style="${style}" data-rejected-reason="${escapeHTML(reason)}" title="View rejected reason" aria-label="View rejected reason">${escapeHTML(label)}</button>`;
-    }
-    return `<span class="co-item-status" style="${style}">${escapeHTML(label)}</span>`;
   }
 
   // ===== Tracking progress (same flow as Current Orders) =====
@@ -1734,8 +1651,19 @@
     const creatorName = String(group.createdByName || first.createdByName || '').trim() || '—';
     const creatorId = String(group.createdById || first.createdById || first.teamMemberId || '').trim();
 
-    const displayStatus = group.isArchived ? "Archive" : (group.approval || "Not Started");
-    const statusVars = approvalColorVars(displayStatus, group.approvalColor);
+    const stage = computeStage(items);
+    const showOperationalStatus = TAB === "approved" && !group.isArchived;
+    const operationalColor = stage.color || first.statusColor || (stage.idx >= 4 ? 'green' : stage.idx >= 3 ? 'blue' : stage.idx >= 2 ? 'yellow' : 'orange');
+    const statusVars = group.isArchived
+      ? { bg: '#F3E8FF', fg: '#6B21A8', bd: '#E9D5FF' }
+      : showOperationalStatus
+        ? notionColorVars(operationalColor)
+        : notionColorVars(group.approvalColor);
+    const displayStatus = group.isArchived
+      ? 'Archive'
+      : showOperationalStatus
+        ? displayWorkflowStatusLabel(stage.label || first.status || 'In progress')
+        : (group.approval || 'Not Started');
 
     const thumbHTML = orderTypeThumbMarkup(
       group.orderType || first.orderType,
@@ -1805,7 +1733,6 @@
     if (!modalOverlay) return;
     closeSvMoreMenu();
     closeRejectReasonModal({ restoreFocus: false });
-    closeRejectedReasonViewModal({ restoreFocus: false });
     modalOverlay.classList.remove("is-open");
     modalOverlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("co-modal-open");
@@ -1855,7 +1782,13 @@
     if (modalEls.components) modalEls.components.textContent = String(modalItemsList.length);
     if (modalEls.totalPrice) modalEls.totalPrice.textContent = fmtMoney(group.totals?.estimateTotal ?? 0);
 
-    modalRows.meta?.querySelectorAll?.(".co-meta-row--reject-reason").forEach((row) => row.remove());
+    const rejectedReasonRow = ensureRejectedReasonCard(modalRows.meta, "svModalRejectedReason");
+    const rejectedReasonText = collectRejectedReason(modalItemsList);
+    if (rejectedReasonRow) {
+      const rejectedReasonValue = rejectedReasonRow.querySelector("#svModalRejectedReason");
+      if (rejectedReasonValue) rejectedReasonValue.textContent = rejectedReasonText || "—";
+      rejectedReasonRow.hidden = !rejectedReasonText;
+    }
 
     if (modalEls.items) {
       const items = (group.products || []).slice().sort((a, b) =>
@@ -1907,7 +1840,6 @@
               </button>
             </div>
           `.trim() : "";
-          const itemStatusHTML = itemApprovalStatusMarkup(it);
 
           const subLine = isMaintenanceOrder
             ? ""
@@ -1926,7 +1858,6 @@
                 ${isMaintenanceOrder
                   ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
                   : `<div class="co-item-total">Qty: ${qtyHTML}</div>`}
-                ${itemStatusHTML}
                 ${actionButtons}
               </div>
             </div>
@@ -2193,7 +2124,9 @@
   function applyFilter() {
     const q = norm(searchInput?.value);
     filteredGroups = allGroups.filter((g) => {
-      if (TAB === "archive") {
+      if (TAB === "all") {
+        // All tab shows every order group together.
+      } else if (TAB === "archive") {
         const archived = !!g?.isArchived || (g?.products || []).some((item) => isArchiveStatus(item?.status));
         if (!archived) return false;
       } else if (approvalKey(g.approval) !== TAB) {
@@ -2239,12 +2172,12 @@
 
     const y = preserveScroll ? window.scrollY : 0;
 
-    // IMPORTANT: groups are built from items matching the current tab only.
-    // This allows per-component decisions (reject one item moves it to Rejected tab)
-    // while keeping the rest of the order in Not Started until bulk decision.
+    // IMPORTANT: groups are built from items matching the current tab.
+    // All shows every order item together, while the status tabs remain component-level.
     // Archive is based on the operational Status, not the S.V Approval column.
     const itemsForTab = (allItems || []).filter((x) => {
       const archived = isArchiveStatus(x?.status);
+      if (TAB === 'all') return true;
       if (TAB === 'archive') return archived;
       if (archived) return false;
       return approvalKey(normalizeApproval(x?.approval)) === TAB;
@@ -2269,7 +2202,7 @@
 
   async function loadList(opts = {}) {
     const requestId = ++loadSeq;
-    const requestedTab = normalizeSvTab(opts?.tab || TAB || "not-started");
+    const requestedTab = normalizeSvTab(opts?.tab || TAB || "all");
     const cached = readSvCache(requestedTab);
     const hasCache = !!(cached && Array.isArray(cached.data));
 
@@ -2427,7 +2360,7 @@ if (tabsWrap) {
 
     e.preventDefault();
 
-    const targetTab = normalizeSvTab(a.dataset.tab || "not-started");
+    const targetTab = normalizeSvTab(a.dataset.tab || "all");
     if (!targetTab || targetTab === TAB) {
       syncTabsIndicator();
       return;
@@ -2639,13 +2572,6 @@ if (tabsWrap) {
         const btn = e.target.closest("button");
         if (!btn) return;
 
-        if (btn.classList.contains("sv-rejected-reason-trigger")) {
-          e.preventDefault();
-          e.stopPropagation();
-          openRejectedReasonViewModal(btn.getAttribute("data-rejected-reason") || "");
-          return;
-        }
-
         // Bulk actions
         if (btn.classList.contains("sv-approve-all") || btn.classList.contains("sv-reject-all")) {
           e.preventDefault();
@@ -2688,11 +2614,6 @@ if (tabsWrap) {
     // Escape closes open overlays
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      if (rejectedReasonViewModal?.classList.contains("is-open")) {
-        e.preventDefault();
-        closeRejectedReasonViewModal();
-        return;
-      }
       if (rejectReasonModal?.classList.contains("is-open")) {
         e.preventDefault();
         closeRejectReasonModal();
