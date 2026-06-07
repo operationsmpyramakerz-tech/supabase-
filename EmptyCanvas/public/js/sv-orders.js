@@ -74,7 +74,7 @@
 
   // ===== Helpers =====
   const qs = new URLSearchParams(location.search);
-  let TAB = (qs.get("tab") || "all").toLowerCase();
+  let TAB = (qs.get("tab") || "not-started").toLowerCase();
   let currentTypeFilter = String(qs.get("type") || "all").toLowerCase().trim();
 
   const norm = (s) => String(s || "").toLowerCase().trim();
@@ -150,7 +150,7 @@
 
   // ===== Page cache (speed) =====
   // Keep a small per-tab cache so opening Orders Review does not always need a full refetch.
-  const SV_CACHE_PREFIX = "cache:svOrders:v6:";
+  const SV_CACHE_PREFIX = "cache:svOrders:v5:";
   const SV_CACHE_TTL_MS = 45 * 1000; // 45s
 
   function normalizeSvTab(tab) {
@@ -709,6 +709,206 @@
 
   const toastOK  = (m) => (window.toast ? window.toast.success(m) : console.log("[OK]", m));
   const toastERR = (m) => (window.toast ? window.toast.error(m)   : console.error("[ERR]", m));
+
+
+  let rejectReasonModal = null;
+  let rejectReasonLastFocus = null;
+  let pendingRejectReasonConfirm = null;
+
+  function ensureRejectReasonModal() {
+    if (rejectReasonModal) return rejectReasonModal;
+    rejectReasonModal = document.createElement("div");
+    rejectReasonModal.className = "co-submodal-overlay reject-reason-modal";
+    rejectReasonModal.setAttribute("aria-hidden", "true");
+    rejectReasonModal.hidden = true;
+    rejectReasonModal.innerHTML = `
+      <div class="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectReasonTitle" aria-describedby="rejectReasonSub">
+        <button type="button" class="co-submodal-close" data-reject-reason-close aria-label="Close reject reason dialog"><i data-feather="x"></i></button>
+        <div class="co-submodal-header req-edit-header">
+          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
+          <div>
+            <div class="co-submodal-title" id="rejectReasonTitle">Reject reason</div>
+            <div class="co-submodal-sub" id="rejectReasonSub">Write the reason before rejecting this order.</div>
+          </div>
+        </div>
+        <div class="co-submodal-body">
+          <label class="co-submodal-label" for="rejectReasonInput">Reason</label>
+          <textarea class="co-submodal-textarea reject-reason-input" id="rejectReasonInput" rows="4" placeholder="Write reject reason..."></textarea>
+          <div class="co-submodal-error" id="rejectReasonError" role="alert" aria-live="polite"></div>
+        </div>
+        <div class="co-submodal-actions">
+          <button type="button" class="ro-action-btn ro-action-btn--light" data-reject-reason-cancel>Cancel</button>
+          <button type="button" class="ro-action-btn ro-action-btn--dark reject-reason-confirm" data-reject-reason-confirm>Reject</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(rejectReasonModal);
+
+    const close = () => closeRejectReasonModal();
+    rejectReasonModal.addEventListener("click", (event) => {
+      if (event.target === rejectReasonModal || event.target.closest("[data-reject-reason-close], [data-reject-reason-cancel]")) {
+        event.preventDefault();
+        close();
+        return;
+      }
+      const confirmBtn = event.target.closest("[data-reject-reason-confirm]");
+      if (confirmBtn) {
+        event.preventDefault();
+        submitRejectReasonModal();
+      }
+    });
+    rejectReasonModal.querySelector("#rejectReasonInput")?.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        submitRejectReasonModal();
+      }
+    });
+    return rejectReasonModal;
+  }
+
+  function openRejectReasonModal({ title = "Reject reason", sub = "Write the reason before rejecting this order.", confirmText = "Reject", onConfirm } = {}) {
+    const modal = ensureRejectReasonModal();
+    rejectReasonLastFocus = document.activeElement;
+    pendingRejectReasonConfirm = typeof onConfirm === "function" ? onConfirm : null;
+    const titleEl = modal.querySelector("#rejectReasonTitle");
+    const subEl = modal.querySelector("#rejectReasonSub");
+    const input = modal.querySelector("#rejectReasonInput");
+    const error = modal.querySelector("#rejectReasonError");
+    const confirm = modal.querySelector("[data-reject-reason-confirm]");
+    if (titleEl) titleEl.textContent = title;
+    if (subEl) subEl.textContent = sub;
+    if (input) input.value = "";
+    if (error) error.textContent = "";
+    if (confirm) confirm.textContent = confirmText;
+    modal.hidden = false;
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    if (window.feather) window.feather.replace();
+    setTimeout(() => input?.focus?.(), 30);
+  }
+
+  function closeRejectReasonModal({ restoreFocus = true } = {}) {
+    if (!rejectReasonModal) return;
+    rejectReasonModal.classList.remove("is-open");
+    rejectReasonModal.setAttribute("aria-hidden", "true");
+    rejectReasonModal.hidden = true;
+    pendingRejectReasonConfirm = null;
+    if (restoreFocus && rejectReasonLastFocus?.focus) {
+      try { rejectReasonLastFocus.focus(); } catch {}
+    }
+  }
+
+  async function submitRejectReasonModal() {
+    const modal = ensureRejectReasonModal();
+    const input = modal.querySelector("#rejectReasonInput");
+    const error = modal.querySelector("#rejectReasonError");
+    const confirm = modal.querySelector("[data-reject-reason-confirm]");
+    const cancel = modal.querySelector("[data-reject-reason-cancel]");
+    const closeBtn = modal.querySelector("[data-reject-reason-close]");
+    const reason = String(input?.value || "").trim();
+    if (!reason) {
+      if (error) error.textContent = "Reject reason is required.";
+      try { input?.focus?.(); } catch {}
+      return;
+    }
+    if (!pendingRejectReasonConfirm) {
+      closeRejectReasonModal();
+      return;
+    }
+    try {
+      if (error) error.textContent = "";
+      if (confirm) { confirm.disabled = true; confirm.textContent = "Saving..."; }
+      if (cancel) cancel.disabled = true;
+      if (closeBtn) closeBtn.disabled = true;
+      await pendingRejectReasonConfirm(reason);
+      closeRejectReasonModal({ restoreFocus: false });
+    } catch (err) {
+      if (error) error.textContent = err?.message || "Failed to save reject reason.";
+    } finally {
+      if (confirm) { confirm.disabled = false; confirm.textContent = "Reject"; }
+      if (cancel) cancel.disabled = false;
+      if (closeBtn) closeBtn.disabled = false;
+    }
+  }
+
+  let rejectedReasonViewModal = null;
+  let rejectedReasonViewLastFocus = null;
+
+  function ensureRejectedReasonViewModal() {
+    if (rejectedReasonViewModal) return rejectedReasonViewModal;
+    rejectedReasonViewModal = document.createElement("div");
+    rejectedReasonViewModal.className = "co-submodal-overlay reject-reason-view-modal";
+    rejectedReasonViewModal.setAttribute("aria-hidden", "true");
+    rejectedReasonViewModal.hidden = true;
+    rejectedReasonViewModal.innerHTML = `
+      <div class="co-submodal-dialog reject-reason-dialog reject-reason-view-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectedReasonViewTitle" aria-describedby="rejectedReasonViewSub">
+        <button type="button" class="co-submodal-close" data-rejected-reason-view-close aria-label="Close rejected reason"><i data-feather="x"></i></button>
+        <div class="co-submodal-header req-edit-header">
+          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
+          <div>
+            <div class="co-submodal-title" id="rejectedReasonViewTitle">Rejected reason</div>
+            <div class="co-submodal-sub" id="rejectedReasonViewSub">The saved reason for this rejected component.</div>
+          </div>
+        </div>
+        <div class="co-submodal-body">
+          <div class="rejected-reason-view-text" id="rejectedReasonViewText">—</div>
+        </div>
+        <div class="co-submodal-actions">
+          <button type="button" class="ro-action-btn ro-action-btn--dark" data-rejected-reason-view-close>Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(rejectedReasonViewModal);
+
+    rejectedReasonViewModal.addEventListener("click", (event) => {
+      if (event.target === rejectedReasonViewModal || event.target.closest("[data-rejected-reason-view-close]")) {
+        event.preventDefault();
+        closeRejectedReasonViewModal();
+      }
+    });
+    return rejectedReasonViewModal;
+  }
+
+  function openRejectedReasonViewModal(reason) {
+    const modal = ensureRejectedReasonViewModal();
+    rejectedReasonViewLastFocus = document.activeElement;
+    const text = modal.querySelector("#rejectedReasonViewText");
+    if (text) text.textContent = String(reason || "").trim() || "No rejected reason saved.";
+    modal.hidden = false;
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    if (window.feather) window.feather.replace();
+    setTimeout(() => modal.querySelector("[data-rejected-reason-view-close]")?.focus?.(), 30);
+  }
+
+  function closeRejectedReasonViewModal({ restoreFocus = true } = {}) {
+    if (!rejectedReasonViewModal) return;
+    rejectedReasonViewModal.classList.remove("is-open");
+    rejectedReasonViewModal.setAttribute("aria-hidden", "true");
+    rejectedReasonViewModal.hidden = true;
+    if (restoreFocus && rejectedReasonViewLastFocus?.focus) {
+      try { rejectedReasonViewLastFocus.focus(); } catch {}
+    }
+  }
+
+  function collectRejectedReason(items) {
+    const reasons = Array.from(new Set((Array.isArray(items) ? items : [])
+      .map((it) => String(it?.rejectedReason || it?.rejected_reason || "").trim())
+      .filter(Boolean)));
+    return reasons.join("\n") || "";
+  }
+
+  function ensureRejectedReasonCard(metaEl, id = "svModalRejectedReason") {
+    if (!metaEl) return null;
+    let row = metaEl.querySelector(`.co-meta-row--reject-reason #${id}`)?.closest?.(".co-meta-row");
+    if (row) return row;
+    row = document.createElement("div");
+    row.className = "co-meta-row co-meta-row--reason co-meta-row--reject-reason";
+    row.hidden = true;
+    row.innerHTML = `<span>Rejected reason</span><strong id="${id}">—</strong>`;
+    metaEl.appendChild(row);
+    return row;
+  }
 
   const SV_ORDER_ACTION_CONFIG = {
     edit: {
@@ -1271,6 +1471,29 @@
     return `<span class="sv-approval-pill" style="--tag-bg:#FEF3C7;--tag-fg:#92400E;--tag-border:#FDE68A;">Not Started</span>`;
   }
 
+  function approvalColorVars(label, fallbackColor) {
+    const k = approvalKey(label);
+    if (k === "approved") return { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" };
+    if (k === "rejected") return { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" };
+    if (k === "archive") return { bg: "#F3E8FF", fg: "#6B21A8", bd: "#E9D5FF" };
+    return notionColorVars(fallbackColor || "yellow");
+  }
+
+  function rejectedReasonForItem(item) {
+    return String(item?.rejectedReason || item?.rejected_reason || "").trim();
+  }
+
+  function itemApprovalStatusMarkup(item) {
+    const label = normalizeApproval(item?.approval);
+    const vars = approvalColorVars(label, item?.approvalColor);
+    const style = `--tag-bg:${vars.bg};--tag-fg:${vars.fg};--tag-border:${vars.bd};`;
+    if (approvalKey(label) === "rejected") {
+      const reason = rejectedReasonForItem(item);
+      return `<button type="button" class="co-item-status sv-rejected-reason-trigger" style="${style}" data-rejected-reason="${escapeHTML(reason)}" title="View rejected reason" aria-label="View rejected reason">${escapeHTML(label)}</button>`;
+    }
+    return `<span class="co-item-status" style="${style}">${escapeHTML(label)}</span>`;
+  }
+
   // ===== Tracking progress (same flow as Current Orders) =====
   const STATUS_FLOW = [
     { label: "Under Supervision", sub: "Your order is under supervision." },
@@ -1511,19 +1734,8 @@
     const creatorName = String(group.createdByName || first.createdByName || '').trim() || '—';
     const creatorId = String(group.createdById || first.createdById || first.teamMemberId || '').trim();
 
-    const stage = computeStage(items);
-    const showOperationalStatus = TAB === "approved" && !group.isArchived;
-    const operationalColor = stage.color || first.statusColor || (stage.idx >= 4 ? 'green' : stage.idx >= 3 ? 'blue' : stage.idx >= 2 ? 'yellow' : 'orange');
-    const statusVars = group.isArchived
-      ? { bg: '#F3E8FF', fg: '#6B21A8', bd: '#E9D5FF' }
-      : showOperationalStatus
-        ? notionColorVars(operationalColor)
-        : notionColorVars(group.approvalColor);
-    const displayStatus = group.isArchived
-      ? 'Archive'
-      : showOperationalStatus
-        ? displayWorkflowStatusLabel(stage.label || first.status || 'In progress')
-        : (group.approval || 'Not Started');
+    const displayStatus = group.isArchived ? "Archive" : (group.approval || "Not Started");
+    const statusVars = approvalColorVars(displayStatus, group.approvalColor);
 
     const thumbHTML = orderTypeThumbMarkup(
       group.orderType || first.orderType,
@@ -1592,6 +1804,8 @@
   function closeModal() {
     if (!modalOverlay) return;
     closeSvMoreMenu();
+    closeRejectReasonModal({ restoreFocus: false });
+    closeRejectedReasonViewModal({ restoreFocus: false });
     modalOverlay.classList.remove("is-open");
     modalOverlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("co-modal-open");
@@ -1640,6 +1854,8 @@
     if (modalEls.date) modalEls.date.textContent = fmtCreated(group.latestCreated) || "—";
     if (modalEls.components) modalEls.components.textContent = String(modalItemsList.length);
     if (modalEls.totalPrice) modalEls.totalPrice.textContent = fmtMoney(group.totals?.estimateTotal ?? 0);
+
+    modalRows.meta?.querySelectorAll?.(".co-meta-row--reject-reason").forEach((row) => row.remove());
 
     if (modalEls.items) {
       const items = (group.products || []).slice().sort((a, b) =>
@@ -1691,6 +1907,7 @@
               </button>
             </div>
           `.trim() : "";
+          const itemStatusHTML = itemApprovalStatusMarkup(it);
 
           const subLine = isMaintenanceOrder
             ? ""
@@ -1709,6 +1926,7 @@
                 ${isMaintenanceOrder
                   ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
                   : `<div class="co-item-total">Qty: ${qtyHTML}</div>`}
+                ${itemStatusHTML}
                 ${actionButtons}
               </div>
             </div>
@@ -1978,9 +2196,6 @@
       if (TAB === "archive") {
         const archived = !!g?.isArchived || (g?.products || []).some((item) => isArchiveStatus(item?.status));
         if (!archived) return false;
-      } else if (TAB === "all") {
-        const archived = !!g?.isArchived || (g?.products || []).some((item) => isArchiveStatus(item?.status));
-        if (archived) return false;
       } else if (approvalKey(g.approval) !== TAB) {
         return false;
       }
@@ -2032,7 +2247,6 @@
       const archived = isArchiveStatus(x?.status);
       if (TAB === 'archive') return archived;
       if (archived) return false;
-      if (TAB === 'all') return true;
       return approvalKey(normalizeApproval(x?.approval)) === TAB;
     });
     allGroups = buildGroups(itemsForTab);
@@ -2055,7 +2269,7 @@
 
   async function loadList(opts = {}) {
     const requestId = ++loadSeq;
-    const requestedTab = normalizeSvTab(opts?.tab || TAB || "all");
+    const requestedTab = normalizeSvTab(opts?.tab || TAB || "not-started");
     const cached = readSvCache(requestedTab);
     const hasCache = !!(cached && Array.isArray(cached.data));
 
@@ -2113,14 +2327,15 @@
 }
 
 // ===== Approve/Reject =====
-  async function setApproval(id, decision) {
+  async function setApproval(id, decision, rejectedReason = "") {
     try {
       const normalized = normalizeApproval(decision);
-      const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
+      const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized, rejectedReason });
 
       const idx = allItems.findIndex((x) => String(x.id) === String(id));
       if (idx >= 0) {
         allItems[idx].approval = normalized;
+        allItems[idx].rejectedReason = normalized === "Rejected" ? String(rejectedReason || "").trim() : "";
         if (data?.status) allItems[idx].status = data.status;
         if (data?.statusColor) allItems[idx].statusColor = data.statusColor;
       }
@@ -2134,7 +2349,7 @@
     }
   }
 
-  async function setBulkApproval(groupId, decision) {
+  async function setBulkApproval(groupId, decision, rejectedReason = "") {
     if (!groupId) return;
     const group = groupsById.get(groupId);
     if (!group) return;
@@ -2170,11 +2385,12 @@
         while (cursor < toUpdate.length) {
           const id = toUpdate[cursor++];
           try {
-            const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized });
+            const data = await http.post(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { decision: normalized, rejectedReason });
 
             const idx = allItems.findIndex((x) => String(x.id) === String(id));
             if (idx >= 0) {
               allItems[idx].approval = normalized;
+              allItems[idx].rejectedReason = normalized === "Rejected" ? String(rejectedReason || "").trim() : "";
               if (data?.status) allItems[idx].status = data.status;
               if (data?.statusColor) allItems[idx].statusColor = data.statusColor;
             }
@@ -2211,7 +2427,7 @@ if (tabsWrap) {
 
     e.preventDefault();
 
-    const targetTab = normalizeSvTab(a.dataset.tab || "all");
+    const targetTab = normalizeSvTab(a.dataset.tab || "not-started");
     if (!targetTab || targetTab === TAB) {
       syncTabsIndicator();
       return;
@@ -2423,6 +2639,13 @@ if (tabsWrap) {
         const btn = e.target.closest("button");
         if (!btn) return;
 
+        if (btn.classList.contains("sv-rejected-reason-trigger")) {
+          e.preventDefault();
+          e.stopPropagation();
+          openRejectedReasonViewModal(btn.getAttribute("data-rejected-reason") || "");
+          return;
+        }
+
         // Bulk actions
         if (btn.classList.contains("sv-approve-all") || btn.classList.contains("sv-reject-all")) {
           e.preventDefault();
@@ -2430,7 +2653,14 @@ if (tabsWrap) {
           const gid = modalOverlay?.dataset?.groupId;
           if (!gid) return;
           if (btn.classList.contains("sv-approve-all")) setBulkApproval(gid, "Approved");
-          else setBulkApproval(gid, "Rejected");
+          else {
+            openRejectReasonModal({
+              title: "Reject all components",
+              sub: "Write the reason that will be saved for all rejected components.",
+              confirmText: "Reject all",
+              onConfirm: (reason) => setBulkApproval(gid, "Rejected", reason),
+            });
+          }
           return;
         }
 
@@ -2445,7 +2675,12 @@ if (tabsWrap) {
         } else if (btn.classList.contains("sv-reject")) {
           e.preventDefault();
           e.stopPropagation();
-          setApproval(id, "Rejected");
+          openRejectReasonModal({
+            title: "Reject component",
+            sub: "Write the reason before rejecting this component.",
+            confirmText: "Reject",
+            onConfirm: (reason) => setApproval(id, "Rejected", reason),
+          });
         }
       });
     }
@@ -2453,6 +2688,17 @@ if (tabsWrap) {
     // Escape closes open overlays
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (rejectedReasonViewModal?.classList.contains("is-open")) {
+        e.preventDefault();
+        closeRejectedReasonViewModal();
+        return;
+      }
+      if (rejectReasonModal?.classList.contains("is-open")) {
+        e.preventDefault();
+        closeRejectReasonModal();
+        return;
+      }
+
       if (isReviewEditOpen()) {
         e.preventDefault();
         closeReviewEditModal();
