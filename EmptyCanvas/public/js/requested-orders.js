@@ -3856,7 +3856,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (rejectedReasonRow) {
       const rejectedReasonValue = rejectedReasonRow.querySelector("#reqModalRejectedReason");
       if (rejectedReasonValue) rejectedReasonValue.textContent = rejectedReasonText || "—";
-      rejectedReasonRow.hidden = !rejectedReasonText;
+      // In All / Rejected, the per-item status pill already shows rejected items.
+      // Keep the modal clean by removing the separate rejected-reason card there.
+      rejectedReasonRow.hidden = currentTab === "all" || currentTab === "rejected" || !rejectedReasonText;
     }
 
     // Extra fields: show for "Received" and later only
@@ -3999,21 +4001,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const qtyReceivedRawVal = receivedQtyRaw(it);
 
         const qtyEffective =
-          isReceivedTab
-            ? (qtyReceivedRawVal !== null && qtyReceivedRawVal !== undefined ? qtyReceivedRawVal : qtyBase)
-            : (qtyReceivedDisplay !== null && qtyReceivedDisplay !== undefined ? qtyReceivedDisplay : qtyBase);
+          currentTab === "rejected"
+            ? qtyBase
+            : isReceivedTab
+              ? (qtyReceivedRawVal !== null && qtyReceivedRawVal !== undefined ? qtyReceivedRawVal : qtyBase)
+              : (qtyReceivedDisplay !== null && qtyReceivedDisplay !== undefined ? qtyReceivedDisplay : qtyBase);
         const unit = Number(it.unitPrice) || 0;
         const qtyRem = remainingQty(it);
 
         const total = (isRemainingTab ? qtyRem : qtyEffective) * unit;
 
-        // Do not show the old crossed-out qty in All / Not Started / Approved.
-        // In Approved, an edited received qty should appear as a normal value only.
+        // Do not show the old crossed-out qty in All / Not Started / Approved / Rejected.
+        // In Rejected, keep the original requested qty visible as a normal value.
         // The diff/strike visual remains reserved for the later workflow tabs.
         const showStrike =
           !isRemainingTab &&
           !isReceivedTab &&
           currentTab !== "approved" &&
+          currentTab !== "rejected" &&
           qtyReceivedDisplay !== null &&
           qtyReceivedDisplay !== undefined &&
           qtyReceivedDisplay !== qtyBase;
