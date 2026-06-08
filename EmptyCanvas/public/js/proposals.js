@@ -282,6 +282,25 @@
     hydrateIcons(els.kitsList);
   }
 
+
+  function restartProposalAnimation(element, className) {
+    if (!element || !className) return;
+    try {
+      element.classList.remove(className);
+      // Force reflow so the animation restarts when the same panel is shown again.
+      void element.offsetWidth;
+      element.classList.add(className);
+      window.setTimeout(() => element.classList.remove(className), 520);
+    } catch {}
+  }
+
+  function markFolderOpening(button) {
+    const folder = button?.closest?.('.products-proposal-folder');
+    if (!folder) return;
+    folder.classList.add('is-opening');
+    window.setTimeout(() => folder.classList.remove('is-opening'), 460);
+  }
+
   function totalsForItems(items = []) {
     return (Array.isArray(items) ? items : []).reduce((acc, item) => {
       const qty = Number(item?.quantity || 0) || 0;
@@ -475,6 +494,7 @@
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
+    restartProposalAnimation(isKits ? els.kitsPanel : els.proposalsPanel, 'proposal-panel-enter');
     if (isKits) loadKits();
     else loadProposals();
   }
@@ -526,6 +546,7 @@
     if (els.proposalDetail) {
       els.proposalDetail.hidden = false;
       els.proposalDetail.innerHTML = loadingCard('proposal');
+      restartProposalAnimation(els.proposalDetail, 'proposal-detail-enter');
     }
     try {
       state.proposalEditMode = !!options.edit;
@@ -547,6 +568,7 @@
     if (els.kitDetail) {
       els.kitDetail.hidden = false;
       els.kitDetail.innerHTML = loadingCard('kit');
+      restartProposalAnimation(els.kitDetail, 'proposal-detail-enter');
     }
     try {
       state.kitEditMode = !!options.edit;
@@ -567,7 +589,10 @@
     state.proposalEditMode = false;
     state.proposalAdminPassword = '';
     if (els.proposalDetail) els.proposalDetail.hidden = true;
-    if (els.proposalsList) els.proposalsList.hidden = false;
+    if (els.proposalsList) {
+      els.proposalsList.hidden = false;
+      restartProposalAnimation(els.proposalsList, 'proposal-panel-enter');
+    }
     renderProposalFolders();
   }
 
@@ -578,7 +603,10 @@
     state.kitEditMode = false;
     state.kitAdminPassword = '';
     if (els.kitDetail) els.kitDetail.hidden = true;
-    if (els.kitsList) els.kitsList.hidden = false;
+    if (els.kitsList) {
+      els.kitsList.hidden = false;
+      restartProposalAnimation(els.kitsList, 'proposal-panel-enter');
+    }
     renderKitFolders();
   }
 
@@ -989,7 +1017,10 @@
         if (menu) { const open = menu.hidden; closeAllFolderMenus(menu); menu.hidden = !open; }
         return;
       }
-      if (action === 'open-proposal') return openProposalDetail(folder.id, { edit: false });
+      if (action === 'open-proposal') {
+        markFolderOpening(btn);
+        return openProposalDetail(folder.id, { edit: false });
+      }
       if (action === 'edit-proposal') {
         const adminPassword = requestAdminIfNeeded(folder, 'edit');
         if (adminPassword === null) return;
@@ -1010,7 +1041,10 @@
         if (menu) { const open = menu.hidden; closeAllFolderMenus(menu); menu.hidden = !open; }
         return;
       }
-      if (action === 'open-kit') return openKitDetail(folder.id, { edit: false });
+      if (action === 'open-kit') {
+        markFolderOpening(btn);
+        return openKitDetail(folder.id, { edit: false });
+      }
       if (action === 'edit-kit') {
         const adminPassword = requestAdminIfNeeded(folder, 'edit');
         if (adminPassword === null) return;
