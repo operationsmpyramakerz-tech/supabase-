@@ -2002,6 +2002,7 @@ if (document.querySelector('.sidebar')) {
         department: String(safe.department || '').trim(),
         email: String(safe.email || '').trim(),
         photoUrl: String(safe.photoUrl || '').trim(),
+        coverPhotoUrl: String(safe.coverPhotoUrl || safe.coverPhoto || '').trim(),
         allowedPages: Array.isArray(safe.allowedPages) ? safe.allowedPages : (getCachedAllowedPages() || []),
         savedAt: Date.now(),
       };
@@ -2009,8 +2010,52 @@ if (document.querySelector('.sidebar')) {
     } catch {}
   }
 
+  function normalizeSystemCoverUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (!['http:', 'https:', 'blob:'].includes(String(url.protocol || '').toLowerCase())) return '';
+      if (url.origin === window.location.origin) return `${url.pathname}${url.search}${url.hash}`;
+      return url.href;
+    } catch {
+      return '';
+    }
+  }
+
+  function applyUserSystemCover(coverPhotoUrl = '') {
+    const cleanUrl = normalizeSystemCoverUrl(coverPhotoUrl);
+    const root = document.documentElement;
+    if (cleanUrl) {
+      try { root.style.setProperty('--ops-system-cover-image', `url(${JSON.stringify(cleanUrl)})`); } catch {}
+      try { document.body.classList.add('ops-has-system-cover'); } catch {}
+      try {
+        document.querySelectorAll('.main-content').forEach((el) => {
+          el.classList.add('ops-system-cover-target');
+        });
+      } catch {}
+    } else {
+      try { root.style.removeProperty('--ops-system-cover-image'); } catch {}
+      try { document.body.classList.remove('ops-has-system-cover'); } catch {}
+      try {
+        document.querySelectorAll('.main-content').forEach((el) => {
+          el.classList.remove('ops-system-cover-target');
+        });
+      } catch {}
+    }
+  }
+
+  try {
+    window.OpsSystemCover = Object.assign({}, window.OpsSystemCover || {}, {
+      apply: applyUserSystemCover,
+      normalize: normalizeSystemCoverUrl,
+    });
+  } catch {}
+
   function primeChromeFromCache(){
     const cachedChrome = readChromeCache();
+    const cachedCoverPhotoUrl = String(cachedChrome?.coverPhotoUrl || cachedChrome?.coverPhoto || '').trim();
+    applyUserSystemCover(cachedCoverPhotoUrl);
     const cachedName = String(cachedChrome?.name || getCachedName() || '').trim();
     if (cachedName) {
       try { localStorage.setItem('username', cachedName); } catch {}
@@ -2023,6 +2068,7 @@ if (document.querySelector('.sidebar')) {
           department: cachedChrome?.department || '',
           email: cachedChrome?.email || '',
           photoUrl: cachedChrome?.photoUrl || '',
+          coverPhotoUrl: cachedCoverPhotoUrl,
         });
       } catch {}
     }
@@ -2182,6 +2228,8 @@ if (document.querySelector('.sidebar')) {
 
   async function ensureGreetingAndPages(){
     const cachedChrome = readChromeCache();
+    const cachedCoverPhotoUrl = String(cachedChrome?.coverPhotoUrl || cachedChrome?.coverPhoto || '').trim();
+    applyUserSystemCover(cachedCoverPhotoUrl);
     const cached = getCachedName() || String(cachedChrome?.name || '').trim();
     if (cached) {
       renderGreeting(cached);
@@ -2198,6 +2246,7 @@ if (document.querySelector('.sidebar')) {
           department: cachedChrome?.department || window.__opsUserInfo?.department || '',
           email: cachedChrome?.email || window.__opsUserInfo?.email || '',
           photoUrl: cachedChrome?.photoUrl || window.__opsUserInfo?.photoUrl || '',
+          coverPhotoUrl: cachedCoverPhotoUrl || window.__opsUserInfo?.coverPhotoUrl || '',
         });
       } catch {}
     }
@@ -2211,6 +2260,8 @@ if (document.querySelector('.sidebar')) {
       const data = await res.json();
 
       const name = (data && (data.name || data.username)) ? String(data.name || data.username) : '';
+      const coverPhotoUrl = String(data?.coverPhotoUrl || data?.coverPhoto || '').trim();
+      applyUserSystemCover(coverPhotoUrl);
       if (name) {
         if (name !== cached) localStorage.setItem('username', name);
         renderGreeting(name);
@@ -2239,6 +2290,7 @@ if (document.querySelector('.sidebar')) {
           position: data.position || '',
           department: data.department || '',
           photoUrl: data.photoUrl || '',
+          coverPhotoUrl,
           email: data.email || ''
         };
 
@@ -2253,6 +2305,7 @@ if (document.querySelector('.sidebar')) {
         position: data.position || '',
         department: data.department || '',
         photoUrl: data.photoUrl || '',
+        coverPhotoUrl,
         email: data.email || '',
         allowedPages: Array.isArray(data.allowedPages) ? data.allowedPages : (getCachedAllowedPages() || []),
       });
@@ -2542,33 +2595,19 @@ function initMobileHeaderAutoHide() {
   if (!mainContent || !header || !scroller) return;
 
   const media = window.matchMedia('(max-width: 768px)');
-
-  // Keep the hide/show behavior, but make it stable:
-  // - the header is hidden with a GPU transform only (CSS keeps layout height reserved),
-  //   so scrollTop does not jump while the animation runs.
-  // - a small hysteresis prevents Android momentum scroll from instantly toggling
-  //   the header back and forth, which was the visible vibration.
-  const TOP_REVEAL_LIMIT = 10;
-  const HIDE_AFTER_TOP = 72;
-  const MIN_SCROLL_DELTA = 4;
-  const HIDE_DISTANCE = 18;
-  const SHOW_DISTANCE = 30;
-
-  let observedTop = 0;
-  let toggleTop = 0;
+  let lastTop = 0;
   let hidden = false;
   let ticking = false;
 
   function syncHeaderHeight() {
-    const applyHeight = () => {
-      const wasHidden = mainContent.classList.contains('mobile-header-hidden');
-      if (wasHidden) mainContent.classList.remove('mobile-header-hidden');
+    const wasHidden = mainContent.classList.contains('mobile-header-hidden');
+    if (wasHidden) mainContent.classList.remove('mobile-header-hidden');
 
+    const applyHeight = () => {
       const height = Math.ceil(header.scrollHeight || header.offsetHeight || 0);
       if (height > 0) {
         mainContent.style.setProperty('--mobile-header-height', `${height}px`);
       }
-
       if (wasHidden && hidden && media.matches) {
         mainContent.classList.add('mobile-header-hidden');
       }
@@ -2582,49 +2621,40 @@ function initMobileHeaderAutoHide() {
   }
 
   function showHeader(force = false) {
-    if (!hidden && !force) return;
     hidden = false;
     mainContent.classList.remove('mobile-header-hidden');
-    toggleTop = Math.max(0, Number(scroller.scrollTop || 0));
-    if (force) observedTop = toggleTop;
+    if (force) lastTop = Number(scroller.scrollTop || 0);
   }
 
   function hideHeader() {
     if (hidden) return;
     hidden = true;
     mainContent.classList.add('mobile-header-hidden');
-    toggleTop = Math.max(0, Number(scroller.scrollTop || 0));
   }
 
   function handleScroll() {
-    const currentTop = Math.max(0, Number(scroller.scrollTop || 0));
-
     if (!media.matches) {
-      observedTop = currentTop;
       showHeader(true);
       return;
     }
 
-    const delta = currentTop - observedTop;
-    observedTop = currentTop;
+    const currentTop = Math.max(0, Number(scroller.scrollTop || 0));
+    const delta = currentTop - lastTop;
 
-    if (currentTop <= TOP_REVEAL_LIMIT) {
+    if (currentTop <= 8) {
       showHeader(true);
       return;
     }
 
-    if (Math.abs(delta) < MIN_SCROLL_DELTA) return;
+    if (Math.abs(delta) < 6) return;
 
-    if (!hidden) {
-      if (delta > 0 && currentTop > HIDE_AFTER_TOP && (currentTop - toggleTop) >= HIDE_DISTANCE) {
-        hideHeader();
-      }
-      return;
-    }
-
-    if (delta < 0 && (toggleTop - currentTop) >= SHOW_DISTANCE) {
+    if (delta > 0 && currentTop > 72) {
+      hideHeader();
+    } else if (delta < 0) {
       showHeader();
     }
+
+    lastTop = currentTop;
   }
 
   function onScroll() {
@@ -2643,9 +2673,11 @@ function initMobileHeaderAutoHide() {
 
   function onViewportChange() {
     syncHeaderHeight();
-    observedTop = Math.max(0, Number(scroller.scrollTop || 0));
-    toggleTop = observedTop;
-    if (!media.matches || observedTop <= TOP_REVEAL_LIMIT) {
+    if (!media.matches) {
+      showHeader(true);
+      return;
+    }
+    if ((scroller.scrollTop || 0) <= 8) {
       showHeader(true);
     }
   }
