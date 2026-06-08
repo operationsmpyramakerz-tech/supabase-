@@ -1376,10 +1376,57 @@ document.addEventListener('DOMContentLoaded', () => {
     main.insertBefore(header, main.firstChild);
   }
 
+
+  function ensureMainBarTitleLabelStyle(){
+    if (document.getElementById('ops-mainbar-title-label-style')) return;
+    const style = document.createElement('style');
+    style.id = 'ops-mainbar-title-label-style';
+    style.textContent = `
+      .main-header .dash-title{
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: min(46vw, 420px) !important;
+        min-height: 42px !important;
+        padding: 0 18px !important;
+        border-radius: 999px !important;
+        background: #FFFFFF !important;
+        border: 1px solid rgba(226,232,240,0.94) !important;
+        color: #0F172A !important;
+        box-shadow: 0 10px 24px rgba(15,23,42,0.08) !important;
+        flex: 0 1 auto !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+      .main-header .dash-title:empty{ display: none !important; }
+      @media (max-width: 768px){
+        .main-header .dash-title{
+          max-width: min(52vw, 280px) !important;
+          min-height: 40px !important;
+          padding: 0 14px !important;
+          font-size: clamp(15px, 4.2vw, 18px) !important;
+        }
+      }
+      @media (max-width: 420px){
+        .main-header .dash-title{
+          max-width: 42vw !important;
+          min-height: 38px !important;
+          padding: 0 12px !important;
+          font-size: 15px !important;
+        }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
   function ensureDashboardHeaderLayout(){
     const header = document.querySelector('.main-header');
     if (!header) return;
 
+    ensureMainBarTitleLabelStyle();
     header.classList.add('dash-header');
 
     const row1 = header.querySelector('.header-row1');

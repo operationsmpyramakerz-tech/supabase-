@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     endpoint: '/api/account/profile-picture',
     responseKey: 'photoUrl',
     successMessage: 'Profile picture updated successfully.',
+    removeSuccessMessage: 'Profile picture removed successfully.',
   };
 
   const COVER_PHOTO_META = {
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     endpoint: '/api/account/cover-photo',
     responseKey: 'coverPhotoUrl',
     successMessage: 'Cover photo updated successfully.',
+    removeSuccessMessage: 'Cover photo removed successfully.',
   };
 
   let pendingProfilePicture = null;
@@ -105,9 +107,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="profile-field-label">${escapeHTML(meta.label)}</div>
         <div class="profile-field-box ${isPassword ? 'profile-field-box--password' : ''}">
           <span class="profile-field-value">${escapeHTML(displayValue(meta.key))}</span>
-          <button class="profile-field-edit acc-edit" type="button" aria-label="Edit ${escapeHTML(meta.label)}" title="Edit ${escapeHTML(meta.label)}">
-            <i data-feather="edit-2"></i>
-          </button>
         </div>
       </section>
     `;
@@ -130,6 +129,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const coverMarkup = coverPhotoUrl
       ? `<img class="profile-cover-image" src="${escapeHTML(coverPhotoUrl)}" decoding="async" alt="${escapeHTML(displayName)} cover photo" />`
       : `<div class="profile-cover-fallback" aria-hidden="true"></div>`;
+    const coverRemoveMarkup = coverPhotoUrl
+      ? `<button class="profile-cover-remove profile-image-remove" type="button" data-remove-image="coverPhoto" aria-label="Remove cover photo" title="Remove cover photo"><i data-feather="trash-2"></i><span>Remove</span></button>`
+      : '';
+    const avatarRemoveMarkup = String(state?.photoUrl || '').trim()
+      ? `<button class="profile-avatar-remove profile-image-remove" type="button" data-remove-image="profilePicture" aria-label="Remove profile picture" title="Remove profile picture"><i data-feather="trash-2"></i><span>Remove</span></button>`
+      : '';
 
     return `
       <section class="profile-hero-section" aria-label="User profile header">
@@ -137,6 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <button class="profile-cover-display" type="button" aria-label="Change cover photo" title="Change cover photo">
             ${coverMarkup}
           </button>
+          ${coverRemoveMarkup}
           <button class="profile-cover-edit" type="button" aria-label="Edit cover photo" title="Edit cover photo">
             <i data-feather="edit-2"></i>
           </button>
@@ -152,6 +158,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <button class="profile-avatar-edit" type="button" aria-label="Edit profile picture" title="Edit profile picture">
                 <i data-feather="edit-2"></i>
               </button>
+              ${avatarRemoveMarkup}
               <input class="acc-file-input profile-avatar-file-input" data-upload-field="profilePicture" type="file" accept="image/*" hidden />
             </div>
           </div>
@@ -393,6 +400,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         buttonEl.classList.remove('is-uploading');
         buttonEl.removeAttribute('aria-busy');
         buttonEl.setAttribute('title', `Edit ${String(meta.label || 'image').toLowerCase()}`);
+      }
+      if (window.feather) feather.replace();
+    }
+  }
+
+
+  async function removeAccountImage(fieldKey, buttonEl) {
+    const meta = imageMetaForField(fieldKey);
+    if (!meta?.endpoint) return;
+
+    const isCover = fieldKey === COVER_PHOTO_META.key;
+    const currentUrl = String(isCover ? (state?.coverPhotoUrl || '') : (state?.photoUrl || '')).trim();
+    if (!currentUrl) return;
+
+    const label = isCover ? 'cover photo' : 'profile picture';
+    const confirmed = window.confirm(`Remove ${label} and restore the default image?`);
+    if (!confirmed) return;
+
+    if (buttonEl) {
+      buttonEl.disabled = true;
+      buttonEl.classList.add('is-removing');
+      buttonEl.setAttribute('aria-busy', 'true');
+    }
+
+    try {
+      showSavingOverlay();
+      const res = await fetch(meta.endpoint, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || `Request failed (${res.status})`);
+      }
+
+      if (isCover) state.coverPhotoUrl = '';
+      else state.photoUrl = '';
+
+      render();
+      try { window.dispatchEvent(new Event('user:updated')); } catch {}
+      toast('success', 'Removed', meta.removeSuccessMessage || `${meta.label} removed successfully.`);
+    } catch (e) {
+      toast('error', 'Remove failed', e.message || `Failed to remove ${label}.`);
+    } finally {
+      hideSavingOverlay();
+      if (buttonEl) {
+        buttonEl.disabled = false;
+        buttonEl.classList.remove('is-removing');
+        buttonEl.removeAttribute('aria-busy');
       }
       if (window.feather) feather.replace();
     }
@@ -791,8 +849,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Event delegation for edit button
+  // Event delegation for image actions
   container.addEventListener('click', (e) => {
+    const removeImageBtn = e.target.closest('[data-remove-image]');
+    if (removeImageBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      removeAccountImage(String(removeImageBtn.dataset.removeImage || '').trim(), removeImageBtn);
+      return;
+    }
+
     const coverEditBtn = e.target.closest('.profile-cover-edit, .profile-cover-display');
     if (coverEditBtn) {
       const coverSection = coverEditBtn.closest('.profile-cover-section');
