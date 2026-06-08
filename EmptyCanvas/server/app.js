@@ -23880,6 +23880,37 @@ app.patch(
 );
 
 
+
+async function _requireProductsAdminPassword(req, res) {
+  const password = String(req?.body?.adminPassword || req?.body?.password || '').trim();
+  if (!password) {
+    res.status(400).json({ ok: false, error: 'Admin password is required.' });
+    return false;
+  }
+  const ok = await verifyAdminPassword(password);
+  if (!ok) {
+    res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
+    return false;
+  }
+  return true;
+}
+
+app.post(
+  "/api/products/admin/verify",
+  requireAuth,
+  requirePage(["Proposals", "Kits", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!await _requireProductsAdminPassword(req, res)) return;
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("POST /api/products/admin/verify error:", error?.details || error);
+      return res.status(500).json({ ok: false, error: "Failed to verify Admin password." });
+    }
+  },
+);
+
 app.get(
   "/api/products/proposals",
   requireAuth,
@@ -23905,6 +23936,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      if (!await _requireProductsAdminPassword(req, res)) return;
       const proposal = await _sbCreateProductProposal(req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", proposal });
     } catch (error) {
@@ -24128,6 +24160,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      if (!await _requireProductsAdminPassword(req, res)) return;
       const kit = await _sbCreateProductKit(req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", kit });
     } catch (error) {
