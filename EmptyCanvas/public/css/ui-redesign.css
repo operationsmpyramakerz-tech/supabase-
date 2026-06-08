@@ -354,11 +354,68 @@ body.permissions-loading:not(.permissions-ready) .main-header{
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
+  isolation: isolate;
 }
 
 body.sidebar-collapsed .main-content{
   margin-left: 0 !important;
 }
+
+/* ---------- User cover photo as system upper background ---------- */
+body.ops-has-system-cover:not(.shell-embedded) .main-content::before{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: clamp(210px, 30vh, 380px);
+  border-radius: var(--ui-radius-main) var(--ui-radius-main) 0 0;
+  background-image:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.04) 0%,
+      rgba(255,255,255,0.24) 32%,
+      rgba(255,255,255,0.72) 68%,
+      #FFFFFF 100%),
+    var(--ops-system-cover-image);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.96;
+}
+
+body.ops-has-system-cover:not(.shell-embedded) .main-content::after{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: clamp(240px, 34vh, 420px);
+  background:
+    radial-gradient(circle at 74% 6%, rgba(255,255,255,0.34), transparent 34%),
+    linear-gradient(180deg, rgba(255,255,255,0.00) 0%, rgba(255,255,255,0.84) 74%, #FFFFFF 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.ops-has-system-cover:not(.shell-embedded) .main-content > header,
+body.ops-has-system-cover:not(.shell-embedded) .main-content > main,
+body.ops-has-system-cover:not(.shell-embedded) .ops-shell-host-main{
+  position: relative;
+  z-index: 1;
+}
+
+body.ops-has-system-cover:not(.shell-embedded) .main-header{
+  background: transparent !important;
+}
+
+body.ops-has-system-cover:not(.shell-embedded) .ops-shell-frame-wrap,
+body.ops-has-system-cover:not(.shell-embedded) .ops-shell-frame{
+  background: transparent !important;
+}
+
 
 /* ---------- Header redesign ---------- */
 .main-header{
@@ -1519,22 +1576,19 @@ body.has-floating-search .main-header .searchbar{
     z-index: 20 !important;
     overflow: hidden !important;
     max-height: var(--mobile-header-height, 140px) !important;
-    transform: translate3d(0, 0, 0) !important;
+    transform: translateY(0) !important;
     opacity: 1 !important;
-    backface-visibility: hidden !important;
-    will-change: transform, opacity !important;
-    transition: transform .24s cubic-bezier(.2,.8,.2,1), opacity .18s ease !important;
+    will-change: transform, opacity, max-height, padding, margin !important;
+    transition: transform .24s ease, opacity .18s ease, max-height .24s ease, padding .24s ease, margin .24s ease !important;
   }
 
   .main-content.mobile-header-hidden .main-header{
-    /* Keep the header's layout height reserved while it visually hides.
-       This preserves the mobile hide/show interaction without changing the
-       scroll container height mid-scroll, which caused the main bar vibration. */
-    max-height: var(--mobile-header-height, 140px) !important;
-    padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 6px !important;
+    max-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
     margin-top: 0 !important;
     margin-bottom: 0 !important;
-    transform: translate3d(0, calc(-1 * var(--mobile-header-height, 140px)), 0) !important;
+    transform: translateY(-14px) !important;
     opacity: 0 !important;
     pointer-events: none !important;
   }
@@ -2113,7 +2167,7 @@ body.page-shell-host .main-content{
 
 html body.shell-embedded,
 body.shell-embedded{
-  background: #FFFFFF !important;
+  background: transparent !important;
   overflow: hidden !important;
 }
 
