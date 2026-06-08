@@ -9937,6 +9937,70 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
   }
  });
 
+
+
+app.delete("/api/account/profile-picture", requireAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+
+    if (_sbTeamMembersEnabled()) {
+      const row = await _sbFindSessionTeamMember(req);
+      if (!row) return res.status(404).json({ error: "User not found." });
+
+      const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+      const username = _sbString(_sbValueForLabel(row, "Name")) || String(req.session?.username || "").trim();
+      if (!rowId) return res.status(500).json({ error: "Unable to remove profile picture." });
+
+      const rows = await _sbSelectTeamMembersRows().catch(() => [row]);
+      const profileKey = _sbProfilePictureColumnKey(row, rows || []);
+      if (!profileKey) {
+        return res.status(400).json({ error: "Profile picture field is not configured." });
+      }
+
+      await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [profileKey]: null });
+      req.session.userSupabaseId = rowId;
+      if (username) req.session.username = username;
+
+      await clearUserServerCaches(req, { userId: rowId, username });
+      await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(rowId)}:v1`).catch(() => {});
+      if (username) await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(username)}:v1`).catch(() => {});
+
+      return res.json({ success: true, photoUrl: "", source: "supabase" });
+    }
+
+    if (!teamMembersDatabaseId) {
+      return res.status(500).json({ error: "Team_Members database ID is not configured." });
+    }
+
+    const userId = await getSessionUserNotionId(req);
+    if (!userId) return res.status(404).json({ error: "User not found." });
+
+    const userPage = await notion.pages.retrieve({ page_id: userId });
+    const props = userPage?.properties || {};
+    const profilePropName = findProfilePhotoPropName(props) || "Profile picture";
+    const profileProp = props?.[profilePropName];
+
+    if (profileProp?.type !== "files") {
+      return res.status(400).json({ error: `The "${profilePropName}" property must be Files & media.` });
+    }
+
+    await notion.pages.update({
+      page_id: userId,
+      properties: {
+        [profilePropName]: { files: [] },
+      },
+    });
+
+    await clearUserServerCaches(req, { userId });
+    return res.json({ success: true, photoUrl: "" });
+  } catch (error) {
+    console.error("Error removing profile picture:", error?.details || error?.body || error);
+    const status = Number(error?.statusCode) || Number(error?.status) || 500;
+    const safeMessage = status >= 400 && status < 500 ? (error?.message || "Failed to remove profile picture.") : "Failed to remove profile picture.";
+    return res.status(status >= 400 && status < 500 ? status : 500).json({ error: safeMessage });
+  }
+});
+
 app.post("/api/account/cover-photo", requireAuth, async (req, res) => {
   try {
     const { dataUrl, filename, currentPassword } = req.body || {};
@@ -10004,6 +10068,46 @@ app.post("/api/account/cover-photo", requireAuth, async (req, res) => {
     const safeMessage = status === 401
       ? "invalid password"
       : (status >= 400 && status < 500 ? (error?.message || "Failed to update cover photo.") : "Failed to update cover photo.");
+    return res.status(status >= 400 && status < 500 ? status : 500).json({ error: safeMessage });
+  }
+});
+
+
+
+app.delete("/api/account/cover-photo", requireAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ error: "Supabase Team Members table is not configured." });
+    }
+
+    const row = await _sbFindSessionTeamMember(req);
+    if (!row) return res.status(404).json({ error: "User not found." });
+
+    const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+    const username = _sbString(_sbValueForLabel(row, "Name")) || String(req.session?.username || "").trim();
+    if (!rowId) return res.status(500).json({ error: "Unable to remove cover photo." });
+
+    const rows = await _sbSelectTeamMembersRows().catch(() => [row]);
+    const coverKey = _sbCoverPhotoColumnKey(row, rows || []);
+    if (!coverKey) {
+      return res.status(400).json({ error: "Cover photo field is not configured." });
+    }
+
+    await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [coverKey]: null });
+    req.session.userSupabaseId = rowId;
+    if (username) req.session.username = username;
+
+    await clearUserServerCaches(req, { userId: rowId, username });
+    await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(rowId)}:v1`).catch(() => {});
+    if (username) await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(username)}:v1`).catch(() => {});
+
+    return res.json({ success: true, coverPhotoUrl: "", source: "supabase" });
+  } catch (error) {
+    console.error("Error removing cover photo:", error?.details || error?.body || error);
+    const status = Number(error?.statusCode) || Number(error?.status) || 500;
+    const safeMessage = status >= 400 && status < 500 ? (error?.message || "Failed to remove cover photo.") : "Failed to remove cover photo.";
     return res.status(status >= 400 && status < 500 ? status : 500).json({ error: safeMessage });
   }
 });
