@@ -130,10 +130,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       ? `<img class="profile-cover-image" src="${escapeHTML(coverPhotoUrl)}" decoding="async" alt="${escapeHTML(displayName)} cover photo" />`
       : `<div class="profile-cover-fallback" aria-hidden="true"></div>`;
     const coverRemoveMarkup = coverPhotoUrl
-      ? `<button class="profile-cover-remove profile-image-remove" type="button" data-remove-image="coverPhoto" aria-label="Remove cover photo" title="Remove cover photo"><i data-feather="trash-2"></i><span>Remove</span></button>`
+      ? `<button class="profile-cover-remove profile-image-remove" type="button" data-remove-image="coverPhoto" aria-label="Remove cover photo" title="Remove cover photo"><i data-feather="x"></i></button>`
       : '';
     const avatarRemoveMarkup = String(state?.photoUrl || '').trim()
-      ? `<button class="profile-avatar-remove profile-image-remove" type="button" data-remove-image="profilePicture" aria-label="Remove profile picture" title="Remove profile picture"><i data-feather="trash-2"></i><span>Remove</span></button>`
+      ? `<button class="profile-avatar-remove profile-image-remove" type="button" data-remove-image="profilePicture" aria-label="Remove profile picture" title="Remove profile picture"><i data-feather="x"></i></button>`
       : '';
 
     return `
