@@ -208,6 +208,7 @@
     const count = Number(item?.itemsCount || 0) || 0;
     const createdBy = String(item?.createdBy || '').trim();
     const badge = kind === 'kit' ? 'K' : 'Q';
+    const countLabel = `${formatNumber(count)} component${count === 1 ? '' : 's'}`;
     return `
       <article class="products-proposal-folder" data-folder-kind="${escapeHTML(kind)}" data-id="${escapeHTML(id)}" data-can-edit="${canEditItem(item) ? '1' : '0'}" data-name="${escapeHTML(name)}">
         <button type="button" class="proposal-folder-menu-btn" data-action="toggle-${kind}-menu" data-id="${escapeHTML(id)}" aria-label="Actions for ${escapeHTML(name)}"><span class="proposal-menu-dots" aria-hidden="true">•••</span></button>
@@ -219,13 +220,16 @@
         <button type="button" class="products-proposal-folder__main" data-action="open-${kind}" data-id="${escapeHTML(id)}" aria-label="Open ${escapeHTML(name)}">
           <span class="proposal-folder-figure" aria-hidden="true">
             <span class="proposal-folder-figure__paper proposal-folder-figure__paper--left"></span>
+            <span class="proposal-folder-figure__paper proposal-folder-figure__paper--middle"></span>
             <span class="proposal-folder-figure__paper proposal-folder-figure__paper--right"></span>
             <span class="proposal-folder-figure__back"></span>
             <span class="proposal-folder-figure__front"><small>${escapeHTML(badge)}</small></span>
           </span>
-          <strong>${escapeHTML(name)}</strong>
-          <span>${formatNumber(count)} component${count === 1 ? '' : 's'}</span>
-          ${createdBy ? `<em>Created by ${escapeHTML(createdBy)}</em>` : ''}
+          <span class="proposal-folder-copy">
+            <strong>${escapeHTML(name)}</strong>
+            ${createdBy ? `<em>Created by ${escapeHTML(createdBy)}</em>` : `<em>Created by —</em>`}
+          </span>
+          <span class="proposal-folder-count"><i data-feather="copy"></i><span>${escapeHTML(countLabel)}</span></span>
         </button>
       </article>
     `;
