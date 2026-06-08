@@ -299,7 +299,9 @@ body.permissions-loading:not(.permissions-ready) .main-header{
   justify-content: center !important;
   padding: 0 !important;
   border-radius: 22px !important;
-  color: #0B0C10 !important;
+  color: rgba(255,255,255,0.72) !important;
+  border: 2px solid transparent !important;
+  box-sizing: border-box !important;
   margin: 0 !important;
   background: transparent !important;
   line-height: 0 !important;
@@ -320,6 +322,8 @@ body.permissions-loading:not(.permissions-ready) .main-header{
 .nav-link.active{
   background: #FFFFFF !important;
   color: #0B0C10 !important;
+  border: 2px solid #0B0C10 !important;
+  box-sizing: border-box !important;
   font-weight: 800 !important;
   box-shadow: 0 12px 26px rgba(255,255,255,0.12), 0 10px 24px rgba(0,0,0,0.18) !important;
 }
@@ -2000,7 +2004,7 @@ body.has-floating-search .main-header .searchbar{
     gap: 0 !important;
     border-radius: 16px !important;
     background: transparent !important;
-    color: #0B0C10 !important;
+    color: rgba(255,255,255,0.72) !important;
     box-shadow: none !important;
   }
 
@@ -2033,7 +2037,7 @@ body.has-floating-search .main-header .searchbar{
 
   .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link:not(.active){
     background: transparent !important;
-    color: #0B0C10 !important;
+    color: rgba(255,255,255,0.72) !important;
   }
 
   .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link{
@@ -3967,8 +3971,8 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: transparent !important;
-  color: #0B0C10 !important;
+  background: #0B0C10 !important;
+  color: #FFFFFF !important;
 }
 
 :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon svg{
@@ -3979,9 +3983,9 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 
 :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-filtered .orders-type-filter__button-icon,
 :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open .orders-type-filter__button-icon{
-  background: transparent !important;
-  color: #0B0C10 !important;
-  box-shadow: none !important;
+  background: #0B0C10 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 12px 24px rgba(15,23,42,0.18) !important;
 }
 
 :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-label,
@@ -4235,52 +4239,70 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 }
 
 
-/* Orders toolbar v3: filter icon should be black with no inner dark circle; include Maintenance Orders. */
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open .orders-type-filter__button-icon,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-filtered .orders-type-filter__button-icon{
+/* =========================================================
+   Sidebar page dock restore v4
+   Scope: real page sidebar only. Do not touch order status tabs.
+   ========================================================= */
+.sidebar .sidebar-nav .nav-link:not(.active){
   background: transparent !important;
-  color: #0B0C10 !important;
+  color: rgba(255,255,255,0.72) !important;
+  border: 2px solid transparent !important;
   box-shadow: none !important;
 }
 
-/* Sidebar safety: do not let the orders toolbar tab styling recolor the mobile page dock icons. */
+.sidebar .sidebar-nav .nav-link:not(.active):hover{
+  background: rgba(255,255,255,0.08) !important;
+  color: #FFFFFF !important;
+}
+
+.sidebar .sidebar-nav .nav-link:not(.active) svg{
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+.sidebar .sidebar-nav .nav-link.active{
+  width: 60px !important;
+  min-width: 60px !important;
+  height: 60px !important;
+  min-height: 60px !important;
+  border-radius: 22px !important;
+  background: #FFFFFF !important;
+  color: #0B0C10 !important;
+  border: 2px solid #0B0C10 !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 12px 26px rgba(255,255,255,0.12), 0 10px 24px rgba(0,0,0,0.18) !important;
+}
+
+.sidebar .sidebar-nav .nav-link.active svg{
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
 @media (max-width: 900px){
   .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:not(.active),
   .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:not(.active) svg{
     color: rgba(255,255,255,0.72) !important;
     stroke: currentColor !important;
   }
-}
 
-
-/* Sidebar rollback v3: keep sidebar page icons in the original light color; orders toolbar styles must not make them black. */
-.sidebar .sidebar-nav .nav-link.active svg{
-  color: #FFFFFF !important;
-  stroke: currentColor !important;
-}
-
-@media (min-width: 901px){
-  .sidebar .sidebar-nav .nav-link.active{
-    background: var(--primary-color, #F97316) !important;
-    color: #FFFFFF !important;
-    border-color: transparent !important;
-    box-shadow: 0 8px 16px rgba(234,88,12,0.25) !important;
-  }
-}
-
-@media (max-width: 900px){
   .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active{
-    background: rgba(255,255,255,0.12) !important;
-    color: #FFFFFF !important;
-    border-color: rgba(255,255,255,0.22) !important;
-    box-shadow: none !important;
+    background: #FFFFFF !important;
+    color: #0B0C10 !important;
+    border: 2px solid #0B0C10 !important;
+    box-shadow: 0 12px 26px rgba(255,255,255,0.14), 0 12px 24px rgba(0,0,0,0.18) !important;
   }
 
   .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg{
-    color: #FFFFFF !important;
+    color: currentColor !important;
     stroke: currentColor !important;
     background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active{
+    background: transparent !important;
+    color: #FFFFFF !important;
+    border: none !important;
     box-shadow: none !important;
   }
 
@@ -4290,4 +4312,13 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
     stroke: currentColor !important;
     box-shadow: 0 12px 24px rgba(255,255,255,0.16) !important;
   }
+}
+
+/* Orders toolbar v4: keep the filter as a plain black icon on white, and include Maintenance Orders. */
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open .orders-type-filter__button-icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-filtered .orders-type-filter__button-icon{
+  background: transparent !important;
+  color: #0B0C10 !important;
+  box-shadow: none !important;
 }
