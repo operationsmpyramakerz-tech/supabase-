@@ -1247,3 +1247,144 @@
     grid-template-columns:minmax(0, 280px) !important;
   }
 }
+
+/* 2026-06-08: fixed orange compact folder cards + full-width proposal grid */
+.proposals-page .products-shell.proposals-shell{
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:18px 28px 80px !important;
+  box-sizing:border-box !important;
+}
+.proposals-page .products-proposals-view{
+  width:100% !important;
+  max-width:none !important;
+  margin-top:10px !important;
+  box-sizing:border-box !important;
+}
+.proposals-page .products-proposal-folders{
+  width:100% !important;
+  grid-template-columns:repeat(auto-fill, minmax(218px, 218px)) !important;
+  justify-content:start !important;
+  justify-items:start !important;
+  align-items:start !important;
+  gap:24px 22px !important;
+  padding-top:26px !important;
+}
+.proposals-page .products-proposal-folder,
+.proposals-page .products-proposal-folder:nth-child(3n+2),
+.proposals-page .products-proposal-folder:nth-child(3n){
+  width:218px !important;
+  height:204px !important;
+  min-height:204px !important;
+  border:2px solid rgba(9,12,18,.92) !important;
+  border-radius:24px !important;
+  background:
+    radial-gradient(circle at 22% 5%, rgba(255,255,255,.42) 0 13%, rgba(255,255,255,0) 35%),
+    radial-gradient(circle at 80% 0%, rgba(255,255,255,.22) 0 10%, rgba(255,255,255,0) 30%),
+    linear-gradient(135deg, #ff8a1f 0%, #f97316 45%, #ea580c 100%) !important;
+  box-shadow:0 22px 42px rgba(15,23,42,.14) !important;
+}
+.proposals-page .products-proposal-folder:hover{
+  transform:translateY(-3px) !important;
+  box-shadow:0 28px 50px rgba(15,23,42,.18) !important;
+}
+.proposals-page .products-proposal-folder__main{
+  inset:2px !important;
+  border-radius:22px !important;
+}
+.proposals-page .products-proposal-folder__main::before{
+  height:118px !important;
+  border-radius:0 0 22px 22px !important;
+  background:#272727 !important;
+}
+.proposals-page .products-proposal-folder__main::after{
+  top:76px !important;
+  width:138px !important;
+  height:42px !important;
+  background:#272727 !important;
+  clip-path:polygon(0 0, 82px 0, 138px 42px, 0 42px) !important;
+}
+.proposals-page .proposal-folder-figure{
+  top:31px !important;
+  width:158px !important;
+  height:88px !important;
+}
+.proposals-page .proposal-folder-figure__paper{
+  width:68px !important;
+  height:75px !important;
+  border-radius:10px !important;
+}
+.proposals-page .proposal-folder-figure__paper::before{
+  left:11px !important;
+  right:11px !important;
+  top:14px !important;
+  height:4px !important;
+  box-shadow:0 15px 0 rgba(203,213,225,.42), 0 30px 0 rgba(203,213,225,.32) !important;
+}
+.proposals-page .proposal-folder-figure__paper--left{
+  left:14px !important;
+}
+.proposals-page .proposal-folder-figure__paper--middle{
+  left:45px !important;
+  top:-6px !important;
+}
+.proposals-page .proposal-folder-figure__paper--right{
+  right:14px !important;
+}
+.proposals-page .proposal-folder-copy{
+  left:18px !important;
+  right:48px !important;
+  top:102px !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-copy strong{
+  font-size:.95rem !important;
+  line-height:1.05 !important;
+  margin-bottom:5px !important;
+  letter-spacing:-.025em !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-copy em{
+  font-size:.74rem !important;
+  line-height:1.1 !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-count{
+  left:18px !important;
+  right:12px !important;
+  bottom:17px !important;
+  gap:6px !important;
+  font-size:.77rem !important;
+  line-height:1 !important;
+}
+.proposals-page .proposal-folder-count svg{
+  width:13px !important;
+  height:13px !important;
+  stroke-width:2.3 !important;
+}
+.proposals-page .proposal-folder-menu-btn{
+  top:92px !important;
+  right:11px !important;
+  width:24px !important;
+  height:24px !important;
+  min-width:24px !important;
+  min-height:24px !important;
+  padding:0 !important;
+}
+.proposals-page .proposal-menu-dots{
+  font-size:12px !important;
+  letter-spacing:1px !important;
+  transform:translateY(-1px) !important;
+}
+.proposals-page .proposal-folder-menu{
+  top:120px !important;
+  right:10px !important;
+}
+@media (max-width: 640px){
+  .proposals-page .products-shell.proposals-shell{
+    padding-left:14px !important;
+    padding-right:14px !important;
+  }
+  .proposals-page .products-proposal-folders{
+    grid-template-columns:repeat(auto-fill, minmax(218px, 218px)) !important;
+    justify-content:start !important;
+  }
+}
