@@ -7974,7 +7974,7 @@ function _backupCatalog() {
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
     { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
     { key: 'proposal-items', pageName: 'Proposal Items', tableName: _sbProductProposalItemsTable(), moduleName: 'Proposals', icon: 'list', description: 'Components saved inside proposals.' },
-    { key: 'kits', pageName: 'Kits', tableName: _sbProductKitsTable(), moduleName: 'Proposals', icon: 'box', description: 'Saved kit folders.' },
+    { key: 'kits', pageName: 'Kits', tableName: _sbProductKitsTable(), moduleName: 'Proposals', icon: 'briefcase', description: 'Saved kit folders.' },
     { key: 'kit-items', pageName: 'Kit Items', tableName: _sbProductKitItemsTable(), moduleName: 'Proposals', icon: 'layers', description: 'Components saved inside kits.' },
     { key: 'tasks', pageName: 'Tasks', tableName: _sbTasksTable(), moduleName: 'Tasks', icon: 'check-square', description: 'Task cards and assignments.' },
     { key: 'task-checkpoints', pageName: 'Task Checkpoints', tableName: _sbTaskCheckpointsTable(), moduleName: 'Tasks', icon: 'check-circle', description: 'Task checklist/checkpoint records.' },
