@@ -652,8 +652,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Products', 'Product', 'Components', '/products'])) {
       urls.push('/api/products');
     }
-    if (hasAllowedPage(allowedPages, ['Proposals', 'Kits', '/proposals', 'Products', '/products'])) {
+    if (hasAllowedPage(allowedPages, ['Proposals', '/proposals', 'Products', '/products'])) {
       urls.push('/api/products/proposals', '/api/products/kits');
+    } else if (hasAllowedPage(allowedPages, ['Kits', '/kits'])) {
+      urls.push('/api/products/kits');
     }
     if (hasAllowedPage(allowedPages, ['Expenses', '/expenses'])) {
       urls.push('/api/expenses', '/api/expenses/types', '/api/expenses/cash-in-from/options');
@@ -1792,7 +1794,9 @@ if (document.querySelector('.sidebar')) {
     'product': 'a[href="/products"]',
     'components': 'a[href="/products"]',
     'proposals': 'a[href="/proposals"]',
-    'kits': 'a[href="/proposals"]',
+    'kits': 'a[href="/kits"]',
+    'product kits': 'a[href="/kits"]',
+    'saved kits': 'a[href="/kits"]',
     'saved quotations': 'a[href="/proposals"]',
     'tasks': 'a[href="/tasks"]',
     'kpis': 'a[href="/kpis"]',
@@ -1934,11 +1938,15 @@ if (document.querySelector('.sidebar')) {
       if (home) showEl(home.closest('li') || home);
     } catch {}
 
-    // Proposals is a standalone workspace, but existing product users should see it too.
+    // Proposals and Kits are standalone pages, but existing product users should still see both workspaces.
     try {
       const proposals = document.querySelector('a[href="/proposals"]');
       if (proposals && (allowedSet.has('products') || allowedSet.has('/products') || allowedSet.has('proposals') || allowedSet.has('/proposals'))) {
         showEl(proposals.closest('li') || proposals);
+      }
+      const kits = document.querySelector('a[href="/kits"]');
+      if (kits && (allowedSet.has('products') || allowedSet.has('/products') || allowedSet.has('kits') || allowedSet.has('/kits'))) {
+        showEl(kits.closest('li') || kits);
       }
     } catch {}
 
@@ -2452,6 +2460,7 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
   ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
   ensureLink({ href: '/proposals', label: 'Proposals', icon: 'file-text', beforeHref: '/orders/sv-orders' });
+  ensureLink({ href: '/kits', label: 'Kits', icon: 'box', beforeHref: '/orders/sv-orders' });
   removeSidebarMailLinks();
   ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
@@ -4899,6 +4908,7 @@ function deriveOpsShellTitle(path) {
     ['/stocktaking', 'Stocktaking'],
     ['/products', 'Products'],
     ['/proposals', 'Proposals'],
+    ['/kits', 'Kits'],
     ['/expenses/users', 'Expenses Users'],
     ['/expenses', 'Expenses'],
     ['/b2b', 'B2B'],

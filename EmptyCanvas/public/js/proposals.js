@@ -30,6 +30,12 @@
   const els = {};
   const $ = (id) => document.getElementById(id);
 
+  function currentWorkspaceMode() {
+    const mode = String(document.body?.dataset?.proposalsMode || '').trim().toLowerCase();
+    if (mode === 'kits' || /^\/kits(?:\/|$)/i.test(window.location.pathname || '')) return 'kits';
+    return 'proposals';
+  }
+
   function escapeHTML(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -482,11 +488,11 @@
     hydrateIcons(els.kitDetail);
   }
 
-  function setTab(tab) {
+  function setTab(tab, options = {}) {
     state.tab = tab === 'kits' ? 'kits' : 'proposals';
     const isKits = state.tab === 'kits';
-    els.proposalsPanel.hidden = isKits;
-    els.kitsPanel.hidden = !isKits;
+    if (els.proposalsPanel) els.proposalsPanel.hidden = isKits;
+    if (els.kitsPanel) els.kitsPanel.hidden = !isKits;
     if (els.createProposalBtn) els.createProposalBtn.hidden = isKits;
     if (els.createKitBtn) els.createKitBtn.hidden = !isKits;
     document.querySelectorAll('.proposals-tab').forEach((btn) => {
@@ -495,6 +501,7 @@
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
     restartProposalAnimation(isKits ? els.kitsPanel : els.proposalsPanel, 'proposal-panel-enter');
+    if (options.skipLoad) return;
     if (isKits) loadKits();
     else loadProposals();
   }
@@ -1141,11 +1148,18 @@
     collectEls();
     bindEvents();
     hydrateIcons();
+    const mode = currentWorkspaceMode();
+    state.tab = mode;
     renderProposalFolders();
     renderKitFolders();
     await loadProducts();
-    await Promise.all([loadProposals(), loadKits()]);
-    setTab('proposals');
+    if (mode === 'kits') {
+      await loadKits();
+      setTab('kits', { skipLoad: true });
+    } else {
+      await Promise.all([loadProposals(), loadKits()]);
+      setTab('proposals', { skipLoad: true });
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
