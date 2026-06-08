@@ -3903,3 +3903,320 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   position: relative;
   z-index: 1;
 }
+
+
+/* =========================================================
+   Orders pages dock-style status toolbar
+   - Current Orders + Operations Orders + Orders Review only
+   - Makes the type filter the left rail, like the mobile Home rail
+   - Makes status tabs an icon-only black dock, matching the bottom sidebar
+   ========================================================= */
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar{
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  margin: 12px 0 18px !important;
+  padding: 0 !important;
+  width: 100% !important;
+  overflow: visible !important;
+  isolation: isolate !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter{
+  order: 0 !important;
+  flex: 0 0 88px !important;
+  width: 88px !important;
+  height: 76px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  z-index: 4 !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button{
+  width: 88px !important;
+  min-width: 88px !important;
+  height: 76px !important;
+  min-height: 76px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 0 !important;
+  border: none !important;
+  border-radius: 30px !important;
+  background: #0B0C10 !important;
+  color: rgba(255,255,255,0.94) !important;
+  box-shadow: 0 18px 40px rgba(15,23,42,0.18) !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button:hover,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-open .orders-type-filter__button,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-filtered .orders-type-filter__button{
+  background: #0B0C10 !important;
+  color: #FFFFFF !important;
+  border: none !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon{
+  width: 46px !important;
+  height: 46px !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255,255,255,0.09) !important;
+  color: currentColor !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon svg{
+  width: 23px !important;
+  height: 23px !important;
+  stroke-width: 2.4 !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-filtered .orders-type-filter__button-icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-open .orders-type-filter__button-icon{
+  background: #FFFFFF !important;
+  color: #0B0C10 !important;
+  box-shadow: 0 12px 24px rgba(255,255,255,0.16) !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-label,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .order-status-tab__label{
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-dot{
+  position: absolute !important;
+  right: 18px !important;
+  top: 18px !important;
+  width: 9px !important;
+  height: 9px !important;
+  background: #FF5A1F !important;
+  box-shadow: 0 0 0 4px rgba(255,90,31,0.18) !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__divider{
+  order: 1 !important;
+  flex: 0 0 10px !important;
+  width: 10px !important;
+  height: 26px !important;
+  display: block !important;
+  align-self: center !important;
+  border-radius: 999px !important;
+  background: #0B0C10 !important;
+  box-shadow: 0 8px 14px rgba(15,23,42,0.10) !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll{
+  order: 2 !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  height: 76px !important;
+  padding: 0 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  border-radius: 30px !important;
+  background: #0B0C10 !important;
+  box-shadow: 0 18px 40px rgba(15,23,42,0.18) !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll::-webkit-scrollbar{
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs{
+  --orders-active-tab-opacity: 0 !important;
+  width: max-content !important;
+  min-width: 100% !important;
+  height: 100% !important;
+  min-height: 76px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  margin: 0 !important;
+  padding: 4px 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs::before{
+  content: none !important;
+  display: none !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio{
+  flex: 0 0 52px !important;
+  width: 52px !important;
+  min-width: 52px !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  background: transparent !important;
+  color: rgba(255,255,255,0.72) !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio:hover{
+  background: rgba(255,255,255,0.08) !important;
+  color: #FFFFFF !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.active,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.is-active,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio[aria-selected="true"]{
+  background: #FFFFFF !important;
+  color: #0B0C10 !important;
+  box-shadow: 0 12px 26px rgba(255,255,255,0.14), 0 12px 24px rgba(0,0,0,0.18) !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .order-status-tab__icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.active .order-status-tab__icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.is-active .order-status-tab__icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio[aria-selected="true"] .order-status-tab__icon{
+  width: 24px !important;
+  height: 24px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: currentColor !important;
+  box-shadow: none !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .order-status-tab__icon svg{
+  width: 22px !important;
+  height: 22px !important;
+  stroke-width: 2.35 !important;
+}
+
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__panel{
+  top: calc(100% + 12px) !important;
+  left: 0 !important;
+  right: auto !important;
+  z-index: 80 !important;
+}
+
+@media (max-width: 768px){
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar{
+    gap: 10px !important;
+    margin: 10px 0 18px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter,
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button{
+    flex-basis: 74px !important;
+    width: 74px !important;
+    min-width: 74px !important;
+    height: 68px !important;
+    min-height: 68px !important;
+    border-radius: 26px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon{
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon svg{
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__divider{
+    flex-basis: 8px !important;
+    width: 8px !important;
+    height: 24px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll{
+    height: 68px !important;
+    padding: 0 8px !important;
+    border-radius: 26px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs{
+    min-height: 68px !important;
+    gap: 8px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio{
+    flex-basis: 48px !important;
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    border-radius: 17px !important;
+  }
+}
+
+@media (max-width: 420px){
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar{
+    gap: 8px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter,
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button{
+    flex-basis: 66px !important;
+    width: 66px !important;
+    min-width: 66px !important;
+    height: 62px !important;
+    min-height: 62px !important;
+    border-radius: 24px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon{
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll{
+    height: 62px !important;
+    border-radius: 24px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs{
+    min-height: 62px !important;
+    gap: 7px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio{
+    flex-basis: 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 16px !important;
+  }
+
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .order-status-tab__icon svg{
+    width: 20px !important;
+    height: 20px !important;
+  }
+}
