@@ -410,7 +410,7 @@
           </div>
         </div>
         <div class="products-proposal-tool-card">
-          <div class="products-proposal-tool-title"><i data-feather="box"></i><span>Add saved kit</span></div>
+          <div class="products-proposal-tool-title"><i data-feather="briefcase"></i><span>Add saved kit</span></div>
           <div class="products-proposal-control-grid proposals-kit-grid">
             ${kitSelectHTML('proposalKitSelect')}
             <label class="products-field products-field--qty"><span>Qty</span><input id="proposalKitQty" type="number" min="1" step="1" value="1" inputmode="numeric" /></label>

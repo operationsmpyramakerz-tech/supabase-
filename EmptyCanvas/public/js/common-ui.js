@@ -2069,6 +2069,16 @@ if (document.querySelector('.sidebar')) {
     }
 
 
+
+  function normalizeKitsSidebarIcon(){
+    try {
+      document.querySelectorAll('a[href="/kits"] i[data-feather="box"]').forEach((icon) => {
+        icon.setAttribute('data-feather', 'briefcase');
+      });
+      hydratePendingFeatherIcons();
+    } catch {}
+  }
+
   function removeSidebarMailLinks(){
     try {
       document.querySelectorAll('.sidebar a[href="/messages"], .sidebar a[href="/emails"]').forEach((link) => {
@@ -2460,7 +2470,8 @@ if (document.querySelector('.sidebar')) {
   ensureLink({ href: '/home', label: 'Home', icon: 'home', prepend: true });
   ensureLink({ href: '/products', label: 'Products', icon: 'package', beforeHref: '/orders/sv-orders' });
   ensureLink({ href: '/proposals', label: 'Proposals', icon: 'file-text', beforeHref: '/orders/sv-orders' });
-  ensureLink({ href: '/kits', label: 'Kits', icon: 'box', beforeHref: '/orders/sv-orders' });
+  ensureLink({ href: '/kits', label: 'Kits', icon: 'briefcase', beforeHref: '/orders/sv-orders' });
+  normalizeKitsSidebarIcon();
   removeSidebarMailLinks();
   ensureLink({ href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' });
   ensureLink({ href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' });
