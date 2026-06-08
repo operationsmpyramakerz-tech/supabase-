@@ -1532,6 +1532,56 @@
       }
     }
 </style>
+
+<style>
+  /* 2026-06-08: floating Add action and folders-only white card for B2B */
+  .b2b-wrap{
+    display:flex !important;
+    flex-direction:column !important;
+    gap:18px !important;
+  }
+  .b2b-floating-actions{
+    display:flex !important;
+    justify-content:flex-end !important;
+    align-items:center !important;
+    width:100% !important;
+    padding:0 !important;
+    margin:0 !important;
+    background:transparent !important;
+    border:0 !important;
+    box-shadow:none !important;
+  }
+  .b2b-folders-card{
+    background:rgba(255,255,255,.96) !important;
+    border:1px solid rgba(255,255,255,.78) !important;
+    box-shadow:0 24px 60px rgba(15,23,42,.08) !important;
+    min-height:calc(100vh - 300px) !important;
+    padding:0 !important;
+    overflow:visible !important;
+  }
+  .b2b-floating-actions .b2b-add-school-btn{
+    width:auto !important;
+    min-height:50px !important;
+    border-radius:18px !important;
+    padding:0 24px !important;
+    background:linear-gradient(135deg,#fb923c 0%,#f97316 52%,#ea580c 100%) !important;
+    color:#fff !important;
+    box-shadow:0 18px 34px rgba(249,115,22,.30) !important;
+    border:0 !important;
+  }
+  .b2b-floating-actions .b2b-add-school-btn:hover{
+    transform:translateY(-2px) !important;
+    box-shadow:0 22px 42px rgba(249,115,22,.36) !important;
+  }
+  @media (max-width:900px){
+    .b2b-floating-actions{
+      justify-content:stretch !important;
+    }
+    .b2b-floating-actions .b2b-add-school-btn{
+      width:100% !important;
+    }
+  }
+</style>
 </head>
 <body class="permissions-loading">
 <script>
@@ -1605,20 +1655,14 @@
 
     <main class="container-full-width">
       <div class="b2b-wrap">
-        <section class="card b2b-card-shell">
-          <div class="b2b-section-head">
-            <div class="card-header">
-              <div class="b2b-head-copy">
-                <h2>B2B</h2>
-                <p>Saved school folders ready to open and manage.</p>
-              </div>
-              <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
-                <i data-feather="plus-circle"></i>
-                <span>Add</span>
-              </button>
-            </div>
-          </div>
+        <div class="b2b-floating-actions">
+          <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
+            <i data-feather="plus-circle"></i>
+            <span>Add</span>
+          </button>
+        </div>
 
+        <section class="card b2b-card-shell b2b-folders-card">
           <div id="b2b-schools" class="b2b-grid" aria-live="polite">
             <div class="b2b-loading">Loading schools…</div>
           </div>
