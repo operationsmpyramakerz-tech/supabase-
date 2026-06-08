@@ -3825,3 +3825,45 @@ body.login-success-active {
     box-shadow: none !important;
   }
 }
+
+
+/* =========================================================
+   Current Orders visual experiment
+   - Let the system cover image stay visible lower on the page.
+   - Remove only the large white wrapper behind the order cards.
+   ========================================================= */
+body.current-orders-page.ops-has-system-cover:not(.shell-embedded) .main-content::before{
+  height: clamp(360px, 46vh, 540px);
+  background-image:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.03) 0%,
+      rgba(255,255,255,0.14) 42%,
+      rgba(255,255,255,0.48) 76%,
+      #FFFFFF 100%),
+    var(--ops-system-cover-image);
+}
+
+body.current-orders-page.ops-has-system-cover:not(.shell-embedded) .main-content::after{
+  height: clamp(390px, 50vh, 580px);
+  background:
+    radial-gradient(circle at 74% 6%, rgba(255,255,255,0.28), transparent 34%),
+    linear-gradient(180deg,
+      rgba(255,255,255,0.00) 0%,
+      rgba(255,255,255,0.12) 56%,
+      rgba(255,255,255,0.68) 88%,
+      #FFFFFF 100%);
+}
+
+body.current-orders-page #current-orders.card{
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 4px 18px !important;
+  backdrop-filter: none !important;
+}
+
+body.current-orders-page #orders-list.co-cards{
+  position: relative;
+  z-index: 1;
+}
