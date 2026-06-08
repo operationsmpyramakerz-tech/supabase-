@@ -1522,9 +1522,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabs = products.map(statusTabForItem);
     const allArchived = tabs.every((tab) => tab === 'archive');
     if (allArchived) return 'archive';
-    if (tabs.includes('rejected')) return 'rejected';
+
+    // Current Orders card summary should show the latest workflow stage once any
+    // component has moved forward. A mixed Approved/Rejected pill is only for the
+    // review-decision stage; after one approved component becomes Shipping or
+    // Arrived, that newer stage must be the outer card label.
     if (tabs.includes('arrived')) return 'arrived';
     if (tabs.includes('shipped')) return 'shipped';
+    if (tabs.includes('rejected')) return 'rejected';
     if (tabs.includes('approved')) return 'approved';
     return 'under-supervision';
   }
