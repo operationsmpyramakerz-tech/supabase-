@@ -723,6 +723,58 @@
     border: 2px solid #FFFFFF;
   }
 
+
+
+  .page-account .profile-image-remove{
+    -webkit-appearance: none;
+    appearance: none;
+    position: absolute;
+    min-height: 38px;
+    padding: 0 0.85rem;
+    border: 2px solid #FFFFFF;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.96);
+    color: #B91C1C;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
+    font-size: 0.78rem;
+    font-weight: 850;
+    line-height: 1;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    z-index: 6;
+    cursor: pointer;
+    transition: transform .18s ease, background .18s ease, box-shadow .18s ease, opacity .18s ease;
+  }
+
+  .page-account .profile-image-remove:hover{
+    transform: translateY(-1px);
+    background: #FEF2F2;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.22);
+  }
+
+  .page-account .profile-image-remove:disabled,
+  .page-account .profile-image-remove.is-removing{
+    opacity: 0.65;
+    cursor: wait;
+  }
+
+  .page-account .profile-image-remove svg{
+    width: 15px;
+    height: 15px;
+  }
+
+  .page-account .profile-cover-remove{
+    right: 72px;
+    bottom: 20px;
+  }
+
+  .page-account .profile-avatar-remove{
+    right: -24px;
+    bottom: -14px;
+  }
+
   .page-account .profile-identity-name{
     margin: 0;
     color: #0F172A;
@@ -780,6 +832,23 @@
     .page-account .profile-cover-edit{
       right: 14px;
       bottom: 14px;
+    }
+
+
+    .page-account .profile-image-remove{
+      min-height: 32px;
+      padding: 0 0.65rem;
+      font-size: 0.72rem;
+    }
+
+    .page-account .profile-cover-remove{
+      right: 54px;
+      bottom: 15px;
+    }
+
+    .page-account .profile-avatar-remove{
+      right: -18px;
+      bottom: -18px;
     }
   }
 </style>
