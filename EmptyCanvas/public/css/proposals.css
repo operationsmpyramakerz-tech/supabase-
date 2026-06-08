@@ -1038,3 +1038,212 @@
     max-width:none;
   }
 }
+
+/* 2026-06-08: iOS work-files style cards for proposal/kit folders */
+.proposals-page .products-proposal-folders{
+  grid-template-columns:repeat(auto-fill, minmax(260px, 280px)) !important;
+  justify-content:center !important;
+  gap:34px 28px !important;
+}
+.proposals-page .products-proposal-folder{
+  height:255px !important;
+  min-height:255px !important;
+  border:1px solid rgba(15,23,42,.06) !important;
+  border-radius:30px !important;
+  overflow:visible !important;
+  isolation:isolate !important;
+  background:
+    radial-gradient(circle at 24% 0%, rgba(255,255,255,.72) 0 12%, rgba(255,255,255,0) 30%),
+    linear-gradient(135deg, #70d7ff 0%, #1477ff 52%, #074bd9 100%) !important;
+  box-shadow:0 26px 52px rgba(15,23,42,.14) !important;
+  transform:none !important;
+}
+.proposals-page .products-proposal-folder:nth-child(3n+2){
+  background:
+    radial-gradient(circle at 78% 5%, rgba(255,255,255,.72) 0 14%, rgba(255,255,255,0) 34%),
+    linear-gradient(135deg, #ff0f38 0%, #ff4577 50%, #ffd3dd 100%) !important;
+}
+.proposals-page .products-proposal-folder:nth-child(3n){
+  background:
+    radial-gradient(circle at 22% 0%, rgba(255,255,255,.72) 0 12%, rgba(255,255,255,0) 30%),
+    linear-gradient(135deg, #9b5cff 0%, #4f46e5 52%, #081a57 100%) !important;
+}
+.proposals-page .products-proposal-folder:hover{
+  transform:translateY(-5px) !important;
+  box-shadow:0 32px 62px rgba(15,23,42,.18) !important;
+}
+.proposals-page .products-proposal-folder__main{
+  position:absolute !important;
+  inset:0 !important;
+  min-height:0 !important;
+  padding:0 !important;
+  display:block !important;
+  border-radius:30px !important;
+  overflow:hidden !important;
+  background:transparent !important;
+  text-align:left !important;
+}
+.proposals-page .products-proposal-folder__main::before{
+  content:'';
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:152px;
+  z-index:2;
+  border-radius:0 0 30px 30px;
+  background:#272727;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+.proposals-page .products-proposal-folder__main::after{
+  content:'';
+  position:absolute;
+  left:0;
+  top:79px;
+  width:176px;
+  height:54px;
+  z-index:2;
+  background:#272727;
+  clip-path:polygon(0 0, 106px 0, 176px 54px, 0 54px);
+}
+.proposals-page .proposal-folder-figure{
+  position:absolute !important;
+  top:40px !important;
+  left:50% !important;
+  z-index:1 !important;
+  width:196px !important;
+  height:116px !important;
+  margin:0 !important;
+  transform:translateX(-50%) !important;
+  pointer-events:none !important;
+}
+.proposals-page .proposal-folder-figure__paper{
+  position:absolute !important;
+  top:0 !important;
+  width:84px !important;
+  height:96px !important;
+  border-radius:12px !important;
+  border:1px solid rgba(15,23,42,.05) !important;
+  background:linear-gradient(180deg,#ffffff 0%,#fafafa 100%) !important;
+  box-shadow:0 14px 24px rgba(15,23,42,.16) !important;
+}
+.proposals-page .proposal-folder-figure__paper::before{
+  content:'' !important;
+  position:absolute !important;
+  left:14px !important;
+  right:14px !important;
+  top:18px !important;
+  height:5px !important;
+  border-radius:999px !important;
+  background:rgba(203,213,225,.55) !important;
+  box-shadow:0 18px 0 rgba(203,213,225,.42), 0 36px 0 rgba(203,213,225,.32) !important;
+}
+.proposals-page .proposal-folder-figure__paper--left{
+  left:18px !important;
+  transform:rotate(-6deg) !important;
+}
+.proposals-page .proposal-folder-figure__paper--middle{
+  left:56px !important;
+  top:-7px !important;
+  z-index:2 !important;
+  transform:rotate(1deg) !important;
+}
+.proposals-page .proposal-folder-figure__paper--right{
+  right:18px !important;
+  transform:rotate(7deg) !important;
+}
+.proposals-page .proposal-folder-figure__back,
+.proposals-page .proposal-folder-figure__front{
+  display:none !important;
+}
+.proposals-page .proposal-folder-copy{
+  position:absolute !important;
+  left:26px !important;
+  right:58px !important;
+  top:124px !important;
+  z-index:4 !important;
+  display:block !important;
+  min-width:0 !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-copy strong{
+  display:block !important;
+  width:100% !important;
+  margin:0 0 7px !important;
+  color:#fff !important;
+  font-size:1.16rem !important;
+  line-height:1.05 !important;
+  font-weight:850 !important;
+  letter-spacing:-.03em !important;
+  text-align:left !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-copy em{
+  display:block !important;
+  margin:0 !important;
+  color:rgba(255,255,255,.38) !important;
+  font-size:.91rem !important;
+  line-height:1.15 !important;
+  font-style:normal !important;
+  font-weight:750 !important;
+  text-align:left !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-count{
+  position:absolute !important;
+  left:26px !important;
+  right:20px !important;
+  bottom:27px !important;
+  z-index:4 !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:8px !important;
+  width:auto !important;
+  color:rgba(255,255,255,.72) !important;
+  font-size:.94rem !important;
+  font-weight:750 !important;
+  text-align:left !important;
+  white-space:nowrap !important;
+}
+.proposals-page .proposal-folder-count svg{
+  width:17px !important;
+  height:17px !important;
+  stroke-width:2.4 !important;
+  color:rgba(255,255,255,.65) !important;
+}
+.proposals-page .proposal-folder-menu-btn{
+  top:119px !important;
+  right:22px !important;
+  z-index:8 !important;
+  width:31px !important;
+  height:31px !important;
+  min-width:31px !important;
+  min-height:31px !important;
+  border-radius:999px !important;
+  background:transparent !important;
+  color:rgba(255,255,255,.86) !important;
+  box-shadow:none !important;
+}
+.proposals-page .proposal-folder-menu-btn:hover,
+.proposals-page .proposal-folder-menu-btn[aria-expanded="true"]{
+  background:rgba(255,255,255,.10) !important;
+  color:#fff !important;
+}
+.proposals-page .proposal-menu-dots{
+  color:rgba(255,255,255,.86) !important;
+  font-size:19px !important;
+  letter-spacing:1.5px !important;
+}
+.proposals-page .proposal-folder-menu{
+  top:153px !important;
+  right:16px !important;
+  z-index:30 !important;
+}
+@media (max-width: 640px){
+  .proposals-page .products-proposal-folders{
+    grid-template-columns:minmax(0, 280px) !important;
+  }
+}
