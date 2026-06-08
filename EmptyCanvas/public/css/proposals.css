@@ -1872,3 +1872,68 @@
 .proposals-page .proposal-folder-menu-btn{
   z-index:5 !important;
 }
+
+
+/* 2026-06-08: floating create action for Proposals/Kits and folders-only white card */
+.proposals-page .products-shell.proposals-shell{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:18px !important;
+}
+.proposals-page .proposals-floating-actions{
+  display:flex !important;
+  justify-content:flex-end !important;
+  align-items:center !important;
+  width:100% !important;
+  padding:0 !important;
+  margin:0 !important;
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+.proposals-page.proposal-detail-open .proposals-floating-actions{
+  display:none !important;
+}
+.proposals-page .proposals-folders-card{
+  margin-top:0 !important;
+  background:rgba(255,255,255,.96) !important;
+  border:1px solid rgba(255,255,255,.78) !important;
+  box-shadow:var(--products-shadow-soft) !important;
+  padding:20px 24px 28px !important;
+  min-height:calc(100vh - 300px) !important;
+}
+.proposals-page .proposals-folders-card .proposals-panel{
+  padding-top:0 !important;
+}
+.proposals-page .proposals-folders-card .products-proposals-list{
+  min-height:210px !important;
+}
+.proposals-page .proposals-folders-card .products-proposal-folders{
+  padding-top:0 !important;
+}
+.proposals-page .proposals-create-btn{
+  min-height:50px !important;
+  border-radius:18px !important;
+  padding:0 24px !important;
+  background:linear-gradient(135deg,#fb923c 0%,#f97316 52%,#ea580c 100%) !important;
+  color:#fff !important;
+  box-shadow:0 18px 34px rgba(249,115,22,.30) !important;
+  border:0 !important;
+}
+.proposals-page .proposals-create-btn:hover{
+  transform:translateY(-2px) !important;
+  box-shadow:0 22px 42px rgba(249,115,22,.36) !important;
+}
+@media (max-width:900px){
+  .proposals-page .proposals-floating-actions{
+    justify-content:stretch !important;
+  }
+  .proposals-page .proposals-floating-actions .proposals-create-btn{
+    width:100% !important;
+  }
+}
+@media (max-width:640px){
+  .proposals-page .proposals-folders-card{
+    padding:18px 16px 24px !important;
+  }
+}
