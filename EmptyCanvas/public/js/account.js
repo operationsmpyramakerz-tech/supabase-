@@ -25,9 +25,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     required: false,
     isFileUpload: true,
     placeholder: 'Selected image',
+    endpoint: '/api/account/profile-picture',
+    responseKey: 'photoUrl',
+    successMessage: 'Profile picture updated successfully.',
+  };
+
+  const COVER_PHOTO_META = {
+    key: 'coverPhoto',
+    label: 'Cover photo',
+    icon: 'image',
+    inputType: 'text',
+    required: false,
+    isFileUpload: true,
+    placeholder: 'Selected cover image',
+    endpoint: '/api/account/cover-photo',
+    responseKey: 'coverPhotoUrl',
+    successMessage: 'Cover photo updated successfully.',
   };
 
   let pendingProfilePicture = null;
+  let pendingCoverPhoto = null;
 
   // ===== Helpers =====
   function toast(type, title, message) {
@@ -96,25 +113,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
   }
 
-  function profileAvatarSection() {
+  function profileAvatarMarkup() {
     const photoUrl = String(state?.photoUrl || '').trim();
     const displayName = String(state?.name || 'User').trim() || 'User';
-    const preview = photoUrl
-      ? `<img class="profile-avatar-image" src="${escapeHTML(photoUrl)}" width="156" height="156" decoding="async" alt="${escapeHTML(displayName)} profile picture" />`
+    return photoUrl
+      ? `<img class="profile-avatar-image" src="${escapeHTML(photoUrl)}" width="142" height="142" decoding="async" alt="${escapeHTML(displayName)} profile picture" />`
       : `<span class="profile-avatar-fallback" aria-hidden="true">${escapeHTML(initialsFromName(displayName))}</span>`;
+  }
+
+  function profileHeroSection() {
+    const coverPhotoUrl = String(state?.coverPhotoUrl || '').trim();
+    const displayName = String(state?.name || 'User').trim() || 'User';
+    const department = String(state?.department || '').trim();
+    const position = String(state?.position || '').trim();
+    const subtitle = [department, position].filter(Boolean).join('  |  ') || 'Team Member';
+    const coverMarkup = coverPhotoUrl
+      ? `<img class="profile-cover-image" src="${escapeHTML(coverPhotoUrl)}" decoding="async" alt="${escapeHTML(displayName)} cover photo" />`
+      : `<div class="profile-cover-fallback" aria-hidden="true"></div>`;
 
     return `
-      <div class="profile-avatar-section" data-field="profilePicture">
-        <div class="profile-avatar-shell">
-          <button class="profile-avatar-display" type="button" aria-label="Change profile picture" title="Change profile picture">
-            ${preview}
+      <section class="profile-hero-section" aria-label="User profile header">
+        <div class="profile-cover-section" data-field="coverPhoto">
+          <button class="profile-cover-display" type="button" aria-label="Change cover photo" title="Change cover photo">
+            ${coverMarkup}
           </button>
-          <button class="profile-avatar-edit" type="button" aria-label="Edit profile picture" title="Edit profile picture">
-            <i data-feather="camera"></i>
+          <button class="profile-cover-edit" type="button" aria-label="Edit cover photo" title="Edit cover photo">
+            <i data-feather="edit-2"></i>
           </button>
-          <input class="acc-file-input" type="file" accept="image/*" hidden />
+          <input class="acc-file-input profile-cover-file-input" data-upload-field="coverPhoto" type="file" accept="image/*" hidden />
         </div>
-      </div>
+
+        <div class="profile-identity-block">
+          <div class="profile-avatar-section" data-field="profilePicture">
+            <div class="profile-avatar-shell">
+              <button class="profile-avatar-display" type="button" aria-label="Change profile picture" title="Change profile picture">
+                ${profileAvatarMarkup()}
+              </button>
+              <button class="profile-avatar-edit" type="button" aria-label="Edit profile picture" title="Edit profile picture">
+                <i data-feather="edit-2"></i>
+              </button>
+              <input class="acc-file-input profile-avatar-file-input" data-upload-field="profilePicture" type="file" accept="image/*" hidden />
+            </div>
+          </div>
+          <h2 class="profile-identity-name">${escapeHTML(displayName)}</h2>
+          <div class="profile-identity-subtitle">${escapeHTML(subtitle)}</div>
+        </div>
+      </section>
     `;
   }
 
@@ -206,7 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function render() {
     container.innerHTML = `
       <div class="account-panel account-panel--profile account-profile-modern">
-        ${profileAvatarSection()}
+        ${profileHeroSection()}
         <div class="profile-fields-list">
           ${FIELD_META.map(profileFieldCard).join('')}
         </div>
@@ -288,9 +332,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     return true;
   }
 
-  async function handleProfilePictureUpload(file, inputEl, buttonEl, currentPassword) {
+  function pendingUploadForField(field) {
+    return field === COVER_PHOTO_META.key ? pendingCoverPhoto : pendingProfilePicture;
+  }
+
+  function setPendingUploadForField(field, value) {
+    if (field === COVER_PHOTO_META.key) pendingCoverPhoto = value;
+    else pendingProfilePicture = value;
+  }
+
+  function imageMetaForField(field) {
+    return field === COVER_PHOTO_META.key ? COVER_PHOTO_META : PROFILE_PICTURE_META;
+  }
+
+  async function handleAccountImageUpload(meta, file, inputEl, buttonEl, currentPassword) {
     const selected = file || null;
-    if (!selected) return false;
+    if (!selected || !meta?.endpoint) return false;
 
     if (buttonEl) {
       buttonEl.disabled = true;
@@ -301,12 +358,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       const dataUrl = await fileToDataUrl(selected);
-      const res = await fetch('/api/account/profile-picture', {
+      const res = await fetch(meta.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({
-          filename: selected.name || 'profile-picture.png',
+          filename: selected.name || 'account-image.png',
           dataUrl,
           currentPassword: String(currentPassword || '').trim(),
         }),
@@ -317,13 +374,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error(json.error || `Request failed (${res.status})`);
       }
 
-      state.photoUrl = String(json.photoUrl || '').trim();
+      const returnedUrl = String(json?.[meta.responseKey] || '').trim();
+      if (meta.key === COVER_PHOTO_META.key) state.coverPhotoUrl = returnedUrl;
+      else state.photoUrl = returnedUrl;
+
+      setPendingUploadForField(meta.key, null);
       render();
       try { window.dispatchEvent(new Event('user:updated')); } catch {}
-      toast('success', 'Saved', 'Profile picture updated successfully.');
+      toast('success', 'Saved', meta.successMessage || `${meta.label} updated successfully.`);
       return true;
     } catch (e) {
-      toast('error', 'Upload failed', e.message === 'invalid password' ? 'invalid password' : 'Failed to update profile picture.');
+      toast('error', 'Upload failed', e.message === 'invalid password' ? 'invalid password' : (e.message || `Failed to update ${String(meta.label || 'image').toLowerCase()}.`));
       return false;
     } finally {
       if (inputEl) inputEl.value = '';
@@ -331,9 +392,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         buttonEl.disabled = false;
         buttonEl.classList.remove('is-uploading');
         buttonEl.removeAttribute('aria-busy');
-        buttonEl.setAttribute('title', 'Edit profile picture');
+        buttonEl.setAttribute('title', `Edit ${String(meta.label || 'image').toLowerCase()}`);
       }
-      pendingProfilePicture = null;
       if (window.feather) feather.replace();
     }
   }
@@ -428,7 +488,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   function openModalForField(fieldKey, options = {}) {
     const meta = fieldKey === PROFILE_PICTURE_META.key
       ? PROFILE_PICTURE_META
-      : FIELD_META.find((m) => m.key === fieldKey);
+      : (fieldKey === COVER_PHOTO_META.key
+        ? COVER_PHOTO_META
+        : FIELD_META.find((m) => m.key === fieldKey));
     if (!meta || !modalEl) return;
 
     const isProfilePicture = !!meta.isFileUpload;
@@ -504,7 +566,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function closeModal(options = {}) {
     if (!modalEl) return;
     const preservePendingProfilePicture = !!options.preservePendingProfilePicture;
-    const closingProfilePicture = !!(activeField && activeField.key === PROFILE_PICTURE_META.key);
+    const closingUploadField = activeField && activeField.isFileUpload ? activeField.key : '';
 
     modalEl.style.display = 'none';
     modalEl.setAttribute('aria-hidden', 'true');
@@ -530,9 +592,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (togglePassBtn && passInput) syncToggleVisual(togglePassBtn, passInput);
     setModalError('');
 
-    if (closingProfilePicture && !preservePendingProfilePicture) {
-      try { pendingProfilePicture?.inputEl && (pendingProfilePicture.inputEl.value = ''); } catch {}
-      pendingProfilePicture = null;
+    if (closingUploadField && !preservePendingProfilePicture) {
+      const pending = pendingUploadForField(closingUploadField);
+      try { pending?.inputEl && (pending.inputEl.value = ''); } catch {}
+      setPendingUploadForField(closingUploadField, null);
     }
   }
 
@@ -582,7 +645,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Reset error message on every submit
     setModalError('');
 
-    if (isProfilePicture && !(pendingProfilePicture && pendingProfilePicture.file)) {
+    if (isProfilePicture && !(pendingUploadForField(field) && pendingUploadForField(field).file)) {
       toast('warning', 'Image required', 'Please choose an image first.');
       closeModal();
       return;
@@ -632,10 +695,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       showSavingOverlay();
 
       if (isProfilePicture) {
-        await handleProfilePictureUpload(
-          pendingProfilePicture?.file || null,
-          pendingProfilePicture?.inputEl || null,
-          pendingProfilePicture?.buttonEl || null,
+        const pendingUpload = pendingUploadForField(field);
+        await handleAccountImageUpload(
+          imageMetaForField(field),
+          pendingUpload?.file || null,
+          pendingUpload?.inputEl || null,
+          pendingUpload?.buttonEl || null,
           currentPassword,
         );
         return;
@@ -709,6 +774,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           ? String(data.employeeCode ?? '').trim()
           : '',
         photoUrl: data.photoUrl || '',
+        coverPhotoUrl: data.coverPhotoUrl || '',
         filesMedia: normalizeFilesMedia(data.filesMedia),
         passwordSet: !!data.passwordSet,
       };
@@ -727,6 +793,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Event delegation for edit button
   container.addEventListener('click', (e) => {
+    const coverEditBtn = e.target.closest('.profile-cover-edit, .profile-cover-display');
+    if (coverEditBtn) {
+      const coverSection = coverEditBtn.closest('.profile-cover-section');
+      const fileInput = coverSection?.querySelector('.acc-file-input');
+      fileInput?.click?.();
+      return;
+    }
+
     const avatarEditBtn = e.target.closest('.profile-avatar-edit, .profile-avatar-display');
     if (avatarEditBtn) {
       const avatarSection = avatarEditBtn.closest('.profile-avatar-section');
@@ -749,13 +823,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const input = e.target.closest('.acc-file-input');
     if (!input) return;
     const file = input.files && input.files[0] ? input.files[0] : null;
-    const avatarSection = input.closest('.profile-avatar-section');
-    const buttonEl = avatarSection?.querySelector('.profile-avatar-edit') || null;
+    const field = String(input.dataset.uploadField || '').trim() || (input.closest('.profile-cover-section') ? COVER_PHOTO_META.key : PROFILE_PICTURE_META.key);
+    const meta = imageMetaForField(field);
+    const hostSection = input.closest(field === COVER_PHOTO_META.key ? '.profile-cover-section' : '.profile-avatar-section');
+    const buttonEl = hostSection?.querySelector(field === COVER_PHOTO_META.key ? '.profile-cover-edit' : '.profile-avatar-edit') || null;
 
     if (!validateProfilePictureFile(file, input)) return;
 
-    pendingProfilePicture = { file, inputEl: input, buttonEl };
-    openModalForField(PROFILE_PICTURE_META.key, { fileName: file?.name || '' });
+    setPendingUploadForField(field, { file, inputEl: input, buttonEl });
+    openModalForField(field, { fileName: file?.name || '', placeholder: meta.placeholder });
   });
 
   // Init
