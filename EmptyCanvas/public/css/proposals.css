@@ -1834,3 +1834,41 @@
     gap:16px 14px !important;
   }
 }
+
+
+/* 2026-06-08: restore wide folder lip + kits briefcase icon polish */
+.proposals-page .products-proposal-folder__main::before{
+  height:86px !important;
+  border-radius:0 0 15px 15px !important;
+  background:#272727 !important;
+}
+.proposals-page .products-proposal-folder__main::after{
+  top:43px !important;
+  left:42px !important;
+  width:88px !important;
+  height:28px !important;
+  z-index:3 !important;
+  display:block !important;
+  background:#272727 !important;
+  border-radius:13px 13px 0 0 !important;
+  clip-path:polygon(0 100%, 18px 0, 62px 0, 88px 100%, 100% 100%) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07) !important;
+}
+.proposals-page .proposal-folder-figure{
+  top:16px !important;
+  z-index:1 !important;
+}
+.proposals-page .proposal-folder-copy{
+  top:70px !important;
+}
+.proposals-page .proposal-folder-menu-btn{
+  top:64px !important;
+}
+.proposals-page .proposal-folder-menu{
+  top:89px !important;
+}
+.proposals-page .products-proposal-folder__main .proposal-folder-copy,
+.proposals-page .products-proposal-folder__main .proposal-folder-count,
+.proposals-page .proposal-folder-menu-btn{
+  z-index:5 !important;
+}
