@@ -3911,7 +3911,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
    - Places the type filter on the right as an icon-only rail
    - Makes status tabs an icon-only white dock with black tabs
    ========================================================= */
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar{
   display: flex !important;
   align-items: center !important;
   gap: 14px !important;
@@ -3924,7 +3924,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   z-index: 70 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter{
   order: 2 !important;
   flex: 0 0 88px !important;
   width: 88px !important;
@@ -3936,7 +3936,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   z-index: 4 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button{
   width: 88px !important;
   min-width: 88px !important;
   height: 76px !important;
@@ -3952,40 +3952,40 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   box-shadow: 0 18px 40px rgba(15,23,42,0.14) !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button:hover,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-open .orders-type-filter__button,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-filtered .orders-type-filter__button{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button:hover,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open .orders-type-filter__button,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-filtered .orders-type-filter__button{
   background: #FFFFFF !important;
   color: #0B0C10 !important;
   border: none !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon{
   width: 46px !important;
   height: 46px !important;
   border-radius: 999px !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: #0B0C10 !important;
-  color: #FFFFFF !important;
+  background: transparent !important;
+  color: #0B0C10 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon svg{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon svg{
   width: 23px !important;
   height: 23px !important;
   stroke-width: 2.4 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-filtered .orders-type-filter__button-icon,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-open .orders-type-filter__button-icon{
-  background: #0B0C10 !important;
-  color: #FFFFFF !important;
-  box-shadow: 0 12px 24px rgba(15,23,42,0.18) !important;
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-filtered .orders-type-filter__button-icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open .orders-type-filter__button-icon{
+  background: transparent !important;
+  color: #0B0C10 !important;
+  box-shadow: none !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-label,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .order-status-tab__label{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-label,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .order-status-tab__label{
   position: absolute !important;
   width: 1px !important;
   height: 1px !important;
@@ -3997,7 +3997,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   border: 0 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-dot{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-dot{
   position: absolute !important;
   right: 18px !important;
   top: 18px !important;
@@ -4007,7 +4007,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   box-shadow: 0 0 0 4px rgba(255,90,31,0.18) !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__divider{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__divider{
   order: 1 !important;
   flex: 0 0 10px !important;
   width: 10px !important;
@@ -4019,7 +4019,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   box-shadow: 0 8px 14px rgba(15,23,42,0.10) !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__scroll{
   order: 0 !important;
   flex: 1 1 auto !important;
   min-width: 0 !important;
@@ -4036,13 +4036,13 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   -ms-overflow-style: none !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll::-webkit-scrollbar{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__scroll::-webkit-scrollbar{
   display: none !important;
   width: 0 !important;
   height: 0 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .portfolio-tabs{
   --orders-active-tab-opacity: 0 !important;
   width: max-content !important;
   min-width: 100% !important;
@@ -4062,12 +4062,12 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   overflow: visible !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs::before{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .portfolio-tabs::before{
   content: none !important;
   display: none !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio{
   flex: 0 0 52px !important;
   width: 52px !important;
   min-width: 52px !important;
@@ -4086,23 +4086,23 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   text-decoration: none !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio:hover{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio:hover{
   background: rgba(15,23,42,0.08) !important;
   color: #0B0C10 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.active,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.is-active,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio[aria-selected="true"]{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio.active,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio.is-active,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio[aria-selected="true"]{
   background: #0B0C10 !important;
   color: #FFFFFF !important;
   box-shadow: 0 12px 26px rgba(15,23,42,0.18) !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .order-status-tab__icon,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.active .order-status-tab__icon,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio.is-active .order-status-tab__icon,
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio[aria-selected="true"] .order-status-tab__icon{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .order-status-tab__icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio.active .order-status-tab__icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio.is-active .order-status-tab__icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio[aria-selected="true"] .order-status-tab__icon{
   width: 24px !important;
   height: 24px !important;
   border: none !important;
@@ -4112,13 +4112,13 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   box-shadow: none !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .order-status-tab__icon svg{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .order-status-tab__icon svg{
   width: 22px !important;
   height: 22px !important;
   stroke-width: 2.35 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__panel{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__panel{
   top: calc(100% + 12px) !important;
   left: auto !important;
   right: 0 !important;
@@ -4126,13 +4126,13 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 }
 
 @media (max-width: 768px){
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar{
     gap: 10px !important;
     margin: 10px 0 18px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter,
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter,
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button{
     flex-basis: 74px !important;
     width: 74px !important;
     min-width: 74px !important;
@@ -4141,34 +4141,34 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
     border-radius: 26px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon{
     width: 42px !important;
     height: 42px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon svg{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon svg{
     width: 22px !important;
     height: 22px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__divider{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__divider{
     flex-basis: 8px !important;
     width: 8px !important;
     height: 24px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__scroll{
     height: 68px !important;
     padding: 0 8px !important;
     border-radius: 26px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .portfolio-tabs{
     min-height: 68px !important;
     gap: 8px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio{
     flex-basis: 48px !important;
     width: 48px !important;
     min-width: 48px !important;
@@ -4179,12 +4179,12 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 }
 
 @media (max-width: 420px){
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar{
     gap: 8px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter,
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter,
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button{
     flex-basis: 66px !important;
     width: 66px !important;
     min-width: 66px !important;
@@ -4193,22 +4193,22 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
     border-radius: 24px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter__button-icon{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon{
     width: 38px !important;
     height: 38px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar__scroll{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__scroll{
     height: 62px !important;
     border-radius: 24px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .portfolio-tabs{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .portfolio-tabs{
     min-height: 62px !important;
     gap: 7px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .tab-portfolio{
     flex-basis: 44px !important;
     width: 44px !important;
     min-width: 44px !important;
@@ -4217,7 +4217,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
     border-radius: 16px !important;
   }
 
-  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .order-status-tab__icon svg{
+  :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar .order-status-tab__icon svg{
     width: 20px !important;
     height: 20px !important;
   }
@@ -4225,11 +4225,69 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 
 
 /* Orders toolbar v2: keep filter dropdown above the floating order cards. */
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar + section.card{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar + section.card{
   position: relative !important;
   z-index: 1 !important;
 }
 
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-type-filter.is-open{
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open{
   z-index: 10000 !important;
+}
+
+
+/* Orders toolbar v3: filter icon should be black with no inner dark circle; include Maintenance Orders. */
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter__button-icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-open .orders-type-filter__button-icon,
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-type-filter.is-filtered .orders-type-filter__button-icon{
+  background: transparent !important;
+  color: #0B0C10 !important;
+  box-shadow: none !important;
+}
+
+/* Sidebar safety: do not let the orders toolbar tab styling recolor the mobile page dock icons. */
+@media (max-width: 900px){
+  .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:not(.active),
+  .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:not(.active) svg{
+    color: rgba(255,255,255,0.72) !important;
+    stroke: currentColor !important;
+  }
+}
+
+
+/* Sidebar rollback v3: keep sidebar page icons in the original light color; orders toolbar styles must not make them black. */
+.sidebar .sidebar-nav .nav-link.active svg{
+  color: #FFFFFF !important;
+  stroke: currentColor !important;
+}
+
+@media (min-width: 901px){
+  .sidebar .sidebar-nav .nav-link.active{
+    background: var(--primary-color, #F97316) !important;
+    color: #FFFFFF !important;
+    border-color: transparent !important;
+    box-shadow: 0 8px 16px rgba(234,88,12,0.25) !important;
+  }
+}
+
+@media (max-width: 900px){
+  .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active{
+    background: rgba(255,255,255,0.12) !important;
+    color: #FFFFFF !important;
+    border-color: rgba(255,255,255,0.22) !important;
+    box-shadow: none !important;
+  }
+
+  .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg{
+    color: #FFFFFF !important;
+    stroke: currentColor !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg{
+    background: #FFFFFF !important;
+    color: #0B0C10 !important;
+    stroke: currentColor !important;
+    box-shadow: 0 12px 24px rgba(255,255,255,0.16) !important;
+  }
 }
