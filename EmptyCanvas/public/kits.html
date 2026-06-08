@@ -11,14 +11,14 @@
   <script src="/pwa-register.js" defer></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Proposals | Operations Hub</title>
+  <title>Kits | Operations Hub</title>
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=mobile-global-scroll-dock-balance-v1" rel="stylesheet" />
   <link href="/css/products.css?v=proposals-page-v1" rel="stylesheet" />
   <link href="/css/proposals.css?v=proposal-kits-split-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
-<body class="permissions-loading products-page proposals-page proposals-only-page" data-proposals-mode="proposals">
+<body class="permissions-loading products-page proposals-page kits-page" data-proposals-mode="kits">
   <script>
     (function() {
       try {
@@ -47,8 +47,8 @@
           <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
           <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
           <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
-          <li><a class="nav-link active" href="/proposals"><i data-feather="file-text"></i><span class="nav-label">Proposals</span></a></li>
-          <li><a class="nav-link" href="/kits"><i data-feather="box"></i><span class="nav-label">Kits</span></a></li>
+          <li><a class="nav-link" href="/proposals"><i data-feather="file-text"></i><span class="nav-label">Proposals</span></a></li>
+          <li><a class="nav-link active" href="/kits"><i data-feather="box"></i><span class="nav-label">Kits</span></a></li>
           <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
           <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
           <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
@@ -71,7 +71,7 @@
               <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
               <div class="greet-text">
                 <div class="greet-title">Hi, <span data-username>...</span> 👋</div>
-                <div class="greet-sub">Build reusable quotation lists.</div>
+                <div class="greet-sub">Build reusable component kits.</div>
               </div>
             </div>
           </div>
@@ -83,7 +83,7 @@
           </div>
         </div>
         <div class="header-row2">
-          <h1 class="page-title">Proposals</h1>
+          <h1 class="page-title">Kits</h1>
         </div>
       </header>
 
@@ -91,75 +91,45 @@
         <section class="products-proposals-view proposals-workspace" aria-live="polite">
           <header class="products-proposals-head proposals-main-head proposals-page-head">
             <div class="proposals-page-heading">
-              <h2>Proposals</h2>
-              <p>Saved quotation folders with their selected components.</p>
+              <h2>Kits</h2>
+              <p>Reusable component folders ready to add into proposals.</p>
             </div>
             <div class="proposals-main-create-actions">
-              <button type="button" class="products-add-btn proposals-create-btn" id="createProposalBtn">
-                <i data-feather="folder-plus"></i><span>Create New Proposal</span>
+              <button type="button" class="products-add-btn proposals-create-btn" id="createKitBtn">
+                <i data-feather="box"></i><span>Create New Kit</span>
               </button>
             </div>
           </header>
 
-          <section class="proposals-panel" id="proposalsPanel" role="tabpanel">
-            <div class="products-proposals-list" id="proposalsList"></div>
-            <section class="products-proposal-detail" id="proposalDetail" hidden></section>
+          <section class="proposals-panel" id="kitsPanel" role="tabpanel">
+            <div class="products-proposals-list" id="kitsList"></div>
+            <section class="products-proposal-detail" id="kitDetail" hidden></section>
           </section>
         </section>
       </main>
     </div>
   </div>
 
-  <div class="products-modal-overlay" id="proposalNameModal" aria-hidden="true" hidden>
-    <form class="products-modal products-proposal-modal" id="proposalNameForm" role="dialog" aria-modal="true" aria-labelledby="proposalNameModalTitle">
-      <button type="button" class="products-modal__close" id="proposalNameClose" aria-label="Close proposal form"><span aria-hidden="true">×</span></button>
+  <div class="products-modal-overlay" id="kitNameModal" aria-hidden="true" hidden>
+    <form class="products-modal products-proposal-modal" id="kitNameForm" role="dialog" aria-modal="true" aria-labelledby="kitNameModalTitle">
+      <button type="button" class="products-modal__close" id="kitNameClose" aria-label="Close kit form"><span aria-hidden="true">×</span></button>
       <div class="products-modal__header">
-        <div class="products-modal__icon"><i data-feather="folder-plus"></i></div>
+        <div class="products-modal__icon"><i data-feather="box"></i></div>
         <div>
-          <h2 id="proposalNameModalTitle">Create New Proposal</h2>
-          <p>Name the proposal folder so you can return to it later.</p>
+          <h2 id="kitNameModalTitle">Create New Kit</h2>
+          <p>Name the kit, then add its reusable components and quantities.</p>
         </div>
       </div>
       <div class="products-form-grid">
         <label class="products-field products-field--wide">
-          <span>Proposal Name <em>*</em></span>
-          <input id="proposalNameInput" type="text" autocomplete="off" required placeholder="Example: School supplies quotation" />
+          <span>Kit Name <em>*</em></span>
+          <input id="kitNameInput" type="text" autocomplete="off" required placeholder="Example: Arduino starter kit" />
         </label>
       </div>
-      <div class="products-form-error" id="proposalNameError" aria-live="polite"></div>
+      <div class="products-form-error" id="kitNameError" aria-live="polite"></div>
       <div class="products-modal__actions">
-        <button type="button" class="products-btn products-btn--light" id="proposalNameCancel">Cancel</button>
-        <button type="submit" class="products-btn products-btn--dark" id="proposalNameSave"><i data-feather="save"></i><span>Create Proposal</span></button>
-      </div>
-    </form>
-  </div>
-
-  <div class="products-modal-overlay" id="makeOrderModal" aria-hidden="true" hidden>
-    <form class="products-modal products-proposal-modal proposal-make-order-modal" id="makeOrderForm" role="dialog" aria-modal="true" aria-labelledby="makeOrderModalTitle">
-      <button type="button" class="products-modal__close" id="makeOrderClose" aria-label="Close make order form"><span aria-hidden="true">×</span></button>
-      <div class="products-modal__header">
-        <div class="products-modal__icon"><i data-feather="shopping-bag"></i></div>
-        <div>
-          <h2 id="makeOrderModalTitle">Make order</h2>
-          <p>Select the team member who will receive this full proposal order.</p>
-        </div>
-      </div>
-      <div class="products-form-grid">
-        <label class="products-field products-field--wide">
-          <span>Team Member <em>*</em></span>
-          <select id="makeOrderMember" required>
-            <option value="">Select team member</option>
-          </select>
-        </label>
-        <label class="products-field products-field--wide">
-          <span>Password <em>*</em></span>
-          <input id="makeOrderPassword" type="password" autocomplete="current-password" required placeholder="Enter selected user password" />
-        </label>
-      </div>
-      <div class="products-form-error" id="makeOrderError" aria-live="polite"></div>
-      <div class="products-modal__actions">
-        <button type="button" class="products-btn products-btn--light" id="makeOrderCancel">Cancel</button>
-        <button type="submit" class="products-btn products-btn--dark"><i data-feather="shopping-bag"></i><span>Create Order</span></button>
+        <button type="button" class="products-btn products-btn--light" id="kitNameCancel">Cancel</button>
+        <button type="submit" class="products-btn products-btn--dark" id="kitNameSave"><i data-feather="save"></i><span>Create Kit</span></button>
       </div>
     </form>
   </div>
