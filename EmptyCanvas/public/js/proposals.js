@@ -23,6 +23,8 @@
     teamMembers: [],
     proposalNameMode: 'create',
     kitNameMode: 'create',
+    proposalCreateMode: false,
+    kitCreateMode: false,
     copyProposalTarget: null,
     copyKitTarget: null,
   };
@@ -88,6 +90,96 @@
   function adminPasswordPrompt(message) {
     const value = window.prompt(message || 'Enter Admin password');
     return value === null ? null : String(value || '').trim();
+  }
+
+  function ensureProductsAdminModal() {
+    let modal = document.querySelector('[data-products-admin-modal]');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'products-modal-overlay products-admin-password-overlay';
+    modal.dataset.productsAdminModal = 'true';
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+      <form class="products-modal products-admin-password-modal" data-admin-form role="dialog" aria-modal="true" aria-labelledby="productsAdminPasswordTitle">
+        <button type="button" class="products-modal__close" data-admin-cancel aria-label="Close admin password"><span aria-hidden="true">×</span></button>
+        <div class="products-modal__header">
+          <div class="products-modal__icon"><i data-feather="shield"></i></div>
+          <div>
+            <h2 id="productsAdminPasswordTitle" data-admin-title>Admin password required</h2>
+            <p data-admin-message>Enter the Admin password to continue.</p>
+          </div>
+        </div>
+        <div class="products-form-grid">
+          <label class="products-field products-field--wide">
+            <span>Admin password <em>*</em></span>
+            <input type="password" autocomplete="current-password" required placeholder="Enter Admin password" data-admin-input />
+          </label>
+        </div>
+        <div class="products-form-error" data-admin-error aria-live="polite"></div>
+        <div class="products-modal__actions">
+          <button type="button" class="products-btn products-btn--light" data-admin-cancel>Cancel</button>
+          <button type="submit" class="products-btn products-btn--dark" data-admin-submit><i data-feather="lock"></i><span>Continue</span></button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(modal);
+    hydrateIcons(modal);
+    return modal;
+  }
+
+  function requestProductsAdminPassword({ title = 'Admin password required', message = 'Enter the Admin password to continue.' } = {}) {
+    const modal = ensureProductsAdminModal();
+    const form = modal.querySelector('[data-admin-form]');
+    const titleEl = modal.querySelector('[data-admin-title]');
+    const messageEl = modal.querySelector('[data-admin-message]');
+    const input = modal.querySelector('[data-admin-input]');
+    const error = modal.querySelector('[data-admin-error]');
+    const submit = modal.querySelector('[data-admin-submit]');
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = message;
+    if (input) input.value = '';
+    if (error) error.textContent = '';
+    if (submit) submit.disabled = false;
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('products-modal-open');
+    setTimeout(() => input && input.focus(), 40);
+
+    return new Promise((resolve) => {
+      const cleanup = (value) => {
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('products-modal-open');
+        form?.removeEventListener('submit', onSubmit);
+        modal.querySelectorAll('[data-admin-cancel]').forEach((node) => node.removeEventListener('click', onCancel));
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKeydown);
+        resolve(value);
+      };
+      const onCancel = (event) => { event.preventDefault(); cleanup(null); };
+      const onBackdrop = (event) => { if (event.target === modal) cleanup(null); };
+      const onKeydown = (event) => { if (event.key === 'Escape') cleanup(null); };
+      const onSubmit = async (event) => {
+        event.preventDefault();
+        const password = String(input?.value || '').trim();
+        if (!password) { if (error) error.textContent = 'Please enter the Admin password.'; return; }
+        if (submit) submit.disabled = true;
+        if (error) error.textContent = '';
+        try {
+          await api('/api/products/admin/verify', { method: 'POST', body: JSON.stringify({ password }) });
+          cleanup(password);
+        } catch (err) {
+          if (error) error.textContent = err?.message || 'Invalid Admin password.';
+          if (submit) submit.disabled = false;
+          setTimeout(() => input && input.focus(), 20);
+        }
+      };
+      form?.addEventListener('submit', onSubmit);
+      modal.querySelectorAll('[data-admin-cancel]').forEach((node) => node.addEventListener('click', onCancel));
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKeydown);
+    });
   }
 
   async function api(path, options = {}) {
@@ -369,18 +461,33 @@
   }
 
 
-  function editNameBlockHTML(kind, currentName) {
+  function editNameBlockHTML(kind, currentName, options = {}) {
     const isKit = kind === 'kit';
     const inputId = isKit ? 'kitEditNameInput' : 'proposalEditNameInput';
     const action = isKit ? 'save-kit-name' : 'save-proposal-name';
     const label = isKit ? 'Kit name' : 'Proposal name';
+    const placeholder = options.placeholder || (isKit ? 'Example: Arduino starter kit' : 'Example: City quotation');
+    const requiredMark = options.required ? ' <em>*</em>' : '';
     return `
-      <div class="proposal-name-edit-block">
+      <div class="proposal-name-edit-block ${options.createMode ? 'proposal-name-edit-block--create' : ''}">
         <label class="products-field products-field--wide">
-          <span>${label}</span>
-          <input id="${inputId}" type="text" value="${escapeHTML(currentName || '')}" autocomplete="off" />
+          <span>${label}${requiredMark}</span>
+          <input id="${inputId}" type="text" value="${escapeHTML(currentName || '')}" autocomplete="off" placeholder="${escapeHTML(placeholder)}" />
         </label>
         <button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>
+      </div>
+    `;
+  }
+
+  function createModeHintHTML(kind) {
+    const label = kind === 'kit' ? 'kit' : 'proposal';
+    return `
+      <div class="proposal-create-mode-note">
+        <i data-feather="info"></i>
+        <div>
+          <strong>Name this ${escapeHTML(label)} first.</strong>
+          <span>After saving, you will return to the ${escapeHTML(kind === 'kit' ? 'Kits' : 'Proposals')} page.</span>
+        </div>
       </div>
     `;
   }
@@ -389,17 +496,19 @@
     const proposal = state.activeProposal;
     const count = state.proposalItems.length;
     const editable = !!state.proposalEditMode;
+    const createMode = !!state.proposalCreateMode;
     return `
       <header class="products-proposal-detail__head">
         <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
         <div class="proposal-detail-title-block">
-          <h2>${escapeHTML(proposal?.name || 'Proposal')}</h2>
-          <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
+          <h2>${escapeHTML(createMode ? 'Create New Proposal' : (proposal?.name || 'Proposal'))}</h2>
+          <p>${createMode ? 'Write the proposal name to continue' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
         </div>
-        <button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>
+        ${createMode ? '' : `<button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>`}
       </header>
-      ${editable ? editNameBlockHTML('proposal', proposal?.name || 'Proposal') : ''}
-      ${editable ? `
+      ${editable ? editNameBlockHTML('proposal', createMode ? '' : (proposal?.name || 'Proposal'), { createMode, required: createMode }) : ''}
+      ${createMode ? createModeHintHTML('proposal') : ''}
+      ${editable && !createMode ? `
       <div class="products-proposal-tools proposals-two-tools">
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add one component</span></div>
@@ -417,8 +526,8 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-proposal-kit"><i data-feather="plus"></i><span>Add Kit</span></button>
           </div>
         </div>
-      </div>` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`}
-      <div class="products-proposal-table-card">
+      </div>` : (createMode ? '' : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`)}
+      ${createMode ? '' : `<div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Components table</h3><p>Saved products and quantities for this proposal.</p></div>
           <span>${formatNumber(count)} item${count === 1 ? '' : 's'}</span>
@@ -430,7 +539,7 @@
           </table>
         </div>
         ${totalBlockHTML(state.proposalItems)}
-      </div>
+      </div>`}
     `;
   }
 
@@ -438,16 +547,18 @@
     const kit = state.activeKit;
     const count = state.kitItems.length;
     const editable = !!state.kitEditMode;
+    const createMode = !!state.kitCreateMode;
     return `
       <header class="products-proposal-detail__head">
         <button type="button" class="products-back-btn" data-action="back-kits" aria-label="Back to kits"><i data-feather="arrow-left"></i></button>
         <div>
-          <h2>${escapeHTML(kit?.name || 'Kit')}</h2>
-          <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
+          <h2>${escapeHTML(createMode ? 'Create New Kit' : (kit?.name || 'Kit'))}</h2>
+          <p>${createMode ? 'Write the kit name to continue' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
         </div>
       </header>
-      ${editable ? editNameBlockHTML('kit', kit?.name || 'Kit') : ''}
-      ${editable ? `
+      ${editable ? editNameBlockHTML('kit', createMode ? '' : (kit?.name || 'Kit'), { createMode, required: createMode }) : ''}
+      ${createMode ? createModeHintHTML('kit') : ''}
+      ${editable && !createMode ? `
       <div class="products-proposal-tools proposals-one-tool">
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add kit component</span></div>
@@ -457,8 +568,8 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-kit-product"><i data-feather="plus"></i><span>Add</span></button>
           </div>
         </div>
-      </div>` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
-      <div class="products-proposal-table-card">
+      </div>` : (createMode ? '' : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`)}
+      ${createMode ? '' : `<div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
           <span>${formatNumber(count)} item${count === 1 ? '' : 's'}</span>
@@ -470,7 +581,7 @@
           </table>
         </div>
         ${totalBlockHTML(state.kitItems)}
-      </div>
+      </div>`}
     `;
   }
 
@@ -594,6 +705,7 @@
     state.activeProposal = null;
     state.proposalItems = [];
     state.proposalEditMode = false;
+    state.proposalCreateMode = false;
     state.proposalAdminPassword = '';
     if (els.proposalDetail) els.proposalDetail.hidden = true;
     if (els.proposalsList) {
@@ -608,6 +720,7 @@
     state.activeKit = null;
     state.kitItems = [];
     state.kitEditMode = false;
+    state.kitCreateMode = false;
     state.kitAdminPassword = '';
     if (els.kitDetail) els.kitDetail.hidden = true;
     if (els.kitsList) {
@@ -615,6 +728,42 @@
       restartProposalAnimation(els.kitsList, 'proposal-panel-enter');
     }
     renderKitFolders();
+  }
+
+  async function startNewFolder(kind) {
+    const isKit = kind === 'kit';
+    const password = await requestProductsAdminPassword({
+      title: `Create New ${isKit ? 'Kit' : 'Proposal'}`,
+      message: `Enter the Admin password to create a new ${isKit ? 'kit' : 'proposal'}.`,
+    });
+    if (!password) return;
+
+    document.body.classList.add('proposal-detail-open');
+    if (isKit) {
+      state.kitCreateMode = true;
+      state.kitEditMode = true;
+      state.kitAdminPassword = password;
+      state.activeKit = { id: '', name: '' };
+      state.kitItems = [];
+      if (els.kitsList) els.kitsList.hidden = true;
+      if (els.kitDetail) {
+        els.kitDetail.hidden = false;
+        renderKitDetail();
+        restartProposalAnimation(els.kitDetail, 'proposal-detail-enter');
+      }
+    } else {
+      state.proposalCreateMode = true;
+      state.proposalEditMode = true;
+      state.proposalAdminPassword = password;
+      state.activeProposal = { id: '', name: '' };
+      state.proposalItems = [];
+      if (els.proposalsList) els.proposalsList.hidden = true;
+      if (els.proposalDetail) {
+        els.proposalDetail.hidden = false;
+        renderProposalDetail();
+        restartProposalAnimation(els.proposalDetail, 'proposal-detail-enter');
+      }
+    }
   }
 
   function openModal(kind, mode = 'create', copyTarget = null) {
@@ -819,7 +968,36 @@
     const id = String(parent?.id || '').trim();
     const input = document.getElementById(isKit ? 'kitEditNameInput' : 'proposalEditNameInput');
     const name = String(input?.value || '').trim();
-    if (!id || !name) return toast('error', isKit ? 'Kits' : 'Proposals', isKit ? 'Kit name is required.' : 'Proposal name is required.');
+    const title = isKit ? 'Kits' : 'Proposals';
+    const requiredMessage = isKit ? 'Kit name is required.' : 'Proposal name is required.';
+    if (!name) {
+      if (input) input.focus();
+      return toast('error', title, requiredMessage);
+    }
+
+    if ((isKit && state.kitCreateMode) || (!isKit && state.proposalCreateMode)) {
+      try {
+        await api(isKit ? '/api/products/kits' : '/api/products/proposals', {
+          method: 'POST',
+          body: JSON.stringify({ name, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }),
+        });
+        if (isKit) {
+          state.kitCreateMode = false;
+          await loadKits();
+          backToKits();
+        } else {
+          state.proposalCreateMode = false;
+          await loadProposals();
+          backToProposals();
+        }
+        toast('success', title, `${isKit ? 'Kit' : 'Proposal'} folder created.`);
+      } catch (error) {
+        toast('error', title, error?.message || `Failed to create ${isKit ? 'kit' : 'proposal'}.`);
+      }
+      return;
+    }
+
+    if (!id) return toast('error', title, requiredMessage);
     const url = isKit ? `/api/products/kits/${encodeURIComponent(id)}` : `/api/products/proposals/${encodeURIComponent(id)}`;
     try {
       const data = await api(url, { method: 'PATCH', body: JSON.stringify({ name, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
@@ -916,8 +1094,6 @@
       els.makeOrderModal.setAttribute('aria-hidden', 'true');
     }
     state.pendingOrderProposalId = '';
-    if (kind === 'kit') { state.kitNameMode = 'create'; state.copyKitTarget = null; }
-    else { state.proposalNameMode = 'create'; state.copyProposalTarget = null; }
     document.body.classList.remove('products-modal-open');
   }
 
@@ -1010,8 +1186,8 @@
     document.querySelectorAll('.proposals-tab').forEach((btn) => {
       btn.addEventListener('click', () => setTab(btn.getAttribute('data-tab')));
     });
-    if (els.createProposalBtn) els.createProposalBtn.addEventListener('click', () => openModal('proposal'));
-    if (els.createKitBtn) els.createKitBtn.addEventListener('click', () => openModal('kit'));
+    if (els.createProposalBtn) els.createProposalBtn.addEventListener('click', () => startNewFolder('proposal'));
+    if (els.createKitBtn) els.createKitBtn.addEventListener('click', () => startNewFolder('kit'));
 
     if (els.proposalsList) els.proposalsList.addEventListener('click', (event) => {
       const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';

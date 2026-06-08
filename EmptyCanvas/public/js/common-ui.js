@@ -5240,6 +5240,7 @@ function shouldSkipOpsPersistentShellHostForCurrentPage() {
   try {
     const pathname = new URL(window.location.href).pathname.replace(/\/+$/, '') || '/';
     if (pathname === '/messages' || pathname === '/emails') return true;
+    if (pathname === '/proposals' || pathname === '/kits' || pathname === '/b2b') return true;
   } catch {}
 
   try {
