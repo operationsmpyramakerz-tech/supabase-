@@ -2987,6 +2987,21 @@ function _sbValueForLabel(row, label) {
     "picture",
     "picture_url"
   );
+  if (canon === "coverphoto") aliases.push(
+    "Cover photo",
+    "Cover Photo",
+    "Cover Image",
+    "cover_photo",
+    "cover_photo_url",
+    "cover_image",
+    "cover_image_url",
+    "cover",
+    "cover_url",
+    "banner",
+    "banner_url",
+    "profile_cover",
+    "profile_cover_url"
+  );
   if (canon === "filesmedia") aliases.push("Files & media", "files_media", "files", "media");
   if (canon === "employeecode") aliases.push("Employee Code", "employee_code", "code");
   if (canon === "email") aliases.push("Email", "email", "mail");
@@ -3002,6 +3017,7 @@ function _sbSerializeTeamMemberRow(row, editableFields = null) {
   const email = _sbString(_sbValueForLabel(row, "Email"));
   const employeeCode = _sbString(_sbValueForLabel(row, "Employee Code"));
   const photoUrl = _sbExtractUrl(_sbValueForLabel(row, "Profile picture"));
+  const coverPhotoUrl = _sbExtractUrl(_sbValueForLabel(row, "Cover photo"));
 
   const fields = fieldsSchema.map((field) => {
     const valueRaw = _sbValueForLabel(row, field.name);
@@ -3021,6 +3037,7 @@ function _sbSerializeTeamMemberRow(row, editableFields = null) {
     email,
     employeeCode,
     photoUrl,
+    coverPhotoUrl,
     createdTime: _uaSafeDate(_sbGet(row, ["created_at", "Created time", "created_time"])),
     lastEditedTime: _uaSafeDate(_sbGet(row, ["updated_at", "Updated time", "last_edited_time"])),
     fields,
@@ -3120,6 +3137,34 @@ function _sbProfilePictureColumnKey(row = {}, extraRows = []) {
   }) || "";
 }
 
+function _sbCoverPhotoColumnKey(row = {}, extraRows = []) {
+  const keys = _sbAllColumnKeys([row, ...(Array.isArray(extraRows) ? extraRows : [])]).filter((key) => !_sbNonEditableColumn(key));
+  const direct = _sbFindKey(keys, [
+    "Cover photo",
+    "Cover Photo",
+    "Cover Image",
+    "cover_photo",
+    "cover_photo_url",
+    "cover_image",
+    "cover_image_url",
+    "cover",
+    "cover_url",
+    "banner",
+    "banner_url",
+    "profile_cover",
+    "profile_cover_url",
+  ]);
+  if (direct) return direct;
+
+  return keys.find((key) => {
+    const canon = _sbCanon(key);
+    if (!canon || canon === "filesmedia" || canon === "allowedpages" || canon === "password" || canon === "profilepicture") return false;
+    const hasCoverWord = canon.includes("cover") || canon.includes("banner");
+    const hasImageWord = canon.includes("picture") || canon.includes("photo") || canon.includes("image") || canon.includes("pic") || canon.includes("url");
+    return hasCoverWord && hasImageWord;
+  }) || "";
+}
+
 function _sbCoerceAccountPatchValue(existingValue, nextValue) {
   if (nextValue === null || typeof nextValue === "undefined") return null;
   if (typeof existingValue === "number") {
@@ -3143,6 +3188,7 @@ function _sbAccountPayload(row, fallbackUsername = "") {
     department: _sbString(_sbValueForLabel(row, "Department")) || "",
     position: _sbString(_sbValueForLabel(row, "Position")) || "",
     photoUrl: _sbExtractUrl(_sbValueForLabel(row, "Profile picture")) || "",
+    coverPhotoUrl: _sbExtractUrl(_sbValueForLabel(row, "Cover photo")) || "",
     phone: _sbString(_sbValueForLabel(row, "Phone")) || "",
     email: _sbString(_sbValueForLabel(row, "Email")) || "",
     employeeCode: _sbString(_sbValueForLabel(row, "Employee Code")) || null,
@@ -9405,6 +9451,7 @@ app.post("/api/login", async (req, res) => {
           department: p?.Department?.select?.name || "",
           position: p?.Position?.select?.name || "",
           photoUrl: extractProfilePhotoUrlFromProps(p) || "",
+          coverPhotoUrl: "",
           phone: p?.Phone?.phone_number || "",
           email: p?.Email?.email || "",
           employeeCode: p?.["Employee Code"]?.number ?? null,
@@ -9581,6 +9628,7 @@ app.get("/api/account", requireAuth, async (req, res) => {
         department: p?.Department?.select?.name || "",
         position: p?.Position?.select?.name || "",
         photoUrl: extractProfilePhotoUrlFromProps(p) || "",
+        coverPhotoUrl: "",
         phone: p?.Phone?.phone_number || "",
         email: p?.Email?.email || "",
         employeeCode: p?.["Employee Code"]?.number ?? null,
@@ -9648,6 +9696,7 @@ function _sbSerializeTeamMemberPublicProfile(row = {}) {
     email: base.email,
     employeeCode: base.employeeCode,
     photoUrl: base.photoUrl,
+    coverPhotoUrl: base.coverPhotoUrl || "",
     filesMedia,
     fields,
     source: 'supabase',
@@ -9884,6 +9933,77 @@ app.post("/api/account/profile-picture", requireAuth, async (req, res) => {
     const safeMessage = status === 401
       ? "invalid password"
       : (status >= 400 && status < 500 ? (error?.message || "Failed to update profile picture.") : "Failed to update profile picture.");
+    return res.status(status >= 400 && status < 500 ? status : 500).json({ error: safeMessage });
+  }
+ });
+
+app.post("/api/account/cover-photo", requireAuth, async (req, res) => {
+  try {
+    const { dataUrl, filename, currentPassword } = req.body || {};
+    const providedPassword = String(currentPassword ?? "").trim();
+
+    if (!providedPassword) {
+      return res.status(400).json({ error: "Current password is required." });
+    }
+
+    if (!dataUrl) {
+      return res.status(400).json({ error: "Image data is required." });
+    }
+
+    const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+    if (!/^image\//i.test(String(mime || ""))) {
+      return res.status(400).json({ error: "Only image uploads are allowed." });
+    }
+
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: "Image is too large. Maximum size is 10MB." });
+    }
+
+    if (!_sbTeamMembersEnabled()) {
+      return res.status(500).json({ error: "Supabase Team Members table is not configured." });
+    }
+
+    const row = await _sbFindSessionTeamMember(req);
+    if (!row) return res.status(404).json({ error: "User not found." });
+
+    const storedPassword = _sbTeamMemberPasswordValue(row);
+    if (!storedPassword) return res.status(400).json({ error: "No password set for this account." });
+    if (String(storedPassword) !== providedPassword) {
+      return res.status(401).json({ error: "invalid password" });
+    }
+
+    const safeOriginalName = String(filename || "cover-photo.png").trim() || "cover-photo.png";
+    const cleanName = safeOriginalName.replace(/[^a-z0-9._-]/gi, "_");
+    const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
+    const username = _sbString(_sbValueForLabel(row, "Name")) || String(req.session?.username || "").trim();
+    if (!rowId) return res.status(500).json({ error: "Unable to update cover photo." });
+
+    const rows = await _sbSelectTeamMembersRows().catch(() => [row]);
+    const coverKey = _sbCoverPhotoColumnKey(row, rows || []);
+    if (!coverKey) {
+      return res.status(400).json({ error: "Cover photo field is not configured. Run the user profile cover photo SQL file first." });
+    }
+
+    const objectName = `team-members/cover-photos/${rowId || username || "user"}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+    const publicUrl = await uploadToBlobFromBase64(dataUrl, objectName);
+
+    const updated = await supabaseDb.updateById(_sbTeamMembersTable(), rowId, { [coverKey]: publicUrl });
+    req.session.userSupabaseId = rowId;
+    if (username) req.session.username = username;
+
+    await clearUserServerCaches(req, { userId: rowId, username });
+    await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(rowId)}:v1`).catch(() => {});
+    if (username) await cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(username)}:v1`).catch(() => {});
+
+    const nextRow = updated || { ...row, [coverKey]: publicUrl };
+    const coverPhotoUrl = _sbExtractUrl(_sbValueForLabel(nextRow, "Cover photo")) || publicUrl;
+    return res.json({ success: true, coverPhotoUrl, source: "supabase" });
+  } catch (error) {
+    console.error("Error updating cover photo:", error?.details || error?.body || error);
+    const status = Number(error?.statusCode) || Number(error?.status) || 500;
+    const safeMessage = status === 401
+      ? "invalid password"
+      : (status >= 400 && status < 500 ? (error?.message || "Failed to update cover photo.") : "Failed to update cover photo.");
     return res.status(status >= 400 && status < 500 ? status : 500).json({ error: safeMessage });
   }
 });
