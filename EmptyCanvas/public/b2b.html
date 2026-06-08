@@ -1191,7 +1191,347 @@
         top: -16px;
       }
     }
-  </style>
+  
+
+    /* 2026-06-08: B2B page kits-style folder redesign */
+    .b2b-wrap{
+      width:100% !important;
+      max-width:none !important;
+      margin:0 !important;
+      padding:18px 28px 80px !important;
+      box-sizing:border-box !important;
+    }
+
+    .b2b-card-shell{
+      min-height:calc(100vh - 235px) !important;
+      border-radius:28px !important;
+      border:1px solid rgba(15,23,42,.06) !important;
+      background:rgba(255,255,255,.96) !important;
+      box-shadow:0 24px 60px rgba(15,23,42,.08) !important;
+      padding:0 !important;
+      overflow:visible !important;
+    }
+
+    .b2b-section-head{
+      padding:22px 24px 0 !important;
+    }
+
+    .b2b-section-head .card-header{
+      display:grid !important;
+      grid-template-columns:minmax(0,1fr) auto !important;
+      align-items:center !important;
+      gap:18px !important;
+      padding:0 0 16px !important;
+      border-bottom:1px solid rgba(15,23,42,.08) !important;
+    }
+
+    .b2b-head-copy{
+      display:block !important;
+      min-width:0 !important;
+    }
+
+    .b2b-head-copy h2{
+      margin:0 !important;
+      color:#0f172a !important;
+      font-size:1.15rem !important;
+      line-height:1.1 !important;
+      font-weight:950 !important;
+      letter-spacing:-.035em !important;
+    }
+
+    .b2b-head-copy p{
+      margin:5px 0 0 !important;
+      color:#667085 !important;
+      font-size:.82rem !important;
+      line-height:1.25 !important;
+      font-weight:800 !important;
+    }
+
+    .b2b-add-school-btn{
+      min-height:50px !important;
+      border-radius:18px !important;
+      padding:0 22px !important;
+      background:linear-gradient(135deg,#fb923c 0%,#f97316 52%,#ea580c 100%) !important;
+      color:#fff !important;
+      box-shadow:0 18px 34px rgba(249,115,22,.30) !important;
+      font-size:.95rem !important;
+      font-weight:950 !important;
+    }
+
+    .b2b-add-school-btn:hover{
+      transform:translateY(-2px) !important;
+      box-shadow:0 22px 42px rgba(249,115,22,.36) !important;
+    }
+
+    .b2b-add-school-btn svg{
+      width:18px !important;
+      height:18px !important;
+    }
+
+    .b2b-grid{
+      width:100% !important;
+      display:grid !important;
+      grid-template-columns:repeat(auto-fill, minmax(154px, 154px)) !important;
+      justify-content:start !important;
+      justify-items:start !important;
+      align-items:start !important;
+      gap:18px 16px !important;
+      padding:18px 24px 28px !important;
+    }
+
+    .school-folder-card{
+      position:relative !important;
+      width:154px !important;
+      min-width:154px !important;
+      height:144px !important;
+      isolation:isolate !important;
+    }
+
+    .school-folder{
+      position:relative !important;
+      display:block !important;
+      width:154px !important;
+      height:144px !important;
+      min-height:144px !important;
+      padding:0 !important;
+      border:5px solid #101217 !important;
+      border-radius:20px !important;
+      overflow:hidden !important;
+      isolation:isolate !important;
+      text-align:left !important;
+      background:
+        radial-gradient(circle at 23% 5%, rgba(255,255,255,.42) 0 14%, rgba(255,255,255,0) 36%),
+        radial-gradient(circle at 82% 0%, rgba(255,255,255,.18) 0 11%, rgba(255,255,255,0) 32%),
+        linear-gradient(135deg, #ff8a1f 0%, #f97316 46%, #e45512 100%) !important;
+      box-shadow:0 14px 26px rgba(15,23,42,.12) !important;
+      transform:none !important;
+      transition:transform .18s ease, box-shadow .18s ease !important;
+    }
+
+    .school-folder:hover{
+      transform:translateY(-2px) !important;
+      box-shadow:0 20px 34px rgba(15,23,42,.16) !important;
+      background:
+        radial-gradient(circle at 23% 5%, rgba(255,255,255,.42) 0 14%, rgba(255,255,255,0) 36%),
+        radial-gradient(circle at 82% 0%, rgba(255,255,255,.18) 0 11%, rgba(255,255,255,0) 32%),
+        linear-gradient(135deg, #ff8a1f 0%, #f97316 46%, #e45512 100%) !important;
+    }
+
+    .school-folder:focus-visible{
+      outline:3px solid rgba(249,115,22,.22) !important;
+      outline-offset:3px !important;
+    }
+
+    .school-folder::before{
+      content:'';
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:86px;
+      z-index:2;
+      border-radius:0 0 15px 15px;
+      background:#272727;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+    }
+
+    .school-folder::after{
+      content:'';
+      position:absolute;
+      top:43px;
+      left:0;
+      width:130px;
+      height:28px;
+      z-index:3;
+      display:block;
+      background:#272727;
+      border-radius:0 13px 0 0;
+      clip-path:polygon(0 0, 83px 0, 130px 100%, 100% 100%, 0 100%);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+    }
+
+    .school-folder__figure{
+      position:absolute !important;
+      top:16px !important;
+      left:50% !important;
+      z-index:1 !important;
+      width:118px !important;
+      height:68px !important;
+      margin:0 !important;
+      transform:translateX(-50%) !important;
+      pointer-events:none !important;
+    }
+
+    .school-folder__paper{
+      position:absolute !important;
+      top:0 !important;
+      width:50px !important;
+      height:54px !important;
+      border-radius:7px !important;
+      border:1px solid rgba(15,23,42,.05) !important;
+      background:linear-gradient(180deg,#ffffff 0%,#fafafa 100%) !important;
+      box-shadow:0 10px 18px rgba(15,23,42,.15) !important;
+    }
+
+    .school-folder__paper::before{
+      content:'' !important;
+      position:absolute !important;
+      left:8px !important;
+      right:8px !important;
+      top:10px !important;
+      height:3px !important;
+      border-radius:999px !important;
+      background:rgba(203,213,225,.55) !important;
+      box-shadow:0 10px 0 rgba(203,213,225,.42), 0 20px 0 rgba(203,213,225,.32) !important;
+    }
+
+    .school-folder__paper--left{
+      left:9px !important;
+      transform:rotate(-6deg) !important;
+    }
+
+    .school-folder__paper--middle{
+      left:34px !important;
+      top:-4px !important;
+      z-index:2 !important;
+      transform:rotate(1deg) !important;
+    }
+
+    .school-folder__paper--right{
+      right:9px !important;
+      transform:rotate(7deg) !important;
+    }
+
+    .school-folder__back,
+    .school-folder__front,
+    .school-folder__chips{
+      display:none !important;
+    }
+
+    .school-folder__name{
+      position:absolute !important;
+      left:11px !important;
+      right:31px !important;
+      top:70px !important;
+      z-index:5 !important;
+      width:auto !important;
+      min-height:0 !important;
+      margin:0 !important;
+      color:#fff !important;
+      font-size:.72rem !important;
+      line-height:1.03 !important;
+      font-weight:850 !important;
+      letter-spacing:-.015em !important;
+      text-align:left !important;
+      display:block !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
+    .school-folder__caption{
+      position:absolute !important;
+      left:11px !important;
+      right:7px !important;
+      bottom:10px !important;
+      z-index:5 !important;
+      width:auto !important;
+      min-height:0 !important;
+      margin:0 !important;
+      color:rgba(255,255,255,.55) !important;
+      font-size:.58rem !important;
+      line-height:1 !important;
+      font-weight:750 !important;
+      text-align:left !important;
+      display:flex !important;
+      align-items:center !important;
+      gap:4px !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
+    .school-folder__caption::before{
+      content:'';
+      width:10px;
+      height:10px;
+      flex:0 0 auto;
+      opacity:.76;
+      background:currentColor;
+      -webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>') center / contain no-repeat;
+      mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>') center / contain no-repeat;
+    }
+
+    .school-folder-actions{
+      position:absolute !important;
+      top:64px !important;
+      right:7px !important;
+      z-index:12 !important;
+    }
+
+    .school-folder__menu-btn{
+      width:17px !important;
+      height:17px !important;
+      min-width:17px !important;
+      min-height:17px !important;
+      padding:0 !important;
+      border:0 !important;
+      border-radius:999px !important;
+      background:transparent !important;
+      color:rgba(255,255,255,.86) !important;
+      box-shadow:none !important;
+      display:grid !important;
+      place-items:center !important;
+    }
+
+    .school-folder__menu-btn:hover,
+    .school-folder__menu-btn[aria-expanded="true"]{
+      background:rgba(255,255,255,.10) !important;
+      color:#fff !important;
+      transform:none !important;
+    }
+
+    .school-folder__menu-dots{
+      color:rgba(255,255,255,.86) !important;
+      font-size:9px !important;
+      line-height:1 !important;
+      letter-spacing:.7px !important;
+      transform:translateY(-1px) !important;
+      font-weight:950 !important;
+    }
+
+    .school-folder__actions-menu{
+      top:27px !important;
+      right:0 !important;
+      z-index:40 !important;
+      width:128px !important;
+    }
+
+    @media (max-width:900px){
+      .b2b-section-head .card-header{
+        grid-template-columns:1fr !important;
+        align-items:stretch !important;
+      }
+      .b2b-add-school-btn{ width:100% !important; }
+    }
+
+    @media (max-width:640px){
+      .b2b-wrap{
+        padding-left:14px !important;
+        padding-right:14px !important;
+      }
+      .b2b-section-head{
+        padding-left:16px !important;
+        padding-right:16px !important;
+      }
+      .b2b-grid{
+        grid-template-columns:repeat(auto-fill, minmax(154px, 154px)) !important;
+        gap:16px 14px !important;
+        padding-left:16px !important;
+        padding-right:16px !important;
+      }
+    }
+</style>
 </head>
 <body class="permissions-loading">
 <script>
@@ -1268,7 +1608,10 @@
         <section class="card b2b-card-shell">
           <div class="b2b-section-head">
             <div class="card-header">
-              <div class="b2b-head-copy" aria-hidden="true"></div>
+              <div class="b2b-head-copy">
+                <h2>B2B</h2>
+                <p>Saved school folders ready to open and manage.</p>
+              </div>
               <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
                 <i data-feather="plus-circle"></i>
                 <span>Add</span>
@@ -1287,6 +1630,6 @@
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=database-page-v2"></script>
-<script src="/js/b2b.js?v=b2b-admin-folders-v1"></script>
+<script src="/js/b2b.js?v=b2b-kits-folder-style-v1"></script>
 </body>
 </html>
