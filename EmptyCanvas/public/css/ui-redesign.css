@@ -3826,13 +3826,12 @@ body.login-success-active {
   }
 }
 
-
 /* =========================================================
-   Current Orders visual experiment
-   - Let the system cover image stay visible lower on the page.
-   - Remove only the large white wrapper behind the order cards.
+   Global floating-background experiment
+   - Extends the user cover/system background further down every dashboard page.
+   - Removes large list/wrapper surfaces so inner cards float directly on the background.
    ========================================================= */
-body.current-orders-page.ops-has-system-cover:not(.shell-embedded) .main-content::before{
+body.ops-has-system-cover:not(.shell-embedded) .main-content::before{
   height: clamp(360px, 46vh, 540px);
   background-image:
     linear-gradient(180deg,
@@ -3843,7 +3842,7 @@ body.current-orders-page.ops-has-system-cover:not(.shell-embedded) .main-content
     var(--ops-system-cover-image);
 }
 
-body.current-orders-page.ops-has-system-cover:not(.shell-embedded) .main-content::after{
+body.ops-has-system-cover:not(.shell-embedded) .main-content::after{
   height: clamp(390px, 50vh, 580px);
   background:
     radial-gradient(circle at 74% 6%, rgba(255,255,255,0.28), transparent 34%),
@@ -3854,16 +3853,53 @@ body.current-orders-page.ops-has-system-cover:not(.shell-embedded) .main-content
       #FFFFFF 100%);
 }
 
-body.current-orders-page #current-orders.card{
+body.ops-has-system-cover:not(.shell-embedded) #current-orders.card,
+body.ops-has-system-cover:not(.shell-embedded) #sv-orders.card,
+body.ops-has-system-cover:not(.shell-embedded).operations-orders-page .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded)[data-orders-view="maintenance"] .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded).page-maintenance-orders .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded).page-orders-maintenance .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded) .main-content > main.container-full-width > section.card:has(.groups-grid),
+body.ops-has-system-cover:not(.shell-embedded) .history-list-card,
+body.ops-has-system-cover:not(.shell-embedded) .backup-list-card,
+body.ops-has-system-cover:not(.shell-embedded) .products-group,
+body.ops-has-system-cover:not(.shell-embedded) .products-loading-card,
+body.ops-has-system-cover:not(.shell-embedded) .products-empty,
+body.ops-has-system-cover:not(.shell-embedded) .products-error,
+body.ops-has-system-cover:not(.shell-embedded) .products-proposals-view.proposals-folders-card,
+body.ops-has-system-cover:not(.shell-embedded) .b2b-card-shell.b2b-folders-card,
+body.ops-has-system-cover:not(.shell-embedded) .ua-folders-panel,
+body.ops-has-system-cover:not(.shell-embedded) .ua-members-panel{
   background: transparent !important;
   background-color: transparent !important;
-  border: 0 !important;
+  background-image: none !important;
+  border-color: transparent !important;
   box-shadow: none !important;
-  padding: 0 4px 18px !important;
   backdrop-filter: none !important;
 }
 
-body.current-orders-page #orders-list.co-cards{
+body.ops-has-system-cover:not(.shell-embedded) #current-orders.card,
+body.ops-has-system-cover:not(.shell-embedded) #sv-orders.card,
+body.ops-has-system-cover:not(.shell-embedded).operations-orders-page .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded)[data-orders-view="maintenance"] .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded).page-maintenance-orders .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded).page-orders-maintenance .page-body > section.card,
+body.ops-has-system-cover:not(.shell-embedded) .main-content > main.container-full-width > section.card:has(.groups-grid){
+  padding: 0 4px 18px !important;
+}
+
+body.ops-has-system-cover:not(.shell-embedded) #orders-list,
+body.ops-has-system-cover:not(.shell-embedded) #requested-list,
+body.ops-has-system-cover:not(.shell-embedded) #sv-list,
+body.ops-has-system-cover:not(.shell-embedded) #stock-groups,
+body.ops-has-system-cover:not(.shell-embedded) .groups-grid,
+body.ops-has-system-cover:not(.shell-embedded) .history-list,
+body.ops-has-system-cover:not(.shell-embedded) .backup-grid,
+body.ops-has-system-cover:not(.shell-embedded) .products-grid,
+body.ops-has-system-cover:not(.shell-embedded) .products-proposal-folders,
+body.ops-has-system-cover:not(.shell-embedded) .b2b-grid,
+body.ops-has-system-cover:not(.shell-embedded) .ua-folder-grid,
+body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   position: relative;
   z-index: 1;
 }
