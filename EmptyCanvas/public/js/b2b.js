@@ -299,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <a class="school-folder" href="/b2b/school/${encodeURIComponent(school.id)}" aria-label="Open ${escapeHtml(schoolName)}">
             <div class="school-folder__figure" aria-hidden="true">
               <span class="school-folder__paper school-folder__paper--left"></span>
+              <span class="school-folder__paper school-folder__paper--middle"></span>
               <span class="school-folder__paper school-folder__paper--right"></span>
               <span class="school-folder__back"></span>
               <span class="school-folder__front">
@@ -312,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </a>
           <div class="school-folder-actions">
             <button class="school-folder__menu-btn" type="button" data-school-actions-toggle aria-label="School actions" aria-expanded="false">
-              <i data-feather="more-horizontal"></i>
+              <span class="school-folder__menu-dots" aria-hidden="true">•••</span>
             </button>
             <div class="school-folder__actions-menu" data-school-actions-menu>
               <button type="button" data-edit-school="${escapeHtml(school.id)}">
