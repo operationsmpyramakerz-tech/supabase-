@@ -228,6 +228,65 @@ document.addEventListener('DOMContentLoaded', () => {
       "'": '&#39;',
     }[c]));
 
+
+  let rejectedReasonViewModal = null;
+  let rejectedReasonViewLastFocus = null;
+
+  function ensureRejectedReasonViewModal() {
+    if (rejectedReasonViewModal) return rejectedReasonViewModal;
+    rejectedReasonViewModal = document.createElement('div');
+    rejectedReasonViewModal.className = 'co-submodal-overlay reject-reason-view-modal';
+    rejectedReasonViewModal.setAttribute('aria-hidden', 'true');
+    rejectedReasonViewModal.hidden = true;
+    rejectedReasonViewModal.innerHTML = `
+      <div class="co-submodal-dialog reject-reason-dialog reject-reason-view-dialog" role="dialog" aria-modal="true" aria-labelledby="currentRejectedReasonViewTitle">
+        <button type="button" class="co-submodal-close" data-rejected-reason-view-close aria-label="Close rejected reason"><i data-feather="x"></i></button>
+        <div class="co-submodal-header req-edit-header">
+          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
+          <div>
+            <div class="co-submodal-title" id="currentRejectedReasonViewTitle">Rejected reason</div>
+          </div>
+        </div>
+        <div class="co-submodal-body">
+          <div class="rejected-reason-view-text" id="currentRejectedReasonViewText">—</div>
+        </div>
+        <div class="co-submodal-actions">
+          <button type="button" class="ro-action-btn ro-action-btn--dark" data-rejected-reason-view-close>Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(rejectedReasonViewModal);
+    rejectedReasonViewModal.addEventListener('click', (event) => {
+      if (event.target === rejectedReasonViewModal || event.target.closest('[data-rejected-reason-view-close]')) {
+        event.preventDefault();
+        closeRejectedReasonViewModal();
+      }
+    });
+    return rejectedReasonViewModal;
+  }
+
+  function openRejectedReasonViewModal(reason) {
+    const modal = ensureRejectedReasonViewModal();
+    rejectedReasonViewLastFocus = document.activeElement;
+    const text = modal.querySelector('#currentRejectedReasonViewText');
+    if (text) text.textContent = String(reason || '').trim() || 'No rejected reason saved.';
+    modal.hidden = false;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    if (window.feather) window.feather.replace();
+    setTimeout(() => modal.querySelector('[data-rejected-reason-view-close]')?.focus?.(), 30);
+  }
+
+  function closeRejectedReasonViewModal({ restoreFocus = true } = {}) {
+    if (!rejectedReasonViewModal) return;
+    rejectedReasonViewModal.classList.remove('is-open');
+    rejectedReasonViewModal.setAttribute('aria-hidden', 'true');
+    rejectedReasonViewModal.hidden = true;
+    if (restoreFocus && rejectedReasonViewLastFocus?.focus) {
+      try { rejectedReasonViewLastFocus.focus(); } catch {}
+    }
+  }
+
   // Only allow http/https URLs to be opened from the UI
   function safeHttpUrl(url) {
     try {
@@ -631,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
               ${isMaintenanceOrder
                 ? `<div class="co-item-issue-desc">${escapeHTML(maintenanceIssueText(it))}</div>`
                 : `<div class="co-item-total">Qty: ${qtyHTML}</div>`}
-              <div class="co-item-status" style="${sStyle}">${escapeHTML(approvalLabel)}</div>
+              ${currentItemStatusMarkup(it, approvalLabel, sStyle)}
             </div>
           `;
           frag.appendChild(row);
@@ -1362,8 +1421,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   }
 
+  function rejectedReasonForItem(item) {
+    return String(item?.rejectedReason || item?.rejected_reason || '').trim();
+  }
+
   function itemHasRejectedReason(item) {
-    return !!String(item?.rejectedReason || item?.rejected_reason || '').trim();
+    return !!rejectedReasonForItem(item);
+  }
+
+  function collectRejectedReason(items) {
+    const reasons = Array.from(new Set((Array.isArray(items) ? items : [])
+      .map((item) => rejectedReasonForItem(item))
+      .filter(Boolean)));
+    return reasons.join("\n");
   }
 
   // Current Orders filters are component-level, not whole-order-level:
@@ -1424,6 +1494,26 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
+
+
+  function rejectedReasonStatusButton(label, style, reason, className = '') {
+    return `<button type="button" class="${className} rejected-reason-trigger" style="${style}" data-rejected-reason="${escapeHTML(reason)}" title="View rejected reason" aria-label="View rejected reason">${escapeHTML(label)}</button>`;
+  }
+
+  function currentItemStatusMarkup(item, label, style) {
+    if (statusTabForItem(item) === 'rejected') {
+      return rejectedReasonStatusButton(label, style, rejectedReasonForItem(item), 'co-item-status current-rejected-reason-trigger');
+    }
+    return `<span class="co-item-status" style="${style}">${escapeHTML(label)}</span>`;
+  }
+
+  function currentCardStatusMarkup(group, label, style) {
+    const reason = collectRejectedReason(group?.products || []);
+    if (groupDominantStatusTab(group) === 'rejected') {
+      return rejectedReasonStatusButton(label, style, reason, 'co-status-btn current-rejected-card-reason-trigger');
+    }
+    return `<span class="co-status-btn" style="${style}">${escapeHTML(label)}</span>`;
+  }
 
   function groupDominantStatusTab(group) {
     const products = Array.isArray(group?.products) ? group.products : [];
@@ -1698,13 +1788,20 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="co-actions">
           ${currentStatusTab === 'all' && hasMixedApprovedRejectedStatus(items)
             ? mixedApprovalStatusMarkup()
-            : `<span class="co-status-btn" style="${statusStyle}">${escapeHTML(groupStatusLabel)}</span>`}
+            : currentCardStatusMarkup(group, groupStatusLabel, statusStyle)}
           <span class="co-right-ico" aria-hidden="true"><i data-feather="percent"></i></span>
         </div>
       </div>
     `;
 
     card.addEventListener('click', (e) => {
+      const rejectedReasonBtn = e.target?.closest?.('.current-rejected-card-reason-trigger');
+      if (rejectedReasonBtn) {
+        try { e.preventDefault(); } catch {}
+        try { e.stopPropagation(); } catch {}
+        openRejectedReasonViewModal(rejectedReasonBtn.getAttribute('data-rejected-reason') || '');
+        return;
+      }
       // In some layouts a parent element may listen for clicks (or the card could
       // be wrapped by an accidental link). Prevent any default navigation and
       // stop bubbling so the click reliably opens the modal only.
@@ -1898,6 +1995,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Modal wiring
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && rejectedReasonViewModal?.classList.contains('is-open')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeRejectedReasonViewModal();
+    }
+  });
+
   if (modalCloseBtn) {
     modalCloseBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1908,6 +2013,13 @@ document.addEventListener('DOMContentLoaded', () => {
   bindOrderModalCloseHitArea(modalCloseBtn, closeOrderModal);
   if (modalOverlay) {
     modalOverlay.addEventListener('click', (e) => {
+      const rejectedReasonBtn = e.target?.closest?.('.current-rejected-reason-trigger');
+      if (rejectedReasonBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openRejectedReasonViewModal(rejectedReasonBtn.getAttribute('data-rejected-reason') || '');
+        return;
+      }
       if (e.target === modalOverlay) closeOrderModal();
     });
   }

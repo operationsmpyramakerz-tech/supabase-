@@ -841,13 +841,12 @@
     rejectedReasonViewModal.setAttribute("aria-hidden", "true");
     rejectedReasonViewModal.hidden = true;
     rejectedReasonViewModal.innerHTML = `
-      <div class="co-submodal-dialog reject-reason-dialog reject-reason-view-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectedReasonViewTitle" aria-describedby="rejectedReasonViewSub">
+      <div class="co-submodal-dialog reject-reason-dialog reject-reason-view-dialog" role="dialog" aria-modal="true" aria-labelledby="rejectedReasonViewTitle">
         <button type="button" class="co-submodal-close" data-rejected-reason-view-close aria-label="Close rejected reason"><i data-feather="x"></i></button>
         <div class="co-submodal-header req-edit-header">
           <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
           <div>
             <div class="co-submodal-title" id="rejectedReasonViewTitle">Rejected reason</div>
-            <div class="co-submodal-sub" id="rejectedReasonViewSub">The saved reason for this rejected component.</div>
           </div>
         </div>
         <div class="co-submodal-body">

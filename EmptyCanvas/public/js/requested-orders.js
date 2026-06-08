@@ -1223,6 +1223,66 @@ document.addEventListener("DOMContentLoaded", () => {
       "'": "&#39;",
     }[c]));
 
+
+  let rejectedReasonViewModal = null;
+  let rejectedReasonViewLastFocus = null;
+
+  function ensureRejectedReasonViewModal() {
+    if (rejectedReasonViewModal) return rejectedReasonViewModal;
+    rejectedReasonViewModal = document.createElement("div");
+    rejectedReasonViewModal.className = "co-submodal-overlay reject-reason-view-modal";
+    rejectedReasonViewModal.setAttribute("aria-hidden", "true");
+    rejectedReasonViewModal.hidden = true;
+    rejectedReasonViewModal.innerHTML = `
+      <div class="co-submodal-dialog reject-reason-dialog reject-reason-view-dialog" role="dialog" aria-modal="true" aria-labelledby="operationsRejectedReasonViewTitle">
+        <button type="button" class="co-submodal-close" data-rejected-reason-view-close aria-label="Close rejected reason"><i data-feather="x"></i></button>
+        <div class="co-submodal-header req-edit-header">
+          <div class="req-edit-icon reject-reason-icon" aria-hidden="true"><i data-feather="x-circle"></i></div>
+          <div>
+            <div class="co-submodal-title" id="operationsRejectedReasonViewTitle">Rejected reason</div>
+          </div>
+        </div>
+        <div class="co-submodal-body">
+          <div class="rejected-reason-view-text" id="operationsRejectedReasonViewText">—</div>
+        </div>
+        <div class="co-submodal-actions">
+          <button type="button" class="ro-action-btn ro-action-btn--dark" data-rejected-reason-view-close>Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(rejectedReasonViewModal);
+
+    rejectedReasonViewModal.addEventListener("click", (event) => {
+      if (event.target === rejectedReasonViewModal || event.target.closest("[data-rejected-reason-view-close]")) {
+        event.preventDefault();
+        closeRejectedReasonViewModal();
+      }
+    });
+    return rejectedReasonViewModal;
+  }
+
+  function openRejectedReasonViewModal(reason) {
+    const modal = ensureRejectedReasonViewModal();
+    rejectedReasonViewLastFocus = document.activeElement;
+    const text = modal.querySelector("#operationsRejectedReasonViewText");
+    if (text) text.textContent = String(reason || "").trim() || "No rejected reason saved.";
+    modal.hidden = false;
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    if (window.feather) window.feather.replace();
+    setTimeout(() => modal.querySelector("[data-rejected-reason-view-close]")?.focus?.(), 30);
+  }
+
+  function closeRejectedReasonViewModal({ restoreFocus = true } = {}) {
+    if (!rejectedReasonViewModal) return;
+    rejectedReasonViewModal.classList.remove("is-open");
+    rejectedReasonViewModal.setAttribute("aria-hidden", "true");
+    rejectedReasonViewModal.hidden = true;
+    if (restoreFocus && rejectedReasonViewLastFocus?.focus) {
+      try { rejectedReasonViewLastFocus.focus(); } catch {}
+    }
+  }
+
   const creatorProfileCache = new Map();
   let creatorProfilePopover = null;
   let creatorProfileListenersBound = false;
@@ -2018,6 +2078,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if (key === "approved") return notionColorVars("green");
     if (key === "rejected") return notionColorVars("red");
     return notionColorVars("yellow");
+  }
+
+
+  function rejectedReasonStatusButton(label, style, reason, className = "") {
+    return `<button type="button" class="${className} rejected-reason-trigger" style="${style}" data-rejected-reason="${escapeHTML(reason)}" title="View rejected reason" aria-label="View rejected reason">${escapeHTML(label)}</button>`;
+  }
+
+  function operationsItemStatusMarkup(item, label, style) {
+    if (itemOpsDecisionKey(item) === "rejected") {
+      return rejectedReasonStatusButton(label, style, itemRejectedReason(item), "co-item-status req-rejected-reason-trigger");
+    }
+    return `<span class="co-item-status" style="${style}">${escapeHTML(label)}</span>`;
+  }
+
+  function operationsCardStatusMarkup(items, label, style) {
+    const keys = (Array.isArray(items) ? items : []).map(itemOpsDecisionKey);
+    if (keys.includes("rejected")) {
+      return rejectedReasonStatusButton(label, style, collectRejectedReason(items), "co-status-btn req-rejected-card-reason-trigger");
+    }
+    return `<span class="co-status-btn" style="${style}">${escapeHTML(label)}</span>`;
   }
 
   async function setOperationsApproval(ids, decision, rejectedReason = "") {
@@ -3632,7 +3712,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="co-actions">
           ${!isMaintenancePage && currentTab === "all" && stage.idx === 2 && hasMixedApprovedRejectedDecision(g.items)
             ? mixedApprovalStatusMarkup()
-            : `<span class="co-status-btn" style="${statusStyle}">${escapeHTML(cardStatusLabel)}</span>`}
+            : operationsCardStatusMarkup(g.items || [], cardStatusLabel, statusStyle)}
           ${creatorButtonMarkup(creatorId, createdByRaw)}
         </div>
       </div>
@@ -3645,7 +3725,16 @@ document.addEventListener("DOMContentLoaded", () => {
       openCreatorProfilePopover(creatorBtn, creatorBtn.dataset.creatorId, creatorBtn.dataset.creatorName);
     });
 
-    card.addEventListener("click", () => openOrderModal(g));
+    card.addEventListener("click", (event) => {
+      const rejectedReasonBtn = event.target?.closest?.(".req-rejected-card-reason-trigger");
+      if (rejectedReasonBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        openRejectedReasonViewModal(rejectedReasonBtn.getAttribute("data-rejected-reason") || "");
+        return;
+      }
+      openOrderModal(g);
+    });
     card.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -3977,7 +4066,7 @@ document.addEventListener("DOMContentLoaded", () => {
           ? ''
           : `
             <div class="co-item-right-row">
-              <div class="co-item-status" style="${itemStatusStyle}">${escapeHTML(itemStatusLabel)}</div>
+              ${operationsItemStatusMarkup(it, itemStatusLabel, itemStatusStyle)}
               ${editBtnHTML}
               ${opsReviewButtonsHTML}
             </div>
@@ -5971,6 +6060,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       return;
     }
 
+    if (rejectedReasonViewModal?.classList.contains("is-open")) {
+      e.preventDefault();
+      closeRejectedReasonViewModal();
+      return;
+    }
+
     if (rejectReasonModal?.classList.contains("is-open")) {
       e.preventDefault();
       closeRejectReasonModal();
@@ -6026,6 +6121,14 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   });
 
   modalItems?.addEventListener("click", (e) => {
+    const rejectedReasonBtn = e.target.closest(".req-rejected-reason-trigger");
+    if (rejectedReasonBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openRejectedReasonViewModal(rejectedReasonBtn.getAttribute("data-rejected-reason") || "");
+      return;
+    }
+
     const opsApproveAll = e.target.closest("button.req-ops-approve-all");
     if (opsApproveAll) {
       e.preventDefault();
