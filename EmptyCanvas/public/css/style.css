@@ -9599,7 +9599,9 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
 }
 
 /* Orders Review: component status pill and rejected reason viewer */
-.sv-rejected-reason-trigger.co-item-status{
+.rejected-reason-trigger.co-item-status,
+.sv-rejected-reason-trigger.co-item-status,
+.rejected-reason-trigger.co-status-btn{
   appearance: none;
   -webkit-appearance: none;
   font-family: inherit;
@@ -9607,26 +9609,71 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   box-shadow: none;
 }
 
-.sv-rejected-reason-trigger.co-item-status:hover{
+.rejected-reason-trigger.co-item-status:hover,
+.sv-rejected-reason-trigger.co-item-status:hover,
+.rejected-reason-trigger.co-status-btn:hover{
   filter: brightness(.98);
   transform: translateY(-1px);
 }
 
 .rejected-reason-view-text{
-  min-height: 92px;
-  padding: 14px 16px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: 16px 18px;
   border-radius: 18px;
-  border: 1px solid #FECACA;
-  background:
-    radial-gradient(circle at 12% 30%, rgba(239,68,68,.22) 0 2px, transparent 3px),
-    radial-gradient(circle at 78% 22%, rgba(239,68,68,.18) 0 4px, transparent 5px),
-    linear-gradient(135deg, #1F0707 0%, #120405 100%);
+  border: 1px solid rgba(248, 113, 113, .34);
+  background-color: #130304;
+  background-image:
+    radial-gradient(circle at 11% 22%, transparent 0 8px, rgba(248, 113, 113, 0.22) 8.8px 10.8px, transparent 11.6px),
+    radial-gradient(circle at 29% 66%, transparent 0 6px, rgba(252, 165, 165, 0.18) 6.8px 8.4px, transparent 9.2px),
+    radial-gradient(circle at 58% 26%, transparent 0 7px, rgba(248, 113, 113, 0.16) 7.8px 9.6px, transparent 10.2px),
+    radial-gradient(circle at 84% 30%, transparent 0 9px, rgba(239, 68, 68, 0.2) 9.8px 11.8px, transparent 12.8px),
+    radial-gradient(circle at 74% 74%, transparent 0 7px, rgba(252, 165, 165, 0.18) 7.8px 9.6px, transparent 10.4px),
+    radial-gradient(circle at 94% 72%, transparent 0 11px, rgba(248, 113, 113, 0.16) 11.8px 13.8px, transparent 14.6px),
+    linear-gradient(180deg, #1F0508 0%, #050000 100%);
   color: #FFFFFF;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1.45;
+  text-align: center;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.rejected-reason-view-text::before,
+.rejected-reason-view-text::after{
+  position: absolute;
+  z-index: 0;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.rejected-reason-view-text::before{
+  content: "!   ×   !";
+  top: 10px;
+  left: 16px;
+  font-size: 30px;
+  letter-spacing: 32px;
+  color: rgba(248, 113, 113, 0.22);
+  transform: rotate(-8deg);
+}
+
+.rejected-reason-view-text::after{
+  content: "×   !   ×";
+  right: 14px;
+  bottom: 8px;
+  font-size: 24px;
+  letter-spacing: 20px;
+  color: rgba(239, 68, 68, 0.22);
+  transform: rotate(7deg);
 }
 
 
@@ -9667,8 +9714,8 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   align-items: center;
   justify-content: center;
   min-height: 1em;
-  padding: 10px 11px;
-  font-size: inherit;
+  padding: 7px 9px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
   background: transparent;
@@ -9676,22 +9723,22 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
 }
 .sv-mixed-approval-pill__part--approved{
   color: #065F46;
-  padding-right: 13px;
+  padding-right: 11px;
 }
 .sv-mixed-approval-pill__part--rejected{
   color: #B91C1C;
-  padding-left: 13px;
+  padding-left: 11px;
 }
 .sv-mixed-approval-pill__sep{
   display: none;
 }
 @media (max-width: 520px){
   .sv-mixed-approval-pill__part{
-    padding-top: 9px;
-    padding-bottom: 9px;
-    padding-left: 9px;
-    padding-right: 9px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
-  .sv-mixed-approval-pill__part--approved{ padding-right: 11px; }
-  .sv-mixed-approval-pill__part--rejected{ padding-left: 11px; }
+  .sv-mixed-approval-pill__part--approved{ padding-right: 10px; }
+  .sv-mixed-approval-pill__part--rejected{ padding-left: 10px; }
 }
