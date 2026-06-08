@@ -466,7 +466,8 @@ function _historyResolvePage(pathname = '') {
     [/^\/orders(\/|$)|^\/current-orders/i, 'Current Orders', 'current_orders'],
     [/^\/stocktaking/i, 'Stocktaking', 'stocktaking'],
     [/^\/products|^\/components/i, 'Products', 'products'],
-    [/^\/proposals|^\/kits/i, 'Proposals', 'proposals'],
+    [/^\/kits/i, 'Kits', 'kits'],
+    [/^\/proposals/i, 'Proposals', 'proposals'],
     [/^\/expenses\/users/i, 'Expenses Users', 'expenses_users'],
     [/^\/expenses/i, 'Expenses', 'expenses'],
     [/^\/b2b/i, 'B2B', 'b2b'],
@@ -2019,6 +2020,7 @@ const ALL_PAGES = [
   "Stocktaking",
   "Products",
   "Proposals",
+  "Kits",
   "Tasks",
   "KPIs",
   "History",
@@ -2051,7 +2053,8 @@ function normalizePages(names = []) {
   if (set.has("create new order")) out.push("Create New Order");
   if (set.has("stocktaking")) out.push("Stocktaking");
   if (set.has("products") || set.has("product") || set.has("components") || set.has("inventory products")) out.push("Products");
-  if (set.has("proposals") || set.has("quotation proposals") || set.has("saved quotations") || set.has("kits")) out.push("Proposals");
+  if (set.has("proposals") || set.has("quotation proposals") || set.has("saved quotations")) out.push("Proposals");
+  if (set.has("kits") || set.has("product kits") || set.has("saved kits")) out.push("Kits");
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
   if (set.has("history") || set.has("system history") || set.has("audit history") || set.has("audit log") || set.has("system audit") || set.has("/history")) out.push("History");
@@ -3260,6 +3263,8 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     products: "Products",
     proposals: "Proposals",
     "product-proposals": "Proposals",
+    kits: "Kits",
+    "product-kits": "Kits",
     "orders-review": "Orders Review",
     expenses: "Expenses",
     "expenses-users": "Expenses Users",
@@ -6521,9 +6526,14 @@ function expandAllowedForUI(list = []) {
   }
   if (set.has("Proposals")) {
     set.add("Proposals");
-    set.add("Kits");
     set.add("Saved Quotations");
     set.add("/proposals");
+  }
+  if (set.has("Kits")) {
+    set.add("Kits");
+    set.add("Product Kits");
+    set.add("Saved Kits");
+    set.add("/kits");
   }
   if (set.has("Expenses")) {
     set.add("Expenses");
@@ -6602,6 +6612,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Stocktaking")) return "/stocktaking";
   if (list.includes("Products")) return "/products";
   if (list.includes("Proposals")) return "/proposals";
+  if (list.includes("Kits")) return "/kits";
   if (list.includes("Tasks")) return "/tasks";
   if (list.includes("History")) return "/history";
   if (list.includes("Backup")) return "/backup";
@@ -7624,6 +7635,10 @@ app.get("/products", requireAuth, requirePage("Products"), (req, res) => {
 
 app.get("/proposals", requireAuth, requirePage(["Proposals", "Products"]), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "proposals.html"));
+});
+
+app.get("/kits", requireAuth, requirePage(["Kits", "Products"]), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "kits.html"));
 });
 
 app.get("/tasks", requireAuth, requirePage("Tasks"), (req, res) => {
@@ -23867,7 +23882,7 @@ app.delete(
 app.get(
   "/api/products/kits",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23884,7 +23899,7 @@ app.get(
 app.post(
   "/api/products/kits",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23901,7 +23916,7 @@ app.post(
 app.post(
   "/api/products/kits/:kitId/copy",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23918,7 +23933,7 @@ app.post(
 app.patch(
   "/api/products/kits/:kitId",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23935,7 +23950,7 @@ app.patch(
 app.delete(
   "/api/products/kits/:kitId",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23952,7 +23967,7 @@ app.delete(
 app.get(
   "/api/products/kits/:kitId",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23970,7 +23985,7 @@ app.get(
 app.post(
   "/api/products/kits/:kitId/items",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -23987,7 +24002,7 @@ app.post(
 app.patch(
   "/api/products/kits/:kitId/items/:itemId",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -24004,7 +24019,7 @@ app.patch(
 app.delete(
   "/api/products/kits/:kitId/items/:itemId",
   requireAuth,
-  requirePage(["Proposals", "Products"]),
+  requirePage(["Kits", "Proposals", "Products"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
