@@ -2002,6 +2002,7 @@ if (document.querySelector('.sidebar')) {
         department: String(safe.department || '').trim(),
         email: String(safe.email || '').trim(),
         photoUrl: String(safe.photoUrl || '').trim(),
+        coverPhotoUrl: String(safe.coverPhotoUrl || safe.coverPhoto || '').trim(),
         allowedPages: Array.isArray(safe.allowedPages) ? safe.allowedPages : (getCachedAllowedPages() || []),
         savedAt: Date.now(),
       };
@@ -2009,8 +2010,52 @@ if (document.querySelector('.sidebar')) {
     } catch {}
   }
 
+  function normalizeSystemCoverUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (!['http:', 'https:', 'blob:'].includes(String(url.protocol || '').toLowerCase())) return '';
+      if (url.origin === window.location.origin) return `${url.pathname}${url.search}${url.hash}`;
+      return url.href;
+    } catch {
+      return '';
+    }
+  }
+
+  function applyUserSystemCover(coverPhotoUrl = '') {
+    const cleanUrl = normalizeSystemCoverUrl(coverPhotoUrl);
+    const root = document.documentElement;
+    if (cleanUrl) {
+      try { root.style.setProperty('--ops-system-cover-image', `url(${JSON.stringify(cleanUrl)})`); } catch {}
+      try { document.body.classList.add('ops-has-system-cover'); } catch {}
+      try {
+        document.querySelectorAll('.main-content').forEach((el) => {
+          el.classList.add('ops-system-cover-target');
+        });
+      } catch {}
+    } else {
+      try { root.style.removeProperty('--ops-system-cover-image'); } catch {}
+      try { document.body.classList.remove('ops-has-system-cover'); } catch {}
+      try {
+        document.querySelectorAll('.main-content').forEach((el) => {
+          el.classList.remove('ops-system-cover-target');
+        });
+      } catch {}
+    }
+  }
+
+  try {
+    window.OpsSystemCover = Object.assign({}, window.OpsSystemCover || {}, {
+      apply: applyUserSystemCover,
+      normalize: normalizeSystemCoverUrl,
+    });
+  } catch {}
+
   function primeChromeFromCache(){
     const cachedChrome = readChromeCache();
+    const cachedCoverPhotoUrl = String(cachedChrome?.coverPhotoUrl || cachedChrome?.coverPhoto || '').trim();
+    applyUserSystemCover(cachedCoverPhotoUrl);
     const cachedName = String(cachedChrome?.name || getCachedName() || '').trim();
     if (cachedName) {
       try { localStorage.setItem('username', cachedName); } catch {}
@@ -2023,6 +2068,7 @@ if (document.querySelector('.sidebar')) {
           department: cachedChrome?.department || '',
           email: cachedChrome?.email || '',
           photoUrl: cachedChrome?.photoUrl || '',
+          coverPhotoUrl: cachedCoverPhotoUrl,
         });
       } catch {}
     }
@@ -2182,6 +2228,8 @@ if (document.querySelector('.sidebar')) {
 
   async function ensureGreetingAndPages(){
     const cachedChrome = readChromeCache();
+    const cachedCoverPhotoUrl = String(cachedChrome?.coverPhotoUrl || cachedChrome?.coverPhoto || '').trim();
+    applyUserSystemCover(cachedCoverPhotoUrl);
     const cached = getCachedName() || String(cachedChrome?.name || '').trim();
     if (cached) {
       renderGreeting(cached);
@@ -2198,6 +2246,7 @@ if (document.querySelector('.sidebar')) {
           department: cachedChrome?.department || window.__opsUserInfo?.department || '',
           email: cachedChrome?.email || window.__opsUserInfo?.email || '',
           photoUrl: cachedChrome?.photoUrl || window.__opsUserInfo?.photoUrl || '',
+          coverPhotoUrl: cachedCoverPhotoUrl || window.__opsUserInfo?.coverPhotoUrl || '',
         });
       } catch {}
     }
@@ -2211,6 +2260,8 @@ if (document.querySelector('.sidebar')) {
       const data = await res.json();
 
       const name = (data && (data.name || data.username)) ? String(data.name || data.username) : '';
+      const coverPhotoUrl = String(data?.coverPhotoUrl || data?.coverPhoto || '').trim();
+      applyUserSystemCover(coverPhotoUrl);
       if (name) {
         if (name !== cached) localStorage.setItem('username', name);
         renderGreeting(name);
@@ -2239,6 +2290,7 @@ if (document.querySelector('.sidebar')) {
           position: data.position || '',
           department: data.department || '',
           photoUrl: data.photoUrl || '',
+          coverPhotoUrl,
           email: data.email || ''
         };
 
@@ -2253,6 +2305,7 @@ if (document.querySelector('.sidebar')) {
         position: data.position || '',
         department: data.department || '',
         photoUrl: data.photoUrl || '',
+        coverPhotoUrl,
         email: data.email || '',
         allowedPages: Array.isArray(data.allowedPages) ? data.allowedPages : (getCachedAllowedPages() || []),
       });
