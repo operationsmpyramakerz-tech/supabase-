@@ -15,9 +15,9 @@
 <script src="/pwa-register.js" defer></script>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Account Info</title>
+<title>User Profile</title>
 <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet"/>
-<link href="/css/ui-redesign.css?v=mobile-header-autohide-stable-v1" rel="stylesheet"/>
+<link href="/css/ui-redesign.css?v=user-cover-system-bg-v1" rel="stylesheet"/>
 <style>
   /* 🔒 Critical: prevent sidebar links flash before permissions load */
   body.permissions-loading .sidebar li { display: none !important; }
@@ -602,6 +602,187 @@
     }
   }
 </style>
+
+<style>
+  /* User Profile cover + avatar hero redesign */
+  .page-account .account-panel--profile.account-profile-modern{
+    width: min(100%, 820px);
+    padding: 0 0 clamp(1.35rem, 3vw, 2.05rem) !important;
+    overflow: hidden;
+  }
+
+  .page-account .account-panel--profile.account-profile-modern::before{
+    display: none;
+  }
+
+  .page-account .profile-hero-section{
+    position: relative;
+    z-index: 1;
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .page-account .profile-cover-section{
+    position: relative;
+    height: clamp(178px, 22vw, 240px);
+    margin: 0;
+    overflow: visible;
+  }
+
+  .page-account .profile-cover-display{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: #E5E7EB;
+    cursor: pointer;
+    display: block;
+    overflow: hidden;
+  }
+
+  .page-account .profile-cover-image,
+  .page-account .profile-cover-fallback{
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    object-position: center;
+  }
+
+  .page-account .profile-cover-fallback{
+    background:
+      radial-gradient(circle at 50% 115%, rgba(255,255,255,0.88) 0 11%, transparent 12%),
+      linear-gradient(135deg, rgba(15,23,42,0.86), rgba(17,24,39,0.74)),
+      linear-gradient(135deg, rgba(249,115,22,0.34), rgba(251,146,60,0.12));
+  }
+
+  .page-account .profile-cover-edit{
+    position: absolute;
+    right: 22px;
+    bottom: 18px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 2px solid #FFFFFF;
+    border-radius: 15px;
+    background: rgba(255,255,255,0.96);
+    color: #C2410C;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.22);
+    z-index: 5;
+    transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+  }
+
+  .page-account .profile-cover-edit:hover{
+    transform: translateY(-1px);
+    background: #FFF7ED;
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.25);
+  }
+
+  .page-account .profile-cover-edit svg{
+    width: 18px;
+    height: 18px;
+  }
+
+  .page-account .profile-identity-block{
+    position: relative;
+    text-align: center;
+    margin-top: -78px;
+    padding: 0 clamp(1rem, 3vw, 2rem);
+    z-index: 4;
+  }
+
+  .page-account .profile-avatar-section{
+    display: flex;
+    justify-content: center;
+    margin: 0 0 0.9rem;
+  }
+
+  .page-account .profile-avatar-shell{
+    width: 148px;
+    height: 148px;
+  }
+
+  .page-account .profile-avatar-display{
+    box-shadow:
+      0 0 0 8px #FFFFFF,
+      0 0 0 11px rgba(249, 115, 22, 0.20),
+      0 22px 46px rgba(15, 23, 42, 0.20) !important;
+  }
+
+  .page-account .profile-avatar-edit{
+    right: -2px;
+    bottom: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    border: 2px solid #FFFFFF;
+  }
+
+  .page-account .profile-identity-name{
+    margin: 0;
+    color: #0F172A;
+    font-size: clamp(1.85rem, 3.2vw, 2.55rem);
+    font-weight: 950;
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+  }
+
+  .page-account .profile-identity-subtitle{
+    margin-top: 0.45rem;
+    color: #9CA3AF;
+    font-size: clamp(1rem, 1.7vw, 1.25rem);
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .page-account .profile-fields-list,
+  .page-account .profile-files-media-section{
+    margin-inline: clamp(1rem, 3vw, 2rem);
+  }
+
+  @media (max-width: 768px){
+    .page-account .account-panel--profile.account-profile-modern{
+      border-radius: 26px;
+    }
+
+    .page-account .profile-cover-section{
+      height: 150px;
+    }
+
+    .page-account .profile-identity-block{
+      margin-top: -56px;
+    }
+
+    .page-account .profile-avatar-shell{
+      width: 112px;
+      height: 112px;
+    }
+
+    .page-account .profile-avatar-display{
+      box-shadow:
+        0 0 0 6px #FFFFFF,
+        0 0 0 8px rgba(249, 115, 22, 0.20),
+        0 18px 36px rgba(15, 23, 42, 0.18) !important;
+    }
+
+    .page-account .profile-avatar-edit,
+    .page-account .profile-cover-edit{
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+    }
+
+    .page-account .profile-cover-edit{
+      right: 14px;
+      bottom: 14px;
+    }
+  }
+</style>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-account">
@@ -686,7 +867,7 @@
 </div>
 </div>
 <div class="header-row2">
-<h1 class="page-title">Account Info</h1>
+<h1 class="page-title">User Profile</h1>
 </div>
 </header>
 <main class="container-full-width">
@@ -757,9 +938,9 @@
 </div>
 
     <script>if (window.feather) feather.replace();</script>
-<script src="/js/common-ui.js?v=mobile-header-autohide-stable-v1"></script>
+<script src="/js/common-ui.js?v=user-cover-system-bg-v1"></script>
 <script src="/js/script.js?v=no-data-empty-v1"></script>
-<script src="/js/account.js"></script>
+<script src="/js/account.js?v=user-profile-cover-v1"></script>
     <script>
 (() => {
   const GROUP_KEY = 'ui.sidebar.nrr.open';
