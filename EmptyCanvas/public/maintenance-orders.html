@@ -92,15 +92,20 @@
   <div class="orders-toolbar" aria-label="Maintenance orders tools">
     <div class="orders-toolbar__scroll">
       <div id="reqTabs" class="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Maintenance Orders status">
-        <a class="tab-portfolio order-status-tab" data-tab="received" role="tab" aria-selected="true"
-           href="/orders/maintenance-orders?tab=received">
+        <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="true"
+           href="/orders/maintenance-orders?tab=not-started">
           <span class="order-status-tab__icon"><i data-feather="tool"></i></span>
-          <span class="order-status-tab__label">Tech Visit</span>
+          <span class="order-status-tab__label">Not started</span>
         </a>
-        <a class="tab-portfolio order-status-tab" data-tab="delivered" role="tab" aria-selected="false"
-           href="/orders/maintenance-orders?tab=delivered">
+        <a class="tab-portfolio order-status-tab" data-tab="in-progress" role="tab" aria-selected="false"
+           href="/orders/maintenance-orders?tab=in-progress">
+          <span class="order-status-tab__icon"><i data-feather="activity"></i></span>
+          <span class="order-status-tab__label">In progress</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="done" role="tab" aria-selected="false"
+           href="/orders/maintenance-orders?tab=done">
           <span class="order-status-tab__icon"><i data-feather="check-circle"></i></span>
-          <span class="order-status-tab__label">Delivered</span>
+          <span class="order-status-tab__label">Done</span>
         </a>
       </div>
     </div>
@@ -275,6 +280,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=notification-freeze-fix-v2"></script>
-<script src="/js/requested-orders.js?v=maintenance-techvisit-pdf-fix-v1"></script>
+<script src="/js/requested-orders.js?v=maintenance-tabs-workflow-v1"></script>
 </body>
 </html>
