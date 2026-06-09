@@ -818,6 +818,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const modernSelectState = new WeakMap();
   let openModernSelect = null;
+  let modernSelectPlacementRaf = 0;
+
+  function queueOpenModernSelectPlacement() {
+    if (!openModernSelect) return;
+    window.cancelAnimationFrame(modernSelectPlacementRaf);
+    modernSelectPlacementRaf = window.requestAnimationFrame(() => {
+      if (openModernSelect) updateModernSelectPlacement(openModernSelect);
+    });
+  }
+
+  window.addEventListener("resize", queueOpenModernSelectPlacement, { passive: true });
+  document.addEventListener("scroll", queueOpenModernSelectPlacement, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && openModernSelect) closeModernSelect(openModernSelect);
+  });
 
   function closeModernSelect(selectEl) {
     const state = modernSelectState.get(selectEl);
@@ -1110,22 +1125,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.addEventListener("click", (e) => {
       if (!wrap.contains(e.target)) closeModernSelect(selectEl);
-    });
-
-    window.addEventListener("resize", () => {
-      if (openModernSelect === selectEl) updateModernSelectPlacement(selectEl);
-    });
-
-    document.addEventListener(
-      "scroll",
-      () => {
-        if (openModernSelect === selectEl) updateModernSelectPlacement(selectEl);
-      },
-      true,
-    );
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && openModernSelect === selectEl) closeModernSelect(selectEl);
     });
 
     modernSelectState.set(selectEl, state);
@@ -3863,11 +3862,12 @@ document.addEventListener("DOMContentLoaded", () => {
       rejectedReasonRow.hidden = currentTab === "all" || currentTab === "rejected" || !rejectedReasonText;
     }
 
-    // Extra fields: show for "Received" and later only
-    // NOTE: User request: in "Not Started" tab hide Receipt/Received-by even if present.
-    const shouldShowExtras = !isMaintenanceOrder && currentTab !== "not-started" && (stage?.idx || 1) >= 3;
+    // Extra fields: show for "Received" and later only. Maintenance orders also
+    // use the same receipt number/photo metadata when spare parts were replaced.
     const receiptVal = g && (g.receiptNumber !== null && g.receiptNumber !== undefined) ? g.receiptNumber : null;
     const receivedByVal = String(g.operationsByName || "").trim();
+    const receiptPhotoEntries = collectReceiptEntriesFromGroup(g || {});
+    const shouldShowExtras = currentTab !== "not-started" && (stage?.idx || 1) >= 3 && (!isMaintenanceOrder || !!receiptVal || receiptPhotoEntries.length > 0 || groupHasMaintenanceSpareParts(g));
 
     if (receiptRow) receiptRow.hidden = !shouldShowExtras;
     if (modalReceiptNumber) {
@@ -3875,7 +3875,6 @@ document.addEventListener("DOMContentLoaded", () => {
       modalReceiptNumber.textContent = receiptDisplay || "—";
     }
 
-    const receiptPhotoEntries = collectReceiptEntriesFromGroup(g || {});
     const shouldShowReceiptPhotosMeta = shouldShowExtras && ["received", "delivered"].includes(currentTab);
 
     if (receivedByRow) receivedByRow.hidden = !shouldShowReceiptPhotosMeta;
@@ -4191,6 +4190,7 @@ document.addEventListener("DOMContentLoaded", () => {
     { value: "idCode", label: "ID", checked: true },
     { value: "component", label: "Component", checked: true },
     { value: "issue", label: "Issue", checked: true },
+    { value: "qty", label: "Qty", checked: true },
     { value: "unit", label: "Unit cost", checked: true },
     { value: "total", label: "Total cost", checked: true },
     { value: "link", label: "Component link", checked: false },
@@ -4866,6 +4866,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let maintenanceLogLastFocus = null;
   let maintenanceLogLoadToken = 0;
+  let currentMaintenanceSparePartOptions = [];
 
   function maintenanceLogItemsForGroup(group = activeGroup) {
     return (Array.isArray(group?.items) ? group.items.slice() : []).sort(compareItemsByProductName);
@@ -4891,6 +4892,119 @@ document.addEventListener("DOMContentLoaded", () => {
     `).join('');
   }
 
+  function parseMaintenanceSpareQtyFromName(value) {
+    let name = String(value || '').trim();
+    let qty = 1;
+    const match = name.match(/(?:\s*[x×]\s*|\s*\(\s*qty\s*:?\s*)(\d+(?:\.\d+)?)\s*\)?\s*$/i);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > 0) qty = Math.max(1, Math.round(parsed));
+      name = name.slice(0, match.index).trim();
+    }
+    return { name, qty };
+  }
+
+  function normalizeMaintenanceSpareEntries(item = {}) {
+    const out = [];
+    const seen = new Set();
+    const add = (entry = {}) => {
+      let id = String(entry?.id ?? entry?.productId ?? entry?.sparePartId ?? '').trim();
+      let name = String(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName ?? '').trim();
+      let qty = Number(entry?.qty ?? entry?.quantity ?? 1);
+      if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+      qty = Math.max(1, Math.round(qty));
+      if (!name && id) {
+        const match = currentMaintenanceSparePartOptions.find((opt) => String(opt.value || '') === id);
+        if (match?.label) name = String(match.label || '').trim();
+      }
+      const parsed = parseMaintenanceSpareQtyFromName(name);
+      name = parsed.name;
+      if (parsed.qty > 1 || /[x×]|qty/i.test(String(entry?.name || ''))) qty = parsed.qty;
+      const key = `${id || normKey(name)}|${qty}`;
+      if ((!id && !name) || seen.has(key)) return;
+      seen.add(key);
+      out.push({ id, name, qty });
+    };
+
+    if (Array.isArray(item?.sparePartsReplacedEntries)) item.sparePartsReplacedEntries.forEach(add);
+    const ids = toStringArray(item?.sparePartsReplacedIds?.length ? item.sparePartsReplacedIds : item?.sparePartsReplacedId);
+    const names = toStringArray(
+      item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName,
+      { splitComma: true },
+    );
+    if (ids.length) ids.forEach((id, index) => add({ id, name: names[index] || '' }));
+    else names.forEach((name) => add({ name }));
+    return out;
+  }
+
+  function createMaintenanceSpareRowMarkup(cardIndex, rowIndex, entry = {}) {
+    const selectedValue = String(entry?.id || entry?.name || '').trim();
+    const qty = Number.isFinite(Number(entry?.qty)) && Number(entry.qty) > 0 ? Math.max(1, Math.round(Number(entry.qty))) : 1;
+    return `
+      <div class="req-maintenance-spare-row" data-maintenance-spare-row data-maintenance-spare-row-index="${rowIndex}">
+        <div class="co-submodal-field req-maintenance-spare-row__part">
+          <label class="co-submodal-label" for="${maintenanceLogInputId(cardIndex, `spare_${rowIndex}`)}">Spare part</label>
+          <select class="co-submodal-select" id="${maintenanceLogInputId(cardIndex, `spare_${rowIndex}`)}" data-maintenance-log-field="sparePartId" data-placeholder="Select component" data-searchable="true" data-search-placeholder="Search components" data-selected-value="${escapeHTML(selectedValue)}">
+            <option value="">Select component</option>
+          </select>
+        </div>
+        <div class="co-submodal-field req-maintenance-spare-row__qty">
+          <label class="co-submodal-label" for="${maintenanceLogInputId(cardIndex, `qty_${rowIndex}`)}">Qty</label>
+          <input class="co-submodal-input" id="${maintenanceLogInputId(cardIndex, `qty_${rowIndex}`)}" data-maintenance-log-field="sparePartQty" type="number" min="1" step="1" inputmode="numeric" value="${qty}" />
+        </div>
+        <button type="button" class="req-maintenance-spare-row__remove" data-maintenance-remove-spare-row aria-label="Remove spare part">
+          <i data-feather="x"></i>
+        </button>
+      </div>
+    `;
+  }
+
+  function fillMaintenanceSpareRowSelect(row, selectedValue = '') {
+    const select = row?.querySelector?.('[data-maintenance-log-field="sparePartId"]');
+    if (!select) return;
+    const selected = String(selectedValue || select.value || select.dataset.selectedValue || '').trim();
+    const selectedIsName = selected && !currentMaintenanceSparePartOptions.some((opt) => String(opt.value || '') === selected);
+    const options = selectedIsName
+      ? [{ value: selected, label: selected }, ...currentMaintenanceSparePartOptions]
+      : currentMaintenanceSparePartOptions;
+    ensureModernSelect(select);
+    fillSelectOptions(select, options, {
+      placeholder: 'Select component',
+      allowEmpty: true,
+      selectedValue: selected,
+    });
+    select.disabled = false;
+  }
+
+  function refreshMaintenanceSpareRows(card) {
+    if (!card) return;
+    card.querySelectorAll('[data-maintenance-spare-row]').forEach((row) => {
+      const select = row.querySelector('[data-maintenance-log-field="sparePartId"]');
+      fillMaintenanceSpareRowSelect(row, select?.value || select?.dataset.selectedValue || '');
+    });
+    const rows = Array.from(card.querySelectorAll('[data-maintenance-spare-row]'));
+    rows.forEach((row) => {
+      const removeBtn = row.querySelector('[data-maintenance-remove-spare-row]');
+      if (removeBtn) removeBtn.disabled = rows.length <= 1;
+    });
+  }
+
+  function addMaintenanceSpareRow(card, entry = {}) {
+    if (!card) return;
+    const list = card.querySelector('[data-maintenance-spare-list]');
+    if (!list) return;
+    const cardIndex = Number(card.getAttribute('data-maintenance-log-index')) || 0;
+    const nextIndex = list.querySelectorAll('[data-maintenance-spare-row]').length;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = createMaintenanceSpareRowMarkup(cardIndex, nextIndex, entry);
+    const row = wrap.firstElementChild;
+    if (!row) return;
+    list.appendChild(row);
+    fillMaintenanceSpareRowSelect(row, entry?.id || entry?.name || '');
+    refreshMaintenanceSpareRows(card);
+    if (window.feather) window.feather.replace();
+  }
+
   function renderMaintenanceLogCards(items = [], options = {}) {
     if (!maintenanceLogItems) return;
     const safeItems = Array.isArray(items) ? items : [];
@@ -4898,10 +5012,10 @@ document.addEventListener("DOMContentLoaded", () => {
       value: entry?.name,
       label: entry?.name,
     }));
-    const sparePartOptions = (options?.spareParts || []).map((entry) => ({
-      value: entry?.id,
-      label: entry?.name,
-    }));
+    currentMaintenanceSparePartOptions = (options?.spareParts || []).map((entry) => ({
+      value: String(entry?.id || entry?.value || '').trim(),
+      label: String(entry?.name || entry?.label || '').trim(),
+    })).filter((entry) => entry.value && entry.label);
 
     if (!safeItems.length) {
       maintenanceLogItems.innerHTML = `
@@ -4918,6 +5032,8 @@ document.addEventListener("DOMContentLoaded", () => {
     maintenanceLogItems.innerHTML = safeItems.map((item, index) => {
       const orderId = String(item?.id || '').trim();
       const issue = maintenanceIssueText(item);
+      const spareEntries = normalizeMaintenanceSpareEntries(item);
+      const initialRows = spareEntries.length ? spareEntries : [{ id: '', name: '', qty: 1 }];
       return `
         <section class="req-maintenance-log-card" data-maintenance-order-id="${escapeHTML(orderId)}" data-maintenance-log-index="${index}">
           <div class="req-maintenance-log-card__head">
@@ -4942,11 +5058,17 @@ document.addEventListener("DOMContentLoaded", () => {
               <label class="co-submodal-label" for="${maintenanceLogInputId(index, 'repair')}">Repair Action</label>
               <textarea class="co-submodal-textarea" id="${maintenanceLogInputId(index, 'repair')}" data-maintenance-log-field="repairAction" rows="4" placeholder="Write the repair action"></textarea>
             </div>
-            <div class="co-submodal-field">
-              <label class="co-submodal-label" for="${maintenanceLogInputId(index, 'spare')}">Spare parts replaced</label>
-              <select class="co-submodal-select" id="${maintenanceLogInputId(index, 'spare')}" data-maintenance-log-field="sparePartIds" data-placeholder="No spare part selected" data-searchable="true" data-search-placeholder="Search spare parts" multiple>
-                <option value="">No spare part selected</option>
-              </select>
+            <div class="co-submodal-field req-maintenance-log-card__spares">
+              <div class="req-maintenance-spare-head">
+                <label class="co-submodal-label">Spare parts replaced</label>
+                <button type="button" class="req-maintenance-spare-add" data-maintenance-add-spare-row>
+                  <i data-feather="plus"></i>
+                  <span>Add</span>
+                </button>
+              </div>
+              <div class="req-maintenance-spare-list" data-maintenance-spare-list>
+                ${initialRows.map((entry, rowIndex) => createMaintenanceSpareRowMarkup(index, rowIndex, entry)).join('')}
+              </div>
             </div>
           </div>
         </section>
@@ -4957,7 +5079,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const card = maintenanceLogItems.querySelector(`[data-maintenance-log-index="${index}"]`);
       if (!card) return;
       const resolutionSelect = card.querySelector('[data-maintenance-log-field="resolutionMethod"]');
-      const spareSelect = card.querySelector('[data-maintenance-log-field="sparePartIds"]');
       const actualInput = card.querySelector('[data-maintenance-log-field="actualIssueDescription"]');
       const repairInput = card.querySelector('[data-maintenance-log-field="repairAction"]');
 
@@ -4965,34 +5086,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (repairInput) repairInput.value = String(item?.repairAction || '');
 
       const currentResolution = String(item?.resolutionMethod || '').trim();
-      const currentSparePartIds = toStringArray(
-        item?.sparePartsReplacedIds?.length ? item.sparePartsReplacedIds : item?.sparePartsReplacedId,
-      );
-      const currentSparePartNames = toStringArray(
-        item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName,
-        { splitComma: true },
-      );
-      const spareOptionsForItem = currentSparePartNames.length && !currentSparePartIds.length
-        ? [
-            ...sparePartOptions,
-            ...currentSparePartNames.map((name) => ({ value: name, label: name })),
-          ]
-        : sparePartOptions;
-
       ensureModernSelect(resolutionSelect);
-      ensureModernSelect(spareSelect);
       if (resolutionSelect) resolutionSelect.disabled = false;
-      if (spareSelect) spareSelect.disabled = false;
       fillSelectOptions(resolutionSelect, resolutionOptions, {
         placeholder: 'Select resolution method',
         allowEmpty: true,
         selectedValue: currentResolution,
       });
-      fillSelectOptions(spareSelect, spareOptionsForItem, {
-        placeholder: 'No spare part selected',
-        allowEmpty: false,
-        selectedValues: currentSparePartIds.length ? currentSparePartIds : currentSparePartNames,
-      });
+      refreshMaintenanceSpareRows(card);
     });
 
     if (window.feather) window.feather.replace();
@@ -5004,20 +5105,32 @@ document.addEventListener("DOMContentLoaded", () => {
       .map((card) => {
         const orderId = String(card.getAttribute('data-maintenance-order-id') || '').trim();
         const resolutionSelect = card.querySelector('[data-maintenance-log-field="resolutionMethod"]');
-        const spareSelect = card.querySelector('[data-maintenance-log-field="sparePartIds"]');
         const actualInput = card.querySelector('[data-maintenance-log-field="actualIssueDescription"]');
         const repairInput = card.querySelector('[data-maintenance-log-field="repairAction"]');
+        const spareParts = Array.from(card.querySelectorAll('[data-maintenance-spare-row]'))
+          .map((row) => {
+            const select = row.querySelector('[data-maintenance-log-field="sparePartId"]');
+            const qtyInput = row.querySelector('[data-maintenance-log-field="sparePartQty"]');
+            const id = String(select?.value || '').trim();
+            const name = String(getSelectSelectedLabels(select)?.[0] || '').trim();
+            const qtyNumber = Number(qtyInput?.value || 1);
+            const qty = Number.isFinite(qtyNumber) && qtyNumber > 0 ? Math.max(1, Math.round(qtyNumber)) : 1;
+            return { id, name, qty };
+          })
+          .filter((entry) => entry.id || entry.name);
         return {
           orderId,
           resolutionMethod: String(resolutionSelect?.value || '').trim(),
           actualIssueDescription: String(actualInput?.value || '').trim(),
           repairAction: String(repairInput?.value || '').trim(),
-          sparePartIds: getSelectSelectedValues(spareSelect),
-          sparePartNames: getSelectSelectedLabels(spareSelect),
+          spareParts,
+          sparePartIds: spareParts.map((entry) => entry.id).filter(Boolean),
+          sparePartNames: spareParts.map((entry) => entry.name).filter(Boolean),
         };
       })
       .filter((entry) => entry.orderId);
   }
+
 
   async function openMaintenanceLogModal() {
     if (!maintenanceLogModal || !maintenanceLogItems) return;
@@ -5104,6 +5217,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function groupHasMaintenanceSpareParts(group = activeGroup) {
+    return (Array.isArray(group?.items) ? group.items : []).some((item) => {
+      if (Array.isArray(item?.sparePartsReplacedEntries) && item.sparePartsReplacedEntries.length) return true;
+      if (toStringArray(item?.sparePartsReplacedIds || item?.sparePartsReplacedId).length) return true;
+      if (toStringArray(item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName, { splitComma: true }).length) return true;
+      return false;
+    });
+  }
+
   function openMaintenanceReceiptModal() {
     if (
       !maintenanceReceiptModal ||
@@ -5117,7 +5239,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const orderType = activeGroup?.orderType || activeGroup?.items?.[0]?.orderType;
     const modalConfig = getDeliveryProofModalConfig(orderType);
-    const needReceiptNumbers = !!modalConfig.requireReceiptNumbers;
+    const isMaintenanceOrder = isMaintenanceOrderType(orderType);
+    const needReceiptNumbers = !!modalConfig.requireReceiptNumbers || (isMaintenanceOrder && groupHasMaintenanceSpareParts(activeGroup));
 
     maintenanceReceiptLastFocus = document.activeElement;
     maintenanceReceiptInput.value = "";
@@ -5696,7 +5819,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       String(entry?.actualIssueDescription || '').trim() ||
       String(entry?.repairAction || '').trim() ||
       toStringArray(entry?.sparePartIds).length ||
-      toStringArray(entry?.sparePartNames, { splitComma: true }).length
+      toStringArray(entry?.sparePartNames, { splitComma: true }).length ||
+      (Array.isArray(entry?.spareParts) && entry.spareParts.length)
     ));
 
     if (!logsWithAnyDetails.length) {
@@ -5738,12 +5862,16 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
           it.resolutionMethod = String(entry.resolutionMethod || '').trim() || it.resolutionMethod || null;
           it.actualIssueDescription = String(entry.actualIssueDescription || '').trim() || it.actualIssueDescription || null;
           it.repairAction = String(entry.repairAction || '').trim() || it.repairAction || null;
+          const selectedSpareParts = Array.isArray(entry.spareParts) ? entry.spareParts : [];
           const selectedSparePartIds = toStringArray(entry.sparePartIds);
           const selectedSparePartLabels = toStringArray(entry.sparePartNames, { splitComma: true });
           it.sparePartsReplacedIds = selectedSparePartIds;
           it.sparePartsReplacedId = selectedSparePartIds[0] || null;
           it.sparePartsReplacedNames = selectedSparePartLabels;
-          it.sparePartsReplacedName = selectedSparePartLabels.join(', ') || null;
+          it.sparePartsReplacedName = selectedSpareParts.length
+            ? selectedSpareParts.map((part) => `${part.name || part.id}${Number(part.qty) > 1 ? ` x${Math.max(1, Math.round(Number(part.qty)))}` : ''}`).join(', ')
+            : (selectedSparePartLabels.join(', ') || null);
+          it.sparePartsReplacedEntries = selectedSpareParts;
           if (data?.status || moveToArrived || moveToShipping) {
             it.status = data?.status || (moveToShipping ? 'Shipped' : 'Arrived');
             it.statusColor = data?.statusColor || (moveToShipping ? 'blue' : 'green');
@@ -6564,6 +6692,24 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   maintenanceLogItems?.addEventListener("change", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
   });
+  maintenanceLogItems?.addEventListener("click", (e) => {
+    const addBtn = e.target?.closest?.('[data-maintenance-add-spare-row]');
+    if (addBtn) {
+      e.preventDefault();
+      const card = addBtn.closest('[data-maintenance-order-id]');
+      addMaintenanceSpareRow(card, { id: '', name: '', qty: 1 });
+      return;
+    }
+    const removeBtn = e.target?.closest?.('[data-maintenance-remove-spare-row]');
+    if (removeBtn) {
+      e.preventDefault();
+      const card = removeBtn.closest('[data-maintenance-order-id]');
+      const row = removeBtn.closest('[data-maintenance-spare-row]');
+      const rows = card ? Array.from(card.querySelectorAll('[data-maintenance-spare-row]')) : [];
+      if (row && rows.length > 1) row.remove();
+      refreshMaintenanceSpareRows(card);
+    }
+  });
   maintenanceResolutionSelect?.addEventListener("change", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
   });
@@ -6630,7 +6776,9 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     const files = Array.from(maintenanceReceiptInput?.files || []).filter(Boolean);
     const orderType = activeGroup?.orderType || activeGroup?.items?.[0]?.orderType;
     const isWithdrawalOrder = isWithdrawalOrderType(orderType);
-    const receiptNumbers = isWithdrawalOrder ? collectDeliveryReceiptNumbers() : { error: "", values: [] };
+    const isMaintenanceOrder = isMaintenanceOrderType(orderType);
+    const requiresReceiptNumbers = isWithdrawalOrder || (isMaintenanceOrder && groupHasMaintenanceSpareParts(activeGroup));
+    const receiptNumbers = requiresReceiptNumbers ? collectDeliveryReceiptNumbers() : { error: "", values: [] };
 
     if (!files.length) {
       setMaintenanceReceiptError("Please upload at least one signed report image.");

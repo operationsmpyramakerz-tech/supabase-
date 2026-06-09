@@ -3466,7 +3466,7 @@ function initNotificationsWidget() {
   // Initial badge load + live polling
   refreshNotifications(false);
   try { ensureOpsPushNotificationsEnabled({ ask: false, quiet: true }); } catch {}
-  setInterval(() => refreshNotifications(false), 1000);
+  setInterval(() => refreshNotifications(false), 15000);
 }
 
 
@@ -4668,6 +4668,12 @@ async function refreshNotifications(renderList) {
   const badge = document.getElementById("notifBadge");
   const listEl = document.getElementById("notifList");
 
+  // Guard against overlapping notification requests. The previous 1-second
+  // polling cadence could stack fetches on slow mobile networks and make order
+  // screens feel frozen, especially when large modals are open.
+  if (window.__opsNotifRefreshInFlight) return;
+  window.__opsNotifRefreshInFlight = true;
+
   try {
     const resp = await fetch(`/api/notifications/refresh?limit=60&_=${Date.now()}`, {
       credentials: "include",
@@ -4706,6 +4712,8 @@ async function refreshNotifications(renderList) {
     if (renderList && listEl) {
       listEl.innerHTML = `<div class="notif-empty">Couldn’t load notifications</div>`;
     }
+  } finally {
+    window.__opsNotifRefreshInFlight = false;
   }
 }
 
