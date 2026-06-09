@@ -10090,3 +10090,31 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
     padding-right: 6px;
   }
 }
+
+.req-maintenance-field-error{
+  margin-top: 7px;
+  color: #DC2626;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 850;
+}
+
+.req-maintenance-field-error[hidden]{
+  display: none !important;
+}
+
+.req-maintenance-log-card .is-field-invalid,
+.req-maintenance-log-card .is-field-invalid + .co-modern-select__trigger{
+  border-color: rgba(220,38,38,.72) !important;
+  box-shadow: 0 0 0 3px rgba(220,38,38,.10) !important;
+}
+
+.req-maintenance-spare-row__remove{
+  color: #DC2626 !important;
+}
+
+.req-maintenance-spare-row__remove span{
+  color: #DC2626 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
