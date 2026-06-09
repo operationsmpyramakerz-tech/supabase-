@@ -20,7 +20,7 @@
 <style>
   body.permissions-loading .sidebar li { display: none !important; }
 </style>
-<link href="/css/style.css?v=rejected-reason-view-v1" rel="stylesheet"/>
+<link href="/css/style.css?v=maintenance-log-cards-v1" rel="stylesheet"/>
 <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v2" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -515,7 +515,7 @@
 
 <!-- ===================== LOG MAINTENANCE (SUB-MODAL) ===================== -->
 <div id="reqMaintenanceLogModal" class="co-submodal-overlay" aria-hidden="true" hidden>
-  <div class="co-submodal-dialog" role="dialog" aria-modal="true" aria-labelledby="reqMaintenanceLogTitle" aria-describedby="reqMaintenanceLogSub">
+  <div class="co-submodal-dialog req-maintenance-log-dialog" role="dialog" aria-modal="true" aria-labelledby="reqMaintenanceLogTitle" aria-describedby="reqMaintenanceLogSub">
     <button type="button" class="co-submodal-close" id="reqMaintenanceLogClose" aria-label="Close">
       <i data-feather="x"></i>
     </button>
@@ -525,42 +525,8 @@
       <div class="co-submodal-sub" id="reqMaintenanceLogSub">Save the maintenance work details for this order.</div>
     </div>
 
-    <div class="co-submodal-body">
-      <div class="co-submodal-fields">
-        <div class="co-submodal-field">
-          <label class="co-submodal-label" for="reqMaintenanceResolutionSelect">Resolution Method</label>
-          <select class="co-submodal-select" id="reqMaintenanceResolutionSelect" data-placeholder="Select resolution method">
-            <option value="">Select resolution method</option>
-          </select>
-        </div>
-
-        <div class="co-submodal-field">
-          <label class="co-submodal-label" for="reqMaintenanceActualIssueInput">The Actual Issue Description</label>
-          <textarea
-            class="co-submodal-textarea"
-            id="reqMaintenanceActualIssueInput"
-            rows="5"
-            placeholder="Write the actual issue description"
-          ></textarea>
-        </div>
-
-        <div class="co-submodal-field">
-          <label class="co-submodal-label" for="reqMaintenanceRepairActionInput">Repair Action</label>
-          <textarea
-            class="co-submodal-textarea"
-            id="reqMaintenanceRepairActionInput"
-            rows="5"
-            placeholder="Write the repair action"
-          ></textarea>
-        </div>
-
-        <div class="co-submodal-field">
-          <label class="co-submodal-label" for="reqMaintenanceSparePartSelect">Spare parts replaced</label>
-          <select class="co-submodal-select" id="reqMaintenanceSparePartSelect" data-placeholder="No spare part selected" data-searchable="true" data-search-placeholder="Search spare parts" multiple>
-            <option value="">No spare part selected</option>
-          </select>
-        </div>
-      </div>
+    <div class="co-submodal-body req-maintenance-log-body">
+      <div class="req-maintenance-log-items" id="reqMaintenanceLogItems"></div>
 
       <div class="co-submodal-error" id="reqMaintenanceLogError" role="alert" aria-live="polite"></div>
     </div>
@@ -626,6 +592,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=sidebar-order-scroll-v1"></script>
-<script src="/js/requested-orders.js?v=rejected-reason-view-v1"></script>
+<script src="/js/requested-orders.js?v=maintenance-log-cards-v1"></script>
 </body>
 </html>
