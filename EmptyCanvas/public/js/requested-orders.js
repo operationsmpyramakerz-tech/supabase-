@@ -4904,6 +4904,11 @@ document.addEventListener("DOMContentLoaded", () => {
     return { name, qty };
   }
 
+  function isMaintenanceSparePlaceholder(value) {
+    const key = normKey(value);
+    return !key || key === 'selectcomponent' || key === 'selectsparepart' || key === 'nosparepartselected';
+  }
+
   function normalizeMaintenanceSpareEntries(item = {}) {
     const out = [];
     const seen = new Set();
@@ -4920,6 +4925,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const parsed = parseMaintenanceSpareQtyFromName(name);
       name = parsed.name;
       if (parsed.qty > 1 || /[x×]|qty/i.test(String(entry?.name || ''))) qty = parsed.qty;
+      if (!id && isMaintenanceSparePlaceholder(name)) return;
       const key = `${id || normKey(name)}|${qty}`;
       if ((!id && !name) || seen.has(key)) return;
       seen.add(key);
@@ -4953,7 +4959,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <input class="co-submodal-input" id="${maintenanceLogInputId(cardIndex, `qty_${rowIndex}`)}" data-maintenance-log-field="sparePartQty" type="number" min="1" step="1" inputmode="numeric" value="${qty}" />
         </div>
         <button type="button" class="req-maintenance-spare-row__remove" data-maintenance-remove-spare-row aria-label="Remove spare part">
-          <i data-feather="x"></i>
+          <span aria-hidden="true">×</span>
         </button>
       </div>
     `;
@@ -5115,9 +5121,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const name = String(getSelectSelectedLabels(select)?.[0] || '').trim();
             const qtyNumber = Number(qtyInput?.value || 1);
             const qty = Number.isFinite(qtyNumber) && qtyNumber > 0 ? Math.max(1, Math.round(qtyNumber)) : 1;
+            if (!id && isMaintenanceSparePlaceholder(name)) return null;
             return { id, name, qty };
           })
-          .filter((entry) => entry.id || entry.name);
+          .filter((entry) => entry && (entry.id || entry.name));
         return {
           orderId,
           resolutionMethod: String(resolutionSelect?.value || '').trim(),
@@ -5219,10 +5226,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function groupHasMaintenanceSpareParts(group = activeGroup) {
     return (Array.isArray(group?.items) ? group.items : []).some((item) => {
-      if (Array.isArray(item?.sparePartsReplacedEntries) && item.sparePartsReplacedEntries.length) return true;
-      if (toStringArray(item?.sparePartsReplacedIds || item?.sparePartsReplacedId).length) return true;
-      if (toStringArray(item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName, { splitComma: true }).length) return true;
-      return false;
+      const entries = normalizeMaintenanceSpareEntries(item);
+      if (entries.length) return true;
+      const ids = toStringArray(item?.sparePartsReplacedIds || item?.sparePartsReplacedId)
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+      if (ids.length) return true;
+      const names = toStringArray(item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName, { splitComma: true })
+        .map((value) => String(value || '').trim())
+        .filter((value) => !isMaintenanceSparePlaceholder(value));
+      return names.length > 0;
     });
   }
 
