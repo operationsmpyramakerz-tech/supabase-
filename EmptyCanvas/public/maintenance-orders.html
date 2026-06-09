@@ -216,7 +216,7 @@
 
     <div class="co-submodal-actions">
       <button type="button" class="ro-action-btn ro-action-btn--light" id="reqMaintenanceLogCancel">Cancel</button>
-      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqMaintenanceLogConfirm">Confirm</button>
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqMaintenanceLogConfirm" onclick="window.__opsMaintenanceLogConfirmClick && window.__opsMaintenanceLogConfirmClick(event)">Confirm</button>
     </div>
   </div>
 </div>
@@ -275,6 +275,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=notification-freeze-fix-v2"></script>
-<script src="/js/requested-orders.js?v=maintenance-log-confirm-fix-v3"></script>
+<script src="/js/requested-orders.js?v=maintenance-log-confirm-fix-v4"></script>
 </body>
 </html>
