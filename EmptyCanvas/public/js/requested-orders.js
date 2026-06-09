@@ -1187,7 +1187,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Cache the requested orders list in sessionStorage to avoid re-fetching / re-rendering
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
   const REQ_CACHE_KEY = isMaintenancePage
-    ? "cache:ops:requestedOrders:v5:maintenance-tabs"
+    ? "cache:ops:requestedOrders:v6:maintenance-all-tabs"
     : "cache:ops:requestedOrders:v6:operations-approval";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
@@ -2986,10 +2986,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const url = new URL(window.location.href);
     const tab = norm(url.searchParams.get("tab"));
     const allowed = isMaintenancePage
-      ? new Set(["not-started", "in-progress", "done"])
+      ? new Set(["all", "not-started", "in-progress", "done"])
       : new Set(["all", "approved", "rejected", "remaining", "received", "delivered", "archive"]);
     if (allowed.has(tab)) return tab;
-    return isMaintenancePage ? "not-started" : "all";
+    return "all";
   }
 
   function normalizeTypeFilterValue(value) {
@@ -3332,7 +3332,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------- Rendering ----------
   let allItems = [];
   let groups = [];
-  let currentTab = isMaintenancePage ? "not-started" : "all";
+  let currentTab = "all";
   let currentTypeFilter = "all";
   let activeGroup = null;
   let lastFocus = null;
@@ -3476,6 +3476,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return (Array.isArray(group?.items) ? group.items : []).some((item) => itemHasMaintenanceLog(item));
   }
 
+  function maintenanceGroupWorkflowState(group = activeGroup) {
+    const stage = group?.stage || computeStage(group?.items || []);
+    const idx = Number(stage?.idx) || 1;
+    if (idx >= 4) {
+      return { key: "done", label: "Done", color: "green", idx };
+    }
+    if (groupHasMaintenanceLog(group)) {
+      return { key: "in-progress", label: "In progress", color: "blue", idx };
+    }
+    return { key: "not-started", label: "Not started", color: "gray", idx };
+  }
+
   function groupMatchesCurrentTab(g) {
     const idx = g?.stage?.idx || 1;
     const isArchived = idx >= 5 || norm(g?.stage?.key) === "archive";
@@ -3492,10 +3504,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // - Done: order was marked as delivered/arrived.
     if (isMaintenancePage) {
       if (!isMaintenanceOrder) return false;
-      const hasLog = groupHasMaintenanceLog(g);
-      if (currentTab === "not-started") return (idx === 2 || idx === 3) && !hasLog;
-      if (currentTab === "in-progress") return idx === 3 && hasLog;
-      if (currentTab === "done") return idx >= 4;
+      const maintenanceState = maintenanceGroupWorkflowState(g);
+      if (currentTab === "all") return true;
+      if (currentTab === "not-started") return maintenanceState.key === "not-started";
+      if (currentTab === "in-progress") return maintenanceState.key === "in-progress";
+      if (currentTab === "done") return maintenanceState.key === "done";
       return false;
     }
 
@@ -3677,7 +3690,9 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     const stage = g.stage || computeStage(g.items || []);
-    const cardStatus = !isMaintenancePage ? summarizeOpsCardStatus(g.items || [], stage) : { label: stage.label, color: stage.color };
+    const cardStatus = isMaintenancePage
+      ? maintenanceGroupWorkflowState(g)
+      : summarizeOpsCardStatus(g.items || [], stage);
     const cardStatusLabel = cardStatus.label || stage.label;
     const statusVars = notionColorVars(cardStatus.color || stage.color);
     const statusStyle = `--tag-bg:${statusVars.bg};--tag-fg:${statusVars.fg};--tag-border:${statusVars.bd};`;
@@ -3839,6 +3854,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const all = (g.items || []).slice().sort(compareItemsByProductName);
     const stage = g.stage || computeStage(all);
     const isMaintenanceOrder = isMaintenanceOrderType(g.orderType || all[0]?.orderType);
+    const maintenanceModalState = isMaintenancePage && isMaintenanceOrder ? maintenanceGroupWorkflowState(g) : null;
 
     const isRemainingTab = currentTab === "remaining";
     const isReceivedTab = currentTab === "received";
@@ -3878,6 +3894,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : (String(g.reason || "—").trim() || "—");
     }
     if (modalDate) modalDate.textContent = fmtDateTime(g.latestCreated) || "—";
+    setRowHidden(modalDateRow, isMaintenancePage);
     setRowHidden(modalComponentsRow, isMaintenanceOrder);
     setRowHidden(modalTotalPriceRow, isMaintenanceOrder);
     if (modalComponents) {
@@ -3912,7 +3929,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const receiptVal = g && (g.receiptNumber !== null && g.receiptNumber !== undefined) ? g.receiptNumber : null;
     const receivedByVal = String(g.operationsByName || "").trim();
     const receiptPhotoEntries = collectReceiptEntriesFromGroup(g || {});
-    const shouldShowExtras = currentTab !== "not-started" && (stage?.idx || 1) >= 3 && (!isMaintenanceOrder || !!receiptVal || receiptPhotoEntries.length > 0 || groupHasMaintenanceSpareParts(g));
+    const shouldShowExtras = isMaintenancePage && isMaintenanceOrder
+      ? maintenanceModalState?.key === "done"
+      : currentTab !== "not-started" && (stage?.idx || 1) >= 3 && (!isMaintenanceOrder || !!receiptVal || receiptPhotoEntries.length > 0 || groupHasMaintenanceSpareParts(g));
 
     if (receiptRow) receiptRow.hidden = !shouldShowExtras;
     if (modalReceiptNumber) {
@@ -3920,7 +3939,11 @@ document.addEventListener("DOMContentLoaded", () => {
       modalReceiptNumber.textContent = receiptDisplay || "—";
     }
 
-    const shouldShowReceiptPhotosMeta = shouldShowExtras && ["received", "delivered"].includes(currentTab);
+    const shouldShowReceiptPhotosMeta = shouldShowExtras && (
+      (isMaintenancePage && isMaintenanceOrder)
+        ? maintenanceModalState?.key === "done"
+        : ["received", "delivered"].includes(currentTab)
+    );
 
     if (receivedByRow) receivedByRow.hidden = !shouldShowReceiptPhotosMeta;
     if (modalOperationsBy) modalOperationsBy.textContent = receivedByVal || "—";
@@ -3970,7 +3993,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Maintenance page: show it in In progress only after the maintenance log is saved.
     if (arrivedBtn) {
       const showArrivedBtn = isMaintenancePage
-        ? currentTab === "in-progress" && stage.idx === 3 && groupHasMaintenanceLog(g)
+        ? maintenanceModalState?.key === "in-progress"
         : currentTab === "received" && stage.idx === 3;
       arrivedBtn.style.display = showArrivedBtn ? "inline-flex" : "none";
     }
@@ -4013,20 +4036,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     syncModalMoreVisibility();
     if (logMaintenanceBtn) {
-      const stageIdx = stage?.idx || 1;
       const canLogMaintenance = isMaintenanceOrder && (
         isMaintenancePage
-          ? currentTab === "not-started" && (stageIdx === 2 || stageIdx === 3) && !groupHasMaintenanceLog(g)
+          ? maintenanceModalState?.key === "not-started"
           : currentTab === "approved"
       );
       logMaintenanceBtn.style.display = canLogMaintenance ? "inline-flex" : "none";
     }
     if (maintenancePdfBtn) {
-      const stageIdx = stage?.idx || 1;
       const canDownloadMaintenancePdf = isMaintenanceOrder && (
         isMaintenancePage
-          ? ((currentTab === "in-progress" && stageIdx === 3 && groupHasMaintenanceLog(g)) || (currentTab === "done" && stageIdx >= 4))
-          : stageIdx >= 4
+          ? ["in-progress", "done"].includes(maintenanceModalState?.key || "")
+          : (stage?.idx || 1) >= 4
       );
       maintenancePdfBtn.style.display = canDownloadMaintenancePdf ? "inline-flex" : "none";
     }
@@ -4253,7 +4274,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function isMaintenanceExportContext(group = activeGroup, tab = currentTab) {
     const tabKey = String(tab || "").trim().toLowerCase();
     const orderType = group?.orderType || group?.items?.[0]?.orderType;
-    return isMaintenanceOrderType(orderType) && (tabKey === "received" || tabKey === "delivered");
+    if (!isMaintenanceOrderType(orderType)) return false;
+    if (isMaintenancePage) return ["all", "in-progress", "done"].includes(tabKey);
+    return tabKey === "received" || tabKey === "delivered";
   }
 
   function opsExportColumnDefsForTab(tab = currentTab, group = activeGroup) {
@@ -4525,7 +4548,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!receiptPhotosBtn) return;
     const stageIdx = group?.stage?.idx || computeStage(group?.items || [])?.idx || 1;
     const entries = collectReceiptEntriesFromGroup(group || {});
-    const show = currentTab === "delivered" && stageIdx >= 5 && entries.length > 0;
+    const isMaintenanceOrder = isMaintenanceOrderType(group?.orderType || group?.items?.[0]?.orderType);
+    const show = entries.length > 0 && (
+      isMaintenancePage
+        ? isMaintenanceOrder && maintenanceGroupWorkflowState(group).key === "done"
+        : currentTab === "delivered" && stageIdx >= 4
+    );
     receiptPhotosBtn.style.display = show ? "inline-flex" : "none";
     receiptPhotosBtn.disabled = !show;
   }
@@ -5439,18 +5467,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ---------- Actions ----------
   function setMainDownloadBusy(isBusy) {
-    if (!downloadMenuBtn) return;
+    const btn = downloadMenuBtn || (isMaintenancePage ? maintenancePdfBtn : null);
+    if (!btn) return;
     if (isBusy) {
-      downloadMenuBtn.disabled = true;
-      downloadMenuBtn.dataset.prevHtml = downloadMenuBtn.innerHTML;
-      downloadMenuBtn.innerHTML = '<i data-feather="loader"></i><span>Preparing...</span>';
-      downloadMenuBtn.classList.add('is-busy');
+      btn.disabled = true;
+      btn.dataset.prevHtml = btn.innerHTML;
+      btn.innerHTML = '<i data-feather="loader"></i><span>Preparing...</span>';
+      btn.classList.add('is-busy');
     } else {
-      downloadMenuBtn.disabled = false;
-      downloadMenuBtn.classList.remove('is-busy');
-      const prev = downloadMenuBtn.dataset.prevHtml;
-      if (prev) downloadMenuBtn.innerHTML = prev;
-      delete downloadMenuBtn.dataset.prevHtml;
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+      const prev = btn.dataset.prevHtml;
+      if (prev) btn.innerHTML = prev;
+      delete btn.dataset.prevHtml;
     }
     if (window.feather) window.feather.replace();
   }
@@ -6124,6 +6153,10 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       writeRequestedCache(allItems);
 
       groups = buildGroups(allItems);
+      if (isMaintenancePage) {
+        currentTab = "done";
+        updateTabUI();
+      }
       render();
 
       const updated = groups.find((x) => x.groupId === targetGroup.groupId);
@@ -6749,9 +6782,19 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     closeDownloadMenu();
     downloadPdf(activeGroup);
   });
-  maintenancePdfBtn?.addEventListener("click", (e) => {
+  maintenancePdfBtn?.addEventListener("click", async (e) => {
     e.preventDefault();
     closeDownloadMenu();
+    if (isMaintenancePage) {
+      const opts = await OperationsExportModal.open({ tab: currentTab });
+      if (!opts) return;
+      if (opts.fileType === "excel" || opts.fileType === "xlsx") {
+        downloadExcel(activeGroup, opts.columns);
+      } else {
+        downloadPdf(activeGroup, opts.columns);
+      }
+      return;
+    }
     downloadMaintenancePdf(activeGroup);
   });
 
@@ -6892,7 +6935,9 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     const submitTab = maintenanceLogActiveTab || currentTab;
     await saveMaintenanceLog(targetGroup, {
       perItemLogs: collectMaintenanceLogPayload(targetGroup),
-      moveToShipping: (!isMaintenancePage && submitTab === "approved") || (isMaintenancePage && submitTab === "not-started"),
+      // On the Maintenance Orders page, saving the log is a local maintenance-workflow
+      // transition only. Keep the Operations Orders status as-is (usually Shipping).
+      moveToShipping: !isMaintenancePage && submitTab === "approved",
     });
   });
 
