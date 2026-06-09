@@ -180,6 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ---------- Utils ----------
   const norm = (s) => String(s || "").trim().toLowerCase();
+  const normKey = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
   const RECEIPT_INPUT_SELECTOR = ".req-receipt-input";
 
   function createSubmodalInputRow(input, { removable = false, kind = "receipt" } = {}) {
@@ -1187,7 +1188,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
   const REQ_CACHE_KEY = isMaintenancePage
     ? "cache:ops:requestedOrders:v4:maintenance"
-    : "cache:ops:requestedOrders:v7:maintenance-log-confirm";
+    : "cache:ops:requestedOrders:v6:operations-approval";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
   function readRequestedCache() {
@@ -4892,7 +4893,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let maintenanceLogLoadToken = 0;
   let maintenanceLogActiveGroup = null;
   let maintenanceLogActiveTab = null;
-  let maintenanceLogSubmitInFlight = false;
   let currentMaintenanceSparePartOptions = [];
 
   function maintenanceLogItemsForGroup(group = activeGroup) {
@@ -5210,7 +5210,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter((entry) => entry.orderId);
   }
 
-  function validateMaintenanceLogPayload(perItemLogs = [], options = {}) {
+  function validateMaintenanceLogPayload(perItemLogs = []) {
     clearMaintenanceLogFieldErrors();
 
     const entries = Array.isArray(perItemLogs) ? perItemLogs : [];
@@ -5222,14 +5222,6 @@ document.addEventListener("DOMContentLoaded", () => {
       toStringArray(entry?.sparePartNames, { splitComma: true }).filter((name) => !isMaintenanceSparePlaceholder(name)).length ||
       (Array.isArray(entry?.spareParts) && entry.spareParts.length)
     ));
-
-    // In Operations Orders > Approved, confirming the maintenance log is also the action
-    // that moves the maintenance request into the technical-visit workflow.
-    // Do not make the button feel dead if the user only wants to confirm that move.
-    if (!logsWithAnyDetails.length && options?.allowWorkflowMove) {
-      setMaintenanceLogError('');
-      return { ok: true, logsWithAnyDetails: entries };
-    }
 
     if (!logsWithAnyDetails.length) {
       setMaintenanceLogError('Please fill maintenance details for at least one component. Spare parts are optional.');
@@ -5265,13 +5257,11 @@ document.addEventListener("DOMContentLoaded", () => {
     maintenanceLogModal.setAttribute('aria-hidden', 'false');
 
     if (window.feather) window.feather.replace();
-    bindMaintenanceLogConfirmFallback();
 
     try {
       const options = await loadMaintenanceFormOptions();
       if (loadToken !== maintenanceLogLoadToken || !isMaintenanceLogOpen()) return;
       renderMaintenanceLogCards(items, options);
-      bindMaintenanceLogConfirmFallback();
       if (maintenanceLogConfirmBtn) maintenanceLogConfirmBtn.disabled = false;
       window.requestAnimationFrame(() => {
         try {
@@ -5568,18 +5558,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 async function postJson(url, body) {
-    const requestUrl = new URL(url, window.location.origin);
-    requestUrl.searchParams.set('_ts', String(Date.now()));
-    const res = await fetch(requestUrl.pathname + requestUrl.search, {
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-      },
+      headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      cache: "no-store",
       body: JSON.stringify(body || {}),
     });
     const data = await res.json().catch(() => ({}));
@@ -5819,7 +5801,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       });
 
       const data = await postJson("/api/orders/requested/mark-shipped", {
-        orderIds: g.orderIds,
+        orderIds: targetGroup.orderIds,
         receiptNumber: rnVal,
         quantities,
         issueDescription: issueDescriptionText || null,
@@ -5922,7 +5904,6 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       // Close receipt prompt (if opened)
       closeReceiptModal({ restoreFocus: false });
-      return true;
     } catch (e) {
       console.error(e);
       const message = e.message || (isMaintenanceOrder ? "Failed to request technical visit." : "Failed to mark as received.");
@@ -5931,7 +5912,6 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       } else {
         alert(message);
       }
-      return false;
     } finally {
       if (shippedBtn) {
         shippedBtn.disabled = false;
@@ -5942,120 +5922,24 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     }
   }
 
-  let maintenanceLogLastSubmitAt = 0;
-
-  async function submitMaintenanceLogFromModal(event = null) {
-    if (event) {
-      try { event.preventDefault(); } catch {}
-      try { event.stopPropagation(); } catch {}
-      try { event.stopImmediatePropagation(); } catch {}
-    }
-
-    if (!isMaintenanceLogOpen()) return false;
-    if (maintenanceLogSubmitInFlight) return false;
-
-    const now = Date.now();
-    if (now - maintenanceLogLastSubmitAt < 650) return false;
-    maintenanceLogLastSubmitAt = now;
-
-    const targetGroup = maintenanceLogActiveGroup || activeGroup;
-    const submitTab = maintenanceLogActiveTab || currentTab;
-
-    maintenanceLogSubmitInFlight = true;
-    setMaintenanceLogError('');
-    try {
-      return await saveMaintenanceLog(targetGroup, {
-        perItemLogs: collectMaintenanceLogPayload(targetGroup),
-        moveToShipping: !isMaintenancePage && submitTab === 'approved',
-      });
-    } catch (error) {
-      console.error('maintenance-log submit error:', error);
-      const message = error?.message || 'Failed to save maintenance log.';
-      setMaintenanceLogError(message);
-      try { toast('error', 'Failed', message); } catch {}
-      return false;
-    } finally {
-      maintenanceLogSubmitInFlight = false;
-    }
-  }
-
-  function eventTargetClosest(target, selector) {
-    if (!target) return null;
-    if (typeof target.closest === 'function') return target.closest(selector);
-    const parent = target.parentElement || target.parentNode;
-    return parent && typeof parent.closest === 'function' ? parent.closest(selector) : null;
-  }
-
-  function isMaintenanceLogConfirmHit(event = null) {
-    if (!maintenanceLogConfirmBtn || !isMaintenanceLogOpen()) return false;
-    const target = event?.target || null;
-    if (eventTargetClosest(target, '#reqMaintenanceLogConfirm')) return true;
-    return isPointInsideElement(event, maintenanceLogConfirmBtn);
-  }
-
-  function bindMaintenanceLogConfirmFallback() {
-    if (!maintenanceLogConfirmBtn || maintenanceLogConfirmBtn.dataset.confirmFallbackBound === 'true') return;
-    maintenanceLogConfirmBtn.dataset.confirmFallbackBound = 'true';
-    maintenanceLogConfirmBtn.style.touchAction = 'manipulation';
-    maintenanceLogConfirmBtn.setAttribute('aria-busy', 'false');
-
-    const handle = (event) => {
-      if (!isMaintenanceLogConfirmHit(event)) return;
-      if (maintenanceLogConfirmBtn.disabled || maintenanceLogSubmitInFlight) return;
-      void submitMaintenanceLogFromModal(event);
-    };
-
-    const directHandle = (event) => {
-      if (event?.type === 'keyup') {
-        const key = String(event?.key || '');
-        if (key !== 'Enter' && key !== ' ') return;
-      }
-      if (maintenanceLogConfirmBtn.disabled || maintenanceLogSubmitInFlight) return;
-      void submitMaintenanceLogFromModal(event);
-    };
-
-    // Some Android/Opera mobile builds drop the final click after interacting
-    // with a scrollable dialog or a textarea. Submit from the earliest touch
-    // phases too, and also keep a coordinate-based document fallback in case an
-    // overlay/high-z-index dock receives the actual event target.
-    ['pointerdown', 'mousedown', 'click', 'keyup'].forEach((eventName) => {
-      maintenanceLogConfirmBtn.addEventListener(eventName, directHandle, true);
-    });
-    maintenanceLogConfirmBtn.addEventListener('touchstart', directHandle, { capture: true, passive: false });
-
-    ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'].forEach((eventName) => {
-      document.addEventListener(eventName, handle, true);
-    });
-    document.addEventListener('touchstart', handle, { capture: true, passive: false });
-    document.addEventListener('touchend', handle, { capture: true, passive: false });
-
-    window.__opsSubmitMaintenanceLogFromModal = submitMaintenanceLogFromModal;
-    window.__opsMaintenanceLogConfirmClick = (event) => submitMaintenanceLogFromModal(event);
-  }
-
   async function saveMaintenanceLog(g, payload = {}) {
     const targetGroup = g || maintenanceLogActiveGroup || activeGroup;
     if (!targetGroup || !Array.isArray(targetGroup.orderIds) || !targetGroup.orderIds.length) {
       const message = 'Order details are unavailable. Please close this window, open the order again, and retry.';
       setMaintenanceLogError(message);
       toast('error', 'Failed', message);
-      return false;
+      return;
     }
 
     const perItemLogs = Array.isArray(payload?.perItemLogs)
       ? payload.perItemLogs
       : collectMaintenanceLogPayload(targetGroup);
-    const moveToArrived = !!payload?.moveToArrived;
-    const moveToShipping = !!payload?.moveToShipping;
-    const validation = validateMaintenanceLogPayload(perItemLogs, {
-      allowWorkflowMove: moveToArrived || moveToShipping,
-    });
-    if (!validation.ok) return false;
+    const validation = validateMaintenanceLogPayload(perItemLogs);
+    if (!validation.ok) return;
     const logsWithAnyDetails = validation.logsWithAnyDetails;
 
     if (maintenanceLogConfirmBtn) {
       maintenanceLogConfirmBtn.disabled = true;
-      maintenanceLogConfirmBtn.setAttribute('aria-busy', 'true');
       maintenanceLogConfirmBtn.dataset.prevHtml = maintenanceLogConfirmBtn.innerHTML;
       maintenanceLogConfirmBtn.textContent = 'Saving...';
     }
@@ -6063,6 +5947,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (maintenanceLogCloseBtn) maintenanceLogCloseBtn.disabled = true;
 
     try {
+      const moveToArrived = !!payload?.moveToArrived;
+      const moveToShipping = !!payload?.moveToShipping;
       const data = await postJson('/api/orders/requested/log-maintenance', {
         orderIds: targetGroup.orderIds,
         perItemLogs: logsWithAnyDetails,
@@ -6127,16 +6013,13 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
         movedToWorkflowStep ? movedLabel : 'Saved',
         movedToWorkflowStep ? `Maintenance log saved and order moved to ${movedLabel}.` : 'Maintenance log saved.',
       );
-      return true;
     } catch (e) {
       console.error(e);
       setMaintenanceLogError(e.message || 'Failed to save maintenance log.');
       toast('error', 'Failed', e.message || 'Failed to save maintenance log.');
-      return false;
     } finally {
       if (maintenanceLogConfirmBtn) {
         maintenanceLogConfirmBtn.disabled = false;
-        maintenanceLogConfirmBtn.setAttribute('aria-busy', 'false');
         const prev = maintenanceLogConfirmBtn.dataset.prevHtml;
         if (prev) maintenanceLogConfirmBtn.innerHTML = prev;
         else maintenanceLogConfirmBtn.textContent = 'Confirm';
@@ -6908,8 +6791,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (techVisitCloseBtn) techVisitCloseBtn.disabled = true;
 
     try {
-      const saved = await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
-      if (saved) closeTechVisitModal({ restoreFocus: false });
+      await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
+      closeTechVisitModal({ restoreFocus: false });
     } finally {
       if (techVisitConfirmBtn) techVisitConfirmBtn.disabled = false;
       if (techVisitCancelBtn) techVisitCancelBtn.disabled = false;
@@ -6963,8 +6846,17 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   maintenanceSparePartSelect?.addEventListener("change", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
   });
-  bindMaintenanceLogConfirmFallback();
-  maintenanceLogConfirmBtn?.addEventListener("click", submitMaintenanceLogFromModal);
+  maintenanceLogConfirmBtn?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    setMaintenanceLogError("");
+
+    const targetGroup = maintenanceLogActiveGroup || activeGroup;
+    const submitTab = maintenanceLogActiveTab || currentTab;
+    await saveMaintenanceLog(targetGroup, {
+      perItemLogs: collectMaintenanceLogPayload(targetGroup),
+      moveToShipping: !isMaintenancePage && submitTab === "approved",
+    });
+  });
 
   maintenanceReceiptChooseBtn?.addEventListener("click", (e) => {
     e.preventDefault();
