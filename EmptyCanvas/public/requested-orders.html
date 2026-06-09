@@ -20,7 +20,7 @@
 <style>
   body.permissions-loading .sidebar li { display: none !important; }
 </style>
-<link href="/css/style.css?v=maintenance-log-cards-v1" rel="stylesheet"/>
+<link href="/css/style.css?v=maintenance-log-flow-v2" rel="stylesheet"/>
 <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v2" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -491,18 +491,15 @@
       <div class="co-submodal-sub" id="reqTechVisitSub">Review and edit the issue description before sending the maintenance order.</div>
     </div>
 
-    <div class="co-submodal-body">
-      <div class="co-submodal-fields">
-        <div class="co-submodal-field">
-          <label class="co-submodal-label" for="reqTechVisitIssueInput">Issue Description</label>
-          <textarea
-            class="co-submodal-textarea"
-            id="reqTechVisitIssueInput"
-            rows="5"
-            placeholder="Describe the issue"
-          ></textarea>
-        </div>
-      </div>
+    <div class="co-submodal-body req-tech-visit-body">
+      <div class="req-tech-visit-items" id="reqTechVisitItems"></div>
+      <textarea
+        class="co-submodal-textarea req-tech-visit-fallback"
+        id="reqTechVisitIssueInput"
+        rows="5"
+        placeholder="Describe the issue"
+        hidden
+      ></textarea>
       <div class="co-submodal-error" id="reqTechVisitError" role="alert" aria-live="polite"></div>
     </div>
 
@@ -592,6 +589,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=sidebar-order-scroll-v1"></script>
-<script src="/js/requested-orders.js?v=maintenance-log-cards-v1"></script>
+<script src="/js/requested-orders.js?v=maintenance-log-flow-v2"></script>
 </body>
 </html>
