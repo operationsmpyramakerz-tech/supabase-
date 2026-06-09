@@ -5299,6 +5299,7 @@ function _sbResolveMaintenanceSparePartsForItem(item = {}, lookups = {}) {
   const add = (part = {}) => {
     const name = String(part?.name || "").trim();
     const id = String(part?.id || "").trim();
+    if (!id && isMaintenanceSparePartPlaceholderName(name)) return;
     const key = `${id || normKey(name)}|${Number(part?.qty) || 1}`;
     if (!key || seen.has(key)) return;
     seen.add(key);
@@ -7407,6 +7408,11 @@ function isSparePartsTagName(value) {
   return key === normKey("Spare Parts") || key === normKey("Spare Part") || key === "spareparts";
 }
 
+function isMaintenanceSparePartPlaceholderName(value) {
+  const key = normKey(value);
+  return !key || key === "selectcomponent" || key === "selectsparepart" || key === "nosparepartselected";
+}
+
 
 async function listMaintenanceReplacementProducts() {
   if (_sbProductsEnabled()) {
@@ -7453,10 +7459,12 @@ function _normalizeMaintenanceSparePartEntries(value, lookups = {}) {
       rawName = rawName.slice(0, qtyMatch.index).trim();
     }
 
+    if (!id && isMaintenanceSparePartPlaceholderName(rawName)) return;
+
     const fromName = rawName ? byName.get(normKey(rawName)) : null;
     const product = fromId || fromName || null;
     const name = String(product?.name || rawName || "").trim();
-    if (!name) return;
+    if (!name || (!id && isMaintenanceSparePartPlaceholderName(name))) return;
     const finalId = String(product?.id || id || "").trim();
     const key = `${finalId || normKey(name)}|${qty}`;
     if (seen.has(key)) return;

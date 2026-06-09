@@ -224,12 +224,12 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
 
   const measureSparePartsTable = (w, parts = []) => {
     const safeParts = Array.isArray(parts) ? parts : [];
-    const rows = safeParts.length ? safeParts : [{ name: "No spare parts replaced", idCode: "", unit: 0, qty: 1, total: 0 }];
+    const rows = safeParts.length ? safeParts : [{ name: "No spare parts replacement", empty: true }];
     const headerH = 22;
     const totalH = 24;
     let bodyH = 0;
     rows.forEach((part) => {
-      const nameW = Math.max(140, w - 220);
+      const nameW = part.empty ? w - 18 : Math.max(140, w - 220);
       bodyH += Math.max(23, textHeight(part.name, nameW, 8.4) + 13);
     });
     return headerH + bodyH + totalH;
@@ -237,7 +237,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
 
   const drawSparePartsTable = (x, y, w, parts = []) => {
     const safeParts = Array.isArray(parts) ? parts : [];
-    const rows = safeParts.length ? safeParts : [{ name: "No spare parts replaced", idCode: "", unit: 0, qty: 1, total: 0 }];
+    const rows = safeParts.length ? safeParts : [{ name: "No spare parts replacement", empty: true }];
     const headerH = 22;
     const tableH = measureSparePartsTable(w, parts);
     const totalCost = safeParts.reduce((sum, part) => sum + (Number(part.total) || 0), 0);
@@ -262,13 +262,19 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     let rowY = y + headerH;
     rows.forEach((part, idx) => {
       const nameText = ensureText(part.name, "Spare part");
-      const rowH = Math.max(23, textHeight(nameText, nameW, 8.4) + 13);
+      const isEmptyRow = !safeParts.length || part.empty;
+      const currentNameW = isEmptyRow ? w - 18 : nameW;
+      const rowH = Math.max(23, textHeight(nameText, currentNameW, 8.4) + 13);
       if (idx > 0) doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
-      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(safeParts.length ? String(idx + 1) : "—", x + 9, rowY + 7, { width: numW });
-      doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(nameText, x + 9 + numW, rowY + 7, { width: nameW, lineGap: 1 });
-      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(safeParts.length ? String(Number(part.qty) || 1) : "—", x + 9 + numW + nameW + 4, rowY + 7, { width: qtyW, align: "right" });
-      doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(safeParts.length ? money(part.unit) : "—", x + w - unitW - totalW - 14, rowY + 7, { width: unitW, align: "right" });
-      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(safeParts.length ? money(part.total) : "—", x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
+      if (isEmptyRow) {
+        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.6).text(nameText, x + 9, rowY + 7, { width: w - 18, align: "center" });
+      } else {
+        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(String(idx + 1), x + 9, rowY + 7, { width: numW });
+        doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(nameText, x + 9 + numW, rowY + 7, { width: nameW, lineGap: 1 });
+        doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(String(Number(part.qty) || 1), x + 9 + numW + nameW + 4, rowY + 7, { width: qtyW, align: "right" });
+        doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(money(part.unit), x + w - unitW - totalW - 14, rowY + 7, { width: unitW, align: "right" });
+        doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(money(part.total), x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
+      }
       rowY += rowH;
     });
 
