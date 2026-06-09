@@ -20,7 +20,7 @@
 <style>
   body.permissions-loading .sidebar li { display: none !important; }
 </style>
-<link href="/css/style.css?v=maintenance-log-flow-v2" rel="stylesheet"/>
+<link href="/css/style.css?v=maintenance-spares-qty-v1" rel="stylesheet"/>
 <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v2" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
@@ -234,8 +234,24 @@
     </div>
 
     <div class="co-submodal-body">
+      <div class="co-submodal-field" id="reqMaintenanceReceiptNumbersField" hidden>
+        <label class="co-submodal-label" for="reqMaintenanceReceiptNumberInput">Store Receipt Number</label>
+        <div class="co-submodal-inputs" id="reqMaintenanceReceiptNumbers">
+          <input
+            class="co-submodal-input req-delivery-receipt-input"
+            id="reqMaintenanceReceiptNumberInput"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="e.g. 12345, 67890"
+            aria-label="Store Receipt Number"
+          />
+        </div>
+        <button type="button" class="ro-action-btn ro-action-btn--light co-submodal-add" id="reqMaintenanceAddReceiptBtn">Add Other Receipt</button>
+      </div>
+
       <div class="co-submodal-field">
-        <label class="co-submodal-label" for="reqMaintenanceReceiptInput">Maintenance receipt images</label>
+        <label class="co-submodal-label" id="reqMaintenanceReceiptLabel" for="reqMaintenanceReceiptInput">Maintenance receipt images</label>
         <input class="co-upload-field__input" id="reqMaintenanceReceiptInput" type="file" accept="image/*" multiple hidden />
         <button type="button" class="co-upload-field" id="reqMaintenanceReceiptChooseBtn">
           <span class="co-upload-field__icon"><i data-feather="upload-cloud"></i></span>
@@ -258,7 +274,7 @@
 </div>
 </div>
 <script>if (window.feather) feather.replace();</script>
-<script src="/js/common-ui.js?v=sidebar-order-scroll-v1"></script>
-<script src="/js/requested-orders.js?v=maintenance-log-flow-v2"></script>
+<script src="/js/common-ui.js?v=freeze-polling-v1"></script>
+<script src="/js/requested-orders.js?v=maintenance-spares-qty-v1"></script>
 </body>
 </html>
