@@ -9742,3 +9742,131 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   .sv-mixed-approval-pill__part--approved{ padding-right: 10px; }
   .sv-mixed-approval-pill__part--rejected{ padding-left: 10px; }
 }
+
+/* =================================
+   Maintenance log per-component cards
+   ================================= */
+#reqMaintenanceLogModal.co-submodal-overlay{
+  z-index: 1700;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  overflow: auto;
+}
+
+#reqMaintenanceLogModal .req-maintenance-log-dialog{
+  width: min(760px, 94vw);
+  max-height: min(88dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#reqMaintenanceLogModal .req-maintenance-log-body{
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.req-maintenance-log-items{
+  display: grid;
+  gap: 14px;
+}
+
+.req-maintenance-log-card{
+  border: 1px solid rgba(229,231,235,.96);
+  border-radius: 22px;
+  background: #FFFFFF;
+  box-shadow: 0 16px 34px rgba(15,23,42,.08);
+  padding: 16px;
+}
+
+.req-maintenance-log-card__head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.req-maintenance-log-card__label{
+  color: #9CA3AF;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.req-maintenance-log-card__title{
+  margin-top: 3px;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 1000;
+}
+
+.req-maintenance-log-card__issue{
+  margin-top: 8px;
+  color: #6B7280;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.req-maintenance-log-card__issue span{
+  color: #111827;
+  font-weight: 950;
+}
+
+.req-maintenance-log-card__fields{
+  gap: 12px;
+}
+
+.req-maintenance-log-card__loading,
+.req-maintenance-log-empty{
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: #6B7280;
+  font-weight: 800;
+  text-align: center;
+  border: 1px dashed #E5E7EB;
+  border-radius: 18px;
+  background: #F9FAFB;
+}
+
+.req-maintenance-log-empty strong{
+  color: #111827;
+  font-size: 14px;
+}
+
+.req-maintenance-log-empty span{
+  font-size: 12px;
+}
+
+@media (max-width: 768px){
+  #reqMaintenanceLogModal.co-submodal-overlay{
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  #reqMaintenanceLogModal .req-maintenance-log-dialog{
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px;
+    padding: 16px 14px 14px;
+  }
+
+  .req-maintenance-log-card{
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .req-maintenance-log-card__title{
+    font-size: 16px;
+  }
+}
