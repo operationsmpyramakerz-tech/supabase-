@@ -5260,6 +5260,62 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", colu
   }, res);
 }
 
+async function _sbBuildMaintenanceSparePartLookups() {
+  const products = await _sbProductsList().catch(() => []);
+  const byId = new Map();
+  const byName = new Map();
+  for (const product of products || []) {
+    const normalized = {
+      id: String(product?.id || "").trim(),
+      name: String(product?.name || "").trim(),
+      displayId: String(product?.displayId || "").trim(),
+      unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : 0,
+      url: product?.url || null,
+    };
+    if (normalized.id) byId.set(normalized.id, normalized);
+    const nameKey = normKey(normalized.name);
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, normalized);
+  }
+  return { byId, byName };
+}
+
+function _sbResolveMaintenanceSparePartsForItem(item = {}, lookups = {}) {
+  const ids = toUniqueStringArray(item?.sparePartsReplacedIds || item?.sparePartsReplacedId || []);
+  const names = toUniqueStringArray(
+    item?.sparePartsReplacedNames?.length
+      ? item.sparePartsReplacedNames
+      : (item?.sparePartsReplacedName || item?.sparePartsReplaced || []),
+    { splitComma: true },
+  );
+  const out = [];
+  const seen = new Set();
+  const add = (part = {}) => {
+    const name = String(part?.name || "").trim();
+    const id = String(part?.id || "").trim();
+    const key = id || normKey(name);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      id,
+      idCode: String(part?.displayId || part?.idCode || "").trim(),
+      name: name || "Spare part",
+      unit: Number.isFinite(Number(part?.unitPrice)) ? Number(part.unitPrice) : 0,
+      qty: Number.isFinite(Number(part?.qty)) ? Number(part.qty) : 1,
+      link: part?.url || part?.link || null,
+    });
+  };
+
+  for (const id of ids) {
+    const match = lookups?.byId?.get?.(String(id || "").trim());
+    if (match) add(match);
+  }
+  for (const name of names) {
+    const match = lookups?.byName?.get?.(normKey(name));
+    add(match || { name });
+  }
+  return out;
+}
+
 async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const first = payload.first || {};
@@ -5267,6 +5323,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
     return res.status(400).json({ error: "This export is only available for maintenance orders." });
   }
 
+  const lookups = await _sbBuildMaintenanceSparePartLookups();
   const componentLogs = (payload.items || []).map((item, index) => ({
     idCode: payload.rows?.[index]?.idCode || "",
     component: item.productName || payload.rows?.[index]?.component || "Unknown Product",
@@ -5277,6 +5334,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
     sparePartsReplacedIds: item.sparePartsReplacedIds || [],
     sparePartsReplacedNames: item.sparePartsReplacedNames || [],
     sparePartsReplacedName: item.sparePartsReplacedName || "",
+    spareParts: _sbResolveMaintenanceSparePartsForItem(item, lookups),
     link: item.productUrl || payload.rows?.[index]?.link || "",
   }));
 
@@ -5308,9 +5366,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const selectedColumns = _selectedOrderExportColumnDefs(columns, { tab });
   const first = payload.first || {};
-  const isMaintenanceExport = _normKeyOrderType(first.orderType || "") === _normKeyOrderType("Request Maintenance")
-    && selectedColumns.some((col) => col.key === "issue")
-    && !selectedColumns.some((col) => ["qty", "unit", "total", "reason"].includes(col.key));
+  const isMaintenanceExport = _normKeyOrderType(first.orderType || "") === _normKeyOrderType("Request Maintenance");
   const columnCount = Math.max(1, selectedColumns.length);
   const lastCol = _orderExcelColumnName(columnCount);
 
@@ -5397,7 +5453,8 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   };
 
   if (isMaintenanceExport) {
-    const titleRow = ws.addRow(["Maintenance components"]);
+    const lookups = await _sbBuildMaintenanceSparePartLookups();
+    const titleRow = ws.addRow(["Maintenance spare parts replacement"]);
     const titleNum = titleRow.number;
     ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
     for (let c = 1; c <= columnCount; c += 1) {
@@ -5415,8 +5472,43 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
       cell.alignment = { vertical: "middle", wrapText: true };
     });
 
-    const items = (payload.rows || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
-    items.forEach(addItemRow);
+    let maintenanceGrandTotal = 0;
+    const items = (payload.items || []).slice().sort((a, b) => String(a.productName || "").localeCompare(String(b.productName || "")));
+    for (const item of items) {
+      const spareParts = _sbResolveMaintenanceSparePartsForItem(item, lookups);
+      const itemIssue = item.actualIssueDescription || item.issueDescription || item.reason || "No Issue";
+      const rowsForItem = spareParts.length ? spareParts : [{ name: "No spare parts replaced", idCode: "", unit: 0, qty: 1, link: "" }];
+      rowsForItem.forEach((part) => {
+        const unit = Number.isFinite(Number(part.unit)) ? Number(part.unit) : 0;
+        const qty = Number.isFinite(Number(part.qty)) ? Number(part.qty) : 1;
+        const total = unit * qty;
+        maintenanceGrandTotal += total;
+        addItemRow({
+          idCode: part.idCode || "",
+          component: part.name || item.productName || "Spare part",
+          issue: itemIssue,
+          link: part.link || "",
+          unit,
+          total,
+        });
+      });
+    }
+
+    if (selectedColumns.some((col) => col.key === "total")) {
+      const totalRowValues = new Array(columnCount).fill("");
+      const totalIndex = selectedColumns.findIndex((col) => col.key === "total");
+      const labelIndex = Math.max(0, Math.min(columnCount - 1, totalIndex > 0 ? totalIndex - 1 : 0));
+      totalRowValues[labelIndex] = "Spare parts total cost";
+      totalRowValues[totalIndex >= 0 ? totalIndex : columnCount - 1] = maintenanceGrandTotal;
+      const totalRow = ws.addRow(totalRowValues);
+      totalRow.font = { bold: true, color: { argb: "FF111827" } };
+      totalRow.eachCell((cell, index) => {
+        cell.border = borderThin;
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+        cell.alignment = { vertical: "middle", wrapText: true };
+        if (index - 1 === totalIndex) cell.numFmt = '"£"#,##0.00';
+      });
+    }
     ws.addRow([]);
   } else {
     const reasonMap = new Map();
@@ -19840,7 +19932,7 @@ app.post(
   requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
-      const { orderIds, receiptNumber, quantities, issueDescription } = req.body || {};
+      const { orderIds, receiptNumber, quantities, issueDescription, perItemIssues } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -19854,13 +19946,37 @@ app.post(
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
         const rnText = _normalizeReceiptNumbersText(receiptNumber);
-        const patch = {
+        const issueDescriptionText = String(issueDescription || "").trim();
+        const issueById = new Map(
+          (Array.isArray(perItemIssues) ? perItemIssues : [])
+            .map((entry) => [String(entry?.orderId || "").trim(), String(entry?.issueDescription || "").trim()])
+            .filter(([id]) => id),
+        );
+        const basePatch = {
           status: "Shipped",
           person_received_by_operations: req.session.username || null,
         };
-        if (rnText) patch.receipt_number = rnText;
-        if (issueDescription) patch.issue_description = String(issueDescription || "").trim();
-        const updatedRows = await _sbUpdateOrdersByIdsWithQuantities(ids, patch, quantities || null);
+        if (rnText) basePatch.receipt_number = rnText;
+
+        let updatedRows = [];
+        if (issueById.size) {
+          for (const id of ids) {
+            const rowPatch = { ...basePatch };
+            const idKey = String(id);
+            const rowIssue = issueById.has(idKey) ? issueById.get(idKey) : issueDescriptionText;
+            if (rowIssue) rowPatch.issue_description = rowIssue;
+            const rowQuantities = quantities && typeof quantities === "object" && Object.prototype.hasOwnProperty.call(quantities, id)
+              ? { [id]: quantities[id] }
+              : null;
+            const rowUpdates = await _sbUpdateOrdersByIdsWithQuantities([id], rowPatch, rowQuantities);
+            updatedRows.push(...rowUpdates);
+          }
+        } else {
+          const patch = { ...basePatch };
+          if (issueDescriptionText) patch.issue_description = issueDescriptionText;
+          updatedRows = await _sbUpdateOrdersByIdsWithQuantities(ids, patch, quantities || null);
+        }
+
         const returnedReceiptNumber =
           updatedRows
             .map((row) => _sbExistingOrderReceiptNumber(row))
@@ -19873,7 +19989,8 @@ app.post(
           status: "Shipped",
           statusColor: "blue",
           operationsByName: req.session.username || "",
-          issueDescription: issueDescription || null,
+          issueDescription: issueDescriptionText || null,
+          perItemIssues: Array.from(issueById.entries()).map(([orderId, issue]) => ({ orderId, issueDescription: issue })),
           receiptNumber: returnedReceiptNumber,
           source: "supabase",
         });
@@ -20571,6 +20688,7 @@ app.post(
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
         const perItemLogsInput = Array.isArray(req.body?.perItemLogs) ? req.body.perItemLogs : [];
         const moveToArrived = !!req.body?.moveToArrived;
+        const moveToShipping = !!req.body?.moveToShipping;
         const logById = new Map();
 
         const normalizeLogEntry = (entry = {}) => {
@@ -20638,7 +20756,8 @@ app.post(
           if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
           if (log.repairActionText) patch.repair_action = log.repairActionText;
           if (sparePartText) patch.spare_parts_replaced = sparePartText;
-          if (moveToArrived) patch.status = "Arrived";
+          if (moveToShipping) patch.status = "Shipped";
+          else if (moveToArrived) patch.status = "Arrived";
 
           return {
             patch,
@@ -20664,13 +20783,13 @@ app.post(
           const detailKeys = ["resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
           const hasDetailsForRow = detailKeys.some((key) => String(built.patch?.[key] || "").trim());
           hasAnyDetails = hasAnyDetails || hasDetailsForRow;
-          if (!hasDetailsForRow && !moveToArrived) continue;
+          if (!hasDetailsForRow && !moveToArrived && !moveToShipping) continue;
           const updatedRow = await _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, built.patch, []);
           updatedRows.push(updatedRow);
           responseById.set(String(id), built.response);
         }
 
-        if (!hasAnyDetails && !moveToArrived) {
+        if (!hasAnyDetails && !moveToArrived && !moveToShipping) {
           return res.status(400).json({ error: "No maintenance details were provided." });
         }
 
@@ -20689,8 +20808,8 @@ app.post(
         return res.json({
           success: true,
           source: "supabase",
-          status: moveToArrived ? "Arrived" : null,
-          statusColor: moveToArrived ? "green" : null,
+          status: moveToShipping ? "Shipped" : moveToArrived ? "Arrived" : null,
+          statusColor: moveToShipping ? "blue" : moveToArrived ? "green" : null,
           items: serializedItems,
         });
       }
