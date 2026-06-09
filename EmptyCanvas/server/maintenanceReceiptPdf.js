@@ -243,9 +243,10 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const totalCost = safeParts.reduce((sum, part) => sum + (Number(part.total) || 0), 0);
 
     const numW = 28;
+    const qtyW = 42;
     const unitW = 64;
     const totalW = 72;
-    const nameW = Math.max(120, w - numW - unitW - totalW - 30);
+    const nameW = Math.max(110, w - numW - qtyW - unitW - totalW - 34);
 
     doc.save();
     doc.roundedRect(x, y, w, tableH, 10).fillAndStroke("#FFFFFF", COLORS.border);
@@ -253,6 +254,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4);
     doc.text("#", x + 9, y + 7, { width: numW });
     doc.text("Spare Parts Replacement", x + 9 + numW, y + 7, { width: nameW });
+    doc.text("Qty", x + 9 + numW + nameW + 4, y + 7, { width: qtyW, align: "right" });
     doc.text("Unit Cost", x + w - unitW - totalW - 14, y + 7, { width: unitW, align: "right" });
     doc.text("Total Cost", x + w - totalW - 10, y + 7, { width: totalW, align: "right" });
     doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, y + headerH).lineTo(x + w, y + headerH).stroke();
@@ -264,6 +266,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       if (idx > 0) doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
       doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(safeParts.length ? String(idx + 1) : "—", x + 9, rowY + 7, { width: numW });
       doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(nameText, x + 9 + numW, rowY + 7, { width: nameW, lineGap: 1 });
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(safeParts.length ? String(Number(part.qty) || 1) : "—", x + 9 + numW + nameW + 4, rowY + 7, { width: qtyW, align: "right" });
       doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(safeParts.length ? money(part.unit) : "—", x + w - unitW - totalW - 14, rowY + 7, { width: unitW, align: "right" });
       doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(safeParts.length ? money(part.total) : "—", x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
       rowY += rowH;
@@ -300,7 +303,10 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const spareParts = Array.isArray(item.spareParts) ? item.spareParts : [];
     const cardH = measureMaintenanceCard(item);
 
-    ensureSpace(cardH + 10);
+    // Do not push the whole component to the next page just because the full
+    // calculated card is tall. Starting the next component as soon as there is
+    // enough visible space avoids the large blank gaps seen in generated reports.
+    ensureSpace(Math.min(cardH + 10, 220));
     const y = doc.y;
     doc.save();
     doc.roundedRect(mL, y, contentW, cardH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);

@@ -4292,7 +4292,11 @@ function _sbSerializeOrderRow(row = {}) {
   const operationsByName = _sbOrderText(_sbOrderGet(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
   const operationsApproval = _sbOrderText(_sbOrderGet(row, ["operations_approval", "Operations Approval", "operation_approval", "Operation Approval"])) || null;
   const rejectedReason = _sbOrderText(_sbOrderGet(row, ["rejected_reason", "Rejected Reason", "Reject Reason", "rejection_reason", "Rejection Reason"])) || null;
-  const spareParts = _sbOrderSplitNames(_sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]));
+  const sparePartsRaw = _sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]);
+  const sparePartEntries = _normalizeMaintenanceSparePartEntries(sparePartsRaw);
+  const spareParts = sparePartEntries.length
+    ? toUniqueStringArray(sparePartEntries.map((entry) => entry.name), { splitComma: true })
+    : _sbOrderSplitNames(sparePartsRaw);
   const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
   const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
   const orderReceiptEntries = _sbNormalizeOrderReceiptEntries(orderReceiptRaw, "Receipt photo");
@@ -4340,6 +4344,7 @@ function _sbSerializeOrderRow(row = {}) {
     sparePartsReplacedId: null,
     sparePartsReplacedNames: spareParts,
     sparePartsReplacedName: spareParts.join(", ") || null,
+    sparePartsReplacedEntries: sparePartEntries,
     orderReceiptEntries,
     orderReceiptNames,
     orderReceiptUrls,
@@ -5280,6 +5285,7 @@ async function _sbBuildMaintenanceSparePartLookups() {
 }
 
 function _sbResolveMaintenanceSparePartsForItem(item = {}, lookups = {}) {
+  const explicitEntries = _normalizeMaintenanceSparePartEntries(item?.sparePartsReplacedEntries || [], lookups);
   const ids = toUniqueStringArray(item?.sparePartsReplacedIds || item?.sparePartsReplacedId || []);
   const names = toUniqueStringArray(
     item?.sparePartsReplacedNames?.length
@@ -5287,32 +5293,31 @@ function _sbResolveMaintenanceSparePartsForItem(item = {}, lookups = {}) {
       : (item?.sparePartsReplacedName || item?.sparePartsReplaced || []),
     { splitComma: true },
   );
+  const parsedNameEntries = _normalizeMaintenanceSparePartEntries(names, lookups);
   const out = [];
   const seen = new Set();
   const add = (part = {}) => {
     const name = String(part?.name || "").trim();
     const id = String(part?.id || "").trim();
-    const key = id || normKey(name);
+    const key = `${id || normKey(name)}|${Number(part?.qty) || 1}`;
     if (!key || seen.has(key)) return;
     seen.add(key);
     out.push({
       id,
       idCode: String(part?.displayId || part?.idCode || "").trim(),
       name: name || "Spare part",
-      unit: Number.isFinite(Number(part?.unitPrice)) ? Number(part.unitPrice) : 0,
-      qty: Number.isFinite(Number(part?.qty)) ? Number(part.qty) : 1,
+      unit: Number.isFinite(Number(part?.unitPrice ?? part?.unit)) ? Number(part?.unitPrice ?? part.unit) : 0,
+      qty: Number.isFinite(Number(part?.qty)) ? Math.max(1, Math.round(Number(part.qty))) : 1,
       link: part?.url || part?.link || null,
     });
   };
 
+  explicitEntries.forEach(add);
   for (const id of ids) {
     const match = lookups?.byId?.get?.(String(id || "").trim());
     if (match) add(match);
   }
-  for (const name of names) {
-    const match = lookups?.byName?.get?.(normKey(name));
-    add(match || { name });
-  }
+  parsedNameEntries.forEach(add);
   return out;
 }
 
@@ -5486,6 +5491,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
         addItemRow({
           idCode: part.idCode || "",
           component: part.name || item.productName || "Spare part",
+          qty,
           issue: itemIssue,
           link: part.link || "",
           unit,
@@ -7399,6 +7405,104 @@ function notionExactOptionName(propMeta, desired, fallback = "") {
 function isSparePartsTagName(value) {
   const key = normKey(value);
   return key === normKey("Spare Parts") || key === normKey("Spare Part") || key === "spareparts";
+}
+
+
+async function listMaintenanceReplacementProducts() {
+  if (_sbProductsEnabled()) {
+    const list = await _sbProductsList();
+    const out = (Array.isArray(list) ? list : [])
+      .map((product) => ({
+        id: String(product?.id || "").trim(),
+        name: String(product?.name || "").trim(),
+        displayId: String(product?.displayId || product?.idCode || "").trim(),
+        unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : 0,
+        url: product?.url || null,
+        tags: Array.isArray(product?.tags) ? product.tags : _sbSplitValues(product?.tags),
+      }))
+      .filter((product) => product.id && product.name);
+    out.sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+      sensitivity: "base",
+      numeric: true,
+    }));
+    return out;
+  }
+  return listSparePartsComponents();
+}
+
+function _normalizeMaintenanceSparePartEntries(value, lookups = {}) {
+  const entries = [];
+  const seen = new Set();
+  const byId = lookups?.byId || new Map();
+  const byName = lookups?.byName || new Map();
+
+  const add = (entry = {}) => {
+    const id = String(entry?.id ?? entry?.productId ?? entry?.sparePartId ?? entry?.value ?? "").trim();
+    let rawName = String(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName ?? "").trim();
+    let qty = Number(entry?.qty ?? entry?.quantity ?? entry?.count ?? 1);
+    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+    qty = Math.max(1, Math.round(qty));
+
+    const fromId = id ? byId.get(id) : null;
+    if (!rawName && fromId?.name) rawName = fromId.name;
+
+    const qtyMatch = rawName.match(/(?:\s*[x×]\s*|\s*\(\s*qty\s*:?\s*)(\d+(?:\.\d+)?)\s*\)?\s*$/i);
+    if (qtyMatch) {
+      const parsedQty = Number(qtyMatch[1]);
+      if (Number.isFinite(parsedQty) && parsedQty > 0) qty = Math.max(1, Math.round(parsedQty));
+      rawName = rawName.slice(0, qtyMatch.index).trim();
+    }
+
+    const fromName = rawName ? byName.get(normKey(rawName)) : null;
+    const product = fromId || fromName || null;
+    const name = String(product?.name || rawName || "").trim();
+    if (!name) return;
+    const finalId = String(product?.id || id || "").trim();
+    const key = `${finalId || normKey(name)}|${qty}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({
+      id: finalId,
+      name,
+      qty,
+      displayId: String(product?.displayId || product?.idCode || "").trim(),
+      unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : 0,
+      url: product?.url || null,
+    });
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach(add);
+    return entries;
+  }
+
+  if (value && typeof value === "object") {
+    if (Array.isArray(value.items)) value.items.forEach(add);
+    else add(value);
+    return entries;
+  }
+
+  const raw = String(value || "").trim();
+  if (!raw) return entries;
+  try {
+    const parsed = JSON.parse(raw);
+    return _normalizeMaintenanceSparePartEntries(parsed, lookups);
+  } catch {}
+
+  raw.split(/[,\n]+/).map((part) => part.trim()).filter(Boolean).forEach((name) => add({ name }));
+  return entries;
+}
+
+function _maintenanceSparePartEntriesToText(entries = []) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => {
+      const name = String(entry?.name || "").trim();
+      if (!name) return "";
+      const qty = Number.isFinite(Number(entry?.qty)) ? Math.max(1, Math.round(Number(entry.qty))) : 1;
+      return qty > 1 ? `${name} x${qty}` : name;
+    })
+    .filter(Boolean)
+    .join(", ");
 }
 
 async function listSparePartsComponents() {
@@ -20644,7 +20748,7 @@ app.get(
         }
       }
 
-      const spareParts = await listSparePartsComponents();
+      const spareParts = await listMaintenanceReplacementProducts();
 
       return res.json({
         resolutionMethods,
@@ -20714,12 +20818,18 @@ app.post(
             ],
             { splitComma: true },
           );
+          const rawSparePartEntries = Array.isArray(entry?.spareParts)
+            ? entry.spareParts
+            : Array.isArray(entry?.sparePartEntries)
+              ? entry.sparePartEntries
+              : [];
           return {
             resolutionMethodText,
             actualIssueDescriptionText,
             repairActionText,
             rawSparePartTokens,
             requestedSparePartNames,
+            rawSparePartEntries,
           };
         };
 
@@ -20730,26 +20840,25 @@ app.post(
         }
 
         const fallbackLog = normalizeLogEntry({});
-        const catalog = await listSparePartsComponents().catch(() => []);
-        const catalogById = new Map((catalog || []).map((item) => [String(item?.id || "").trim(), String(item?.name || "").trim()]));
+        const catalog = await listMaintenanceReplacementProducts().catch(() => []);
+        const catalogById = new Map((catalog || []).map((item) => [String(item?.id || "").trim(), item]));
+        const catalogByName = new Map((catalog || []).map((item) => [normKey(item?.name || ""), item]));
+        const catalogLookups = { byId: catalogById, byName: catalogByName };
 
         const buildPatchForLog = async (entryLog) => {
           const log = entryLog || fallbackLog;
-          const spareNames = [...(log.requestedSparePartNames || [])];
           const spareIds = (log.rawSparePartTokens || []).map((value) => String(value || "").trim()).filter(Boolean);
+          const tokenEntries = spareIds.map((value) => ({ id: value }));
+          const nameEntries = (log.requestedSparePartNames || []).map((name) => ({ name }));
+          const normalizedEntries = _normalizeMaintenanceSparePartEntries([
+            ...(Array.isArray(log.rawSparePartEntries) ? log.rawSparePartEntries : []),
+            ...tokenEntries,
+            ...nameEntries,
+          ], catalogLookups);
 
-          for (const spareId of spareIds) {
-            const fromCatalog = catalogById.get(spareId);
-            if (fromCatalog) spareNames.push(fromCatalog);
-            else if (/^\d+$/.test(spareId)) {
-              const info = await getProductInfoCached(spareId).catch(() => null);
-              if (info?.name && info.name !== "Unknown Product") spareNames.push(String(info.name).trim());
-            }
-          }
-
-          const normalizedSparePartNames = toUniqueStringArray(spareNames, { splitComma: true });
-          const sparePartText = normalizedSparePartNames.join(", ");
-          const normalizedSparePartIds = toUniqueStringArray(spareIds);
+          const normalizedSparePartNames = toUniqueStringArray(normalizedEntries.map((entry) => entry.name), { splitComma: true });
+          const normalizedSparePartIds = toUniqueStringArray(normalizedEntries.map((entry) => entry.id).filter(Boolean));
+          const sparePartText = _maintenanceSparePartEntriesToText(normalizedEntries);
 
           const patch = { updated_at: new Date().toISOString() };
           if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
@@ -20769,6 +20878,7 @@ app.post(
               sparePartsReplacedId: normalizedSparePartIds[0] || null,
               sparePartsReplacedNames: normalizedSparePartNames,
               sparePartsReplacedName: sparePartText || null,
+              sparePartsReplacedEntries: normalizedEntries,
             },
           };
         };
