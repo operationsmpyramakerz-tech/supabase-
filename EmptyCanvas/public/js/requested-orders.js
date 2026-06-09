@@ -5061,14 +5061,14 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="co-submodal-field req-maintenance-log-card__spares">
               <div class="req-maintenance-spare-head">
                 <label class="co-submodal-label">Spare parts replaced</label>
-                <button type="button" class="req-maintenance-spare-add" data-maintenance-add-spare-row>
-                  <i data-feather="plus"></i>
-                  <span>Add</span>
-                </button>
               </div>
               <div class="req-maintenance-spare-list" data-maintenance-spare-list>
                 ${initialRows.map((entry, rowIndex) => createMaintenanceSpareRowMarkup(index, rowIndex, entry)).join('')}
               </div>
+              <button type="button" class="req-maintenance-spare-add req-maintenance-spare-add--full" data-maintenance-add-spare-row>
+                <i data-feather="plus"></i>
+                <span>Add spare part</span>
+              </button>
             </div>
           </div>
         </section>
