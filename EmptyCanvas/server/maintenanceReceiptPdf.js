@@ -309,36 +309,106 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const spareParts = Array.isArray(item.spareParts) ? item.spareParts : [];
     const cardH = measureMaintenanceCard(item);
 
-    // Do not push the whole component to the next page just because the full
-    // calculated card is tall. Starting the next component as soon as there is
-    // enough visible space avoids the large blank gaps seen in generated reports.
-    ensureSpace(Math.min(cardH + 10, 220));
-    const y = doc.y;
+    const drawCardHeader = (y, suffix = "") => {
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}${suffix}`, mL + 12, y + 12, {
+        width: contentW - 24,
+      });
+      const subtitle = [item.idCode ? `ID: ${item.idCode}` : "", item.component].filter(Boolean).join("  •  ");
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, {
+        width: contentW - 24,
+      });
+    };
+
+    const drawFullCard = () => {
+      ensureSpace(cardH + 10);
+      const y = doc.y;
+      doc.save();
+      doc.roundedRect(mL, y, contentW, cardH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+      drawCardHeader(y);
+      doc.restore();
+
+      let fy = y + 52;
+      const issueH = Math.max(
+        drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription),
+        drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Resolution Method", item.resolutionMethod),
+      );
+      fy += issueH + fieldsGap;
+      const actionH = Math.max(
+        drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription),
+        drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Repair Action", item.repairAction),
+      );
+      fy += actionH + 10;
+      drawSparePartsTable(mL + 12, fy, contentW - 24, spareParts);
+
+      doc.y = y + cardH + 10;
+    };
+
+    // Normal case: keep the card as one piece, but only when the whole card fits
+    // above the reserved signature footer area. This prevents the content from
+    // being drawn under the signature boxes.
+    if (doc.y + cardH + 10 <= metrics().maxY) {
+      drawFullCard();
+      return;
+    }
+
+    const issueH = Math.max(
+      measureSmallField(fieldW, item.issueDescription),
+      measureSmallField(fieldW, item.resolutionMethod),
+    );
+    const actionH = Math.max(
+      measureSmallField(fieldW, item.actualIssueDescription),
+      measureSmallField(fieldW, item.repairAction),
+    );
+    const detailsH = 52 + issueH + fieldsGap + actionH + 14;
+    const tableH = measureSparePartsTable(contentW - 24, spareParts);
+
+    // If there is not enough room to show a meaningful first segment, move the
+    // card to the next page. If it fits there, draw it normally.
+    if (metrics().maxY - doc.y < Math.min(detailsH, 150)) {
+      doc.addPage();
+      drawHeader(true);
+      if (doc.y + cardH + 10 <= metrics().maxY) {
+        drawFullCard();
+        return;
+      }
+    }
+
+    // Split layout: details stay in the current page up to the signature-safe
+    // boundary, and the spare-parts table continues in a new card segment.
+    ensureSpace(detailsH + 10);
+    let y = doc.y;
     doc.save();
-    doc.roundedRect(mL, y, contentW, cardH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}`, mL + 12, y + 12, {
-      width: contentW - 24,
-    });
-    const subtitle = [item.idCode ? `ID: ${item.idCode}` : "", item.component].filter(Boolean).join("  •  ");
-    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, {
-      width: contentW - 24,
-    });
+    doc.roundedRect(mL, y, contentW, detailsH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    drawCardHeader(y);
     doc.restore();
 
     let fy = y + 52;
-    const issueH = Math.max(
+    const drawnIssueH = Math.max(
       drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription),
       drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Resolution Method", item.resolutionMethod),
     );
-    fy += issueH + fieldsGap;
-    const actionH = Math.max(
+    fy += drawnIssueH + fieldsGap;
+    Math.max(
       drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription),
       drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Repair Action", item.repairAction),
     );
-    fy += actionH + 10;
-    drawSparePartsTable(mL + 12, fy, contentW - 24, spareParts);
+    doc.y = y + detailsH + 8;
 
-    doc.y = y + cardH + 10;
+    const tableSegmentH = tableH + 44;
+    if (doc.y + tableSegmentH > metrics().maxY) {
+      doc.addPage();
+      drawHeader(true);
+    }
+
+    y = doc.y;
+    doc.save();
+    doc.roundedRect(mL, y, contentW, tableSegmentH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10.5).text(`Maintenance for Component ${index + 1} — continued`, mL + 12, y + 12, {
+      width: contentW - 24,
+    });
+    doc.restore();
+    drawSparePartsTable(mL + 12, y + 34, contentW - 24, spareParts);
+    doc.y = y + tableSegmentH + 10;
   };
 
   const drawFooterSignatureBox = (x, y, w, title) => {
