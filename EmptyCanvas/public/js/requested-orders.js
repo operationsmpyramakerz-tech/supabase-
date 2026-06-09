@@ -4892,6 +4892,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let maintenanceLogLoadToken = 0;
   let maintenanceLogActiveGroup = null;
   let maintenanceLogActiveTab = null;
+  let maintenanceLogSubmitInFlight = false;
   let currentMaintenanceSparePartOptions = [];
 
   function maintenanceLogItemsForGroup(group = activeGroup) {
@@ -5931,13 +5932,63 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     }
   }
 
+  async function submitMaintenanceLogFromModal(event = null) {
+    if (event) {
+      try { event.preventDefault(); } catch {}
+      try { event.stopPropagation(); } catch {}
+    }
+
+    if (!isMaintenanceLogOpen()) return false;
+    if (maintenanceLogSubmitInFlight) return false;
+
+    const targetGroup = maintenanceLogActiveGroup || activeGroup;
+    const submitTab = maintenanceLogActiveTab || currentTab;
+
+    maintenanceLogSubmitInFlight = true;
+    setMaintenanceLogError('');
+    try {
+      return await saveMaintenanceLog(targetGroup, {
+        perItemLogs: collectMaintenanceLogPayload(targetGroup),
+        moveToShipping: !isMaintenancePage && submitTab === 'approved',
+      });
+    } finally {
+      maintenanceLogSubmitInFlight = false;
+    }
+  }
+
+  function isMaintenanceLogConfirmHit(event = null) {
+    if (!maintenanceLogConfirmBtn || !isMaintenanceLogOpen()) return false;
+    const target = event?.target || null;
+    if (target?.closest?.('#reqMaintenanceLogConfirm')) return true;
+    return isPointInsideElement(event, maintenanceLogConfirmBtn);
+  }
+
+  function bindMaintenanceLogConfirmFallback() {
+    if (!maintenanceLogConfirmBtn || maintenanceLogConfirmBtn.dataset.confirmFallbackBound === 'true') return;
+    maintenanceLogConfirmBtn.dataset.confirmFallbackBound = 'true';
+    maintenanceLogConfirmBtn.style.touchAction = 'manipulation';
+
+    const handle = (event) => {
+      if (!isMaintenanceLogConfirmHit(event)) return;
+      if (maintenanceLogConfirmBtn.disabled) return;
+      submitMaintenanceLogFromModal(event);
+    };
+
+    // Android browsers sometimes cancel the final click when the modal body is
+    // scrollable or the keyboard was recently open. Capture pointer/touch/click
+    // at document level so the Confirm button always reaches the save action.
+    document.addEventListener('pointerup', handle, true);
+    document.addEventListener('touchend', handle, { capture: true, passive: false });
+    document.addEventListener('click', handle, true);
+  }
+
   async function saveMaintenanceLog(g, payload = {}) {
     const targetGroup = g || maintenanceLogActiveGroup || activeGroup;
     if (!targetGroup || !Array.isArray(targetGroup.orderIds) || !targetGroup.orderIds.length) {
       const message = 'Order details are unavailable. Please close this window, open the order again, and retry.';
       setMaintenanceLogError(message);
       toast('error', 'Failed', message);
-      return;
+      return false;
     }
 
     const perItemLogs = Array.isArray(payload?.perItemLogs)
@@ -6859,17 +6910,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   maintenanceSparePartSelect?.addEventListener("change", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
   });
-  maintenanceLogConfirmBtn?.addEventListener("click", async (e) => {
-    e.preventDefault();
-    setMaintenanceLogError("");
-
-    const targetGroup = maintenanceLogActiveGroup || activeGroup;
-    const submitTab = maintenanceLogActiveTab || currentTab;
-    await saveMaintenanceLog(targetGroup, {
-      perItemLogs: collectMaintenanceLogPayload(targetGroup),
-      moveToShipping: !isMaintenancePage && submitTab === "approved",
-    });
-  });
+  bindMaintenanceLogConfirmFallback();
+  maintenanceLogConfirmBtn?.addEventListener("click", submitMaintenanceLogFromModal);
 
   maintenanceReceiptChooseBtn?.addEventListener("click", (e) => {
     e.preventDefault();
