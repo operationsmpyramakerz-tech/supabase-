@@ -9870,3 +9870,68 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
     font-size: 16px;
   }
 }
+
+/* =================================
+   Request technical visit — per-component issue cards
+   ================================= */
+.req-tech-visit-body{
+  max-height: min(62dvh, 560px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.req-tech-visit-items{
+  display: grid;
+  gap: 12px;
+}
+
+.req-tech-visit-card{
+  border: 1px solid rgba(229,231,235,.96);
+  border-radius: 20px;
+  background: #FFFFFF;
+  box-shadow: 0 14px 30px rgba(15,23,42,.08);
+  padding: 14px;
+}
+
+.req-tech-visit-card__head{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.req-tech-visit-card__label{
+  color: #9CA3AF;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.req-tech-visit-card__title{
+  margin-top: 3px;
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 1000;
+}
+
+.req-tech-visit-card__textarea{
+  min-height: 98px;
+}
+
+.req-tech-visit-fallback[hidden]{
+  display: none !important;
+}
+
+@media (max-width: 768px){
+  .req-tech-visit-body{
+    max-height: min(70dvh, 620px);
+  }
+  .req-tech-visit-card{
+    padding: 12px;
+    border-radius: 18px;
+  }
+}
