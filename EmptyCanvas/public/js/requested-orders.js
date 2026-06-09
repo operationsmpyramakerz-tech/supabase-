@@ -4890,6 +4890,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let maintenanceLogLastFocus = null;
   let maintenanceLogLoadToken = 0;
+  let maintenanceLogActiveGroup = null;
+  let maintenanceLogActiveTab = null;
   let currentMaintenanceSparePartOptions = [];
 
   function maintenanceLogItemsForGroup(group = activeGroup) {
@@ -5169,11 +5171,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.feather) window.feather.replace();
   }
 
-  function collectMaintenanceLogPayload() {
+  function collectMaintenanceLogPayload(group = maintenanceLogActiveGroup || activeGroup) {
     if (!maintenanceLogItems) return [];
+    const groupItems = Array.isArray(group?.items) ? group.items.slice().sort(compareItemsByProductName) : [];
     return Array.from(maintenanceLogItems.querySelectorAll('[data-maintenance-order-id]'))
       .map((card) => {
-        const orderId = String(card.getAttribute('data-maintenance-order-id') || '').trim();
+        const cardIndex = Number(card.getAttribute('data-maintenance-log-index'));
+        const fallbackItem = Number.isFinite(cardIndex) ? groupItems[cardIndex] : null;
+        const orderId = String(card.getAttribute('data-maintenance-order-id') || fallbackItem?.id || '').trim();
         const resolutionSelect = card.querySelector('[data-maintenance-log-field="resolutionMethod"]');
         const actualInput = card.querySelector('[data-maintenance-log-field="actualIssueDescription"]');
         const repairInput = card.querySelector('[data-maintenance-log-field="repairAction"]');
@@ -5233,8 +5238,10 @@ document.addEventListener("DOMContentLoaded", () => {
   async function openMaintenanceLogModal() {
     if (!maintenanceLogModal || !maintenanceLogItems) return;
 
+    maintenanceLogActiveGroup = activeGroup;
+    maintenanceLogActiveTab = currentTab;
     setMaintenanceLogError('');
-    const items = maintenanceLogItemsForGroup(activeGroup);
+    const items = maintenanceLogItemsForGroup(maintenanceLogActiveGroup);
     const loadToken = ++maintenanceLogLoadToken;
 
     if (maintenanceLogConfirmBtn) maintenanceLogConfirmBtn.disabled = true;
@@ -5288,6 +5295,8 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch {}
     }
     maintenanceLogLastFocus = null;
+    maintenanceLogActiveGroup = null;
+    maintenanceLogActiveTab = null;
   }
 
   let maintenanceReceiptLastFocus = null;
@@ -5791,7 +5800,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       });
 
       const data = await postJson("/api/orders/requested/mark-shipped", {
-        orderIds: g.orderIds,
+        orderIds: targetGroup.orderIds,
         receiptNumber: rnVal,
         quantities,
         issueDescription: issueDescriptionText || null,
@@ -5879,7 +5888,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       render();
 
       // Keep modal open and refreshed, except maintenance orders that move to Maintenance Orders page.
-      const updated = groups.find((x) => x.groupId === g.groupId);
+      const updated = groups.find((x) => x.groupId === targetGroup.groupId);
       if (isMaintenanceOrder && !isMaintenancePage) {
         closeOrderModal();
       } else if (updated && orderModal?.classList.contains("is-open")) {
@@ -5913,11 +5922,17 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   }
 
   async function saveMaintenanceLog(g, payload = {}) {
-    if (!g || !g.orderIds?.length) return;
+    const targetGroup = g || maintenanceLogActiveGroup || activeGroup;
+    if (!targetGroup || !Array.isArray(targetGroup.orderIds) || !targetGroup.orderIds.length) {
+      const message = 'Order details are unavailable. Please close this window, open the order again, and retry.';
+      setMaintenanceLogError(message);
+      toast('error', 'Failed', message);
+      return;
+    }
 
     const perItemLogs = Array.isArray(payload?.perItemLogs)
       ? payload.perItemLogs
-      : collectMaintenanceLogPayload();
+      : collectMaintenanceLogPayload(targetGroup);
     const validation = validateMaintenanceLogPayload(perItemLogs);
     if (!validation.ok) return;
     const logsWithAnyDetails = validation.logsWithAnyDetails;
@@ -5934,7 +5949,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       const moveToArrived = !!payload?.moveToArrived;
       const moveToShipping = !!payload?.moveToShipping;
       const data = await postJson('/api/orders/requested/log-maintenance', {
-        orderIds: g.orderIds,
+        orderIds: targetGroup.orderIds,
         perItemLogs: logsWithAnyDetails,
         moveToArrived,
         moveToShipping,
@@ -5949,7 +5964,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
         });
       } else {
         const logById = new Map(logsWithAnyDetails.map((entry) => [String(entry.orderId || ''), entry]));
-        const idSet = new Set(g.orderIds.map((id) => String(id || '')));
+        const idSet = new Set(targetGroup.orderIds.map((id) => String(id || '')));
         allItems.forEach((it) => {
           if (!idSet.has(String(it.id || ''))) return;
           const entry = logById.get(String(it.id || '')) || logsWithAnyDetails[0] || {};
@@ -5983,7 +5998,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       render();
 
-      const updated = groups.find((x) => x.groupId === g.groupId);
+      const updated = groups.find((x) => x.groupId === targetGroup.groupId);
       if (updated) activeGroup = updated;
       if (updated && orderModal?.classList.contains('is-open')) {
         openOrderModal(updated);
@@ -6072,7 +6087,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       groups = buildGroups(allItems);
       render();
 
-      const updated = groups.find((x) => x.groupId === g.groupId);
+      const updated = groups.find((x) => x.groupId === targetGroup.groupId);
       if (updated && orderModal?.classList.contains("is-open")) {
         openOrderModal(updated);
       }
@@ -6834,9 +6849,11 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     e.preventDefault();
     setMaintenanceLogError("");
 
-    await saveMaintenanceLog(activeGroup, {
-      perItemLogs: collectMaintenanceLogPayload(),
-      moveToShipping: !isMaintenancePage && currentTab === "approved",
+    const targetGroup = maintenanceLogActiveGroup || activeGroup;
+    const submitTab = maintenanceLogActiveTab || currentTab;
+    await saveMaintenanceLog(targetGroup, {
+      perItemLogs: collectMaintenanceLogPayload(targetGroup),
+      moveToShipping: !isMaintenancePage && submitTab === "approved",
     });
   });
 
