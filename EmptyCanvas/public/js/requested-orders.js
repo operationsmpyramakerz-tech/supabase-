@@ -5741,9 +5741,15 @@ async function postJson(url, body) {
   }
 
 async function markReceivedByOperations(g, receiptNumber, extra = {}) {
-    if (!g || !g.orderIds?.length) return;
+    const targetGroup = g || activeGroup;
+    if (!targetGroup || !Array.isArray(targetGroup.orderIds) || !targetGroup.orderIds.length) {
+      const message = "Order details are unavailable. Please close this window, open the order again, and retry.";
+      if (isTechVisitOpen()) setTechVisitError(message);
+      else alert(message);
+      return null;
+    }
 
-    const isMaintenanceOrder = isMaintenanceOrderType(g.orderType || g.items?.[0]?.orderType);
+    const isMaintenanceOrder = isMaintenanceOrderType(targetGroup.orderType || targetGroup.items?.[0]?.orderType);
     const issueDescriptionText = String(extra?.issueDescription || "").trim();
     const perItemIssues = Array.isArray(extra?.perItemIssues) ? extra.perItemIssues : [];
     const issueById = new Map(perItemIssues.map((entry) => [String(entry?.orderId || '').trim(), String(entry?.issueDescription || '').trim()]));
@@ -5772,7 +5778,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       const quantities = {};
       const isRemainingTab = currentTab === "remaining";
 
-      (g.items || []).forEach((it) => {
+      (targetGroup.items || []).forEach((it) => {
         const id = String(it?.id || "").trim();
         if (!id) return;
 
@@ -5810,10 +5816,10 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       // Update local state (set status = Shipped + operationsByName)
       const username = String(data.operationsByName || localStorage.getItem("username") || "").trim();
-      const idSet = new Set(g.orderIds);
+      const idSet = new Set(targetGroup.orderIds.map((id) => String(id || "")));
 
       allItems.forEach((it) => {
-        if (!idSet.has(it.id)) return;
+        if (!idSet.has(String(it.id || ""))) return;
 
         // Capture previous state for visual feedback in Remaining tab
         it.previousRemaining = remainingQty(it);
@@ -5904,6 +5910,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       // Close receipt prompt (if opened)
       closeReceiptModal({ restoreFocus: false });
+      return data;
     } catch (e) {
       console.error(e);
       const message = e.message || (isMaintenanceOrder ? "Failed to request technical visit." : "Failed to mark as received.");
@@ -5912,6 +5919,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       } else {
         alert(message);
       }
+      return null;
     } finally {
       if (shippedBtn) {
         shippedBtn.disabled = false;
@@ -6031,7 +6039,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   }
 
   async function markArrived(g, extra = {}) {
-    if (!g || !g.orderIds?.length) return;
+    const targetGroup = g || activeGroup;
+    if (!targetGroup || !Array.isArray(targetGroup.orderIds) || !targetGroup.orderIds.length) return;
 
     const orderReceiptDataUrls = toStringArray(
       extra?.orderReceiptDataUrls ?? extra?.orderReceiptDataUrl ?? extra?.maintenanceReceiptDataUrls ?? extra?.maintenanceReceiptDataUrl,
@@ -6052,21 +6061,21 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
     try {
       const data = await postJson("/api/orders/requested/mark-arrived", {
-        orderIds: g.orderIds,
+        orderIds: targetGroup.orderIds,
         orderReceiptDataUrls,
         orderReceiptFilenames,
         receiptNumbers,
       });
 
-      const idSet = new Set(g.orderIds);
-      const primaryReceiptPageId = String(data?.primaryReceiptPageId || g.orderIds?.[0] || "").trim();
+      const idSet = new Set(targetGroup.orderIds.map((id) => String(id || "")));
+      const primaryReceiptPageId = String(data?.primaryReceiptPageId || targetGroup.orderIds?.[0] || "").trim();
       const nextOrderReceiptUrls = toStringArray(data?.orderReceiptUrls ?? data?.orderReceiptUrl);
       const nextOrderReceiptNames = toStringArray(data?.orderReceiptNames ?? data?.orderReceiptName);
       const nextMaintenanceReceiptUrls = toStringArray(data?.maintenanceReceiptUrls ?? data?.maintenanceReceiptUrl);
       const nextMaintenanceReceiptNames = toStringArray(data?.maintenanceReceiptNames ?? data?.maintenanceReceiptName);
 
       allItems.forEach((it) => {
-        if (!idSet.has(it.id)) return;
+        if (!idSet.has(String(it.id || ""))) return;
         const isReceiptHolder = !!primaryReceiptPageId && String(it.id || "").trim() === primaryReceiptPageId;
         it.status = "Arrived";
         it.statusColor = data.statusColor || it.statusColor;
@@ -6791,8 +6800,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (techVisitCloseBtn) techVisitCloseBtn.disabled = true;
 
     try {
-      await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
-      closeTechVisitModal({ restoreFocus: false });
+      const result = await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
+      if (result?.success) closeTechVisitModal({ restoreFocus: false });
     } finally {
       if (techVisitConfirmBtn) techVisitConfirmBtn.disabled = false;
       if (techVisitCancelBtn) techVisitCancelBtn.disabled = false;
