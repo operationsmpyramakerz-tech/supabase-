@@ -1187,7 +1187,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
   const REQ_CACHE_KEY = isMaintenancePage
     ? "cache:ops:requestedOrders:v4:maintenance"
-    : "cache:ops:requestedOrders:v6:operations-approval";
+    : "cache:ops:requestedOrders:v7:maintenance-log-confirm";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
   function readRequestedCache() {
@@ -5265,11 +5265,13 @@ document.addEventListener("DOMContentLoaded", () => {
     maintenanceLogModal.setAttribute('aria-hidden', 'false');
 
     if (window.feather) window.feather.replace();
+    bindMaintenanceLogConfirmFallback();
 
     try {
       const options = await loadMaintenanceFormOptions();
       if (loadToken !== maintenanceLogLoadToken || !isMaintenanceLogOpen()) return;
       renderMaintenanceLogCards(items, options);
+      bindMaintenanceLogConfirmFallback();
       if (maintenanceLogConfirmBtn) maintenanceLogConfirmBtn.disabled = false;
       window.requestAnimationFrame(() => {
         try {
@@ -5566,10 +5568,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 async function postJson(url, body) {
-    const res = await fetch(url, {
+    const requestUrl = new URL(url, window.location.origin);
+    requestUrl.searchParams.set('_ts', String(Date.now()));
+    const res = await fetch(requestUrl.pathname + requestUrl.search, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+      },
       credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify(body || {}),
     });
     const data = await res.json().catch(() => ({}));
@@ -5932,14 +5942,21 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     }
   }
 
+  let maintenanceLogLastSubmitAt = 0;
+
   async function submitMaintenanceLogFromModal(event = null) {
     if (event) {
       try { event.preventDefault(); } catch {}
       try { event.stopPropagation(); } catch {}
+      try { event.stopImmediatePropagation(); } catch {}
     }
 
     if (!isMaintenanceLogOpen()) return false;
     if (maintenanceLogSubmitInFlight) return false;
+
+    const now = Date.now();
+    if (now - maintenanceLogLastSubmitAt < 650) return false;
+    maintenanceLogLastSubmitAt = now;
 
     const targetGroup = maintenanceLogActiveGroup || activeGroup;
     const submitTab = maintenanceLogActiveTab || currentTab;
@@ -5951,15 +5968,28 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
         perItemLogs: collectMaintenanceLogPayload(targetGroup),
         moveToShipping: !isMaintenancePage && submitTab === 'approved',
       });
+    } catch (error) {
+      console.error('maintenance-log submit error:', error);
+      const message = error?.message || 'Failed to save maintenance log.';
+      setMaintenanceLogError(message);
+      try { toast('error', 'Failed', message); } catch {}
+      return false;
     } finally {
       maintenanceLogSubmitInFlight = false;
     }
   }
 
+  function eventTargetClosest(target, selector) {
+    if (!target) return null;
+    if (typeof target.closest === 'function') return target.closest(selector);
+    const parent = target.parentElement || target.parentNode;
+    return parent && typeof parent.closest === 'function' ? parent.closest(selector) : null;
+  }
+
   function isMaintenanceLogConfirmHit(event = null) {
     if (!maintenanceLogConfirmBtn || !isMaintenanceLogOpen()) return false;
     const target = event?.target || null;
-    if (target?.closest?.('#reqMaintenanceLogConfirm')) return true;
+    if (eventTargetClosest(target, '#reqMaintenanceLogConfirm')) return true;
     return isPointInsideElement(event, maintenanceLogConfirmBtn);
   }
 
@@ -5967,19 +5997,40 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (!maintenanceLogConfirmBtn || maintenanceLogConfirmBtn.dataset.confirmFallbackBound === 'true') return;
     maintenanceLogConfirmBtn.dataset.confirmFallbackBound = 'true';
     maintenanceLogConfirmBtn.style.touchAction = 'manipulation';
+    maintenanceLogConfirmBtn.setAttribute('aria-busy', 'false');
 
     const handle = (event) => {
       if (!isMaintenanceLogConfirmHit(event)) return;
-      if (maintenanceLogConfirmBtn.disabled) return;
-      submitMaintenanceLogFromModal(event);
+      if (maintenanceLogConfirmBtn.disabled || maintenanceLogSubmitInFlight) return;
+      void submitMaintenanceLogFromModal(event);
     };
 
-    // Android browsers sometimes cancel the final click when the modal body is
-    // scrollable or the keyboard was recently open. Capture pointer/touch/click
-    // at document level so the Confirm button always reaches the save action.
-    document.addEventListener('pointerup', handle, true);
+    const directHandle = (event) => {
+      if (event?.type === 'keyup') {
+        const key = String(event?.key || '');
+        if (key !== 'Enter' && key !== ' ') return;
+      }
+      if (maintenanceLogConfirmBtn.disabled || maintenanceLogSubmitInFlight) return;
+      void submitMaintenanceLogFromModal(event);
+    };
+
+    // Some Android/Opera mobile builds drop the final click after interacting
+    // with a scrollable dialog or a textarea. Submit from the earliest touch
+    // phases too, and also keep a coordinate-based document fallback in case an
+    // overlay/high-z-index dock receives the actual event target.
+    ['pointerdown', 'mousedown', 'click', 'keyup'].forEach((eventName) => {
+      maintenanceLogConfirmBtn.addEventListener(eventName, directHandle, true);
+    });
+    maintenanceLogConfirmBtn.addEventListener('touchstart', directHandle, { capture: true, passive: false });
+
+    ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'].forEach((eventName) => {
+      document.addEventListener(eventName, handle, true);
+    });
+    document.addEventListener('touchstart', handle, { capture: true, passive: false });
     document.addEventListener('touchend', handle, { capture: true, passive: false });
-    document.addEventListener('click', handle, true);
+
+    window.__opsSubmitMaintenanceLogFromModal = submitMaintenanceLogFromModal;
+    window.__opsMaintenanceLogConfirmClick = (event) => submitMaintenanceLogFromModal(event);
   }
 
   async function saveMaintenanceLog(g, payload = {}) {
@@ -6004,6 +6055,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
     if (maintenanceLogConfirmBtn) {
       maintenanceLogConfirmBtn.disabled = true;
+      maintenanceLogConfirmBtn.setAttribute('aria-busy', 'true');
       maintenanceLogConfirmBtn.dataset.prevHtml = maintenanceLogConfirmBtn.innerHTML;
       maintenanceLogConfirmBtn.textContent = 'Saving...';
     }
@@ -6084,6 +6136,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     } finally {
       if (maintenanceLogConfirmBtn) {
         maintenanceLogConfirmBtn.disabled = false;
+        maintenanceLogConfirmBtn.setAttribute('aria-busy', 'false');
         const prev = maintenanceLogConfirmBtn.dataset.prevHtml;
         if (prev) maintenanceLogConfirmBtn.innerHTML = prev;
         else maintenanceLogConfirmBtn.textContent = 'Confirm';
