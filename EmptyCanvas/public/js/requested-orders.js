@@ -3734,16 +3734,25 @@ document.addEventListener("DOMContentLoaded", () => {
         openRejectedReasonViewModal(rejectedReasonBtn.getAttribute("data-rejected-reason") || "");
         return;
       }
-      openOrderModal(g);
+      event.stopPropagation();
+      safeOpenOrderModal(g);
     });
     card.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        openOrderModal(g);
+        safeOpenOrderModal(g);
       }
     });
 
     return card;
+  }
+
+  function groupById(groupId) {
+    const id = String(groupId || "").trim();
+    if (!id) return null;
+    return (groups || []).find((g) => String(g?.groupId || "") === id) ||
+      getFilteredGroups().find((g) => String(g?.groupId || "") === id) ||
+      null;
   }
 
   function render() {
@@ -3772,6 +3781,21 @@ document.addEventListener("DOMContentLoaded", () => {
     listDiv.appendChild(frag);
 
     if (window.feather) window.feather.replace();
+  }
+
+  // ---------- Modal ----------
+  function safeOpenOrderModal(g) {
+    if (!g || !Array.isArray(g.items) || !g.items.length) {
+      toast("error", "Failed", "Order details are unavailable. Please refresh and try again.");
+      return;
+    }
+
+    try {
+      openOrderModal(g);
+    } catch (error) {
+      console.error("openOrderModal failed:", error);
+      toast("error", "Failed", error?.message || "Failed to open order details.");
+    }
   }
 
   // ---------- Modal ----------
@@ -6306,6 +6330,18 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (!typeFilterWrap || !typeFilterPanel || typeFilterPanel.hidden) return;
     if (typeFilterWrap.contains(e.target)) return;
     closeTypeFilterMenu();
+  });
+
+  // Fallback delegation: keeps order cards clickable after re-renders, cached
+  // iframe shell navigation, or mobile touch quirks. The per-card listener above
+  // still handles the normal path; this only catches missed clicks.
+  listDiv?.addEventListener("click", (event) => {
+    const card = event.target?.closest?.(".co-card[data-group-id]");
+    if (!card || !listDiv.contains(card)) return;
+    if (event.target?.closest?.("button, a, input, textarea, select, [role='button']:not(.co-card)")) return;
+    const group = groupById(card.dataset.groupId);
+    if (!group) return;
+    safeOpenOrderModal(group);
   });
 
   document.addEventListener("keydown", (e) => {

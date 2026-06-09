@@ -3463,10 +3463,13 @@ function initNotificationsWidget() {
     });
   });
 
-  // Initial badge load + live polling
+  // Initial badge load + live polling. Use a single global timer so pages loaded
+  // inside the desktop shell/iframe do not start competing notification loops.
   refreshNotifications(false);
   try { ensureOpsPushNotificationsEnabled({ ask: false, quiet: true }); } catch {}
-  setInterval(() => refreshNotifications(false), 15000);
+  if (!window.__opsNotifPollTimer) {
+    window.__opsNotifPollTimer = setInterval(() => refreshNotifications(false), 30000);
+  }
 }
 
 
@@ -3834,6 +3837,8 @@ function opsChatTimeValue(value) {
 async function opsUpdateMailUnreadDot() {
   const btn = document.getElementById('messagesShortcutBtn');
   if (!btn || btn.hidden || btn.style.display === 'none') return;
+  if (!opsMailPollAllowed()) return;
+  window.__opsMailUnreadInFlight = true;
   try {
     const response = await fetch('/api/messages/chats?limit=80', { credentials: 'include', cache: 'no-store' });
     if (!response.ok) throw new Error('mail unread fetch failed');
@@ -3856,8 +3861,18 @@ async function opsUpdateMailUnreadDot() {
   } catch {
     btn.classList.remove('has-unread');
     btn.removeAttribute('data-unread-count');
+  } finally {
+    window.__opsMailUnreadInFlight = false;
   }
 }
+function opsMailPollAllowed() {
+  try {
+    if (document.visibilityState === 'hidden') return false;
+    if (window.__opsMailUnreadInFlight) return false;
+  } catch {}
+  return true;
+}
+
 function opsApplyMailShortcutAccess(allowed, account = null) {
   const btn = document.getElementById('messagesShortcutBtn');
   if (!btn) return;
@@ -4668,14 +4683,17 @@ async function refreshNotifications(renderList) {
   const badge = document.getElementById("notifBadge");
   const listEl = document.getElementById("notifList");
 
-  // Guard against overlapping notification requests. The previous 1-second
-  // polling cadence could stack fetches on slow mobile networks and make order
-  // screens feel frozen, especially when large modals are open.
+  // Guard against overlapping notification requests. Polling should never stack
+  // requests while order pages, modals, or the desktop shell are busy.
   if (window.__opsNotifRefreshInFlight) return;
+  if (!renderList && typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  const disabledUntil = Number(window.__opsNotifRefreshDisabledUntil || 0);
+  if (!renderList && disabledUntil && Date.now() < disabledUntil) return;
+
   window.__opsNotifRefreshInFlight = true;
 
   try {
-    const resp = await fetch(`/api/notifications/refresh?limit=60&_=${Date.now()}`, {
+    const resp = await fetch(`/api/notifications?limit=60&_=${Date.now()}`, {
       credentials: "include",
       cache: "no-store",
       headers: {
@@ -4686,7 +4704,11 @@ async function refreshNotifications(renderList) {
     });
 
     const data = await resp.json().catch(() => ({}));
+    if (resp.status === 404) {
+      window.__opsNotifRefreshDisabledUntil = Date.now() + (5 * 60 * 1000);
+    }
     if (!resp.ok || !data || data.success === false) throw new Error(data.error || "Failed");
+    window.__opsNotifRefreshDisabledUntil = 0;
 
     const unread = Number(data.unreadCount || 0);
     if (badge) {
