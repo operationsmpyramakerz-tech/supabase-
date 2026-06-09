@@ -1187,7 +1187,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Cache the requested orders list in sessionStorage to avoid re-fetching / re-rendering
   // on quick navigation. This speeds up Operations Orders noticeably on Vercel cold starts.
   const REQ_CACHE_KEY = isMaintenancePage
-    ? "cache:ops:requestedOrders:v4:maintenance"
+    ? "cache:ops:requestedOrders:v5:maintenance-tabs"
     : "cache:ops:requestedOrders:v6:operations-approval";
   const REQ_CACHE_TTL_MS = 45 * 1000; // 45s (server cache is 60s)
 
@@ -2986,10 +2986,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const url = new URL(window.location.href);
     const tab = norm(url.searchParams.get("tab"));
     const allowed = isMaintenancePage
-      ? new Set(["received", "delivered"])
+      ? new Set(["not-started", "in-progress", "done"])
       : new Set(["all", "approved", "rejected", "remaining", "received", "delivered", "archive"]);
     if (allowed.has(tab)) return tab;
-    return isMaintenancePage ? "received" : "all";
+    return isMaintenancePage ? "not-started" : "all";
   }
 
   function normalizeTypeFilterValue(value) {
@@ -3332,7 +3332,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------- Rendering ----------
   let allItems = [];
   let groups = [];
-  let currentTab = isMaintenancePage ? "received" : "all";
+  let currentTab = isMaintenancePage ? "not-started" : "all";
   let currentTypeFilter = "all";
   let activeGroup = null;
   let lastFocus = null;
@@ -3460,6 +3460,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizeTypeFilterValue(g.orderType || first.orderType);
   }
 
+  function itemHasMaintenanceLog(item = {}) {
+    return !!(
+      String(item?.resolutionMethod || '').trim() ||
+      String(item?.actualIssueDescription || '').trim() ||
+      String(item?.repairAction || '').trim() ||
+      normalizeMaintenanceSpareEntries(item).length ||
+      toStringArray(item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName, { splitComma: true })
+        .map((value) => String(value || '').trim())
+        .filter((value) => !isMaintenanceSparePlaceholder(value)).length
+    );
+  }
+
+  function groupHasMaintenanceLog(group = activeGroup) {
+    return (Array.isArray(group?.items) ? group.items : []).some((item) => itemHasMaintenanceLog(item));
+  }
+
   function groupMatchesCurrentTab(g) {
     const idx = g?.stage?.idx || 1;
     const isArchived = idx >= 5 || norm(g?.stage?.key) === "archive";
@@ -3470,12 +3486,16 @@ document.addEventListener("DOMContentLoaded", () => {
       return !isMaintenancePage && currentTab === "archive";
     }
 
-    // Maintenance Orders page uses the same script but only needs received/delivered
-    // maintenance orders. Keep that page isolated from regular operations filtering.
+    // Maintenance Orders page workflow:
+    // - Not started: maintenance order is approved/requested for technical visit, but no log was saved yet.
+    // - In progress: maintenance log is saved and the order is still in Shipping/In progress stage.
+    // - Done: order was marked as delivered/arrived.
     if (isMaintenancePage) {
       if (!isMaintenanceOrder) return false;
-      if (currentTab === "received") return idx === 3;
-      if (currentTab === "delivered") return idx === 4;
+      const hasLog = groupHasMaintenanceLog(g);
+      if (currentTab === "not-started") return (idx === 2 || idx === 3) && !hasLog;
+      if (currentTab === "in-progress") return idx === 3 && hasLog;
+      if (currentTab === "done") return idx >= 4;
       return false;
     }
 
@@ -3946,9 +3966,13 @@ document.addEventListener("DOMContentLoaded", () => {
         : '<i data-feather="truck"></i> Received by operations';
     }
     // "Mark as Delivered" button:
-    // Show it in the "Received" tab when the order is in Shipped stage.
+    // Operations page: show it in the Received tab when the order is in Shipped stage.
+    // Maintenance page: show it in In progress only after the maintenance log is saved.
     if (arrivedBtn) {
-      arrivedBtn.style.display = currentTab === "received" && stage.idx === 3 ? "inline-flex" : "none";
+      const showArrivedBtn = isMaintenancePage
+        ? currentTab === "in-progress" && stage.idx === 3 && groupHasMaintenanceLog(g)
+        : currentTab === "received" && stage.idx === 3;
+      arrivedBtn.style.display = showArrivedBtn ? "inline-flex" : "none";
     }
     if (createWithdrawalBtn) {
       const repeatAction = getDeliveredRepeatActionConfig(g, all[0]);
@@ -3992,13 +4016,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const stageIdx = stage?.idx || 1;
       const canLogMaintenance = isMaintenanceOrder && (
         isMaintenancePage
-          ? stageIdx >= 4
+          ? currentTab === "not-started" && (stageIdx === 2 || stageIdx === 3) && !groupHasMaintenanceLog(g)
           : currentTab === "approved"
       );
       logMaintenanceBtn.style.display = canLogMaintenance ? "inline-flex" : "none";
     }
     if (maintenancePdfBtn) {
-      const canDownloadMaintenancePdf = isMaintenanceOrder && (stage?.idx || 1) >= 4;
+      const stageIdx = stage?.idx || 1;
+      const canDownloadMaintenancePdf = isMaintenanceOrder && (
+        isMaintenancePage
+          ? ((currentTab === "in-progress" && stageIdx === 3 && groupHasMaintenanceLog(g)) || (currentTab === "done" && stageIdx >= 4))
+          : stageIdx >= 4
+      );
       maintenancePdfBtn.style.display = canDownloadMaintenancePdf ? "inline-flex" : "none";
     }
 
@@ -6000,8 +6029,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       writeRequestedCache(allItems);
       groups = buildGroups(allItems);
 
-      if (data?.status || moveToArrived || moveToShipping) {
-        currentTab = 'received';
+      if (data?.status || moveToArrived || moveToShipping || isMaintenancePage) {
+        currentTab = isMaintenancePage ? 'in-progress' : 'received';
         updateTabUI();
       }
 
@@ -6863,7 +6892,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     const submitTab = maintenanceLogActiveTab || currentTab;
     await saveMaintenanceLog(targetGroup, {
       perItemLogs: collectMaintenanceLogPayload(targetGroup),
-      moveToShipping: !isMaintenancePage && submitTab === "approved",
+      moveToShipping: (!isMaintenancePage && submitTab === "approved") || (isMaintenancePage && submitTab === "not-started"),
     });
   });
 
