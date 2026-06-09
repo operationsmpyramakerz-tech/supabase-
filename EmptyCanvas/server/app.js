@@ -20817,7 +20817,7 @@ app.post(
               : Array.isArray(sparePartIds) && sparePartIds.length
                 ? sparePartIds
                 : (entry?.sparePartId ?? sparePartId),
-          );
+          ).filter((value) => !isMaintenanceSparePartPlaceholderName(value));
           const requestedSparePartNames = toUniqueStringArray(
             [
               ...rawSparePartTokens.filter((value) => !/^\d+$/.test(String(value || "").trim()) && !looksLikeNotionId(value)),
@@ -20825,7 +20825,7 @@ app.post(
               ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
             ],
             { splitComma: true },
-          );
+          ).filter((value) => !isMaintenanceSparePartPlaceholderName(value));
           const rawSparePartEntries = Array.isArray(entry?.spareParts)
             ? entry.spareParts
             : Array.isArray(entry?.sparePartEntries)
@@ -20962,7 +20962,7 @@ app.post(
 
       const rawSparePartTokens = toUniqueStringArray(
         Array.isArray(sparePartIds) && sparePartIds.length ? sparePartIds : sparePartId,
-      );
+      ).filter((value) => !isMaintenanceSparePartPlaceholderName(value));
       const requestedSparePartIds = rawSparePartTokens
         .filter((value) => looksLikeNotionId(value))
         .map((value) => toHyphenatedUUID(value))
@@ -20973,7 +20973,7 @@ app.post(
           ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
         ],
         { splitComma: true },
-      );
+      ).filter((value) => !isMaintenanceSparePartPlaceholderName(value));
 
       const finalSparePartIds = [...requestedSparePartIds];
       const finalSparePartNames = [];
