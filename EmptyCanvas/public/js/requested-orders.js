@@ -156,6 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const maintenanceActualIssueInput = document.getElementById("reqMaintenanceActualIssueInput");
   const maintenanceRepairActionInput = document.getElementById("reqMaintenanceRepairActionInput");
   const maintenanceSparePartSelect = document.getElementById("reqMaintenanceSparePartSelect");
+  const maintenanceLogItems = document.getElementById("reqMaintenanceLogItems");
   const maintenanceLogError = document.getElementById("reqMaintenanceLogError");
 
   // Maintenance receipt sub-modal
@@ -3897,6 +3898,13 @@ document.addEventListener("DOMContentLoaded", () => {
     ].some((row) => row && !row.hidden && row.style.display !== "none");
     setRowHidden(modalMeta, !hasVisibleMetaRow);
 
+    // Hide the generic download action for maintenance orders while they are still in Approved.
+    // Maintenance reports become downloadable from the Received/Delivered stage only.
+    if (downloadMenuWrap) {
+      const hideMaintenanceApprovedDownload = isMaintenanceOrder && !isMaintenancePage && currentTab === "approved";
+      downloadMenuWrap.style.display = hideMaintenanceApprovedDownload ? "none" : "inline-flex";
+    }
+
     // Actions visibility
     // - Approved: show "Received by operations" for S.V-approved In progress orders
     // - Remaining: show it again so operations can add another receipt number
@@ -4172,15 +4180,34 @@ document.addEventListener("DOMContentLoaded", () => {
     { value: "component", label: "Component", checked: true },
     { value: "qty", label: "Qty", checked: true },
     { value: "reason", label: "Reason", checked: false },
+    { value: "issue", label: "Issue", checked: false },
     { value: "link", label: "Component link", checked: false },
     { value: "unit", label: "Unit cost", checked: true },
     { value: "total", label: "Total cost", checked: true },
   ];
 
-  function defaultOpsExportColumnsForTab(tab = currentTab) {
+  const OPS_MAINTENANCE_EXPORT_COLUMNS = [
+    { value: "idCode", label: "ID", checked: true },
+    { value: "component", label: "Component", checked: true },
+    { value: "issue", label: "Issue", checked: true },
+    { value: "link", label: "Component link", checked: false },
+  ];
+
+  function isMaintenanceExportContext(group = activeGroup, tab = currentTab) {
     const tabKey = String(tab || "").trim().toLowerCase();
+    const orderType = group?.orderType || group?.items?.[0]?.orderType;
+    return isMaintenanceOrderType(orderType) && (tabKey === "received" || tabKey === "delivered");
+  }
+
+  function opsExportColumnDefsForTab(tab = currentTab, group = activeGroup) {
+    return isMaintenanceExportContext(group, tab) ? OPS_MAINTENANCE_EXPORT_COLUMNS : OPS_EXPORT_COLUMNS;
+  }
+
+  function defaultOpsExportColumnsForTab(tab = currentTab, group = activeGroup) {
+    const tabKey = String(tab || "").trim().toLowerCase();
+    const defs = opsExportColumnDefsForTab(tab, group);
     const hideCostByDefault = tabKey === "received" || tabKey === "delivered";
-    return OPS_EXPORT_COLUMNS.map((col) => ({
+    return defs.map((col) => ({
       ...col,
       checked: hideCostByDefault && (col.value === "unit" || col.value === "total") ? false : !!col.checked,
     }));
@@ -4189,6 +4216,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const OperationsExportModal = (() => {
     let ui = null;
     let resolver = null;
+    let currentColumnDefs = OPS_EXPORT_COLUMNS;
 
     const ensure = () => {
       if (ui) return ui;
@@ -4315,7 +4343,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const selectedLabels = () => checks()
         .filter((x) => x.checked)
-        .map((x) => OPS_EXPORT_COLUMNS.find((col) => col.value === x.value)?.label || x.value);
+        .map((x) => currentColumnDefs.find((col) => col.value === x.value)?.label || x.value);
 
       const updateColumnSummary = () => {
         const labels = selectedLabels();
@@ -4347,7 +4375,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const renderColumns = (columns) => {
         if (!columnsWrap) return;
-        columnsWrap.innerHTML = columns.map((col) => `
+        currentColumnDefs = Array.isArray(columns) ? columns : OPS_EXPORT_COLUMNS;
+        columnsWrap.innerHTML = currentColumnDefs.map((col) => `
           <label class="ops-export-check" role="option">
             <input type="checkbox" value="${escapeHTML(col.value)}" ${col.checked ? "checked" : ""} />
             <span>${escapeHTML(col.label)}</span>
@@ -4419,7 +4448,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const x = ensure();
         resolver = resolve;
         if (x.fileType) x.fileType.value = "pdf";
-        x.renderColumns(defaultOpsExportColumnsForTab(tab));
+        x.renderColumns(defaultOpsExportColumnsForTab(tab, activeGroup));
         x.updateFileTypeSummary?.();
         x.updateColumnSummary?.();
         x.setFileTypePanelOpen?.(false);
@@ -4750,124 +4779,197 @@ document.addEventListener("DOMContentLoaded", () => {
   let maintenanceLogLastFocus = null;
   let maintenanceLogLoadToken = 0;
 
-  async function openMaintenanceLogModal() {
-    if (
-      !maintenanceLogModal ||
-      !maintenanceResolutionSelect ||
-      !maintenanceActualIssueInput ||
-      !maintenanceRepairActionInput ||
-      !maintenanceSparePartSelect
-    ) {
+  function maintenanceLogItemsForGroup(group = activeGroup) {
+    return (Array.isArray(group?.items) ? group.items.slice() : []).sort(compareItemsByProductName);
+  }
+
+  function maintenanceLogInputId(index, field) {
+    return `reqMaintenanceLog_${field}_${index + 1}`;
+  }
+
+  function renderMaintenanceLogLoading(items = []) {
+    if (!maintenanceLogItems) return;
+    const safeItems = Array.isArray(items) && items.length ? items : [{ productName: 'Component' }];
+    maintenanceLogItems.innerHTML = safeItems.map((item, index) => `
+      <div class="req-maintenance-log-card is-loading">
+        <div class="req-maintenance-log-card__head">
+          <div>
+            <div class="req-maintenance-log-card__label">Component ${index + 1}</div>
+            <div class="req-maintenance-log-card__title">${escapeHTML(item?.productName || 'Component')}</div>
+          </div>
+        </div>
+        <div class="req-maintenance-log-card__loading">Loading maintenance fields...</div>
+      </div>
+    `).join('');
+  }
+
+  function renderMaintenanceLogCards(items = [], options = {}) {
+    if (!maintenanceLogItems) return;
+    const safeItems = Array.isArray(items) ? items : [];
+    const resolutionOptions = (options?.resolutionMethods || []).map((entry) => ({
+      value: entry?.name,
+      label: entry?.name,
+    }));
+    const sparePartOptions = (options?.spareParts || []).map((entry) => ({
+      value: entry?.id,
+      label: entry?.name,
+    }));
+
+    if (!safeItems.length) {
+      maintenanceLogItems.innerHTML = `
+        <div class="req-maintenance-log-empty">
+          <i data-feather="alert-circle"></i>
+          <strong>No maintenance components found</strong>
+          <span>Please reload the order and try again.</span>
+        </div>
+      `;
+      if (window.feather) window.feather.replace();
       return;
     }
 
-    setMaintenanceLogError("");
-    const item = getPrimaryMaintenanceItem(activeGroup);
-    const currentResolution = String(item?.resolutionMethod || "").trim();
-    const currentSparePartIds = toStringArray(
-      item?.sparePartsReplacedIds?.length ? item.sparePartsReplacedIds : item?.sparePartsReplacedId,
-    );
-    const currentSparePartNames = toStringArray(
-      item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName,
-      { splitComma: true },
-    );
+    maintenanceLogItems.innerHTML = safeItems.map((item, index) => {
+      const orderId = String(item?.id || '').trim();
+      const issue = maintenanceIssueText(item);
+      return `
+        <section class="req-maintenance-log-card" data-maintenance-order-id="${escapeHTML(orderId)}" data-maintenance-log-index="${index}">
+          <div class="req-maintenance-log-card__head">
+            <div>
+              <div class="req-maintenance-log-card__label">Component ${index + 1}</div>
+              <div class="req-maintenance-log-card__title">${escapeHTML(item?.productName || 'Component')}</div>
+              ${issue ? `<div class="req-maintenance-log-card__issue"><span>Issue:</span> ${escapeHTML(issue)}</div>` : ''}
+            </div>
+          </div>
+          <div class="co-submodal-fields req-maintenance-log-card__fields">
+            <div class="co-submodal-field">
+              <label class="co-submodal-label" for="${maintenanceLogInputId(index, 'resolution')}">Resolution Method</label>
+              <select class="co-submodal-select" id="${maintenanceLogInputId(index, 'resolution')}" data-maintenance-log-field="resolutionMethod" data-placeholder="Select resolution method">
+                <option value="">Select resolution method</option>
+              </select>
+            </div>
+            <div class="co-submodal-field">
+              <label class="co-submodal-label" for="${maintenanceLogInputId(index, 'actual')}">The Actual Issue Description</label>
+              <textarea class="co-submodal-textarea" id="${maintenanceLogInputId(index, 'actual')}" data-maintenance-log-field="actualIssueDescription" rows="4" placeholder="Write the actual issue description"></textarea>
+            </div>
+            <div class="co-submodal-field">
+              <label class="co-submodal-label" for="${maintenanceLogInputId(index, 'repair')}">Repair Action</label>
+              <textarea class="co-submodal-textarea" id="${maintenanceLogInputId(index, 'repair')}" data-maintenance-log-field="repairAction" rows="4" placeholder="Write the repair action"></textarea>
+            </div>
+            <div class="co-submodal-field">
+              <label class="co-submodal-label" for="${maintenanceLogInputId(index, 'spare')}">Spare parts replaced</label>
+              <select class="co-submodal-select" id="${maintenanceLogInputId(index, 'spare')}" data-maintenance-log-field="sparePartIds" data-placeholder="No spare part selected" data-searchable="true" data-search-placeholder="Search spare parts" multiple>
+                <option value="">No spare part selected</option>
+              </select>
+            </div>
+          </div>
+        </section>
+      `;
+    }).join('');
+
+    safeItems.forEach((item, index) => {
+      const card = maintenanceLogItems.querySelector(`[data-maintenance-log-index="${index}"]`);
+      if (!card) return;
+      const resolutionSelect = card.querySelector('[data-maintenance-log-field="resolutionMethod"]');
+      const spareSelect = card.querySelector('[data-maintenance-log-field="sparePartIds"]');
+      const actualInput = card.querySelector('[data-maintenance-log-field="actualIssueDescription"]');
+      const repairInput = card.querySelector('[data-maintenance-log-field="repairAction"]');
+
+      if (actualInput) actualInput.value = String(item?.actualIssueDescription || '');
+      if (repairInput) repairInput.value = String(item?.repairAction || '');
+
+      const currentResolution = String(item?.resolutionMethod || '').trim();
+      const currentSparePartIds = toStringArray(
+        item?.sparePartsReplacedIds?.length ? item.sparePartsReplacedIds : item?.sparePartsReplacedId,
+      );
+      const currentSparePartNames = toStringArray(
+        item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName,
+        { splitComma: true },
+      );
+      const spareOptionsForItem = currentSparePartNames.length && !currentSparePartIds.length
+        ? [
+            ...sparePartOptions,
+            ...currentSparePartNames.map((name) => ({ value: name, label: name })),
+          ]
+        : sparePartOptions;
+
+      ensureModernSelect(resolutionSelect);
+      ensureModernSelect(spareSelect);
+      if (resolutionSelect) resolutionSelect.disabled = false;
+      if (spareSelect) spareSelect.disabled = false;
+      fillSelectOptions(resolutionSelect, resolutionOptions, {
+        placeholder: 'Select resolution method',
+        allowEmpty: true,
+        selectedValue: currentResolution,
+      });
+      fillSelectOptions(spareSelect, spareOptionsForItem, {
+        placeholder: 'No spare part selected',
+        allowEmpty: false,
+        selectedValues: currentSparePartIds.length ? currentSparePartIds : currentSparePartNames,
+      });
+    });
+
+    if (window.feather) window.feather.replace();
+  }
+
+  function collectMaintenanceLogPayload() {
+    if (!maintenanceLogItems) return [];
+    return Array.from(maintenanceLogItems.querySelectorAll('[data-maintenance-order-id]'))
+      .map((card) => {
+        const orderId = String(card.getAttribute('data-maintenance-order-id') || '').trim();
+        const resolutionSelect = card.querySelector('[data-maintenance-log-field="resolutionMethod"]');
+        const spareSelect = card.querySelector('[data-maintenance-log-field="sparePartIds"]');
+        const actualInput = card.querySelector('[data-maintenance-log-field="actualIssueDescription"]');
+        const repairInput = card.querySelector('[data-maintenance-log-field="repairAction"]');
+        return {
+          orderId,
+          resolutionMethod: String(resolutionSelect?.value || '').trim(),
+          actualIssueDescription: String(actualInput?.value || '').trim(),
+          repairAction: String(repairInput?.value || '').trim(),
+          sparePartIds: getSelectSelectedValues(spareSelect),
+          sparePartNames: getSelectSelectedLabels(spareSelect),
+        };
+      })
+      .filter((entry) => entry.orderId);
+  }
+
+  async function openMaintenanceLogModal() {
+    if (!maintenanceLogModal || !maintenanceLogItems) return;
+
+    setMaintenanceLogError('');
+    const items = maintenanceLogItemsForGroup(activeGroup);
     const loadToken = ++maintenanceLogLoadToken;
 
     if (maintenanceLogConfirmBtn) maintenanceLogConfirmBtn.disabled = true;
     if (maintenanceLogCancelBtn) maintenanceLogCancelBtn.disabled = false;
     if (maintenanceLogCloseBtn) maintenanceLogCloseBtn.disabled = false;
 
-    maintenanceActualIssueInput.value = String(item?.actualIssueDescription || "");
-    maintenanceRepairActionInput.value = String(item?.repairAction || "");
-
-    fillSelectOptions(maintenanceResolutionSelect, [], {
-      placeholder: "Loading resolution methods...",
-      allowEmpty: true,
-      selectedValue: "",
-    });
-    fillSelectOptions(maintenanceSparePartSelect, [], {
-      placeholder: "Loading spare parts...",
-      allowEmpty: false,
-      selectedValues: [],
-    });
-    setSelectLoading(maintenanceResolutionSelect, "Loading resolution methods...");
-    setSelectLoading(maintenanceSparePartSelect, "Loading spare parts...");
+    renderMaintenanceLogLoading(items);
 
     maintenanceLogLastFocus = document.activeElement;
     maintenanceLogModal.hidden = false;
-    maintenanceLogModal.classList.add("is-open");
-    maintenanceLogModal.setAttribute("aria-hidden", "false");
+    maintenanceLogModal.classList.add('is-open');
+    maintenanceLogModal.setAttribute('aria-hidden', 'false');
 
     if (window.feather) window.feather.replace();
-
-    window.requestAnimationFrame(() => {
-      try {
-        maintenanceActualIssueInput.focus();
-      } catch {}
-    });
 
     try {
       const options = await loadMaintenanceFormOptions();
       if (loadToken !== maintenanceLogLoadToken || !isMaintenanceLogOpen()) return;
-
-      maintenanceResolutionSelect.disabled = false;
-      maintenanceSparePartSelect.disabled = false;
-
-      fillSelectOptions(
-        maintenanceResolutionSelect,
-        (options?.resolutionMethods || []).map((entry) => ({
-          value: entry?.name,
-          label: entry?.name,
-        })),
-        {
-          placeholder: "Select resolution method",
-          allowEmpty: true,
-          selectedValue: currentResolution,
-        },
-      );
-
-      const sparePartOptions = (options?.spareParts || []).map((entry) => ({
-        value: entry?.id,
-        label: entry?.name,
-      }));
-
-      fillSelectOptions(
-        maintenanceSparePartSelect,
-        sparePartOptions,
-        {
-          placeholder: "No spare part selected",
-          allowEmpty: false,
-          selectedValues: currentSparePartIds,
-        },
-      );
-
-      if (currentSparePartNames.length && !currentSparePartIds.length) {
-        fillSelectOptions(
-          maintenanceSparePartSelect,
-          [
-            ...sparePartOptions,
-            ...currentSparePartNames.map((name) => ({ value: name, label: name })),
-          ],
-          {
-            placeholder: "No spare part selected",
-            allowEmpty: false,
-            selectedValues: currentSparePartNames,
-          },
-        );
-      }
-
-      if (window.feather) window.feather.replace();
+      renderMaintenanceLogCards(items, options);
       if (maintenanceLogConfirmBtn) maintenanceLogConfirmBtn.disabled = false;
+      window.requestAnimationFrame(() => {
+        try {
+          maintenanceLogItems.querySelector('textarea, button, select')?.focus?.();
+        } catch {}
+      });
     } catch (e) {
       if (loadToken !== maintenanceLogLoadToken) return;
       console.error(e);
-      setMaintenanceLogError(e.message || "Failed to load maintenance form.");
+      renderMaintenanceLogCards(items, { resolutionMethods: [], spareParts: [] });
+      setMaintenanceLogError(e.message || 'Failed to load maintenance form.');
       if (maintenanceLogConfirmBtn) maintenanceLogConfirmBtn.disabled = false;
       if (maintenanceLogCancelBtn) maintenanceLogCancelBtn.disabled = false;
       if (maintenanceLogCloseBtn) maintenanceLogCloseBtn.disabled = false;
-      maintenanceResolutionSelect.disabled = false;
-      maintenanceSparePartSelect.disabled = false;
-      toast("error", "Failed", e.message || "Failed to load maintenance form.");
+      toast('error', 'Failed', e.message || 'Failed to load maintenance form.');
     }
   }
 
@@ -5049,7 +5151,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!g || !g.orderIds || !g.orderIds.length) return;
     setMainDownloadBusy(true);
     try {
-      const res = await fetch("/api/orders/requested/export/pdf", {
+      const isMaintenanceReport = isMaintenanceExportContext(g, currentTab);
+      const res = await fetch(isMaintenanceReport ? "/api/orders/requested/export/maintenance-pdf" : "/api/orders/requested/export/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -5066,8 +5169,8 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(err.error || "Failed to export PDF");
       }
 
-      await downloadBlob(res, "order.pdf");
-      toast("success", "Downloaded", "PDF downloaded.");
+      await downloadBlob(res, isMaintenanceExportContext(g, currentTab) ? "maintenance_report.pdf" : "order.pdf");
+      toast("success", "Downloaded", isMaintenanceExportContext(g, currentTab) ? "Maintenance report downloaded." : "PDF downloaded.");
     } catch (e) {
       console.error(e);
       alert(e.message || "Failed to export PDF");
@@ -5492,72 +5595,95 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   async function saveMaintenanceLog(g, payload = {}) {
     if (!g || !g.orderIds?.length) return;
 
-    const resolutionMethod = String(payload?.resolutionMethod || "").trim();
-    const actualIssueDescription = String(payload?.actualIssueDescription || "").trim();
-    const repairAction = String(payload?.repairAction || "").trim();
-    const sparePartIds = toStringArray(payload?.sparePartIds ?? payload?.sparePartId);
-    const sparePartNames = toStringArray(payload?.sparePartNames, { splitComma: true });
+    const perItemLogs = Array.isArray(payload?.perItemLogs)
+      ? payload.perItemLogs
+      : collectMaintenanceLogPayload();
+    const logsWithAnyDetails = perItemLogs.filter((entry) => (
+      String(entry?.resolutionMethod || '').trim() ||
+      String(entry?.actualIssueDescription || '').trim() ||
+      String(entry?.repairAction || '').trim() ||
+      toStringArray(entry?.sparePartIds).length ||
+      toStringArray(entry?.sparePartNames, { splitComma: true }).length
+    ));
+
+    if (!logsWithAnyDetails.length) {
+      setMaintenanceLogError('Please enter maintenance details for at least one component.');
+      return;
+    }
 
     if (maintenanceLogConfirmBtn) {
       maintenanceLogConfirmBtn.disabled = true;
       maintenanceLogConfirmBtn.dataset.prevHtml = maintenanceLogConfirmBtn.innerHTML;
-      maintenanceLogConfirmBtn.textContent = "Saving...";
+      maintenanceLogConfirmBtn.textContent = 'Saving...';
     }
     if (maintenanceLogCancelBtn) maintenanceLogCancelBtn.disabled = true;
     if (maintenanceLogCloseBtn) maintenanceLogCloseBtn.disabled = true;
 
     try {
-      const data = await postJson("/api/orders/requested/log-maintenance", {
+      const moveToArrived = !!payload?.moveToArrived;
+      const data = await postJson('/api/orders/requested/log-maintenance', {
         orderIds: g.orderIds,
-        resolutionMethod,
-        actualIssueDescription,
-        repairAction,
-        sparePartIds,
-        sparePartNames,
+        perItemLogs: logsWithAnyDetails,
+        moveToArrived,
       });
 
-      const selectedSparePartIds = toStringArray(data?.sparePartsReplacedIds ?? sparePartIds);
-      const selectedSparePartLabels = toStringArray(
-        data?.sparePartsReplacedNames?.length
-          ? data.sparePartsReplacedNames
-          : getSelectSelectedLabels(maintenanceSparePartSelect),
-        { splitComma: true },
-      );
-      const selectedSparePartLabel = toStringArray(data?.sparePartsReplacedName || selectedSparePartLabels).join(", ");
-      const idSet = new Set(g.orderIds);
-
-      allItems.forEach((it) => {
-        if (!idSet.has(it.id)) return;
-        it.resolutionMethod = data?.resolutionMethod || resolutionMethod || null;
-        it.actualIssueDescription = data?.actualIssueDescription || actualIssueDescription || null;
-        it.repairAction = data?.repairAction || repairAction || null;
-        it.sparePartsReplacedIds = selectedSparePartIds;
-        it.sparePartsReplacedId = selectedSparePartIds[0] || null;
-        it.sparePartsReplacedNames = selectedSparePartLabels;
-        it.sparePartsReplacedName = selectedSparePartLabel || null;
-      });
+      const updatedItems = Array.isArray(data?.items) ? data.items : [];
+      if (updatedItems.length) {
+        const byId = new Map(updatedItems.map((item) => [String(item?.id || ''), item]));
+        allItems = allItems.map((item) => {
+          const updated = byId.get(String(item?.id || ''));
+          return updated ? { ...item, ...updated } : item;
+        });
+      } else {
+        const logById = new Map(logsWithAnyDetails.map((entry) => [String(entry.orderId || ''), entry]));
+        const idSet = new Set(g.orderIds.map((id) => String(id || '')));
+        allItems.forEach((it) => {
+          if (!idSet.has(String(it.id || ''))) return;
+          const entry = logById.get(String(it.id || '')) || logsWithAnyDetails[0] || {};
+          it.resolutionMethod = String(entry.resolutionMethod || '').trim() || it.resolutionMethod || null;
+          it.actualIssueDescription = String(entry.actualIssueDescription || '').trim() || it.actualIssueDescription || null;
+          it.repairAction = String(entry.repairAction || '').trim() || it.repairAction || null;
+          const selectedSparePartIds = toStringArray(entry.sparePartIds);
+          const selectedSparePartLabels = toStringArray(entry.sparePartNames, { splitComma: true });
+          it.sparePartsReplacedIds = selectedSparePartIds;
+          it.sparePartsReplacedId = selectedSparePartIds[0] || null;
+          it.sparePartsReplacedNames = selectedSparePartLabels;
+          it.sparePartsReplacedName = selectedSparePartLabels.join(', ') || null;
+          if (data?.status || moveToArrived) {
+            it.status = data?.status || 'Arrived';
+            it.statusColor = data?.statusColor || 'green';
+          }
+        });
+      }
 
       writeRequestedCache(allItems);
       groups = buildGroups(allItems);
+
+      if (data?.status || moveToArrived) {
+        currentTab = 'received';
+        updateTabUI();
+      }
+
       render();
 
       const updated = groups.find((x) => x.groupId === g.groupId);
-      if (updated && orderModal?.classList.contains("is-open")) {
+      if (updated) activeGroup = updated;
+      if (updated && orderModal?.classList.contains('is-open')) {
         openOrderModal(updated);
       }
 
       closeMaintenanceLogModal({ restoreFocus: false });
-      toast("success", "Saved", "Maintenance log saved.");
+      toast('success', data?.status || moveToArrived ? 'Arrived' : 'Saved', data?.status || moveToArrived ? 'Maintenance log saved and order moved to Arrived.' : 'Maintenance log saved.');
     } catch (e) {
       console.error(e);
-      setMaintenanceLogError(e.message || "Failed to save maintenance log.");
-      toast("error", "Failed", e.message || "Failed to save maintenance log.");
+      setMaintenanceLogError(e.message || 'Failed to save maintenance log.');
+      toast('error', 'Failed', e.message || 'Failed to save maintenance log.');
     } finally {
       if (maintenanceLogConfirmBtn) {
         maintenanceLogConfirmBtn.disabled = false;
         const prev = maintenanceLogConfirmBtn.dataset.prevHtml;
         if (prev) maintenanceLogConfirmBtn.innerHTML = prev;
-        else maintenanceLogConfirmBtn.textContent = "Confirm";
+        else maintenanceLogConfirmBtn.textContent = 'Confirm';
       }
       if (maintenanceLogCancelBtn) maintenanceLogCancelBtn.disabled = false;
       if (maintenanceLogCloseBtn) maintenanceLogCloseBtn.disabled = false;
@@ -6328,6 +6454,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     e.preventDefault();
     closeMaintenanceLogModal();
   });
+  maintenanceLogItems?.addEventListener("input", () => {
+    if (maintenanceLogError?.textContent) setMaintenanceLogError("");
+  });
+  maintenanceLogItems?.addEventListener("change", () => {
+    if (maintenanceLogError?.textContent) setMaintenanceLogError("");
+  });
   maintenanceResolutionSelect?.addEventListener("change", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
   });
@@ -6345,11 +6477,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     setMaintenanceLogError("");
 
     await saveMaintenanceLog(activeGroup, {
-      resolutionMethod: maintenanceResolutionSelect?.value || "",
-      actualIssueDescription: maintenanceActualIssueInput?.value || "",
-      repairAction: maintenanceRepairActionInput?.value || "",
-      sparePartIds: getSelectSelectedValues(maintenanceSparePartSelect),
-      sparePartNames: getSelectSelectedLabels(maintenanceSparePartSelect),
+      perItemLogs: collectMaintenanceLogPayload(),
+      moveToArrived: !isMaintenancePage && currentTab === "approved",
     });
   });
 
