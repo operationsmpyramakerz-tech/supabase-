@@ -5209,7 +5209,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter((entry) => entry.orderId);
   }
 
-  function validateMaintenanceLogPayload(perItemLogs = []) {
+  function validateMaintenanceLogPayload(perItemLogs = [], options = {}) {
     clearMaintenanceLogFieldErrors();
 
     const entries = Array.isArray(perItemLogs) ? perItemLogs : [];
@@ -5221,6 +5221,14 @@ document.addEventListener("DOMContentLoaded", () => {
       toStringArray(entry?.sparePartNames, { splitComma: true }).filter((name) => !isMaintenanceSparePlaceholder(name)).length ||
       (Array.isArray(entry?.spareParts) && entry.spareParts.length)
     ));
+
+    // In Operations Orders > Approved, confirming the maintenance log is also the action
+    // that moves the maintenance request into the technical-visit workflow.
+    // Do not make the button feel dead if the user only wants to confirm that move.
+    if (!logsWithAnyDetails.length && options?.allowWorkflowMove) {
+      setMaintenanceLogError('');
+      return { ok: true, logsWithAnyDetails: entries };
+    }
 
     if (!logsWithAnyDetails.length) {
       setMaintenanceLogError('Please fill maintenance details for at least one component. Spare parts are optional.');
@@ -5800,7 +5808,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       });
 
       const data = await postJson("/api/orders/requested/mark-shipped", {
-        orderIds: targetGroup.orderIds,
+        orderIds: g.orderIds,
         receiptNumber: rnVal,
         quantities,
         issueDescription: issueDescriptionText || null,
@@ -5903,6 +5911,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
       // Close receipt prompt (if opened)
       closeReceiptModal({ restoreFocus: false });
+      return true;
     } catch (e) {
       console.error(e);
       const message = e.message || (isMaintenanceOrder ? "Failed to request technical visit." : "Failed to mark as received.");
@@ -5911,6 +5920,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       } else {
         alert(message);
       }
+      return false;
     } finally {
       if (shippedBtn) {
         shippedBtn.disabled = false;
@@ -5933,8 +5943,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     const perItemLogs = Array.isArray(payload?.perItemLogs)
       ? payload.perItemLogs
       : collectMaintenanceLogPayload(targetGroup);
-    const validation = validateMaintenanceLogPayload(perItemLogs);
-    if (!validation.ok) return;
+    const moveToArrived = !!payload?.moveToArrived;
+    const moveToShipping = !!payload?.moveToShipping;
+    const validation = validateMaintenanceLogPayload(perItemLogs, {
+      allowWorkflowMove: moveToArrived || moveToShipping,
+    });
+    if (!validation.ok) return false;
     const logsWithAnyDetails = validation.logsWithAnyDetails;
 
     if (maintenanceLogConfirmBtn) {
@@ -5946,8 +5960,6 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (maintenanceLogCloseBtn) maintenanceLogCloseBtn.disabled = true;
 
     try {
-      const moveToArrived = !!payload?.moveToArrived;
-      const moveToShipping = !!payload?.moveToShipping;
       const data = await postJson('/api/orders/requested/log-maintenance', {
         orderIds: targetGroup.orderIds,
         perItemLogs: logsWithAnyDetails,
@@ -6012,10 +6024,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
         movedToWorkflowStep ? movedLabel : 'Saved',
         movedToWorkflowStep ? `Maintenance log saved and order moved to ${movedLabel}.` : 'Maintenance log saved.',
       );
+      return true;
     } catch (e) {
       console.error(e);
       setMaintenanceLogError(e.message || 'Failed to save maintenance log.');
       toast('error', 'Failed', e.message || 'Failed to save maintenance log.');
+      return false;
     } finally {
       if (maintenanceLogConfirmBtn) {
         maintenanceLogConfirmBtn.disabled = false;
@@ -6790,8 +6804,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (techVisitCloseBtn) techVisitCloseBtn.disabled = true;
 
     try {
-      await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
-      closeTechVisitModal({ restoreFocus: false });
+      const saved = await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
+      if (saved) closeTechVisitModal({ restoreFocus: false });
     } finally {
       if (techVisitConfirmBtn) techVisitConfirmBtn.disabled = false;
       if (techVisitCancelBtn) techVisitCancelBtn.disabled = false;
