@@ -145,6 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const techVisitCancelBtn = document.getElementById("reqTechVisitCancel");
   const techVisitConfirmBtn = document.getElementById("reqTechVisitConfirm");
   const techVisitIssueInput = document.getElementById("reqTechVisitIssueInput");
+  const techVisitItems = document.getElementById("reqTechVisitItems");
   const techVisitError = document.getElementById("reqTechVisitError");
 
   // Log maintenance sub-modal
@@ -4190,6 +4191,8 @@ document.addEventListener("DOMContentLoaded", () => {
     { value: "idCode", label: "ID", checked: true },
     { value: "component", label: "Component", checked: true },
     { value: "issue", label: "Issue", checked: true },
+    { value: "unit", label: "Unit cost", checked: true },
+    { value: "total", label: "Total cost", checked: true },
     { value: "link", label: "Component link", checked: false },
   ];
 
@@ -4205,8 +4208,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function defaultOpsExportColumnsForTab(tab = currentTab, group = activeGroup) {
     const tabKey = String(tab || "").trim().toLowerCase();
+    const isMaintenanceContext = isMaintenanceExportContext(group, tab);
     const defs = opsExportColumnDefsForTab(tab, group);
-    const hideCostByDefault = tabKey === "received" || tabKey === "delivered";
+    const hideCostByDefault = !isMaintenanceContext && (tabKey === "received" || tabKey === "delivered");
     return defs.map((col) => ({
       ...col,
       checked: hideCostByDefault && (col.value === "unit" || col.value === "total") ? false : !!col.checked,
@@ -4735,11 +4739,94 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let techVisitLastFocus = null;
 
+  function techVisitItemsForGroup(group = activeGroup) {
+    return (Array.isArray(group?.items) ? group.items.slice() : []).sort(compareItemsByProductName);
+  }
+
+  function techVisitInputId(index) {
+    return `reqTechVisitIssue_${index + 1}`;
+  }
+
+  function renderTechVisitItems(group = activeGroup) {
+    const items = techVisitItemsForGroup(group);
+    if (!techVisitItems) {
+      if (techVisitIssueInput) techVisitIssueInput.value = getCurrentIssueDescription(group);
+      return;
+    }
+
+    const safeItems = items.length ? items : [{ id: '', productName: 'Component', issueDescription: getCurrentIssueDescription(group) }];
+    techVisitItems.innerHTML = safeItems.map((item, index) => {
+      const orderId = String(item?.id || '').trim();
+      const issue = maintenanceIssueText(item);
+      return `
+        <section class="req-tech-visit-card" data-tech-visit-order-id="${escapeHTML(orderId)}" data-tech-visit-index="${index}">
+          <div class="req-tech-visit-card__head">
+            <div>
+              <div class="req-tech-visit-card__label">Component ${index + 1}</div>
+              <div class="req-tech-visit-card__title">${escapeHTML(item?.productName || 'Component')}</div>
+            </div>
+          </div>
+          <label class="co-submodal-label" for="${techVisitInputId(index)}">Issue Description</label>
+          <textarea
+            class="co-submodal-textarea req-tech-visit-card__textarea"
+            id="${techVisitInputId(index)}"
+            data-tech-visit-field="issueDescription"
+            rows="4"
+            placeholder="Describe this component issue"
+          >${escapeHTML(issue === '—' ? '' : issue)}</textarea>
+        </section>
+      `;
+    }).join('');
+
+    if (techVisitIssueInput) {
+      techVisitIssueInput.value = safeItems.map((item, index) => {
+        const name = String(item?.productName || `Component ${index + 1}`).trim();
+        const issue = maintenanceIssueText(item);
+        return `${name}: ${issue === '—' ? '' : issue}`.trim();
+      }).join('\n');
+    }
+  }
+
+  function collectTechVisitIssues() {
+    if (!techVisitItems) {
+      const issueDescription = String(techVisitIssueInput?.value || '').trim();
+      return {
+        issueDescription,
+        perItemIssues: [],
+        hasAnyIssue: !!issueDescription,
+      };
+    }
+
+    const perItemIssues = Array.from(techVisitItems.querySelectorAll('[data-tech-visit-order-id]'))
+      .map((card) => {
+        const orderId = String(card.getAttribute('data-tech-visit-order-id') || '').trim();
+        const input = card.querySelector('[data-tech-visit-field="issueDescription"]');
+        return {
+          orderId,
+          issueDescription: String(input?.value || '').trim(),
+        };
+      })
+      .filter((entry) => entry.orderId);
+
+    const hasAnyIssue = perItemIssues.some((entry) => entry.issueDescription);
+    const hasMissingIssue = perItemIssues.some((entry) => !entry.issueDescription);
+    const issueDescription = perItemIssues
+      .map((entry, index) => {
+        const item = techVisitItemsForGroup(activeGroup)[index] || {};
+        const name = String(item?.productName || `Component ${index + 1}`).trim();
+        return `${name}: ${entry.issueDescription}`;
+      })
+      .join('\n')
+      .trim();
+
+    return { issueDescription, perItemIssues, hasAnyIssue, hasMissingIssue };
+  }
+
   function openTechVisitModal() {
-    if (!techVisitModal || !techVisitIssueInput) return;
+    if (!techVisitModal || (!techVisitItems && !techVisitIssueInput)) return;
 
     setTechVisitError("");
-    techVisitIssueInput.value = getCurrentIssueDescription(activeGroup);
+    renderTechVisitItems(activeGroup);
 
     if (techVisitConfirmBtn) techVisitConfirmBtn.disabled = false;
     if (techVisitCancelBtn) techVisitCancelBtn.disabled = false;
@@ -4754,8 +4841,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.requestAnimationFrame(() => {
       try {
-        techVisitIssueInput.focus();
-        techVisitIssueInput.select();
+        const firstInput = techVisitItems?.querySelector?.('textarea') || techVisitIssueInput;
+        firstInput?.focus?.();
+        firstInput?.select?.();
       } catch {}
     });
   }
@@ -5420,6 +5508,8 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
     const isMaintenanceOrder = isMaintenanceOrderType(g.orderType || g.items?.[0]?.orderType);
     const issueDescriptionText = String(extra?.issueDescription || "").trim();
+    const perItemIssues = Array.isArray(extra?.perItemIssues) ? extra.perItemIssues : [];
+    const issueById = new Map(perItemIssues.map((entry) => [String(entry?.orderId || '').trim(), String(entry?.issueDescription || '').trim()]));
 
     // Receipt number can be text now (Notion column is rich_text) so we keep it as string.
     // If missing, we still allow the action.
@@ -5478,6 +5568,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
         receiptNumber: rnVal,
         quantities,
         issueDescription: issueDescriptionText || null,
+        perItemIssues: perItemIssues.length ? perItemIssues : undefined,
       });
 
       // Update local state (set status = Shipped + operationsByName)
@@ -5497,8 +5588,10 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
         if (data.receiptNumber !== null && data.receiptNumber !== undefined) {
           it.receiptNumber = data.receiptNumber;
         }
-        if (issueDescriptionText) {
-          it.issueDescription = data?.issueDescription || issueDescriptionText;
+        const itemIdKey = String(it.id || '');
+        const itemIssueDescription = issueById.has(itemIdKey) ? issueById.get(itemIdKey) : issueDescriptionText;
+        if (itemIssueDescription) {
+          it.issueDescription = itemIssueDescription;
         }
 
         const base = baseQty(it);
@@ -5621,10 +5714,12 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
     try {
       const moveToArrived = !!payload?.moveToArrived;
+      const moveToShipping = !!payload?.moveToShipping;
       const data = await postJson('/api/orders/requested/log-maintenance', {
         orderIds: g.orderIds,
         perItemLogs: logsWithAnyDetails,
         moveToArrived,
+        moveToShipping,
       });
 
       const updatedItems = Array.isArray(data?.items) ? data.items : [];
@@ -5649,9 +5744,9 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
           it.sparePartsReplacedId = selectedSparePartIds[0] || null;
           it.sparePartsReplacedNames = selectedSparePartLabels;
           it.sparePartsReplacedName = selectedSparePartLabels.join(', ') || null;
-          if (data?.status || moveToArrived) {
-            it.status = data?.status || 'Arrived';
-            it.statusColor = data?.statusColor || 'green';
+          if (data?.status || moveToArrived || moveToShipping) {
+            it.status = data?.status || (moveToShipping ? 'Shipped' : 'Arrived');
+            it.statusColor = data?.statusColor || (moveToShipping ? 'blue' : 'green');
           }
         });
       }
@@ -5659,7 +5754,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       writeRequestedCache(allItems);
       groups = buildGroups(allItems);
 
-      if (data?.status || moveToArrived) {
+      if (data?.status || moveToArrived || moveToShipping) {
         currentTab = 'received';
         updateTabUI();
       }
@@ -5673,7 +5768,13 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
       }
 
       closeMaintenanceLogModal({ restoreFocus: false });
-      toast('success', data?.status || moveToArrived ? 'Arrived' : 'Saved', data?.status || moveToArrived ? 'Maintenance log saved and order moved to Arrived.' : 'Maintenance log saved.');
+      const movedToWorkflowStep = data?.status || moveToArrived || moveToShipping;
+      const movedLabel = displayWorkflowStatusLabel(data?.status || (moveToShipping ? 'Shipped' : 'Arrived'));
+      toast(
+        'success',
+        movedToWorkflowStep ? movedLabel : 'Saved',
+        movedToWorkflowStep ? `Maintenance log saved and order moved to ${movedLabel}.` : 'Maintenance log saved.',
+      );
     } catch (e) {
       console.error(e);
       setMaintenanceLogError(e.message || 'Failed to save maintenance log.');
@@ -6421,12 +6522,15 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   techVisitIssueInput?.addEventListener("input", () => {
     if (techVisitError?.textContent) setTechVisitError("");
   });
+  techVisitItems?.addEventListener("input", () => {
+    if (techVisitError?.textContent) setTechVisitError("");
+  });
   techVisitConfirmBtn?.addEventListener("click", async (e) => {
     e.preventDefault();
 
-    const issueDescription = String(techVisitIssueInput?.value || "").trim();
-    if (!issueDescription) {
-      setTechVisitError("Issue description is required.");
+    const { issueDescription, perItemIssues, hasAnyIssue, hasMissingIssue } = collectTechVisitIssues();
+    if (!hasAnyIssue || hasMissingIssue) {
+      setTechVisitError("Issue description is required for every component.");
       return;
     }
 
@@ -6437,7 +6541,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     if (techVisitCloseBtn) techVisitCloseBtn.disabled = true;
 
     try {
-      await markReceivedByOperations(activeGroup, null, { issueDescription });
+      await markReceivedByOperations(activeGroup, null, { issueDescription, perItemIssues });
       closeTechVisitModal({ restoreFocus: false });
     } finally {
       if (techVisitConfirmBtn) techVisitConfirmBtn.disabled = false;
@@ -6478,7 +6582,7 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
 
     await saveMaintenanceLog(activeGroup, {
       perItemLogs: collectMaintenanceLogPayload(),
-      moveToArrived: !isMaintenancePage && currentTab === "approved",
+      moveToShipping: !isMaintenancePage && currentTab === "approved",
     });
   });
 
