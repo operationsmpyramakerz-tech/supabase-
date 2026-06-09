@@ -33243,7 +33243,7 @@ async function _sendPushToUser(userId, payload) {
 
 // ---- API: notifications list / read ----
 
-app.get("/api/notifications", requireAuth, async (req, res) => {
+async function _handleNotificationsList(req, res) {
   res.set("Cache-Control", "no-store");
   try {
     const userId = await _resolveNotificationUserId(req);
@@ -33252,12 +33252,18 @@ app.get("/api/notifications", requireAuth, async (req, res) => {
     const data = await _loadUserNotifications(userId);
     const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
     const unreadCount = (data.items || []).reduce((acc, n) => acc + (n && !n.read ? 1 : 0), 0);
-    res.json({ success: true, items, unreadCount });
+    return res.json({ success: true, items, unreadCount });
   } catch (e) {
     console.error("notifications get error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to load notifications" });
+    return res.status(500).json({ success: false, error: "Failed to load notifications" });
   }
-});
+}
+
+app.get("/api/notifications", requireAuth, _handleNotificationsList);
+
+// Backward-compatible endpoint used by cached builds. Without this alias, old
+// clients poll a 404 every few seconds and can make order pages feel frozen.
+app.get("/api/notifications/refresh", requireAuth, _handleNotificationsList);
 
 app.post("/api/notifications/read", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store");
