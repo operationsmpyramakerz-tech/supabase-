@@ -20,97 +20,59 @@ function formatDateTime(date) {
   }
 }
 
-function normalizeUrl(url) {
-  const value = String(url || "").trim();
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value)) return value;
-  if (value.startsWith("www.")) return `https://${value}`;
-  return "";
-}
-
-async function readRemoteImageBuffer(url) {
-  const normalized = normalizeUrl(url);
-  if (!normalized || typeof fetch !== "function") return null;
-
-  try {
-    const response = await fetch(normalized);
-    if (!response.ok) return null;
-
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    const pathname = (() => {
-      try {
-        return new URL(normalized).pathname.toLowerCase();
-      } catch {
-        return "";
-      }
-    })();
-
-    const isSupported =
-      contentType.includes("image/png") ||
-      contentType.includes("image/jpeg") ||
-      /\.(png|jpe?g)$/.test(pathname);
-
-    if (!isSupported) return null;
-
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
-  } catch {
-    return null;
-  }
-}
-
 function ensureText(value, fallback = "—") {
   const text = String(value || "").trim();
   return text || fallback;
 }
 
-function toUniqueTextList(value) {
+function uniqueTextList(value) {
   const out = [];
   const seen = new Set();
-
   const push = (entry) => {
-    const text = String(entry || "").trim();
-    if (!text) return;
-    const key = text.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(text);
+    String(entry || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => {
+        const key = part.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(part);
+      });
   };
-
-  if (Array.isArray(value)) value.forEach((entry) => push(entry));
+  if (Array.isArray(value)) value.forEach(push);
   else push(value);
-
   return out;
 }
 
-function drawFieldCard(doc, x, y, w, label, value, options = {}) {
-  const COLORS = options.colors;
-  const valueText = ensureText(value);
-  const labelH = 12;
+function buildComponentLogs(params = {}) {
+  const provided = Array.isArray(params.componentLogs) ? params.componentLogs : [];
+  if (provided.length) {
+    return provided.map((item) => ({
+      idCode: ensureText(item?.idCode, ""),
+      component: ensureText(item?.component, "Unknown Component"),
+      issueDescription: ensureText(item?.issueDescription || item?.issue, "No Issue"),
+      actualIssueDescription: ensureText(item?.actualIssueDescription),
+      repairAction: ensureText(item?.repairAction),
+      resolutionMethod: ensureText(item?.resolutionMethod),
+      sparePartsReplacedNames: uniqueTextList(
+        item?.sparePartsReplacedNames?.length
+          ? item.sparePartsReplacedNames
+          : (item?.sparePartsReplacedName || item?.sparePartsReplaced || []),
+      ),
+    }));
+  }
 
-  doc.font("Helvetica").fontSize(11);
-  const valueH = doc.heightOfString(valueText, {
-    width: w - 24,
-    align: "left",
-    lineGap: 1,
-  });
-
-  const h = Math.max(62, 14 + labelH + 8 + valueH + 14);
-
-  doc.save();
-  doc.roundedRect(x, y, w, h, 12).lineWidth(1).strokeColor(COLORS.border).fillAndStroke("#FFFFFF", COLORS.border);
-  doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(String(label || "").trim(), x + 12, y + 12, {
-    width: w - 24,
-    align: "left",
-  });
-  doc.fillColor(COLORS.text).font("Helvetica").fontSize(11).text(valueText, x + 12, y + 12 + labelH + 8, {
-    width: w - 24,
-    align: "left",
-    lineGap: 2,
-  });
-  doc.restore();
-
-  return h;
+  const rows = Array.isArray(params.rows) && params.rows.length ? params.rows : [{ component: "Maintenance order" }];
+  return rows.map((row) => ({
+    idCode: ensureText(row?.idCode, ""),
+    component: ensureText(row?.component, "Unknown Component"),
+    issueDescription: ensureText(params.issueDescription || row?.issue || row?.reason, "No Issue"),
+    actualIssueDescription: ensureText(params.actualIssueDescription),
+    repairAction: ensureText(params.repairAction),
+    resolutionMethod: ensureText(params.resolutionMethod),
+    sparePartsReplacedNames: uniqueTextList(params.sparePartsReplacedList || params.sparePartsReplaced || []),
+  }));
 }
 
 async function pipeMaintenanceReceiptPDF(params = {}, stream) {
@@ -125,8 +87,9 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     muted: "#6B7280",
     border: "#E5E7EB",
     soft: "#F9FAFB",
-    accentBg: "#EEF2FF",
-    accentBorder: "#C7D2FE",
+    soft2: "#F3F4F6",
+    dark: "#111827",
+    accent: "#EA580C",
   };
 
   const logoPath = path.join(__dirname, "..", "public", "images", "logo.png");
@@ -136,24 +99,22 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const pageH = doc.page.height;
     const mL = doc.page.margins.left;
     const mR = doc.page.margins.right;
-    const mT = doc.page.margins.top;
     const mB = doc.page.margins.bottom;
     return {
       pageW,
       pageH,
       mL,
       mR,
-      mT,
       mB,
       contentW: pageW - mL - mR,
-      maxY: pageH - mB - 18,
+      maxY: pageH - mB - 28,
     };
   };
 
   const drawHeader = (compact = false) => {
     drawStocktakingHeader(doc, {
-      title: "Maintenance Receipt",
-      subtitle: `Order: ${ensureText(params.orderId)}`,
+      title: "Maintenance Report",
+      subtitle: `Order: ${ensureText(params.orderId)}  •  Generated: ${formatDateTime(new Date())}`,
       variant: compact ? "compact" : "default",
       logoPath,
       colors: COLORS,
@@ -161,188 +122,170 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   };
 
   const ensureSpace = (height = 24) => {
-    const { maxY } = metrics();
-    if (doc.y + height <= maxY) return;
+    if (doc.y + height <= metrics().maxY) return;
     doc.addPage();
     drawHeader(true);
   };
 
   const drawSectionTitle = (title) => {
-    ensureSpace(30);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(12).text(String(title || "").trim(), doc.page.margins.left, doc.y, {
+    ensureSpace(34);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(13).text(String(title || "").trim(), metrics().mL, doc.y, {
       width: metrics().contentW,
-      align: "left",
     });
-    doc.moveDown(0.4);
+    doc.moveDown(0.45);
   };
 
-  const drawTextBlock = (label, value, minHeight = 82) => {
-    ensureSpace(minHeight + 20);
-    const { mL, contentW } = metrics();
-    const y = doc.y;
+  const drawMetaCard = (x, y, w, label, value) => {
     const text = ensureText(value);
-
     doc.font("Helvetica").fontSize(11);
-    const textHeight = doc.heightOfString(text, {
-      width: contentW - 24,
-      align: "left",
-      lineGap: 2,
-    });
-    const boxH = Math.max(minHeight, 16 + 12 + 10 + textHeight + 16);
-
+    const h = Math.max(56, doc.heightOfString(text, { width: w - 24 }) + 38);
     doc.save();
-    doc.roundedRect(mL, y, contentW, boxH, 14).lineWidth(1).strokeColor(COLORS.border).fillAndStroke("#FFFFFF", COLORS.border);
-    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(String(label || "").trim(), mL + 12, y + 12, {
-      width: contentW - 24,
-      align: "left",
-    });
-    doc.fillColor(COLORS.text).font("Helvetica").fontSize(11).text(text, mL + 12, y + 34, {
-      width: contentW - 24,
-      align: "left",
+    doc.roundedRect(x, y, w, h, 14).fillAndStroke("#FFFFFF", COLORS.border);
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(label, x + 12, y + 12, { width: w - 24 });
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11).text(text, x + 12, y + 30, {
+      width: w - 24,
       lineGap: 2,
     });
     doc.restore();
-    doc.y = y + boxH + 12;
+    return h;
   };
 
-  const drawComponentsTable = (rows) => {
-    const safeRows = Array.isArray(rows) ? rows : [];
-    if (!safeRows.length) {
-      drawTextBlock("Components", "No components found.", 62);
-      return;
-    }
-
+  const drawOrderData = () => {
+    drawSectionTitle("Order Data");
     const { mL, contentW } = metrics();
-    const colId = 92;
-    const colQty = 70;
-    const colComponent = contentW - colId - colQty;
+    const gap = 10;
+    const colW = (contentW - gap * 2) / 3;
+    const y = doc.y;
+    const heights = [
+      drawMetaCard(mL, y, colW, "Team Member", params.teamMember || params.requestedBy),
+      drawMetaCard(mL + colW + gap, y, colW, "Order ID", params.orderId),
+      drawMetaCard(mL + (colW + gap) * 2, y, colW, "Date", formatDateTime(params.createdAt)),
+    ];
+    doc.y = y + Math.max(...heights) + 18;
+  };
 
-    const drawHeaderRow = () => {
-      ensureSpace(46);
-      const y = doc.y;
-      doc.save();
-      doc.roundedRect(mL, y, contentW, 34, 12).fillAndStroke(COLORS.accentBg, COLORS.accentBorder);
-      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10);
-      doc.text("ID code", mL + 12, y + 11, { width: colId - 16, align: "left" });
-      doc.text("Component", mL + colId, y + 11, { width: colComponent - 16, align: "left" });
-      doc.text("Qty", mL + colId + colComponent, y + 11, { width: colQty - 12, align: "right" });
-      doc.restore();
-      doc.y = y + 42;
-    };
+  const textHeight = (value, width, fontSize = 9) => {
+    doc.font("Helvetica").fontSize(fontSize);
+    return doc.heightOfString(ensureText(value), { width, lineGap: 1 });
+  };
 
-    drawHeaderRow();
+  const measureSmallField = (w, value) => {
+    const labelH = 11;
+    const valueH = textHeight(value, w - 20, 9.5);
+    return Math.max(52, 12 + labelH + 6 + valueH + 12);
+  };
 
-    safeRows.forEach((row, idx) => {
-      doc.font("Helvetica").fontSize(10);
-      const componentText = ensureText(row?.component, "Unknown");
-      const rowHeight = Math.max(
-        34,
-        doc.heightOfString(componentText, { width: colComponent - 16, lineGap: 1 }) + 18,
-      );
-
-      ensureSpace(rowHeight + 14);
-      if (doc.y + rowHeight > metrics().maxY) {
-        doc.addPage();
-        drawHeader(true);
-        drawHeaderRow();
-      }
-
-      const y = doc.y;
-      doc.save();
-      doc.roundedRect(mL, y, contentW, rowHeight, 12).fillAndStroke(idx % 2 === 0 ? "#FFFFFF" : COLORS.soft, COLORS.border);
-      doc.fillColor(COLORS.text).font("Helvetica").fontSize(10);
-      doc.text(ensureText(row?.idCode, "—"), mL + 12, y + 10, { width: colId - 16, align: "left" });
-      doc.text(componentText, mL + colId, y + 10, { width: colComponent - 16, align: "left", lineGap: 1 });
-      doc.text(String(row?.qty ?? 0), mL + colId + colComponent, y + 10, { width: colQty - 12, align: "right" });
-      doc.restore();
-      doc.y = y + rowHeight + 8;
+  const drawSmallField = (x, y, w, label, value) => {
+    const h = measureSmallField(w, value);
+    const valueText = ensureText(value);
+    doc.save();
+    doc.roundedRect(x, y, w, h, 10).fillAndStroke(COLORS.soft, COLORS.border);
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.5).text(label, x + 10, y + 10, { width: w - 20 });
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(9.5).text(valueText, x + 10, y + 28, {
+      width: w - 20,
+      lineGap: 1,
     });
+    doc.restore();
+    return h;
+  };
+
+  const drawSparePartsTable = (x, y, w, parts = []) => {
+    const safeParts = uniqueTextList(parts);
+    const headerH = 24;
+    const rowH = 24;
+    const tableH = headerH + Math.max(1, safeParts.length) * rowH;
+
+    doc.save();
+    doc.roundedRect(x, y, w, tableH, 10).fillAndStroke("#FFFFFF", COLORS.border);
+    doc.rect(x, y, w, headerH).fill(COLORS.soft2);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9);
+    doc.text("#", x + 10, y + 8, { width: 28 });
+    doc.text("Spare Parts Replacement", x + 42, y + 8, { width: w - 54 });
+    doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, y + headerH).lineTo(x + w, y + headerH).stroke();
+
+    const rows = safeParts.length ? safeParts : ["No spare parts replaced"];
+    rows.forEach((part, idx) => {
+      const ry = y + headerH + idx * rowH;
+      if (idx > 0) doc.moveTo(x, ry).lineTo(x + w, ry).strokeColor(COLORS.border).stroke();
+      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(safeParts.length ? String(idx + 1) : "—", x + 10, ry + 7, { width: 28 });
+      doc.fillColor(COLORS.text).font("Helvetica").fontSize(9).text(part, x + 42, ry + 7, { width: w - 54 });
+    });
+    doc.restore();
+    return tableH;
+  };
+
+  const drawMaintenanceCard = (item, index) => {
+    const { mL, contentW } = metrics();
+    const fieldsGap = 8;
+    const fieldW = (contentW - 24 - fieldsGap) / 2;
+    const spareParts = uniqueTextList(item.sparePartsReplacedNames || item.sparePartsReplacedName || []);
+
+    const issueH = Math.max(
+      measureSmallField(fieldW, item.issueDescription),
+      measureSmallField(fieldW, item.resolutionMethod),
+    );
+    const actionH = Math.max(
+      measureSmallField(fieldW, item.actualIssueDescription),
+      measureSmallField(fieldW, item.repairAction),
+    );
+    const tableH = 24 + Math.max(1, spareParts.length) * 24;
+    const cardH = 62 + issueH + fieldsGap + actionH + 12 + tableH + 20;
+
+    ensureSpace(cardH + 12);
+    const y = doc.y;
+    doc.save();
+    doc.roundedRect(mL, y, contentW, cardH, 16).fillAndStroke("#FFFFFF", COLORS.border);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(12).text(`Maintenance for Component ${index + 1}`, mL + 14, y + 14, {
+      width: contentW - 28,
+    });
+    const subtitle = [item.idCode ? `ID: ${item.idCode}` : "", item.component].filter(Boolean).join("  •  ");
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(10).text(subtitle || "Unknown Component", mL + 14, y + 34, {
+      width: contentW - 28,
+    });
+    doc.restore();
+
+    let fy = y + 58;
+    drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription);
+    drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Resolution Method", item.resolutionMethod);
+    fy += issueH + fieldsGap;
+    drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription);
+    drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Repair Action", item.repairAction);
+    fy += actionH + 12;
+    drawSparePartsTable(mL + 12, fy, contentW - 24, spareParts);
+
+    doc.y = y + cardH + 12;
+  };
+
+  const drawSignatureBox = (x, y, w, title) => {
+    const h = 108;
+    doc.save();
+    doc.roundedRect(x, y, w, h, 14).fillAndStroke("#FFFFFF", COLORS.border);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10).text(title, x + 14, y + 12, { width: w - 28 });
+    doc.strokeColor(COLORS.border).lineWidth(1).moveTo(x + 14, y + 58).lineTo(x + w - 14, y + 58).stroke();
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8.5).text("Name / Signature / Date", x + 14, y + 66, { width: w - 28 });
+    doc.restore();
+    return h;
+  };
+
+  const drawSignatures = () => {
+    ensureSpace(150);
+    drawSectionTitle("Signatures");
+    const { mL, contentW } = metrics();
+    const gap = 14;
+    const w = (contentW - gap) / 2;
+    const y = doc.y;
+    const h1 = drawSignatureBox(mL, y, w, "Technician Signature");
+    const h2 = drawSignatureBox(mL + w + gap, y, w, "Machine Owner Signature");
+    doc.y = y + Math.max(h1, h2) + 12;
   };
 
   drawHeader(false);
+  drawOrderData();
 
-  const { mL, contentW } = metrics();
-  const metaY = doc.y;
-  const metaW = (contentW - 12) / 2;
-
-  const metaHeights = [
-    drawFieldCard(doc, mL, metaY, metaW, "Order", params.orderId, { colors: COLORS }),
-    drawFieldCard(doc, mL + metaW + 12, metaY, metaW, "Date", formatDateTime(params.createdAt), { colors: COLORS }),
-  ];
-  const metaY2 = metaY + Math.max(...metaHeights) + 12;
-  const metaHeights2 = [
-    drawFieldCard(doc, mL, metaY2, metaW, "Requested by", params.requestedBy, { colors: COLORS }),
-    drawFieldCard(doc, mL + metaW + 12, metaY2, metaW, "Operations", params.operationsBy, { colors: COLORS }),
-  ];
-  doc.y = metaY2 + Math.max(...metaHeights2) + 18;
-
-  drawSectionTitle("Issue Overview");
-  drawTextBlock("Issue Description", params.issueDescription, 76);
-  drawTextBlock("The Actual Issue Description", params.actualIssueDescription, 92);
-  drawTextBlock("Repair Action", params.repairAction, 92);
-
-  drawSectionTitle("Resolution Summary");
-  const summaryY = doc.y;
-  const summaryW = (contentW - 12) / 2;
-  const sparePartsText = toUniqueTextList(params.sparePartsReplacedList || params.sparePartsReplaced).join(", ");
-  const summaryHeights = [
-    drawFieldCard(doc, mL, summaryY, summaryW, "Resolution Method", params.resolutionMethod, { colors: COLORS }),
-    drawFieldCard(doc, mL + summaryW + 12, summaryY, summaryW, "Spare parts replaced", sparePartsText, { colors: COLORS }),
-  ];
-  doc.y = summaryY + Math.max(...summaryHeights) + 18;
-
-  drawSectionTitle("Components");
-  drawComponentsTable(params.rows);
-
-  drawSectionTitle("Attached Maintenance Receipt");
-  const receiptFiles = Array.isArray(params.maintenanceReceiptFiles) && params.maintenanceReceiptFiles.length
-    ? params.maintenanceReceiptFiles
-    : [{ name: params.maintenanceReceiptName, url: params.maintenanceReceiptUrl }].filter((item) => item?.name || item?.url);
-
-  if (!receiptFiles.length) {
-    drawTextBlock("Receipt file", "No maintenance receipt image uploaded.", 64);
-  } else {
-    let renderedAny = false;
-    for (let index = 0; index < receiptFiles.length; index += 1) {
-      const file = receiptFiles[index] || {};
-      const fileLabel = file?.name || `Receipt ${index + 1}`;
-      const imageBuffer = await readRemoteImageBuffer(file?.url);
-
-      if (imageBuffer) {
-        ensureSpace(336);
-        const startY = doc.y;
-        const boxH = 312;
-        doc.save();
-        doc.roundedRect(mL, startY, contentW, boxH, 14).fillAndStroke("#FFFFFF", COLORS.border);
-        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(fileLabel, mL + 12, startY + 12, {
-          width: contentW - 24,
-        });
-        try {
-          doc.image(imageBuffer, mL + 12, startY + 36, {
-            fit: [contentW - 24, boxH - 48],
-            align: "center",
-            valign: "center",
-          });
-        } catch {
-          doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("The attached maintenance receipt could not be embedded in the PDF.", mL + 12, startY + 48, {
-            width: contentW - 24,
-          });
-        }
-        doc.restore();
-        doc.y = startY + boxH + 12;
-        renderedAny = true;
-        continue;
-      }
-
-      drawTextBlock(fileLabel, file?.url || file?.name || "Receipt image unavailable.", 64);
-      renderedAny = true;
-    }
-
-    if (!renderedAny) {
-      const fallbackText = params.maintenanceReceiptName || params.maintenanceReceiptUrl || "No maintenance receipt image uploaded.";
-      drawTextBlock("Receipt file", fallbackText, 64);
-    }
-  }
+  const componentLogs = buildComponentLogs(params);
+  drawSectionTitle("Maintenance Details");
+  componentLogs.forEach((item, index) => drawMaintenanceCard(item, index));
+  drawSignatures();
 
   return await new Promise((resolve, reject) => {
     const done = () => resolve();

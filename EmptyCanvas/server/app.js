@@ -5121,6 +5121,14 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
       component: item.productName || prod?.name || "Unknown Product",
       qty,
       reason: item.reason || "No Reason",
+      issue: item.actualIssueDescription || item.issueDescription || item.reason || "No Issue",
+      issueDescription: item.issueDescription || null,
+      actualIssueDescription: item.actualIssueDescription || null,
+      repairAction: item.repairAction || null,
+      resolutionMethod: item.resolutionMethod || null,
+      sparePartsReplacedIds: item.sparePartsReplacedIds || [],
+      sparePartsReplacedNames: item.sparePartsReplacedNames || [],
+      sparePartsReplacedName: item.sparePartsReplacedName || null,
       link: item.productUrl || prod?.url || "",
       unit,
       total,
@@ -5156,6 +5164,7 @@ const ORDER_EXPORT_COLUMN_DEFS = [
   { key: "component", label: "Component", width: 36 },
   { key: "qty", label: "Quantity", width: 12 },
   { key: "reason", label: "Reason", width: 24 },
+  { key: "issue", label: "Issue", width: 34 },
   { key: "link", label: "Component link", width: 54 },
   { key: "unit", label: "Unit cost", width: 14 },
   { key: "total", label: "Total cost", width: 14 },
@@ -5205,6 +5214,7 @@ function _orderExportCellValue(row = {}, key = "") {
     case "component": return row.component || "";
     case "qty": return Number(row.qty) || 0;
     case "reason": return row.reason || "";
+    case "issue": return row.issue || row.actualIssueDescription || row.issueDescription || row.reason || "";
     case "link": return row.link || row.url || row.componentLink || row.href || "";
     case "unit": return row.unit === null || typeof row.unit === "undefined" ? "" : Number(row.unit);
     case "total": return row.total === null || typeof row.total === "undefined" ? "" : Number(row.total);
@@ -5256,7 +5266,21 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   if (_normKeyOrderType(first.orderType || "") !== _normKeyOrderType("Request Maintenance")) {
     return res.status(400).json({ error: "This export is only available for maintenance orders." });
   }
-  const fileName = `maintenance_receipt_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
+
+  const componentLogs = (payload.items || []).map((item, index) => ({
+    idCode: payload.rows?.[index]?.idCode || "",
+    component: item.productName || payload.rows?.[index]?.component || "Unknown Product",
+    issueDescription: item.issueDescription || item.reason || "No Issue",
+    actualIssueDescription: item.actualIssueDescription || "—",
+    repairAction: item.repairAction || "—",
+    resolutionMethod: item.resolutionMethod || "—",
+    sparePartsReplacedIds: item.sparePartsReplacedIds || [],
+    sparePartsReplacedNames: item.sparePartsReplacedNames || [],
+    sparePartsReplacedName: item.sparePartsReplacedName || "",
+    link: item.productUrl || payload.rows?.[index]?.link || "",
+  }));
+
+  const fileName = `maintenance_report_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
   res.setHeader("Cache-Control", "no-store");
@@ -5265,6 +5289,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
     orderId: payload.orderIdRange,
     createdAt: payload.createdAt,
     requestedBy: payload.teamMember,
+    teamMember: payload.teamMember,
     operationsBy: payload.operationsBy,
     issueDescription: first.issueDescription || "—",
     actualIssueDescription: first.actualIssueDescription || "—",
@@ -5272,6 +5297,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
     resolutionMethod: first.resolutionMethod || "—",
     sparePartsReplacedList: first.sparePartsReplacedNames || [],
     rows: payload.rows,
+    componentLogs,
     maintenanceReceiptName: first.maintenanceReceiptName || "",
     maintenanceReceiptUrl: first.maintenanceReceiptUrl || "",
   }, res);
@@ -5281,6 +5307,10 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   const ExcelJS = require("exceljs");
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const selectedColumns = _selectedOrderExportColumnDefs(columns, { tab });
+  const first = payload.first || {};
+  const isMaintenanceExport = _normKeyOrderType(first.orderType || "") === _normKeyOrderType("Request Maintenance")
+    && selectedColumns.some((col) => col.key === "issue")
+    && !selectedColumns.some((col) => ["qty", "unit", "total", "reason"].includes(col.key));
   const columnCount = Math.max(1, selectedColumns.length);
   const lastCol = _orderExcelColumnName(columnCount);
 
@@ -5320,8 +5350,12 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
 
   ws.addRow(["Order ID", payload.orderIdRange, "Date", formatDateTime(payload.createdAt)]);
   ws.addRow(["Team member", payload.teamMember || "", "Prepared by (Operations)", String(req.session?.username || "—")]);
-  ws.addRow(["Total quantity", Number(payload.grandQty) || 0, "Estimate total", Number(payload.grandTotal) || 0]);
-  for (let r = 1; r <= 3; r += 1) {
+  if (!isMaintenanceExport) {
+    ws.addRow(["Total quantity", Number(payload.grandQty) || 0, "Estimate total", Number(payload.grandTotal) || 0]);
+  }
+
+  const metaRowCount = isMaintenanceExport ? 2 : 3;
+  for (let r = 1; r <= metaRowCount; r += 1) {
     const row = ws.getRow(r);
     row.height = 20;
     for (let c = 1; c <= 4; c += 1) {
@@ -5336,62 +5370,91 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
       }
     }
   }
-  ws.getRow(3).getCell(2).numFmt = "0";
-  ws.getRow(3).getCell(4).numFmt = '"£"#,##0.00';
+  if (!isMaintenanceExport) {
+    ws.getRow(3).getCell(2).numFmt = "0";
+    ws.getRow(3).getCell(4).numFmt = '"£"#,##0.00';
+  }
   ws.addRow([]);
 
-  const reasonMap = new Map();
-  for (const row of payload.rows || []) {
-    const reason = String(row.reason || "").trim() || "No Reason";
-    if (!reasonMap.has(reason)) reasonMap.set(reason, []);
-    reasonMap.get(reason).push(row);
-  }
-  const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
   const headerCols = selectedColumns.map((col) => col.label);
 
-  for (const reason of reasons) {
-    const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
+  const addItemRow = (item) => {
+    const values = selectedColumns.map((col) => _orderExportCellValue(item, col.key));
+    const r = ws.addRow(values);
+    selectedColumns.forEach((col, index) => {
+      const cell = r.getCell(index + 1);
+      if (col.key === "link" && values[index]) {
+        cell.value = { text: String(values[index]), hyperlink: String(values[index]) };
+        cell.font = { color: { argb: "FF2563EB" }, underline: true };
+      }
+      if (col.key === "qty") cell.numFmt = "0.######";
+      if (col.key === "unit" || col.key === "total") cell.numFmt = '"£"#,##0.00';
+    });
+    r.eachCell((cell) => {
+      cell.border = borderLight;
+      cell.alignment = { vertical: "middle", wrapText: true };
+    });
+  };
+
+  if (isMaintenanceExport) {
+    const titleRow = ws.addRow(["Maintenance components"]);
     const titleNum = titleRow.number;
     ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
     for (let c = 1; c <= columnCount; c += 1) {
       const cell = ws.getRow(titleNum).getCell(c);
       cell.border = borderThin;
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
-      cell.font = { bold: true, color: { argb: "FF5B21B6" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+      cell.font = { bold: true, color: { argb: "FF111827" } };
     }
 
     const header = ws.addRow(headerCols);
     header.font = { bold: true, color: { argb: "FF111827" } };
     header.eachCell((cell) => {
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
       cell.border = borderThin;
       cell.alignment = { vertical: "middle", wrapText: true };
     });
 
-    const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
-    for (const item of items) {
-      const values = selectedColumns.map((col) => _orderExportCellValue(item, col.key));
-      const r = ws.addRow(values);
-      selectedColumns.forEach((col, index) => {
-        const cell = r.getCell(index + 1);
-        if (col.key === "link" && values[index]) {
-          cell.value = { text: String(values[index]), hyperlink: String(values[index]) };
-          cell.font = { color: { argb: "FF2563EB" }, underline: true };
-        }
-        if (col.key === "qty") cell.numFmt = "0.######";
-        if (col.key === "unit" || col.key === "total") cell.numFmt = '"£"#,##0.00';
-      });
-      r.eachCell((cell) => {
-        cell.border = borderLight;
+    const items = (payload.rows || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
+    items.forEach(addItemRow);
+    ws.addRow([]);
+  } else {
+    const reasonMap = new Map();
+    for (const row of payload.rows || []) {
+      const reason = String(row.reason || "").trim() || "No Reason";
+      if (!reasonMap.has(reason)) reasonMap.set(reason, []);
+      reasonMap.get(reason).push(row);
+    }
+    const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+
+    for (const reason of reasons) {
+      const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
+      const titleNum = titleRow.number;
+      ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
+      for (let c = 1; c <= columnCount; c += 1) {
+        const cell = ws.getRow(titleNum).getCell(c);
+        cell.border = borderThin;
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
+        cell.font = { bold: true, color: { argb: "FF5B21B6" } };
+      }
+
+      const header = ws.addRow(headerCols);
+      header.font = { bold: true, color: { argb: "FF111827" } };
+      header.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
+        cell.border = borderThin;
         cell.alignment = { vertical: "middle", wrapText: true };
       });
+
+      const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
+      items.forEach(addItemRow);
+      ws.addRow([]);
     }
-    ws.addRow([]);
   }
 
   ws.columns = selectedColumns.map((col) => ({ width: col.width || 16 }));
-  ws.views = [{ state: "frozen", ySplit: 4 }];
-  const fileName = `order_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
+  ws.views = [{ state: "frozen", ySplit: isMaintenanceExport ? 3 : 4 }];
+  const fileName = `${isMaintenanceExport ? "maintenance_order" : "order"}_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
   const buf = await wb.xlsx.writeBuffer();
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
@@ -19037,7 +19100,7 @@ app.get(
 app.get(
   "/api/orders/requested",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     if (!_sbOrdersEnabled() && !ordersDatabaseId)
       return res.status(500).json({ error: "Orders DB not configured" });
@@ -19774,7 +19837,7 @@ app.post(
 app.post(
   "/api/orders/requested/mark-shipped",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       const { orderIds, receiptNumber, quantities, issueDescription } = req.body || {};
@@ -20429,7 +20492,7 @@ app.post(
 app.get(
   "/api/orders/requested/maintenance-form-options",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
 
@@ -20481,7 +20544,7 @@ app.get(
 app.post(
   "/api/orders/requested/log-maintenance",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       const {
@@ -20506,73 +20569,129 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        const resolutionMethodText = String(resolutionMethod || "").trim();
-        const actualIssueDescriptionText = String(actualIssueDescription || "")
-          .replace(/\r\n/g, "\n")
-          .trim();
-        const repairActionText = String(repairAction || "")
-          .replace(/\r\n/g, "\n")
-          .trim();
+        const perItemLogsInput = Array.isArray(req.body?.perItemLogs) ? req.body.perItemLogs : [];
+        const moveToArrived = !!req.body?.moveToArrived;
+        const logById = new Map();
 
-        const rawSparePartTokens = toUniqueStringArray(
-          Array.isArray(sparePartIds) && sparePartIds.length ? sparePartIds : sparePartId,
-        );
-        const requestedSparePartNames = toUniqueStringArray(
-          [
-            ...rawSparePartTokens.filter((value) => !/^\d+$/.test(String(value || "").trim()) && !looksLikeNotionId(value)),
-            ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
-          ],
-          { splitComma: true },
-        );
+        const normalizeLogEntry = (entry = {}) => {
+          const resolutionMethodText = String(entry?.resolutionMethod || resolutionMethod || "").trim();
+          const actualIssueDescriptionText = String(entry?.actualIssueDescription || actualIssueDescription || "")
+            .replace(/\r\n/g, "\n")
+            .trim();
+          const repairActionText = String(entry?.repairAction || repairAction || "")
+            .replace(/\r\n/g, "\n")
+            .trim();
+          const rawSparePartTokens = toUniqueStringArray(
+            Array.isArray(entry?.sparePartIds) && entry.sparePartIds.length
+              ? entry.sparePartIds
+              : Array.isArray(sparePartIds) && sparePartIds.length
+                ? sparePartIds
+                : (entry?.sparePartId ?? sparePartId),
+          );
+          const requestedSparePartNames = toUniqueStringArray(
+            [
+              ...rawSparePartTokens.filter((value) => !/^\d+$/.test(String(value || "").trim()) && !looksLikeNotionId(value)),
+              ...(Array.isArray(entry?.sparePartNames) ? entry.sparePartNames : []),
+              ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
+            ],
+            { splitComma: true },
+          );
+          return {
+            resolutionMethodText,
+            actualIssueDescriptionText,
+            repairActionText,
+            rawSparePartTokens,
+            requestedSparePartNames,
+          };
+        };
 
-        const spareNames = [...requestedSparePartNames];
-        const spareIds = rawSparePartTokens.map((value) => String(value || "").trim()).filter(Boolean);
-        if (spareIds.length) {
-          const catalog = await listSparePartsComponents().catch(() => []);
-          const byId = new Map((catalog || []).map((item) => [String(item?.id || "").trim(), String(item?.name || "").trim()]));
+        for (const entry of perItemLogsInput) {
+          const orderId = String(entry?.orderId ?? entry?.id ?? "").trim();
+          if (!orderId) continue;
+          logById.set(orderId, normalizeLogEntry(entry));
+        }
+
+        const fallbackLog = normalizeLogEntry({});
+        const catalog = await listSparePartsComponents().catch(() => []);
+        const catalogById = new Map((catalog || []).map((item) => [String(item?.id || "").trim(), String(item?.name || "").trim()]));
+
+        const buildPatchForLog = async (entryLog) => {
+          const log = entryLog || fallbackLog;
+          const spareNames = [...(log.requestedSparePartNames || [])];
+          const spareIds = (log.rawSparePartTokens || []).map((value) => String(value || "").trim()).filter(Boolean);
+
           for (const spareId of spareIds) {
-            const fromCatalog = byId.get(spareId);
+            const fromCatalog = catalogById.get(spareId);
             if (fromCatalog) spareNames.push(fromCatalog);
             else if (/^\d+$/.test(spareId)) {
               const info = await getProductInfoCached(spareId).catch(() => null);
               if (info?.name && info.name !== "Unknown Product") spareNames.push(String(info.name).trim());
             }
           }
+
+          const normalizedSparePartNames = toUniqueStringArray(spareNames, { splitComma: true });
+          const sparePartText = normalizedSparePartNames.join(", ");
+          const normalizedSparePartIds = toUniqueStringArray(spareIds);
+
+          const patch = { updated_at: new Date().toISOString() };
+          if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
+          if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
+          if (log.repairActionText) patch.repair_action = log.repairActionText;
+          if (sparePartText) patch.spare_parts_replaced = sparePartText;
+          if (moveToArrived) patch.status = "Arrived";
+
+          return {
+            patch,
+            response: {
+              resolutionMethod: log.resolutionMethodText || null,
+              actualIssueDescription: log.actualIssueDescriptionText || null,
+              repairAction: log.repairActionText || null,
+              sparePartsReplacedIds: normalizedSparePartIds,
+              sparePartsReplacedId: normalizedSparePartIds[0] || null,
+              sparePartsReplacedNames: normalizedSparePartNames,
+              sparePartsReplacedName: sparePartText || null,
+            },
+          };
+        };
+
+        const updatedRows = [];
+        const responseById = new Map();
+        let hasAnyDetails = false;
+
+        for (const id of ids) {
+          const entryLog = logById.get(String(id)) || fallbackLog;
+          const built = await buildPatchForLog(entryLog);
+          const detailKeys = ["resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
+          const hasDetailsForRow = detailKeys.some((key) => String(built.patch?.[key] || "").trim());
+          hasAnyDetails = hasAnyDetails || hasDetailsForRow;
+          if (!hasDetailsForRow && !moveToArrived) continue;
+          const updatedRow = await _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, built.patch, []);
+          updatedRows.push(updatedRow);
+          responseById.set(String(id), built.response);
         }
 
-        const normalizedSparePartNames = toUniqueStringArray(spareNames, { splitComma: true });
-        const sparePartText = normalizedSparePartNames.join(", ");
-        const normalizedSparePartIds = toUniqueStringArray(spareIds);
-
-        const patch = { updated_at: new Date().toISOString() };
-        if (resolutionMethodText) patch.resolution_method = resolutionMethodText;
-        if (actualIssueDescriptionText) patch.actual_issue_description = actualIssueDescriptionText;
-        if (repairActionText) patch.repair_action = repairActionText;
-        if (sparePartText) patch.spare_parts_replaced = sparePartText;
-
-        if (Object.keys(patch).length <= 1) {
+        if (!hasAnyDetails && !moveToArrived) {
           return res.status(400).json({ error: "No maintenance details were provided." });
         }
 
-        await Promise.all(
-          ids.map((id) => _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, patch, [])),
-        );
         await _sbInvalidateOrdersCaches(req).catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v2:approved").catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v2:all-system").catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v3:approved").catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v3:all-system").catch(() => {});
 
+        const serializedItems = (updatedRows || []).map((row) => {
+          const item = _sbSerializeOrderRow(row || {});
+          const extra = responseById.get(String(item?.id || "")) || {};
+          return { ...item, ...extra };
+        });
+
         return res.json({
           success: true,
           source: "supabase",
-          resolutionMethod: resolutionMethodText || null,
-          actualIssueDescription: actualIssueDescriptionText || null,
-          repairAction: repairActionText || null,
-          sparePartsReplacedIds: normalizedSparePartIds,
-          sparePartsReplacedId: normalizedSparePartIds[0] || null,
-          sparePartsReplacedNames: normalizedSparePartNames,
-          sparePartsReplacedName: sparePartText || null,
+          status: moveToArrived ? "Arrived" : null,
+          statusColor: moveToArrived ? "green" : null,
+          items: serializedItems,
         });
       }
 
@@ -20757,7 +20876,7 @@ app.post(
 app.post(
   "/api/orders/requested/mark-arrived",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       const {
@@ -21343,7 +21462,7 @@ app.post(
 app.get(
   "/api/orders/requested/receipt-photos",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
@@ -21994,7 +22113,7 @@ app.post(
 app.post(
   "/api/orders/requested/export/pdf",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       const { orderIds, tab, columns } = req.body || {};
@@ -22319,7 +22438,7 @@ app.post(
 app.post(
   "/api/orders/requested/export/maintenance-pdf",
   requireAuth,
-  requirePage(["Requested Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       const { orderIds } = req.body || {};
@@ -22579,11 +22698,11 @@ app.post(
 app.post(
   "/api/orders/requested/export/excel",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds, columns } = req.body || {};
+      const { orderIds, columns, tab } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -22596,7 +22715,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids, { columns });
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab });
       }
 
       // Helpers
