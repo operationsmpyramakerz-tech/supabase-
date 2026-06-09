@@ -4930,7 +4930,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function isMaintenanceSparePlaceholder(value) {
     const key = normKey(value);
-    return !key || key === 'selectcomponent' || key === 'selectsparepart' || key === 'nosparepartselected';
+    return !key
+      || key === 'selectcomponent'
+      || key === 'selectsparepart'
+      || key === 'nosparepartselected'
+      || key === 'selectanoption';
+  }
+
+  function getCleanMaintenanceSpareValue(value) {
+    const text = String(value || '').trim();
+    return isMaintenanceSparePlaceholder(text) ? '' : text;
+  }
+
+  function clearMaintenanceLogFieldErrors(root = maintenanceLogItems) {
+    if (!root) return;
+    root.querySelectorAll('[data-maintenance-field-error]').forEach((el) => {
+      el.textContent = '';
+      el.hidden = true;
+    });
+    root.querySelectorAll('.is-field-invalid').forEach((el) => {
+      el.classList.remove('is-field-invalid');
+      el.removeAttribute('aria-invalid');
+    });
+  }
+
+  function setMaintenanceLogFieldError(fieldEl, message) {
+    if (!fieldEl) return null;
+    const holder = fieldEl.closest('.co-submodal-field') || fieldEl.parentElement;
+    if (!holder) return null;
+    fieldEl.classList.add('is-field-invalid');
+    fieldEl.setAttribute('aria-invalid', 'true');
+    let errorEl = holder.querySelector('[data-maintenance-field-error]');
+    if (!errorEl) {
+      errorEl = document.createElement('div');
+      errorEl.className = 'req-maintenance-field-error';
+      errorEl.setAttribute('data-maintenance-field-error', '');
+      errorEl.setAttribute('role', 'alert');
+      holder.appendChild(errorEl);
+    }
+    errorEl.textContent = String(message || 'This field is required.');
+    errorEl.hidden = false;
+    return errorEl;
   }
 
   function normalizeMaintenanceSpareEntries(item = {}) {
@@ -5141,11 +5181,13 @@ document.addEventListener("DOMContentLoaded", () => {
           .map((row) => {
             const select = row.querySelector('[data-maintenance-log-field="sparePartId"]');
             const qtyInput = row.querySelector('[data-maintenance-log-field="sparePartQty"]');
-            const id = String(select?.value || '').trim();
-            const name = String(getSelectSelectedLabels(select)?.[0] || '').trim();
+            const id = getCleanMaintenanceSpareValue(select?.value);
+            const name = getCleanMaintenanceSpareValue(getSelectSelectedLabels(select)?.[0]);
             const qtyNumber = Number(qtyInput?.value || 1);
             const qty = Number.isFinite(qtyNumber) && qtyNumber > 0 ? Math.max(1, Math.round(qtyNumber)) : 1;
-            if (!id && isMaintenanceSparePlaceholder(name)) return null;
+            // Spare parts are optional. Keep completely empty rows out of the payload
+            // so the placeholder row does not block saving the maintenance log.
+            if (!id && !name) return null;
             return { id, name, qty };
           })
           .filter((entry) => entry && (entry.id || entry.name));
@@ -5160,6 +5202,31 @@ document.addEventListener("DOMContentLoaded", () => {
         };
       })
       .filter((entry) => entry.orderId);
+  }
+
+  function validateMaintenanceLogPayload(perItemLogs = []) {
+    clearMaintenanceLogFieldErrors();
+
+    const entries = Array.isArray(perItemLogs) ? perItemLogs : [];
+    const logsWithAnyDetails = entries.filter((entry) => (
+      String(entry?.resolutionMethod || '').trim() ||
+      String(entry?.actualIssueDescription || '').trim() ||
+      String(entry?.repairAction || '').trim() ||
+      toStringArray(entry?.sparePartIds).length ||
+      toStringArray(entry?.sparePartNames, { splitComma: true }).filter((name) => !isMaintenanceSparePlaceholder(name)).length ||
+      (Array.isArray(entry?.spareParts) && entry.spareParts.length)
+    ));
+
+    if (!logsWithAnyDetails.length) {
+      setMaintenanceLogError('Please fill maintenance details for at least one component. Spare parts are optional.');
+      const firstField = maintenanceLogItems?.querySelector?.('[data-maintenance-log-field="resolutionMethod"], [data-maintenance-log-field="actualIssueDescription"], [data-maintenance-log-field="repairAction"]');
+      setMaintenanceLogFieldError(firstField, 'Add maintenance details here. Spare parts can be left empty.');
+      try { firstField?.focus?.(); } catch {}
+      return { ok: false, logsWithAnyDetails };
+    }
+
+    setMaintenanceLogError('');
+    return { ok: true, logsWithAnyDetails };
   }
 
 
@@ -5851,19 +5918,9 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
     const perItemLogs = Array.isArray(payload?.perItemLogs)
       ? payload.perItemLogs
       : collectMaintenanceLogPayload();
-    const logsWithAnyDetails = perItemLogs.filter((entry) => (
-      String(entry?.resolutionMethod || '').trim() ||
-      String(entry?.actualIssueDescription || '').trim() ||
-      String(entry?.repairAction || '').trim() ||
-      toStringArray(entry?.sparePartIds).length ||
-      toStringArray(entry?.sparePartNames, { splitComma: true }).length ||
-      (Array.isArray(entry?.spareParts) && entry.spareParts.length)
-    ));
-
-    if (!logsWithAnyDetails.length) {
-      setMaintenanceLogError('Please enter maintenance details for at least one component.');
-      return;
-    }
+    const validation = validateMaintenanceLogPayload(perItemLogs);
+    if (!validation.ok) return;
+    const logsWithAnyDetails = validation.logsWithAnyDetails;
 
     if (maintenanceLogConfirmBtn) {
       maintenanceLogConfirmBtn.disabled = true;
@@ -6737,9 +6794,11 @@ async function markReceivedByOperations(g, receiptNumber, extra = {}) {
   });
   maintenanceLogItems?.addEventListener("input", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
+    clearMaintenanceLogFieldErrors();
   });
   maintenanceLogItems?.addEventListener("change", () => {
     if (maintenanceLogError?.textContent) setMaintenanceLogError("");
+    clearMaintenanceLogFieldErrors();
   });
   maintenanceLogItems?.addEventListener("click", (e) => {
     const addBtn = e.target?.closest?.('[data-maintenance-add-spare-row]');
