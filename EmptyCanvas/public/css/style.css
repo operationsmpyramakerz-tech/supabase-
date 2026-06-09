@@ -10038,12 +10038,19 @@ body.order-modal-fit-screen #sv-list .co-right-ico svg{
   cursor: not-allowed;
 }
 
-.req-maintenance-spare-row__remove svg{
+.req-maintenance-spare-row__remove svg,
+.req-maintenance-spare-row__remove span{
   width: 17px;
   height: 17px;
   color: #DC2626;
   stroke: currentColor;
   stroke-width: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 950;
+  line-height: 1;
 }
 
 @media (max-width: 640px){
