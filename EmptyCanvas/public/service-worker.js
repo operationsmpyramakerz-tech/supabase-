@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-supabase-notifications-v1";
+const CACHE_NAME = "ops-cache-fast-notifications-freeze-fix-v2";
 
 const PRECACHE_URLS = [
   "/pwa-start",
