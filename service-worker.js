@@ -1,6 +1,6 @@
 // Bump this value whenever we change static assets (CSS/JS/images)
 // so existing installs don't keep serving stale cached files.
-const CACHE_NAME = "ops-cache-supabase-notifications-v1";
+const CACHE_NAME = "ops-cache-fast-notifications-freeze-fix-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
