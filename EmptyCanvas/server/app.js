@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const net = require("net");
 const tls = require("tls");
+const crypto = require("crypto");
 const { Client } = require("@notionhq/client");
 const PDFDocument = require("pdfkit"); // PDF
 const { attachPageNumbers } = require("./pdfPageNumbers");
@@ -33020,12 +33021,20 @@ app.post("/api/expenses/export/excel", async (req, res) => {
 // ===============================
 
 const _NOTIF_LASTCHECK_KEY = "notif:lastCheck:v1";
-const _NOTIF_TTL_SECONDS = 60 * 60 * 24 * 90; // keep notifications 90 days
-const _PUSH_SUBS_TTL_SECONDS = 60 * 60 * 24 * 365; // keep subscriptions 1 year
+const _NOTIF_AUTOSCAN_KEY = "notif:autoScan:v1";
+const _NOTIF_TTL_SECONDS = 60 * 60 * 24 * 90; // legacy fallback only
+const _PUSH_SUBS_TTL_SECONDS = 60 * 60 * 24 * 365; // legacy fallback only
+const _NOTIF_AUTOSCAN_INTERVAL_MS = Math.max(
+  15 * 1000,
+  Math.min(10 * 60 * 1000, Number(process.env.NOTIFICATIONS_AUTOSCAN_INTERVAL_MS || 45 * 1000)),
+);
 
-// In-memory fallback (only used if Redis isn't ready)
+// In-memory fallback (only used if Supabase/Redis isn't ready)
 const _NOTIF_MEM = new Map(); // key -> data
 const _PUSH_MEM = new Map(); // key -> data
+let _NOTIF_SCAN_IN_FLIGHT = null;
+let _NOTIF_SUPABASE_WARNED = false;
+let _PUSH_SUPABASE_WARNED = false;
 
 function _notificationScopedUserKey(userId) {
   const raw = String(userId || "").trim();
@@ -33040,12 +33049,45 @@ function _subsKey(userId) {
   return `push:subs:${_notificationScopedUserKey(userId)}`;
 }
 
-async function _resolveNotificationUserId(req, { allowNotionLookup = false } = {}) {
+function _sbNotificationsTable() {
+  return String(process.env.SUPABASE_NOTIFICATIONS_TABLE || "notifications").trim() || "notifications";
+}
+function _sbPushSubscriptionsTable() {
+  return String(process.env.SUPABASE_PUSH_SUBSCRIPTIONS_TABLE || "push_subscriptions").trim() || "push_subscriptions";
+}
+function _sbNotificationStateTable() {
+  return String(process.env.SUPABASE_NOTIFICATION_STATE_TABLE || "notification_state").trim() || "notification_state";
+}
+function _sbNotificationsEnabled() {
+  return !!(supabaseDb?.isConfigured?.() && _sbNotificationsTable());
+}
+function _sbPushSubscriptionsEnabled() {
+  return !!(supabaseDb?.isConfigured?.() && _sbPushSubscriptionsTable());
+}
+function _sbNotificationStateEnabled() {
+  return !!(supabaseDb?.isConfigured?.() && _sbNotificationStateTable());
+}
+function _sbTablePath(table) {
+  return `/${encodeURIComponent(String(table || "").trim())}`;
+}
+function _sha1(value) {
+  return crypto.createHash("sha1").update(String(value || "")).digest("hex");
+}
+function _notificationRowId(userId, notificationId) {
+  const userKey = _notificationScopedUserKey(userId);
+  const notifKey = cacheKeySafe(notificationId || _randId("n"));
+  return `${userKey}:${notifKey}`.slice(0, 240);
+}
+function _pushSubRowId(userId, endpoint) {
+  return `${_notificationScopedUserKey(userId)}:${_sha1(endpoint)}`;
+}
+function _safeIsoNow() {
+  return new Date().toISOString();
+}
+
+async function _resolveNotificationUserId(req) {
   const sessionSupabaseId = String(req?.session?.userSupabaseId || "").trim();
   if (sessionSupabaseId) return sessionSupabaseId;
-
-  const sessionNotionId = String(req?.session?.userNotionId || "").trim();
-  if (sessionNotionId) return sessionNotionId;
 
   if (_sbTeamMembersEnabled()) {
     const row = await _sbFindSessionTeamMember(req).catch(() => null);
@@ -33056,9 +33098,10 @@ async function _resolveNotificationUserId(req, { allowNotionLookup = false } = {
     }
   }
 
-  if (allowNotionLookup) {
-    return await getSessionUserNotionId(req);
-  }
+  // Keep this only as a session compatibility bridge. New notifications are stored
+  // under Supabase team member ids and no Notion notification scan is performed.
+  const sessionNotionId = String(req?.session?.userNotionId || "").trim();
+  if (sessionNotionId) return sessionNotionId;
 
   return "";
 }
@@ -33068,11 +33111,10 @@ function _randId(prefix = "n") {
 }
 
 async function _storeGetJSON(key) {
-  // Prefer Redis (shared)
+  // Legacy fallback only. Notifications now prefer Supabase tables.
   const fromRedis = await _redisGet(key);
   if (fromRedis !== null && fromRedis !== undefined) return fromRedis;
 
-  // Fallback to memory
   if (_NOTIF_MEM.has(key)) return _NOTIF_MEM.get(key);
   if (_PUSH_MEM.has(key)) return _PUSH_MEM.get(key);
 
@@ -33080,17 +33122,104 @@ async function _storeGetJSON(key) {
 }
 
 async function _storeSetJSON(key, val, ttlSeconds) {
-  // Prefer Redis
+  // Legacy fallback only. Notifications now prefer Supabase tables.
   if (redisClient && redisClient.isReady) {
     await _redisSet(key, val, ttlSeconds);
     return;
   }
-  // Memory fallback
   if (key.startsWith("notif:")) _NOTIF_MEM.set(key, val);
   if (key.startsWith("push:")) _PUSH_MEM.set(key, val);
 }
 
+function _notificationItemFromRow(row = {}) {
+  const id = String(_sbGet(row, ["notification_id", "notif_id", "id"]) || "").trim();
+  if (!id) return null;
+  const tsRaw = _sbGet(row, ["ts", "timestamp_ms", "created_ms", "created_at"]);
+  const ts = typeof tsRaw === "number"
+    ? tsRaw
+    : (Number(tsRaw) || Date.parse(String(tsRaw || "")) || Date.now());
+  return {
+    id,
+    type: _sbString(_sbGet(row, ["type", "notification_type"])) || "update",
+    title: _sbString(_sbGet(row, ["title"])) || "Update",
+    body: _sbString(_sbGet(row, ["body", "message", "description"])),
+    url: _sbString(_sbGet(row, ["url", "target_url"])) || "/home",
+    ts,
+    read: _sbBool(_sbGet(row, ["read", "is_read"]), false),
+  };
+}
+
+async function _sbSelectNotificationRow(rowId) {
+  if (!_sbNotificationsEnabled() || !rowId) return null;
+  const rows = await supabaseDb.request(
+    `${_sbTablePath(_sbNotificationsTable())}?select=*&id=eq.${_sbRestFilterValue(rowId)}&limit=1`,
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function _sbLoadUserNotifications(userId, { limit = 120 } = {}) {
+  if (!_sbNotificationsEnabled() || !userId) return null;
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 120));
+  const rows = await supabaseDb.request(
+    `${_sbTablePath(_sbNotificationsTable())}?select=*&user_id=eq.${_sbRestFilterValue(userId)}&order=ts.desc&limit=${safeLimit}`,
+  );
+  const items = (Array.isArray(rows) ? rows : [])
+    .map(_notificationItemFromRow)
+    .filter(Boolean)
+    .sort((a, b) => (Number(b.ts || 0) - Number(a.ts || 0)));
+  return { items };
+}
+
+async function _sbSaveNotification(userId, notif) {
+  if (!_sbNotificationsEnabled() || !userId || !notif?.id) return false;
+  const rowId = _notificationRowId(userId, notif.id);
+  const existing = await _sbSelectNotificationRow(rowId).catch(() => null);
+  const wasRead = existing ? _sbBool(_sbGet(existing, ["read", "is_read"]), false) : false;
+  const nowIso = _safeIsoNow();
+  const row = {
+    id: rowId,
+    user_id: String(userId),
+    notification_id: String(notif.id),
+    type: String(notif.type || "update"),
+    title: String(notif.title || "Update"),
+    body: String(notif.body || ""),
+    url: String(notif.url || "/home"),
+    ts: Number(notif.ts || Date.now()),
+    read: wasRead ? true : !!notif.read,
+    payload: notif && typeof notif === "object" ? notif : {},
+    updated_at: nowIso,
+  };
+
+  if (existing) {
+    const updated = await supabaseDb.request(
+      `${_sbTablePath(_sbNotificationsTable())}?id=eq.${_sbRestFilterValue(rowId)}`,
+      { method: "PATCH", headers: { Prefer: "return=representation" }, body: row },
+    );
+    return Array.isArray(updated) ? updated.length > 0 : true;
+  }
+
+  row.created_at = nowIso;
+  await supabaseDb.request(_sbTablePath(_sbNotificationsTable()), {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: row,
+  });
+  return true;
+}
+
 async function _loadUserNotifications(userId) {
+  if (_sbNotificationsEnabled()) {
+    try {
+      const data = await _sbLoadUserNotifications(userId, { limit: 200 });
+      if (data) return data;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase notifications table unavailable; using fallback store:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const key = _notifKey(userId);
   const data = await _storeGetJSON(key);
   if (data && Array.isArray(data.items)) return data;
@@ -33098,27 +33227,72 @@ async function _loadUserNotifications(userId) {
 }
 
 async function _saveUserNotifications(userId, data) {
+  if (_sbNotificationsEnabled() && Array.isArray(data?.items)) {
+    try {
+      for (const item of data.items) {
+        if (item?.id) await _sbSaveNotification(userId, item);
+      }
+      return;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase notification save failed; using fallback store:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const key = _notifKey(userId);
   await _storeSetJSON(key, data, _NOTIF_TTL_SECONDS);
 }
 
 async function _addNotification(userId, notif) {
-  if (!userId) return;
+  if (!userId || !notif?.id) return;
+
+  if (_sbNotificationsEnabled()) {
+    try {
+      await _sbSaveNotification(userId, notif);
+      return;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase notification insert failed; using fallback store:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const data = await _loadUserNotifications(userId);
-
-  // De-dupe by id
   const items = Array.isArray(data.items) ? data.items : [];
+  const existing = items.find((x) => x && x.id === notif.id);
   const filtered = items.filter((x) => x && x.id !== notif.id);
-
-  const next = [notif, ...filtered].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 120);
+  const nextNotif = { ...notif, read: existing?.read ? true : !!notif.read };
+  const next = [nextNotif, ...filtered].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 120);
   await _saveUserNotifications(userId, { items: next });
 }
 
 async function _markNotificationRead(userId, id) {
+  const cleanId = String(id || "").trim();
+  if (!userId || !cleanId) return false;
+
+  if (_sbNotificationsEnabled()) {
+    try {
+      const rowId = _notificationRowId(userId, cleanId);
+      const rows = await supabaseDb.request(
+        `${_sbTablePath(_sbNotificationsTable())}?id=eq.${_sbRestFilterValue(rowId)}`,
+        { method: "PATCH", headers: { Prefer: "return=representation" }, body: { read: true, updated_at: _safeIsoNow() } },
+      );
+      return Array.isArray(rows) ? rows.length > 0 : true;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase mark-read failed; using fallback store:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const data = await _loadUserNotifications(userId);
   let changed = false;
   const next = (data.items || []).map((n) => {
-    if (n && n.id === id && !n.read) {
+    if (n && n.id === cleanId && !n.read) {
       changed = true;
       return { ...n, read: true };
     }
@@ -33129,6 +33303,23 @@ async function _markNotificationRead(userId, id) {
 }
 
 async function _markAllNotificationsRead(userId) {
+  if (!userId) return false;
+
+  if (_sbNotificationsEnabled()) {
+    try {
+      const rows = await supabaseDb.request(
+        `${_sbTablePath(_sbNotificationsTable())}?user_id=eq.${_sbRestFilterValue(userId)}&read=eq.false`,
+        { method: "PATCH", headers: { Prefer: "return=representation" }, body: { read: true, updated_at: _safeIsoNow() } },
+      );
+      return Array.isArray(rows) ? rows.length > 0 : true;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase mark-all-read failed; using fallback store:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const data = await _loadUserNotifications(userId);
   let changed = false;
   const next = (data.items || []).map((n) => {
@@ -33142,7 +33333,80 @@ async function _markAllNotificationsRead(userId) {
   return changed;
 }
 
+async function _sbGetNotificationState(key) {
+  const cleanKey = String(key || "").trim();
+  if (!cleanKey) return null;
+
+  if (_sbNotificationStateEnabled()) {
+    try {
+      const rows = await supabaseDb.request(
+        `${_sbTablePath(_sbNotificationStateTable())}?select=*&key=eq.${_sbRestFilterValue(cleanKey)}&limit=1`,
+      );
+      const row = Array.isArray(rows) ? rows[0] || null : null;
+      if (row) return _sbGet(row, ["value", "data", "payload"]) || null;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase notification_state table unavailable; using fallback state:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
+  return await _storeGetJSON(cleanKey);
+}
+
+async function _sbSetNotificationState(key, value, ttlSeconds = 60 * 60 * 24 * 30) {
+  const cleanKey = String(key || "").trim();
+  if (!cleanKey) return;
+
+  if (_sbNotificationStateEnabled()) {
+    try {
+      const existing = await supabaseDb.request(
+        `${_sbTablePath(_sbNotificationStateTable())}?select=key&key=eq.${_sbRestFilterValue(cleanKey)}&limit=1`,
+      );
+      const row = { key: cleanKey, value: value || {}, updated_at: _safeIsoNow() };
+      if (Array.isArray(existing) && existing.length) {
+        await supabaseDb.request(
+          `${_sbTablePath(_sbNotificationStateTable())}?key=eq.${_sbRestFilterValue(cleanKey)}`,
+          { method: "PATCH", headers: { Prefer: "return=minimal" }, body: row },
+        );
+      } else {
+        await supabaseDb.request(_sbTablePath(_sbNotificationStateTable()), {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: row,
+        });
+      }
+      return;
+    } catch (error) {
+      if (!_NOTIF_SUPABASE_WARNED) {
+        console.warn("[notifications] Supabase notification_state save failed; using fallback state:", error?.message || error);
+        _NOTIF_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
+  await _storeSetJSON(cleanKey, value, ttlSeconds);
+}
+
 async function _loadUserPushSubs(userId) {
+  if (_sbPushSubscriptionsEnabled() && userId) {
+    try {
+      const rows = await supabaseDb.request(
+        `${_sbTablePath(_sbPushSubscriptionsTable())}?select=*&user_id=eq.${_sbRestFilterValue(userId)}&order=updated_at.desc&limit=20`,
+      );
+      return (Array.isArray(rows) ? rows : [])
+        .map((row) => _sbGet(row, ["subscription", "payload", "sub"]) || row)
+        .map(_cleanSubObject)
+        .filter(Boolean);
+    } catch (error) {
+      if (!_PUSH_SUPABASE_WARNED) {
+        console.warn("[push] Supabase push_subscriptions table unavailable; using fallback store:", error?.message || error);
+        _PUSH_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const key = _subsKey(userId);
   const data = await _storeGetJSON(key);
   if (Array.isArray(data)) return data;
@@ -33151,6 +33415,34 @@ async function _loadUserPushSubs(userId) {
 }
 
 async function _saveUserPushSubs(userId, subs) {
+  if (_sbPushSubscriptionsEnabled() && userId) {
+    try {
+      const cleanSubs = (Array.isArray(subs) ? subs : []).map(_cleanSubObject).filter(Boolean);
+      const existingRows = await supabaseDb.request(
+        `${_sbTablePath(_sbPushSubscriptionsTable())}?select=id,endpoint&user_id=eq.${_sbRestFilterValue(userId)}&limit=50`,
+      ).catch(() => []);
+      const keepIds = new Set(cleanSubs.map((sub) => _pushSubRowId(userId, sub.endpoint)));
+      for (const row of Array.isArray(existingRows) ? existingRows : []) {
+        const id = String(_sbGet(row, ["id"]) || "");
+        if (id && !keepIds.has(id)) {
+          await supabaseDb.request(
+            `${_sbTablePath(_sbPushSubscriptionsTable())}?id=eq.${_sbRestFilterValue(id)}`,
+            { method: "DELETE", headers: { Prefer: "return=minimal" } },
+          ).catch(() => undefined);
+        }
+      }
+      for (const sub of cleanSubs) {
+        await _upsertPushSubscription(userId, sub);
+      }
+      return;
+    } catch (error) {
+      if (!_PUSH_SUPABASE_WARNED) {
+        console.warn("[push] Supabase push subscription save failed; using fallback store:", error?.message || error);
+        _PUSH_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const key = _subsKey(userId);
   await _storeSetJSON(key, { subs: subs || [] }, _PUSH_SUBS_TTL_SECONDS);
 }
@@ -33174,20 +33466,72 @@ async function _upsertPushSubscription(userId, sub) {
   const cleaned = _cleanSubObject(sub);
   if (!cleaned) return { ok: false, error: "Invalid subscription" };
 
+  if (_sbPushSubscriptionsEnabled() && userId) {
+    try {
+      const rowId = _pushSubRowId(userId, cleaned.endpoint);
+      const row = {
+        id: rowId,
+        user_id: String(userId),
+        endpoint: cleaned.endpoint,
+        subscription: cleaned,
+        expiration_time: cleaned.expirationTime || null,
+        updated_at: _safeIsoNow(),
+      };
+      const existing = await supabaseDb.request(
+        `${_sbTablePath(_sbPushSubscriptionsTable())}?select=id&id=eq.${_sbRestFilterValue(rowId)}&limit=1`,
+      ).catch(() => []);
+      if (Array.isArray(existing) && existing.length) {
+        await supabaseDb.request(
+          `${_sbTablePath(_sbPushSubscriptionsTable())}?id=eq.${_sbRestFilterValue(rowId)}`,
+          { method: "PATCH", headers: { Prefer: "return=minimal" }, body: row },
+        );
+      } else {
+        row.created_at = _safeIsoNow();
+        await supabaseDb.request(_sbTablePath(_sbPushSubscriptionsTable()), {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: row,
+        });
+      }
+      return { ok: true };
+    } catch (error) {
+      if (!_PUSH_SUPABASE_WARNED) {
+        console.warn("[push] Supabase push subscription upsert failed; using fallback store:", error?.message || error);
+        _PUSH_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const list = await _loadUserPushSubs(userId);
   const dedup = list.filter((s) => s && s.endpoint !== cleaned.endpoint);
-  dedup.unshift(cleaned); // newest first
-  const next = dedup.slice(0, 10); // max 10 devices
-  await _saveUserPushSubs(userId, next);
+  dedup.unshift(cleaned);
+  const next = dedup.slice(0, 10);
+  await _storeSetJSON(_subsKey(userId), { subs: next }, _PUSH_SUBS_TTL_SECONDS);
   return { ok: true };
 }
 
 async function _removePushSubscription(userId, endpoint) {
   const ep = String(endpoint || "").trim();
   if (!ep) return { ok: false, error: "Missing endpoint" };
+
+  if (_sbPushSubscriptionsEnabled() && userId) {
+    try {
+      await supabaseDb.request(
+        `${_sbTablePath(_sbPushSubscriptionsTable())}?user_id=eq.${_sbRestFilterValue(userId)}&endpoint=eq.${_sbRestFilterValue(ep)}`,
+        { method: "DELETE", headers: { Prefer: "return=minimal" } },
+      );
+      return { ok: true };
+    } catch (error) {
+      if (!_PUSH_SUPABASE_WARNED) {
+        console.warn("[push] Supabase push subscription remove failed; using fallback store:", error?.message || error);
+        _PUSH_SUPABASE_WARNED = true;
+      }
+    }
+  }
+
   const list = await _loadUserPushSubs(userId);
   const next = list.filter((s) => s && s.endpoint !== ep);
-  await _saveUserPushSubs(userId, next);
+  await _storeSetJSON(_subsKey(userId), { subs: next }, _PUSH_SUBS_TTL_SECONDS);
   return { ok: true };
 }
 
@@ -33241,183 +33585,31 @@ async function _sendPushToUser(userId, payload) {
   return { ok: true, sent };
 }
 
-// ---- API: notifications list / read ----
 
-async function _handleNotificationsList(req, res) {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const limit = Math.max(1, Math.min(80, Number(req.query.limit) || 25));
-    const data = await _loadUserNotifications(userId);
-    const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
-    const unreadCount = (data.items || []).reduce((acc, n) => acc + (n && !n.read ? 1 : 0), 0);
-    return res.json({ success: true, items, unreadCount });
-  } catch (e) {
-    console.error("notifications get error", e?.body || e);
-    return res.status(500).json({ success: false, error: "Failed to load notifications" });
+async function _runSupabaseNotificationsScan({ force = false } = {}) {
+  if (!supabaseDb?.isConfigured?.()) {
+    return { ok: false, skipped: true, reason: "Supabase is not configured" };
   }
-}
 
-app.get("/api/notifications", requireAuth, _handleNotificationsList);
-
-// Backward-compatible endpoint used by cached builds. Without this alias, old
-// clients poll a 404 every few seconds and can make order pages feel frozen.
-app.get("/api/notifications/refresh", requireAuth, _handleNotificationsList);
-
-app.post("/api/notifications/read", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const id = String(req.body?.id || "").trim();
-    if (!id) return res.status(400).json({ success: false, error: "Missing id" });
-    const changed = await _markNotificationRead(userId, id);
-    res.json({ success: true, changed });
-  } catch (e) {
-    console.error("notifications read error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to mark read" });
-  }
-});
-
-app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const changed = await _markAllNotificationsRead(userId);
-    res.json({ success: true, changed });
-  } catch (e) {
-    console.error("notifications read-all error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to mark all read" });
-  }
-});
-
-/**
- * Debug endpoint — create a test in-app notification + (if configured) a push notification.
- * Open it while logged in: /api/notifications/test
- */
-app.get("/api/notifications/test", requireAuth, async (req, res) => {
-  try {
-    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
-    if (!userId) return res.status(404).json({ error: "User not found" });
-
-    const notif = {
-      id: _randId("test"),
-      type: "test",
-      title: "Test notification",
-      body: "This is a test notification from the server ✅",
-      url: "/home",
-      ts: Date.now(),
-      read: false,
-    };
-
-    await _addNotification(userId, notif);
-
-    const push = await _sendPushToUser(userId, {
-      title: "Operations",
-      body: "✅ Push notifications working (test)",
-      url: "/home",
-    });
-
-    res.json({ success: true, notif, push });
-  } catch (e) {
-    console.error("notifications test error:", e?.message || e);
-    res.status(500).json({ success: false, error: "test failed" });
-  }
-});
-
-
-// ---- API: push subscribe/unsubscribe & public key ----
-
-app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
-  res.set("Cache-Control", "no-store");
-  res.json({ success: true, enabled: _WEBPUSH_READY, publicKey: _VAPID_PUBLIC_KEY || "" });
-});
-
-app.post("/api/push/subscribe", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const sub = req.body?.subscription || req.body;
-    const out = await _upsertPushSubscription(userId, sub);
-    if (!out.ok) return res.status(400).json({ success: false, error: out.error });
-    res.json({ success: true });
-  } catch (e) {
-    console.error("push subscribe error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to save subscription" });
-  }
-});
-
-app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req, { allowNotionLookup: true });
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const endpoint = String(req.body?.endpoint || "").trim();
-    const out = await _removePushSubscription(userId, endpoint);
-    if (!out.ok) return res.status(400).json({ success: false, error: out.error });
-    res.json({ success: true });
-  } catch (e) {
-    console.error("push unsubscribe error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to remove subscription" });
-  }
-});
-
-// ---- Cron endpoint: check Notion changes and notify users ----
-//
-// IMPORTANT: protect this route with CRON_SECRET (env var).
-// Vercel cron jobs are HTTP GET requests (production only).
-app.get("/api/cron/notifications", async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const secret = String(process.env.CRON_SECRET || "").trim();
-    const authHeader = String(req.headers["authorization"] || "").trim();
-    const bearer = authHeader.toLowerCase().startsWith("bearer ")
-      ? authHeader.slice(7).trim()
-      : authHeader;
-    const legacyHeaderSecret = String(req.headers["x-cron-secret"] || "").trim();
-    const querySecret = String(req.query.secret || "").trim();
-
-    if (secret && bearer !== secret && legacyHeaderSecret !== secret && querySecret !== secret) {
-      return res.status(401).json({ ok: false, error: "Unauthorized" });
+  if (!force) {
+    const lastAuto = (await _sbGetNotificationState(_NOTIF_AUTOSCAN_KEY).catch(() => null)) || {};
+    const lastAutoTs = Number(lastAuto.ts || 0);
+    if (lastAutoTs && (Date.now() - lastAutoTs) < _NOTIF_AUTOSCAN_INTERVAL_MS) {
+      return { ok: true, skipped: true, reason: "throttled" };
     }
+  }
 
+  if (_NOTIF_SCAN_IN_FLIGHT) {
+    return await _NOTIF_SCAN_IN_FLIGHT;
+  }
+
+  _NOTIF_SCAN_IN_FLIGHT = (async () => {
     const now = new Date();
     const nowIso = now.toISOString();
-
-    const lastObj = (await _storeGetJSON(_NOTIF_LASTCHECK_KEY)) || {};
+    const lastObj = (await _sbGetNotificationState(_NOTIF_LASTCHECK_KEY).catch(() => null)) || {};
     const lastIso =
       String(lastObj.iso || "").trim() ||
-      new Date(Date.now() - 5 * 60 * 1000).toISOString(); // first run fallback
-
-    // Helper to paginate DB query by last_edited_time
-    async function queryEditedSince(databaseId, afterIso, maxPages = 300) {
-      if (!databaseId) return [];
-      const out = [];
-      let cursor = undefined;
-      let hasMore = true;
-
-      while (hasMore && out.length < maxPages) {
-        const resp = await notion.databases.query({
-          database_id: databaseId,
-          start_cursor: cursor,
-          page_size: 100,
-          filter: {
-            timestamp: "last_edited_time",
-            last_edited_time: { after: afterIso },
-          },
-          sorts: [{ timestamp: "last_edited_time", direction: "descending" }],
-        });
-        out.push(...(resp.results || []));
-        hasMore = resp.has_more;
-        cursor = resp.next_cursor;
-        if (!hasMore) break;
-      }
-
-      return out;
-    }
+      new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
     function _cronSafeDateMs(value) {
       const ms = Date.parse(String(value || ""));
@@ -33440,9 +33632,9 @@ app.get("/api/cron/notifications", async (req, res) => {
       );
     }
 
-    async function _sbCronRowsEditedSince(table, afterIso, { limit = 5000 } = {}) {
+    async function _sbCronRowsEditedSince(table, afterIso, { limit = 2000 } = {}) {
       if (!supabaseDb?.isConfigured?.() || !table) return [];
-      const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 5000));
+      const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 2000));
       let rows = [];
       try {
         rows = await supabaseDb.selectAll(table, { limit: safeLimit, order: "updated_at.desc" });
@@ -33466,58 +33658,26 @@ app.get("/api/cron/notifications", async (req, res) => {
         .filter(Boolean);
     }
 
-    // Load team members → allowed pages map
     async function loadUsersAllowedPages() {
-      if (_sbTeamMembersEnabled()) {
-        try {
-          return await cacheGetOrSet("cache:notif:teamMembers:supabase:v1", 5 * 60, async () => {
-            const rows = await _sbSelectTeamMembersRows();
-            return (Array.isArray(rows) ? rows : [])
-              .map((row) => {
-                const id = String(_sbGet(row, ["id", "ID"]) || "").trim();
-                const name = _sbString(_sbValueForLabel(row, "Name"));
-                const allowedPages = _sbExtractAllowedPages(row);
-                const dept = _sbString(_sbValueForLabel(row, "Department"));
-                return { id, name, allowedPages, department: dept, source: "supabase" };
-              })
-              .filter((user) => user.id);
-          });
-        } catch (error) {
-          console.warn("[cron] Supabase team members load failed; falling back to Notion:", error?.message || error);
-        }
-      }
-
-      if (!teamMembersDatabaseId) return [];
-      return await cacheGetOrSet("cache:notif:teamMembers:v1", 5 * 60, async () => {
-        const all = [];
-        let cursor = undefined;
-        let hasMore = true;
-        while (hasMore) {
-          const resp = await notion.databases.query({
-            database_id: teamMembersDatabaseId,
-            start_cursor: cursor,
-            page_size: 100,
-          });
-          all.push(...(resp.results || []));
-          hasMore = resp.has_more;
-          cursor = resp.next_cursor;
-          if (!hasMore) break;
-        }
-
-        return all.map((page) => {
-          const props = page.properties || {};
-          const name = props?.Name?.title?.[0]?.plain_text || "";
-          const allowedPages = extractAllowedPages(props);
-          const dept = props?.Department?.select?.name || props?.Department?.multi_select?.[0]?.name || "";
-          return { id: page.id, name, allowedPages, department: dept, source: "notion" };
-        });
-      });
+      if (!_sbTeamMembersEnabled()) return [];
+      const rows = await _sbSelectTeamMembersRows();
+      return (Array.isArray(rows) ? rows : [])
+        .map((row) => {
+          const id = String(_sbGet(row, ["id", "ID"]) || "").trim();
+          const name = _sbString(_sbValueForLabel(row, "Name"));
+          const allowedPages = _sbExtractAllowedPages(row);
+          const dept = _sbString(_sbValueForLabel(row, "Department"));
+          return { id, name, allowedPages, department: dept, source: "supabase" };
+        })
+        .filter((user) => user.id);
     }
 
-    const users = await loadUsersAllowedPages();
+    const users = await loadUsersAllowedPages().catch((error) => {
+      console.warn("[notifications] Supabase team members scan failed:", error?.message || error);
+      return [];
+    });
 
-    // Collect updates per user
-    const perUser = new Map(); // userId -> { notifCount, pages: Set(), tasks:int, expenses:int, orders:int, stock:int }
+    const perUser = new Map();
     function bump(userId, key) {
       if (!userId) return;
       const u = perUser.get(userId) || { tasks: 0, expenses: 0, orders: 0, stock: 0, other: 0 };
@@ -33525,13 +33685,11 @@ app.get("/api/cron/notifications", async (req, res) => {
       perUser.set(userId, u);
     }
 
-    // ---- Tasks: notify assignees ----
+    // ---- Tasks: notify assignees from Supabase only ----
     let tasksChanged = [];
-    let tasksSupabaseFailed = false;
     if (_sbTasksEnabled()) {
       try {
-        tasksChanged = await _sbCronRowsEditedSince(_sbTasksTable(), lastIso, { limit: 5000 });
-
+        tasksChanged = await _sbCronRowsEditedSince(_sbTasksTable(), lastIso, { limit: 3000 });
         for (const row of tasksChanged) {
           const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
           const title =
@@ -33569,7 +33727,6 @@ app.get("/api/cron/notifications", async (req, res) => {
             ...assigneeIds,
             ..._cronMatchUsersByName(users, assigneeNames),
           ]);
-
           if (!targetIds.length) continue;
 
           const ts = _sbCronRowUpdatedAt(row) || Date.now();
@@ -33588,54 +33745,16 @@ app.get("/api/cron/notifications", async (req, res) => {
           }
         }
       } catch (e) {
-        console.warn("[cron] Supabase tasks check failed; falling back to Notion:", e?.message || e);
-        tasksSupabaseFailed = true;
+        console.warn("[notifications] Supabase tasks check failed:", e?.message || e);
         tasksChanged = [];
       }
     }
 
-    if (!tasksChanged.length && (!_sbTasksEnabled() || tasksSupabaseFailed) && tasksDatabaseId) {
-      try {
-        const schema = await getTasksSchemaCached();
-        const assigneeProp = schema.assigneeProp;
-        const titleProp = schema.titleProp || "Name";
-
-        tasksChanged = await queryEditedSince(tasksDatabaseId, lastIso, 300);
-
-        for (const page of tasksChanged) {
-          const props = page.properties || {};
-          const title = props?.[titleProp]?.title?.[0]?.plain_text || "Task";
-          const assignees = props?.[assigneeProp]?.relation || [];
-          const assigneeIds = assignees.map((r) => r.id).filter(Boolean);
-
-          // If no assignee, skip (or notify creator later)
-          if (!assigneeIds.length) continue;
-
-          for (const uid of assigneeIds) {
-            const id = `task:${normalizeNotionId(page.id)}:${String(page.last_edited_time || "")}`;
-            await _addNotification(uid, {
-              id,
-              type: "task",
-              title: "Task updated",
-              body: title,
-              url: "/tasks",
-              ts: Date.parse(page.last_edited_time) || Date.now(),
-              read: false,
-            });
-            bump(uid, "tasks");
-          }
-        }
-      } catch (e) {
-        console.warn("[cron] tasks check failed", e?.body || e);
-      }
-    }
-
-    // ---- Expenses: notify owner ----
+    // ---- Expenses: notify owner from Supabase only ----
     let expensesChanged = [];
-    let expensesSupabaseFailed = false;
     if (_sbExpensesEnabled()) {
       try {
-        expensesChanged = await _sbCronRowsEditedSince(_sbExpensesTable(), lastIso, { limit: 5000 });
+        expensesChanged = await _sbCronRowsEditedSince(_sbExpensesTable(), lastIso, { limit: 3000 });
         for (const row of expensesChanged) {
           const rowId = String(_sbGet(row, ["id", "ID"]) || "").trim();
           const reason =
@@ -33689,61 +33808,19 @@ app.get("/api/cron/notifications", async (req, res) => {
           }
         }
       } catch (e) {
-        console.warn("[cron] Supabase expenses check failed; falling back to Notion:", e?.message || e);
-        expensesSupabaseFailed = true;
+        console.warn("[notifications] Supabase expenses check failed:", e?.message || e);
         expensesChanged = [];
       }
     }
 
-    if (!expensesChanged.length && (!_sbExpensesEnabled() || expensesSupabaseFailed) && expensesDatabaseId) {
-      try {
-        expensesChanged = await queryEditedSince(expensesDatabaseId, lastIso, 300);
-        for (const page of expensesChanged) {
-          const props = page.properties || {};
-          const reason =
-            props?.Reason?.title?.[0]?.plain_text ||
-            props?.Reason?.rich_text?.[0]?.plain_text ||
-            "Expense updated";
-          const rel = props?.["Team Member"]?.relation || [];
-          const userIds = rel.map((r) => r.id).filter(Boolean);
-          for (const uid of userIds) {
-            const id = `exp:${normalizeNotionId(page.id)}:${String(page.last_edited_time || "")}`;
-            await _addNotification(uid, {
-              id,
-              type: "expense",
-              title: "Expense updated",
-              body: reason,
-              url: "/expenses",
-              ts: Date.parse(page.last_edited_time) || Date.now(),
-              read: false,
-            });
-            bump(uid, "expenses");
-          }
-        }
-      } catch (e) {
-        console.warn("[cron] expenses check failed", e?.body || e);
-      }
-    }
-
-    // ---- Orders DB: notify users who can see orders pages ----
+    // ---- Orders: notify users who can see order pages from Supabase only ----
     let ordersChangedCount = 0;
-    let ordersSupabaseFailed = false;
     if (_sbOrdersEnabled()) {
       try {
-        const changed = await _sbCronRowsEditedSince(_sbOrdersTable(), lastIso, { limit: 5000 });
+        const changed = await _sbCronRowsEditedSince(_sbOrdersTable(), lastIso, { limit: 3000 });
         ordersChangedCount = changed.length;
       } catch (e) {
-        console.warn("[cron] Supabase orders check failed; falling back to Notion:", e?.message || e);
-        ordersSupabaseFailed = true;
-      }
-    }
-
-    if (!ordersChangedCount && (!_sbOrdersEnabled() || ordersSupabaseFailed) && ordersDatabaseId) {
-      try {
-        const changed = await queryEditedSince(ordersDatabaseId, lastIso, 300);
-        ordersChangedCount = changed.length;
-      } catch (e) {
-        console.warn("[cron] orders check failed", e?.body || e);
+        console.warn("[notifications] Supabase orders check failed:", e?.message || e);
       }
     }
 
@@ -33751,15 +33828,17 @@ app.get("/api/cron/notifications", async (req, res) => {
       const orderPages = new Set([
         "Current Orders",
         "Requested Orders",
-                    "Orders Review",
+        "Operations Orders",
+        "Orders Review",
+        "Maintenance Orders",
       ]);
 
       for (const u of users) {
         const allowed = Array.isArray(u.allowedPages) ? u.allowedPages : [];
-        const canSee = allowed.some((p) => orderPages.has(p));
+        const canSee = allowed.some((pageName) => orderPages.has(pageName));
         if (!canSee) continue;
 
-        const id = `orders:${nowIso}:${_notificationScopedUserKey(u.id)}`;
+        const id = `orders:sb:${nowIso}:${_notificationScopedUserKey(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "orders",
@@ -33773,25 +33852,14 @@ app.get("/api/cron/notifications", async (req, res) => {
       }
     }
 
-    // ---- Stocktaking DB: notify users who can see Stocktaking ----
+    // ---- Stocktaking: notify users who can see Stocktaking from Supabase only ----
     let stockChangedCount = 0;
-    let stockSupabaseFailed = false;
     if (_sbStocktakingEnabled()) {
       try {
-        const changed = await _sbCronRowsEditedSince(_sbStocktakingTable(), lastIso, { limit: 5000 });
+        const changed = await _sbCronRowsEditedSince(_sbStocktakingTable(), lastIso, { limit: 3000 });
         stockChangedCount = changed.length;
       } catch (e) {
-        console.warn("[cron] Supabase stocktaking check failed; falling back to Notion:", e?.message || e);
-        stockSupabaseFailed = true;
-      }
-    }
-
-    if (!stockChangedCount && (!_sbStocktakingEnabled() || stockSupabaseFailed) && stocktakingDatabaseId) {
-      try {
-        const changed = await queryEditedSince(stocktakingDatabaseId, lastIso, 200);
-        stockChangedCount = changed.length;
-      } catch (e) {
-        console.warn("[cron] stocktaking check failed", e?.body || e);
+        console.warn("[notifications] Supabase stocktaking check failed:", e?.message || e);
       }
     }
 
@@ -33800,7 +33868,7 @@ app.get("/api/cron/notifications", async (req, res) => {
         const allowed = Array.isArray(u.allowedPages) ? u.allowedPages : [];
         if (!allowed.includes("Stocktaking")) continue;
 
-        const id = `stock:${nowIso}:${_notificationScopedUserKey(u.id)}`;
+        const id = `stock:sb:${nowIso}:${_notificationScopedUserKey(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "stock",
@@ -33814,13 +33882,12 @@ app.get("/api/cron/notifications", async (req, res) => {
       }
     }
 
-    // ---- Push: send a summary per user (1 push max) ----
+    // ---- Push: send a summary per user ----
     let pushUsers = 0;
     if (_WEBPUSH_READY) {
       for (const [uid, counts] of perUser.entries()) {
         const total =
           (counts.tasks || 0) + (counts.expenses || 0) + (counts.orders || 0) + (counts.stock || 0) + (counts.other || 0);
-
         if (total <= 0) continue;
 
         const parts = [];
@@ -33829,23 +33896,21 @@ app.get("/api/cron/notifications", async (req, res) => {
         if (counts.orders) parts.push(`${counts.orders} orders update(s)`);
         if (counts.stock) parts.push(`${counts.stock} stock update(s)`);
 
-        const body = parts.slice(0, 3).join(", ");
-        const payload = {
+        const out = await _sendPushToUser(uid, {
           title: "Operations updates",
-          body: body || "New updates available",
+          body: parts.slice(0, 3).join(", ") || "New updates available",
           url: "/dashboard",
-        };
-
-        const out = await _sendPushToUser(uid, payload);
+        });
         if (out.ok) pushUsers += 1;
       }
     }
 
-    // Save last check
-    await _storeSetJSON(_NOTIF_LASTCHECK_KEY, { iso: nowIso }, 60 * 60 * 24 * 30);
+    await _sbSetNotificationState(_NOTIF_LASTCHECK_KEY, { iso: nowIso }, 60 * 60 * 24 * 30);
+    await _sbSetNotificationState(_NOTIF_AUTOSCAN_KEY, { ts: Date.now(), iso: nowIso }, 60 * 60 * 24 * 30);
 
-    return res.json({
+    return {
       ok: true,
+      source: "supabase",
       lastIso,
       nowIso,
       tasksChanged: tasksChanged.length,
@@ -33854,12 +33919,169 @@ app.get("/api/cron/notifications", async (req, res) => {
       stockChanged: stockChangedCount,
       usersNotified: perUser.size,
       pushUsers,
+    };
+  })();
+
+  try {
+    return await _NOTIF_SCAN_IN_FLIGHT;
+  } finally {
+    _NOTIF_SCAN_IN_FLIGHT = null;
+  }
+}
+
+// ---- API: notifications list / read ----
+
+async function _handleNotificationsList(req, res) {
+  res.set("Cache-Control", "no-store");
+  try {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+
+    // The bell refresh performs a throttled Supabase scan, then reads the stored Supabase notifications table.
+    await _runSupabaseNotificationsScan({ force: false }).catch((error) => {
+      console.warn("[notifications] auto Supabase scan skipped/failed:", error?.message || error);
     });
+
+    const limit = Math.max(1, Math.min(80, Number(req.query.limit) || 25));
+    const data = await _loadUserNotifications(userId);
+    const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
+    const unreadCount = (data.items || []).reduce((acc, n) => acc + (n && !n.read ? 1 : 0), 0);
+    return res.json({ success: true, source: _sbNotificationsEnabled() ? "supabase" : "fallback", items, unreadCount });
   } catch (e) {
-    console.error("[cron] notifications error", e?.body || e);
-    res.status(500).json({ ok: false, error: "Cron failed" });
+    console.error("notifications get error", e?.body || e);
+    return res.status(500).json({ success: false, error: "Failed to load notifications" });
+  }
+}
+
+app.get("/api/notifications", requireAuth, _handleNotificationsList);
+
+// Backward-compatible endpoint used by cached builds. Without this alias, old
+// clients poll a 404 every few seconds and can make order pages feel frozen.
+app.get("/api/notifications/refresh", requireAuth, _handleNotificationsList);
+
+app.post("/api/notifications/read", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const id = String(req.body?.id || "").trim();
+    if (!id) return res.status(400).json({ success: false, error: "Missing id" });
+    const changed = await _markNotificationRead(userId, id);
+    res.json({ success: true, changed });
+  } catch (e) {
+    console.error("notifications read error", e?.body || e);
+    res.status(500).json({ success: false, error: "Failed to mark read" });
   }
 });
 
+app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const changed = await _markAllNotificationsRead(userId);
+    res.json({ success: true, changed });
+  } catch (e) {
+    console.error("notifications read-all error", e?.body || e);
+    res.status(500).json({ success: false, error: "Failed to mark all read" });
+  }
+});
+
+/**
+ * Debug endpoint — create a test in-app notification + (if configured) a push notification.
+ * Open it while logged in: /api/notifications/test
+ */
+app.get("/api/notifications/test", requireAuth, async (req, res) => {
+  try {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ error: "User not found" });
+
+    const notif = {
+      id: _randId("test"),
+      type: "test",
+      title: "Test notification",
+      body: "This is a test notification from the server ✅",
+      url: "/home",
+      ts: Date.now(),
+      read: false,
+    };
+
+    await _addNotification(userId, notif);
+
+    const push = await _sendPushToUser(userId, {
+      title: "Operations",
+      body: "✅ Push notifications working (test)",
+      url: "/home",
+    });
+
+    res.json({ success: true, notif, push });
+  } catch (e) {
+    console.error("notifications test error:", e?.message || e);
+    res.status(500).json({ success: false, error: "test failed" });
+  }
+});
+
+
+// ---- API: push subscribe/unsubscribe & public key ----
+
+app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ success: true, enabled: _WEBPUSH_READY, publicKey: _VAPID_PUBLIC_KEY || "" });
+});
+
+app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const sub = req.body?.subscription || req.body;
+    const out = await _upsertPushSubscription(userId, sub);
+    if (!out.ok) return res.status(400).json({ success: false, error: out.error });
+    res.json({ success: true });
+  } catch (e) {
+    console.error("push subscribe error", e?.body || e);
+    res.status(500).json({ success: false, error: "Failed to save subscription" });
+  }
+});
+
+app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
+    const endpoint = String(req.body?.endpoint || "").trim();
+    const out = await _removePushSubscription(userId, endpoint);
+    if (!out.ok) return res.status(400).json({ success: false, error: out.error });
+    res.json({ success: true });
+  } catch (e) {
+    console.error("push unsubscribe error", e?.body || e);
+    res.status(500).json({ success: false, error: "Failed to remove subscription" });
+  }
+});
+
+// ---- Cron endpoint: scan Supabase tables and save notifications in Supabase ----
+// IMPORTANT: protect this route with CRON_SECRET (env var) when used by Vercel Cron.
+app.get("/api/cron/notifications", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const secret = String(process.env.CRON_SECRET || "").trim();
+    const authHeader = String(req.headers["authorization"] || "").trim();
+    const bearer = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : authHeader;
+    const legacyHeaderSecret = String(req.headers["x-cron-secret"] || "").trim();
+    const querySecret = String(req.query.secret || "").trim();
+
+    if (secret && bearer !== secret && legacyHeaderSecret !== secret && querySecret !== secret) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const out = await _runSupabaseNotificationsScan({ force: true });
+    return res.json(out);
+  } catch (e) {
+    console.error("[cron] Supabase notifications error", e?.body || e);
+    res.status(500).json({ ok: false, error: "Supabase notification scan failed" });
+  }
+});
 
 module.exports = app;
