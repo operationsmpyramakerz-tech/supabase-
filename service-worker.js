@@ -1,6 +1,6 @@
 // Bump this value whenever we change static assets (CSS/JS/images)
 // so existing installs don't keep serving stale cached files.
-const CACHE_NAME = "ops-cache-fast-notifications-freeze-fix-v2";
+const CACHE_NAME = "ops-cache-remove-receipt-photos-btn-v1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
