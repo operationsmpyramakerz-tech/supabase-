@@ -4545,17 +4545,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ---------- Delivered receipt photos viewer ----------
   function setReceiptPhotosButtonVisibility(group = activeGroup) {
+    // The standalone "Receipt Photos" action button was removed from all tabs.
+    // Keep this defensive guard so old cached HTML cannot show it after deployment.
     if (!receiptPhotosBtn) return;
-    const stageIdx = group?.stage?.idx || computeStage(group?.items || [])?.idx || 1;
-    const entries = collectReceiptEntriesFromGroup(group || {});
-    const isMaintenanceOrder = isMaintenanceOrderType(group?.orderType || group?.items?.[0]?.orderType);
-    const show = entries.length > 0 && (
-      isMaintenancePage
-        ? isMaintenanceOrder && maintenanceGroupWorkflowState(group).key === "done"
-        : currentTab === "delivered" && stageIdx >= 4
-    );
-    receiptPhotosBtn.style.display = show ? "inline-flex" : "none";
-    receiptPhotosBtn.disabled = !show;
+    receiptPhotosBtn.hidden = true;
+    receiptPhotosBtn.style.display = "none";
+    receiptPhotosBtn.disabled = true;
   }
 
 
