@@ -149,7 +149,19 @@
   async function load() {
     try {
       listEl.innerHTML = `<div class="notif-center-empty">Loading…</div>`;
-      const resp = await fetch("/api/notifications?limit=80", { credentials: "include" });
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timeout = controller ? window.setTimeout(() => { try { controller.abort(); } catch {} }, 8000) : 0;
+      const resp = await fetch(`/api/notifications?limit=80&_=${Date.now()}`, {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller ? controller.signal : undefined,
+        headers: {
+          "Accept": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+        },
+      });
+      if (timeout) { try { window.clearTimeout(timeout); } catch {} }
       const data = await resp.json();
       allItems = Array.isArray(data?.items) ? data.items : [];
       render();

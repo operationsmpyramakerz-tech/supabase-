@@ -214,20 +214,63 @@
 
   function start() {
     apply(document);
+
+    // Heavy pages (orders/expenses/stock) can render hundreds of nodes at once.
+    // Running the full direction scan synchronously for every MutationObserver
+    // record can lock the browser when the user clicks quickly between views.
+    // Batch the work into one small idle/frame task instead.
+    const pendingRoots = new Set();
+    const pendingTextBlocks = new Set();
+    let scheduled = false;
+
+    function scheduleFlush() {
+      if (scheduled) return;
+      scheduled = true;
+      const run = () => {
+        scheduled = false;
+        const roots = Array.from(pendingRoots).slice(0, 80);
+        const textBlocks = Array.from(pendingTextBlocks).slice(0, 160);
+        roots.forEach((root) => pendingRoots.delete(root));
+        textBlocks.forEach((el) => pendingTextBlocks.delete(el));
+
+        for (const el of textBlocks) {
+          try { if (el?.isConnected) syncTextBlock(el); } catch {}
+        }
+        for (const root of roots) {
+          try { if (root?.isConnected) apply(root); } catch {}
+        }
+
+        // If a very large render produced more than one batch, continue without
+        // blocking input for a long continuous stretch.
+        if (pendingRoots.size || pendingTextBlocks.size) scheduleFlush();
+      };
+
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(run, { timeout: 180 });
+      } else if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(run);
+      } else {
+        window.setTimeout(run, 50);
+      }
+    }
+
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes || []) {
           if (node && node.nodeType === 1) {
-            if (node.matches?.('input, textarea, [contenteditable="true"]')) bindField(node);
-            if (node.matches?.(TEXT_BLOCK_SELECTOR)) syncTextBlock(node);
-            apply(node);
+            if (node.matches?.('input, textarea, [contenteditable="true"]')) {
+              try { bindField(node); } catch {}
+            }
+            if (node.matches?.(TEXT_BLOCK_SELECTOR)) pendingTextBlocks.add(node);
+            pendingRoots.add(node);
           }
         }
         if (mutation.type === 'characterData') {
           const parent = mutation.target?.parentElement;
-          if (parent?.matches?.(TEXT_BLOCK_SELECTOR)) syncTextBlock(parent);
+          if (parent?.matches?.(TEXT_BLOCK_SELECTOR)) pendingTextBlocks.add(parent);
         }
       }
+      scheduleFlush();
     });
     observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: true });
   }
@@ -246,6 +289,84 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
+})();
+
+
+// Defensive rapid-click guard.
+// Prevents click storms from starting many route changes/modals/API actions at once.
+(function initOpsRapidClickGuard() {
+  if (window.__opsRapidClickGuardBound) return;
+  window.__opsRapidClickGuardBound = true;
+
+  const ACTION_SELECTOR = [
+    'button',
+    'a[href]',
+    '[role="button"]',
+    '[data-action]',
+    '.nav-link',
+    '.notif-row',
+    '.card[onclick]',
+    '.order-card',
+    '.co-card',
+    '.task-card',
+  ].join(',');
+  const EDITABLE_SELECTOR = 'input, textarea, select, option, [contenteditable="true"], .ql-editor';
+  const DUPLICATE_WINDOW_MS = 280;
+  const STORM_WINDOW_MS = 850;
+  const STORM_LIMIT = 9;
+  const COOLDOWN_MS = 520;
+
+  let lastSignature = '';
+  let lastAt = 0;
+  let cooldownUntil = 0;
+  const recent = [];
+
+  function isEditableTarget(target) {
+    try { return !!target?.closest?.(EDITABLE_SELECTOR); } catch { return false; }
+  }
+
+  function actionSignature(el) {
+    if (!el) return '';
+    const tag = String(el.tagName || '').toLowerCase();
+    const id = String(el.id || '').trim();
+    const href = String(el.getAttribute?.('href') || '').trim();
+    const action = String(el.getAttribute?.('data-action') || '').trim();
+    const text = String(el.textContent || '').trim().slice(0, 80);
+    return `${tag}|${id}|${href}|${action}|${text}`;
+  }
+
+  function block(event) {
+    try { event.preventDefault(); } catch {}
+    try { event.stopImmediatePropagation(); } catch { try { event.stopPropagation(); } catch {} }
+  }
+
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const target = event.target;
+    if (!target || isEditableTarget(target)) return;
+
+    const action = target.closest?.(ACTION_SELECTOR);
+    if (!action || action.getAttribute?.('data-no-rapid-click-guard') !== null) return;
+
+    const now = Date.now();
+    if (now < cooldownUntil) {
+      block(event);
+      return;
+    }
+
+    while (recent.length && now - recent[0] > STORM_WINDOW_MS) recent.shift();
+    recent.push(now);
+
+    const sig = actionSignature(action);
+    const duplicate = sig && sig === lastSignature && (now - lastAt) < DUPLICATE_WINDOW_MS;
+    lastSignature = sig;
+    lastAt = now;
+
+    if (duplicate || recent.length > STORM_LIMIT) {
+      if (recent.length > STORM_LIMIT) cooldownUntil = now + COOLDOWN_MS;
+      block(event);
+    }
+  }, true);
 })();
 
 
@@ -578,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const APP_API_CACHE_RULES = [
     { name: 'account', test: (url) => url.pathname === '/api/account', ttlMs: 5 * 60 * 1000 },
-    { name: 'notifications', test: (url) => url.pathname === '/api/notifications', ttlMs: 20 * 1000 },
+    { name: 'notifications', test: (url) => url.pathname === '/api/notifications', ttlMs: 2 * 1000 },
     { name: 'messages-chats', test: (url) => url.pathname === '/api/messages/chats', ttlMs: 15 * 1000 },
     { name: 'messages-team-members', test: (url) => url.pathname === '/api/messages/team-members', ttlMs: 2 * 60 * 1000 },
     { name: 'messages-comments', test: (url) => /^\/api\/messages\/chats\/[^/]+\/comments$/.test(url.pathname), ttlMs: 8 * 1000 },
@@ -623,7 +744,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function buildPrefetchUrls(allowedPages) {
-    const urls = ['/api/account', '/api/notifications?limit=60'];
+    const urls = ['/api/account'];
 
     if (hasAllowedPage(allowedPages, ['B2B', '/b2b'])) {
       urls.push('/api/b2b/schools');
@@ -3463,12 +3584,20 @@ function initNotificationsWidget() {
     });
   });
 
-  // Initial badge load + live polling. Use a single global timer so pages loaded
-  // inside the desktop shell/iframe do not start competing notification loops.
+  // Initial badge load + faster live polling. Use a single global timer so pages
+  // loaded inside the desktop shell/iframe do not start competing notification loops.
+  const pollMs = Math.max(6000, Math.min(30000, Number(window.OPS_NOTIFICATIONS_POLL_MS || 8000)));
   refreshNotifications(false);
   try { ensureOpsPushNotificationsEnabled({ ask: false, quiet: true }); } catch {}
   if (!window.__opsNotifPollTimer) {
-    window.__opsNotifPollTimer = setInterval(() => refreshNotifications(false), 30000);
+    window.__opsNotifPollTimer = setInterval(() => refreshNotifications(false), pollMs);
+  }
+  if (!window.__opsNotifFocusRefreshBound) {
+    window.__opsNotifFocusRefreshBound = true;
+    window.addEventListener('focus', () => refreshNotifications(false));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refreshNotifications(false);
+    });
   }
 }
 
@@ -4691,11 +4820,14 @@ async function refreshNotifications(renderList) {
   if (!renderList && disabledUntil && Date.now() < disabledUntil) return;
 
   window.__opsNotifRefreshInFlight = true;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = controller ? window.setTimeout(() => { try { controller.abort(); } catch {} }, 7000) : 0;
 
   try {
     const resp = await fetch(`/api/notifications?limit=60&_=${Date.now()}`, {
       credentials: "include",
       cache: "no-store",
+      signal: controller ? controller.signal : undefined,
       headers: {
         "Accept": "application/json",
         "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -4735,6 +4867,7 @@ async function refreshNotifications(renderList) {
       listEl.innerHTML = `<div class="notif-empty">Couldn’t load notifications</div>`;
     }
   } finally {
+    if (timeout) { try { window.clearTimeout(timeout); } catch {} }
     window.__opsNotifRefreshInFlight = false;
   }
 }
@@ -5660,6 +5793,12 @@ function initOpsPersistentShellHost() {
   const state = {
     currentPath: resolveOpsShellCanonicalPath(window.location.href),
     requestedPath: null,
+    queuedPath: null,
+    queuedOpts: null,
+    queueTimer: 0,
+    loading: false,
+    loadStartedAt: 0,
+    loadWatchdog: 0,
     frame,
     frameWrap,
     legacyMain,
@@ -5679,6 +5818,11 @@ function initOpsPersistentShellHost() {
   };
 
   const finishLoad = () => {
+    if (state.loadWatchdog) {
+      try { window.clearTimeout(state.loadWatchdog); } catch {}
+      state.loadWatchdog = 0;
+    }
+
     const meta = readOpsShellFrameMeta();
     const loadedPath = normalizeOpsShellPath(meta.path || state.requestedPath || state.currentPath);
     const requestedPath = normalizeOpsShellPath(state.requestedPath || state.currentPath);
@@ -5692,6 +5836,7 @@ function initOpsPersistentShellHost() {
 
     state.currentPath = loadedPath;
     state.requestedPath = null;
+    state.loading = false;
 
     applyOpsShellChrome(meta);
     legacyMain.hidden = true;
@@ -5706,14 +5851,26 @@ function initOpsPersistentShellHost() {
     }
 
     try { window.__opsFreshLoadOverlayMarkShellReady?.(); } catch {}
+
+    // If the user clicked several nav links while the iframe was still loading,
+    // keep only the latest requested page. This prevents a cascade of iframe
+    // reloads/page scripts that can freeze Chromium/Android WebView.
+    if (state.queuedPath) {
+      const queuedPath = state.queuedPath;
+      const queuedOpts = Object.assign({}, state.queuedOpts || {});
+      state.queuedPath = null;
+      state.queuedOpts = null;
+      if (normalizeOpsShellPath(queuedPath) !== normalizeOpsShellPath(state.currentPath)) {
+        window.setTimeout(() => loadFrame(queuedPath, queuedOpts), 0);
+      }
+    }
   };
 
   frame.addEventListener('load', () => {
     try { finishLoad(); } catch (e) { console.warn('[ops-shell] frame load sync failed', e); }
   });
 
-  const loadFrame = (href, opts = {}) => {
-    const nextPath = resolveOpsShellCanonicalPath(href);
+  const startFrameLoad = (nextPath, opts = {}) => {
     const nextNormalized = normalizeOpsShellPath(nextPath);
     const currentNormalized = normalizeOpsShellPath(state.currentPath);
     const shouldPush = !!opts.pushHistory && nextNormalized !== currentNormalized;
@@ -5722,6 +5879,7 @@ function initOpsPersistentShellHost() {
 
     if (!opts.forceReload && hasLoadedFrame && nextNormalized === currentNormalized) {
       state.requestedPath = null;
+      state.loading = false;
       if (shouldReplace) {
         try { history.replaceState({ opsShellPath: nextPath }, '', nextPath); } catch {}
       }
@@ -5730,6 +5888,8 @@ function initOpsPersistentShellHost() {
     }
 
     state.requestedPath = nextPath;
+    state.loading = true;
+    state.loadStartedAt = Date.now();
 
     if (shouldPush) {
       try { history.pushState({ opsShellPath: nextPath }, '', nextPath); } catch {}
@@ -5739,6 +5899,62 @@ function initOpsPersistentShellHost() {
 
     showLoading(!!opts.hideLegacy);
     frame.src = buildOpsShellContentUrl(nextPath);
+
+    if (state.loadWatchdog) {
+      try { window.clearTimeout(state.loadWatchdog); } catch {}
+    }
+    state.loadWatchdog = window.setTimeout(() => {
+      try {
+        // Do not leave the user trapped behind the shell loader if the iframe
+        // load event is lost during a rapid navigation burst.
+        state.loading = false;
+        state.requestedPath = null;
+        frameWrap.classList.remove('is-loading');
+        frame.style.visibility = 'visible';
+        try { window.__opsFreshLoadOverlayMarkShellReady?.(); } catch {}
+        if (state.queuedPath) {
+          const queuedPath = state.queuedPath;
+          const queuedOpts = Object.assign({}, state.queuedOpts || {});
+          state.queuedPath = null;
+          state.queuedOpts = null;
+          loadFrame(queuedPath, queuedOpts);
+        }
+      } catch {}
+    }, 12000);
+  };
+
+  const loadFrame = (href, opts = {}) => {
+    const nextPath = resolveOpsShellCanonicalPath(href);
+    const nextNormalized = normalizeOpsShellPath(nextPath);
+    const currentNormalized = normalizeOpsShellPath(state.currentPath);
+
+    if (state.loading && !opts.forceReload) {
+      state.queuedPath = nextPath;
+      state.queuedOpts = Object.assign({}, opts);
+      if (state.queueTimer) {
+        try { window.clearTimeout(state.queueTimer); } catch {}
+      }
+      state.queueTimer = window.setTimeout(() => {
+        state.queueTimer = 0;
+        // If loading finished meanwhile, start the latest queued page now. If
+        // not, finishLoad/watchdog will pick it up.
+        if (!state.loading && state.queuedPath) {
+          const queuedPath = state.queuedPath;
+          const queuedOpts = Object.assign({}, state.queuedOpts || {});
+          state.queuedPath = null;
+          state.queuedOpts = null;
+          startFrameLoad(queuedPath, queuedOpts);
+        }
+      }, 140);
+      return;
+    }
+
+    if (!opts.forceReload && nextNormalized === currentNormalized && frame && frame.getAttribute('src')) {
+      try { bindOpsShellFrameNavigation(getOpsPersistentShellFrameDocument()); } catch {}
+      return;
+    }
+
+    startFrameLoad(nextPath, opts);
   };
 
   document.addEventListener('click', (event) => {
