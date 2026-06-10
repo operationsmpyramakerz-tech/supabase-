@@ -33025,8 +33025,8 @@ const _NOTIF_AUTOSCAN_KEY = "notif:autoScan:v1";
 const _NOTIF_TTL_SECONDS = 60 * 60 * 24 * 90; // legacy fallback only
 const _PUSH_SUBS_TTL_SECONDS = 60 * 60 * 24 * 365; // legacy fallback only
 const _NOTIF_AUTOSCAN_INTERVAL_MS = Math.max(
-  15 * 1000,
-  Math.min(10 * 60 * 1000, Number(process.env.NOTIFICATIONS_AUTOSCAN_INTERVAL_MS || 45 * 1000)),
+  5 * 1000,
+  Math.min(2 * 60 * 1000, Number(process.env.NOTIFICATIONS_AUTOSCAN_INTERVAL_MS || 10 * 1000)),
 );
 
 // In-memory fallback (only used if Supabase/Redis isn't ready)
@@ -33635,6 +33635,20 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
     async function _sbCronRowsEditedSince(table, afterIso, { limit = 2000 } = {}) {
       if (!supabaseDb?.isConfigured?.() || !table) return [];
       const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 2000));
+      const cutoff = _cronSafeDateMs(afterIso);
+
+      // Fast path: let Supabase filter by updated_at instead of downloading
+      // thousands of rows then filtering in Node. This makes bell refreshes much
+      // faster and reduces UI stalls during rapid user navigation.
+      try {
+        const rows = await supabaseDb.request(
+          `${_sbTablePath(table)}?select=*&updated_at=gt.${_sbRestFilterValue(afterIso)}&order=updated_at.desc&limit=${safeLimit}`,
+        );
+        return (Array.isArray(rows) ? rows : []).filter((row) => _sbCronRowUpdatedAt(row) > cutoff);
+      } catch (fastError) {
+        // Some legacy tables may not have updated_at. Keep a safe fallback.
+      }
+
       let rows = [];
       try {
         rows = await supabaseDb.selectAll(table, { limit: safeLimit, order: "updated_at.desc" });
@@ -33645,7 +33659,6 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
           throw firstError || fallbackError;
         }
       }
-      const cutoff = _cronSafeDateMs(afterIso);
       return (Array.isArray(rows) ? rows : []).filter((row) => _sbCronRowUpdatedAt(row) > cutoff);
     }
 
