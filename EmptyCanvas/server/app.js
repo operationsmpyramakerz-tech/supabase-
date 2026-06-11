@@ -15244,6 +15244,51 @@ app.post(
   },
 );
 
+app.get(
+  "/api/b2b/stocktaking-columns",
+  requireAuth,
+  requirePage("B2B"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      }
+      const columns = await _uaStocktakingSchoolOptions();
+      return res.json({ ok: true, columns, source: "supabase" });
+    } catch (e) {
+      console.error("GET /api/b2b/stocktaking-columns error:", e?.details || e?.body || e);
+      return res.status(e?.status || 500).json({ ok: false, error: e?.message || "Failed to load Stocktaking columns." });
+    }
+  },
+);
+
+app.post(
+  "/api/b2b/stocktaking-columns",
+  requireAuth,
+  requirePage("B2B"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) {
+        return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      }
+      const password = String(req?.body?.adminPassword || req?.body?.password || "").trim();
+      if (!_uaAdminVerified(req)) {
+        if (!password) return res.status(400).json({ ok: false, error: "Admin password is required." });
+        const ok = await verifyAdminPassword(password);
+        if (!ok) return res.status(401).json({ ok: false, error: "Invalid Admin password." });
+      }
+      const created = await _uaAddStocktakingSchoolColumn(req.body?.name || req.body?.column || "");
+      await cacheDel("cache:api:user-access:team-members:supabase:v1");
+      return res.json({ ok: true, ...created, value: created.label, source: "supabase" });
+    } catch (e) {
+      console.error("POST /api/b2b/stocktaking-columns error:", e?.details || e?.body || e);
+      return res.status(e?.status || 500).json({ ok: false, error: e?.message || "Failed to add Stocktaking column." });
+    }
+  },
+);
+
 // ===== B2B — Create (or get) selected-date inventory columns for a school =====
 // Creates new Number properties in the School Stocktaking database:
 //   "<School> Inventory YYYY-MM-DD"
@@ -15796,7 +15841,7 @@ app.get(
       const groupMap = new Map();
       for (const it of filteredStockForPdf) {
         const tagName = normalizeTagName(it?.tag?.name);
-        const tagColor = it?.tag?.color || "default";
+        const tagColor = _stockMovementTagColor(tagName, it?.tag?.color || "default");
         const key = `${tagName.toLowerCase()}|${tagColor}`;
         if (!groupMap.has(key)) groupMap.set(key, { name: tagName, color: tagColor, items: [] });
         groupMap.get(key).items.push(it);
@@ -15910,7 +15955,7 @@ app.get(
           .fontSize(10)
           .text(String(value || "-"), x + 10, boxY + 18, { width: boxW - 20 });
       };
-      drawInfoBox(mL, "School", schoolName);
+      drawInfoBox(mL, "Name", schoolName);
       drawInfoBox(mL + boxW + boxGap, "Date", exportDateLabel);
       doc.y = boxY + boxH + 16;
 
@@ -16366,7 +16411,7 @@ app.get(
       // Data rows
       for (const r of rows) {
         const tagName = r?.tag?.name || "Untagged";
-        const tagColor = r?.tag?.color || "default";
+        const tagColor = _stockMovementTagColor(tagName, r?.tag?.color || "default");
         const rowValues = [
           tagName,
           r.idCode || "",
@@ -26838,6 +26883,29 @@ function _sbStocktakingText(value) {
   return t && !/^null$/i.test(t) ? t : "";
 }
 
+function _stockMovementTagColor(name = "", fallback = "default") {
+  const canon = _sbCanon(name);
+  if (canon === "requestproducts" || canon === "requestproduct") return "green";
+  if (canon === "withdrawproducts" || canon === "withdrawproduct" || canon === "withdrawalproducts" || canon === "withdrawalproduct") return "red";
+  return fallback || "default";
+}
+
+function _stockMovementTagHex(name = "", fallback = "default") {
+  const color = _stockMovementTagColor(name, fallback);
+  switch (color) {
+    case "gray": return { bg: "#F3F4F6", text: "#374151", border: "#E5E7EB" };
+    case "brown": return { bg: "#EFEBE9", text: "#4E342E", border: "#D7CCC8" };
+    case "orange": return { bg: "#FFF7ED", text: "#9A3412", border: "#FED7AA" };
+    case "yellow": return { bg: "#FEFCE8", text: "#854D0E", border: "#FDE68A" };
+    case "green": return { bg: "#ECFDF5", text: "#065F46", border: "#A7F3D0" };
+    case "blue": return { bg: "#EFF6FF", text: "#1E40AF", border: "#BFDBFE" };
+    case "purple": return { bg: "#F5F3FF", text: "#5B21B6", border: "#DDD6FE" };
+    case "pink": return { bg: "#FDF2F8", text: "#9D174D", border: "#FBCFE8" };
+    case "red": return { bg: "#FEF2F2", text: "#991B1B", border: "#FECACA" };
+    default: return { bg: "#F3F4F6", text: "#111827", border: "#E5E7EB" };
+  }
+}
+
 function _sbStocktakingColumnKey(label = "") {
   return String(label || "")
     .replace(/\u00A0/g, " ")
@@ -27155,7 +27223,7 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
       _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])) || "",
     ),
     unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
-    tag: { name: tagName, color: "default" },
+    tag: { name: tagName, color: _stockMovementTagColor(tagName, "default") },
     quantityColumn: quantityColumn || null,
     source: "supabase",
   };
@@ -27176,7 +27244,18 @@ async function _sbStocktakingForRequest(req) {
 }
 
 async function _sbRenderStocktakingPdf(req, res) {
-  const items = await _sbStocktakingForRequest(req);
+  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
+  if (!schoolName) {
+    const err = new Error("Could not determine school name for the current user.");
+    err.status = 404;
+    throw err;
+  }
+
+  const rows = await _sbStocktakingRows();
+  const items = rows
+    .map((row) => _sbSerializeStocktakingRow(row, schoolName))
+    .filter((item) => Number(item.quantity) !== 0);
+
   const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
   const includeInventoryCol = selectedExportColumns.includes("inventory");
   const includeDefectedCol = selectedExportColumns.includes("defected");
@@ -27185,6 +27264,7 @@ async function _sbRenderStocktakingPdf(req, res) {
     .map((item) => {
       const quantity = Number(item?.quantity) || 0;
       const unityPrice = _b2bStockMoneyValue(item?.unitPrice);
+      const tagName = item?.tag?.name || "Untagged";
       return {
         id: item?.id,
         name: item?.name,
@@ -27198,7 +27278,7 @@ async function _sbRenderStocktakingPdf(req, res) {
           item?.inventory === null || typeof item?.inventory === "undefined" ? null : Number(item.inventory),
         defected:
           item?.defected === null || typeof item?.defected === "undefined" ? null : Number(item.defected),
-        tag: item?.tag || { name: "Untagged", color: "default" },
+        tag: { ...(item?.tag || {}), name: tagName, color: _stockMovementTagColor(tagName, item?.tag?.color || "default") },
       };
     })
     .filter((row) => {
@@ -27224,27 +27304,75 @@ async function _sbRenderStocktakingPdf(req, res) {
   enableArabicPdf(doc);
   doc.pipe(res);
   attachPageNumbers(doc);
+
+  const COLORS = {
+    text: "#111827",
+    muted: "#6B7280",
+    border: "#E5E7EB",
+    headerBg: "#F9FAFB",
+    tableHeadBg: "#F3F4F6",
+  };
+
+  const logoPath = path.join(__dirname, "../public/images/logo.png");
+  const exportDateLabel = formatDateTime(createdAt);
+  const displayName = String(schoolName || req.session?.username || "-").trim() || "-";
+
   drawStocktakingHeader(doc, {
     title: "Stocktaking",
-    subtitle: `Generated ${formatDateTime(createdAt)}`,
-    logoPath: path.join(__dirname, "../public/images/logo.png"),
+    subtitle: `Name: ${displayName}  •  Date: ${exportDateLabel}`,
+    logoPath,
+    colors: COLORS,
   });
+
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  const contentW = right - left;
+
+  doc
+    .fillColor(COLORS.text)
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text("Handover Confirmation", left, doc.y);
+
+  doc
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(
+      "I hereby confirm receiving the below items in good condition. Any discrepancies were noted at delivery.",
+      left,
+      doc.y + 4,
+      { width: contentW },
+    );
+
+  doc.moveDown(1.1);
+
+  const boxH = 32;
+  const boxGap = 12;
+  const boxW = (contentW - boxGap) / 2;
+  const boxY = doc.y;
+  const drawInfoBox = (x, title, value) => {
+    doc.roundedRect(x, boxY, boxW, boxH, 8).fillColor(COLORS.headerBg).fill();
+    doc.roundedRect(x, boxY, boxW, boxH, 8).strokeColor(COLORS.border).stroke();
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(title, x + 10, boxY + 6);
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(10).text(String(value || "-"), x + 10, boxY + 18, { width: boxW - 20 });
+  };
+  drawInfoBox(left, "Name", displayName);
+  drawInfoBox(left + boxW + boxGap, "Date", exportDateLabel);
+  doc.y = boxY + boxH + 16;
 
   const groups = new Map();
   for (const item of exportRows) {
     const tag = item?.tag?.name || "Untagged";
-    const color = item?.tag?.color || "default";
+    const color = _stockMovementTagColor(tag, item?.tag?.color || "default");
     const key = `${String(tag).toLowerCase()}|${color}`;
     if (!groups.has(key)) groups.set(key, { name: tag, color, items: [] });
     groups.get(key).items.push(item);
   }
   const tagGroups = Array.from(groups.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
-  const left = doc.page.margins.left;
-  const right = doc.page.width - doc.page.margins.right;
-  const bottom = doc.page.height - doc.page.margins.bottom;
-  const contentW = right - left;
-  let y = Math.max(doc.y + 14, 120);
+  let y = doc.y;
   const rowH = 20;
   const colIdW = 66;
   const extraDefs = selectedExportColumns.map((key) => {
@@ -27284,17 +27412,24 @@ async function _sbRenderStocktakingPdf(req, res) {
     }
   };
 
+  if (!tagGroups.length) {
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("No stock data found.", left, y);
+    doc.end();
+    return;
+  }
+
   for (const group of tagGroups) {
     const groupItems = (group.items || []).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    const pill = _stockMovementTagHex(group.name, group.color);
     ensureSpace(54);
-    doc.roundedRect(left, y, contentW, 22, 10).fillAndStroke("#F3F4F6", "#E5E7EB");
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#111827").text(`Tag  ${group.name}`, left + 10, y + 7, { width: contentW - 90 });
-    doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827").text(`${groupItems.length} items`, right - 72, y + 7, { width: 62, align: "right" });
+    doc.roundedRect(left, y, contentW, 22, 10).fillAndStroke(pill.bg, pill.border);
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(pill.text).text(`Tag  ${group.name}`, left + 10, y + 7, { width: contentW - 90 });
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.text).text(`${groupItems.length} items`, right - 72, y + 7, { width: 62, align: "right" });
     y += 30;
 
-    doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827");
-    doc.rect(left, y, contentW, 22).fill("#F3F4F6");
-    doc.fillColor("#111827");
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.text);
+    doc.rect(left, y, contentW, 22).fill(pill.bg);
+    doc.fillColor(pill.text);
     doc.text("ID Code", left + 6, y + 7, { width: colIdW - 10 });
     doc.text("Component", left + colIdW + 6, y + 7, { width: colNameW - 12 });
     let x = left + colIdW + colNameW;
@@ -27304,7 +27439,7 @@ async function _sbRenderStocktakingPdf(req, res) {
     }
     y += 24;
 
-    doc.font("Helvetica").fontSize(8).fillColor("#111827");
+    doc.font("Helvetica").fontSize(8).fillColor(COLORS.text);
     for (const item of groupItems) {
       ensureSpace(rowH + 4);
       doc.text(String(item.idCode || ""), left + 6, y, { width: colIdW - 10 });
@@ -27789,7 +27924,7 @@ app.all(
       const groupMap = new Map();
       for (const it of filteredStockForPdf) {
         const tagName = normalizeTagName(it?.tag?.name);
-        const tagColor = it?.tag?.color || "default";
+        const tagColor = _stockMovementTagColor(tagName, it?.tag?.color || "default");
         const key = `${tagName.toLowerCase()}|${tagColor}`;
         if (!groupMap.has(key)) groupMap.set(key, { name: tagName, color: tagColor, items: [] });
         groupMap.get(key).items.push(it);
@@ -27950,7 +28085,7 @@ app.all(
           .fontSize(10)
           .text(String(value || "-"), x + 10, boxY + 18, { width: boxW - 20 });
       };
-      drawInfoBox(mL, "School", schoolName);
+      drawInfoBox(mL, "Name", schoolName);
       drawInfoBox(mL + boxW + boxGap, "Date", formatDateTime(createdAt));
       doc.y = boxY + boxH + 16;
 
@@ -28427,7 +28562,7 @@ app.all(
       // Data rows
       for (const r of rows) {
         const tagName = r?.tag?.name || "Untagged";
-        const tagColor = r?.tag?.color || "default";
+        const tagColor = _stockMovementTagColor(tagName, r?.tag?.color || "default");
         const price = unitPriceOf(r.name);
 
         const rowValues = [
