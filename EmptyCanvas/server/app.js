@@ -6789,20 +6789,25 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
 
   const statGap = 10;
   const statW = (contentW - statGap * 2) / 3;
-  const statY = doc.y;
-  const drawStat = (idx, label, value) => {
-    const x = mL + idx * (statW + statGap);
-    doc.roundedRect(x, statY, statW, 46, 12).fillColor(COLORS.dark).fill();
-    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(label, x + 12, statY + 10, { width: statW - 24 });
-    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13).text(String(value || "0"), x + 12, statY + 25, { width: statW - 24 });
+  const drawStats = () => {
+    ensureSpace(58);
+    const statY = doc.y;
+    const drawStat = (idx, label, value) => {
+      const x = mL + idx * (statW + statGap);
+      doc.roundedRect(x, statY, statW, 46, 12).fillColor(COLORS.dark).fill();
+      doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(label, x + 12, statY + 10, { width: statW - 24 });
+      doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13).text(String(value || "0"), x + 12, statY + 25, { width: statW - 24 });
+    };
+    drawStat(0, "TOTAL REQUESTED ITEMS", `${totals.items} item${totals.items === 1 ? "" : "s"}`);
+    drawStat(1, "TOTAL QUANTITY", totals.quantity);
+    drawStat(2, "TOTAL COST", _proposalPdfMoney(totals.total));
+    doc.y = statY + 62;
   };
-  drawStat(0, "TOTAL REQUESTED ITEMS", `${totals.items} item${totals.items === 1 ? "" : "s"}`);
-  drawStat(1, "TOTAL QUANTITY", totals.quantity);
-  drawStat(2, "TOTAL COST", _proposalPdfMoney(totals.total));
-  doc.y = statY + 62;
 
   if (!rows.length) {
     doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("No components yet.", mL, doc.y);
+    doc.moveDown(1.2);
+    drawStats();
     doc.end();
     return;
   }
@@ -6880,6 +6885,9 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
     }
     doc.y = y + rowH;
   });
+
+  doc.moveDown(1.2);
+  drawStats();
 
   doc.end();
 }
