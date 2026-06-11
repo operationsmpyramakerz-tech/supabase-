@@ -1988,3 +1988,108 @@
     grid-template-columns:1fr !important;
   }
 }
+
+
+/* 2026-06-11: proposal dropdown layering + stocktaking-style download button */
+.proposals-page .products-proposal-detail,
+.proposals-page .proposals-panel,
+.proposals-page .products-proposals-view,
+.proposals-page .proposals-folders-card{
+  overflow:visible !important;
+}
+.proposals-page .products-proposal-detail__head{
+  align-items:center !important;
+}
+.proposals-page .proposal-detail-actions{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:12px !important;
+  flex:0 0 auto !important;
+  margin-left:auto !important;
+}
+.proposals-page .proposal-detail-actions .products-btn,
+.proposals-page .proposal-detail-actions .proposal-download-btn{
+  min-height:52px !important;
+  border-radius:18px !important;
+  white-space:nowrap !important;
+}
+.proposals-page .proposal-download-btn.b2b-download-primary{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:.55rem !important;
+  padding:.72rem 1.05rem !important;
+  border:1px solid #050b18 !important;
+  background:#050b18 !important;
+  color:#fff !important;
+  font-weight:900 !important;
+  box-shadow:0 14px 30px rgba(15,23,42,.22) !important;
+  transition:transform .16s ease, background .16s ease, box-shadow .16s ease, opacity .16s ease !important;
+}
+.proposals-page .proposal-download-btn.b2b-download-primary svg,
+.proposals-page .proposal-download-btn.b2b-download-primary i{
+  width:18px !important;
+  height:18px !important;
+  color:currentColor !important;
+}
+.proposals-page .proposal-download-btn.b2b-download-primary:hover:not(:disabled){
+  transform:translateY(-1px) !important;
+  background:#0b1220 !important;
+  box-shadow:0 18px 36px rgba(15,23,42,.28) !important;
+}
+.proposals-page .proposal-download-btn.b2b-download-primary:disabled{
+  cursor:wait !important;
+  opacity:.72 !important;
+}
+.proposals-page .products-proposal-tools{
+  position:relative !important;
+  z-index:80 !important;
+  overflow:visible !important;
+}
+.proposals-page .products-proposal-tool-card{
+  position:relative !important;
+  z-index:10 !important;
+  overflow:visible !important;
+}
+.proposals-page .products-proposal-tool-card.has-open-select{
+  z-index:120 !important;
+}
+.proposals-page .proposal-search-select{
+  position:relative !important;
+  z-index:20 !important;
+}
+.proposals-page .proposal-search-select.is-open{
+  z-index:160 !important;
+}
+.proposals-page .proposal-search-select__menu{
+  z-index:9999 !important;
+}
+.proposals-page .products-proposal-table-card{
+  position:relative !important;
+  z-index:1 !important;
+}
+@media (max-width:1100px){
+  .proposals-page .products-proposal-detail__head{
+    align-items:flex-start !important;
+  }
+  .proposals-page .proposal-detail-actions{
+    width:100% !important;
+    justify-content:stretch !important;
+    margin-left:0 !important;
+  }
+  .proposals-page .proposal-detail-actions .products-btn,
+  .proposals-page .proposal-detail-actions .proposal-download-btn{
+    flex:1 1 0 !important;
+    justify-content:center !important;
+  }
+}
+@media (max-width:640px){
+  .proposals-page .proposal-detail-actions{
+    flex-direction:column !important;
+  }
+  .proposals-page .proposal-detail-actions .products-btn,
+  .proposals-page .proposal-detail-actions .proposal-download-btn{
+    width:100% !important;
+  }
+}
