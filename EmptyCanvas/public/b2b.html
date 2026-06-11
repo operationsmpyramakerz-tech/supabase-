@@ -178,8 +178,8 @@
       cursor:not-allowed;
     }
 </style>
-  <link rel="stylesheet" href="/css/style.css?v=black-add-transparent-loader-v1"/>
-  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v2" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css?v=b2b-addname-transparent-pdf-v1"/>
+  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
 
   <style>
@@ -1614,6 +1614,14 @@
     background:transparent !important;
   }
 </style>
+
+<style>
+  /* 2026-06-11: longer B2B Add new customer label */
+  body.b2b-page .b2b-floating-actions .b2b-add-school-btn{
+    min-width: 178px !important;
+    white-space: nowrap !important;
+  }
+</style>
 </head>
 <body class="permissions-loading b2b-page">
 <script>
@@ -1690,7 +1698,7 @@
         <div class="b2b-floating-actions">
           <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
             <i data-feather="plus-circle"></i>
-            <span>Add</span>
+            <span>Add new customer</span>
           </button>
         </div>
 
@@ -1706,6 +1714,6 @@
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=supabase-notifications-v1"></script>
-<script src="/js/b2b.js?v=black-add-transparent-loader-v1"></script>
+<script src="/js/b2b.js?v=b2b-addname-transparent-pdf-v1"></script>
 </body>
 </html>
