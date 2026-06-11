@@ -2658,3 +2658,16 @@
     max-height: min(260px, 42vh);
   }
 }
+
+
+/* 2026-06-11: no white backing card behind Users Center folders/members */
+:where(body.user-access-page, body.page-user-access) :where(.ua-folders-panel, .ua-members-panel){
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}

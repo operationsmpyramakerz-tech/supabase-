@@ -1142,3 +1142,45 @@ body.products-page{
   margin-left:8px !important;
   vertical-align:middle !important;
 }
+
+
+/* 2026-06-11: make Products/Kits/Proposals workspace wrappers float on the cover image */
+:where(body.products-page, body.proposals-page, body.kits-page) :where(.products-hero, .products-filter-panel, .products-group, .products-proposals-view.proposals-folders-card){
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+:where(body.products-page, body.proposals-page, body.kits-page) .products-hero::before{
+  content: none !important;
+  display: none !important;
+}
+
+body.products-page .products-hero{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+body.products-page .products-filter-panel{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+body.products-page .products-group__head{
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-bottom-color: rgba(15,23,42,.08) !important;
+}
+
+body.products-page .products-group{
+  overflow: visible !important;
+}
+
+:where(body.proposals-page, body.kits-page) .products-proposals-view.proposals-folders-card{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}

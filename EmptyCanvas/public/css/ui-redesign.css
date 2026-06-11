@@ -4417,3 +4417,67 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
     border-radius: 22px !important;
   }
 }
+
+
+/* =========================================================
+   2026-06-11: remove persistent white backing cards
+   Applies in normal pages AND inside the persistent iframe shell. The previous
+   rules were scoped with :not(.shell-embedded), so the white wrapper could
+   reappear on tablet/desktop navigation until a hard refresh.
+   ========================================================= */
+:where(
+  body.current-orders-page,
+  body.operations-orders-page,
+  body.orders-review-page,
+  body[data-orders-view="maintenance"],
+  body.page-orders-maintenance-orders,
+  body.stocktaking-page,
+  body.page-stocktaking,
+  body.page-orders-new,
+  body.user-access-page,
+  body.page-user-access
+) :where(#current-orders.card, #sv-orders.card, .page-body > section.card, .main-content > main.container-full-width > section.card:has(.groups-grid), .ua-folders-panel, .ua-members-panel){
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+:where(
+  body.current-orders-page,
+  body.operations-orders-page,
+  body.orders-review-page,
+  body[data-orders-view="maintenance"],
+  body.page-orders-maintenance-orders,
+  body.stocktaking-page,
+  body.page-stocktaking
+) :where(#current-orders.card, #sv-orders.card, .page-body > section.card, .main-content > main.container-full-width > section.card:has(.groups-grid)){
+  padding: 0 4px 18px !important;
+}
+
+:where(body.page-orders-new, body.shell-embedded.page-orders-new) .order-type-step{
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+:where(body.user-access-page, body.page-user-access) .ua-page-body{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+:where(body.user-access-page, body.page-user-access) :where(.ua-folders-panel, .ua-members-panel){
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+:where(body.stocktaking-page, body.page-stocktaking) .main-content > main.container-full-width > section.card > .card-toolbar{
+  padding-right: 0 !important;
+}
