@@ -10575,3 +10575,47 @@ body.stocktaking-page .b2b-export-confirm.is-busy {
   }
 }
 
+
+
+/* 2026-06-11: remove cached white backing cards on folder/order pages and unify loading cards */
+body.current-orders-page #current-orders,
+body.operations-orders-page main > section.card:has(#requested-list),
+body[data-orders-view="maintenance"] main > section.card:has(#requested-list),
+body.orders-review-page main > section.card:has(#sv-list),
+body.order-modal-fit-screen main > section.card:has(#sv-list){
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+  padding:0 !important;
+}
+body.current-orders-page #orders-list,
+body.operations-orders-page #requested-list,
+body[data-orders-view="maintenance"] #requested-list,
+body.orders-review-page #sv-list{
+  background:transparent !important;
+}
+.modern-loading{
+  width:min(100%, 620px);
+  min-height:74px;
+  border-radius:20px;
+  background:rgba(255,255,255,.82);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.b2b-loading{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:12px !important;
+  width:min(100%, 620px) !important;
+  min-height:74px !important;
+  padding:22px 18px !important;
+  border:1px solid #e5e7eb !important;
+  border-radius:20px !important;
+  background:rgba(255,255,255,.82) !important;
+  box-shadow:0 12px 30px rgba(0,0,0,.06) !important;
+  color:#6b7280 !important;
+  font-weight:850 !important;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}

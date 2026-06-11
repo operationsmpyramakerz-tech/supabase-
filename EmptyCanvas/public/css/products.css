@@ -1110,3 +1110,35 @@ body.products-page{
   .products-proposal-control-grid{ grid-template-columns:1fr; }
   .products-proposal-control-grid .products-btn{ width:100%; }
 }
+
+
+/* 2026-06-11: align product-family loaders with Current Orders loading card */
+.products-loading-card{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:12px !important;
+  padding:22px 18px !important;
+  border:1px solid #e5e7eb !important;
+  border-radius:16px !important;
+  background:rgba(255,255,255,.82) !important;
+  box-shadow:0 12px 30px rgba(0,0,0,.06) !important;
+  color:#6b7280 !important;
+}
+.products-loading-card .products-spinner{
+  width:24px !important;
+  height:24px !important;
+  border-width:3px !important;
+}
+.products-loading-card strong{
+  color:#6b7280 !important;
+  font-weight:850 !important;
+}
+.products-loading-card > div > span:not(.modern-loading__dots){
+  display:none !important;
+}
+.products-loading-card .modern-loading__dots{
+  display:inline-flex !important;
+  margin-left:8px !important;
+  vertical-align:middle !important;
+}
