@@ -23,6 +23,13 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   // ألوان Notion للـ select
+  const stockMovementTagColor = (name = '', fallback = 'default') => {
+    const canon = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (canon === 'requestproducts' || canon === 'requestproduct') return 'green';
+    if (canon === 'withdrawproducts' || canon === 'withdrawproduct' || canon === 'withdrawalproducts' || canon === 'withdrawalproduct') return 'red';
+    return fallback || 'default';
+  };
+
   const colorVars = (color = 'default') => {
     switch (color) {
       case 'gray':   return { bg:'#F3F4F6', text:'#374151', border:'#E5E7EB' };
@@ -40,10 +47,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const makeTagPill = (tag) => {
     const span = document.createElement('span');
-    const color = (tag && tag.color) || 'default';
+    const name = (tag && tag.name) || 'Untagged';
+    const color = stockMovementTagColor(name, (tag && tag.color) || 'default');
     span.className = `tag-pill tag--${color}`;
-    span.textContent = (tag && tag.name) || 'Untagged';
-    span.title = (tag && tag.name) || 'Untagged';
+    span.textContent = name;
+    span.title = name;
     return span;
   };
 
@@ -60,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const map = new Map();
     rows.forEach(item => {
       const name  = item?.tag?.name || 'Untagged';
-      const color = item?.tag?.color || 'default';
+      const color = stockMovementTagColor(name, item?.tag?.color || 'default');
       const key = `${name.toLowerCase()}|${color}`;
       if (!map.has(key)) map.set(key, { name, color, items: [] });
       map.get(key).items.push(item);

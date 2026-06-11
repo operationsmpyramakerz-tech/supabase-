@@ -30,6 +30,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const stockMovementTagColor = (name = '', fallback = 'default') => {
+    const canon = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (canon === 'requestproducts' || canon === 'requestproduct') return 'green';
+    if (canon === 'withdrawproducts' || canon === 'withdrawproduct' || canon === 'withdrawalproducts' || canon === 'withdrawalproduct') return 'red';
+    return fallback || 'default';
+  };
+
   // Notion select colors mapping
   const colorVars = (color = 'default') => {
     switch (color) {
@@ -48,8 +55,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const makePill = (text, color = 'default') => {
     const span = document.createElement('span');
-    span.className = `tag-pill tag--${color}`;
-    span.textContent = String(text || '').trim() || '—';
+    const cleanText = String(text || '').trim() || '—';
+    const resolvedColor = stockMovementTagColor(cleanText, color);
+    span.className = `tag-pill tag--${resolvedColor}`;
+    span.textContent = cleanText;
     return span;
   };
 
@@ -69,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const map = new Map();
     (rows || []).forEach((item) => {
       const name = item?.tag?.name || 'Untagged';
-      const color = item?.tag?.color || 'default';
+      const color = stockMovementTagColor(name, item?.tag?.color || 'default');
       const key = `${name.toLowerCase()}|${color}`;
       if (!map.has(key)) map.set(key, { name, color, items: [] });
       map.get(key).items.push(item);

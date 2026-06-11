@@ -765,7 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: rawName }),
+        body: JSON.stringify({ name: rawName, adminPassword: activeAdminPassword }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) {
