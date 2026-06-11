@@ -504,7 +504,12 @@
           <h2>${escapeHTML(createMode ? 'Create New Proposal' : (proposal?.name || 'Proposal'))}</h2>
           <p>${createMode ? 'Write the proposal name to continue' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
         </div>
-        ${createMode ? '' : `<button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>`}
+        ${createMode ? '' : `
+          <div class="proposal-detail-actions">
+            <button type="button" class="btn b2b-download-primary proposal-download-btn" data-action="download-proposal"><i data-feather="download"></i><span>Download</span></button>
+            <button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>
+          </div>
+        `}
       </header>
       ${editable ? editNameBlockHTML('proposal', createMode ? '' : (proposal?.name || 'Proposal'), { createMode, required: createMode }) : ''}
       ${createMode ? createModeHintHTML('proposal') : ''}
@@ -1116,12 +1121,64 @@
     }
   }
 
+  function filenameFromDisposition(disposition, fallback) {
+    const header = String(disposition || '');
+    const utf = header.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf && utf[1]) {
+      try { return decodeURIComponent(utf[1].replace(/["']/g, '').trim()) || fallback; } catch {}
+    }
+    const ascii = header.match(/filename="?([^";]+)"?/i);
+    return (ascii && ascii[1] ? ascii[1].trim() : '') || fallback;
+  }
+
+  async function downloadActiveProposal() {
+    const proposalId = String(state.activeProposal?.id || '').trim();
+    if (!proposalId || state.downloadingProposal) return;
+    const btn = els.proposalDetail?.querySelector?.('[data-action="download-proposal"]');
+    const label = btn?.querySelector?.('span');
+    const originalLabel = label ? label.textContent : '';
+    state.downloadingProposal = true;
+    if (btn) btn.disabled = true;
+    if (label) label.textContent = 'Downloading...';
+    try {
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/pdf?_ts=${Date.now()}`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to download proposal.');
+      }
+      const blob = await res.blob();
+      const fallbackName = `${String(state.activeProposal?.name || 'Proposal').replace(/[^a-z0-9_-]+/gi, '_') || 'Proposal'}.pdf`;
+      const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), fallbackName);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      toast('success', 'Proposal', 'Proposal PDF downloaded.');
+    } catch (error) {
+      toast('error', 'Proposal', error?.message || 'Failed to download proposal.');
+    } finally {
+      state.downloadingProposal = false;
+      if (btn) btn.disabled = false;
+      if (label) label.textContent = originalLabel || 'Download';
+    }
+  }
+
   function closeAllSearchSelects(exceptRoot = null) {
     document.querySelectorAll('[data-select-root]').forEach((root) => {
       if (exceptRoot && root === exceptRoot) return;
       const menu = root.querySelector('.proposal-search-select__menu');
       const toggle = root.querySelector('.proposal-search-select__button');
       if (menu) menu.hidden = true;
+      root.classList.remove('is-open');
+      const card = root.closest('.products-proposal-tool-card');
+      if (card) card.classList.remove('has-open-select');
       if (toggle) toggle.setAttribute('aria-expanded', 'false');
       const search = root.querySelector('[data-role="select-search"]');
       if (search) {
@@ -1149,6 +1206,9 @@
       if (!root || !menu) return;
       const shouldOpen = menu.hidden;
       closeAllSearchSelects(root);
+      root.classList.toggle('is-open', shouldOpen);
+      const card = root.closest('.products-proposal-tool-card');
+      if (card) card.classList.toggle('has-open-select', shouldOpen);
       menu.hidden = !shouldOpen;
       toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
       if (shouldOpen) {
@@ -1242,6 +1302,7 @@
       if (!action) return;
       if (action === 'back-proposals') return backToProposals();
       if (action === 'open-make-order') return openMakeOrderModal();
+      if (action === 'download-proposal') return downloadActiveProposal();
       if (action === 'save-proposal-name') return saveActiveName('proposal');
       if (action === 'add-proposal-product') return addProposalProduct();
       if (action === 'add-proposal-kit') return addProposalKit();
