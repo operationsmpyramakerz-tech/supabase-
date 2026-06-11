@@ -6655,6 +6655,235 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
   return { orderNumber, orderId: `ORD-${orderNumber}`, count: created.length, member: verified.member };
 }
 
+function _proposalPdfSafeFilename(value = "Proposal") {
+  const cleaned = String(value || "Proposal")
+    .trim()
+    .replace(/[^a-z0-9\-_]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+  return cleaned || "Proposal";
+}
+
+function _proposalPdfMoney(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return `£${n.toFixed(2)}`;
+}
+
+async function _sbRenderProductProposalPdf(proposalId, req, res) {
+  const id = String(proposalId || "").trim();
+  if (!id) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  const detail = await _sbProductProposalById(id, req);
+  if (!detail?.proposal) {
+    const err = new Error("Proposal not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  const productMap = await _sbProductsMapById();
+  const rows = (Array.isArray(detail.items) ? detail.items : []).map((item) => {
+    const product = productMap.get(String(item?.productId || "")) || {};
+    const quantity = _sbProposalQuantity(item?.quantity || 1);
+    const unitPriceRaw = product?.unitPrice ?? product?.unit_price ?? item?.unitPrice ?? item?.unit_price ?? null;
+    const unitPrice = Number(unitPriceRaw);
+    const cleanUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null;
+    const totalPrice = cleanUnitPrice === null ? null : cleanUnitPrice * quantity;
+    return {
+      idCode: String(product?.displayId || product?.idCode || product?.id_code || "").trim(),
+      name: String(product?.name || item?.productName || item?.product_name || "Untitled Product").trim() || "Untitled Product",
+      url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
+      quantity,
+      unitPrice: cleanUnitPrice,
+      totalPrice,
+    };
+  });
+
+  await ensurePdfArabicSupport();
+  const createdAt = new Date();
+  const dateStr = createdAt.toISOString().slice(0, 10);
+  const fileBase = _proposalPdfSafeFilename(detail.proposal.name || "Proposal");
+  const fileName = `${fileBase}-${dateStr}.pdf`;
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.set("Cache-Control", "no-store");
+
+  const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  enableArabicPdf(doc);
+  doc.pipe(res);
+  attachPageNumbers(doc);
+
+  const COLORS = {
+    text: "#111827",
+    muted: "#6B7280",
+    border: "#E5E7EB",
+    headerBg: "#F9FAFB",
+    tableHeadBg: "#F3F4F6",
+    rowAlt: "#FAFAFA",
+    dark: "#050B18",
+    link: "#1D4ED8",
+  };
+  const logoPath = path.join(__dirname, "../public/images/logo.png");
+  const mL = doc.page.margins.left;
+  const mR = doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  const contentW = doc.page.width - mL - mR;
+  const generatedLabel = formatDateTime(createdAt);
+  const proposalName = String(detail.proposal.name || "Proposal").trim() || "Proposal";
+
+  const drawHeader = (variant = "default") => {
+    drawStocktakingHeader(doc, {
+      title: "Proposal",
+      variant,
+      logoPath,
+      colors: COLORS,
+    });
+  };
+
+  const ensureSpace = (height = 24, { repeatTableHeader } = {}) => {
+    if (doc.y + height <= bottom) return;
+    doc.addPage();
+    drawHeader("compact");
+    if (typeof repeatTableHeader === "function") repeatTableHeader();
+  };
+
+  drawHeader("default");
+
+  doc
+    .fillColor(COLORS.text)
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text("Proposal Summary", mL, doc.y);
+  doc
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .fontSize(9)
+    .text("Saved components and quantities for this proposal.", mL, doc.y + 4, { width: contentW });
+  doc.moveDown(1.1);
+
+  const boxH = 34;
+  const boxGap = 12;
+  const boxW = (contentW - boxGap) / 2;
+  const boxY = doc.y;
+  const drawInfoBox = (x, title, value) => {
+    doc.roundedRect(x, boxY, boxW, boxH, 8).fillColor(COLORS.headerBg).fill();
+    doc.roundedRect(x, boxY, boxW, boxH, 8).strokeColor(COLORS.border).stroke();
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text(title, x + 10, boxY + 6);
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(10).text(String(value || "-"), x + 10, boxY + 19, { width: boxW - 20 });
+  };
+  drawInfoBox(mL, "Name", proposalName);
+  drawInfoBox(mL + boxW + boxGap, "Date", generatedLabel);
+  doc.y = boxY + boxH + 18;
+
+  const totals = rows.reduce((acc, row) => {
+    acc.items += 1;
+    acc.quantity += Number(row.quantity) || 0;
+    if (Number.isFinite(Number(row.totalPrice))) acc.total += Number(row.totalPrice);
+    return acc;
+  }, { items: 0, quantity: 0, total: 0 });
+
+  const statGap = 10;
+  const statW = (contentW - statGap * 2) / 3;
+  const statY = doc.y;
+  const drawStat = (idx, label, value) => {
+    const x = mL + idx * (statW + statGap);
+    doc.roundedRect(x, statY, statW, 46, 12).fillColor(COLORS.dark).fill();
+    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(label, x + 12, statY + 10, { width: statW - 24 });
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13).text(String(value || "0"), x + 12, statY + 25, { width: statW - 24 });
+  };
+  drawStat(0, "TOTAL REQUESTED ITEMS", `${totals.items} item${totals.items === 1 ? "" : "s"}`);
+  drawStat(1, "TOTAL QUANTITY", totals.quantity);
+  drawStat(2, "TOTAL COST", _proposalPdfMoney(totals.total));
+  doc.y = statY + 62;
+
+  if (!rows.length) {
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("No components yet.", mL, doc.y);
+    doc.end();
+    return;
+  }
+
+  const columns = [
+    { key: "idCode", label: "ID Code", width: 70, align: "left" },
+    { key: "name", label: "Component", width: 215, align: "left" },
+    { key: "quantity", label: "Quantity", width: 60, align: "right" },
+    { key: "unitPrice", label: "Unity Price", width: 78, align: "right" },
+    { key: "totalPrice", label: "Total Price", width: 86, align: "right" },
+  ];
+  const tableW = columns.reduce((sum, col) => sum + col.width, 0);
+  const startX = mL;
+  const cellPad = 7;
+  const headerH = 22;
+
+  const drawTableHeader = () => {
+    const y = doc.y;
+    doc.rect(startX, y, tableW, headerH).fillColor(COLORS.tableHeadBg).fill();
+    doc.rect(startX, y, tableW, headerH).lineWidth(0.8).strokeColor(COLORS.border).stroke();
+    let x = startX;
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.5);
+    for (const col of columns) {
+      doc.text(col.label, x + cellPad, y + 7, { width: col.width - cellPad * 2, align: col.align });
+      x += col.width;
+      if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + headerH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    }
+    doc.y = y + headerH;
+  };
+
+  const normalizeUrlForPdf = (url) => {
+    const s = String(url || "").trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith("www.")) return `https://${s}`;
+    return null;
+  };
+
+  drawTableHeader();
+
+  rows.forEach((row, idx) => {
+    doc.font("Helvetica").fontSize(8.5);
+    const values = {
+      idCode: row.idCode || "",
+      name: row.name || "-",
+      quantity: String(row.quantity || 0),
+      unitPrice: _proposalPdfMoney(row.unitPrice),
+      totalPrice: _proposalPdfMoney(row.totalPrice),
+    };
+    const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || ""), { width: col.width - cellPad * 2, align: col.align }));
+    const rowH = Math.max(22, ...heights) + 8;
+    ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    if (idx % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
+    doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    let x = startX;
+    for (const col of columns) {
+      const text = String(values[col.key] || "");
+      const opts = { width: col.width - cellPad * 2, align: col.align };
+      if (col.key === "name") {
+        const link = normalizeUrlForPdf(row.url);
+        if (link) {
+          opts.link = link;
+          opts.underline = true;
+          doc.fillColor(COLORS.link);
+        } else {
+          doc.fillColor(COLORS.text);
+        }
+      } else {
+        doc.fillColor(COLORS.text);
+      }
+      doc.font("Helvetica").fontSize(8.5).text(text, x + cellPad, y + 6, opts);
+      x += col.width;
+      if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    }
+    doc.y = y + rowH;
+  });
+
+  doc.end();
+}
+
 async function _sbProductsMapById() {
   const products = await _sbProductsList();
   return new Map(products.map((p) => [String(p.id), p]));
@@ -24530,6 +24759,24 @@ app.delete(
     } catch (error) {
       console.error("DELETE /api/products/proposals/:proposalId error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete product proposal." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/proposals/:proposalId/pdf",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      return await _sbRenderProductProposalPdf(req.params.proposalId, req, res);
+    } catch (error) {
+      console.error("GET /api/products/proposals/:proposalId/pdf error:", error?.details || error);
+      if (!res.headersSent) {
+        return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download proposal PDF." });
+      }
+      try { res.end(); } catch {}
     }
   },
 );
