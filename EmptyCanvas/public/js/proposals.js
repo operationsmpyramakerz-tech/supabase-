@@ -335,9 +335,9 @@
 
   function loadingCard(label) {
     return `
-      <div class="products-loading-card">
+      <div class="products-loading-card" role="status" aria-live="polite">
         <div class="products-spinner" aria-hidden="true"></div>
-        <div><strong>Loading ${escapeHTML(label)}...</strong><span>Reading saved folders.</span></div>
+        <div><strong>Loading ${escapeHTML(label)}</strong><span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div>
       </div>
     `;
   }
