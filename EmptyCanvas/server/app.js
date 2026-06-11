@@ -13642,6 +13642,7 @@ const B2B_SCHOOL_FIELD_DEFS = [
   { key: 'solution_type', label: 'Solution Type', type: 'text', section: 'Main' },
   { key: 'theme_type', label: 'Theme Type', type: 'text', section: 'Main' },
   { key: 'education_system', label: 'Education System', type: 'text', section: 'Main' },
+  { key: 'stocktaking_column', label: 'Stocktaking Column', type: 'text', section: 'Stocktaking' },
   { key: 'governorate', label: 'Governorate', type: 'text', section: 'Location' },
   { key: 'location', label: 'Location', type: 'url', section: 'Location' },
   { key: 'date_of_supply', label: 'Date of Supply', type: 'date', section: 'Contract' },
@@ -13676,9 +13677,84 @@ const B2B_SCHOOL_FIELD_KEYS = B2B_SCHOOL_FIELD_DEFS.map((field) => field.key);
 const B2B_SCHOOL_NUMBER_FIELDS = new Set(B2B_SCHOOL_FIELD_DEFS.filter((field) => field.type === 'number').map((field) => field.key));
 const B2B_SCHOOL_BOOL_FIELDS = new Set(B2B_SCHOOL_FIELD_DEFS.filter((field) => field.type === 'checkbox').map((field) => field.key));
 
+function _sbB2BStocktakingColumnAliases() {
+  return [
+    'stocktaking_column', 'Stocktaking Column', 'stocktakingColumn', 'StocktakingColumn',
+    'stock_column', 'Stock Column', 'done_column', 'Done Column',
+  ];
+}
+
+function _sbB2BExtractStocktakingColumn(source = {}) {
+  const primary = _sbString(_sbGet(source || {}, _sbB2BStocktakingColumnAliases()));
+  if (primary) return primary;
+  if (source?.fields && typeof source.fields === 'object') {
+    return _sbString(_sbGet(source.fields, _sbB2BStocktakingColumnAliases()));
+  }
+  return '';
+}
+
+async function _sbB2BSchoolColumnKeys() {
+  if (!_sbB2BSchoolsEnabled()) return [];
+  try {
+    let keys = [];
+    try {
+      const rows = await supabaseDb.selectAll(_sbB2BSchoolsTable(), { limit: 1 });
+      const row = Array.isArray(rows) ? rows[0] || {} : {};
+      keys = Object.keys(row || {});
+    } catch (rowError) {
+      console.warn('[b2b:supabase] failed to sample b2b_schools row:', rowError?.message || rowError);
+    }
+    if (!keys.length) {
+      try {
+        const openApi = await supabaseDb.request('/', { headers: { Accept: 'application/openapi+json' } });
+        keys = _uaColumnKeysFromOpenApiSchema(openApi, _sbB2BSchoolsTable());
+      } catch (schemaError) {
+        console.warn('[b2b:supabase] failed to inspect b2b_schools schema:', schemaError?.message || schemaError);
+      }
+    }
+    return Array.from(new Set(keys || [])).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function _sbResolveB2BStocktakingStorageKeyFromKeys(keys = []) {
+  const hit = _sbFindKey(keys || [], _sbB2BStocktakingColumnAliases());
+  return hit || 'stocktaking_column';
+}
+
+function _sbPayloadHasB2BStocktakingColumn(payload = {}) {
+  const body = payload && typeof payload === 'object' ? payload : {};
+  const source = body.fields && typeof body.fields === 'object' ? body.fields : body;
+  return _sbB2BStocktakingColumnAliases().some((key) => (
+    Object.prototype.hasOwnProperty.call(source, key) || Object.prototype.hasOwnProperty.call(body, key)
+  ));
+}
+
+async function _sbApplyB2BStocktakingColumnWrite(row = {}, payload = {}) {
+  if (!_sbPayloadHasB2BStocktakingColumn(payload)) return { row, storageKey: '' };
+  const body = payload && typeof payload === 'object' ? payload : {};
+  const source = body.fields && typeof body.fields === 'object' ? body.fields : body;
+  const value = _sbB2BExtractStocktakingColumn({ ...body, ...source });
+  const keys = await _sbB2BSchoolColumnKeys();
+  const storageKey = _sbResolveB2BStocktakingStorageKeyFromKeys(keys);
+
+  // Keep only the real storage key so Supabase does not silently drop the value
+  // when the deployed table uses an older alias such as stock_column/done_column.
+  for (const alias of _sbB2BStocktakingColumnAliases()) {
+    if (alias !== storageKey && Object.prototype.hasOwnProperty.call(row, alias)) delete row[alias];
+  }
+  row[storageKey] = value || null;
+  return { row, storageKey };
+}
+
 function _sbB2BPublicFieldValues(row = {}) {
   const out = {};
   for (const key of B2B_SCHOOL_FIELD_KEYS) {
+    if (key === 'stocktaking_column') {
+      out[key] = _sbB2BExtractStocktakingColumn(row);
+      continue;
+    }
     if (B2B_SCHOOL_BOOL_FIELDS.has(key)) {
       out[key] = _sbBool(_sbGet(row, [key, key.toUpperCase(), key.replace(/^g/i, 'G')]));
     } else if (B2B_SCHOOL_NUMBER_FIELDS.has(key)) {
@@ -13771,6 +13847,7 @@ function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
   const educationSystem = _sbSplitValues(_sbGet(row, ['education_system', 'Education System', 'Education system', 'education']));
   const programType = _sbString(_sbGet(row, ['solution_type', 'Solution Type', 'program_type', 'Program type', 'Program Type', 'program']));
   const location = _sbExtractUrl(_sbGet(row, ['location', 'Location', 'google_maps', 'Google Maps'])) || _sbString(_sbGet(row, ['location', 'Location']));
+  const stocktakingColumn = _sbB2BExtractStocktakingColumn(row);
   const grades = {};
   for (let i = 1; i <= 12; i++) {
     grades[i] = _sbBool(_sbGet(row, [`g${i}`, `G${i}`, `grade_${i}`, `Grade ${i}`]));
@@ -13785,6 +13862,7 @@ function _sbSerializeB2BSchoolRow(row = {}, { detail = false } = {}) {
     programType,
     grades,
     schoolCode: _sbString(_sbGet(row, ['school_code', 'School Code', 'code', 'ID'])),
+    stocktakingColumn,
     source: 'supabase',
   };
 
@@ -13857,8 +13935,10 @@ async function _sbGetB2BSchoolStocktakingPayload(schoolId) {
   const school = await _getB2BSchoolById(schoolId);
   if (!school) return { meta: {}, items: [] };
   const schoolName = String(school.name || '').trim();
+  const stocktakingColumn = _sbB2BExtractStocktakingColumn(school);
+  const doneLookupName = stocktakingColumn || schoolName;
   const rows = await _sbStocktakingRows();
-  const doneCol = _sbB2BFindColumnInRows(rows, schoolName, 'done') || null;
+  const doneCol = _sbB2BFindColumnInRows(rows, doneLookupName, 'done') || null;
   const inventoryCol = _sbB2BFindColumnInRows(rows, schoolName, 'inventory') || null;
   const defectedCol = _sbB2BFindColumnInRows(rows, schoolName, 'defected') || null;
 
@@ -13880,6 +13960,7 @@ async function _sbGetB2BSchoolStocktakingPayload(schoolId) {
     meta: {
       schoolName,
       donePropName: doneCol?.name || null,
+      selectedStocktakingColumn: stocktakingColumn || null,
       inventoryPropName: inventoryCol?.name || null,
       inventoryDate: inventoryCol?.date || null,
       defectedPropName: defectedCol?.name || null,
@@ -15002,7 +15083,12 @@ app.post(
     try {
       if (!(await _requireB2BAdminPassword(req, res))) return;
 
-      const row = _sbBuildB2BSchoolWriteRow(req.body || {});
+      const prepared = await _sbApplyB2BStocktakingColumnWrite(
+        _sbBuildB2BSchoolWriteRow(req.body || {}),
+        req.body || {},
+      );
+      const row = prepared.row;
+      const stocktakingStorageKey = prepared.storageKey;
       const explicitId = String(req?.body?.id || req?.body?.fields?.id || '').trim();
       if (explicitId) {
         row.id = explicitId;
@@ -15012,13 +15098,21 @@ app.post(
 
       let created = null;
       try {
-        created = await _sbInsertWithMissingColumnFallback(_sbB2BSchoolsTable(), row, ['school_name']);
+        created = await _sbInsertWithMissingColumnFallback(
+          _sbB2BSchoolsTable(),
+          row,
+          ['school_name', stocktakingStorageKey].filter(Boolean),
+        );
       } catch (error) {
         const msg = String(error?.message || '').toLowerCase();
         if (Object.prototype.hasOwnProperty.call(row, 'id') && (msg.includes('identity') || msg.includes('generated') || msg.includes('duplicate'))) {
           const fallback = { ...row };
           delete fallback.id;
-          created = await _sbInsertWithMissingColumnFallback(_sbB2BSchoolsTable(), fallback, ['school_name']);
+          created = await _sbInsertWithMissingColumnFallback(
+            _sbB2BSchoolsTable(),
+            fallback,
+            ['school_name', stocktakingStorageKey].filter(Boolean),
+          );
         } else {
           throw error;
         }
@@ -15028,6 +15122,13 @@ app.post(
       return res.status(201).json(_sbSerializeB2BSchoolRow(created || row, { detail: true }));
     } catch (e) {
       console.error("Error creating B2B school:", e?.details || e);
+      const msg = String(e?.message || '');
+      if (/stocktaking_column|stock column|done_column/i.test(msg)) {
+        return res.status(e?.status || 500).json({
+          error: "B2B schools table is missing the Stocktaking Column field.",
+          details: "Run the included supabase_b2b_stocktaking_column.sql migration once, then try saving again.",
+        });
+      }
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to create B2B school." });
     }
   },
@@ -15053,14 +15154,31 @@ app.patch(
       const existing = await _sbFindB2BSchoolById(id);
       if (!existing) return res.status(404).json({ error: "School not found." });
 
-      const row = _sbBuildB2BSchoolWriteRow(req.body || {});
+      const prepared = await _sbApplyB2BStocktakingColumnWrite(
+        _sbBuildB2BSchoolWriteRow(req.body || {}),
+        req.body || {},
+      );
+      const row = prepared.row;
+      const stocktakingStorageKey = prepared.storageKey;
       delete row.id;
 
-      const updated = await _sbUpdateByIdWithMissingColumnFallback(_sbB2BSchoolsTable(), id, row, ['school_name']);
+      const updated = await _sbUpdateByIdWithMissingColumnFallback(
+        _sbB2BSchoolsTable(),
+        id,
+        row,
+        ['school_name', stocktakingStorageKey].filter(Boolean),
+      );
       await _sbClearB2BCaches(id);
       return res.json(_sbSerializeB2BSchoolRow(updated || { ...existing, ...row }, { detail: true }));
     } catch (e) {
       console.error("Error updating B2B school:", e?.details || e);
+      const msg = String(e?.message || '');
+      if (/stocktaking_column|stock column|done_column/i.test(msg)) {
+        return res.status(e?.status || 500).json({
+          error: "B2B schools table is missing the Stocktaking Column field.",
+          details: "Run the included supabase_b2b_stocktaking_column.sql migration once, then try saving again.",
+        });
+      }
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to update B2B school." });
     }
   },
