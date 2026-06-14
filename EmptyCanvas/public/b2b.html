@@ -178,8 +178,8 @@
       cursor:not-allowed;
     }
 </style>
-  <link rel="stylesheet" href="/css/style.css?v=b2b-addname-transparent-pdf-v1"/>
-  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1"/>
+  <link href="/css/ui-redesign.css?v=page-gutter-stocktaking-v1" rel="stylesheet"/>
   <script src="/js/vendor/feather-icons.min.js"></script>
 
   <style>
@@ -1582,48 +1582,8 @@
     }
   }
 </style>
-
-<style>
-  /* 2026-06-11: black Add button + no white backing card on B2B folders */
-  body.b2b-page .b2b-floating-actions .b2b-add-school-btn,
-  body.b2b-page .b2b-add-school-btn{
-    background:#050b18 !important;
-    color:#ffffff !important;
-    border:1px solid #050b18 !important;
-    box-shadow:0 16px 34px rgba(15,23,42,.24) !important;
-  }
-  body.b2b-page .b2b-floating-actions .b2b-add-school-btn:hover,
-  body.b2b-page .b2b-add-school-btn:hover{
-    background:#0b1220 !important;
-    box-shadow:0 20px 40px rgba(15,23,42,.30) !important;
-  }
-  body.b2b-page .b2b-add-school-btn svg,
-  body.b2b-page .b2b-add-school-btn span{
-    color:#ffffff !important;
-    stroke:currentColor !important;
-  }
-  body.b2b-page .b2b-folders-card{
-    background:transparent !important;
-    border:0 !important;
-    box-shadow:none !important;
-    min-height:0 !important;
-    padding:0 !important;
-  }
-  body.b2b-page .b2b-grid{
-    padding:18px 0 28px !important;
-    background:transparent !important;
-  }
-</style>
-
-<style>
-  /* 2026-06-11: longer B2B Add new customer label */
-  body.b2b-page .b2b-floating-actions .b2b-add-school-btn{
-    min-width: 178px !important;
-    white-space: nowrap !important;
-  }
-</style>
 </head>
-<body class="permissions-loading b2b-page">
+<body class="permissions-loading">
 <script>
   (function() {
     try {
@@ -1698,7 +1658,7 @@
         <div class="b2b-floating-actions">
           <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
             <i data-feather="plus-circle"></i>
-            <span>Add new customer</span>
+            <span>Add</span>
           </button>
         </div>
 
@@ -1714,6 +1674,6 @@
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=supabase-notifications-v1"></script>
-<script src="/js/b2b.js?v=b2b-addname-transparent-pdf-v1"></script>
+<script src="/js/b2b.js?v=b2b-kits-folder-style-v1"></script>
 </body>
 </html>
