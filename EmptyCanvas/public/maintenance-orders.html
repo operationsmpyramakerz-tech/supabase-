@@ -20,8 +20,8 @@
 <style>
   body.permissions-loading .sidebar li { display: none !important; }
 </style>
-<link href="/css/style.css?v=maintenance-spare-optional-error-v1" rel="stylesheet"/>
-<link href="/css/ui-redesign.css?v=page-gutter-stocktaking-v1" rel="stylesheet"/>
+<link href="/css/style.css?v=b2b-addname-transparent-pdf-v1" rel="stylesheet"/>
+<link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading" data-orders-view="maintenance">
@@ -92,15 +92,25 @@
   <div class="orders-toolbar" aria-label="Maintenance orders tools">
     <div class="orders-toolbar__scroll">
       <div id="reqTabs" class="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Maintenance Orders status">
-        <a class="tab-portfolio order-status-tab" data-tab="received" role="tab" aria-selected="true"
-           href="/orders/maintenance-orders?tab=received">
-          <span class="order-status-tab__icon"><i data-feather="tool"></i></span>
-          <span class="order-status-tab__label">Tech Visit</span>
+        <a class="tab-portfolio order-status-tab" data-tab="all" role="tab" aria-selected="true"
+           href="/orders/maintenance-orders?tab=all">
+          <span class="order-status-tab__icon"><i data-feather="layers"></i></span>
+          <span class="order-status-tab__label">All</span>
         </a>
-        <a class="tab-portfolio order-status-tab" data-tab="delivered" role="tab" aria-selected="false"
-           href="/orders/maintenance-orders?tab=delivered">
+        <a class="tab-portfolio order-status-tab" data-tab="not-started" role="tab" aria-selected="false"
+           href="/orders/maintenance-orders?tab=not-started">
+          <span class="order-status-tab__icon"><i data-feather="pause-circle"></i></span>
+          <span class="order-status-tab__label">Not started</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="in-progress" role="tab" aria-selected="false"
+           href="/orders/maintenance-orders?tab=in-progress">
+          <span class="order-status-tab__icon"><i data-feather="activity"></i></span>
+          <span class="order-status-tab__label">In progress</span>
+        </a>
+        <a class="tab-portfolio order-status-tab" data-tab="done" role="tab" aria-selected="false"
+           href="/orders/maintenance-orders?tab=done">
           <span class="order-status-tab__icon"><i data-feather="check-circle"></i></span>
-          <span class="order-status-tab__label">Delivered</span>
+          <span class="order-status-tab__label">Done</span>
         </a>
       </div>
     </div>
@@ -169,8 +179,13 @@
           <strong id="reqModalReceiptNumber">—</strong>
         </div>
         <div class="co-meta-row" id="reqReceivedByRow" hidden>
-          <span>Received by</span>
-          <strong id="reqModalOperationsBy">—</strong>
+          <span>Receipt Photos</span>
+          <strong>
+            <button type="button" class="co-inline-receipt-photos-btn" id="reqModalReceiptPhotosMetaBtn" disabled>
+              <i data-feather="image"></i>
+              <span>No photos</span>
+            </button>
+          </strong>
         </div>
       </div>
 
@@ -179,6 +194,8 @@
           <i data-feather="download"></i>
           Download
         </button>
+
+        <!-- Receipt Photos action button removed by request. The compact viewer modal remains available for existing inline "View photo" metadata only. -->
 
         <button type="button" class="ro-action-btn ro-action-btn--light" id="reqLogMaintenanceBtn" style="display:none;">
           <i data-feather="clipboard"></i>
@@ -192,6 +209,29 @@
       </div>
 
       <div class="co-modal-items" id="reqModalItems"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== RECEIPT PHOTOS VIEWER MODAL ===================== -->
+<div id="reqReceiptPhotosModal" class="co-submodal-overlay req-receipt-photos-modal" aria-hidden="true" hidden>
+  <div class="co-submodal-dialog req-receipt-photos-dialog" role="dialog" aria-modal="true" aria-labelledby="reqReceiptPhotosTitle" aria-describedby="reqReceiptPhotosSub">
+    <button type="button" class="co-submodal-close" id="reqReceiptPhotosClose" aria-label="Close receipt photos">
+      <i data-feather="x"></i>
+    </button>
+
+    <div class="co-submodal-header req-receipt-photos-header">
+      <div class="co-submodal-title" id="reqReceiptPhotosTitle">Receipt photos</div>
+      <div class="co-submodal-sub" id="reqReceiptPhotosSub" hidden></div>
+      <div class="req-receipt-photos-count" id="reqReceiptPhotosCount" hidden></div>
+    </div>
+
+    <div class="co-submodal-body">
+      <div class="req-receipt-photos-grid" id="reqReceiptPhotosGrid"></div>
+    </div>
+
+    <div class="co-submodal-actions req-receipt-photos-actions">
+      <button type="button" class="ro-action-btn ro-action-btn--dark" id="reqReceiptPhotosDone">Done</button>
     </div>
   </div>
 </div>
@@ -274,7 +314,7 @@
 </div>
 </div>
 <script>if (window.feather) feather.replace();</script>
-<script src="/js/common-ui.js?v=supabase-notifications-v1"></script>
-<script src="/js/requested-orders.js?v=maintenance-log-confirm-fix-v1"></script>
+<script src="/js/common-ui.js?v=notification-freeze-fix-v2"></script>
+<script src="/js/requested-orders.js?v=maintenance-orders-all-tabs-v1"></script>
 </body>
 </html>
