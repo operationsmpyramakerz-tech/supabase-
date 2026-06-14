@@ -4418,74 +4418,46 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   }
 }
 
+
 /* =========================================================
-   2026-06-14: unified inner page gutter + Stocktaking shell cleanup
-   - Keeps every page content away from the black app frame with the same
-     spacing used by Home.
-   - Uses simple selectors for Stocktaking so tablet/WebView browsers do not
-     leave the old white wrapper visible.
+   2026-06-11: remove persistent white backing cards
+   Applies in normal pages AND inside the persistent iframe shell. The previous
+   rules were scoped with :not(.shell-embedded), so the white wrapper could
+   reappear on tablet/desktop navigation until a hard refresh.
    ========================================================= */
-:root{
-  --ops-page-frame-gutter: 18px;
-}
-
-@media (max-width: 900px){
-  :root{ --ops-page-frame-gutter: 14px; }
-}
-
-@media (max-width: 480px){
-  :root{ --ops-page-frame-gutter: 12px; }
-}
-
-/* One shared left/right breathing space for all pages.
-   Home is excluded because it already owns the reference spacing in home.css. */
-body:not(.page-shell-host):not(.page-home) .main-content > main,
-body:not(.page-shell-host):not(.page-home) .main-content > main.container,
-body:not(.page-shell-host):not(.page-home) .main-content > main.container-full-width,
-body.shell-embedded:not(.page-home) .main-content > main,
-body.shell-embedded:not(.page-home) .main-content > main.container,
-body.shell-embedded:not(.page-home) .main-content > main.container-full-width,
-body.shell-embedded:not(.page-home) .main-content > main.tasks-v2-main,
-body.shell-embedded:not(.page-home) .main-content > main.products-shell{
-  padding-left: var(--ops-page-frame-gutter) !important;
-  padding-right: var(--ops-page-frame-gutter) !important;
-  box-sizing: border-box !important;
-}
-
-
-/* The persistent shell host owns the iframe frame only; do not add another
-   gutter around the iframe itself or Home would get double spacing. */
-body.page-shell-host .ops-shell-host-main{
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-/* Stocktaking: remove the outer white wrapper/card reliably. */
-:where(body.stocktaking-page, body.page-stocktaking) .main-content > main.container-full-width > section.card{
+:where(
+  body.current-orders-page,
+  body.operations-orders-page,
+  body.orders-review-page,
+  body[data-orders-view="maintenance"],
+  body.page-orders-maintenance-orders,
+  body.stocktaking-page,
+  body.page-stocktaking,
+  body.page-orders-new,
+  body.user-access-page,
+  body.page-user-access
+) :where(#current-orders.card, #sv-orders.card, .page-body > section.card, .main-content > main.container-full-width > section.card:has(.groups-grid), .ua-folders-panel, .ua-members-panel){
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
-  border: 0 !important;
   border-color: transparent !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  padding: 0 0 18px !important;
 }
 
-:where(body.stocktaking-page, body.page-stocktaking).shell-embedded .main-content > main.container-full-width > section.card{
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+:where(
+  body.current-orders-page,
+  body.operations-orders-page,
+  body.orders-review-page,
+  body[data-orders-view="maintenance"],
+  body.page-orders-maintenance-orders,
+  body.stocktaking-page,
+  body.page-stocktaking
+) :where(#current-orders.card, #sv-orders.card, .page-body > section.card, .main-content > main.container-full-width > section.card:has(.groups-grid)){
+  padding: 0 4px 18px !important;
 }
 
-:where(body.stocktaking-page, body.page-stocktaking) .card-toolbar{
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-/* Keep the orders wrappers transparent but let the global page gutter own the
-   frame spacing, so cards/toolbars no longer touch the shell sides. */
-:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) :where(#current-orders.card, #sv-orders.card, .page-body > section.card){
+:where(body.page-orders-new, body.shell-embedded.page-orders-new) .order-type-step{
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
@@ -4496,8 +4468,16 @@ body.page-shell-host .ops-shell-host-main{
   padding-right: 0 !important;
 }
 
-/* Products/Kits/Proposals/B2B/Users: do not let workspace wrappers stretch
-   into the frame edge when page-specific CSS has zeroed their side padding. */
-:where(body.products-page, body.proposals-page, body.kits-page, body.b2b-page, body.user-access-page) .main-content > main{
-  box-sizing: border-box !important;
+:where(body.user-access-page, body.page-user-access) .ua-page-body{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+:where(body.user-access-page, body.page-user-access) :where(.ua-folders-panel, .ua-members-panel){
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+:where(body.stocktaking-page, body.page-stocktaking) .main-content > main.container-full-width > section.card > .card-toolbar{
+  padding-right: 0 !important;
 }
