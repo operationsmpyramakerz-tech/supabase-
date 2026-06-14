@@ -4533,3 +4533,29 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   padding: 0 !important;
   margin-bottom: 14px !important;
 }
+
+/* =========================================================
+   2026-06-14: Orders Review card alignment
+   - Removes the legacy S.V. Orders side gutters that only affected
+     the cards list, so the Orders Review cards line up exactly with
+     the status toolbar like Current Orders.
+   ========================================================= */
+body.orders-review-page .main-content > main.page-body,
+body.shell-embedded.orders-review-page .main-content > main.page-body{
+  padding-inline: var(--ops-page-content-gap) !important;
+}
+
+body.orders-review-page section#sv-orders.card,
+body.shell-embedded.orders-review-page section#sv-orders.card{
+  padding-inline: 4px !important;
+}
+
+body.orders-review-page #sv-list,
+body.shell-embedded.orders-review-page #sv-list{
+  padding-inline: 0 !important;
+}
+
+body.orders-review-page #svTabs,
+body.shell-embedded.orders-review-page #svTabs{
+  padding-inline: 0 !important;
+}
