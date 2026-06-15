@@ -2171,12 +2171,17 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
 
 /* 2026-06-15: proposal quantity merge logic selector */
 .proposals-page .proposal-logic-row{
+  position:relative !important;
+  z-index:240 !important;
   display:flex;
-  justify-content:flex-end;
-  margin:0 0 14px;
+  justify-content:flex-start;
+  margin:0 0 18px;
+  overflow:visible !important;
 }
 .proposals-page .proposal-logic-field{
   width:min(100%, 320px);
+  position:relative !important;
+  z-index:241 !important;
 }
 .proposals-page .proposal-logic-field > span{
   color:#475467;
@@ -2290,8 +2295,83 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
   margin-bottom:18px !important;
 }
 
+
+
+/* 2026-06-15: grouped proposal components by product tags */
+.proposals-page .products-proposal-table tr.proposal-tag-group-row td{
+  padding:0 !important;
+  background:linear-gradient(135deg,#fff7ed,#ffffff) !important;
+  border-top:1px solid rgba(228,85,18,.18) !important;
+  border-bottom:1px solid rgba(228,85,18,.14) !important;
+}
+.proposals-page .proposal-tag-group-label{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:42px;
+  padding:10px 14px;
+  color:#9a3412;
+  font-weight:1000;
+  letter-spacing:.01em;
+}
+.proposals-page .proposal-tag-group-label span{
+  display:inline-flex;
+  align-items:center;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.proposals-page .proposal-tag-group-label span::before{
+  content:'';
+  width:9px;
+  height:9px;
+  flex:0 0 auto;
+  margin-right:9px;
+  border-radius:999px;
+  background:#e45512;
+  box-shadow:0 0 0 5px rgba(228,85,18,.10);
+}
+.proposals-page .proposal-tag-group-label small{
+  flex:0 0 auto;
+  color:#667085;
+  font-size:.78rem;
+  font-weight:950;
+}
+
 @media (max-width:1100px){
   .proposals-page .products-proposal-detail__head.proposal-detail-head--compact{
     align-items:flex-start !important;
   }
+}
+
+
+/* 2026-06-15: keep proposal Logic dropdown above the add cards */
+.proposals-page .proposal-logic-row .proposal-search-select__menu{
+  z-index:10050 !important;
+}
+.proposals-page .proposal-logic-row:has(.proposal-search-select.is-open){
+  z-index:10040 !important;
+}
+.proposals-page .products-proposal-table tr.proposal-tag-group-row td::before{
+  display:none !important;
+  content:none !important;
+}
+@media (max-width:700px){
+  .proposals-page .products-proposal-table tr.proposal-tag-group-row{
+    display:block !important;
+    box-shadow:none !important;
+    border:0 !important;
+    padding:0 !important;
+    margin:12px 0 8px !important;
+    background:transparent !important;
+  }
+  .proposals-page .products-proposal-table tr.proposal-tag-group-row td{
+    display:block !important;
+    width:100% !important;
+  }
+}
+.proposals-page .proposal-logic-row .proposal-search-select--logic.is-open{
+  z-index:10060 !important;
 }
