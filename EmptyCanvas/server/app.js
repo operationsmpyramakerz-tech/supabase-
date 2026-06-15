@@ -6608,23 +6608,23 @@ async function _sbInsertOrderRowSafe(row = {}) {
 async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
   const pid = String(proposalId || "").trim();
   const teamMemberId = String(body?.teamMemberId || body?.team_member_id || "").trim();
-  const password = String(body?.password || "").trim();
   if (!pid) {
     const err = new Error("Proposal ID is required.");
     err.status = 400;
     throw err;
   }
-  if (!teamMemberId || !password) {
-    const err = new Error("Team member and password are required.");
+  if (!teamMemberId) {
+    const err = new Error("Team member is required.");
     err.status = 400;
     throw err;
   }
-  const verified = await _sbVerifyTeamMemberPassword(teamMemberId, password);
-  if (!verified.ok) {
-    const err = new Error(verified.error || "Invalid password.");
-    err.status = verified.error === "Team member not found." ? 404 : 401;
+  const memberRow = await _sbFindTeamMemberById(teamMemberId);
+  if (!memberRow) {
+    const err = new Error("Team member not found.");
+    err.status = 404;
     throw err;
   }
+  const member = _sbSerializeProposalTeamMember(memberRow);
   const detail = await _sbProductProposalById(pid, req);
   if (!detail?.proposal) {
     const err = new Error("Proposal not found.");
@@ -6658,8 +6658,8 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
       quantity_remaining: qty,
       status: "Under Supervision",
       sv_approval: null,
-      team_member_id: verified.member.id || null,
-      team_member_name: verified.member.name || null,
+      team_member_id: member.id || null,
+      team_member_name: member.name || null,
       issue_description: `Created from proposal: ${detail.proposal.name || "Proposal"}`,
       supervisor: null,
       person_received_by_operations: null,
@@ -6669,7 +6669,7 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
     created.push(await _sbInsertOrderRowSafe(row));
   }
   await _sbInvalidateOrdersCaches();
-  return { orderNumber, orderId: `ORD-${orderNumber}`, count: created.length, member: verified.member };
+  return { orderNumber, orderId: `ORD-${orderNumber}`, count: created.length, member };
 }
 
 function _proposalPdfSafeFilename(value = "Proposal") {
@@ -24814,6 +24814,7 @@ app.post(
     res.set("Cache-Control", "no-store");
     try {
       if (!_sbOrdersEnabled()) return res.status(500).json({ ok: false, error: "Supabase Orders table is not configured." });
+      if (!await _requireProductsAdminPassword(req, res)) return;
       const result = await _sbCreateOrderFromProposal(req.params.proposalId, req.body || {}, req);
       return res.status(201).json({ ok: true, source: "supabase", ...result });
     } catch (error) {
