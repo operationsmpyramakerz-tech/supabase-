@@ -26,11 +26,19 @@
     proposalCreateMode: false,
     kitCreateMode: false,
     proposalMergeLogic: 'add',
+    downloadingProposal: false,
     copyProposalTarget: null,
     copyKitTarget: null,
   };
 
   const els = {};
+  const PROPOSAL_EXPORT_COLUMNS = [
+    { value: 'idCode', label: 'ID Code', checked: true },
+    { value: 'name', label: 'Component', checked: true },
+    { value: 'quantity', label: 'Qty', checked: true },
+    { value: 'unitPrice', label: 'Unit cost', checked: true },
+    { value: 'totalPrice', label: 'Total cost', checked: true },
+  ];
   const $ = (id) => document.getElementById(id);
 
   function currentWorkspaceMode() {
@@ -967,7 +975,7 @@
     if (!proposalId || !productId) return toast('error', 'Proposals', 'Select a product first.');
     try {
       const mergeLogic = selectedProposalMergeLogic();
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, mergeLogic, adminPassword: state.proposalAdminPassword }) });
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, mergeLogic, logic: mergeLogic, quantityLogic: mergeLogic, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -983,7 +991,7 @@
     if (!proposalId || !kitId) return toast('error', 'Proposals', 'Select a kit first.');
     try {
       const mergeLogic = selectedProposalMergeLogic();
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, mergeLogic, adminPassword: state.proposalAdminPassword }) });
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, mergeLogic, logic: mergeLogic, quantityLogic: mergeLogic, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -1226,6 +1234,252 @@
     }
   }
 
+
+  const ProposalExportModal = (() => {
+    let ui = null;
+    let resolver = null;
+    let currentColumnDefs = PROPOSAL_EXPORT_COLUMNS;
+
+    const ensure = () => {
+      if (ui) return ui;
+      const modal = document.createElement('div');
+      modal.className = 'ops-export-modal hidden proposal-export-modal';
+      modal.id = 'proposalExportModal';
+      modal.innerHTML = `
+        <div class="ops-export-modal__backdrop" data-proposal-export-cancel></div>
+        <div class="ops-export-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="proposalExportTitle">
+          <div class="ops-export-modal__header">
+            <div class="ops-export-modal__icon" aria-hidden="true"><i data-feather="download"></i></div>
+            <div>
+              <h3 class="ops-export-modal__title" id="proposalExportTitle">Download proposal file</h3>
+              <p class="ops-export-modal__hint">Choose the file type and the columns that should appear in the file.</p>
+            </div>
+            <button class="ops-export-modal__close" type="button" aria-label="Close" data-proposal-export-cancel>&times;</button>
+          </div>
+          <div class="ops-export-modal__body">
+            <div class="ops-export-field ops-export-filetype" data-proposal-export-filetype-picker>
+              <span class="ops-export-field__label">File type</span>
+              <input type="hidden" data-proposal-export-filetype value="pdf" />
+              <button class="ops-export-picker-button" type="button" data-proposal-export-filetype-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-proposal-export-filetype-summary>PDF</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-filetype__panel ops-export-floating-panel" data-proposal-export-filetype-panel role="listbox" aria-label="File type" hidden>
+                <button class="ops-export-option is-selected" type="button" data-proposal-export-filetype-option="pdf" role="option" aria-selected="true">
+                  <span>PDF</span>
+                  <i data-feather="check" aria-hidden="true"></i>
+                </button>
+                <button class="ops-export-option" type="button" data-proposal-export-filetype-option="excel" role="option" aria-selected="false">
+                  <span>Excel</span>
+                  <i data-feather="check" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+            <div class="ops-export-field ops-export-multiselect" data-proposal-export-column-picker>
+              <span class="ops-export-field__label">Columns</span>
+              <button class="ops-export-multiselect__button" type="button" data-proposal-export-column-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-proposal-export-column-summary>Columns selected</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-multiselect__panel ops-export-floating-panel" data-proposal-export-column-panel role="listbox" aria-label="Columns" hidden>
+                <div class="ops-export-columns" data-proposal-export-columns></div>
+              </div>
+            </div>
+            <div class="ops-export-modal__error" data-proposal-export-error>Please choose at least one column.</div>
+          </div>
+          <div class="ops-export-modal__footer">
+            <button class="btn btn--light" type="button" data-proposal-export-cancel>Cancel</button>
+            <button class="btn ops-export-confirm" type="button" data-proposal-export-confirm>
+              <i data-feather="download"></i>
+              <span>Download</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const fileType = modal.querySelector('[data-proposal-export-filetype]');
+      const columnsWrap = modal.querySelector('[data-proposal-export-columns]');
+      const err = modal.querySelector('[data-proposal-export-error]');
+      const confirm = modal.querySelector('[data-proposal-export-confirm]');
+      const cancelEls = Array.from(modal.querySelectorAll('[data-proposal-export-cancel]'));
+      const columnPicker = modal.querySelector('[data-proposal-export-column-picker]');
+      const columnToggle = modal.querySelector('[data-proposal-export-column-toggle]');
+      const columnPanel = modal.querySelector('[data-proposal-export-column-panel]');
+      const columnSummary = modal.querySelector('[data-proposal-export-column-summary]');
+      const fileTypePicker = modal.querySelector('[data-proposal-export-filetype-picker]');
+      const fileTypeToggle = modal.querySelector('[data-proposal-export-filetype-toggle]');
+      const fileTypePanel = modal.querySelector('[data-proposal-export-filetype-panel]');
+      const fileTypeSummary = modal.querySelector('[data-proposal-export-filetype-summary]');
+      const fileTypeOptions = Array.from(modal.querySelectorAll('[data-proposal-export-filetype-option]'));
+
+      const checks = () => Array.from(columnsWrap?.querySelectorAll('input[type="checkbox"]') || []);
+
+      const positionFloatingPanel = (toggle, panel) => {
+        if (!toggle || !panel || panel.hidden) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        const rect = toggle.getBoundingClientRect();
+        const margin = 12;
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const panelWidth = Math.min(rect.width, Math.max(0, viewportWidth - (margin * 2)));
+        const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportWidth - panelWidth - margin));
+        const belowSpace = viewportHeight - rect.bottom - margin;
+        const aboveSpace = rect.top - margin;
+        const shouldOpenUp = belowSpace < 230 && aboveSpace > belowSpace;
+        const maxHeight = Math.max(160, Math.min(340, (shouldOpenUp ? aboveSpace : belowSpace) - 8));
+        panel.style.width = `${panelWidth}px`;
+        panel.style.left = `${left}px`;
+        panel.style.maxHeight = `${maxHeight}px`;
+        if (shouldOpenUp) {
+          panel.style.top = 'auto';
+          panel.style.bottom = `${Math.max(margin, viewportHeight - rect.top + 8)}px`;
+        } else {
+          panel.style.top = `${Math.min(rect.bottom + 8, viewportHeight - margin)}px`;
+          panel.style.bottom = 'auto';
+        }
+      };
+
+      const setFloatingPanelOpen = (toggle, panel, open) => {
+        if (!toggle || !panel) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        panel.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.classList.toggle('is-open', !!open);
+        if (open) {
+          positionFloatingPanel(toggle, panel);
+          requestAnimationFrame(() => positionFloatingPanel(toggle, panel));
+        }
+      };
+
+      const updateFileTypeSummary = () => {
+        const value = String(fileType?.value || 'pdf').toLowerCase();
+        const label = value === 'excel' ? 'Excel' : 'PDF';
+        if (fileTypeSummary) fileTypeSummary.textContent = label;
+        fileTypeOptions.forEach((option) => {
+          const selected = option.dataset.proposalExportFiletypeOption === value;
+          option.classList.toggle('is-selected', selected);
+          option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+      };
+
+      const selectedLabels = () => checks()
+        .filter((x) => x.checked)
+        .map((x) => currentColumnDefs.find((col) => col.value === x.value)?.label || x.value);
+
+      const updateColumnSummary = () => {
+        const labels = selectedLabels();
+        if (columnSummary) columnSummary.textContent = labels.length ? labels.join(', ') : 'Select columns';
+        if (err && labels.length) err.style.display = 'none';
+      };
+
+      const setFileTypePanelOpen = (open) => {
+        if (open) setColumnPanelOpen(false);
+        setFloatingPanelOpen(fileTypeToggle, fileTypePanel, open);
+      };
+
+      const setColumnPanelOpen = (open) => {
+        if (open) setFileTypePanelOpen(false);
+        setFloatingPanelOpen(columnToggle, columnPanel, open);
+      };
+
+      const close = (value = null) => {
+        setFileTypePanelOpen(false);
+        setColumnPanelOpen(false);
+        modal.classList.add('hidden');
+        document.body.classList.remove('modal-open');
+        if (resolver) {
+          const done = resolver;
+          resolver = null;
+          done(value);
+        }
+      };
+
+      const renderColumns = (columns) => {
+        if (!columnsWrap) return;
+        currentColumnDefs = Array.isArray(columns) && columns.length ? columns : PROPOSAL_EXPORT_COLUMNS;
+        columnsWrap.innerHTML = currentColumnDefs.map((col) => `
+          <label class="ops-export-check" role="option">
+            <input type="checkbox" value="${escapeHTML(col.value)}" ${col.checked ? 'checked' : ''} />
+            <span>${escapeHTML(col.label)}</span>
+          </label>
+        `).join('');
+        checks().forEach((input) => input.addEventListener('change', updateColumnSummary));
+      };
+
+      cancelEls.forEach((el) => el.addEventListener('click', () => close(null)));
+      modal.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (fileTypePanel && !fileTypePanel.hidden) return setFileTypePanelOpen(false);
+        if (columnPanel && !columnPanel.hidden) return setColumnPanelOpen(false);
+        close(null);
+      });
+      fileTypeToggle?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setFileTypePanelOpen(!!fileTypePanel?.hidden);
+      });
+      fileTypePanel?.addEventListener('click', (e) => e.stopPropagation());
+      fileTypeOptions.forEach((option) => {
+        option.addEventListener('click', () => {
+          if (fileType) fileType.value = option.dataset.proposalExportFiletypeOption || 'pdf';
+          updateFileTypeSummary();
+          setFileTypePanelOpen(false);
+        });
+      });
+      columnToggle?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setColumnPanelOpen(!!columnPanel?.hidden);
+      });
+      columnPanel?.addEventListener('click', (e) => e.stopPropagation());
+      document.addEventListener('click', (e) => {
+        if (modal.classList.contains('hidden')) return;
+        const target = e.target;
+        const insideFileType = fileTypePicker?.contains(target) || fileTypePanel?.contains(target);
+        const insideColumns = columnPicker?.contains(target) || columnPanel?.contains(target);
+        if (insideFileType || insideColumns) return;
+        setFileTypePanelOpen(false);
+        setColumnPanelOpen(false);
+      });
+      const repositionOpenPanels = () => {
+        if (modal.classList.contains('hidden')) return;
+        positionFloatingPanel(fileTypeToggle, fileTypePanel);
+        positionFloatingPanel(columnToggle, columnPanel);
+      };
+      window.addEventListener('resize', repositionOpenPanels);
+      window.addEventListener('scroll', repositionOpenPanels, true);
+      confirm?.addEventListener('click', () => {
+        const selected = checks().filter((x) => x.checked).map((x) => x.value);
+        if (!selected.length) {
+          if (err) err.style.display = 'block';
+          setColumnPanelOpen(true);
+          return;
+        }
+        if (err) err.style.display = 'none';
+        close({ fileType: String(fileType?.value || 'pdf').toLowerCase(), columns: selected });
+      });
+
+      ui = { modal, fileType, renderColumns, updateFileTypeSummary, updateColumnSummary, setFileTypePanelOpen, setColumnPanelOpen };
+      hydrateIcons(modal);
+      return ui;
+    };
+
+    return {
+      open: () => new Promise((resolve) => {
+        const x = ensure();
+        resolver = resolve;
+        if (x.fileType) x.fileType.value = 'pdf';
+        x.renderColumns(PROPOSAL_EXPORT_COLUMNS.map((col) => ({ ...col })));
+        x.updateFileTypeSummary();
+        x.updateColumnSummary();
+        x.modal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        requestAnimationFrame(() => x.modal.querySelector('[data-proposal-export-filetype-toggle]')?.focus());
+      }),
+    };
+  })();
+
   function filenameFromDisposition(disposition, fallback) {
     const header = String(disposition || '');
     const utf = header.match(/filename\*=UTF-8''([^;]+)/i);
@@ -1239,6 +1493,13 @@
   async function downloadActiveProposal() {
     const proposalId = String(state.activeProposal?.id || '').trim();
     if (!proposalId || state.downloadingProposal) return;
+    const options = await ProposalExportModal.open();
+    if (!options) return;
+
+    const fileType = String(options.fileType || 'pdf').toLowerCase() === 'excel' ? 'excel' : 'pdf';
+    const columns = Array.isArray(options.columns) && options.columns.length
+      ? options.columns
+      : PROPOSAL_EXPORT_COLUMNS.filter((col) => col.checked).map((col) => col.value);
     const btn = els.proposalDetail?.querySelector?.('[data-action="download-proposal"]');
     const label = btn?.querySelector?.('span');
     const originalLabel = label ? label.textContent : '';
@@ -1246,16 +1507,19 @@
     if (btn) btn.disabled = true;
     if (label) label.textContent = 'Downloading...';
     try {
-      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/pdf?_ts=${Date.now()}`, {
+      const query = new URLSearchParams({ _ts: String(Date.now()), columns: columns.join(',') });
+      const endpoint = fileType === 'excel' ? 'excel' : 'pdf';
+      const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/${endpoint}?${query.toString()}`, {
         credentials: 'same-origin',
         cache: 'no-store',
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || 'Failed to download proposal.');
+        throw new Error(data?.error || `Failed to download proposal ${fileType === 'excel' ? 'Excel' : 'PDF'}.`);
       }
       const blob = await res.blob();
-      const fallbackName = `${String(state.activeProposal?.name || 'Proposal').replace(/[^a-z0-9_-]+/gi, '_') || 'Proposal'}.pdf`;
+      const ext = fileType === 'excel' ? 'xlsx' : 'pdf';
+      const fallbackName = `${String(state.activeProposal?.name || 'Proposal').replace(/[^a-z0-9_-]+/gi, '_') || 'Proposal'}.${ext}`;
       const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), fallbackName);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1265,7 +1529,7 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
-      toast('success', 'Proposal', 'Proposal PDF downloaded.');
+      toast('success', 'Proposal', `Proposal ${fileType === 'excel' ? 'Excel' : 'PDF'} downloaded.`);
     } catch (error) {
       toast('error', 'Proposal', error?.message || 'Failed to download proposal.');
     } finally {
