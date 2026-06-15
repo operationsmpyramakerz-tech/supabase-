@@ -5879,6 +5879,22 @@ function _sbProposalQuantity(value) {
   return Math.max(1, Math.round(n));
 }
 
+function _sbProposalMergeLogic(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "-");
+  if (raw === "max" || raw === "max-logic") return "max";
+  if (raw === "min" || raw === "min-logic") return "min";
+  return "add";
+}
+
+function _sbProposalMergedQuantity(existingQuantity, incomingQuantity, mergeLogic = "add") {
+  const existingQty = _sbProposalQuantity(existingQuantity);
+  const incomingQty = _sbProposalQuantity(incomingQuantity);
+  const logic = _sbProposalMergeLogic(mergeLogic);
+  if (logic === "max") return Math.max(existingQty, incomingQty);
+  if (logic === "min") return Math.min(existingQty, incomingQty);
+  return existingQty + incomingQty;
+}
+
 function _sbProposalMissingTableError(error) {
   if (_sbIsMissingTableError(error)) {
     const err = new Error("Products proposals tables are not created yet. Please run products_proposals_migration.sql in Supabase first.");
@@ -6107,7 +6123,7 @@ async function _sbRequireEditableProductProposal(proposalId, req = null, body = 
   return row;
 }
 
-async function _sbUpsertProductProposalItem(proposalId, product, quantity) {
+async function _sbUpsertProductProposalItem(proposalId, product, quantity, options = {}) {
   const id = String(proposalId || "").trim();
   const productId = String(product?.id || "").trim();
   if (!id) {
@@ -6122,11 +6138,12 @@ async function _sbUpsertProductProposalItem(proposalId, product, quantity) {
   }
   const qty = _sbProposalQuantity(quantity);
   const now = new Date().toISOString();
+  const mergeLogic = _sbProposalMergeLogic(options?.mergeLogic || options?.logic || options?.quantityLogic);
   const existing = (await _sbProposalItemRows(id)).find((item) => String(_sbGet(item, ["product_id", "productId", "Product ID"]) ?? "").trim() === productId);
   if (existing) {
     const existingQty = _sbProposalQuantity(_sbGet(existing, ["quantity", "qty", "Quantity", "Qty"]));
     const updated = await supabaseDb.updateById(_sbProductProposalItemsTable(), String(_sbGet(existing, ["id", "ID"])), {
-      quantity: existingQty + qty,
+      quantity: _sbProposalMergedQuantity(existingQty, qty, mergeLogic),
       product_name: product.name || "Untitled Product",
       updated_at: now,
     });
@@ -6153,7 +6170,7 @@ async function _sbAddProductProposalItem(proposalId, body = {}, req = null) {
     throw err;
   }
   await _sbRequireEditableProductProposal(proposalId, req, body);
-  await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1);
+  await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1, { mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic });
   await _sbTouchProductProposal(proposalId);
   return await _sbProductProposalById(proposalId, req);
 }
@@ -6173,7 +6190,7 @@ async function _sbAddProductProposalItemsByTag(proposalId, body = {}, req = null
     throw err;
   }
   for (const product of products) {
-    await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1);
+    await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1, { mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic });
   }
   await _sbTouchProductProposal(proposalId);
   const detail = await _sbProductProposalById(proposalId, req);
@@ -6532,7 +6549,7 @@ async function _sbAddProductProposalItemsByKit(proposalId, body = {}, req = null
     const product = productMap.get(String(item.productId || "")) || { id: item.productId, name: item.productName };
     if (!product?.id) continue;
     const itemQty = _sbProposalQuantity(item.quantity || 1);
-    await _sbUpsertProductProposalItem(proposalId, product, itemQty * kitMultiplier);
+    await _sbUpsertProductProposalItem(proposalId, product, itemQty * kitMultiplier, { mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic });
     addedCount += 1;
   }
   await _sbTouchProductProposal(proposalId);
