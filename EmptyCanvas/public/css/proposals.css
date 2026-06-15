@@ -2167,3 +2167,43 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
   margin-left:8px !important;
   vertical-align:middle !important;
 }
+
+
+/* 2026-06-15: proposal quantity merge logic selector */
+.proposals-page .proposal-logic-row{
+  display:flex;
+  justify-content:flex-end;
+  margin:0 0 14px;
+}
+.proposals-page .proposal-logic-field{
+  width:min(100%, 320px);
+}
+.proposals-page .proposal-logic-field > span{
+  color:#475467;
+  font-weight:900;
+}
+.proposals-page .proposal-logic-field select{
+  width:100%;
+  min-height:52px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:18px;
+  background:#ffffff;
+  color:#0f172a;
+  padding:0 46px 0 16px;
+  font-weight:950;
+  outline:0;
+  box-shadow:0 12px 26px rgba(15,23,42,.06);
+  appearance:auto;
+}
+.proposals-page .proposal-logic-field select:focus{
+  border-color:rgba(228,85,18,.45);
+  box-shadow:0 0 0 4px rgba(228,85,18,.10), 0 12px 26px rgba(15,23,42,.06);
+}
+@media (max-width:700px){
+  .proposals-page .proposal-logic-row{
+    justify-content:stretch;
+  }
+  .proposals-page .proposal-logic-field{
+    width:100%;
+  }
+}
