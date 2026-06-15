@@ -129,14 +129,23 @@
 
   function combinedMetaForProposal(proposal = {}) {
     const id = String(proposal?.id || '').trim();
-    const directSources = Array.isArray(proposal?.combinedSources) ? proposal.combinedSources : null;
+    const directSources = Array.isArray(proposal?.combinedSources) ? proposal.combinedSources.filter(Boolean) : [];
+    const directMatrix = Array.isArray(proposal?.combinedMatrix) ? proposal.combinedMatrix.filter(Boolean) : [];
     const directNote = String(proposal?.combineNote || proposal?.combinedNote || '').trim();
     const directLogic = String(proposal?.combineLogic || proposal?.combinedLogic || '').trim();
-    if (directSources || directNote || directLogic) {
-      return { sources: directSources || [], note: directNote, logic: normalizeCombineLogic(directLogic || 'add'), matrix: Array.isArray(proposal?.combinedMatrix) ? proposal.combinedMatrix : [] };
+    const hasServerMeta = directSources.length > 0 || directMatrix.length > 0 || !!directNote || !!directLogic;
+    if (hasServerMeta) {
+      return { sources: directSources, note: directNote, logic: normalizeCombineLogic(directLogic || 'add'), matrix: directMatrix };
     }
     if (!id) return null;
-    return readCombinedMetaStore()[id] || null;
+    const saved = readCombinedMetaStore()[id] || null;
+    if (!saved) return null;
+    const savedSources = Array.isArray(saved.sources) ? saved.sources.filter(Boolean) : [];
+    const savedMatrix = Array.isArray(saved.matrix) ? saved.matrix.filter(Boolean) : [];
+    const savedNote = String(saved.note || '').trim();
+    const savedLogic = String(saved.logic || '').trim();
+    if (!savedSources.length && !savedMatrix.length && !savedNote && !savedLogic) return null;
+    return { ...saved, sources: savedSources, matrix: savedMatrix, logic: normalizeCombineLogic(savedLogic || 'add') };
   }
 
   function combinedMetaCardHTML(proposal = {}) {
@@ -144,9 +153,10 @@
     if (!meta) return '';
     const sources = Array.isArray(meta.sources) ? meta.sources.filter((source) => source?.name || source?.id) : [];
     const names = sources.map((source) => String(source?.name || source?.id || '').trim()).filter(Boolean);
+    if (!names.length && !String(meta.note || '').trim()) return '';
     const sourceText = names.length ? names.join(', ') : 'selected proposals';
     const logicText = normalizeCombineLogic(meta.logic) === 'separate' ? 'Separate logic' : 'Add logic';
-    const note = String(meta.note || `This proposal combines ${sourceText}.`).trim();
+    const note = `This proposal combines: ${sourceText}.`;
     return `
       <div class="proposal-combined-info-card">
         <div class="proposal-combined-info-card__icon"><i data-feather="git-merge"></i></div>
@@ -280,6 +290,78 @@
       };
       form?.addEventListener('submit', onSubmit);
       modal.querySelectorAll('[data-admin-cancel]').forEach((node) => node.addEventListener('click', onCancel));
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKeydown);
+    });
+  }
+
+  function ensureProposalDeleteConfirmModal() {
+    let modal = document.querySelector('[data-proposal-delete-modal]');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'products-modal-overlay proposal-delete-modal-overlay';
+    modal.dataset.proposalDeleteModal = 'true';
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+      <div class="products-modal proposal-delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="proposalDeleteConfirmTitle">
+        <button type="button" class="products-modal__close" data-delete-cancel aria-label="Close delete confirmation"><span aria-hidden="true">×</span></button>
+        <div class="products-modal__header">
+          <div class="products-modal__icon proposal-delete-confirm-modal__icon"><i data-feather="trash-2"></i></div>
+          <div>
+            <h2 id="proposalDeleteConfirmTitle" data-delete-title>Delete proposal?</h2>
+            <p data-delete-message>This action cannot be undone.</p>
+          </div>
+        </div>
+        <div class="proposal-delete-confirm-modal__warning">
+          <i data-feather="alert-triangle"></i>
+          <span>The folder and all saved components inside it will be removed permanently.</span>
+        </div>
+        <div class="products-modal__actions">
+          <button type="button" class="products-btn products-btn--light" data-delete-cancel>Cancel</button>
+          <button type="button" class="products-btn proposal-delete-confirm-modal__delete" data-delete-confirm><i data-feather="trash-2"></i><span>Delete</span></button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    hydrateIcons(modal);
+    return modal;
+  }
+
+  function requestProposalDeleteConfirmation({ kind = 'proposal', name = '' } = {}) {
+    const modal = ensureProposalDeleteConfirmModal();
+    const label = kind === 'kit' ? 'kit' : 'proposal';
+    const title = modal.querySelector('[data-delete-title]');
+    const message = modal.querySelector('[data-delete-message]');
+    const confirm = modal.querySelector('[data-delete-confirm]');
+    if (title) title.textContent = `Delete ${label}?`;
+    if (message) message.textContent = `Delete ${name || `this ${label}`}? This action cannot be undone.`;
+    if (confirm) {
+      const span = confirm.querySelector('span');
+      if (span) span.textContent = `Delete ${label}`;
+    }
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('products-modal-open');
+    setTimeout(() => confirm && confirm.focus(), 40);
+
+    return new Promise((resolve) => {
+      const cleanup = (value) => {
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('products-modal-open');
+        modal.querySelectorAll('[data-delete-cancel]').forEach((node) => node.removeEventListener('click', onCancel));
+        confirm?.removeEventListener('click', onConfirm);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKeydown);
+        resolve(value);
+      };
+      const onCancel = (event) => { event.preventDefault(); cleanup(false); };
+      const onConfirm = (event) => { event.preventDefault(); cleanup(true); };
+      const onBackdrop = (event) => { if (event.target === modal) cleanup(false); };
+      const onKeydown = (event) => { if (event.key === 'Escape') cleanup(false); };
+      modal.querySelectorAll('[data-delete-cancel]').forEach((node) => node.addEventListener('click', onCancel));
+      confirm?.addEventListener('click', onConfirm);
       modal.addEventListener('click', onBackdrop);
       document.addEventListener('keydown', onKeydown);
     });
@@ -477,6 +559,43 @@
       .sort((a, b) => String(a.tag || '').localeCompare(String(b.tag || '')));
   }
 
+
+  function proposalNormKey(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function separateCombinedMeta(proposal = state.activeProposal) {
+    const meta = combinedMetaForProposal(proposal);
+    if (!meta || normalizeCombineLogic(meta.logic) !== 'separate') return null;
+    const sources = Array.isArray(meta.sources) ? meta.sources.filter((source) => source?.id || source?.name) : [];
+    const matrix = Array.isArray(meta.matrix) ? meta.matrix.filter(Boolean) : [];
+    if (!sources.length || !matrix.length) return null;
+    return { ...meta, sources, matrix };
+  }
+
+  function matrixRowForItem(item = {}, meta = null) {
+    const matrix = Array.isArray(meta?.matrix) ? meta.matrix : [];
+    const productId = String(item?.productId || item?.product_id || '').trim();
+    const productName = proposalNormKey(item?.productName || item?.product_name || '');
+    return matrix.find((row) => {
+      const rowProductId = String(row?.productId || row?.product_id || '').trim();
+      if (productId && rowProductId && productId === rowProductId) return true;
+      return productName && proposalNormKey(row?.name || row?.productName || row?.product_name || '') === productName;
+    }) || null;
+  }
+
+  function proposalTableColumnCount(meta = null) {
+    const sourceCount = Array.isArray(meta?.sources) ? meta.sources.length : 0;
+    return sourceCount ? sourceCount + 6 : 6;
+  }
+
+  function proposalTableHeaderHTML(meta = null) {
+    const sources = Array.isArray(meta?.sources) ? meta.sources : [];
+    if (!sources.length) return '<thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th></th></tr></thead>';
+    const sourceHeaders = sources.map((source) => `<th class="proposal-source-qty-head">${escapeHTML(source?.name || source?.id || 'Proposal')} Qty</th>`).join('');
+    return `<thead><tr><th>Component name</th>${sourceHeaders}<th>Total Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th></th></tr></thead>`;
+  }
+
   function formatCurrency(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return '—';
@@ -601,7 +720,7 @@
     return kind === 'kit' ? !!state.kitEditMode : !!state.proposalEditMode;
   }
 
-  function renderItemRow(item, kind) {
+  function renderItemRow(item, kind, options = {}) {
     const actionPrefix = kind === 'kit' ? 'kit' : 'proposal';
     const editable = isEditingKind(kind);
     const id = String(item?.id || '').trim();
@@ -610,18 +729,27 @@
     const unitPrice = itemUnitPrice(item);
     const totalPrice = unitPrice === null ? null : unitPrice * qty;
     const url = itemProductUrl(item);
+    const separateMeta = options?.separateMeta || null;
+    const matrixRow = separateMeta ? matrixRowForItem(item, separateMeta) : null;
     const linkHTML = url
       ? `<a class="proposal-row-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open product link for ${escapeHTML(name)}"><i data-feather="external-link"></i></a>`
       : `<span class="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><i data-feather="minus"></i></span>`;
     const qtyHTML = editable
       ? `<input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" />`
       : `<strong>${escapeHTML(qty)}</strong>`;
+    const sourceQtyHTML = separateMeta
+      ? separateMeta.sources.map((source) => {
+          const sourceQty = Number(matrixRow?.sourceQuantities?.[source.id] || 0) || 0;
+          return `<td class="proposal-source-qty-cell"><strong>${escapeHTML(formatNumber(sourceQty))}</strong></td>`;
+        }).join('')
+      : '';
     const actionHTML = editable
       ? `<button type="button" class="proposal-row-delete proposal-row-delete--icon" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}" aria-label="Delete ${escapeHTML(name)}" title="Delete"><i data-feather="trash-2"></i></button>`
       : '';
     return `
-      <tr data-item-id="${escapeHTML(id)}">
+      <tr data-item-id="${escapeHTML(id)}"${separateMeta ? ' class="proposal-combined-table-row"' : ''}>
         <td class="proposal-component-name"><strong>${escapeHTML(name)}</strong></td>
+        ${sourceQtyHTML}
         <td>${qtyHTML}</td>
         <td class="proposal-price-cell">${escapeHTML(formatCurrency(unitPrice))}</td>
         <td class="proposal-price-cell proposal-price-cell--total">${escapeHTML(formatCurrency(totalPrice))}</td>
@@ -631,22 +759,24 @@
     `;
   }
 
-  function renderItemRows(items, kind) {
+  function renderItemRows(items, kind, options = {}) {
     const editable = isEditingKind(kind);
+    const separateMeta = kind === 'proposal' ? (options?.separateMeta || separateCombinedMeta(state.activeProposal)) : null;
+    const colspan = proposalTableColumnCount(separateMeta);
     if (!items.length) {
-      return `<tr><td colspan="6"><div class="products-table-empty">No components yet. ${editable ? `Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.` : 'Open Edit from the folder menu to add components.'}</div></td></tr>`;
+      return `<tr><td colspan="${escapeHTML(colspan)}"><div class="products-table-empty">No components yet. ${editable ? `Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.` : 'Open Edit from the folder menu to add components.'}</div></td></tr>`;
     }
     if (kind !== 'proposal') return items.map((item) => renderItemRow(item, kind)).join('');
     return groupedProposalItemsByTag(items).map((group) => `
       <tr class="proposal-tag-group-row" data-proposal-tag-group="${escapeHTML(group.tag)}">
-        <td colspan="6">
+        <td colspan="${escapeHTML(colspan)}">
           <div class="proposal-tag-group-label">
             <span>${escapeHTML(group.tag)}</span>
             <small>${formatNumber(group.items.length)} item${group.items.length === 1 ? '' : 's'}</small>
           </div>
         </td>
       </tr>
-      ${group.items.map((item) => renderItemRow(item, kind)).join('')}
+      ${group.items.map((item) => renderItemRow(item, kind, { separateMeta })).join('')}
     `).join('');
   }
 
@@ -698,6 +828,7 @@
     const count = state.proposalItems.length;
     const editable = !!state.proposalEditMode;
     const createMode = !!state.proposalCreateMode;
+    const separateMeta = separateCombinedMeta(proposal);
     return `
       <header class="products-proposal-detail__head proposal-detail-head--compact">
         <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
@@ -709,7 +840,6 @@
         `}
       </header>
       ${!createMode ? combinedMetaCardHTML(proposal) : ''}
-      ${!createMode ? combinedMatrixCardHTML(proposal) : ''}
       ${editable ? editNameBlockHTML('proposal', createMode ? '' : (proposal?.name || 'Proposal'), { createMode, required: createMode }) : ''}
       ${createMode ? createModeHintHTML('proposal') : ''}
       ${editable && !createMode ? proposalLogicControlHTML() : ''}
@@ -738,9 +868,9 @@
           <span>${formatNumber(count)} item${count === 1 ? '' : 's'}</span>
         </div>
         <div class="products-proposal-table-wrap">
-          <table class="products-proposal-table">
-            <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th></th></tr></thead>
-            <tbody>${renderItemRows(state.proposalItems, 'proposal')}</tbody>
+          <table class="products-proposal-table ${separateMeta ? 'products-proposal-table--combined-separate' : ''}">
+            ${proposalTableHeaderHTML(separateMeta)}
+            <tbody>${renderItemRows(state.proposalItems, 'proposal', { separateMeta })}</tbody>
           </table>
         </div>
         ${totalBlockHTML(state.proposalItems)}
@@ -1256,7 +1386,7 @@
     const adminPassword = requestAdminIfNeeded(folder, 'delete');
     if (adminPassword === null) return;
     const label = kind === 'kit' ? 'kit' : 'proposal';
-    const ok = window.confirm(`Delete ${folder.name || label}? This action cannot be undone.`);
+    const ok = await requestProposalDeleteConfirmation({ kind, name: folder.name || label });
     if (!ok) return;
     const url = kind === 'kit'
       ? `/api/products/kits/${encodeURIComponent(folder.id)}`
