@@ -5933,6 +5933,12 @@ function _sbSerializeProductProposal(row = {}, itemsCount = 0, req = null) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbProposalText(_sbGet(row, ["name", "Name", "proposal_name", "Proposal Name"])) || "Untitled Proposal";
   const owner = _sbProposalOwnerInfo(row);
+  const combinedSourcesRaw = _sbProposalText(_sbGet(row, ["combined_sources", "combined_from", "combined_proposals", "Combined Sources", "Combined From"]));
+  const combinedMatrixRaw = _sbProposalText(_sbGet(row, ["combined_matrix", "combine_matrix", "Combined Matrix"]));
+  const parseJson = (raw, fallback) => {
+    if (!raw) return fallback;
+    try { const parsed = JSON.parse(raw); return parsed ?? fallback; } catch { return fallback; }
+  };
   return {
     id,
     name,
@@ -5942,6 +5948,10 @@ function _sbSerializeProductProposal(row = {}, itemsCount = 0, req = null) {
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
     itemsCount: Number(itemsCount) || 0,
     canEdit: req ? _sbProposalCurrentUserOwns(row, req) : false,
+    combinedSources: parseJson(combinedSourcesRaw, []),
+    combineLogic: _sbProposalText(_sbGet(row, ["combine_logic", "combined_logic", "Combine Logic"])) || null,
+    combineNote: _sbProposalText(_sbGet(row, ["combine_note", "combined_note", "Combined Note"])) || null,
+    combinedMatrix: parseJson(combinedMatrixRaw, []),
   };
 }
 
@@ -6256,6 +6266,12 @@ function _sbSerializeProductKit(row = {}, itemsCount = 0, req = null) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbProposalText(_sbGet(row, ["name", "Name", "kit_name", "Kit Name"])) || "Untitled Kit";
   const owner = _sbProposalOwnerInfo(row);
+  const combinedSourcesRaw = _sbProposalText(_sbGet(row, ["combined_sources", "combined_from", "combined_proposals", "Combined Sources", "Combined From"]));
+  const combinedMatrixRaw = _sbProposalText(_sbGet(row, ["combined_matrix", "combine_matrix", "Combined Matrix"]));
+  const parseJson = (raw, fallback) => {
+    if (!raw) return fallback;
+    try { const parsed = JSON.parse(raw); return parsed ?? fallback; } catch { return fallback; }
+  };
   return {
     id,
     name,
@@ -6265,6 +6281,10 @@ function _sbSerializeProductKit(row = {}, itemsCount = 0, req = null) {
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
     itemsCount: Number(itemsCount) || 0,
     canEdit: req ? _sbProposalCurrentUserOwns(row, req) : false,
+    combinedSources: parseJson(combinedSourcesRaw, []),
+    combineLogic: _sbProposalText(_sbGet(row, ["combine_logic", "combined_logic", "Combine Logic"])) || null,
+    combineNote: _sbProposalText(_sbGet(row, ["combine_note", "combined_note", "Combined Note"])) || null,
+    combinedMatrix: parseJson(combinedMatrixRaw, []),
   };
 }
 
@@ -6791,6 +6811,443 @@ async function _sbProductProposalExportData(proposalId, req = null) {
   }, { items: 0, quantity: 0, total: 0 });
 
   return { detail, rows, groupedRows, totals };
+}
+
+
+function _proposalCombineLogic(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "-");
+  if (raw === "separate" || raw === "separate-logic") return "separate";
+  return "add";
+}
+
+function _proposalCombineLogicLabel(value) {
+  return _proposalCombineLogic(value) === "separate" ? "Separate logic" : "Add logic";
+}
+
+function _proposalIdsList(value) {
+  const arr = Array.isArray(value) ? value : String(value || "").split(",");
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const id = String(item || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function _proposalCombinedMeta({ sources = [], logic = "add", matrix = [] } = {}) {
+  const cleanSources = (Array.isArray(sources) ? sources : [])
+    .map((source) => ({ id: String(source?.id || "").trim(), name: String(source?.name || "").trim() }))
+    .filter((source) => source.id || source.name);
+  const sourceText = cleanSources.map((source) => source.name || source.id).filter(Boolean).join(", ") || "selected proposals";
+  const cleanLogic = _proposalCombineLogic(logic);
+  return {
+    sources: cleanSources,
+    logic: cleanLogic,
+    note: `This proposal combines ${sourceText}.`,
+    matrix: Array.isArray(matrix) ? matrix : [],
+  };
+}
+
+async function _sbProductProposalsCombinedExportData(proposalIds = [], req = null, logic = "add") {
+  const ids = _proposalIdsList(proposalIds);
+  if (ids.length < 2) {
+    const err = new Error("Please select at least two proposals to combine.");
+    err.status = 400;
+    throw err;
+  }
+
+  const productMap = await _sbProductsMapById();
+  const details = [];
+  for (const id of ids) {
+    const detail = await _sbProductProposalById(id, req);
+    if (!detail?.proposal) {
+      const err = new Error("One of the selected proposals was not found.");
+      err.status = 404;
+      throw err;
+    }
+    details.push(detail);
+  }
+
+  const sources = details.map((detail) => ({
+    id: String(detail.proposal.id || "").trim(),
+    name: String(detail.proposal.name || "Proposal").trim() || "Proposal",
+  }));
+
+  const rowsMap = new Map();
+  for (const detail of details) {
+    const sourceId = String(detail.proposal.id || "").trim();
+    for (const item of detail.items || []) {
+      const product = productMap.get(String(item?.productId || "")) || {};
+      const productId = String(item?.productId || product?.id || "").trim();
+      const name = String(product?.name || item?.productName || item?.product_name || "Untitled Product").trim() || "Untitled Product";
+      const key = productId ? `id:${productId}` : `name:${normKey(name)}`;
+      const quantity = _sbProposalQuantity(item?.quantity || 1);
+      const unitPriceRaw = product?.unitPrice ?? product?.unit_price ?? item?.unitPrice ?? item?.unit_price ?? null;
+      const unitPrice = Number(unitPriceRaw);
+      const cleanUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null;
+      if (!rowsMap.has(key)) {
+        rowsMap.set(key, {
+          key,
+          productId: productId || null,
+          idCode: String(product?.displayId || product?.idCode || product?.id_code || "").trim(),
+          name,
+          url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
+          tag: firstProductTagForServer(product),
+          sourceQuantities: {},
+          quantity: 0,
+          unitPrice: cleanUnitPrice,
+          totalPrice: cleanUnitPrice === null ? null : 0,
+        });
+      }
+      const row = rowsMap.get(key);
+      row.sourceQuantities[sourceId] = (Number(row.sourceQuantities[sourceId]) || 0) + quantity;
+      row.quantity += quantity;
+      if (row.unitPrice === null && cleanUnitPrice !== null) row.unitPrice = cleanUnitPrice;
+    }
+  }
+
+  const rows = Array.from(rowsMap.values()).map((row) => {
+    const unitPrice = Number(row.unitPrice);
+    const cleanUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null;
+    const totalQuantity = sources.reduce((sum, source) => sum + (Number(row.sourceQuantities[source.id]) || 0), 0);
+    return {
+      ...row,
+      quantity: totalQuantity,
+      totalPrice: cleanUnitPrice === null ? null : cleanUnitPrice * totalQuantity,
+      sourceQuantities: sources.reduce((acc, source) => {
+        acc[source.id] = Number(row.sourceQuantities[source.id]) || 0;
+        return acc;
+      }, {}),
+    };
+  }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+  const groupedRows = Array.from(rows.reduce((map, row) => {
+    const tag = String(row.tag || "Uncategorized").trim() || "Uncategorized";
+    const key = tag.toLowerCase();
+    if (!map.has(key)) map.set(key, { tag, rows: [] });
+    map.get(key).rows.push(row);
+    return map;
+  }, new Map()).values())
+    .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))) }))
+    .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
+
+  const totals = rows.reduce((acc, row) => {
+    acc.items += 1;
+    acc.quantity += Number(row.quantity) || 0;
+    if (Number.isFinite(Number(row.totalPrice))) acc.total += Number(row.totalPrice);
+    return acc;
+  }, { items: 0, quantity: 0, total: 0 });
+
+  const cleanLogic = _proposalCombineLogic(logic);
+  const matrix = rows.map((row) => ({
+    productId: row.productId,
+    name: row.name,
+    tag: row.tag,
+    quantity: row.quantity,
+    sourceQuantities: row.sourceQuantities,
+  }));
+
+  return { sources, rows, groupedRows, totals, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
+}
+
+function _proposalCombinedPdfColumnsForContent(selectedColumns, contentW, sources = [], logic = "add") {
+  const selected = Array.isArray(selectedColumns) && selectedColumns.length ? selectedColumns : PRODUCT_PROPOSAL_EXPORT_COLUMNS;
+  if (_proposalCombineLogic(logic) !== "separate") return _proposalPdfColumnsForContent(selected, contentW);
+  const columns = [];
+  for (const col of selected) {
+    if (col.key === "quantity") {
+      for (const source of sources || []) {
+        columns.push({ key: `sourceQty:${source.id}`, sourceId: source.id, label: `${source.name || "Proposal"} Qty`, width: 58, align: "right" });
+      }
+    } else {
+      columns.push({ key: col.key, label: col.label, width: col.pdfWidth, align: col.align || "left" });
+    }
+  }
+  const naturalW = columns.reduce((sum, col) => sum + (Number(col.width) || 0), 0) || contentW;
+  if (naturalW > contentW) {
+    const scale = contentW / naturalW;
+    columns.forEach((col) => { col.width = Math.max(col.key === "name" ? 88 : 34, Math.floor((Number(col.width) || 58) * scale)); });
+  } else if (naturalW < contentW) {
+    const extra = contentW - naturalW;
+    const nameCol = columns.find((col) => col.key === "name");
+    if (nameCol) nameCol.width += extra;
+    else columns.forEach((col) => { col.width += extra / Math.max(1, columns.length); });
+  }
+  return columns;
+}
+
+function _proposalCombinedCellValue(row = {}, col = {}, { formattedMoney = false } = {}) {
+  const key = String(col?.key || col || "");
+  if (key.startsWith("sourceQty:")) return Number(row?.sourceQuantities?.[col.sourceId || key.slice(10)] || 0) || 0;
+  return _proposalExportCellValue(row, key, { formattedMoney });
+}
+
+async function _sbTryAttachCombinedProposalMeta(proposalId, meta = {}) {
+  const id = String(proposalId || "").trim();
+  if (!id || !meta) return;
+  const payload = {
+    combined_sources: JSON.stringify(meta.sources || []),
+    combine_logic: meta.logic || "add",
+    combine_note: meta.note || null,
+    combined_matrix: JSON.stringify(meta.matrix || []),
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    await supabaseDb.updateById(_sbProductProposalsTable(), id, payload);
+  } catch (error) {
+    // Older deployments may not have optional combined proposal metadata columns yet.
+    // The client keeps the same metadata in localStorage so the information card still appears after saving.
+    if (!_sbIsMissingTableError(error)) {
+      const msg = String(error?.message || "").toLowerCase();
+      if (!msg.includes("combined_sources") && !msg.includes("combine_logic") && !msg.includes("combined_matrix") && !msg.includes("column")) {
+        console.warn("Unable to attach combined proposal metadata:", error?.details || error?.message || error);
+      }
+    }
+  }
+}
+
+async function _sbSaveCombinedProductProposal(body = {}, req = null) {
+  const name = _sbProposalText(body?.name || body?.proposalName || body?.title);
+  const proposalIds = _proposalIdsList(body?.proposalIds || body?.proposal_ids || body?.ids);
+  const logic = _proposalCombineLogic(body?.combineLogic || body?.logic || body?.combine_logic);
+  if (!name) {
+    const err = new Error("Proposal name is required.");
+    err.status = 400;
+    throw err;
+  }
+  const data = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
+  const proposal = await _sbCreateProductProposal({ name }, req);
+  const newId = String(proposal?.id || "").trim();
+  if (!newId) return { proposal, combinedMeta: data.combinedMeta };
+  const productMap = await _sbProductsMapById();
+  for (const row of data.rows || []) {
+    const product = productMap.get(String(row.productId || ""));
+    if (!product?.id) continue;
+    await _sbUpsertProductProposalItem(newId, product, row.quantity || 1, { mergeLogic: "add" });
+  }
+  await _sbTryAttachCombinedProposalMeta(newId, data.combinedMeta);
+  await _sbTouchProductProposal(newId);
+  const detail = await _sbProductProposalById(newId, req);
+  return { proposal: detail?.proposal || proposal, items: detail?.items || [], combinedMeta: data.combinedMeta };
+}
+
+async function _sbRenderCombinedProductProposalsPdf(req, res) {
+  const proposalIds = _proposalIdsList(req?.query?.proposalIds || req?.query?.ids);
+  const logic = _proposalCombineLogic(req?.query?.logic || req?.query?.combineLogic);
+  const { sources, rows, groupedRows, totals } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
+  const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
+
+  await ensurePdfArabicSupport();
+  const createdAt = new Date();
+  const dateStr = createdAt.toISOString().slice(0, 10);
+  const fileName = `combined-proposals-${dateStr}.pdf`;
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.set("Cache-Control", "no-store");
+
+  const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  enableArabicPdf(doc);
+  doc.pipe(res);
+  attachPageNumbers(doc);
+
+  const COLORS = { text: "#111827", muted: "#6B7280", border: "#E5E7EB", headerBg: "#F9FAFB", tableHeadBg: "#F3F4F6", rowAlt: "#FAFAFA", dark: "#050B18", link: "#1D4ED8" };
+  const logoPath = path.join(__dirname, "../public/images/logo.png");
+  const mL = doc.page.margins.left;
+  const mR = doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  const contentW = doc.page.width - mL - mR;
+  const sourceText = sources.map((source) => source.name).join(", ");
+
+  const drawHeader = (variant = "default") => drawStocktakingHeader(doc, { title: "Combined Proposals", variant, logoPath, colors: COLORS });
+  const ensureSpace = (height = 24, { repeatTableHeader } = {}) => {
+    if (doc.y + height <= bottom) return;
+    doc.addPage();
+    drawHeader("compact");
+    if (typeof repeatTableHeader === "function") repeatTableHeader();
+  };
+
+  drawHeader("default");
+  doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(14).text("Combined Proposal Summary", mL, doc.y);
+  doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9).text(`Sources: ${sourceText || "selected proposals"}. Logic: ${_proposalCombineLogicLabel(logic)}.`, mL, doc.y + 4, { width: contentW });
+  doc.moveDown(1.1);
+
+  const boxH = 44;
+  doc.roundedRect(mL, doc.y, contentW, boxH, 8).fillColor(COLORS.headerBg).fill();
+  doc.roundedRect(mL, doc.y, contentW, boxH, 8).strokeColor(COLORS.border).stroke();
+  doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9).text("Selected proposals", mL + 10, doc.y + 7);
+  doc.fillColor(COLORS.text).font("Helvetica").fontSize(10).text(sourceText || "-", mL + 10, doc.y + 21, { width: contentW - 20 });
+  doc.y += boxH + 18;
+
+  const columns = _proposalCombinedPdfColumnsForContent(selectedExportColumns, contentW, sources, logic);
+  const tableW = columns.reduce((sum, col) => sum + col.width, 0);
+  const startX = mL;
+  const cellPad = 6;
+  const headerH = 24;
+  const drawTableHeader = () => {
+    const y = doc.y;
+    doc.rect(startX, y, tableW, headerH).fillColor(COLORS.tableHeadBg).fill();
+    doc.rect(startX, y, tableW, headerH).lineWidth(0.8).strokeColor(COLORS.border).stroke();
+    let x = startX;
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(7.6);
+    for (const col of columns) {
+      doc.text(col.label, x + cellPad, y + 7, { width: col.width - cellPad * 2, align: col.align });
+      x += col.width;
+      if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + headerH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    }
+    doc.y = y + headerH;
+  };
+  const normalizeUrlForPdf = (url) => {
+    const s = String(url || "").trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith("www.")) return `https://${s}`;
+    return null;
+  };
+  const drawTagHeader = (tag, count = 0) => {
+    ensureSpace(46, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    doc.rect(startX, y, tableW, 24).fillColor("#FFF7ED").fill();
+    doc.rect(startX, y, tableW, 24).lineWidth(0.5).strokeColor("#FED7AA").stroke();
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(9.2).text(String(tag || "Uncategorized"), startX + cellPad, y + 7, { width: tableW - 110 });
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8).text(`${count} item${count === 1 ? "" : "s"}`, startX + tableW - 98, y + 8, { width: 92, align: "right" });
+    doc.y = y + 24;
+  };
+
+  if (!rows.length) {
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("No components found.", mL, doc.y);
+  } else {
+    drawTableHeader();
+    let visualIndex = 0;
+    for (const group of groupedRows) {
+      drawTagHeader(group.tag, group.rows.length);
+      for (const row of group.rows) {
+        doc.font("Helvetica").fontSize(8.2);
+        const values = columns.reduce((acc, col) => {
+          const formattedMoney = col.key === "unitPrice" || col.key === "totalPrice";
+          acc[col.key] = _proposalCombinedCellValue(row, col, { formattedMoney });
+          return acc;
+        }, {});
+        const heights = columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPad * 2, align: col.align }));
+        const rowH = Math.max(22, ...heights) + 8;
+        ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
+        const y = doc.y;
+        if (visualIndex % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
+        doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+        let x = startX;
+        for (const col of columns) {
+          const text = String(values[col.key] ?? "");
+          const opts = { width: col.width - cellPad * 2, align: col.align };
+          if (col.key === "name") {
+            const link = normalizeUrlForPdf(row.url);
+            if (link) { opts.link = link; opts.underline = true; doc.fillColor(COLORS.link); }
+            else doc.fillColor(COLORS.text);
+          } else doc.fillColor(COLORS.text);
+          doc.font("Helvetica").fontSize(8.2).text(text, x + cellPad, y + 6, opts);
+          x += col.width;
+          if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+        }
+        doc.y = y + rowH;
+        visualIndex += 1;
+      }
+    }
+  }
+
+  doc.moveDown(1.2);
+  ensureSpace(58);
+  const statGap = 10;
+  const statW = (contentW - statGap * 2) / 3;
+  const statY = doc.y;
+  const drawStat = (idx, label, value) => {
+    const x = mL + idx * (statW + statGap);
+    doc.roundedRect(x, statY, statW, 46, 12).fillColor(COLORS.dark).fill();
+    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(label, x + 12, statY + 10, { width: statW - 24 });
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13).text(String(value || "0"), x + 12, statY + 25, { width: statW - 24 });
+  };
+  drawStat(0, "TOTAL ITEMS", `${totals.items} item${totals.items === 1 ? "" : "s"}`);
+  drawStat(1, "TOTAL QUANTITY", totals.quantity);
+  drawStat(2, "TOTAL COST", _proposalPdfMoney(totals.total));
+  doc.end();
+}
+
+async function _sbRenderCombinedProductProposalsExcel(req, res) {
+  const proposalIds = _proposalIdsList(req?.query?.proposalIds || req?.query?.ids);
+  const logic = _proposalCombineLogic(req?.query?.logic || req?.query?.combineLogic);
+  const { sources, rows, groupedRows, totals } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
+  const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Operations Hub";
+  workbook.created = new Date();
+  const worksheet = workbook.addWorksheet("Combined Proposals");
+  const generatedAt = new Date();
+  const excelColumns = [];
+  for (const col of selectedExportColumns) {
+    if (_proposalCombineLogic(logic) === "separate" && col.key === "quantity") {
+      for (const source of sources) excelColumns.push({ header: `${source.name || "Proposal"} Qty`, key: `sourceQty_${source.id}`, width: 16, align: "right", sourceId: source.id, sourceQty: true });
+    } else {
+      excelColumns.push({ header: col.label, key: col.key, width: col.excelWidth || 16, align: col.align || "left" });
+    }
+  }
+  worksheet.columns = excelColumns.map((col) => ({ header: col.header, key: col.key, width: col.width || 16 }));
+  worksheet.spliceRows(1, 0,
+    ["Combined Proposals", sources.map((source) => source.name).join(", ")],
+    ["Logic", _proposalCombineLogicLabel(logic)],
+    ["Date", formatDateTime(generatedAt)],
+    ["Total items", `${totals.items} item${totals.items === 1 ? "" : "s"}`],
+    ["Total quantity", totals.quantity],
+    ["Total cost", totals.total],
+    []
+  );
+  const headerRowIndex = 8;
+  const headerRow = worksheet.getRow(headerRowIndex);
+  excelColumns.forEach((col, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = col.header;
+    cell.font = { bold: true, color: { argb: "FF111827" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+    cell.border = { top: { style: "thin", color: { argb: "FFE5E7EB" } }, left: { style: "thin", color: { argb: "FFE5E7EB" } }, bottom: { style: "thin", color: { argb: "FFE5E7EB" } }, right: { style: "thin", color: { argb: "FFE5E7EB" } } };
+    cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
+  });
+  if (!rows.length) {
+    const row = worksheet.addRow(["No components found."]);
+    row.font = { italic: true, color: { argb: "FF6B7280" } };
+  } else {
+    for (const group of groupedRows) {
+      const groupRow = worksheet.addRow([`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
+      const lastColumn = Math.max(1, excelColumns.length);
+      if (lastColumn > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastColumn);
+      groupRow.font = { bold: true, color: { argb: "FF9A3412" } };
+      groupRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+      groupRow.eachCell((cell) => { cell.border = { top: { style: "thin", color: { argb: "FFFED7AA" } }, left: { style: "thin", color: { argb: "FFFED7AA" } }, bottom: { style: "thin", color: { argb: "FFFED7AA" } }, right: { style: "thin", color: { argb: "FFFED7AA" } } }; });
+      for (const item of group.rows) {
+        const payload = {};
+        for (const col of excelColumns) {
+          if (col.sourceQty) payload[col.key] = Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0;
+          else payload[col.key] = _proposalExportCellValue(item, col.key);
+        }
+        const row = worksheet.addRow(payload);
+        excelColumns.forEach((col, index) => {
+          const cell = row.getCell(index + 1);
+          if (col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = '£#,##0.00;[Red]-£#,##0.00';
+          cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
+          cell.border = { top: { style: "thin", color: { argb: "FFE5E7EB" } }, left: { style: "thin", color: { argb: "FFE5E7EB" } }, bottom: { style: "thin", color: { argb: "FFE5E7EB" } }, right: { style: "thin", color: { argb: "FFE5E7EB" } } };
+        });
+      }
+    }
+  }
+  worksheet.getColumn(1).eachCell((cell, rowNumber) => { if (rowNumber <= 6) cell.font = { ...(cell.font || {}), bold: rowNumber <= 6 }; });
+  worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
+  const dateStr = generatedAt.toISOString().slice(0, 10);
+  const fileName = `combined-proposals-${dateStr}.xlsx`;
+  const buffer = await workbook.xlsx.writeBuffer();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.set("Cache-Control", "no-store");
+  return res.send(Buffer.from(buffer));
 }
 
 function _proposalExportCellValue(row = {}, key = "", { formattedMoney = false } = {}) {
@@ -24980,6 +25437,55 @@ app.delete(
     } catch (error) {
       console.error("DELETE /api/products/proposals/:proposalId error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete product proposal." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/proposals/combine/pdf",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      return await _sbRenderCombinedProductProposalsPdf(req, res);
+    } catch (error) {
+      console.error("GET /api/products/proposals/combine/pdf error:", error?.details || error);
+      if (!res.headersSent) return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download combined proposals PDF." });
+      try { res.end(); } catch {}
+    }
+  },
+);
+
+app.get(
+  "/api/products/proposals/combine/excel",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      return await _sbRenderCombinedProductProposalsExcel(req, res);
+    } catch (error) {
+      console.error("GET /api/products/proposals/combine/excel error:", error?.details || error);
+      if (!res.headersSent) return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download combined proposals Excel." });
+      try { res.end(); } catch {}
+    }
+  },
+);
+
+app.post(
+  "/api/products/proposals/combine/save",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const result = await _sbSaveCombinedProductProposal(req.body || {}, req);
+      return res.status(201).json({ ok: true, source: "supabase", ...result });
+    } catch (error) {
+      console.error("POST /api/products/proposals/combine/save error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save combined proposal." });
     }
   },
 );
