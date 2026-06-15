@@ -2375,3 +2375,128 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
 .proposals-page .proposal-logic-row .proposal-search-select--logic.is-open{
   z-index:10060 !important;
 }
+
+/* 2026-06-15: combine proposals workflow */
+.proposals-page .proposals-floating-actions--multi{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:12px !important;
+  flex-wrap:wrap !important;
+}
+.proposals-page .proposals-combine-btn{
+  background:#ffffff !important;
+  color:#0b1220 !important;
+  border:1px solid rgba(15,23,42,.10) !important;
+  box-shadow:0 14px 30px rgba(15,23,42,.10) !important;
+}
+.proposals-page .proposals-combine-btn:hover{
+  border-color:rgba(228,85,18,.28) !important;
+  box-shadow:0 18px 38px rgba(15,23,42,.13), 0 0 0 4px rgba(228,85,18,.08) !important;
+}
+.proposal-combine-modal .proposal-combine-modal__dialog{
+  width:min(100%, 560px) !important;
+}
+.proposal-combine-modal .proposal-combine-modal__footer{
+  flex-wrap:wrap;
+}
+.proposal-combine-save-btn{
+  border:1px solid rgba(15,23,42,.10) !important;
+  background:#ffffff !important;
+  color:#0f172a !important;
+  box-shadow:0 10px 22px rgba(15,23,42,.06) !important;
+}
+.proposal-combine-check span{
+  display:grid;
+  gap:3px;
+  min-width:0;
+}
+.proposal-combine-check strong{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.94rem;
+}
+.proposal-combine-check small{
+  color:#667085;
+  font-size:.76rem;
+  font-weight:850;
+}
+.proposal-combine-list-panel{
+  min-width:300px !important;
+}
+.proposal-combine-name-modal__dialog{
+  width:min(100%, 470px) !important;
+}
+.proposal-combine-name-field input{
+  min-height:54px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:18px;
+  background:linear-gradient(180deg,#ffffff,#fbfcff);
+  color:#0f172a;
+  font-weight:900;
+  padding:0 16px;
+  outline:none;
+  box-shadow:0 12px 26px rgba(15,23,42,.05), inset 0 1px 0 rgba(255,255,255,.9);
+}
+.proposal-combine-name-field input:focus{
+  border-color:rgba(228,85,18,.42);
+  box-shadow:0 0 0 4px rgba(228,85,18,.10), 0 16px 34px rgba(15,23,42,.08);
+}
+.proposal-combined-info-card{
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  padding:16px 18px;
+  margin:0 0 18px;
+  border:1px solid rgba(228,85,18,.16);
+  border-radius:22px;
+  background:linear-gradient(135deg, rgba(255,247,237,.95), rgba(255,255,255,.92));
+  box-shadow:0 18px 42px rgba(15,23,42,.08);
+}
+.proposal-combined-info-card__icon{
+  width:42px;
+  height:42px;
+  border-radius:16px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  background:rgba(228,85,18,.10);
+  color:#c2410c;
+  border:1px solid rgba(228,85,18,.14);
+}
+.proposal-combined-info-card strong{
+  display:block;
+  margin:1px 0 4px;
+  color:#0f172a;
+  font-weight:1000;
+  font-size:1rem;
+}
+.proposal-combined-info-card p{
+  margin:0;
+  color:#667085;
+  font-weight:800;
+  line-height:1.45;
+}
+.proposal-combined-info-card p span{
+  color:#9a3412;
+  font-weight:950;
+}
+@media (max-width:700px){
+  .proposal-combine-modal .proposal-combine-modal__footer .btn{
+    width:100%;
+  }
+}
+.proposal-combined-matrix-card{
+  margin:0 0 18px !important;
+}
+.proposal-combined-matrix-table th,
+.proposal-combined-matrix-table td{
+  white-space:nowrap;
+}
+.proposal-combined-matrix-table td:not(:first-child),
+.proposal-combined-matrix-table th:not(:first-child){
+  text-align:center;
+}
