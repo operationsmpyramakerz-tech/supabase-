@@ -6714,11 +6714,25 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
       idCode: String(product?.displayId || product?.idCode || product?.id_code || "").trim(),
       name: String(product?.name || item?.productName || item?.product_name || "Untitled Product").trim() || "Untitled Product",
       url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
+      tag: firstProductTagForServer(product),
       quantity,
       unitPrice: cleanUnitPrice,
       totalPrice,
     };
   });
+
+  const groupedRows = Array.from(rows.reduce((map, row) => {
+    const tag = String(row.tag || "Uncategorized").trim() || "Uncategorized";
+    const key = tag.toLowerCase();
+    if (!map.has(key)) map.set(key, { tag, rows: [] });
+    map.get(key).rows.push(row);
+    return map;
+  }, new Map()).values())
+    .map((group) => ({
+      ...group,
+      rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))),
+    }))
+    .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
 
   await ensurePdfArabicSupport();
   const createdAt = new Date();
@@ -6863,44 +6877,60 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
     return null;
   };
 
+  const tagHeaderH = 24;
+  const drawTagHeader = (tag, count = 0) => {
+    ensureSpace(tagHeaderH + headerH + 2, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    doc.rect(startX, y, tableW, tagHeaderH).fillColor("#FFF7ED").fill();
+    doc.rect(startX, y, tableW, tagHeaderH).lineWidth(0.5).strokeColor("#FED7AA").stroke();
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(9.5).text(String(tag || "Uncategorized"), startX + cellPad, y + 7, { width: tableW - 120 });
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8).text(`${count} item${count === 1 ? "" : "s"}`, startX + tableW - 105, y + 8, { width: 98, align: "right" });
+    doc.y = y + tagHeaderH;
+  };
+
   drawTableHeader();
 
-  rows.forEach((row, idx) => {
-    doc.font("Helvetica").fontSize(8.5);
-    const values = {
-      idCode: row.idCode || "",
-      name: row.name || "-",
-      quantity: String(row.quantity || 0),
-      unitPrice: _proposalPdfMoney(row.unitPrice),
-      totalPrice: _proposalPdfMoney(row.totalPrice),
-    };
-    const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || ""), { width: col.width - cellPad * 2, align: col.align }));
-    const rowH = Math.max(22, ...heights) + 8;
-    ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
-    const y = doc.y;
-    if (idx % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
-    doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
-    let x = startX;
-    for (const col of columns) {
-      const text = String(values[col.key] || "");
-      const opts = { width: col.width - cellPad * 2, align: col.align };
-      if (col.key === "name") {
-        const link = normalizeUrlForPdf(row.url);
-        if (link) {
-          opts.link = link;
-          opts.underline = true;
-          doc.fillColor(COLORS.link);
+  let visualIndex = 0;
+  groupedRows.forEach((group) => {
+    drawTagHeader(group.tag, group.rows.length);
+    group.rows.forEach((row) => {
+      doc.font("Helvetica").fontSize(8.5);
+      const values = {
+        idCode: row.idCode || "",
+        name: row.name || "-",
+        quantity: String(row.quantity || 0),
+        unitPrice: _proposalPdfMoney(row.unitPrice),
+        totalPrice: _proposalPdfMoney(row.totalPrice),
+      };
+      const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || ""), { width: col.width - cellPad * 2, align: col.align }));
+      const rowH = Math.max(22, ...heights) + 8;
+      ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
+      const y = doc.y;
+      if (visualIndex % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
+      doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+      let x = startX;
+      for (const col of columns) {
+        const text = String(values[col.key] || "");
+        const opts = { width: col.width - cellPad * 2, align: col.align };
+        if (col.key === "name") {
+          const link = normalizeUrlForPdf(row.url);
+          if (link) {
+            opts.link = link;
+            opts.underline = true;
+            doc.fillColor(COLORS.link);
+          } else {
+            doc.fillColor(COLORS.text);
+          }
         } else {
           doc.fillColor(COLORS.text);
         }
-      } else {
-        doc.fillColor(COLORS.text);
+        doc.font("Helvetica").fontSize(8.5).text(text, x + cellPad, y + 6, opts);
+        x += col.width;
+        if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
       }
-      doc.font("Helvetica").fontSize(8.5).text(text, x + cellPad, y + 6, opts);
-      x += col.width;
-      if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
-    }
-    doc.y = y + rowH;
+      doc.y = y + rowH;
+      visualIndex += 1;
+    });
   });
 
   doc.moveDown(1.2);
