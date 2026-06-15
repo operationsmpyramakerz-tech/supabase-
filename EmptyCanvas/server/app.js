@@ -5904,6 +5904,21 @@ function _sbProposalMissingTableError(error) {
   return error;
 }
 
+function _sbProposalJsonValue(row = {}, aliases = [], fallback = null) {
+  const raw = _sbGet(row, aliases);
+  if (raw === null || typeof raw === "undefined") return fallback;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "object") return raw;
+  const text = String(raw || "").trim();
+  if (!text || /^null$/i.test(text)) return fallback;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function _sbProposalOwnerInfo(row = {}) {
   return {
     createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
@@ -5933,12 +5948,12 @@ function _sbSerializeProductProposal(row = {}, itemsCount = 0, req = null) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbProposalText(_sbGet(row, ["name", "Name", "proposal_name", "Proposal Name"])) || "Untitled Proposal";
   const owner = _sbProposalOwnerInfo(row);
-  const combinedSourcesRaw = _sbProposalText(_sbGet(row, ["combined_sources", "combined_from", "combined_proposals", "Combined Sources", "Combined From"]));
-  const combinedMatrixRaw = _sbProposalText(_sbGet(row, ["combined_matrix", "combine_matrix", "Combined Matrix"]));
-  const parseJson = (raw, fallback) => {
-    if (!raw) return fallback;
-    try { const parsed = JSON.parse(raw); return parsed ?? fallback; } catch { return fallback; }
-  };
+  const combinedSources = _sbProposalJsonValue(row, ["combined_sources", "combined_from", "combined_proposals", "Combined Sources", "Combined From"], []);
+  const combinedMatrix = _sbProposalJsonValue(row, ["combined_matrix", "combine_matrix", "Combined Matrix"], []);
+  const cleanCombinedSources = Array.isArray(combinedSources) ? combinedSources : [];
+  const cleanCombinedMatrix = Array.isArray(combinedMatrix) ? combinedMatrix : [];
+  const combineLogic = _sbProposalText(_sbGet(row, ["combine_logic", "combined_logic", "Combine Logic"])) || null;
+  const combineNote = _sbProposalText(_sbGet(row, ["combine_note", "combined_note", "Combined Note"])) || null;
   return {
     id,
     name,
@@ -5948,10 +5963,10 @@ function _sbSerializeProductProposal(row = {}, itemsCount = 0, req = null) {
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
     itemsCount: Number(itemsCount) || 0,
     canEdit: req ? _sbProposalCurrentUserOwns(row, req) : false,
-    combinedSources: parseJson(combinedSourcesRaw, []),
-    combineLogic: _sbProposalText(_sbGet(row, ["combine_logic", "combined_logic", "Combine Logic"])) || null,
-    combineNote: _sbProposalText(_sbGet(row, ["combine_note", "combined_note", "Combined Note"])) || null,
-    combinedMatrix: parseJson(combinedMatrixRaw, []),
+    combinedSources: cleanCombinedSources.length ? cleanCombinedSources : null,
+    combineLogic,
+    combineNote,
+    combinedMatrix: cleanCombinedMatrix.length ? cleanCombinedMatrix : null,
   };
 }
 
@@ -6266,12 +6281,12 @@ function _sbSerializeProductKit(row = {}, itemsCount = 0, req = null) {
   const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   const name = _sbProposalText(_sbGet(row, ["name", "Name", "kit_name", "Kit Name"])) || "Untitled Kit";
   const owner = _sbProposalOwnerInfo(row);
-  const combinedSourcesRaw = _sbProposalText(_sbGet(row, ["combined_sources", "combined_from", "combined_proposals", "Combined Sources", "Combined From"]));
-  const combinedMatrixRaw = _sbProposalText(_sbGet(row, ["combined_matrix", "combine_matrix", "Combined Matrix"]));
-  const parseJson = (raw, fallback) => {
-    if (!raw) return fallback;
-    try { const parsed = JSON.parse(raw); return parsed ?? fallback; } catch { return fallback; }
-  };
+  const combinedSources = _sbProposalJsonValue(row, ["combined_sources", "combined_from", "combined_proposals", "Combined Sources", "Combined From"], []);
+  const combinedMatrix = _sbProposalJsonValue(row, ["combined_matrix", "combine_matrix", "Combined Matrix"], []);
+  const cleanCombinedSources = Array.isArray(combinedSources) ? combinedSources : [];
+  const cleanCombinedMatrix = Array.isArray(combinedMatrix) ? combinedMatrix : [];
+  const combineLogic = _sbProposalText(_sbGet(row, ["combine_logic", "combined_logic", "Combine Logic"])) || null;
+  const combineNote = _sbProposalText(_sbGet(row, ["combine_note", "combined_note", "Combined Note"])) || null;
   return {
     id,
     name,
@@ -6281,10 +6296,10 @@ function _sbSerializeProductKit(row = {}, itemsCount = 0, req = null) {
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
     itemsCount: Number(itemsCount) || 0,
     canEdit: req ? _sbProposalCurrentUserOwns(row, req) : false,
-    combinedSources: parseJson(combinedSourcesRaw, []),
-    combineLogic: _sbProposalText(_sbGet(row, ["combine_logic", "combined_logic", "Combine Logic"])) || null,
-    combineNote: _sbProposalText(_sbGet(row, ["combine_note", "combined_note", "Combined Note"])) || null,
-    combinedMatrix: parseJson(combinedMatrixRaw, []),
+    combinedSources: cleanCombinedSources.length ? cleanCombinedSources : null,
+    combineLogic,
+    combineNote,
+    combinedMatrix: cleanCombinedMatrix.length ? cleanCombinedMatrix : null,
   };
 }
 
@@ -6989,10 +7004,10 @@ async function _sbTryAttachCombinedProposalMeta(proposalId, meta = {}) {
   const id = String(proposalId || "").trim();
   if (!id || !meta) return;
   const payload = {
-    combined_sources: JSON.stringify(meta.sources || []),
+    combined_sources: Array.isArray(meta.sources) ? meta.sources : [],
     combine_logic: meta.logic || "add",
     combine_note: meta.note || null,
-    combined_matrix: JSON.stringify(meta.matrix || []),
+    combined_matrix: Array.isArray(meta.matrix) ? meta.matrix : [],
     updated_at: new Date().toISOString(),
   };
   try {
