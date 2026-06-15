@@ -2207,3 +2207,91 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
     width:100%;
   }
 }
+
+/* 2026-06-15: proposal detail header cleanup + custom modern selectors */
+.proposals-page .products-proposal-detail__head.proposal-detail-head--compact{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:16px !important;
+}
+.proposals-page .proposal-detail-head--compact .products-back-btn{
+  flex:0 0 auto !important;
+}
+.proposals-page .proposal-detail-head--compact .proposal-detail-actions{
+  margin-left:auto !important;
+}
+
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__button,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__button{
+  min-height:56px !important;
+  border:1px solid rgba(15,23,42,.10) !important;
+  border-radius:18px !important;
+  background:linear-gradient(180deg,#ffffff,#fbfcff) !important;
+  color:#0f172a !important;
+  box-shadow:0 12px 26px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.9) !important;
+  padding:0 14px 0 16px !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__button:hover,
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__button[aria-expanded="true"],
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__button:hover,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__button[aria-expanded="true"]{
+  background:#ffffff !important;
+  border-color:rgba(228,85,18,.42) !important;
+  box-shadow:0 0 0 4px rgba(228,85,18,.10), 0 16px 34px rgba(15,23,42,.10) !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__value,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__value{
+  color:#0f172a !important;
+  opacity:1 !important;
+  font-weight:950 !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__button svg,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__button svg{
+  color:#c45a24 !important;
+  stroke:currentColor !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__menu,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__menu{
+  border:1px solid rgba(15,23,42,.10) !important;
+  border-radius:20px !important;
+  background:#ffffff !important;
+  box-shadow:0 28px 70px rgba(15,23,42,.24) !important;
+  padding:8px !important;
+  z-index:9999 !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__option,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__option{
+  min-height:48px !important;
+  border-radius:14px !important;
+  padding:10px 12px !important;
+  background:#ffffff !important;
+  color:#0f172a !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__option:hover,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__option:hover{
+  background:#fff7ed !important;
+  color:#9a3412 !important;
+}
+.proposals-page .proposal-search-select.proposal-search-select--light .proposal-search-select__option small,
+.proposal-make-order-modal .proposal-search-select.proposal-search-select--light .proposal-search-select__option small{
+  color:#667085 !important;
+}
+.proposals-page .proposal-logic-field .proposal-search-select--logic{
+  width:100% !important;
+}
+.proposal-make-order-modal .proposal-search-select--modal{
+  width:100% !important;
+}
+.proposal-make-order-modal .proposal-search-select--modal .proposal-search-select__options{
+  max-height:220px !important;
+}
+.proposal-make-order-modal .products-modal__header{
+  margin-bottom:18px !important;
+}
+
+@media (max-width:1100px){
+  .proposals-page .products-proposal-detail__head.proposal-detail-head--compact{
+    align-items:flex-start !important;
+  }
+}
