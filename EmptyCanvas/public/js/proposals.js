@@ -27,6 +27,8 @@
     kitCreateMode: false,
     proposalMergeLogic: 'add',
     downloadingProposal: false,
+    combiningProposals: false,
+    savingCombinedProposal: false,
     copyProposalTarget: null,
     copyKitTarget: null,
   };
@@ -39,6 +41,7 @@
     { value: 'unitPrice', label: 'Unit cost', checked: true },
     { value: 'totalPrice', label: 'Total cost', checked: true },
   ];
+  const COMBINED_META_STORAGE_KEY = 'ops.proposals.combinedMeta.v1';
   const $ = (id) => document.getElementById(id);
 
   function currentWorkspaceMode() {
@@ -94,6 +97,97 @@
 
   function canEditItem(item = {}) {
     return !!item?.canEdit || isItemOwner(item);
+  }
+
+  function readCombinedMetaStore() {
+    try {
+      const raw = localStorage.getItem(COMBINED_META_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch { return {}; }
+  }
+
+  function writeCombinedMetaStore(store = {}) {
+    try { localStorage.setItem(COMBINED_META_STORAGE_KEY, JSON.stringify(store || {})); } catch {}
+  }
+
+  function saveCombinedMetaForProposal(proposalId, meta = {}) {
+    const id = String(proposalId || '').trim();
+    if (!id || !meta) return;
+    const sources = Array.isArray(meta.sources || meta.combinedSources) ? (meta.sources || meta.combinedSources) : [];
+    const clean = {
+      sources: sources.map((source) => ({ id: String(source?.id || '').trim(), name: String(source?.name || '').trim() })).filter((source) => source.id || source.name),
+      logic: normalizeCombineLogic(meta.logic || meta.combineLogic || 'add'),
+      note: String(meta.note || meta.combineNote || '').trim(),
+      matrix: Array.isArray(meta.matrix) ? meta.matrix : [],
+      savedAt: new Date().toISOString(),
+    };
+    const store = readCombinedMetaStore();
+    store[id] = clean;
+    writeCombinedMetaStore(store);
+  }
+
+  function combinedMetaForProposal(proposal = {}) {
+    const id = String(proposal?.id || '').trim();
+    const directSources = Array.isArray(proposal?.combinedSources) ? proposal.combinedSources : null;
+    const directNote = String(proposal?.combineNote || proposal?.combinedNote || '').trim();
+    const directLogic = String(proposal?.combineLogic || proposal?.combinedLogic || '').trim();
+    if (directSources || directNote || directLogic) {
+      return { sources: directSources || [], note: directNote, logic: normalizeCombineLogic(directLogic || 'add'), matrix: Array.isArray(proposal?.combinedMatrix) ? proposal.combinedMatrix : [] };
+    }
+    if (!id) return null;
+    return readCombinedMetaStore()[id] || null;
+  }
+
+  function combinedMetaCardHTML(proposal = {}) {
+    const meta = combinedMetaForProposal(proposal);
+    if (!meta) return '';
+    const sources = Array.isArray(meta.sources) ? meta.sources.filter((source) => source?.name || source?.id) : [];
+    const names = sources.map((source) => String(source?.name || source?.id || '').trim()).filter(Boolean);
+    const sourceText = names.length ? names.join(', ') : 'selected proposals';
+    const logicText = normalizeCombineLogic(meta.logic) === 'separate' ? 'Separate logic' : 'Add logic';
+    const note = String(meta.note || `This proposal combines ${sourceText}.`).trim();
+    return `
+      <div class="proposal-combined-info-card">
+        <div class="proposal-combined-info-card__icon"><i data-feather="git-merge"></i></div>
+        <div>
+          <strong>Combined proposal</strong>
+          <p>${escapeHTML(note)} <span>Logic: ${escapeHTML(logicText)}.</span></p>
+        </div>
+      </div>
+    `;
+  }
+
+  function combinedMatrixCardHTML(proposal = {}) {
+    const meta = combinedMetaForProposal(proposal);
+    const sources = Array.isArray(meta?.sources) ? meta.sources.filter((source) => source?.id || source?.name) : [];
+    const matrix = Array.isArray(meta?.matrix) ? meta.matrix : [];
+    if (!meta || normalizeCombineLogic(meta.logic) !== 'separate' || !sources.length || !matrix.length) return '';
+    const sourceHeaders = sources.map((source) => `<th>${escapeHTML(source.name || source.id || 'Proposal')} Qty</th>`).join('');
+    const rows = matrix.map((row) => {
+      const quantities = sources.map((source) => `<td>${escapeHTML(formatNumber(Number(row?.sourceQuantities?.[source.id]) || 0))}</td>`).join('');
+      return `
+        <tr>
+          <td><strong>${escapeHTML(row?.name || 'Untitled Product')}</strong></td>
+          ${quantities}
+          <td>${escapeHTML(formatNumber(Number(row?.quantity) || 0))}</td>
+        </tr>
+      `;
+    }).join('');
+    return `
+      <div class="products-proposal-table-card proposal-combined-matrix-card">
+        <div class="products-proposal-table-head">
+          <div><h3>Combined source quantities</h3><p>Separate logic keeps each proposal quantity visible without repeating components.</p></div>
+          <span>${escapeHTML(formatNumber(matrix.length))} item${matrix.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="products-proposal-table-wrap">
+          <table class="products-proposal-table proposal-combined-matrix-table">
+            <thead><tr><th>Component name</th>${sourceHeaders}<th>Total Qty</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
   }
 
   function adminPasswordPrompt(message) {
@@ -286,6 +380,16 @@
     if (raw === 'max' || raw === 'max-logic') return 'max';
     if (raw === 'min' || raw === 'min-logic') return 'min';
     return 'add';
+  }
+
+  function normalizeCombineLogic(value) {
+    const raw = String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, '-');
+    if (raw === 'separate' || raw === 'separate-logic') return 'separate';
+    return 'add';
+  }
+
+  function combineLogicLabel(value) {
+    return normalizeCombineLogic(value) === 'separate' ? 'Separate logic' : 'Add logic';
   }
 
   function selectedProposalMergeLogic() {
@@ -604,6 +708,8 @@
           </div>
         `}
       </header>
+      ${!createMode ? combinedMetaCardHTML(proposal) : ''}
+      ${!createMode ? combinedMatrixCardHTML(proposal) : ''}
       ${editable ? editNameBlockHTML('proposal', createMode ? '' : (proposal?.name || 'Proposal'), { createMode, required: createMode }) : ''}
       ${createMode ? createModeHintHTML('proposal') : ''}
       ${editable && !createMode ? proposalLogicControlHTML() : ''}
@@ -704,6 +810,7 @@
     if (els.proposalsPanel) els.proposalsPanel.hidden = isKits;
     if (els.kitsPanel) els.kitsPanel.hidden = !isKits;
     if (els.createProposalBtn) els.createProposalBtn.hidden = isKits;
+    if (els.combineProposalsBtn) els.combineProposalsBtn.hidden = isKits;
     if (els.createKitBtn) els.createKitBtn.hidden = !isKits;
     document.querySelectorAll('.proposals-tab').forEach((btn) => {
       const active = btn.getAttribute('data-tab') === state.tab;
@@ -1480,6 +1587,478 @@
     };
   })();
 
+  const CombineNameModal = (() => {
+    let ui = null;
+    let resolver = null;
+
+    const ensure = () => {
+      if (ui) return ui;
+      const modal = document.createElement('div');
+      modal.className = 'ops-export-modal hidden proposal-combine-name-modal';
+      modal.innerHTML = `
+        <div class="ops-export-modal__backdrop" data-combine-name-cancel></div>
+        <form class="ops-export-modal__dialog proposal-combine-name-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="combineNameTitle">
+          <div class="ops-export-modal__header">
+            <div class="ops-export-modal__icon" aria-hidden="true"><i data-feather="folder-plus"></i></div>
+            <div>
+              <h3 class="ops-export-modal__title" id="combineNameTitle">Save as new proposal</h3>
+              <p class="ops-export-modal__hint">Write a name for the combined proposal.</p>
+            </div>
+            <button class="ops-export-modal__close" type="button" aria-label="Close" data-combine-name-cancel>&times;</button>
+          </div>
+          <div class="ops-export-modal__body">
+            <label class="products-field products-field--wide proposal-combine-name-field">
+              <span>Proposal name <em>*</em></span>
+              <input type="text" data-combine-name-input autocomplete="off" placeholder="Example: Combined school proposal" />
+            </label>
+            <div class="ops-export-modal__error" data-combine-name-error>Proposal name is required.</div>
+          </div>
+          <div class="ops-export-modal__footer">
+            <button class="btn btn--light" type="button" data-combine-name-cancel>Cancel</button>
+            <button class="btn ops-export-confirm" type="submit"><i data-feather="save"></i><span>Save proposal</span></button>
+          </div>
+        </form>
+      `;
+      document.body.appendChild(modal);
+      const form = modal.querySelector('form');
+      const input = modal.querySelector('[data-combine-name-input]');
+      const error = modal.querySelector('[data-combine-name-error]');
+      const close = (value = null) => {
+        modal.classList.add('hidden');
+        document.body.classList.remove('modal-open');
+        if (resolver) {
+          const done = resolver;
+          resolver = null;
+          done(value);
+        }
+      };
+      modal.querySelectorAll('[data-combine-name-cancel]').forEach((el) => el.addEventListener('click', () => close(null)));
+      form?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const name = String(input?.value || '').trim();
+        if (!name) {
+          if (error) error.style.display = 'block';
+          input?.focus();
+          return;
+        }
+        if (error) error.style.display = 'none';
+        close(name);
+      });
+      modal.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(null); });
+      ui = { modal, input, error };
+      hydrateIcons(modal);
+      return ui;
+    };
+
+    return {
+      open: () => new Promise((resolve) => {
+        const x = ensure();
+        resolver = resolve;
+        if (x.input) x.input.value = '';
+        if (x.error) x.error.style.display = 'none';
+        x.modal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        setTimeout(() => x.input?.focus(), 40);
+      }),
+    };
+  })();
+
+  const CombineProposalsModal = (() => {
+    let ui = null;
+    let resolver = null;
+    let currentColumnDefs = PROPOSAL_EXPORT_COLUMNS;
+
+    const ensure = () => {
+      if (ui) return ui;
+      const modal = document.createElement('div');
+      modal.className = 'ops-export-modal hidden proposal-combine-modal';
+      modal.id = 'proposalCombineModal';
+      modal.innerHTML = `
+        <div class="ops-export-modal__backdrop" data-combine-cancel></div>
+        <div class="ops-export-modal__dialog proposal-combine-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="proposalCombineTitle">
+          <div class="ops-export-modal__header">
+            <div class="ops-export-modal__icon" aria-hidden="true"><i data-feather="git-merge"></i></div>
+            <div>
+              <h3 class="ops-export-modal__title" id="proposalCombineTitle">Combine proposals</h3>
+              <p class="ops-export-modal__hint">Choose more than one proposal, then download one combined file or save the result as a new proposal.</p>
+            </div>
+            <button class="ops-export-modal__close" type="button" aria-label="Close" data-combine-cancel>&times;</button>
+          </div>
+          <div class="ops-export-modal__body">
+            <div class="ops-export-field ops-export-multiselect" data-combine-proposal-picker>
+              <span class="ops-export-field__label">Proposals</span>
+              <button class="ops-export-multiselect__button" type="button" data-combine-proposal-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-combine-proposal-summary>Select proposals</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-multiselect__panel ops-export-floating-panel proposal-combine-list-panel" data-combine-proposal-panel role="listbox" aria-label="Proposals" hidden>
+                <div class="ops-export-columns proposal-combine-proposal-list" data-combine-proposals></div>
+              </div>
+            </div>
+            <div class="ops-export-field ops-export-filetype" data-combine-logic-picker>
+              <span class="ops-export-field__label">Combine logic</span>
+              <input type="hidden" data-combine-logic value="add" />
+              <button class="ops-export-picker-button" type="button" data-combine-logic-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-combine-logic-summary>Add logic</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-filetype__panel ops-export-floating-panel" data-combine-logic-panel role="listbox" aria-label="Combine logic" hidden>
+                <button class="ops-export-option is-selected" type="button" data-combine-logic-option="add" role="option" aria-selected="true"><span>Add logic</span><i data-feather="check"></i></button>
+                <button class="ops-export-option" type="button" data-combine-logic-option="separate" role="option" aria-selected="false"><span>Separate logic</span><i data-feather="check"></i></button>
+              </div>
+            </div>
+            <div class="ops-export-field ops-export-filetype" data-combine-filetype-picker>
+              <span class="ops-export-field__label">File type</span>
+              <input type="hidden" data-combine-filetype value="pdf" />
+              <button class="ops-export-picker-button" type="button" data-combine-filetype-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-combine-filetype-summary>PDF</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-filetype__panel ops-export-floating-panel" data-combine-filetype-panel role="listbox" aria-label="File type" hidden>
+                <button class="ops-export-option is-selected" type="button" data-combine-filetype-option="pdf" role="option" aria-selected="true"><span>PDF</span><i data-feather="check"></i></button>
+                <button class="ops-export-option" type="button" data-combine-filetype-option="excel" role="option" aria-selected="false"><span>Excel</span><i data-feather="check"></i></button>
+              </div>
+            </div>
+            <div class="ops-export-field ops-export-multiselect" data-combine-column-picker>
+              <span class="ops-export-field__label">Columns</span>
+              <button class="ops-export-multiselect__button" type="button" data-combine-column-toggle aria-haspopup="listbox" aria-expanded="false">
+                <span data-combine-column-summary>Columns selected</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+              </button>
+              <div class="ops-export-multiselect__panel ops-export-floating-panel" data-combine-column-panel role="listbox" aria-label="Columns" hidden>
+                <div class="ops-export-columns" data-combine-columns></div>
+              </div>
+            </div>
+            <div class="ops-export-modal__error" data-combine-error>Please select at least two proposals and one column.</div>
+          </div>
+          <div class="ops-export-modal__footer proposal-combine-modal__footer">
+            <button class="btn btn--light" type="button" data-combine-cancel>Cancel</button>
+            <button class="btn btn--light proposal-combine-save-btn" type="button" data-combine-save><i data-feather="save"></i><span>Save as new proposal</span></button>
+            <button class="btn ops-export-confirm" type="button" data-combine-download><i data-feather="download"></i><span>Download</span></button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const proposalsWrap = modal.querySelector('[data-combine-proposals]');
+      const proposalToggle = modal.querySelector('[data-combine-proposal-toggle]');
+      const proposalPanel = modal.querySelector('[data-combine-proposal-panel]');
+      const proposalSummary = modal.querySelector('[data-combine-proposal-summary]');
+      const proposalPicker = modal.querySelector('[data-combine-proposal-picker]');
+      const logic = modal.querySelector('[data-combine-logic]');
+      const logicToggle = modal.querySelector('[data-combine-logic-toggle]');
+      const logicPanel = modal.querySelector('[data-combine-logic-panel]');
+      const logicSummary = modal.querySelector('[data-combine-logic-summary]');
+      const logicPicker = modal.querySelector('[data-combine-logic-picker]');
+      const logicOptions = Array.from(modal.querySelectorAll('[data-combine-logic-option]'));
+      const fileType = modal.querySelector('[data-combine-filetype]');
+      const fileTypeToggle = modal.querySelector('[data-combine-filetype-toggle]');
+      const fileTypePanel = modal.querySelector('[data-combine-filetype-panel]');
+      const fileTypeSummary = modal.querySelector('[data-combine-filetype-summary]');
+      const fileTypePicker = modal.querySelector('[data-combine-filetype-picker]');
+      const fileTypeOptions = Array.from(modal.querySelectorAll('[data-combine-filetype-option]'));
+      const columnsWrap = modal.querySelector('[data-combine-columns]');
+      const columnToggle = modal.querySelector('[data-combine-column-toggle]');
+      const columnPanel = modal.querySelector('[data-combine-column-panel]');
+      const columnSummary = modal.querySelector('[data-combine-column-summary]');
+      const columnPicker = modal.querySelector('[data-combine-column-picker]');
+      const error = modal.querySelector('[data-combine-error]');
+      const download = modal.querySelector('[data-combine-download]');
+      const save = modal.querySelector('[data-combine-save]');
+
+      const proposalChecks = () => Array.from(proposalsWrap?.querySelectorAll('input[type="checkbox"]') || []);
+      const columnChecks = () => Array.from(columnsWrap?.querySelectorAll('input[type="checkbox"]') || []);
+
+      const positionFloatingPanel = (toggle, panel) => {
+        if (!toggle || !panel || panel.hidden) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        const rect = toggle.getBoundingClientRect();
+        const margin = 12;
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const panelWidth = Math.min(Math.max(rect.width, 260), Math.max(0, viewportWidth - (margin * 2)));
+        const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportWidth - panelWidth - margin));
+        const belowSpace = viewportHeight - rect.bottom - margin;
+        const aboveSpace = rect.top - margin;
+        const shouldOpenUp = belowSpace < 240 && aboveSpace > belowSpace;
+        const maxHeight = Math.max(170, Math.min(360, (shouldOpenUp ? aboveSpace : belowSpace) - 8));
+        panel.style.width = `${panelWidth}px`;
+        panel.style.left = `${left}px`;
+        panel.style.maxHeight = `${maxHeight}px`;
+        if (shouldOpenUp) {
+          panel.style.top = 'auto';
+          panel.style.bottom = `${Math.max(margin, viewportHeight - rect.top + 8)}px`;
+        } else {
+          panel.style.top = `${Math.min(rect.bottom + 8, viewportHeight - margin)}px`;
+          panel.style.bottom = 'auto';
+        }
+      };
+
+      const setPanelOpen = (toggle, panel, open) => {
+        if (!toggle || !panel) return;
+        if (panel.parentElement !== document.body) document.body.appendChild(panel);
+        panel.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.classList.toggle('is-open', !!open);
+        if (open) {
+          [
+            [proposalToggle, proposalPanel],
+            [logicToggle, logicPanel],
+            [fileTypeToggle, fileTypePanel],
+            [columnToggle, columnPanel],
+          ].forEach(([otherToggle, otherPanel]) => {
+            if (otherPanel !== panel) setPanelOpen(otherToggle, otherPanel, false);
+          });
+          positionFloatingPanel(toggle, panel);
+          requestAnimationFrame(() => positionFloatingPanel(toggle, panel));
+        }
+      };
+
+      const selectedProposalLabels = () => proposalChecks().filter((x) => x.checked).map((x) => x.dataset.label || x.value);
+      const selectedColumnLabels = () => columnChecks().filter((x) => x.checked).map((x) => currentColumnDefs.find((col) => col.value === x.value)?.label || x.value);
+
+      const updateProposalSummary = () => {
+        const labels = selectedProposalLabels();
+        if (proposalSummary) proposalSummary.textContent = labels.length ? labels.join(', ') : 'Select proposals';
+        if (error && labels.length >= 2 && selectedColumnLabels().length) error.style.display = 'none';
+      };
+      const updateColumnSummary = () => {
+        const labels = selectedColumnLabels();
+        if (columnSummary) columnSummary.textContent = labels.length ? labels.join(', ') : 'Select columns';
+        if (error && labels.length && selectedProposalLabels().length >= 2) error.style.display = 'none';
+      };
+      const updateLogicSummary = () => {
+        const value = normalizeCombineLogic(logic?.value || 'add');
+        if (logic) logic.value = value;
+        if (logicSummary) logicSummary.textContent = combineLogicLabel(value);
+        logicOptions.forEach((option) => {
+          const selected = normalizeCombineLogic(option.dataset.combineLogicOption) === value;
+          option.classList.toggle('is-selected', selected);
+          option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+      };
+      const updateFileTypeSummary = () => {
+        const value = String(fileType?.value || 'pdf').toLowerCase() === 'excel' ? 'excel' : 'pdf';
+        if (fileType) fileType.value = value;
+        if (fileTypeSummary) fileTypeSummary.textContent = value === 'excel' ? 'Excel' : 'PDF';
+        fileTypeOptions.forEach((option) => {
+          const selected = option.dataset.combineFiletypeOption === value;
+          option.classList.toggle('is-selected', selected);
+          option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+      };
+
+      const renderProposals = (proposals) => {
+        const list = Array.isArray(proposals) ? proposals : [];
+        if (!proposalsWrap) return;
+        proposalsWrap.innerHTML = list.length ? list.map((proposal) => {
+          const id = String(proposal?.id || '').trim();
+          const name = String(proposal?.name || 'Untitled Proposal').trim() || 'Untitled Proposal';
+          const count = Number(proposal?.itemsCount || 0) || 0;
+          return `
+            <label class="ops-export-check proposal-combine-check" role="option">
+              <input type="checkbox" value="${escapeHTML(id)}" data-label="${escapeHTML(name)}" />
+              <span><strong>${escapeHTML(name)}</strong><small>${escapeHTML(formatNumber(count))} component${count === 1 ? '' : 's'}</small></span>
+            </label>`;
+        }).join('') : `<div class="proposal-search-select__empty">No proposals available</div>`;
+        proposalChecks().forEach((input) => input.addEventListener('change', updateProposalSummary));
+      };
+
+      const renderColumns = (columns) => {
+        currentColumnDefs = Array.isArray(columns) && columns.length ? columns : PROPOSAL_EXPORT_COLUMNS;
+        if (!columnsWrap) return;
+        columnsWrap.innerHTML = currentColumnDefs.map((col) => `
+          <label class="ops-export-check" role="option">
+            <input type="checkbox" value="${escapeHTML(col.value)}" ${col.checked ? 'checked' : ''} />
+            <span>${escapeHTML(col.label)}</span>
+          </label>
+        `).join('');
+        columnChecks().forEach((input) => input.addEventListener('change', updateColumnSummary));
+      };
+
+      const close = (value = null) => {
+        [
+          [proposalToggle, proposalPanel],
+          [logicToggle, logicPanel],
+          [fileTypeToggle, fileTypePanel],
+          [columnToggle, columnPanel],
+        ].forEach(([toggle, panel]) => setPanelOpen(toggle, panel, false));
+        modal.classList.add('hidden');
+        document.body.classList.remove('modal-open');
+        if (resolver) {
+          const done = resolver;
+          resolver = null;
+          done(value);
+        }
+      };
+
+      const currentPayload = (action) => {
+        const proposalIds = proposalChecks().filter((x) => x.checked).map((x) => x.value).filter(Boolean);
+        const columns = columnChecks().filter((x) => x.checked).map((x) => x.value).filter(Boolean);
+        if (proposalIds.length < 2 || !columns.length) {
+          if (error) error.style.display = 'block';
+          if (proposalIds.length < 2) setPanelOpen(proposalToggle, proposalPanel, true);
+          else setPanelOpen(columnToggle, columnPanel, true);
+          return null;
+        }
+        if (error) error.style.display = 'none';
+        return {
+          action,
+          proposalIds,
+          combineLogic: normalizeCombineLogic(logic?.value || 'add'),
+          fileType: String(fileType?.value || 'pdf').toLowerCase() === 'excel' ? 'excel' : 'pdf',
+          columns,
+        };
+      };
+
+      modal.querySelectorAll('[data-combine-cancel]').forEach((el) => el.addEventListener('click', () => close(null)));
+      proposalToggle?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); setPanelOpen(proposalToggle, proposalPanel, !!proposalPanel?.hidden); });
+      logicToggle?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); setPanelOpen(logicToggle, logicPanel, !!logicPanel?.hidden); });
+      fileTypeToggle?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); setPanelOpen(fileTypeToggle, fileTypePanel, !!fileTypePanel?.hidden); });
+      columnToggle?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); setPanelOpen(columnToggle, columnPanel, !!columnPanel?.hidden); });
+      [proposalPanel, logicPanel, fileTypePanel, columnPanel].forEach((panel) => panel?.addEventListener('click', (event) => event.stopPropagation()));
+      logicOptions.forEach((option) => option.addEventListener('click', () => { if (logic) logic.value = option.dataset.combineLogicOption || 'add'; updateLogicSummary(); setPanelOpen(logicToggle, logicPanel, false); }));
+      fileTypeOptions.forEach((option) => option.addEventListener('click', () => { if (fileType) fileType.value = option.dataset.combineFiletypeOption || 'pdf'; updateFileTypeSummary(); setPanelOpen(fileTypeToggle, fileTypePanel, false); }));
+      document.addEventListener('click', (event) => {
+        if (modal.classList.contains('hidden')) return;
+        const target = event.target;
+        const inside = proposalPicker?.contains(target) || proposalPanel?.contains(target)
+          || logicPicker?.contains(target) || logicPanel?.contains(target)
+          || fileTypePicker?.contains(target) || fileTypePanel?.contains(target)
+          || columnPicker?.contains(target) || columnPanel?.contains(target);
+        if (inside) return;
+        setPanelOpen(proposalToggle, proposalPanel, false);
+        setPanelOpen(logicToggle, logicPanel, false);
+        setPanelOpen(fileTypeToggle, fileTypePanel, false);
+        setPanelOpen(columnToggle, columnPanel, false);
+      });
+      const repositionOpenPanels = () => {
+        if (modal.classList.contains('hidden')) return;
+        positionFloatingPanel(proposalToggle, proposalPanel);
+        positionFloatingPanel(logicToggle, logicPanel);
+        positionFloatingPanel(fileTypeToggle, fileTypePanel);
+        positionFloatingPanel(columnToggle, columnPanel);
+      };
+      window.addEventListener('resize', repositionOpenPanels);
+      window.addEventListener('scroll', repositionOpenPanels, true);
+      modal.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        if (proposalPanel && !proposalPanel.hidden) return setPanelOpen(proposalToggle, proposalPanel, false);
+        if (logicPanel && !logicPanel.hidden) return setPanelOpen(logicToggle, logicPanel, false);
+        if (fileTypePanel && !fileTypePanel.hidden) return setPanelOpen(fileTypeToggle, fileTypePanel, false);
+        if (columnPanel && !columnPanel.hidden) return setPanelOpen(columnToggle, columnPanel, false);
+        close(null);
+      });
+      download?.addEventListener('click', () => {
+        const payload = currentPayload('download');
+        if (payload) close(payload);
+      });
+      save?.addEventListener('click', () => {
+        const payload = currentPayload('save');
+        if (payload) close(payload);
+      });
+
+      ui = { modal, renderProposals, renderColumns, updateProposalSummary, updateColumnSummary, updateLogicSummary, updateFileTypeSummary };
+      hydrateIcons(modal);
+      return ui;
+    };
+
+    return {
+      open: (proposals) => new Promise((resolve) => {
+        const x = ensure();
+        resolver = resolve;
+        x.renderProposals(Array.isArray(proposals) ? proposals : []);
+        x.renderColumns(PROPOSAL_EXPORT_COLUMNS.map((col) => ({ ...col })));
+        const logic = x.modal.querySelector('[data-combine-logic]');
+        const fileType = x.modal.querySelector('[data-combine-filetype]');
+        if (logic) logic.value = 'add';
+        if (fileType) fileType.value = 'pdf';
+        const err = x.modal.querySelector('[data-combine-error]');
+        if (err) err.style.display = 'none';
+        x.updateProposalSummary();
+        x.updateColumnSummary();
+        x.updateLogicSummary();
+        x.updateFileTypeSummary();
+        x.modal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        requestAnimationFrame(() => x.modal.querySelector('[data-combine-proposal-toggle]')?.focus());
+      }),
+    };
+  })();
+
+  async function openCombineProposalsModal() {
+    if (state.loadingProposals) await loadProposals();
+    const proposals = (Array.isArray(state.proposals) ? state.proposals : []).filter((proposal) => String(proposal?.id || '').trim());
+    if (proposals.length < 2) return toast('error', 'Combine proposals', 'Create at least two proposals first.');
+    const options = await CombineProposalsModal.open(proposals);
+    if (!options) return;
+    if (options.action === 'save') {
+      const name = await CombineNameModal.open();
+      if (!name) return;
+      return saveCombinedProposal(options, name);
+    }
+    return downloadCombinedProposals(options);
+  }
+
+  async function downloadCombinedProposals(options = {}) {
+    if (state.combiningProposals) return;
+    const proposalIds = (Array.isArray(options.proposalIds) ? options.proposalIds : []).map((id) => String(id || '').trim()).filter(Boolean);
+    if (proposalIds.length < 2) return toast('error', 'Combine proposals', 'Select at least two proposals.');
+    const fileType = String(options.fileType || 'pdf').toLowerCase() === 'excel' ? 'excel' : 'pdf';
+    const columns = Array.isArray(options.columns) && options.columns.length ? options.columns : PROPOSAL_EXPORT_COLUMNS.filter((col) => col.checked).map((col) => col.value);
+    state.combiningProposals = true;
+    try {
+      const query = new URLSearchParams({ _ts: String(Date.now()), proposalIds: proposalIds.join(','), logic: normalizeCombineLogic(options.combineLogic || 'add'), columns: columns.join(',') });
+      const res = await fetch(`/api/products/proposals/combine/${fileType === 'excel' ? 'excel' : 'pdf'}?${query.toString()}`, { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to download combined proposals.');
+      }
+      const blob = await res.blob();
+      const ext = fileType === 'excel' ? 'xlsx' : 'pdf';
+      const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), `combined-proposals.${ext}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      toast('success', 'Combine proposals', `Combined ${fileType === 'excel' ? 'Excel' : 'PDF'} downloaded.`);
+    } catch (error) {
+      toast('error', 'Combine proposals', error?.message || 'Failed to download combined proposals.');
+    } finally {
+      state.combiningProposals = false;
+    }
+  }
+
+  async function saveCombinedProposal(options = {}, name = '') {
+    if (state.savingCombinedProposal) return;
+    const proposalIds = (Array.isArray(options.proposalIds) ? options.proposalIds : []).map((id) => String(id || '').trim()).filter(Boolean);
+    if (proposalIds.length < 2 || !String(name || '').trim()) return toast('error', 'Combine proposals', 'Select proposals and write a proposal name.');
+    state.savingCombinedProposal = true;
+    try {
+      const data = await api('/api/products/proposals/combine/save', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: String(name || '').trim(),
+          proposalIds,
+          combineLogic: normalizeCombineLogic(options.combineLogic || 'add'),
+          columns: Array.isArray(options.columns) ? options.columns : [],
+        }),
+      });
+      if (data?.proposal?.id && data?.combinedMeta) saveCombinedMetaForProposal(data.proposal.id, data.combinedMeta);
+      await loadProposals();
+      if (data?.proposal?.id) await openProposalDetail(data.proposal.id, { edit: false });
+      toast('success', 'Combine proposals', 'Combined proposal saved.');
+    } catch (error) {
+      toast('error', 'Combine proposals', error?.message || 'Failed to save combined proposal.');
+    } finally {
+      state.savingCombinedProposal = false;
+    }
+  }
+
   function filenameFromDisposition(disposition, fallback) {
     const header = String(disposition || '');
     const utf = header.match(/filename\*=UTF-8''([^;]+)/i);
@@ -1619,6 +2198,7 @@
       btn.addEventListener('click', () => setTab(btn.getAttribute('data-tab')));
     });
     if (els.createProposalBtn) els.createProposalBtn.addEventListener('click', () => startNewFolder('proposal'));
+    if (els.combineProposalsBtn) els.combineProposalsBtn.addEventListener('click', openCombineProposalsModal);
     if (els.createKitBtn) els.createKitBtn.addEventListener('click', () => startNewFolder('kit'));
 
     if (els.proposalsList) els.proposalsList.addEventListener('click', (event) => {
@@ -1735,6 +2315,7 @@
     els.proposalDetail = $('proposalDetail');
     els.kitDetail = $('kitDetail');
     els.createProposalBtn = $('createProposalBtn');
+    els.combineProposalsBtn = $('combineProposalsBtn');
     els.createKitBtn = $('createKitBtn');
     els.proposalNameModal = $('proposalNameModal');
     els.proposalNameForm = $('proposalNameForm');
