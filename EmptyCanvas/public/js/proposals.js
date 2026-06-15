@@ -287,18 +287,38 @@
     return logic;
   }
 
+  function proposalMergeLogicLabel(value) {
+    const logic = normalizeProposalMergeLogic(value);
+    if (logic === 'max') return 'Max logic';
+    if (logic === 'min') return 'Min logic';
+    return 'Add logic';
+  }
+
+  function proposalLogicOptionHTML(value) {
+    const logic = normalizeProposalMergeLogic(value);
+    return `<button type="button" class="proposal-search-select__option" data-action="choose-search-option" data-value="${escapeHTML(logic)}" data-label="${escapeHTML(proposalMergeLogicLabel(logic))}"><span>${escapeHTML(proposalMergeLogicLabel(logic))}</span></button>`;
+  }
+
   function proposalLogicControlHTML() {
     const current = normalizeProposalMergeLogic(state.proposalMergeLogic || 'add');
-    const option = (value, label) => `<option value="${escapeHTML(value)}"${current === value ? ' selected' : ''}>${escapeHTML(label)}</option>`;
     return `
       <div class="proposal-logic-row">
         <label class="products-field proposal-logic-field">
           <span>Logic</span>
-          <select id="proposalMergeLogicSelect" aria-label="Proposal quantity logic">
-            ${option('add', 'Add logic')}
-            ${option('max', 'Max logic')}
-            ${option('min', 'Min logic')}
-          </select>
+          <div class="proposal-search-select proposal-search-select--light proposal-search-select--logic" data-select-root data-target="proposalMergeLogicSelect">
+            <input type="hidden" id="proposalMergeLogicSelect" value="${escapeHTML(current)}" />
+            <button type="button" class="proposal-search-select__button" data-action="toggle-search-select" aria-haspopup="listbox" aria-expanded="false">
+              <span class="proposal-search-select__value">${escapeHTML(proposalMergeLogicLabel(current))}</span>
+              <i data-feather="chevron-down"></i>
+            </button>
+            <div class="proposal-search-select__menu" role="listbox" hidden>
+              <div class="proposal-search-select__options">
+                ${proposalLogicOptionHTML('add')}
+                ${proposalLogicOptionHTML('max')}
+                ${proposalLogicOptionHTML('min')}
+              </div>
+            </div>
+          </div>
         </label>
       </div>
     `;
@@ -530,12 +550,8 @@
     const editable = !!state.proposalEditMode;
     const createMode = !!state.proposalCreateMode;
     return `
-      <header class="products-proposal-detail__head">
+      <header class="products-proposal-detail__head proposal-detail-head--compact">
         <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
-        <div class="proposal-detail-title-block">
-          <h2>${escapeHTML(createMode ? 'Create New Proposal' : (proposal?.name || 'Proposal'))}</h2>
-          <p>${createMode ? 'Write the proposal name to continue' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
-        </div>
         ${createMode ? '' : `
           <div class="proposal-detail-actions">
             <button type="button" class="btn b2b-download-primary proposal-download-btn" data-action="download-proposal"><i data-feather="download"></i><span>Download</span></button>
@@ -1109,15 +1125,32 @@
     return state.teamMembers;
   }
 
+  function resetMakeOrderMemberSelect() {
+    if (els.makeOrderMember) els.makeOrderMember.value = '';
+    const root = els.makeOrderMemberRoot;
+    const label = root?.querySelector('.proposal-search-select__value');
+    const menu = root?.querySelector('.proposal-search-select__menu');
+    const toggle = root?.querySelector('.proposal-search-select__button');
+    if (label) label.textContent = 'Select team member';
+    if (menu) menu.hidden = true;
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    if (root) root.classList.remove('is-open');
+  }
+
   async function openMakeOrderModal() {
     const proposalId = String(state.activeProposal?.id || '').trim();
     if (!proposalId) return;
     state.pendingOrderProposalId = proposalId;
     try { await loadTeamMembersForOrder(); } catch (error) { return toast('error', 'Make order', error?.message || 'Failed to load team members.'); }
-    const select = els.makeOrderMember;
-    if (select) {
-      select.innerHTML = `<option value="">Select team member</option>` + state.teamMembers.map((m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(m.name)}${m.department ? ` — ${escapeHTML(m.department)}` : ''}</option>`).join('');
+    if (els.makeOrderMemberOptions) {
+      els.makeOrderMemberOptions.innerHTML = state.teamMembers.length
+        ? state.teamMembers.map((m) => {
+            const label = `${m.name || 'Unnamed'}${m.department ? ` — ${m.department}` : ''}`;
+            return `<button type="button" class="proposal-search-select__option" data-action="choose-search-option" data-value="${escapeHTML(m.id)}" data-label="${escapeHTML(label)}"><span>${escapeHTML(label)}</span>${m.position ? `<small>${escapeHTML(m.position)}</small>` : ''}</button>`;
+          }).join('')
+        : `<div class="proposal-search-select__empty">No team members available</div>`;
     }
+    resetMakeOrderMemberSelect();
     if (els.makeOrderPassword) els.makeOrderPassword.value = '';
     if (els.makeOrderError) els.makeOrderError.textContent = '';
     if (els.makeOrderModal) {
@@ -1141,13 +1174,13 @@
     event.preventDefault();
     const proposalId = String(state.pendingOrderProposalId || state.activeProposal?.id || '').trim();
     const teamMemberId = String(els.makeOrderMember?.value || '').trim();
-    const password = String(els.makeOrderPassword?.value || '').trim();
-    if (!proposalId || !teamMemberId || !password) {
-      if (els.makeOrderError) els.makeOrderError.textContent = 'Select a team member and enter the password.';
+    const adminPassword = String(els.makeOrderPassword?.value || '').trim();
+    if (!proposalId || !teamMemberId || !adminPassword) {
+      if (els.makeOrderError) els.makeOrderError.textContent = 'Select a team member and enter the Admin password.';
       return;
     }
     try {
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/make-order`, { method: 'POST', body: JSON.stringify({ teamMemberId, password }) });
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/make-order`, { method: 'POST', body: JSON.stringify({ teamMemberId, adminPassword }) });
       closeMakeOrderModal();
       toast('success', 'Make order', `Created ${data.orderId || 'order'} with ${formatNumber(data.count || 0)} item(s).`);
     } catch (error) {
@@ -1261,6 +1294,9 @@
       const input = targetId ? document.getElementById(targetId) : null;
       const label = option.getAttribute('data-label') || option.textContent || '';
       if (input) input.value = option.getAttribute('data-value') || '';
+      if (targetId === 'proposalMergeLogicSelect') {
+        state.proposalMergeLogic = normalizeProposalMergeLogic(input?.value || option.getAttribute('data-value') || 'add');
+      }
       const valueEl = root?.querySelector('.proposal-search-select__value');
       if (valueEl) valueEl.textContent = label;
       closeAllSearchSelects();
@@ -1416,6 +1452,8 @@
     els.makeOrderClose = $('makeOrderClose');
     els.makeOrderCancel = $('makeOrderCancel');
     els.makeOrderMember = $('makeOrderMember');
+    els.makeOrderMemberRoot = $('makeOrderMemberRoot');
+    els.makeOrderMemberOptions = $('makeOrderMemberOptions');
     els.makeOrderPassword = $('makeOrderPassword');
     els.makeOrderError = $('makeOrderError');
   }
