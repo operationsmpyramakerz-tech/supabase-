@@ -6687,15 +6687,64 @@ function _proposalPdfMoney(value) {
   return `£${n.toFixed(2)}`;
 }
 
-async function _sbRenderProductProposalPdf(proposalId, req, res) {
-  const id = String(proposalId || "").trim();
-  if (!id) {
-    const err = new Error("Proposal ID is required.");
-    err.status = 400;
-    throw err;
-  }
+const PRODUCT_PROPOSAL_EXPORT_COLUMNS = [
+  { key: "idCode", aliases: ["id", "id-code", "id_code", "code"], label: "ID Code", pdfWidth: 70, excelWidth: 16, align: "left" },
+  { key: "name", aliases: ["component", "product", "product-name", "product_name", "component-name", "component_name"], label: "Component", pdfWidth: 215, excelWidth: 34, align: "left" },
+  { key: "quantity", aliases: ["qty", "qnty"], label: "Qty", pdfWidth: 60, excelWidth: 12, align: "right" },
+  { key: "unitPrice", aliases: ["unit", "unit-cost", "unit_cost", "unit-price", "unit_price", "unity-price", "unity_price", "price"], label: "Unit cost", pdfWidth: 78, excelWidth: 15, align: "right" },
+  { key: "totalPrice", aliases: ["total", "total-cost", "total_cost", "total-price", "total_price"], label: "Total cost", pdfWidth: 86, excelWidth: 15, align: "right" },
+];
 
-  const detail = await _sbProductProposalById(id, req);
+function _proposalExportColumnKey(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  if (!raw) return "";
+  for (const col of PRODUCT_PROPOSAL_EXPORT_COLUMNS) {
+    if (raw === String(col.key).trim().toLowerCase().replace(/[\s_]+/g, "-")) return col.key;
+    if ((col.aliases || []).some((alias) => raw === String(alias).trim().toLowerCase().replace(/[\s_]+/g, "-"))) return col.key;
+  }
+  return "";
+}
+
+function _proposalSelectedExportColumns(value) {
+  const rawList = Array.isArray(value)
+    ? value
+    : String(value || "").split(",");
+  const seen = new Set();
+  const selected = [];
+  for (const raw of rawList) {
+    const key = _proposalExportColumnKey(raw);
+    if (!key || seen.has(key)) continue;
+    const def = PRODUCT_PROPOSAL_EXPORT_COLUMNS.find((col) => col.key === key);
+    if (def) {
+      selected.push(def);
+      seen.add(key);
+    }
+  }
+  return selected.length ? selected : PRODUCT_PROPOSAL_EXPORT_COLUMNS.slice();
+}
+
+function _proposalPdfColumnsForContent(selectedColumns, contentW) {
+  const columns = (Array.isArray(selectedColumns) && selectedColumns.length ? selectedColumns : PRODUCT_PROPOSAL_EXPORT_COLUMNS)
+    .map((col) => ({ key: col.key, label: col.label, width: col.pdfWidth, align: col.align || "left" }));
+  const naturalW = columns.reduce((sum, col) => sum + (Number(col.width) || 0), 0) || contentW;
+  if (naturalW > contentW) {
+    const scale = contentW / naturalW;
+    columns.forEach((col) => { col.width = Math.max(42, Math.floor((Number(col.width) || 60) * scale)); });
+  } else if (naturalW < contentW) {
+    const extra = contentW - naturalW;
+    const nameCol = columns.find((col) => col.key === "name");
+    if (nameCol) {
+      nameCol.width += extra;
+    } else {
+      const perColumn = extra / Math.max(1, columns.length);
+      columns.forEach((col) => { col.width += perColumn; });
+    }
+  }
+  return columns;
+}
+
+async function _sbProductProposalExportData(proposalId, req = null) {
+  const detail = await _sbProductProposalById(proposalId, req);
   if (!detail?.proposal) {
     const err = new Error("Proposal not found.");
     err.status = 404;
@@ -6733,6 +6782,36 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
       rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))),
     }))
     .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
+
+  const totals = rows.reduce((acc, row) => {
+    acc.items += 1;
+    acc.quantity += Number(row.quantity) || 0;
+    if (Number.isFinite(Number(row.totalPrice))) acc.total += Number(row.totalPrice);
+    return acc;
+  }, { items: 0, quantity: 0, total: 0 });
+
+  return { detail, rows, groupedRows, totals };
+}
+
+function _proposalExportCellValue(row = {}, key = "", { formattedMoney = false } = {}) {
+  if (key === "idCode") return row.idCode || "";
+  if (key === "name") return row.name || "-";
+  if (key === "quantity") return Number(row.quantity || 0) || 0;
+  if (key === "unitPrice") return formattedMoney ? _proposalPdfMoney(row.unitPrice) : (Number.isFinite(Number(row.unitPrice)) ? Number(row.unitPrice) : null);
+  if (key === "totalPrice") return formattedMoney ? _proposalPdfMoney(row.totalPrice) : (Number.isFinite(Number(row.totalPrice)) ? Number(row.totalPrice) : null);
+  return "";
+}
+
+async function _sbRenderProductProposalPdf(proposalId, req, res) {
+  const id = String(proposalId || "").trim();
+  if (!id) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { detail, rows, groupedRows, totals } = await _sbProductProposalExportData(id, req);
+  const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
 
   await ensurePdfArabicSupport();
   const createdAt = new Date();
@@ -6811,13 +6890,6 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
   drawInfoBox(mL + boxW + boxGap, "Date", generatedLabel);
   doc.y = boxY + boxH + 18;
 
-  const totals = rows.reduce((acc, row) => {
-    acc.items += 1;
-    acc.quantity += Number(row.quantity) || 0;
-    if (Number.isFinite(Number(row.totalPrice))) acc.total += Number(row.totalPrice);
-    return acc;
-  }, { items: 0, quantity: 0, total: 0 });
-
   const statGap = 10;
   const statW = (contentW - statGap * 2) / 3;
   const drawStats = () => {
@@ -6843,13 +6915,7 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
     return;
   }
 
-  const columns = [
-    { key: "idCode", label: "ID Code", width: 70, align: "left" },
-    { key: "name", label: "Component", width: 215, align: "left" },
-    { key: "quantity", label: "Quantity", width: 60, align: "right" },
-    { key: "unitPrice", label: "Unity Price", width: 78, align: "right" },
-    { key: "totalPrice", label: "Total Price", width: 86, align: "right" },
-  ];
+  const columns = _proposalPdfColumnsForContent(selectedExportColumns, contentW);
   const tableW = columns.reduce((sum, col) => sum + col.width, 0);
   const startX = mL;
   const cellPad = 7;
@@ -6895,13 +6961,11 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
     drawTagHeader(group.tag, group.rows.length);
     group.rows.forEach((row) => {
       doc.font("Helvetica").fontSize(8.5);
-      const values = {
-        idCode: row.idCode || "",
-        name: row.name || "-",
-        quantity: String(row.quantity || 0),
-        unitPrice: _proposalPdfMoney(row.unitPrice),
-        totalPrice: _proposalPdfMoney(row.totalPrice),
-      };
+      const values = columns.reduce((acc, col) => {
+        const formattedMoney = col.key === "unitPrice" || col.key === "totalPrice";
+        acc[col.key] = _proposalExportCellValue(row, col.key, { formattedMoney });
+        return acc;
+      }, {});
       const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || ""), { width: col.width - cellPad * 2, align: col.align }));
       const rowH = Math.max(22, ...heights) + 8;
       ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
@@ -6937,6 +7001,108 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
   drawStats();
 
   doc.end();
+}
+
+async function _sbRenderProductProposalExcel(proposalId, req, res) {
+  const id = String(proposalId || "").trim();
+  if (!id) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+
+  const { detail, rows, groupedRows, totals } = await _sbProductProposalExportData(id, req);
+  const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
+  const ExcelJS = require("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Operations Hub";
+  workbook.created = new Date();
+  const worksheet = workbook.addWorksheet("Proposal");
+  const proposalName = String(detail.proposal.name || "Proposal").trim() || "Proposal";
+  const generatedAt = new Date();
+
+  worksheet.columns = selectedExportColumns.map((col) => ({
+    header: col.label,
+    key: col.key,
+    width: col.excelWidth || 16,
+  }));
+
+  worksheet.spliceRows(1, 0,
+    ["Proposal", proposalName],
+    ["Date", formatDateTime(generatedAt)],
+    ["Total requested items", `${totals.items} item${totals.items === 1 ? "" : "s"}`],
+    ["Total quantity", totals.quantity],
+    ["Total cost", totals.total],
+    []
+  );
+
+  const headerRowIndex = 7;
+  const headerRow = worksheet.getRow(headerRowIndex);
+  selectedExportColumns.forEach((col, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = col.label;
+    cell.font = { bold: true, color: { argb: "FF111827" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+    cell.border = {
+      top: { style: "thin", color: { argb: "FFE5E7EB" } },
+      left: { style: "thin", color: { argb: "FFE5E7EB" } },
+      bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+      right: { style: "thin", color: { argb: "FFE5E7EB" } },
+    };
+    cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
+  });
+
+  if (!rows.length) {
+    const row = worksheet.addRow(["No components yet."]);
+    row.font = { italic: true, color: { argb: "FF6B7280" } };
+  } else {
+    for (const group of groupedRows) {
+      const groupRow = worksheet.addRow([`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
+      const lastColumn = Math.max(1, selectedExportColumns.length);
+      if (lastColumn > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastColumn);
+      groupRow.font = { bold: true, color: { argb: "FF9A3412" } };
+      groupRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+      groupRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFFED7AA" } },
+          left: { style: "thin", color: { argb: "FFFED7AA" } },
+          bottom: { style: "thin", color: { argb: "FFFED7AA" } },
+          right: { style: "thin", color: { argb: "FFFED7AA" } },
+        };
+      });
+
+      for (const item of group.rows) {
+        const payload = {};
+        for (const col of selectedExportColumns) payload[col.key] = _proposalExportCellValue(item, col.key);
+        const row = worksheet.addRow(payload);
+        selectedExportColumns.forEach((col, index) => {
+          const cell = row.getCell(index + 1);
+          if (col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = '£#,##0.00;[Red]-£#,##0.00';
+          cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE5E7EB" } },
+            left: { style: "thin", color: { argb: "FFE5E7EB" } },
+            bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+            right: { style: "thin", color: { argb: "FFE5E7EB" } },
+          };
+        });
+      }
+    }
+  }
+
+  worksheet.getColumn(1).eachCell((cell, rowNumber) => {
+    if (rowNumber <= 5) cell.font = { ...(cell.font || {}), bold: rowNumber <= 5 };
+  });
+  worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
+
+  const dateStr = generatedAt.toISOString().slice(0, 10);
+  const fileBase = _proposalPdfSafeFilename(proposalName);
+  const fileName = `${fileBase}-${dateStr}.xlsx`;
+  const buffer = await workbook.xlsx.writeBuffer();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.set("Cache-Control", "no-store");
+  return res.send(Buffer.from(buffer));
 }
 
 async function _sbProductsMapById() {
@@ -24830,6 +24996,24 @@ app.get(
       console.error("GET /api/products/proposals/:proposalId/pdf error:", error?.details || error);
       if (!res.headersSent) {
         return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download proposal PDF." });
+      }
+      try { res.end(); } catch {}
+    }
+  },
+);
+
+app.get(
+  "/api/products/proposals/:proposalId/excel",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      return await _sbRenderProductProposalExcel(req.params.proposalId, req, res);
+    } catch (error) {
+      console.error("GET /api/products/proposals/:proposalId/excel error:", error?.details || error);
+      if (!res.headersSent) {
+        return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download proposal Excel." });
       }
       try { res.end(); } catch {}
     }
