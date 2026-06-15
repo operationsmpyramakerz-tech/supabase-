@@ -342,6 +342,29 @@
     return String(product?.url || product?.productUrl || item?.url || item?.productUrl || item?.product_url || '').trim();
   }
 
+  function firstProductTagForItem(item = {}) {
+    const product = productForItem(item);
+    const rawTags = Array.isArray(product?.tags) ? product.tags : (product?.tags ? [product.tags] : []);
+    const tag = rawTags.map((entry) => String(entry || '').trim()).find(Boolean);
+    return tag || 'Uncategorized';
+  }
+
+  function groupedProposalItemsByTag(items = []) {
+    const groups = new Map();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const tag = firstProductTagForItem(item);
+      const key = tag.toLowerCase();
+      if (!groups.has(key)) groups.set(key, { tag, items: [] });
+      groups.get(key).items.push(item);
+    });
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        items: group.items.slice().sort((a, b) => String(a?.productName || a?.product_name || '').localeCompare(String(b?.productName || b?.product_name || ''))),
+      }))
+      .sort((a, b) => String(a.tag || '').localeCompare(String(b.tag || '')));
+  }
+
   function formatCurrency(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return '—';
@@ -466,39 +489,53 @@
     return kind === 'kit' ? !!state.kitEditMode : !!state.proposalEditMode;
   }
 
-  function renderItemRows(items, kind) {
+  function renderItemRow(item, kind) {
     const actionPrefix = kind === 'kit' ? 'kit' : 'proposal';
+    const editable = isEditingKind(kind);
+    const id = String(item?.id || '').trim();
+    const name = String(item?.productName || item?.product_name || 'Untitled Product').trim();
+    const qty = Number(item?.quantity || 0) || 1;
+    const unitPrice = itemUnitPrice(item);
+    const totalPrice = unitPrice === null ? null : unitPrice * qty;
+    const url = itemProductUrl(item);
+    const linkHTML = url
+      ? `<a class="proposal-row-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open product link for ${escapeHTML(name)}"><i data-feather="external-link"></i></a>`
+      : `<span class="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><i data-feather="minus"></i></span>`;
+    const qtyHTML = editable
+      ? `<input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" />`
+      : `<strong>${escapeHTML(qty)}</strong>`;
+    const actionHTML = editable
+      ? `<button type="button" class="proposal-row-delete proposal-row-delete--icon" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}" aria-label="Delete ${escapeHTML(name)}" title="Delete"><i data-feather="trash-2"></i></button>`
+      : '';
+    return `
+      <tr data-item-id="${escapeHTML(id)}">
+        <td class="proposal-component-name"><strong>${escapeHTML(name)}</strong></td>
+        <td>${qtyHTML}</td>
+        <td class="proposal-price-cell">${escapeHTML(formatCurrency(unitPrice))}</td>
+        <td class="proposal-price-cell proposal-price-cell--total">${escapeHTML(formatCurrency(totalPrice))}</td>
+        <td class="proposal-link-cell">${linkHTML}</td>
+        <td><div class="proposal-row-actions">${actionHTML}</div></td>
+      </tr>
+    `;
+  }
+
+  function renderItemRows(items, kind) {
     const editable = isEditingKind(kind);
     if (!items.length) {
       return `<tr><td colspan="6"><div class="products-table-empty">No components yet. ${editable ? `Add one component${kind === 'proposal' ? ' or one saved kit' : ''} above.` : 'Open Edit from the folder menu to add components.'}</div></td></tr>`;
     }
-    return items.map((item) => {
-      const id = String(item?.id || '').trim();
-      const name = String(item?.productName || item?.product_name || 'Untitled Product').trim();
-      const qty = Number(item?.quantity || 0) || 1;
-      const unitPrice = itemUnitPrice(item);
-      const totalPrice = unitPrice === null ? null : unitPrice * qty;
-      const url = itemProductUrl(item);
-      const linkHTML = url
-        ? `<a class="proposal-row-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open product link for ${escapeHTML(name)}"><i data-feather="external-link"></i></a>`
-        : `<span class="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><i data-feather="minus"></i></span>`;
-      const qtyHTML = editable
-        ? `<input class="proposal-item-qty" type="number" min="1" step="1" value="${escapeHTML(qty)}" aria-label="Quantity for ${escapeHTML(name)}" />`
-        : `<strong>${escapeHTML(qty)}</strong>`;
-      const actionHTML = editable
-        ? `<button type="button" class="proposal-row-delete proposal-row-delete--icon" data-action="delete-${actionPrefix}-item" data-item-id="${escapeHTML(id)}" aria-label="Delete ${escapeHTML(name)}" title="Delete"><i data-feather="trash-2"></i></button>`
-        : '';
-      return `
-        <tr data-item-id="${escapeHTML(id)}">
-          <td class="proposal-component-name"><strong>${escapeHTML(name)}</strong></td>
-          <td>${qtyHTML}</td>
-          <td class="proposal-price-cell">${escapeHTML(formatCurrency(unitPrice))}</td>
-          <td class="proposal-price-cell proposal-price-cell--total">${escapeHTML(formatCurrency(totalPrice))}</td>
-          <td class="proposal-link-cell">${linkHTML}</td>
-          <td><div class="proposal-row-actions">${actionHTML}</div></td>
-        </tr>
-      `;
-    }).join('');
+    if (kind !== 'proposal') return items.map((item) => renderItemRow(item, kind)).join('');
+    return groupedProposalItemsByTag(items).map((group) => `
+      <tr class="proposal-tag-group-row" data-proposal-tag-group="${escapeHTML(group.tag)}">
+        <td colspan="6">
+          <div class="proposal-tag-group-label">
+            <span>${escapeHTML(group.tag)}</span>
+            <small>${formatNumber(group.items.length)} item${group.items.length === 1 ? '' : 's'}</small>
+          </div>
+        </td>
+      </tr>
+      ${group.items.map((item) => renderItemRow(item, kind)).join('')}
+    `).join('');
   }
 
   function totalBlockHTML(items = []) {
