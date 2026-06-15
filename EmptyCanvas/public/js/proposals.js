@@ -25,6 +25,7 @@
     kitNameMode: 'create',
     proposalCreateMode: false,
     kitCreateMode: false,
+    proposalMergeLogic: 'add',
     copyProposalTarget: null,
     copyKitTarget: null,
   };
@@ -272,6 +273,37 @@
     return String(document.getElementById(id)?.value || '').trim();
   }
 
+  function normalizeProposalMergeLogic(value) {
+    const raw = String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, '-');
+    if (raw === 'max' || raw === 'max-logic') return 'max';
+    if (raw === 'min' || raw === 'min-logic') return 'min';
+    return 'add';
+  }
+
+  function selectedProposalMergeLogic() {
+    const select = document.getElementById('proposalMergeLogicSelect');
+    const logic = normalizeProposalMergeLogic(select?.value || state.proposalMergeLogic || 'add');
+    state.proposalMergeLogic = logic;
+    return logic;
+  }
+
+  function proposalLogicControlHTML() {
+    const current = normalizeProposalMergeLogic(state.proposalMergeLogic || 'add');
+    const option = (value, label) => `<option value="${escapeHTML(value)}"${current === value ? ' selected' : ''}>${escapeHTML(label)}</option>`;
+    return `
+      <div class="proposal-logic-row">
+        <label class="products-field proposal-logic-field">
+          <span>Logic</span>
+          <select id="proposalMergeLogicSelect" aria-label="Proposal quantity logic">
+            ${option('add', 'Add logic')}
+            ${option('max', 'Max logic')}
+            ${option('min', 'Min logic')}
+          </select>
+        </label>
+      </div>
+    `;
+  }
+
   function productForItem(item = {}) {
     const productId = String(item?.productId || item?.product_id || '').trim();
     const product = (Array.isArray(state.products) ? state.products : []).find((entry) => String(entry?.id || '').trim() === productId);
@@ -513,6 +545,7 @@
       </header>
       ${editable ? editNameBlockHTML('proposal', createMode ? '' : (proposal?.name || 'Proposal'), { createMode, required: createMode }) : ''}
       ${createMode ? createModeHintHTML('proposal') : ''}
+      ${editable && !createMode ? proposalLogicControlHTML() : ''}
       ${editable && !createMode ? `
       <div class="products-proposal-tools proposals-two-tools">
         <div class="products-proposal-tool-card">
@@ -880,7 +913,8 @@
     const quantity = numericInputValue(document.getElementById('proposalProductQty'), 1);
     if (!proposalId || !productId) return toast('error', 'Proposals', 'Select a product first.');
     try {
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, adminPassword: state.proposalAdminPassword }) });
+      const mergeLogic = selectedProposalMergeLogic();
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, mergeLogic, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -895,7 +929,8 @@
     const quantity = numericInputValue(document.getElementById('proposalKitQty'), 1);
     if (!proposalId || !kitId) return toast('error', 'Proposals', 'Select a kit first.');
     try {
-      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, adminPassword: state.proposalAdminPassword }) });
+      const mergeLogic = selectedProposalMergeLogic();
+      const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, mergeLogic, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
       renderProposalDetail();
@@ -1310,6 +1345,10 @@
       if (action === 'delete-proposal-item') return deleteItem('proposal', itemId);
     });
     if (els.proposalDetail) els.proposalDetail.addEventListener('change', (event) => {
+      if (event.target.matches('#proposalMergeLogicSelect')) {
+        state.proposalMergeLogic = normalizeProposalMergeLogic(event.target.value);
+        return;
+      }
       if (!event.target.matches('.proposal-item-qty')) return;
       const row = event.target.closest('tr');
       const itemId = row?.getAttribute('data-item-id');
