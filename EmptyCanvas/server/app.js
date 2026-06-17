@@ -8890,6 +8890,14 @@ app.get("/b2b", requireAuth, requirePage("B2B"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "b2b.html"));
 });
 
+app.get("/b2b/new", requireAuth, requirePage("B2B"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "b2b.html"));
+});
+
+app.get("/b2b/edit/:id", requireAuth, requirePage("B2B"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "b2b.html"));
+});
+
 // B2B School detail page
 app.get("/b2b/school/:id", requireAuth, requirePage("B2B"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "b2b-school.html"));
