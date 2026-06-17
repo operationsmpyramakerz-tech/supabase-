@@ -799,13 +799,19 @@
     const label = isKit ? 'Kit name' : 'Proposal name';
     const placeholder = options.placeholder || (isKit ? 'Example: Arduino starter kit' : 'Example: City quotation');
     const requiredMark = options.required ? ' <em>*</em>' : '';
+    const blockClasses = [
+      'proposal-name-edit-block',
+      options.createMode ? 'proposal-name-edit-block--create' : '',
+      isKit && options.createMode ? 'proposal-name-edit-block--kit-create' : '',
+    ].filter(Boolean).join(' ');
+    const saveButton = options.hideButton ? '' : `<button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>`;
     return `
-      <div class="proposal-name-edit-block ${options.createMode ? 'proposal-name-edit-block--create' : ''}">
+      <div class="${blockClasses}">
         <label class="products-field products-field--wide">
           <span>${label}${requiredMark}</span>
           <input id="${inputId}" type="text" value="${escapeHTML(currentName || '')}" autocomplete="off" placeholder="${escapeHTML(placeholder)}" />
         </label>
-        <button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>
+        ${saveButton}
       </div>
     `;
   }
@@ -819,6 +825,16 @@
           <strong>Name this ${escapeHTML(label)} first.</strong>
           <span>After saving, you will return to the ${escapeHTML(kind === 'kit' ? 'Kits' : 'Proposals')} page.</span>
         </div>
+      </div>
+    `;
+  }
+
+  function kitCreateSaveHTML() {
+    return `
+      <div class="kit-create-save-footer">
+        <button type="button" class="products-btn products-btn--dark kit-create-save-btn" data-action="save-kit-name">
+          <i data-feather="save"></i><span>Save</span>
+        </button>
       </div>
     `;
   }
@@ -888,12 +904,11 @@
         <button type="button" class="products-back-btn" data-action="back-kits" aria-label="Back to kits"><i data-feather="arrow-left"></i></button>
         <div>
           <h2>${escapeHTML(createMode ? 'Create New Kit' : (kit?.name || 'Kit'))}</h2>
-          <p>${createMode ? 'Write the kit name to continue' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
+          <p>${createMode ? 'Write the kit name and add at least one component' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
         </div>
       </header>
-      ${editable ? editNameBlockHTML('kit', createMode ? '' : (kit?.name || 'Kit'), { createMode, required: createMode }) : ''}
-      ${createMode ? createModeHintHTML('kit') : ''}
-      ${editable && !createMode ? `
+      ${editable ? editNameBlockHTML('kit', createMode ? '' : (kit?.name || 'Kit'), { createMode, required: createMode, hideButton: createMode }) : ''}
+      ${editable ? `
       <div class="products-proposal-tools proposals-one-tool">
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add kit component</span></div>
@@ -903,8 +918,8 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-kit-product"><i data-feather="plus"></i><span>Add</span></button>
           </div>
         </div>
-      </div>` : (createMode ? '' : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`)}
-      ${createMode ? '' : `<div class="products-proposal-table-card">
+      </div>` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
+      <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
           <span>${formatNumber(count)} item${count === 1 ? '' : 's'}</span>
@@ -916,7 +931,8 @@
           </table>
         </div>
         ${totalBlockHTML(state.kitItems)}
-      </div>`}
+      </div>
+      ${createMode ? kitCreateSaveHTML() : ''}
     `;
   }
 
@@ -1237,11 +1253,46 @@
     } catch (error) { toast('error', 'Proposals', error?.message || 'Failed to add kit.'); }
   }
 
+  function productById(productId) {
+    const id = String(productId || '').trim();
+    if (!id) return null;
+    return (Array.isArray(state.products) ? state.products : []).find((product) => String(product?.id || '').trim() === id) || null;
+  }
+
+  function upsertDraftKitProduct(productId, quantity = 1) {
+    const product = productById(productId);
+    if (!product) return false;
+    const id = String(product?.id || '').trim();
+    const existing = state.kitItems.find((item) => String(item?.productId || item?.product_id || '').trim() === id);
+    if (existing) {
+      existing.quantity = Math.max(1, Math.round((Number(existing.quantity || 0) || 0) + (Number(quantity) || 1)));
+      existing.updatedAt = new Date().toISOString();
+      return true;
+    }
+    const tempId = `draft-kit-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    state.kitItems.push({
+      id: tempId,
+      kitId: '',
+      productId: id,
+      productName: product?.name || product?.productName || product?.product_name || 'Untitled Product',
+      quantity: Math.max(1, Math.round(Number(quantity) || 1)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return true;
+  }
+
   async function addKitProduct() {
     const kitId = String(state.activeKit?.id || '').trim();
     const productId = selectedValue('kitProductSelect');
     const quantity = numericInputValue(document.getElementById('kitProductQty'), 1);
-    if (!kitId || !productId) return toast('error', 'Kits', 'Select a product first.');
+    if (!productId) return toast('error', 'Kits', 'Select a product first.');
+    if (state.kitCreateMode) {
+      if (!upsertDraftKitProduct(productId, quantity)) return toast('error', 'Kits', 'Product not found.');
+      renderKitDetail();
+      return toast('success', 'Kits', 'Product added to kit draft.');
+    }
+    if (!kitId) return toast('error', 'Kits', 'Select a kit first.');
     try {
       const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, adminPassword: state.kitAdminPassword }) });
       state.activeKit = data.kit || state.activeKit;
@@ -1256,6 +1307,14 @@
     const isKit = kind === 'kit';
     const parentId = String(isKit ? state.activeKit?.id : state.activeProposal?.id || '').trim();
     const quantity = numericInputValue(row?.querySelector('.proposal-item-qty'), 1);
+    if (isKit && state.kitCreateMode) {
+      const item = state.kitItems.find((entry) => String(entry?.id || '').trim() === String(itemId || '').trim());
+      if (!item) return;
+      item.quantity = quantity;
+      item.updatedAt = new Date().toISOString();
+      renderKitDetail();
+      return toast('success', 'Kits', 'Quantity updated.');
+    }
     if (!parentId || !itemId) return;
     const url = isKit
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
@@ -1278,6 +1337,11 @@
   async function deleteItem(kind, itemId) {
     const isKit = kind === 'kit';
     const parentId = String(isKit ? state.activeKit?.id : state.activeProposal?.id || '').trim();
+    if (isKit && state.kitCreateMode) {
+      state.kitItems = state.kitItems.filter((entry) => String(entry?.id || '').trim() !== String(itemId || '').trim());
+      renderKitDetail();
+      return toast('success', 'Kits', 'Component removed.');
+    }
     if (!parentId || !itemId) return;
     const url = isKit
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
@@ -1314,21 +1378,36 @@
     }
 
     if ((isKit && state.kitCreateMode) || (!isKit && state.proposalCreateMode)) {
+      if (isKit && !state.kitItems.length) {
+        return toast('error', title, 'Add at least one component before saving the kit.');
+      }
       try {
-        await api(isKit ? '/api/products/kits' : '/api/products/proposals', {
+        const createdData = await api(isKit ? '/api/products/kits' : '/api/products/proposals', {
           method: 'POST',
           body: JSON.stringify({ name, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }),
         });
         if (isKit) {
+          const createdKitId = String(createdData?.kit?.id || '').trim();
+          if (!createdKitId) throw new Error('Kit was created but the kit ID was not returned.');
+          const draftItems = state.kitItems.slice();
+          for (const item of draftItems) {
+            const productId = String(item?.productId || item?.product_id || '').trim();
+            if (!productId) continue;
+            await api(`/api/products/kits/${encodeURIComponent(createdKitId)}/items`, {
+              method: 'POST',
+              body: JSON.stringify({ productId, quantity: item?.quantity || 1, adminPassword: state.kitAdminPassword }),
+            });
+          }
           state.kitCreateMode = false;
           await loadKits();
-          backToKits();
+          await openKitDetail(createdKitId, { edit: true, adminPassword: state.kitAdminPassword });
+          toast('success', title, 'Kit saved successfully.');
         } else {
           state.proposalCreateMode = false;
           await loadProposals();
           backToProposals();
+          toast('success', title, 'Proposal folder created.');
         }
-        toast('success', title, `${isKit ? 'Kit' : 'Proposal'} folder created.`);
       } catch (error) {
         toast('error', title, error?.message || `Failed to create ${isKit ? 'kit' : 'proposal'}.`);
       }
