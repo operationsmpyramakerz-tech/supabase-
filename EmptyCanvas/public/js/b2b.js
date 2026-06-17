@@ -2,6 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const grid = document.getElementById('b2b-schools');
   const searchInput = document.getElementById('b2bSearch');
   const addBtn = document.getElementById('addB2BSchoolBtn');
+  const wrap = document.querySelector('.b2b-wrap');
+  const floatingActions = document.querySelector('.b2b-floating-actions');
+  const foldersCard = document.querySelector('.b2b-folders-card');
 
   let allSchools = [];
   let activeEditId = null;
@@ -127,6 +130,62 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!password) return null;
     activeAdminPassword = password;
     return password;
+  }
+
+
+  function setB2BFormView(isForm) {
+    document.body.classList.toggle('b2b-form-view', !!isForm);
+    if (floatingActions) floatingActions.hidden = !!isForm;
+    if (foldersCard) foldersCard.hidden = !!isForm;
+    if (searchInput) {
+      const searchbar = searchInput.closest('.searchbar');
+      if (searchbar) searchbar.hidden = !!isForm;
+    }
+  }
+
+  function showB2BToast(message = '', type = 'success') {
+    const text = String(message || '').trim();
+    if (!text) return;
+    const existing = document.querySelector('[data-b2b-toast]');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = `b2b-page-toast b2b-page-toast--${type === 'error' ? 'error' : 'success'}`;
+    toast.dataset.b2bToast = 'true';
+    toast.innerHTML = `
+      <span class="b2b-page-toast__icon"><i data-feather="${type === 'error' ? 'alert-circle' : 'check-circle'}"></i></span>
+      <span>${escapeHtml(text)}</span>
+    `;
+    document.body.appendChild(toast);
+    if (window.feather) feather.replace();
+    window.setTimeout(() => toast.classList.add('is-visible'), 30);
+    window.setTimeout(() => {
+      toast.classList.remove('is-visible');
+      window.setTimeout(() => toast.remove(), 260);
+    }, 3600);
+  }
+
+  function setB2BFlash(message = '', type = 'success') {
+    try {
+      window.sessionStorage.setItem('b2b.flash', JSON.stringify({ message, type }));
+    } catch {}
+  }
+
+  function consumeB2BFlash() {
+    try {
+      const raw = window.sessionStorage.getItem('b2b.flash');
+      if (!raw) return;
+      window.sessionStorage.removeItem('b2b.flash');
+      const data = JSON.parse(raw);
+      showB2BToast(data?.message || '', data?.type || 'success');
+    } catch {}
+  }
+
+  function b2bRoute() {
+    const path = String(window.location.pathname || '').replace(/\/+$/, '') || '/b2b';
+    if (/^\/b2b\/new$/i.test(path)) return { mode: 'add' };
+    const editMatch = path.match(/^\/b2b\/edit\/(.+)$/i);
+    if (editMatch) return { mode: 'edit', id: decodeURIComponent(editMatch[1] || '') };
+    return { mode: 'list' };
   }
 
   const FIELD_GROUPS = [
@@ -346,9 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             event.stopPropagation();
             closeActionMenus();
-            const password = await requireAdminForAction(`edit ${schoolName || 'this school'}`);
-            if (!password) return;
-            openEditModal(school.id, schoolName);
+            window.location.href = `/b2b/edit/${encodeURIComponent(school.id)}`;
           });
         }
 
@@ -438,45 +495,47 @@ document.addEventListener('DOMContentLoaded', () => {
   const ensureModal = () => {
     if (modalUi) return modalUi;
 
-    const modal = document.createElement('div');
-    modal.className = 'b2b-school-modal';
-    modal.setAttribute('aria-hidden', 'true');
-    modal.innerHTML = `
-      <div class="b2b-school-modal__backdrop" data-b2b-modal-close></div>
-      <form class="b2b-school-modal__dialog" data-b2b-school-form>
-        <div class="b2b-school-modal__header">
-          <div>
-            <div class="b2b-school-modal__eyebrow">B2B schools</div>
-            <h2 class="b2b-school-modal__title" data-b2b-modal-title>Add school</h2>
-            <p class="b2b-school-modal__subtitle" data-b2b-modal-subtitle>Create or update a school folder.</p>
-            <div class="b2b-school-form-error" data-b2b-modal-error></div>
+    const page = document.createElement('section');
+    page.className = 'b2b-school-page';
+    page.setAttribute('aria-hidden', 'true');
+    page.hidden = true;
+    page.innerHTML = `
+      <form class="b2b-school-page__shell b2b-school-modal__dialog" data-b2b-school-form>
+        <div class="b2b-school-page__header">
+          <div class="b2b-school-page__title-pill">
+            <button class="b2b-school-page__back" type="button" data-b2b-modal-close aria-label="Back to B2B customers"><i data-feather="arrow-left"></i></button>
+            <h2 class="b2b-school-modal__title" data-b2b-modal-title>Add new customer</h2>
           </div>
-          <button class="b2b-school-modal__close" type="button" data-b2b-modal-close aria-label="Close">&times;</button>
+          <div class="b2b-school-page__header-copy">
+            <div class="b2b-school-modal__eyebrow">B2B customers</div>
+            <p class="b2b-school-modal__subtitle" data-b2b-modal-subtitle>Create or update a customer page.</p>
+          </div>
         </div>
-        <div class="b2b-school-modal__body" data-b2b-modal-body></div>
-        <div class="b2b-school-modal__footer">
+        <div class="b2b-school-form-error" data-b2b-modal-error></div>
+        <div class="b2b-school-page__body b2b-school-modal__body" data-b2b-modal-body></div>
+        <div class="b2b-school-page__footer b2b-school-modal__footer">
           <button class="b2b-modal-btn b2b-modal-btn--light" type="button" data-b2b-modal-close>Cancel</button>
           <button class="b2b-modal-btn b2b-modal-btn--dark" type="submit" data-b2b-modal-submit>Save</button>
         </div>
       </form>
     `;
 
-    document.body.appendChild(modal);
+    (wrap || document.querySelector('main.container-full-width') || document.body).appendChild(page);
 
-    const form = modal.querySelector('[data-b2b-school-form]');
-    const title = modal.querySelector('[data-b2b-modal-title]');
-    const subtitle = modal.querySelector('[data-b2b-modal-subtitle]');
-    const body = modal.querySelector('[data-b2b-modal-body]');
-    const submit = modal.querySelector('[data-b2b-modal-submit]');
-    const error = modal.querySelector('[data-b2b-modal-error]');
+    const form = page.querySelector('[data-b2b-school-form]');
+    const title = page.querySelector('[data-b2b-modal-title]');
+    const subtitle = page.querySelector('[data-b2b-modal-subtitle]');
+    const body = page.querySelector('[data-b2b-modal-body]');
+    const submit = page.querySelector('[data-b2b-modal-submit]');
+    const error = page.querySelector('[data-b2b-modal-error]');
 
-    modal.querySelectorAll('[data-b2b-modal-close]').forEach((node) => {
+    page.querySelectorAll('[data-b2b-modal-close]').forEach((node) => {
       node.addEventListener('click', () => closeModal());
     });
 
     form.addEventListener('submit', handleModalSubmit);
 
-    modalUi = { modal, form, title, subtitle, body, submit, error };
+    modalUi = { modal: page, form, title, subtitle, body, submit, error };
     renderModalFields({});
     return modalUi;
   };
@@ -996,17 +1055,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const ui = ensureModal();
     activeEditId = mode === 'edit' ? activeEditId : null;
     activeEditName = mode === 'edit' ? schoolName : '';
-    ui.title.textContent = mode === 'edit' ? 'Edit school' : 'Add school';
+    ui.title.textContent = mode === 'edit' ? 'Edit customer' : 'Add new customer';
     ui.subtitle.textContent = mode === 'edit'
-      ? `Update ${schoolName || 'this school'} data.`
-      : 'Create a new B2B school folder.';
-    ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
+      ? `Update ${schoolName || 'this customer'} data.`
+      : 'Create a new B2B customer page.';
+    ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add Customer';
     ui.submit.disabled = false;
     setModalError('');
     renderModalFields(values || {});
+    setB2BFormView(true);
+    ui.modal.hidden = false;
     ui.modal.classList.add('is-open');
     ui.modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
       const first = ui.form.querySelector('[name="school_name"]');
       if (first) first.focus({ preventScroll: true });
@@ -1017,11 +1078,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!modalUi) return;
     modalUi.modal.classList.remove('is-open');
     modalUi.modal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('modal-open');
+    modalUi.modal.hidden = true;
+    setB2BFormView(false);
     activeEditId = null;
     activeEditName = '';
     activeAdminPassword = '';
     setModalError('');
+    if (/^\/b2b\/(new|edit\/)/i.test(window.location.pathname || '')) {
+      window.history.pushState({}, '', '/b2b');
+      fetchSchools();
+      consumeB2BFlash();
+    }
   }
 
   async function ensureStocktakingColumnOptions() {
@@ -1052,8 +1119,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const openAddModal = async () => {
     activeEditId = null;
-    const password = await requireAdminForAction('add a B2B school');
-    if (!password) return;
+    activeEditName = '';
+    activeAdminPassword = '';
     await ensureStocktakingColumnOptions();
     openModal({ mode: 'add', values: {} });
   };
@@ -1095,8 +1162,8 @@ document.addEventListener('DOMContentLoaded', () => {
       activeEditId = cleanId;
       activeEditName = data?.name || schoolName;
       const values = normalizeSchoolFieldsForUi(data, schoolName);
-      ui.title.textContent = 'Edit school';
-      ui.subtitle.textContent = `Update ${data?.name || schoolName || 'this school'} data.`;
+      ui.title.textContent = 'Edit customer';
+      ui.subtitle.textContent = `Update ${data?.name || schoolName || 'this customer'} data.`;
       renderModalFields(values);
       setModalError('');
     } catch (error) {
@@ -1148,6 +1215,16 @@ document.addEventListener('DOMContentLoaded', () => {
     setModalError('');
 
     try {
+      if (!activeAdminPassword) {
+        ui.submit.disabled = false;
+        ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add Customer';
+        const password = await requireAdminForAction(mode === 'edit' ? 'save B2B customer changes' : 'add a B2B customer');
+        if (!password) return;
+        activeAdminPassword = password;
+        ui.submit.disabled = true;
+        ui.submit.textContent = mode === 'edit' ? 'Saving...' : 'Adding...';
+      }
+
       if (ui.form.querySelector('[data-b2b-contract-file-input]')?.files?.[0]) {
         ui.submit.textContent = 'Uploading...';
         values = await uploadPendingContractFile(ui.form, values);
@@ -1170,14 +1247,15 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(errorPayload.error || 'Failed to save school');
       }
 
-      closeModal();
-      await fetchSchools();
+      setB2BFlash(mode === 'edit' ? 'Customer updated successfully.' : 'Customer saved successfully.');
+      window.location.href = '/b2b';
+      return;
     } catch (error) {
       console.error(error);
       setModalError(error.message || 'Failed to save school.');
     } finally {
       ui.submit.disabled = false;
-      ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
+      ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add Customer';
     }
   }
 
@@ -1264,11 +1342,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  fetchSchools();
+  async function initB2BPage() {
+    const route = b2bRoute();
+    if (route.mode === 'add') {
+      await openAddModal();
+      return;
+    }
+    if (route.mode === 'edit') {
+      await openEditModal(route.id || '');
+      return;
+    }
+    setB2BFormView(false);
+    await fetchSchools();
+    consumeB2BFlash();
+  }
 
   if (addBtn) {
-    addBtn.addEventListener('click', openAddModal);
+    addBtn.addEventListener('click', () => {
+      window.location.href = '/b2b/new';
+    });
   }
+
+  initB2BPage();
 
   if (searchInput) {
     searchInput.addEventListener('input', applyFilter);
