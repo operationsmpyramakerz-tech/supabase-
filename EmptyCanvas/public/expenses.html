@@ -93,6 +93,15 @@
       align-items: initial !important;
     }
 
+    /* Keep Expenses compatible with the persistent iframe shell.
+       The rule above uses display:block !important, so this explicit
+       hidden-state rule is needed when the shell hides the legacy page
+       before showing another page inside the frame. */
+    main.expenses-layout[hidden],
+    main.expenses-layout[data-ops-shell-legacy="1"][hidden] {
+      display: none !important;
+    }
+
 
     /* ===== Expenses Header Above Cards ===== */
 .expenses-overview {
