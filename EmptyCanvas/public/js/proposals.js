@@ -31,6 +31,7 @@
     savingCombinedProposal: false,
     copyProposalTarget: null,
     copyKitTarget: null,
+    proposalCreateErrors: { name: '', items: '' },
     kitCreateErrors: { name: '', items: '' },
   };
 
@@ -804,10 +805,14 @@
       'proposal-name-edit-block',
       options.createMode ? 'proposal-name-edit-block--create' : '',
       isKit && options.createMode ? 'proposal-name-edit-block--kit-create' : '',
+      !isKit && options.createMode ? 'proposal-name-edit-block--proposal-create' : '',
     ].filter(Boolean).join(' ');
     const saveButton = options.hideButton ? '' : `<button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>`;
-    const nameError = isKit && options.createMode ? String(state.kitCreateErrors?.name || '') : '';
-    const inlineError = isKit && options.createMode ? `<div class="kit-create-inline-error kit-create-inline-error--name" id="kitCreateNameError" aria-live="polite">${escapeHTML(nameError)}</div>` : '';
+    const nameError = options.createMode
+      ? String(isKit ? (state.kitCreateErrors?.name || '') : (state.proposalCreateErrors?.name || ''))
+      : '';
+    const errorId = isKit ? 'kitCreateNameError' : 'proposalCreateNameError';
+    const inlineError = options.createMode ? `<div class="direct-create-inline-error direct-create-inline-error--name ${isKit ? 'kit-create-inline-error kit-create-inline-error--name' : 'proposal-create-inline-error proposal-create-inline-error--name'}" id="${errorId}" aria-live="polite">${escapeHTML(nameError)}</div>` : '';
     return `
       <div class="${blockClasses}">
         <label class="products-field products-field--wide">
@@ -833,19 +838,30 @@
     `;
   }
 
-  function kitCreateSaveHTML() {
+  function directCreateSaveHTML(kind = 'kit') {
+    const isKit = kind === 'kit';
     return `
-      <div class="kit-create-save-footer">
-        <button type="button" class="products-btn products-btn--dark kit-create-save-btn" data-action="save-kit-name">
+      <div class="kit-create-save-footer direct-create-save-footer">
+        <button type="button" class="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" data-action="${isKit ? 'save-kit-name' : 'save-proposal-name'}">
           <i data-feather="save"></i><span>Save</span>
         </button>
       </div>
     `;
   }
 
+  function kitCreateSaveHTML() {
+    return directCreateSaveHTML('kit');
+  }
+
+  function directCreateItemsErrorHTML(kind = 'kit') {
+    const isKit = kind === 'kit';
+    const message = String(isKit ? (state.kitCreateErrors?.items || '') : (state.proposalCreateErrors?.items || ''));
+    const id = isKit ? 'kitCreateItemsError' : 'proposalCreateItemsError';
+    return `<div class="direct-create-inline-error direct-create-inline-error--items ${isKit ? 'kit-create-inline-error kit-create-inline-error--items' : 'proposal-create-inline-error proposal-create-inline-error--items'}" id="${id}" aria-live="polite">${escapeHTML(message)}</div>`;
+  }
+
   function kitCreateItemsErrorHTML() {
-    const message = String(state.kitCreateErrors?.items || '');
-    return `<div class="kit-create-inline-error kit-create-inline-error--items" id="kitCreateItemsError" aria-live="polite">${escapeHTML(message)}</div>`;
+    return directCreateItemsErrorHTML('kit');
   }
 
   function syncDraftKitNameFromInput() {
@@ -854,9 +870,20 @@
     if (input) state.activeKit = { ...state.activeKit, name: String(input.value || '') };
   }
 
+  function syncDraftProposalNameFromInput() {
+    if (!state.proposalCreateMode || !state.activeProposal) return;
+    const input = document.getElementById('proposalEditNameInput');
+    if (input) state.activeProposal = { ...state.activeProposal, name: String(input.value || '') };
+  }
+
   function clearKitCreateError(key) {
     if (!state.kitCreateErrors) state.kitCreateErrors = { name: '', items: '' };
     if (key) state.kitCreateErrors[key] = '';
+  }
+
+  function clearProposalCreateError(key) {
+    if (!state.proposalCreateErrors) state.proposalCreateErrors = { name: '', items: '' };
+    if (key) state.proposalCreateErrors[key] = '';
   }
 
   function proposalDetailHTML() {
@@ -865,21 +892,26 @@
     const editable = !!state.proposalEditMode;
     const createMode = !!state.proposalCreateMode;
     const separateMeta = separateCombinedMeta(proposal);
-    return `
-      <header class="products-proposal-detail__head proposal-detail-head--compact">
-        <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
-        ${createMode ? '' : `
+    const headerHTML = createMode
+      ? `<header class="products-proposal-detail__head proposal-create-label-head">
+          <div class="proposal-create-title-pill">
+            <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
+            <span>Create New Proposal</span>
+          </div>
+        </header>`
+      : `<header class="products-proposal-detail__head proposal-detail-head--compact">
+          <button type="button" class="products-back-btn" data-action="back-proposals" aria-label="Back to proposals"><i data-feather="arrow-left"></i></button>
           <div class="proposal-detail-actions">
             <button type="button" class="btn b2b-download-primary proposal-download-btn" data-action="download-proposal"><i data-feather="download"></i><span>Download</span></button>
             <button type="button" class="products-btn products-btn--dark proposal-make-order-btn" data-action="open-make-order"><i data-feather="shopping-bag"></i><span>Make Order</span></button>
           </div>
-        `}
-      </header>
+        </header>`;
+    return `
+      ${headerHTML}
       ${!createMode ? combinedMetaCardHTML(proposal) : ''}
-      ${editable ? editNameBlockHTML('proposal', createMode ? '' : (proposal?.name || 'Proposal'), { createMode, required: createMode }) : ''}
-      ${createMode ? createModeHintHTML('proposal') : ''}
-      ${editable && !createMode ? proposalLogicControlHTML() : ''}
-      ${editable && !createMode ? `
+      ${editable ? editNameBlockHTML('proposal', createMode ? (proposal?.name || '') : (proposal?.name || 'Proposal'), { createMode, required: createMode, hideButton: createMode }) : ''}
+      ${editable ? proposalLogicControlHTML() : ''}
+      ${editable ? `
       <div class="products-proposal-tools proposals-two-tools">
         <div class="products-proposal-tool-card">
           <div class="products-proposal-tool-title"><i data-feather="plus-circle"></i><span>Add one component</span></div>
@@ -897,8 +929,9 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-proposal-kit"><i data-feather="plus"></i><span>Add Kit</span></button>
           </div>
         </div>
-      </div>` : (createMode ? '' : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`)}
-      ${createMode ? '' : `<div class="products-proposal-table-card">
+      </div>
+      ${createMode ? directCreateItemsErrorHTML('proposal') : ''}` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`}
+      <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Components table</h3><p>Saved products and quantities for this proposal.</p></div>
           <span>${formatNumber(count)} item${count === 1 ? '' : 's'}</span>
@@ -910,7 +943,8 @@
           </table>
         </div>
         ${totalBlockHTML(state.proposalItems)}
-      </div>`}
+      </div>
+      ${createMode ? directCreateSaveHTML('proposal') : ''}
     `;
   }
 
@@ -1088,6 +1122,7 @@
     state.proposalItems = [];
     state.proposalEditMode = false;
     state.proposalCreateMode = false;
+    state.proposalCreateErrors = { name: '', items: '' };
     state.proposalAdminPassword = '';
     if (els.proposalDetail) els.proposalDetail.hidden = true;
     if (els.proposalsList) {
@@ -1141,6 +1176,7 @@
       state.proposalAdminPassword = password;
       state.activeProposal = { id: '', name: '' };
       state.proposalItems = [];
+      state.proposalCreateErrors = { name: '', items: '' };
       if (els.proposalsList) els.proposalsList.hidden = true;
       if (els.proposalDetail) {
         els.proposalDetail.hidden = false;
@@ -1253,13 +1289,53 @@
     }
   }
 
+  function mergedDraftQuantity(existingQuantity, incomingQuantity, mergeLogic = 'add') {
+    const existingQty = Math.max(1, Math.round(Number(existingQuantity) || 1));
+    const incomingQty = Math.max(1, Math.round(Number(incomingQuantity) || 1));
+    const logic = normalizeProposalMergeLogic(mergeLogic);
+    if (logic === 'max') return Math.max(existingQty, incomingQty);
+    if (logic === 'min') return Math.min(existingQty, incomingQty);
+    return existingQty + incomingQty;
+  }
+
+  function upsertDraftProposalProduct(productId, quantity = 1, mergeLogic = 'add', fallback = {}) {
+    const id = String(productId || fallback?.productId || fallback?.product_id || '').trim();
+    if (!id) return false;
+    const product = productById(id) || fallback || {};
+    const existing = state.proposalItems.find((item) => String(item?.productId || item?.product_id || '').trim() === id);
+    if (existing) {
+      existing.quantity = mergedDraftQuantity(existing.quantity, quantity, mergeLogic);
+      existing.updatedAt = new Date().toISOString();
+      return true;
+    }
+    const tempId = `draft-proposal-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    state.proposalItems.push({
+      id: tempId,
+      proposalId: '',
+      productId: id,
+      productName: product?.name || product?.productName || product?.product_name || fallback?.productName || fallback?.product_name || 'Untitled Product',
+      quantity: Math.max(1, Math.round(Number(quantity) || 1)),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    return true;
+  }
+
   async function addProposalProduct() {
     const proposalId = String(state.activeProposal?.id || '').trim();
     const productId = selectedValue('proposalProductSelect');
     const quantity = numericInputValue(document.getElementById('proposalProductQty'), 1);
-    if (!proposalId || !productId) return toast('error', 'Proposals', 'Select a product first.');
+    if (!productId) return toast('error', 'Proposals', 'Select a product first.');
+    const mergeLogic = selectedProposalMergeLogic();
+    if (state.proposalCreateMode) {
+      syncDraftProposalNameFromInput();
+      if (!upsertDraftProposalProduct(productId, quantity, mergeLogic)) return toast('error', 'Proposals', 'Product not found.');
+      clearProposalCreateError('items');
+      renderProposalDetail();
+      return toast('success', 'Proposals', 'Product added to proposal draft.');
+    }
+    if (!proposalId) return toast('error', 'Proposals', 'Select a proposal first.');
     try {
-      const mergeLogic = selectedProposalMergeLogic();
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, mergeLogic, logic: mergeLogic, quantityLogic: mergeLogic, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
@@ -1273,9 +1349,28 @@
     const proposalId = String(state.activeProposal?.id || '').trim();
     const kitId = selectedValue('proposalKitSelect');
     const quantity = numericInputValue(document.getElementById('proposalKitQty'), 1);
-    if (!proposalId || !kitId) return toast('error', 'Proposals', 'Select a kit first.');
+    if (!kitId) return toast('error', 'Proposals', 'Select a kit first.');
+    const mergeLogic = selectedProposalMergeLogic();
+    if (state.proposalCreateMode) {
+      syncDraftProposalNameFromInput();
+      try {
+        const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) return toast('error', 'Proposals', 'This kit has no components yet.');
+        let addedCount = 0;
+        items.forEach((item) => {
+          const productId = String(item?.productId || item?.product_id || '').trim();
+          const itemQty = Math.max(1, Math.round(Number(item?.quantity || 1) || 1)) * quantity;
+          if (upsertDraftProposalProduct(productId, itemQty, mergeLogic, item)) addedCount += 1;
+        });
+        if (!addedCount) return toast('error', 'Proposals', 'This kit has no valid components.');
+        clearProposalCreateError('items');
+        renderProposalDetail();
+        return toast('success', 'Proposals', `Added ${formatNumber(addedCount)} kit components to proposal draft.`);
+      } catch (error) { return toast('error', 'Proposals', error?.message || 'Failed to add kit.'); }
+    }
+    if (!proposalId) return toast('error', 'Proposals', 'Select a proposal first.');
     try {
-      const mergeLogic = selectedProposalMergeLogic();
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, mergeLogic, logic: mergeLogic, quantityLogic: mergeLogic, adminPassword: state.proposalAdminPassword }) });
       state.activeProposal = data.proposal || state.activeProposal;
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
@@ -1350,6 +1445,15 @@
       renderKitDetail();
       return toast('success', 'Kits', 'Quantity updated.');
     }
+    if (!isKit && state.proposalCreateMode) {
+      syncDraftProposalNameFromInput();
+      const item = state.proposalItems.find((entry) => String(entry?.id || '').trim() === String(itemId || '').trim());
+      if (!item) return;
+      item.quantity = quantity;
+      item.updatedAt = new Date().toISOString();
+      renderProposalDetail();
+      return toast('success', 'Proposals', 'Quantity updated.');
+    }
     if (!parentId || !itemId) return;
     const url = isKit
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
@@ -1378,6 +1482,13 @@
       if (state.kitItems.length) clearKitCreateError('items');
       renderKitDetail();
       return toast('success', 'Kits', 'Component removed.');
+    }
+    if (!isKit && state.proposalCreateMode) {
+      syncDraftProposalNameFromInput();
+      state.proposalItems = state.proposalItems.filter((entry) => String(entry?.id || '').trim() !== String(itemId || '').trim());
+      if (state.proposalItems.length) clearProposalCreateError('items');
+      renderProposalDetail();
+      return toast('success', 'Proposals', 'Component removed.');
     }
     if (!parentId || !itemId) return;
     const url = isKit
@@ -1410,24 +1521,27 @@
     const title = isKit ? 'Kits' : 'Proposals';
     const requiredMessage = isKit ? 'Kit name is required.' : 'Proposal name is required.';
     const isCreateMode = (isKit && state.kitCreateMode) || (!isKit && state.proposalCreateMode);
-    if (!name && !(isKit && state.kitCreateMode)) {
+    if (!name && !isCreateMode) {
       if (input) input.focus();
       return toast('error', title, requiredMessage);
     }
 
     if (isCreateMode) {
-      if (isKit) {
-        syncDraftKitNameFromInput();
-        state.kitCreateErrors = { name: '', items: '' };
-        const hasName = !!name;
-        const hasItems = state.kitItems.length > 0;
-        if (!hasName) state.kitCreateErrors.name = 'Kit name is required.';
-        if (!hasItems) state.kitCreateErrors.items = 'Add at least one component before saving the kit.';
-        if (!hasName || !hasItems) {
-          renderKitDetail();
-          if (!hasName) setTimeout(() => document.getElementById('kitEditNameInput')?.focus(), 40);
-          return;
-        }
+      if (isKit) syncDraftKitNameFromInput();
+      else syncDraftProposalNameFromInput();
+      const draftItems = isKit ? state.kitItems.slice() : state.proposalItems.slice();
+      const errors = { name: '', items: '' };
+      const hasName = !!name;
+      const hasItems = draftItems.length > 0;
+      if (!hasName) errors.name = isKit ? 'Kit name is required.' : 'Proposal name is required.';
+      if (!hasItems) errors.items = isKit ? 'Add at least one component before saving the kit.' : 'Add at least one component before saving the proposal.';
+      if (isKit) state.kitCreateErrors = errors;
+      else state.proposalCreateErrors = errors;
+      if (!hasName || !hasItems) {
+        if (isKit) renderKitDetail();
+        else renderProposalDetail();
+        if (!hasName) setTimeout(() => document.getElementById(isKit ? 'kitEditNameInput' : 'proposalEditNameInput')?.focus(), 40);
+        return;
       }
       try {
         const createdData = await api(isKit ? '/api/products/kits' : '/api/products/proposals', {
@@ -1437,7 +1551,6 @@
         if (isKit) {
           const createdKitId = String(createdData?.kit?.id || '').trim();
           if (!createdKitId) throw new Error('Kit was created but the kit ID was not returned.');
-          const draftItems = state.kitItems.slice();
           for (const item of draftItems) {
             const productId = String(item?.productId || item?.product_id || '').trim();
             if (!productId) continue;
@@ -1452,10 +1565,21 @@
           backToKits();
           toast('success', title, 'Kit saved successfully.');
         } else {
+          const createdProposalId = String(createdData?.proposal?.id || '').trim();
+          if (!createdProposalId) throw new Error('Proposal was created but the proposal ID was not returned.');
+          for (const item of draftItems) {
+            const productId = String(item?.productId || item?.product_id || '').trim();
+            if (!productId) continue;
+            await api(`/api/products/proposals/${encodeURIComponent(createdProposalId)}/items`, {
+              method: 'POST',
+              body: JSON.stringify({ productId, quantity: item?.quantity || 1, mergeLogic: 'add', logic: 'add', quantityLogic: 'add', adminPassword: state.proposalAdminPassword }),
+            });
+          }
           state.proposalCreateMode = false;
+          state.proposalCreateErrors = { name: '', items: '' };
           await loadProposals();
           backToProposals();
-          toast('success', title, 'Proposal folder created.');
+          toast('success', title, 'Proposal saved successfully.');
         }
       } catch (error) {
         toast('error', title, error?.message || `Failed to create ${isKit ? 'kit' : 'proposal'}.`);
@@ -2518,6 +2642,15 @@
       if (action === 'add-proposal-kit') return addProposalKit();
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
       if (action === 'delete-proposal-item') return deleteItem('proposal', itemId);
+    });
+    if (els.proposalDetail) els.proposalDetail.addEventListener('input', (event) => {
+      if (!state.proposalCreateMode || !event.target.matches('#proposalEditNameInput')) return;
+      state.activeProposal = { ...(state.activeProposal || {}), name: String(event.target.value || '') };
+      if (String(event.target.value || '').trim()) {
+        clearProposalCreateError('name');
+        const errorEl = document.getElementById('proposalCreateNameError');
+        if (errorEl) errorEl.textContent = '';
+      }
     });
     if (els.proposalDetail) els.proposalDetail.addEventListener('change', (event) => {
       if (event.target.matches('#proposalMergeLogicSelect')) {
