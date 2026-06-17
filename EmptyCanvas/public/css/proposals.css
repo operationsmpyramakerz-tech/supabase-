@@ -2676,3 +2676,99 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
     justify-content:flex-start !important;
   }
 }
+
+/* 2026-06-17: direct proposal creation workflow, matching Kits */
+.proposals-page .proposal-name-edit-block--proposal-create{
+  max-width:100% !important;
+  margin:16px 0 18px !important;
+  grid-template-columns:1fr !important;
+  align-items:stretch !important;
+}
+.proposals-page .proposal-name-edit-block--proposal-create .products-field,
+.proposals-page .proposal-name-edit-block--proposal-create input{
+  width:100% !important;
+}
+.proposals-page .direct-create-save-footer{
+  display:flex !important;
+  justify-content:flex-end !important;
+  margin:18px 0 0 !important;
+  padding:18px !important;
+  border-radius:24px !important;
+  background:rgba(255,255,255,.88) !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  box-shadow:0 18px 45px rgba(15,23,42,.08) !important;
+}
+.proposals-page .direct-create-save-btn{
+  min-width:180px !important;
+  min-height:58px !important;
+  border-radius:18px !important;
+  justify-content:center !important;
+  font-weight:950 !important;
+}
+.proposals-page .proposal-create-label-head{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  margin:0 0 18px !important;
+  padding:0 !important;
+}
+.proposals-page .proposal-create-title-pill{
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:12px !important;
+  padding:8px 18px 8px 8px !important;
+  border-radius:999px !important;
+  background:rgba(255,255,255,.96) !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  box-shadow:0 16px 34px rgba(15,23,42,.10) !important;
+  color:#0f172a !important;
+  font-size:clamp(1.15rem,2.3vw,1.55rem) !important;
+  font-weight:1000 !important;
+  line-height:1 !important;
+}
+.proposals-page .proposal-create-title-pill .products-back-btn{
+  width:44px !important;
+  height:44px !important;
+  min-width:44px !important;
+  border-radius:999px !important;
+  margin:0 !important;
+  background:#fff !important;
+  box-shadow:0 10px 22px rgba(15,23,42,.10) !important;
+}
+.proposals-page .proposal-name-edit-block--proposal-create{
+  position:relative !important;
+}
+.proposals-page .proposal-name-edit-block--proposal-create .direct-create-inline-error--name{
+  grid-column:1 / -1 !important;
+}
+.proposals-page .direct-create-inline-error{
+  min-height:20px !important;
+  margin:7px 2px 0 !important;
+  color:#dc2626 !important;
+  font-size:.92rem !important;
+  font-weight:900 !important;
+  line-height:1.35 !important;
+}
+.proposals-page .direct-create-inline-error:empty{
+  display:none !important;
+}
+.proposals-page .direct-create-inline-error--items{
+  margin:10px 4px 16px !important;
+  padding:0 2px !important;
+}
+.proposals-page .proposal-name-edit-block--proposal-create:has(.direct-create-inline-error--name:not(:empty)) input,
+.proposals-page .direct-create-inline-error--items:not(:empty) + .products-proposal-table-card{
+  border-color:rgba(220,38,38,.32) !important;
+}
+@media (max-width:720px){
+  .proposals-page .direct-create-save-footer{
+    justify-content:stretch !important;
+  }
+  .proposals-page .direct-create-save-btn,
+  .proposals-page .proposal-create-title-pill{
+    width:100% !important;
+  }
+  .proposals-page .proposal-create-title-pill{
+    justify-content:flex-start !important;
+  }
+}
