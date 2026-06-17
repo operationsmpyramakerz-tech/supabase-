@@ -2576,3 +2576,40 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
     grid-template-columns:1fr !important;
   }
 }
+
+/* 2026-06-17: direct kit creation workflow */
+.kits-page .proposal-name-edit-block--kit-create{
+  max-width:100% !important;
+  margin:16px 0 18px !important;
+  grid-template-columns:1fr !important;
+  align-items:stretch !important;
+}
+.kits-page .proposal-name-edit-block--kit-create .products-field,
+.kits-page .proposal-name-edit-block--kit-create input{
+  width:100% !important;
+}
+.kits-page .kit-create-save-footer{
+  display:flex !important;
+  justify-content:flex-end !important;
+  margin:18px 0 0 !important;
+  padding:18px !important;
+  border-radius:24px !important;
+  background:rgba(255,255,255,.88) !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  box-shadow:0 18px 45px rgba(15,23,42,.08) !important;
+}
+.kits-page .kit-create-save-btn{
+  min-width:180px !important;
+  min-height:58px !important;
+  border-radius:18px !important;
+  justify-content:center !important;
+  font-weight:950 !important;
+}
+@media (max-width:720px){
+  .kits-page .kit-create-save-footer{
+    justify-content:stretch !important;
+  }
+  .kits-page .kit-create-save-btn{
+    width:100% !important;
+  }
+}
