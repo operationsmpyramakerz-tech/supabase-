@@ -31,6 +31,7 @@
     savingCombinedProposal: false,
     copyProposalTarget: null,
     copyKitTarget: null,
+    kitCreateErrors: { name: '', items: '' },
   };
 
   const els = {};
@@ -805,12 +806,15 @@
       isKit && options.createMode ? 'proposal-name-edit-block--kit-create' : '',
     ].filter(Boolean).join(' ');
     const saveButton = options.hideButton ? '' : `<button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>`;
+    const nameError = isKit && options.createMode ? String(state.kitCreateErrors?.name || '') : '';
+    const inlineError = isKit && options.createMode ? `<div class="kit-create-inline-error kit-create-inline-error--name" id="kitCreateNameError" aria-live="polite">${escapeHTML(nameError)}</div>` : '';
     return `
       <div class="${blockClasses}">
         <label class="products-field products-field--wide">
           <span>${label}${requiredMark}</span>
           <input id="${inputId}" type="text" value="${escapeHTML(currentName || '')}" autocomplete="off" placeholder="${escapeHTML(placeholder)}" />
         </label>
+        ${inlineError}
         ${saveButton}
       </div>
     `;
@@ -837,6 +841,22 @@
         </button>
       </div>
     `;
+  }
+
+  function kitCreateItemsErrorHTML() {
+    const message = String(state.kitCreateErrors?.items || '');
+    return `<div class="kit-create-inline-error kit-create-inline-error--items" id="kitCreateItemsError" aria-live="polite">${escapeHTML(message)}</div>`;
+  }
+
+  function syncDraftKitNameFromInput() {
+    if (!state.kitCreateMode || !state.activeKit) return;
+    const input = document.getElementById('kitEditNameInput');
+    if (input) state.activeKit = { ...state.activeKit, name: String(input.value || '') };
+  }
+
+  function clearKitCreateError(key) {
+    if (!state.kitCreateErrors) state.kitCreateErrors = { name: '', items: '' };
+    if (key) state.kitCreateErrors[key] = '';
   }
 
   function proposalDetailHTML() {
@@ -899,15 +919,23 @@
     const count = state.kitItems.length;
     const editable = !!state.kitEditMode;
     const createMode = !!state.kitCreateMode;
+    const headerHTML = createMode
+      ? `<header class="products-proposal-detail__head kit-create-label-head">
+          <div class="kit-create-title-pill">
+            <button type="button" class="products-back-btn" data-action="back-kits" aria-label="Back to kits"><i data-feather="arrow-left"></i></button>
+            <span>Create New Kit</span>
+          </div>
+        </header>`
+      : `<header class="products-proposal-detail__head">
+          <button type="button" class="products-back-btn" data-action="back-kits" aria-label="Back to kits"><i data-feather="arrow-left"></i></button>
+          <div>
+            <h2>${escapeHTML(kit?.name || 'Kit')}</h2>
+            <p>${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}</p>
+          </div>
+        </header>`;
     return `
-      <header class="products-proposal-detail__head">
-        <button type="button" class="products-back-btn" data-action="back-kits" aria-label="Back to kits"><i data-feather="arrow-left"></i></button>
-        <div>
-          <h2>${escapeHTML(createMode ? 'Create New Kit' : (kit?.name || 'Kit'))}</h2>
-          <p>${createMode ? 'Write the kit name and add at least one component' : `${formatNumber(count)} saved component${count === 1 ? '' : 's'}${editable ? ' • Edit mode' : ' • View only'}`}</p>
-        </div>
-      </header>
-      ${editable ? editNameBlockHTML('kit', createMode ? '' : (kit?.name || 'Kit'), { createMode, required: createMode, hideButton: createMode }) : ''}
+      ${headerHTML}
+      ${editable ? editNameBlockHTML('kit', createMode ? (kit?.name || '') : (kit?.name || 'Kit'), { createMode, required: createMode, hideButton: createMode }) : ''}
       ${editable ? `
       <div class="products-proposal-tools proposals-one-tool">
         <div class="products-proposal-tool-card">
@@ -918,7 +946,8 @@
             <button type="button" class="products-btn products-btn--dark" data-action="add-kit-product"><i data-feather="plus"></i><span>Add</span></button>
           </div>
         </div>
-      </div>` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
+      </div>
+      ${createMode ? kitCreateItemsErrorHTML() : ''}` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
       <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
@@ -946,6 +975,7 @@
   function renderKitDetail() {
     if (!els.kitDetail) return;
     if (!state.activeKit) return;
+    syncDraftKitNameFromInput();
     els.kitDetail.innerHTML = kitDetailHTML();
     hydrateIcons(els.kitDetail);
   }
@@ -1074,6 +1104,7 @@
     state.kitEditMode = false;
     state.kitCreateMode = false;
     state.kitAdminPassword = '';
+    state.kitCreateErrors = { name: '', items: '' };
     if (els.kitDetail) els.kitDetail.hidden = true;
     if (els.kitsList) {
       els.kitsList.hidden = false;
@@ -1097,6 +1128,7 @@
       state.kitAdminPassword = password;
       state.activeKit = { id: '', name: '' };
       state.kitItems = [];
+      state.kitCreateErrors = { name: '', items: '' };
       if (els.kitsList) els.kitsList.hidden = true;
       if (els.kitDetail) {
         els.kitDetail.hidden = false;
@@ -1288,7 +1320,9 @@
     const quantity = numericInputValue(document.getElementById('kitProductQty'), 1);
     if (!productId) return toast('error', 'Kits', 'Select a product first.');
     if (state.kitCreateMode) {
+      syncDraftKitNameFromInput();
       if (!upsertDraftKitProduct(productId, quantity)) return toast('error', 'Kits', 'Product not found.');
+      clearKitCreateError('items');
       renderKitDetail();
       return toast('success', 'Kits', 'Product added to kit draft.');
     }
@@ -1308,6 +1342,7 @@
     const parentId = String(isKit ? state.activeKit?.id : state.activeProposal?.id || '').trim();
     const quantity = numericInputValue(row?.querySelector('.proposal-item-qty'), 1);
     if (isKit && state.kitCreateMode) {
+      syncDraftKitNameFromInput();
       const item = state.kitItems.find((entry) => String(entry?.id || '').trim() === String(itemId || '').trim());
       if (!item) return;
       item.quantity = quantity;
@@ -1338,7 +1373,9 @@
     const isKit = kind === 'kit';
     const parentId = String(isKit ? state.activeKit?.id : state.activeProposal?.id || '').trim();
     if (isKit && state.kitCreateMode) {
+      syncDraftKitNameFromInput();
       state.kitItems = state.kitItems.filter((entry) => String(entry?.id || '').trim() !== String(itemId || '').trim());
+      if (state.kitItems.length) clearKitCreateError('items');
       renderKitDetail();
       return toast('success', 'Kits', 'Component removed.');
     }
@@ -1372,14 +1409,25 @@
     const name = String(input?.value || '').trim();
     const title = isKit ? 'Kits' : 'Proposals';
     const requiredMessage = isKit ? 'Kit name is required.' : 'Proposal name is required.';
-    if (!name) {
+    const isCreateMode = (isKit && state.kitCreateMode) || (!isKit && state.proposalCreateMode);
+    if (!name && !(isKit && state.kitCreateMode)) {
       if (input) input.focus();
       return toast('error', title, requiredMessage);
     }
 
-    if ((isKit && state.kitCreateMode) || (!isKit && state.proposalCreateMode)) {
-      if (isKit && !state.kitItems.length) {
-        return toast('error', title, 'Add at least one component before saving the kit.');
+    if (isCreateMode) {
+      if (isKit) {
+        syncDraftKitNameFromInput();
+        state.kitCreateErrors = { name: '', items: '' };
+        const hasName = !!name;
+        const hasItems = state.kitItems.length > 0;
+        if (!hasName) state.kitCreateErrors.name = 'Kit name is required.';
+        if (!hasItems) state.kitCreateErrors.items = 'Add at least one component before saving the kit.';
+        if (!hasName || !hasItems) {
+          renderKitDetail();
+          if (!hasName) setTimeout(() => document.getElementById('kitEditNameInput')?.focus(), 40);
+          return;
+        }
       }
       try {
         const createdData = await api(isKit ? '/api/products/kits' : '/api/products/proposals', {
@@ -1399,8 +1447,9 @@
             });
           }
           state.kitCreateMode = false;
+          state.kitCreateErrors = { name: '', items: '' };
           await loadKits();
-          await openKitDetail(createdKitId, { edit: true, adminPassword: state.kitAdminPassword });
+          backToKits();
           toast('success', title, 'Kit saved successfully.');
         } else {
           state.proposalCreateMode = false;
@@ -2488,6 +2537,15 @@
       if (action === 'add-kit-product') return addKitProduct();
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
       if (action === 'delete-kit-item') return deleteItem('kit', itemId);
+    });
+    if (els.kitDetail) els.kitDetail.addEventListener('input', (event) => {
+      if (!state.kitCreateMode || !event.target.matches('#kitEditNameInput')) return;
+      state.activeKit = { ...(state.activeKit || {}), name: String(event.target.value || '') };
+      if (String(event.target.value || '').trim()) {
+        clearKitCreateError('name');
+        const errorEl = document.getElementById('kitCreateNameError');
+        if (errorEl) errorEl.textContent = '';
+      }
     });
     if (els.kitDetail) els.kitDetail.addEventListener('change', (event) => {
       if (!event.target.matches('.proposal-item-qty')) return;
