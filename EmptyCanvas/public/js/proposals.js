@@ -803,16 +803,20 @@
     const requiredMark = options.required ? ' <em>*</em>' : '';
     const blockClasses = [
       'proposal-name-edit-block',
+      options.footerMode ? 'proposal-name-edit-block--footer-save' : '',
       options.createMode ? 'proposal-name-edit-block--create' : '',
       isKit && options.createMode ? 'proposal-name-edit-block--kit-create' : '',
       !isKit && options.createMode ? 'proposal-name-edit-block--proposal-create' : '',
+      isKit && !options.createMode ? 'proposal-name-edit-block--kit-edit' : '',
+      !isKit && !options.createMode ? 'proposal-name-edit-block--proposal-edit' : '',
     ].filter(Boolean).join(' ');
     const saveButton = options.hideButton ? '' : `<button type="button" class="products-btn products-btn--dark" data-action="${action}"><i data-feather="save"></i><span>Save name</span></button>`;
-    const nameError = options.createMode
+    const showInlineError = options.createMode || options.validate;
+    const nameError = showInlineError
       ? String(isKit ? (state.kitCreateErrors?.name || '') : (state.proposalCreateErrors?.name || ''))
       : '';
     const errorId = isKit ? 'kitCreateNameError' : 'proposalCreateNameError';
-    const inlineError = options.createMode ? `<div class="direct-create-inline-error direct-create-inline-error--name ${isKit ? 'kit-create-inline-error kit-create-inline-error--name' : 'proposal-create-inline-error proposal-create-inline-error--name'}" id="${errorId}" aria-live="polite">${escapeHTML(nameError)}</div>` : '';
+    const inlineError = showInlineError ? `<div class="direct-create-inline-error direct-create-inline-error--name ${isKit ? 'kit-create-inline-error kit-create-inline-error--name' : 'proposal-create-inline-error proposal-create-inline-error--name'}" id="${errorId}" aria-live="polite">${escapeHTML(nameError)}</div>` : '';
     return `
       <div class="${blockClasses}">
         <label class="products-field products-field--wide">
@@ -838,19 +842,23 @@
     `;
   }
 
-  function directCreateSaveHTML(kind = 'kit') {
+  function directCreateSaveHTML(kind = 'kit', options = {}) {
     const isKit = kind === 'kit';
+    const createMode = options.createMode !== false;
+    const saveLabel = createMode ? 'Save' : 'Save Changes';
+    const cancelAction = isKit ? 'cancel-kit-edit' : 'cancel-proposal-edit';
     return `
-      <div class="kit-create-save-footer direct-create-save-footer">
+      <div class="kit-create-save-footer direct-create-save-footer ${createMode ? 'direct-create-save-footer--create' : 'direct-create-save-footer--edit'}">
+        <button type="button" class="products-btn products-btn--light direct-create-cancel-btn" data-action="${cancelAction}">Cancel</button>
         <button type="button" class="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" data-action="${isKit ? 'save-kit-name' : 'save-proposal-name'}">
-          <i data-feather="save"></i><span>Save</span>
+          <i data-feather="save"></i><span>${saveLabel}</span>
         </button>
       </div>
     `;
   }
 
-  function kitCreateSaveHTML() {
-    return directCreateSaveHTML('kit');
+  function kitCreateSaveHTML(options = {}) {
+    return directCreateSaveHTML('kit', options);
   }
 
   function directCreateItemsErrorHTML(kind = 'kit') {
@@ -865,15 +873,31 @@
   }
 
   function syncDraftKitNameFromInput() {
-    if (!state.kitCreateMode || !state.activeKit) return;
+    if (!state.kitEditMode || !state.activeKit) return null;
     const input = document.getElementById('kitEditNameInput');
-    if (input) state.activeKit = { ...state.activeKit, name: String(input.value || '') };
+    if (!input) return null;
+    const name = String(input.value || '');
+    state.activeKit = { ...state.activeKit, name };
+    return { hasInput: true, name };
   }
 
   function syncDraftProposalNameFromInput() {
-    if (!state.proposalCreateMode || !state.activeProposal) return;
+    if (!state.proposalEditMode || !state.activeProposal) return null;
     const input = document.getElementById('proposalEditNameInput');
-    if (input) state.activeProposal = { ...state.activeProposal, name: String(input.value || '') };
+    if (!input) return null;
+    const name = String(input.value || '');
+    state.activeProposal = { ...state.activeProposal, name };
+    return { hasInput: true, name };
+  }
+
+  function captureEditableName(kind) {
+    return kind === 'kit' ? syncDraftKitNameFromInput() : syncDraftProposalNameFromInput();
+  }
+
+  function preserveCapturedName(entity, fallback, captured) {
+    const base = entity || fallback || {};
+    if (captured && captured.hasInput) return { ...base, name: captured.name };
+    return base;
   }
 
   function clearKitCreateError(key) {
@@ -887,6 +911,7 @@
   }
 
   function proposalDetailHTML() {
+    syncDraftProposalNameFromInput();
     const proposal = state.activeProposal;
     const count = state.proposalItems.length;
     const editable = !!state.proposalEditMode;
@@ -909,7 +934,7 @@
     return `
       ${headerHTML}
       ${!createMode ? combinedMetaCardHTML(proposal) : ''}
-      ${editable ? editNameBlockHTML('proposal', createMode ? (proposal?.name || '') : (proposal?.name || 'Proposal'), { createMode, required: createMode, hideButton: createMode }) : ''}
+      ${editable ? editNameBlockHTML('proposal', createMode ? (proposal?.name || '') : (proposal?.name ?? 'Proposal'), { createMode, required: true, hideButton: true, validate: true, footerMode: true }) : ''}
       ${editable ? proposalLogicControlHTML() : ''}
       ${editable ? `
       <div class="products-proposal-tools proposals-two-tools">
@@ -930,7 +955,7 @@
           </div>
         </div>
       </div>
-      ${createMode ? directCreateItemsErrorHTML('proposal') : ''}` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`}
+      ${directCreateItemsErrorHTML('proposal')}` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this proposal.</span></div>`}
       <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Components table</h3><p>Saved products and quantities for this proposal.</p></div>
@@ -944,11 +969,12 @@
         </div>
         ${totalBlockHTML(state.proposalItems)}
       </div>
-      ${createMode ? directCreateSaveHTML('proposal') : ''}
+      ${editable ? directCreateSaveHTML('proposal', { createMode }) : ''}
     `;
   }
 
   function kitDetailHTML() {
+    syncDraftKitNameFromInput();
     const kit = state.activeKit;
     const count = state.kitItems.length;
     const editable = !!state.kitEditMode;
@@ -969,7 +995,7 @@
         </header>`;
     return `
       ${headerHTML}
-      ${editable ? editNameBlockHTML('kit', createMode ? (kit?.name || '') : (kit?.name || 'Kit'), { createMode, required: createMode, hideButton: createMode }) : ''}
+      ${editable ? editNameBlockHTML('kit', createMode ? (kit?.name || '') : (kit?.name ?? 'Kit'), { createMode, required: true, hideButton: true, validate: true, footerMode: true }) : ''}
       ${editable ? `
       <div class="products-proposal-tools proposals-one-tool">
         <div class="products-proposal-tool-card">
@@ -981,7 +1007,7 @@
           </div>
         </div>
       </div>
-      ${createMode ? kitCreateItemsErrorHTML() : ''}` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
+      ${kitCreateItemsErrorHTML()}` : `<div class="proposal-view-note"><i data-feather="eye"></i><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>`}
       <div class="products-proposal-table-card">
         <div class="products-proposal-table-head">
           <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
@@ -995,7 +1021,7 @@
         </div>
         ${totalBlockHTML(state.kitItems)}
       </div>
-      ${createMode ? kitCreateSaveHTML() : ''}
+      ${editable ? kitCreateSaveHTML({ createMode }) : ''}
     `;
   }
 
@@ -1084,6 +1110,7 @@
     }
     try {
       state.proposalEditMode = !!options.edit;
+      state.proposalCreateErrors = { name: '', items: '' };
       state.proposalAdminPassword = String(options.adminPassword || '');
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}?_ts=${Date.now()}`);
       state.activeProposal = data.proposal || null;
@@ -1106,6 +1133,7 @@
     }
     try {
       state.kitEditMode = !!options.edit;
+      state.kitCreateErrors = { name: '', items: '' };
       state.kitAdminPassword = String(options.adminPassword || '');
       const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
       state.activeKit = data.kit || null;
@@ -1335,10 +1363,12 @@
       return toast('success', 'Proposals', 'Product added to proposal draft.');
     }
     if (!proposalId) return toast('error', 'Proposals', 'Select a proposal first.');
+    const capturedName = captureEditableName('proposal');
     try {
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, mergeLogic, logic: mergeLogic, quantityLogic: mergeLogic, adminPassword: state.proposalAdminPassword }) });
-      state.activeProposal = data.proposal || state.activeProposal;
+      state.activeProposal = preserveCapturedName(data.proposal, state.activeProposal, capturedName);
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
+      if (state.proposalItems.length) clearProposalCreateError('items');
       renderProposalDetail();
       await loadProposals();
       toast('success', 'Proposals', 'Product added.');
@@ -1370,10 +1400,12 @@
       } catch (error) { return toast('error', 'Proposals', error?.message || 'Failed to add kit.'); }
     }
     if (!proposalId) return toast('error', 'Proposals', 'Select a proposal first.');
+    const capturedName = captureEditableName('proposal');
     try {
       const data = await api(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/by-kit`, { method: 'POST', body: JSON.stringify({ kitId, quantity, mergeLogic, logic: mergeLogic, quantityLogic: mergeLogic, adminPassword: state.proposalAdminPassword }) });
-      state.activeProposal = data.proposal || state.activeProposal;
+      state.activeProposal = preserveCapturedName(data.proposal, state.activeProposal, capturedName);
       state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
+      if (state.proposalItems.length) clearProposalCreateError('items');
       renderProposalDetail();
       await loadProposals();
       toast('success', 'Proposals', `Added ${formatNumber(data?.addedCount || 0)} kit components.`);
@@ -1422,10 +1454,12 @@
       return toast('success', 'Kits', 'Product added to kit draft.');
     }
     if (!kitId) return toast('error', 'Kits', 'Select a kit first.');
+    const capturedName = captureEditableName('kit');
     try {
       const data = await api(`/api/products/kits/${encodeURIComponent(kitId)}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity, adminPassword: state.kitAdminPassword }) });
-      state.activeKit = data.kit || state.activeKit;
+      state.activeKit = preserveCapturedName(data.kit, state.activeKit, capturedName);
       state.kitItems = Array.isArray(data.items) ? data.items : state.kitItems;
+      if (state.kitItems.length) clearKitCreateError('items');
       renderKitDetail();
       await loadKits();
       toast('success', 'Kits', 'Product added to kit.');
@@ -1458,14 +1492,15 @@
     const url = isKit
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
       : `/api/products/proposals/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`;
+    const capturedName = captureEditableName(isKit ? 'kit' : 'proposal');
     try {
       const data = await api(url, { method: 'PATCH', body: JSON.stringify({ quantity, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
       if (isKit) {
-        state.activeKit = data.kit || state.activeKit;
+        state.activeKit = preserveCapturedName(data.kit, state.activeKit, capturedName);
         state.kitItems = Array.isArray(data.items) ? data.items : state.kitItems;
         renderKitDetail();
       } else {
-        state.activeProposal = data.proposal || state.activeProposal;
+        state.activeProposal = preserveCapturedName(data.proposal, state.activeProposal, capturedName);
         state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
         renderProposalDetail();
       }
@@ -1494,15 +1529,16 @@
     const url = isKit
       ? `/api/products/kits/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`
       : `/api/products/proposals/${encodeURIComponent(parentId)}/items/${encodeURIComponent(itemId)}`;
+    const capturedName = captureEditableName(isKit ? 'kit' : 'proposal');
     try {
       const data = await api(url, { method: 'DELETE', body: JSON.stringify({ adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
       if (isKit) {
-        state.activeKit = data.kit || state.activeKit;
+        state.activeKit = preserveCapturedName(data.kit, state.activeKit, capturedName);
         state.kitItems = Array.isArray(data.items) ? data.items : state.kitItems;
         renderKitDetail();
         await loadKits();
       } else {
-        state.activeProposal = data.proposal || state.activeProposal;
+        state.activeProposal = preserveCapturedName(data.proposal, state.activeProposal, capturedName);
         state.proposalItems = Array.isArray(data.items) ? data.items : state.proposalItems;
         renderProposalDetail();
         await loadProposals();
@@ -1521,9 +1557,21 @@
     const title = isKit ? 'Kits' : 'Proposals';
     const requiredMessage = isKit ? 'Kit name is required.' : 'Proposal name is required.';
     const isCreateMode = (isKit && state.kitCreateMode) || (!isKit && state.proposalCreateMode);
-    if (!name && !isCreateMode) {
-      if (input) input.focus();
-      return toast('error', title, requiredMessage);
+    if (!isCreateMode) {
+      const currentItems = isKit ? state.kitItems.slice() : state.proposalItems.slice();
+      const errors = { name: '', items: '' };
+      const hasName = !!name;
+      const hasItems = currentItems.length > 0;
+      if (!hasName) errors.name = requiredMessage;
+      if (!hasItems) errors.items = isKit ? 'Add at least one component before saving changes.' : 'Add at least one component before saving changes.';
+      if (isKit) state.kitCreateErrors = errors;
+      else state.proposalCreateErrors = errors;
+      if (!hasName || !hasItems) {
+        if (isKit) renderKitDetail();
+        else renderProposalDetail();
+        if (!hasName) setTimeout(() => document.getElementById(isKit ? 'kitEditNameInput' : 'proposalEditNameInput')?.focus(), 40);
+        return;
+      }
     }
 
     if (isCreateMode) {
@@ -1592,15 +1640,17 @@
     try {
       const data = await api(url, { method: 'PATCH', body: JSON.stringify({ name, adminPassword: isKit ? state.kitAdminPassword : state.proposalAdminPassword }) });
       if (isKit) {
+        state.kitCreateErrors = { name: '', items: '' };
         state.activeKit = data.kit || { ...state.activeKit, name };
         await loadKits();
         renderKitDetail();
       } else {
+        state.proposalCreateErrors = { name: '', items: '' };
         state.activeProposal = data.proposal || { ...state.activeProposal, name };
         await loadProposals();
         renderProposalDetail();
       }
-      toast('success', isKit ? 'Kits' : 'Proposals', 'Name updated.');
+      toast('success', isKit ? 'Kits' : 'Proposals', 'Changes saved.');
     } catch (error) {
       toast('error', isKit ? 'Kits' : 'Proposals', error?.message || 'Failed to update name.');
     }
@@ -2634,7 +2684,7 @@
     if (els.proposalDetail) els.proposalDetail.addEventListener('click', (event) => {
       const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
       if (!action) return;
-      if (action === 'back-proposals') return backToProposals();
+      if (action === 'back-proposals' || action === 'cancel-proposal-edit') return backToProposals();
       if (action === 'open-make-order') return openMakeOrderModal();
       if (action === 'download-proposal') return downloadActiveProposal();
       if (action === 'save-proposal-name') return saveActiveName('proposal');
@@ -2644,7 +2694,7 @@
       if (action === 'delete-proposal-item') return deleteItem('proposal', itemId);
     });
     if (els.proposalDetail) els.proposalDetail.addEventListener('input', (event) => {
-      if (!state.proposalCreateMode || !event.target.matches('#proposalEditNameInput')) return;
+      if (!state.proposalEditMode || !event.target.matches('#proposalEditNameInput')) return;
       state.activeProposal = { ...(state.activeProposal || {}), name: String(event.target.value || '') };
       if (String(event.target.value || '').trim()) {
         clearProposalCreateError('name');
@@ -2665,14 +2715,14 @@
     if (els.kitDetail) els.kitDetail.addEventListener('click', (event) => {
       const action = event.target.closest('[data-action]')?.getAttribute('data-action') || '';
       if (!action) return;
-      if (action === 'back-kits') return backToKits();
+      if (action === 'back-kits' || action === 'cancel-kit-edit') return backToKits();
       if (action === 'save-kit-name') return saveActiveName('kit');
       if (action === 'add-kit-product') return addKitProduct();
       const itemId = event.target.closest('[data-item-id]')?.getAttribute('data-item-id');
       if (action === 'delete-kit-item') return deleteItem('kit', itemId);
     });
     if (els.kitDetail) els.kitDetail.addEventListener('input', (event) => {
-      if (!state.kitCreateMode || !event.target.matches('#kitEditNameInput')) return;
+      if (!state.kitEditMode || !event.target.matches('#kitEditNameInput')) return;
       state.activeKit = { ...(state.activeKit || {}), name: String(event.target.value || '') };
       if (String(event.target.value || '').trim()) {
         clearKitCreateError('name');
