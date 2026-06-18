@@ -4483,79 +4483,11 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 }
 
 /* =========================================================
-   2026-06-14: unified inner page spacing + stocktaking frame cleanup
-   - Gives every page the same breathing room used by Home on tablet/desktop.
-   - Keeps mobile dock rules untouched.
-   - Removes Stocktaking's outer white backing card without touching data logic.
+   2026-06-18: unified translucent white page background
+   - Gives every dashboard page the same 50% white content backdrop
+     used by the full-page Add New Customer screen.
+   - Keeps existing page cards, logic, layouts, and navigation unchanged.
    ========================================================= */
-:root{
-  --ops-page-content-gap: 18px;
-}
-
-@media (max-width: 900px){
-  :root{
-    --ops-page-content-gap: 14px;
-  }
-}
-
-@media (min-width: 769px){
-  body:not(.page-home):not(.page-shell-host) .main-content > main,
-  body:not(.page-home):not(.page-shell-host) .main-content > main.container,
-  body:not(.page-home):not(.page-shell-host) .main-content > main.container-full-width,
-  body:not(.page-home):not(.page-shell-host) .main-content > main.page-body,
-  body:not(.page-home):not(.page-shell-host) .main-content > main.tasks-v2-main{
-    padding: var(--ops-page-content-gap) !important;
-    box-sizing: border-box !important;
-  }
-
-  body.shell-embedded:not(.page-home) .main-content > main,
-  body.shell-embedded:not(.page-home) .main-content > main.container,
-  body.shell-embedded:not(.page-home) .main-content > main.container-full-width,
-  body.shell-embedded:not(.page-home) .main-content > main.page-body,
-  body.shell-embedded:not(.page-home) .main-content > main.tasks-v2-main{
-    padding: var(--ops-page-content-gap) !important;
-    box-sizing: border-box !important;
-  }
-}
-
-:where(body.stocktaking-page, body.page-stocktaking) .stocktaking-root-card,
-:where(body.stocktaking-page, body.page-stocktaking) .main-content > main.container-full-width > section.stocktaking-root-card{
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  padding: 0 !important;
-}
-
-:where(body.stocktaking-page, body.page-stocktaking) .stocktaking-root-card > .card-toolbar{
-  padding: 0 !important;
-  margin-bottom: 14px !important;
-}
-
-/* =========================================================
-   2026-06-14: Orders Review card alignment
-   - Removes the legacy S.V. Orders side gutters that only affected
-     the cards list, so the Orders Review cards line up exactly with
-     the status toolbar like Current Orders.
-   ========================================================= */
-body.orders-review-page .main-content > main.page-body,
-body.shell-embedded.orders-review-page .main-content > main.page-body{
-  padding-inline: var(--ops-page-content-gap) !important;
-}
-
-body.orders-review-page section#sv-orders.card,
-body.shell-embedded.orders-review-page section#sv-orders.card{
-  padding-inline: 4px !important;
-}
-
-body.orders-review-page #sv-list,
-body.shell-embedded.orders-review-page #sv-list{
-  padding-inline: 0 !important;
-}
-
-body.orders-review-page #svTabs,
-body.shell-embedded.orders-review-page #svTabs{
-  padding-inline: 0 !important;
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
+  background-color: rgba(255, 255, 255, 0.50) !important;
 }
