@@ -2772,3 +2772,50 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
     justify-content:flex-start !important;
   }
 }
+
+/* 2026-06-17: Kits/Proposals footer save actions for create and edit modes */
+.proposals-page .proposal-name-edit-block--footer-save{
+  grid-template-columns:1fr !important;
+  align-items:stretch !important;
+}
+.proposals-page .proposal-name-edit-block--footer-save .products-field,
+.proposals-page .proposal-name-edit-block--footer-save input{
+  width:100% !important;
+}
+.proposals-page .direct-create-save-footer{
+  gap:12px !important;
+  align-items:center !important;
+}
+.proposals-page .direct-create-cancel-btn,
+.proposals-page .direct-create-save-btn{
+  min-width:180px !important;
+  min-height:58px !important;
+  border-radius:18px !important;
+  justify-content:center !important;
+  font-weight:950 !important;
+}
+.proposals-page .direct-create-cancel-btn{
+  background:#fff !important;
+  color:#111827 !important;
+  border:1px solid rgba(15,23,42,.10) !important;
+  box-shadow:0 12px 26px rgba(15,23,42,.06) !important;
+}
+.proposals-page .proposal-name-edit-block--kit-edit .kit-create-inline-error--name,
+.proposals-page .proposal-name-edit-block--proposal-edit .direct-create-inline-error--name{
+  grid-column:1 / -1 !important;
+}
+.proposals-page .proposal-name-edit-block--kit-edit:has(.kit-create-inline-error--name:not(:empty)) input,
+.proposals-page .proposal-name-edit-block--proposal-edit:has(.direct-create-inline-error--name:not(:empty)) input{
+  border-color:rgba(220,38,38,.32) !important;
+  box-shadow:0 0 0 4px rgba(220,38,38,.08) !important;
+}
+@media (max-width:720px){
+  .proposals-page .direct-create-save-footer{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+  }
+  .proposals-page .direct-create-cancel-btn,
+  .proposals-page .direct-create-save-btn{
+    width:100% !important;
+  }
+}
