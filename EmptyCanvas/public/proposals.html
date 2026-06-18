@@ -13,9 +13,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Proposals | Operations Hub</title>
   <link href="/css/style.css?v=b2b-addname-transparent-pdf-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=white-page-overlay-v1" rel="stylesheet" />
   <link href="/css/products.css?v=b2b-addname-transparent-pdf-v1" rel="stylesheet" />
-  <link href="/css/proposals.css?v=proposal-edit-footer-validation-v1" rel="stylesheet" />
+  <link href="/css/proposals.css?v=b2b-addname-transparent-pdf-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page proposals-page proposals-only-page" data-proposals-mode="proposals">
@@ -88,10 +88,7 @@
       </header>
 
       <main class="products-shell proposals-shell">
-        <div class="proposals-floating-actions proposals-floating-actions--multi">
-          <button type="button" class="products-add-btn proposals-combine-btn" id="combineProposalsBtn">
-            <i data-feather="git-merge"></i><span>Combine Proposals</span>
-          </button>
+        <div class="proposals-floating-actions">
           <button type="button" class="products-add-btn proposals-create-btn" id="createProposalBtn">
             <i data-feather="folder-plus"></i><span>Create New Proposal</span>
           </button>
@@ -138,27 +135,19 @@
         <div class="products-modal__icon"><i data-feather="shopping-bag"></i></div>
         <div>
           <h2 id="makeOrderModalTitle">Make order</h2>
+          <p>Select the team member who will receive this full proposal order.</p>
         </div>
       </div>
       <div class="products-form-grid">
         <label class="products-field products-field--wide">
           <span>Team Member <em>*</em></span>
-          <div class="proposal-search-select proposal-search-select--light proposal-search-select--modal" data-select-root data-target="makeOrderMember" id="makeOrderMemberRoot">
-            <input type="hidden" id="makeOrderMember" value="" />
-            <button type="button" class="proposal-search-select__button" data-action="toggle-search-select" aria-haspopup="listbox" aria-expanded="false">
-              <span class="proposal-search-select__value">Select team member</span>
-              <i data-feather="chevron-down"></i>
-            </button>
-            <div class="proposal-search-select__menu" role="listbox" hidden>
-              <div class="proposal-search-select__options" id="makeOrderMemberOptions">
-                <div class="proposal-search-select__empty">Loading team members...</div>
-              </div>
-            </div>
-          </div>
+          <select id="makeOrderMember" required>
+            <option value="">Select team member</option>
+          </select>
         </label>
         <label class="products-field products-field--wide">
-          <span>Admin password <em>*</em></span>
-          <input id="makeOrderPassword" type="password" autocomplete="current-password" required placeholder="Enter Admin password" />
+          <span>Password <em>*</em></span>
+          <input id="makeOrderPassword" type="password" autocomplete="current-password" required placeholder="Enter selected user password" />
         </label>
       </div>
       <div class="products-form-error" id="makeOrderError" aria-live="polite"></div>
@@ -171,6 +160,6 @@
 
 
   <script src="/js/common-ui.js?v=supabase-notifications-v1"></script>
-  <script src="/js/proposals.js?v=proposal-edit-footer-validation-v1"></script>
+  <script src="/js/proposals.js?v=b2b-addname-transparent-pdf-v1"></script>
 </body>
 </html>
