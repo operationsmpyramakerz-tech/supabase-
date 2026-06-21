@@ -2211,6 +2211,7 @@
             <div>Enable</div>
           </div>
           <div class="ua-page-access-list" id="uaPageAccessList"></div>
+          <div class="ua-form-error ua-page-access-error" id="uaPageAccessError" aria-live="polite"></div>
         </div>
         <div class="ua-modal__actions">
           <button type="button" class="ua-btn ua-btn--light" id="uaPageAccessCancel">Cancel</button>
@@ -2226,6 +2227,7 @@
     els.pageAccessModal = wrapper;
     els.pageAccessForm = wrapper.querySelector('#uaPageAccessForm');
     els.pageAccessList = wrapper.querySelector('#uaPageAccessList');
+    els.pageAccessError = wrapper.querySelector('#uaPageAccessError');
     els.pageAccessTitle = wrapper.querySelector('#uaPageAccessTitle');
     els.pageAccessSubtitle = wrapper.querySelector('#uaPageAccessSubtitle');
     els.pageAccessSaveBtn = wrapper.querySelector('#uaPageAccessSave');
@@ -2243,6 +2245,11 @@
       if (!row) return;
       const enabled = row.querySelector('[data-pa-enabled]')?.checked;
       row.classList.toggle('is-disabled', !enabled);
+      syncPageAccessModalRow(row);
+    });
+    els.pageAccessList?.addEventListener('ua:modern-select-change', (event) => {
+      const row = event.target?.closest?.('.ua-page-access-row');
+      if (row) syncPageAccessModalRow(row);
     });
     hydrateIcons(wrapper);
   }
@@ -2256,8 +2263,29 @@
     if (els.pageAccessCancelBtn) els.pageAccessCancelBtn.disabled = saving;
   }
 
+  function setPageAccessFormError(message = '') {
+    if (!els.pageAccessError) return;
+    els.pageAccessError.textContent = String(message || '');
+    els.pageAccessError.hidden = !message;
+  }
+
+  function syncPageAccessModalRow(rowElement) {
+    if (!rowElement) return;
+    const pageId = String(rowElement.getAttribute('data-page-id') || '').trim();
+    const pageKey = String(rowElement.getAttribute('data-page-key') || '').trim();
+    if (!pageId && !pageKey) return;
+    const accessLevel = normalizePageAccessLevel(rowElement.querySelector('[data-pa-level]')?.value || 'edit');
+    const isEnabled = !!rowElement.querySelector('[data-pa-enabled]')?.checked;
+    state.pageAccessModalRows = normalizeAccessRows((state.pageAccessModalRows || []).map((entry) => {
+      const sameId = pageId && String(entry?.pageId || '') === pageId;
+      const sameKey = pageKey && String(entry?.pageKey || '') === pageKey;
+      return sameId || sameKey ? { ...entry, accessLevel, isEnabled } : entry;
+    }));
+  }
+
   function renderPageAccessList() {
     if (!els.pageAccessList) return;
+    setPageAccessFormError('');
     if (state.pageAccessModalLoading) {
       els.pageAccessList.innerHTML = '<div class="ua-page-access-loading"><span></span> Loading pages...</div>';
       if (els.pageAccessSaveBtn) els.pageAccessSaveBtn.disabled = true;
@@ -2336,6 +2364,7 @@
     state.pageAccessModalMemberId = String(state.formMemberId || '').trim();
     state.pageAccessModalLoading = true;
     state.pageAccessModalRows = [];
+    setPageAccessFormError('');
     if (els.pageAccessTitle) els.pageAccessTitle.textContent = 'Page Access';
     if (els.pageAccessSubtitle) {
       const memberName = state.formMode === 'create' ? 'new team member' : (state.formMemberSnapshot?.name || 'this team member');
@@ -2415,6 +2444,7 @@
   async function persistPageAccessSave(memberId, rows) {
     const cleanMemberId = String(memberId || '').trim();
     if (!cleanMemberId) throw new Error('Missing team member ID.');
+    setPageAccessFormError('');
     setPageAccessSaving(true);
     try {
       await savePageAccessForMember(cleanMemberId, rows);
@@ -2456,7 +2486,9 @@
       await persistPageAccessSave(memberId, rows);
     } catch (error) {
       console.error(error);
-      toast('error', 'Save failed', error?.message || 'Failed to save page access.');
+      const message = error?.message || 'Failed to save page access.';
+      setPageAccessFormError(message);
+      toast('error', 'Save failed', message);
     }
   }
 
