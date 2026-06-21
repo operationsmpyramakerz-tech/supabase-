@@ -734,6 +734,219 @@ document.addEventListener('DOMContentLoaded', () => {
     }) || null;
   }
 
+  // =====================================================
+  // Page access runtime: View / Edit / Admin
+  // =====================================================
+  const OPS_ADMIN_BYPASS_TOKEN = '__OPS_PAGE_ADMIN_BYPASS__';
+  let __opsCurrentPageAccess = { level: 'edit', pages: [] };
+  let __opsViewOnlyLastNoticeAt = 0;
+  let __opsPageAccessGuardsInstalled = false;
+  let __opsAdminBypassObserver = null;
+
+  function normalizeOpsAccessLevel(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'admin') return 'admin';
+    if (raw === 'view') return 'view';
+    // Legacy "user" access acts like Edit.
+    return 'edit';
+  }
+
+  function opsAccessToken(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function opsRouteMatchesPage(pathname, row) {
+    const path = String(pathname || '/').replace(/\/+$/, '') || '/';
+    const route = String(row?.routePath || row?.route_path || '').replace(/\/+$/, '') || '';
+    if (route && (path === route || path.startsWith(`${route}/`))) return true;
+    const routeKey = opsAccessToken(path);
+    const candidates = [row?.pageName, row?.page_name, row?.pageKey, row?.page_key, ...(Array.isArray(row?.aliases) ? row.aliases : [])]
+      .map(opsAccessToken)
+      .filter(Boolean);
+    const known = {
+      orders: ['currentorders'],
+      ordersrequested: ['operationsorders', 'requestedorders'],
+      ordersmaintenanceorders: ['maintenanceorders'],
+      orderssvorders: ['ordersreview'],
+      ordersnew: ['createneworder', 'shoppingcart'],
+      expensesusers: ['expensesusers'],
+      useraccess: ['userscenter', 'useraccessdata'],
+      messages: ['mail'],
+    };
+    const wants = new Set([routeKey, ...(known[routeKey] || [])]);
+    return candidates.some((candidate) => wants.has(candidate));
+  }
+
+  function resolveCurrentPageAccessLevel(pages) {
+    const path = String(window.location?.pathname || '/');
+    const matches = (Array.isArray(pages) ? pages : []).filter((row) => row && row.isEnabled !== false && row.is_enabled !== false && opsRouteMatchesPage(path, row));
+    const rank = { view: 1, edit: 2, admin: 3 };
+    let result = 'edit';
+    let highest = 0;
+    matches.forEach((row) => {
+      const level = normalizeOpsAccessLevel(row?.accessLevel || row?.access_level);
+      if (rank[level] > highest) { highest = rank[level]; result = level; }
+    });
+    return matches.length ? result : 'edit';
+  }
+
+  function showViewOnlyNotice() {
+    const now = Date.now();
+    if (now - __opsViewOnlyLastNoticeAt < 900) return;
+    __opsViewOnlyLastNoticeAt = now;
+    try {
+      if (window.UI && typeof window.UI.toast === 'function') {
+        window.UI.toast('info', 'View access only', 'You are not authorized to make changes on this page.');
+        return;
+      }
+    } catch {}
+    try { window.alert('View access only: you are not authorized to make changes on this page.'); } catch {}
+  }
+
+  function isViewOnlyPage() {
+    return String(__opsCurrentPageAccess?.level || '').toLowerCase() === 'view';
+  }
+
+  function isPageAdmin() {
+    return String(__opsCurrentPageAccess?.level || '').toLowerCase() === 'admin';
+  }
+
+  function isChromeOrNavigationControl(node) {
+    if (!node || typeof node.closest !== 'function') return false;
+    return !!node.closest('.sidebar, .main-header, .dashboard-header, .top-header, .mobile-dock, .mobile-bottom-nav, .profile-menu, .notification-panel, .notifications-panel, .global-search, [data-ops-view-allow]');
+  }
+
+  function isEditableContentControl(node) {
+    if (!node || typeof node.matches !== 'function') return false;
+    return node.matches('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"], [role="combobox"]');
+  }
+
+  function installViewOnlyInteractionGuards() {
+    if (__opsPageAccessGuardsInstalled) return;
+    __opsPageAccessGuardsInstalled = true;
+
+    document.addEventListener('click', (event) => {
+      if (!isViewOnlyPage()) return;
+      const control = event.target?.closest?.('button, input[type="submit"], input[type="button"], [role="button"], [data-modern-select-button], [data-proposal-action], [data-kit-action]');
+      if (!control || isChromeOrNavigationControl(control)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      showViewOnlyNotice();
+    }, true);
+
+    document.addEventListener('pointerdown', (event) => {
+      if (!isViewOnlyPage()) return;
+      const control = event.target?.closest?.('input, textarea, select, [contenteditable="true"], [role="combobox"]');
+      if (!control || isChromeOrNavigationControl(control) || !isEditableContentControl(control)) return;
+      event.preventDefault();
+      showViewOnlyNotice();
+    }, true);
+
+    document.addEventListener('keydown', (event) => {
+      if (!isViewOnlyPage()) return;
+      const active = document.activeElement;
+      if (!active || isChromeOrNavigationControl(active) || !isEditableContentControl(active)) return;
+      event.preventDefault();
+      showViewOnlyNotice();
+    }, true);
+
+    document.addEventListener('submit', (event) => {
+      if (!isViewOnlyPage()) return;
+      const form = event.target;
+      if (isChromeOrNavigationControl(form)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      showViewOnlyNotice();
+    }, true);
+  }
+
+  function activeAdminPasswordDialogs() {
+    return Array.from(document.querySelectorAll('input[type="password"]')).filter((input) => {
+      const marker = `${input.name || ''} ${input.placeholder || ''} ${input.closest('form, [role="dialog"], .modal, .products-modal, .b2b-admin-password-modal, .expense-user-action-card')?.textContent || ''}`.toLowerCase();
+      const visible = !!(input.offsetWidth || input.offsetHeight || input.getClientRects().length);
+      return visible && /admin\s*password|adminpassword/.test(marker);
+    });
+  }
+
+  function applyAdminBypassToOpenDialogs() {
+    if (!isPageAdmin()) return;
+    const inputs = activeAdminPasswordDialogs();
+    inputs.forEach((input) => {
+      if (input.value !== OPS_ADMIN_BYPASS_TOKEN) {
+        input.value = OPS_ADMIN_BYPASS_TOKEN;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      input.setAttribute('data-ops-admin-bypass', 'true');
+    });
+
+    // Fully automatic only when the dialog contains a password field and no
+    // other user-entered data. Dialogs with date/options remain open so the
+    // user can choose those values while the password is already bypassed.
+    const roots = Array.from(new Set(inputs.map((input) => input.closest('form, [role="dialog"], .b2b-admin-password-modal, .expense-user-action-card, .co-submodal, .sv-admin-modal')).filter(Boolean)));
+    roots.forEach((root) => {
+      if (root.dataset.opsAdminAutoSubmitted === 'true') return;
+      const editable = Array.from(root.querySelectorAll('input:not([type="hidden"]), select, textarea')).filter((field) => field.type !== 'password' && !field.disabled);
+      if (editable.length) return;
+      const action = root.querySelector('[data-admin-submit], [data-admin-confirm], [data-edit-password-confirm], [data-password-confirm], #coEditPwdConfirm, #reqEditPwdConfirm, #reqArchivePwdConfirm, #svAdminPwdConfirm, #uaAdminPasswordConfirm, button[type="submit"]');
+      if (!action || action.disabled) return;
+      root.dataset.opsAdminAutoSubmitted = 'true';
+      window.setTimeout(() => {
+        try { action.click(); } catch {}
+        window.setTimeout(() => { try { delete root.dataset.opsAdminAutoSubmitted; } catch {} }, 1200);
+      }, 45);
+    });
+  }
+
+  function installAdminBypassHelper() {
+    if (!window.__opsAdminPromptBypassInstalled) {
+      try {
+        const nativePrompt = typeof window.prompt === 'function' ? window.prompt.bind(window) : null;
+        window.prompt = function opsPageAccessPrompt(message, defaultValue) {
+          if (isPageAdmin() && /admin\s*password/i.test(String(message || ''))) return OPS_ADMIN_BYPASS_TOKEN;
+          return nativePrompt ? nativePrompt(message, defaultValue) : null;
+        };
+        window.__opsAdminPromptBypassInstalled = true;
+      } catch {}
+    }
+    if (__opsAdminBypassObserver || typeof MutationObserver === 'undefined') return;
+    __opsAdminBypassObserver = new MutationObserver(() => {
+      window.setTimeout(applyAdminBypassToOpenDialogs, 0);
+    });
+    try { __opsAdminBypassObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'aria-hidden'] }); } catch {}
+    document.addEventListener('click', () => window.setTimeout(applyAdminBypassToOpenDialogs, 0), true);
+  }
+
+  function applyPageAccessRuntime(payload = {}) {
+    const pages = Array.isArray(payload?.pageAccess?.pages)
+      ? payload.pageAccess.pages
+      : Array.isArray(payload?.pageAccess)
+        ? payload.pageAccess
+        : [];
+    const level = resolveCurrentPageAccessLevel(pages);
+    __opsCurrentPageAccess = { level, pages };
+    try { sessionStorage.setItem('ops.currentPageAccess', JSON.stringify({ pages, level, savedAt: Date.now() })); } catch {}
+    try {
+      document.body.dataset.pageAccessLevel = level;
+      document.body.classList.toggle('ops-view-only', level === 'view');
+      document.body.classList.toggle('ops-page-admin', level === 'admin');
+    } catch {}
+    try {
+      window.OpsPageAccess = {
+        level,
+        pages,
+        isViewOnly: () => isViewOnlyPage(),
+        isEdit: () => String(__opsCurrentPageAccess?.level) === 'edit',
+        isAdmin: () => isPageAdmin(),
+        adminBypassToken: OPS_ADMIN_BYPASS_TOKEN,
+        showViewOnlyNotice,
+      };
+    } catch {}
+    installViewOnlyInteractionGuards();
+    installAdminBypassHelper();
+    window.setTimeout(applyAdminBypassToOpenDialogs, 0);
+  }
+
   function normalizeAllowedToken(value) {
     return String(value || '').trim().toLowerCase().replace(/[^a-z0-9/]+/g, '');
   }
@@ -2671,7 +2884,9 @@ if (document.querySelector('.sidebar')) {
           email: cachedChrome?.email || window.__opsUserInfo?.email || '',
           photoUrl: cachedChrome?.photoUrl || window.__opsUserInfo?.photoUrl || '',
           coverPhotoUrl: cachedCoverPhotoUrl || window.__opsUserInfo?.coverPhotoUrl || '',
+          pageAccess: cachedChrome?.pageAccess || window.__opsUserInfo?.pageAccess || { pages: [] },
         });
+        applyPageAccessRuntime({ pageAccess: cachedChrome?.pageAccess || window.__opsUserInfo?.pageAccess || { pages: [] } });
       } catch {}
     }
 
@@ -2715,8 +2930,10 @@ if (document.querySelector('.sidebar')) {
           department: data.department || '',
           photoUrl: data.photoUrl || '',
           coverPhotoUrl,
-          email: data.email || ''
+          email: data.email || '',
+          pageAccess: data.pageAccess || { pages: [] }
         };
+        applyPageAccessRuntime(data || {});
 
         // Notify other widgets that user info changed
         try {
@@ -2732,11 +2949,12 @@ if (document.querySelector('.sidebar')) {
         coverPhotoUrl,
         email: data.email || '',
         allowedPages: Array.isArray(data.allowedPages) ? data.allowedPages : (getCachedAllowedPages() || []),
+        pageAccess: data.pageAccess || { pages: [] },
       });
 
       if (Array.isArray(data.allowedPages)) {
         cacheAllowedPages(data.allowedPages);
-        writeChromeCache({ ...(window.__opsUserInfo || {}), allowedPages: data.allowedPages });
+        writeChromeCache({ ...(window.__opsUserInfo || {}), allowedPages: data.allowedPages, pageAccess: data.pageAccess || { pages: [] } });
 
         // 🔒 اخفي الكل ثم أظهر المسموح
         applyAllowedPages([]);

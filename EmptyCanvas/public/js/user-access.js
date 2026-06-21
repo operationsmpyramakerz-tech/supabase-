@@ -433,6 +433,19 @@
     return picked;
   }
 
+  function normalizePageAccessLevel(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'admin') return 'admin';
+    if (raw === 'view') return 'view';
+    // Legacy "user" maps to Edit.
+    return 'edit';
+  }
+
+  function pageAccessLevelLabel(value) {
+    const level = normalizePageAccessLevel(value);
+    return level === 'admin' ? 'Admin' : level === 'view' ? 'View' : 'Edit';
+  }
+
   function normalizeAccessRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((row) => ({
@@ -442,7 +455,7 @@
         moduleName: String(row?.moduleName || row?.module_name || 'General').trim() || 'General',
         routePath: String(row?.routePath || row?.route_path || '').trim(),
         sortOrder: Number(row?.sortOrder || row?.sort_order || 100),
-        accessLevel: String(row?.accessLevel || row?.access_level || 'user').toLowerCase() === 'admin' ? 'admin' : 'user',
+        accessLevel: normalizePageAccessLevel(row?.accessLevel || row?.access_level || 'edit'),
         isEnabled: !!(row?.isEnabled ?? row?.is_enabled ?? row?.enabled),
       }))
       .filter((row) => row.pageId || row.pageKey)
@@ -492,7 +505,7 @@
     const rows = Array.isArray(summary.rows) ? summary.rows : Array.isArray(summary.pages) ? summary.pages : [];
     return rows.some((row) => {
       const enabled = !!(row?.isEnabled ?? row?.is_enabled ?? row?.enabled);
-      const level = String(row?.accessLevel || row?.access_level || 'user').toLowerCase();
+      const level = normalizePageAccessLevel(row?.accessLevel || row?.access_level || 'edit');
       if (!enabled || level !== 'admin') return false;
       const candidates = [row?.pageName, row?.page_name, row?.pageKey, row?.page_key, row?.routePath, row?.route_path]
         .map(pageToken)
@@ -2262,20 +2275,18 @@
           </div>
           <div>
             <div class="ua-modern-select ua-modern-select--compact ua-page-access-level" data-modern-select>
-              <input type="hidden" data-modern-select-input data-pa-level value="${escapeHTML(row.accessLevel === 'admin' ? 'admin' : 'user')}">
+              <input type="hidden" data-modern-select-input data-pa-level value="${escapeHTML(normalizePageAccessLevel(row.accessLevel))}">
               <button type="button" class="ua-modern-select-button has-value" data-modern-select-button data-modern-placeholder="Select access" aria-haspopup="listbox" aria-expanded="false" aria-label="Access type for ${escapeHTML(row.pageName)}">
-                <span data-modern-select-text>${row.accessLevel === 'admin' ? 'Admin' : 'User'}</span>
+                <span data-modern-select-text>${escapeHTML(pageAccessLevelLabel(row.accessLevel))}</span>
                 <i data-feather="chevron-down"></i>
               </button>
               <div class="ua-modern-select-menu" data-modern-select-menu role="listbox" hidden>
-                <button type="button" class="ua-modern-option ${row.accessLevel === 'admin' ? '' : 'is-selected'}" data-modern-select-value="user">
-                  <span>User</span>
-                  ${row.accessLevel === 'admin' ? '' : '<i data-modern-check data-feather="check"></i>'}
-                </button>
-                <button type="button" class="ua-modern-option ${row.accessLevel === 'admin' ? 'is-selected' : ''}" data-modern-select-value="admin">
-                  <span>Admin</span>
-                  ${row.accessLevel === 'admin' ? '<i data-modern-check data-feather="check"></i>' : ''}
-                </button>
+                ${['view', 'edit', 'admin'].map((level) => `
+                  <button type="button" class="ua-modern-option ${normalizePageAccessLevel(row.accessLevel) === level ? 'is-selected' : ''}" data-modern-select-value="${level}">
+                    <span>${pageAccessLevelLabel(level)}</span>
+                    ${normalizePageAccessLevel(row.accessLevel) === level ? '<i data-modern-check data-feather="check"></i>' : ''}
+                  </button>
+                `).join('')}
               </div>
             </div>
           </div>
@@ -2298,7 +2309,7 @@
       const res = await fetch('/api/user-access/pages', { credentials: 'same-origin', cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load pages.');
-      return normalizeAccessRows((data.pages || []).map((page) => ({ ...page, accessLevel: 'user', isEnabled: false })));
+      return normalizeAccessRows((data.pages || []).map((page) => ({ ...page, accessLevel: 'edit', isEnabled: false })));
     }
     if (!memberId) throw new Error('Missing team member ID.');
     if (state.pageAccessCache.has(memberId)) return normalizeAccessRows(state.pageAccessCache.get(memberId));
@@ -2357,7 +2368,7 @@
       pageId: String(row.getAttribute('data-page-id') || '').trim(),
       pageKey: String(row.getAttribute('data-page-key') || '').trim(),
       pageName: String(row.querySelector('.ua-page-access-name strong')?.textContent || '').trim(),
-      accessLevel: row.querySelector('[data-pa-level]')?.value === 'admin' ? 'admin' : 'user',
+      accessLevel: normalizePageAccessLevel(row.querySelector('[data-pa-level]')?.value || 'edit'),
       isEnabled: !!row.querySelector('[data-pa-enabled]')?.checked,
     }));
   }
