@@ -3486,55 +3486,81 @@ async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemb
     err.status = 400;
     throw err;
   }
+
+  // The page-access window always submits the complete matrix. The old
+  // implementation wrote one PATCH request per page, sequentially. With 20+
+  // pages this could take long enough for a mobile request / Vercel function
+  // to appear stuck, leaving access levels unchanged. Build the complete set
+  // first, then replace the member's access rows in two short REST requests.
   const pages = await _sbSelectAppPages({ assignableOnly: true });
   const pagesById = new Map(pages.map((page) => [String(page.pageId || page.id), page]));
   const pagesByKey = new Map(pages.map((page) => [String(page.pageKey), page]));
   const cleanEntries = _sbNormalizePageAccessEntries(entries);
   const existing = await _sbSelectRawPageAccessForMember(memberId).catch(() => []);
   const existingByPageId = new Map((existing || []).map((row) => [String(_sbGet(row, ["page_id", "pageId"]) ?? ""), row]));
-  const results = [];
 
+  const incomingByPageId = new Map();
   for (const entry of cleanEntries) {
     const page = (entry.pageId && pagesById.get(entry.pageId)) || (entry.pageKey && pagesByKey.get(entry.pageKey));
     if (!page) continue;
-    const pageId = String(page.pageId || page.id);
-    const current = existingByPageId.get(pageId);
-    const body = {
-      team_member_id: memberId,
-      team_member_name: teamMemberName || null,
-      page_id: Number(pageId),
-      access_level: entry.accessLevel,
-      is_enabled: !!entry.isEnabled,
-      granted_by: grantedBy || null,
-    };
-
-    if (current) {
-      const accessId = String(_sbGet(current, ["id", "access_id", "accessId"]) || "").trim();
-      if (!accessId) continue;
-      const rows = await supabaseDb.request(`/team_member_page_access?id=eq.${_sbRestFilterValue(accessId)}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=representation" },
-        body: {
-          team_member_name: body.team_member_name,
-          access_level: body.access_level,
-          is_enabled: body.is_enabled,
-          granted_by: body.granted_by,
-        },
-      });
-      if (Array.isArray(rows) && rows[0]) results.push(rows[0]);
-      continue;
-    }
-
-    if (!entry.isEnabled) continue;
-    const created = await supabaseDb.request('/team_member_page_access', {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body,
-    });
-    if (Array.isArray(created) && created[0]) results.push(created[0]);
+    const pageId = String(page.pageId || page.id || "").trim();
+    if (!pageId) continue;
+    incomingByPageId.set(pageId, { page, entry });
   }
 
-  return results;
+  // Do not silently erase a user's permissions if an invalid / stale browser
+  // payload contains no valid app-page references.
+  if (cleanEntries.length && !incomingByPageId.size) {
+    const err = new Error("No valid application pages were received. Reload the page and try again.");
+    err.status = 400;
+    throw err;
+  }
+
+  const writeRows = [];
+  for (const [pageId, { entry }] of incomingByPageId.entries()) {
+    if (!entry.isEnabled) continue;
+    const previous = existingByPageId.get(pageId) || {};
+    writeRows.push({
+      team_member_id: memberId,
+      team_member_name: teamMemberName || _sbString(_sbGet(previous, ["team_member_name", "teamMemberName"])) || null,
+      page_id: Number(pageId),
+      access_level: _sbNormalizePageAccessLevel(entry.accessLevel),
+      is_enabled: true,
+      granted_by: grantedBy || _sbString(_sbGet(previous, ["granted_by", "grantedBy"])) || null,
+      notes: _sbGet(previous, ["notes"]) ?? null,
+    });
+  }
+
+  // Retain rows for pages that are no longer assignable / listed in the UI.
+  // This prevents a normal save from deleting hidden system permissions.
+  for (const previous of existing || []) {
+    const pageId = String(_sbGet(previous, ["page_id", "pageId"]) ?? "").trim();
+    if (!pageId || incomingByPageId.has(pageId)) continue;
+    if (!_sbBool(_sbGet(previous, ["is_enabled", "isEnabled"]), false)) continue;
+    writeRows.push({
+      team_member_id: memberId,
+      team_member_name: _sbString(_sbGet(previous, ["team_member_name", "teamMemberName"])) || teamMemberName || null,
+      page_id: Number(pageId),
+      access_level: _sbNormalizePageAccessLevel(_sbGet(previous, ["access_level", "accessLevel"]) || PAGE_ACCESS_LEVELS.EDIT),
+      is_enabled: true,
+      granted_by: _sbString(_sbGet(previous, ["granted_by", "grantedBy"])) || grantedBy || null,
+      notes: _sbGet(previous, ["notes"]) ?? null,
+    });
+  }
+
+  // Two bulk operations instead of one sequential PATCH per page.
+  await supabaseDb.request(`/team_member_page_access?team_member_id=eq.${_sbRestFilterValue(memberId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+
+  if (!writeRows.length) return [];
+  const created = await supabaseDb.request('/team_member_page_access', {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: writeRows,
+  });
+  return Array.isArray(created) ? created : [];
 }
 
 async function _sbQueryAllTeamMembersForUserAccess() {
