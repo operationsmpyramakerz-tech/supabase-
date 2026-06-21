@@ -5666,6 +5666,9 @@ function shouldSkipOpsPersistentShellHostForCurrentPage() {
   try {
     const pathname = new URL(window.location.href).pathname.replace(/\/+$/, '') || '/';
     if (pathname === '/messages' || pathname === '/emails') return true;
+    // Direct desktop loads of these pages stay in normal-page mode. Their legacy
+    // layout CSS can otherwise force a hidden page visible beneath the iframe.
+    if (pathname === '/expenses' || pathname === '/expenses/users') return true;
     if (pathname === '/proposals' || pathname === '/kits' || pathname === '/b2b') return true;
   } catch {}
 
