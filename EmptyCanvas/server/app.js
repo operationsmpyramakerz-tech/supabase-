@@ -1942,6 +1942,8 @@ async function _uaGetTeamMembersDbSchema() {
 }
 
 function _uaAdminVerified(req) {
+  // A page-level Admin in Users Center does not need a temporary password token.
+  if (_hasPageAdminAccess(req, USER_ACCESS_PAGE_ALIASES)) return true;
   const until = Number(req.session?.userAccessAdminVerifiedUntil || 0);
   return Number.isFinite(until) && until > Date.now();
 }
@@ -3352,7 +3354,7 @@ function _sbAllowedPagesFromPageAccessRows(rows = []) {
 
 function _sbPageAccessSummaryFromRows(rows = []) {
   const enabledRows = (rows || []).filter((row) => _sbBool(_sbGet(row, ["is_enabled", "isEnabled"]), false));
-  const adminRows = enabledRows.filter((row) => String(_sbGet(row, ["access_level", "accessLevel"]) || "user").toLowerCase() === "admin");
+  const adminRows = enabledRows.filter((row) => _sbNormalizePageAccessLevel(_sbGet(row, ["access_level", "accessLevel"])) === PAGE_ACCESS_LEVELS.ADMIN);
   return {
     allowedPages: expandAllowedForUI(_sbAllowedPagesFromPageAccessRows(enabledRows)),
     accessCount: enabledRows.length,
@@ -3397,10 +3399,22 @@ async function _sbResolveAllowedPagesForTeamMember(row = {}) {
 
 async function _sbAccountPayloadWithAccess(row, fallbackUsername = "") {
   const payload = _sbAccountPayload(row, fallbackUsername);
-  const allowedNormalized = await _sbResolveAllowedPagesForTeamMember(row);
+  const memberId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+  let accessRows = [];
+  try {
+    accessRows = memberId ? await _sbSelectPageAccessViewForMember(memberId) : [];
+  } catch (error) {
+    console.warn("[user-access] account page-access lookup failed, using legacy allowed-pages column:", error?.message || error);
+    accessRows = [];
+  }
+  const pageAccessRows = _sbPageAccessClientRows(accessRows);
+  const allowedNormalized = pageAccessRows.length
+    ? _sbAllowedPagesFromPageAccessRows(accessRows)
+    : _sbExtractAllowedPages(row);
   const allowedUI = expandAllowedForUI(allowedNormalized);
   payload.allowedPages = allowedUI;
-  return { accountPayload: payload, allowedNormalized, allowedUI };
+  payload.pageAccess = { pages: pageAccessRows.length ? pageAccessRows : _legacyPageAccessRowsFromAllowed(allowedNormalized) };
+  return { accountPayload: payload, allowedNormalized, allowedUI, pageAccessRows: payload.pageAccess.pages };
 }
 
 function _sbGroupPageAccessRowsByMember(rows = []) {
@@ -3437,7 +3451,7 @@ function _sbNormalizePageAccessEntries(entries = []) {
     .map((entry) => {
       const pageId = String(entry?.pageId || entry?.page_id || entry?.id || "").trim();
       const pageKey = String(entry?.pageKey || entry?.page_key || "").trim();
-      const accessLevel = String(entry?.accessLevel || entry?.access_level || "user").trim().toLowerCase() === "admin" ? "admin" : "user";
+      const accessLevel = _sbNormalizePageAccessLevel(entry?.accessLevel || entry?.access_level || "edit");
       const isEnabled = _sbBool(entry?.isEnabled ?? entry?.is_enabled ?? entry?.enabled, false);
       return { pageId, pageKey, accessLevel, isEnabled };
     })
@@ -3453,7 +3467,7 @@ async function _sbPageAccessPayloadForMember(teamMemberId) {
     return {
       ...page,
       accessId: String(_sbGet(access || {}, ["id", "access_id", "accessId"]) ?? ""),
-      accessLevel: String(_sbGet(access || {}, ["access_level", "accessLevel"]) || "user").toLowerCase() === "admin" ? "admin" : "user",
+      accessLevel: _sbNormalizePageAccessLevel(_sbGet(access || {}, ["access_level", "accessLevel"]) || "edit"),
       isEnabled: access ? _sbBool(_sbGet(access, ["is_enabled", "isEnabled"]), false) : false,
     };
   });
@@ -5938,7 +5952,7 @@ function _sbProposalCurrentUserOwns(row = {}, req = null) {
 async function _sbAssertProposalOwnerOrAdmin(row = {}, req = null, body = {}) {
   if (_sbProposalCurrentUserOwns(row, req)) return true;
   const adminPassword = String(body?.adminPassword || body?.admin_password || req?.query?.adminPassword || "").trim();
-  if (adminPassword && await verifyAdminPassword(adminPassword)) return true;
+  if (adminPassword && await _verifyPageAdminPassword(req, adminPassword, ["Proposals", "Kits", "Products"])) return true;
   const err = new Error("Admin password is required to modify a folder created by another user.");
   err.status = 403;
   throw err;
@@ -8708,6 +8722,149 @@ async function allocateNextOrderGroupIdNumber(orderIdPropName) {
   return maxFromNotion + 1;
 }
 
+// Page access levels are intentionally page-scoped. Legacy "user" records are
+// treated as Edit so existing users keep their current working permissions.
+const PAGE_ACCESS_LEVELS = Object.freeze({ VIEW: "view", EDIT: "edit", ADMIN: "admin" });
+const PAGE_ADMIN_BYPASS_TOKEN = "__OPS_PAGE_ADMIN_BYPASS__";
+
+function _sbNormalizePageAccessLevel(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === PAGE_ACCESS_LEVELS.ADMIN) return PAGE_ACCESS_LEVELS.ADMIN;
+  if (raw === PAGE_ACCESS_LEVELS.VIEW) return PAGE_ACCESS_LEVELS.VIEW;
+  // "user" was the previous value in Supabase. It now maps to edit.
+  return PAGE_ACCESS_LEVELS.EDIT;
+}
+
+function _pageAccessToken(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function _pageAccessAliases(pageName = "") {
+  const token = _pageAccessToken(pageName);
+  const groups = {
+    currentorders: ["currentorders", "orders", "currentorder"],
+    requestedorders: ["requestedorders", "operationsorders", "operationsrequestedorders"],
+    operationsorders: ["operationsorders", "requestedorders", "operationsrequestedorders"],
+    maintenanceorders: ["maintenanceorders", "maintenance"],
+    createneworder: ["createneworder", "shoppingcart", "ordersnew", "neworder"],
+    ordersreview: ["ordersreview", "svorders", "supervisionorders"],
+    expensesusers: ["expensesusers", "expensesbyuser", "expensesbyusers"],
+    userscenter: ["userscenter", "useraccessdata", "useraccess", "teammembers"],
+    useraccessdata: ["userscenter", "useraccessdata", "useraccess", "teammembers"],
+    backup: ["backup", "backups", "database", "systemdatabase", "systembackup"],
+    mail: ["mail", "messages", "emails", "email"],
+    messages: ["mail", "messages", "emails", "email"],
+    kpis: ["kpis", "kpi"],
+    proposals: ["proposals", "productproposals"],
+    kits: ["kits", "productkits"],
+  };
+  return Array.from(new Set([token, ...(groups[token] || [])].filter(Boolean)));
+}
+
+function _sbPageAccessClientRows(rows = []) {
+  const out = [];
+  for (const row of rows || []) {
+    if (!_sbBool(_sbGet(row, ["is_enabled", "isEnabled", "enabled"]), false)) continue;
+    const page = _sbSerializeAppPage(row);
+    const aliases = _sbLegacyAllowedPagesFromAppPage(page);
+    const pageName = aliases[0] || page.pageName || String(_sbGet(row, ["page_name", "pageName"]) || "").trim();
+    if (!pageName && !page.pageKey && !page.routePath) continue;
+    out.push({
+      pageId: String(page.pageId || _sbGet(row, ["page_id", "pageId", "id"]) || "").trim(),
+      pageKey: String(page.pageKey || _sbGet(row, ["page_key", "pageKey"]) || "").trim(),
+      pageName,
+      aliases: Array.from(new Set([pageName, page.pageName, ...(aliases || [])].filter(Boolean))),
+      routePath: String(page.routePath || _sbGet(row, ["route_path", "routePath"]) || "").trim(),
+      accessLevel: _sbNormalizePageAccessLevel(_sbGet(row, ["access_level", "accessLevel"])),
+      isEnabled: true,
+    });
+  }
+  return out;
+}
+
+function _legacyPageAccessRowsFromAllowed(allowedPages = []) {
+  return normalizePages(allowedPages).map((pageName) => ({
+    pageId: "",
+    pageKey: "",
+    pageName,
+    aliases: [pageName],
+    routePath: "",
+    accessLevel: PAGE_ACCESS_LEVELS.EDIT,
+    isEnabled: true,
+  }));
+}
+
+function _sessionPageAccessRows(req) {
+  const direct = Array.isArray(req?.session?.pageAccess) ? req.session.pageAccess : [];
+  const cached = Array.isArray(req?.session?.accountCache?.pageAccess?.pages) ? req.session.accountCache.pageAccess.pages : [];
+  const rows = direct.length ? direct : cached;
+  return rows.map((row) => ({
+    ...row,
+    accessLevel: _sbNormalizePageAccessLevel(row?.accessLevel || row?.access_level),
+    isEnabled: row?.isEnabled !== false && row?.is_enabled !== false,
+  }));
+}
+
+function _sessionIsBuiltInAdmin(req) {
+  const cached = req?.session?.accountCache || {};
+  const name = _pageAccessToken(cached?.name || req?.session?.username || "");
+  const position = _pageAccessToken(cached?.position || "");
+  return name === "admin" || position.includes("admin");
+}
+
+function _pageAccessEntryMatchesRequirement(entry = {}, pageName = "") {
+  const wanted = new Set(_pageAccessAliases(pageName));
+  const candidates = [
+    entry?.pageName,
+    entry?.pageKey,
+    entry?.routePath,
+    ...(Array.isArray(entry?.aliases) ? entry.aliases : []),
+  ].map(_pageAccessToken).filter(Boolean);
+  return candidates.some((candidate) => wanted.has(candidate));
+}
+
+function _sessionPageAccessLevel(req, pageNameOrNames) {
+  if (_sessionIsBuiltInAdmin(req)) return PAGE_ACCESS_LEVELS.ADMIN;
+  const requested = (Array.isArray(pageNameOrNames) ? pageNameOrNames : [pageNameOrNames]).filter(Boolean);
+  const rows = _sessionPageAccessRows(req).filter((row) => row?.isEnabled !== false);
+  let best = "";
+  const rank = { [PAGE_ACCESS_LEVELS.VIEW]: 1, [PAGE_ACCESS_LEVELS.EDIT]: 2, [PAGE_ACCESS_LEVELS.ADMIN]: 3 };
+  for (const row of rows) {
+    if (!requested.some((pageName) => _pageAccessEntryMatchesRequirement(row, pageName))) continue;
+    const level = _sbNormalizePageAccessLevel(row?.accessLevel || row?.access_level);
+    if (!best || rank[level] > rank[best]) best = level;
+  }
+  if (best) return best;
+
+  // Legacy users still use allowedPages only; preserve their existing access as Edit.
+  const allowed = Array.isArray(req?.session?.allowedPages) ? req.session.allowedPages : [];
+  if (requested.some((name) => allowed.some((candidate) => _pageAccessAliases(name).includes(_pageAccessToken(candidate)) || _pageAccessAliases(candidate).includes(_pageAccessToken(name))))) {
+    return PAGE_ACCESS_LEVELS.EDIT;
+  }
+  return "";
+}
+
+function _hasPageAdminAccess(req, pageNameOrNames) {
+  return _sessionPageAccessLevel(req, pageNameOrNames) === PAGE_ACCESS_LEVELS.ADMIN;
+}
+
+async function _verifyPageAdminPassword(req, password, pageNameOrNames) {
+  // A page-level Admin may continue without entering the shared Admin password.
+  if (_hasPageAdminAccess(req, pageNameOrNames)) return true;
+  const clean = String(password || "").trim();
+  if (!clean || clean === PAGE_ADMIN_BYPASS_TOKEN) return false;
+  return verifyAdminPassword(clean);
+}
+
+function _pageAccessDeniedResponse(req, res, { code = "PAGE_ACCESS_DENIED", error = "You do not have access to this page." } = {}) {
+  const redirect = firstAllowedPath(req.session?.allowedPages || []);
+  if (String(req.path || "").startsWith("/api/")) {
+    res.set("Cache-Control", "no-store");
+    return res.status(403).json({ ok: false, code, error, redirect });
+  }
+  return res.redirect(redirect);
+}
+
 // Authentication middleware
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) return next();
@@ -8732,7 +8889,6 @@ function requireAuth(req, res, next) {
 // Page-Access middleware
 function requirePage(pageNameOrNames) {
   return (req, res, next) => {
-    const allowed = req.session?.allowedPages || ALL_PAGES;
     const requiredPages = Array.isArray(pageNameOrNames)
       ? pageNameOrNames.filter(Boolean)
       : [pageNameOrNames].filter(Boolean);
@@ -8745,20 +8901,25 @@ function requirePage(pageNameOrNames) {
       adminUnlockUntil &&
       Date.now() < adminUnlockUntil;
 
-    const isAllowed = requiredPages.some((pageName) => allowed.includes(pageName));
-    if (isAllowed || adminUnlocked) return next();
+    const accessLevel = _sessionPageAccessLevel(req, requiredPages);
+    if (!accessLevel && !adminUnlocked) {
+      return _pageAccessDeniedResponse(req, res);
+    }
 
-    const redirect = firstAllowedPath(allowed);
-    if (String(req.path || "").startsWith("/api/")) {
-      res.set("Cache-Control", "no-store");
-      return res.status(403).json({
-        ok: false,
-        code: "PAGE_ACCESS_DENIED",
-        error: "You do not have access to this page.",
-        redirect,
+    // View can load and read the page, but cannot call action endpoints.
+    // Read-only browser guards are also applied by common-ui.js, while this
+    // server-side guard prevents direct API calls from changing data.
+    const method = String(req.method || "GET").toUpperCase();
+    if (!adminUnlocked && accessLevel === PAGE_ACCESS_LEVELS.VIEW && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+      return _pageAccessDeniedResponse(req, res, {
+        code: "VIEW_ONLY_ACCESS",
+        error: "View-only access: you are not authorized to make changes on this page.",
       });
     }
-    return res.redirect(redirect);
+
+    req.opsPageAccessLevel = adminUnlocked ? PAGE_ACCESS_LEVELS.ADMIN : accessLevel;
+    req.opsRequiredPages = requiredPages;
+    return next();
   };
 }
 
@@ -9184,7 +9345,7 @@ app.delete('/api/history/clear', requireAuth, requirePage("History"), async (req
     }
     const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
     if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
+    const ok = await _verifyPageAdminPassword(req, adminPassword, "History");
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     await supabaseDb.request(`/${encodeURIComponent(HISTORY_TABLE)}?id=not.is.null`, {
@@ -9902,7 +10063,7 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
     if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
     const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
     if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
+    const ok = await _verifyPageAdminPassword(req, adminPassword, "Backup");
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     const items = _backupCatalog();
@@ -9966,7 +10127,7 @@ async function _backupImportTableHandler(req, res) {
 
     const adminPassword = _backupRequestPassword(req);
     if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
+    const ok = await _verifyPageAdminPassword(req, adminPassword, "Backup");
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     const csvText = _backupRequestCsvText(req);
@@ -10007,7 +10168,7 @@ app.delete('/api/backup/tables/:key', requireAuth, requirePage('Backup'), async 
     if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
     const adminPassword = String(req.body?.adminPassword || req.body?.password || '').trim();
     if (!adminPassword) return res.status(400).json({ ok: false, error: 'Admin password is required.' });
-    const ok = await verifyAdminPassword(adminPassword);
+    const ok = await _verifyPageAdminPassword(req, adminPassword, "Backup");
     if (!ok) return res.status(401).json({ ok: false, error: 'Invalid admin password.' });
 
     _historySetEntity(res, { entityType: 'backup_table', entityId: item.tableName, entityLabel: `${item.pageName} / ${item.tableName}` });
@@ -10595,11 +10756,12 @@ app.post("/api/login", async (req, res) => {
       if (row) {
         const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
         if (storedPassword && String(storedPassword) === providedPassword) {
-          const { accountPayload, allowedNormalized, allowedUI } = await _sbAccountPayloadWithAccess(row, providedUsername);
+          const { accountPayload, allowedNormalized, allowedUI, pageAccessRows } = await _sbAccountPayloadWithAccess(row, providedUsername);
 
           req.session.authenticated = true;
           req.session.username = accountPayload.username || providedUsername;
           req.session.allowedPages = allowedNormalized;
+          req.session.pageAccess = pageAccessRows;
           req.session.userSupabaseId = String(_sbGet(row, ["id", "ID"]) ?? "");
           req.session.accountCache = { ...accountPayload, allowedPages: allowedUI };
           req.session.accountCacheTs = Date.now();
@@ -10637,6 +10799,7 @@ app.post("/api/login", async (req, res) => {
       req.session.authenticated = true;
       req.session.username = username;
       req.session.allowedPages = allowedNormalized;
+      req.session.pageAccess = _legacyPageAccessRowsFromAllowed(allowedNormalized);
       req.session.userNotionId = user.id;
 
       const allowedUI = expandAllowedForUI(allowedNormalized);
@@ -10656,6 +10819,7 @@ app.post("/api/login", async (req, res) => {
           filesMedia: extractFilesMediaFromProps(p),
           passwordSet: (_extractPropText(p?.Password) ?? null) !== null,
           allowedPages: allowedUI,
+          pageAccess: { pages: _legacyPageAccessRowsFromAllowed(allowedNormalized) },
         };
         req.session.accountCacheTs = Date.now();
       } catch {}
@@ -10785,7 +10949,7 @@ app.get("/api/account", requireAuth, async (req, res) => {
   try {
     const cached = req.session?.accountCache;
     const ts = Number(req.session?.accountCacheTs || 0);
-    if (cached && ts && Date.now() - ts < ACCOUNT_CACHE_TTL_MS && Array.isArray(cached.filesMedia)) {
+    if (cached && ts && Date.now() - ts < ACCOUNT_CACHE_TTL_MS && Array.isArray(cached.filesMedia) && cached.pageAccess) {
       return res.json(cached);
     }
   } catch {}
@@ -10794,10 +10958,11 @@ app.get("/api/account", requireAuth, async (req, res) => {
     try {
       const row = await _sbFindTeamMemberById(req.session.userSupabaseId);
       if (row) {
-        const { accountPayload: data, allowedNormalized } = await _sbAccountPayloadWithAccess(row, req.session.username || "");
+        const { accountPayload: data, allowedNormalized, pageAccessRows } = await _sbAccountPayloadWithAccess(row, req.session.username || "");
         try {
           req.session.username = data.username || req.session.username || "";
           req.session.allowedPages = allowedNormalized;
+          req.session.pageAccess = pageAccessRows;
           req.session.accountCache = data;
           req.session.accountCacheTs = Date.now();
         } catch {}
@@ -10833,11 +10998,13 @@ app.get("/api/account", requireAuth, async (req, res) => {
         filesMedia: extractFilesMediaFromProps(p),
         passwordSet: (_extractPropText(p?.Password) ?? null) !== null,
         allowedPages: allowedUI,
+        pageAccess: { pages: _legacyPageAccessRowsFromAllowed(freshAllowed) },
       };
     });
 
     try {
       req.session.allowedPages = Array.isArray(data?.allowedPages) ? data.allowedPages : [];
+      req.session.pageAccess = Array.isArray(data?.pageAccess?.pages) ? data.pageAccess.pages : _legacyPageAccessRowsFromAllowed(req.session.allowedPages);
       req.session.accountCache = data;
       req.session.accountCacheTs = Date.now();
     } catch {}
@@ -16262,7 +16429,7 @@ async function _requireB2BAdminPassword(req, res) {
     return false;
   }
 
-  const ok = await verifyAdminPassword(password);
+  const ok = await _verifyPageAdminPassword(req, password, "B2B");
   if (!ok) {
     res.status(401).json({ error: 'Invalid Admin password.' });
     return false;
@@ -16281,7 +16448,7 @@ app.post(
       const password = String(req?.body?.password || req?.body?.adminPassword || "").trim();
       if (!password) return res.status(400).json({ error: "Missing password." });
 
-      const ok = await verifyAdminPassword(password);
+      const ok = await _verifyPageAdminPassword(req, password, "B2B");
       if (!ok) return res.status(401).json({ error: "Invalid password." });
 
       return res.json({ ok: true });
@@ -16324,7 +16491,7 @@ app.post(
       const password = String(req?.body?.adminPassword || req?.body?.password || "").trim();
       if (!_uaAdminVerified(req)) {
         if (!password) return res.status(400).json({ ok: false, error: "Admin password is required." });
-        const ok = await verifyAdminPassword(password);
+        const ok = await _verifyPageAdminPassword(req, password, "B2B");
         if (!ok) return res.status(401).json({ ok: false, error: "Invalid Admin password." });
       }
       const created = await _uaAddStocktakingSchoolColumn(req.body?.name || req.body?.column || "");
@@ -19752,7 +19919,7 @@ app.post(
       const password = String(req.body?.password || "").trim();
       if (!password) return res.status(400).json({ ok: false, error: "Admin password is required." });
 
-      const ok = await verifyAdminPassword(password);
+      const ok = await _verifyPageAdminPassword(req, password, USER_ACCESS_PAGE_ALIASES);
       if (!ok) return res.status(401).json({ ok: false, error: "Invalid Admin password." });
 
       req.session.userAccessAdminVerifiedUntil = Date.now() + 5 * 60 * 1000;
@@ -20053,8 +20220,17 @@ app.patch(
           })),
         );
         req.session.allowedPages = allowedNormalized;
+        req.session.pageAccess = _sbPageAccessClientRows(payload.pages.map((page) => ({
+          page_id: page.pageId,
+          page_key: page.pageKey,
+          page_name: page.pageName,
+          route_path: page.routePath,
+          access_level: page.accessLevel,
+          is_enabled: page.isEnabled,
+        })));
         if (req.session.accountCache) {
           req.session.accountCache.allowedPages = expandAllowedForUI(allowedNormalized);
+          req.session.accountCache.pageAccess = { pages: req.session.pageAccess };
           req.session.accountCacheTs = Date.now();
         }
       }
@@ -21597,7 +21773,7 @@ app.post(
       }
       const pwd = String(adminPassword || "").trim();
       if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-      const adminOk = await verifyAdminPassword(pwd);
+      const adminOk = await _verifyPageAdminPassword(req, pwd, ["Requested Orders", "Operations Orders"]);
       if (!adminOk) return res.status(401).json({ error: "Invalid admin password" });
 
       const ids = orderIds
@@ -25337,7 +25513,7 @@ async function _requireProductsAdminPassword(req, res) {
     res.status(400).json({ ok: false, error: 'Admin password is required.' });
     return false;
   }
-  const ok = await verifyAdminPassword(password);
+  const ok = await _verifyPageAdminPassword(req, password, ["Proposals", "Kits", "Products"]);
   if (!ok) {
     res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
     return false;
@@ -27044,7 +27220,7 @@ async function _verifyCurrentOrderActionPassword(req, res) {
     res.status(400).json({ error: "adminPassword required" });
     return false;
   }
-  const ok = await verifyAdminPassword(pwd);
+  const ok = await _verifyPageAdminPassword(req, pwd, "Current Orders");
   if (!ok) {
     res.status(401).json({ error: "Invalid admin password" });
     return false;
@@ -27169,7 +27345,7 @@ app.post(
         return res.status(400).json({ error: "adminPassword required" });
       }
 
-      const ok = await verifyAdminPassword(pwd);
+      const ok = await _verifyPageAdminPassword(req, pwd, "Current Orders");
       if (!ok) return res.status(401).json({ error: "Invalid admin password" });
 
       if (_sbOrdersEnabled() && _sbProductsEnabled()) {
@@ -27331,7 +27507,7 @@ app.post(
       const pwd = String(adminPassword || "").trim();
       if (!pwd) return res.status(400).json({ error: "adminPassword required" });
 
-      const ok = await verifyAdminPassword(pwd);
+      const ok = await _verifyPageAdminPassword(req, pwd, ["Operations Orders", "Requested Orders"]);
       if (!ok) return res.status(401).json({ error: "Invalid admin password" });
 
       if (!_sbOrdersEnabled() || !_sbProductsEnabled()) {
@@ -27364,7 +27540,7 @@ app.post(
       const pwd = String(adminPassword || "").trim();
       if (!pwd) return res.status(400).json({ error: "adminPassword required" });
 
-      const ok = await verifyAdminPassword(pwd);
+      const ok = await _verifyPageAdminPassword(req, pwd, ["Operations Orders", "Requested Orders"]);
       if (!ok) return res.status(401).json({ error: "Invalid admin password" });
 
       const ids = orderIds
@@ -27423,7 +27599,7 @@ app.post(
 
       const pwd = String(adminPassword || "").trim();
       if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-      const ok = await verifyAdminPassword(pwd);
+      const ok = await _verifyPageAdminPassword(req, pwd, ["Operations Orders", "Requested Orders"]);
       if (!ok) return res.status(401).json({ error: "Invalid admin password" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
@@ -27469,7 +27645,7 @@ app.post(
 
       const pwd = String(adminPassword || "").trim();
       if (!pwd) return res.status(400).json({ error: "adminPassword required" });
-      const ok = await verifyAdminPassword(pwd);
+      const ok = await _verifyPageAdminPassword(req, pwd, ["Operations Orders", "Requested Orders"]);
       if (!ok) return res.status(401).json({ error: "Invalid admin password" });
 
       if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(String(id)))) {
@@ -30178,7 +30354,7 @@ function _kpiAdminPasswordFromReq(req) {
 async function _kpiVerifyAdminPasswordFromReq(req) {
   const password = _kpiAdminPasswordFromReq(req);
   if (!password) return { ok: false, status: 403, message: "Admin password is required." };
-  const ok = await verifyAdminPassword(password);
+  const ok = await _verifyPageAdminPassword(req, password, "KPIs");
   return ok ? { ok: true } : { ok: false, status: 401, message: "Invalid admin password." };
 }
 async function _kpiReviewBelongsToCurrentUser(req, summary = {}) {
@@ -30236,7 +30412,7 @@ app.post("/api/kpis/admin/verify", requireAuth, requirePage("KPIs"), async (req,
   try {
     const password = String(req.body?.password || req.body?.adminPassword || "").trim();
     if (!password) return res.status(400).json({ ok: false, message: "Admin password is required." });
-    const ok = await verifyAdminPassword(password);
+    const ok = await _verifyPageAdminPassword(req, password, "KPIs");
     if (!ok) return res.status(401).json({ ok: false, message: "Invalid admin password." });
     return res.json({ ok: true });
   } catch (error) {
@@ -32350,7 +32526,7 @@ app.patch(
       if (!expenseId) return res.status(400).json({ success: false, error: "Missing expense ID." });
       if (!adminPassword) return res.status(400).json({ success: false, error: "Admin password is required." });
 
-      const ok = await verifyAdminPassword(adminPassword);
+      const ok = await _verifyPageAdminPassword(req, adminPassword, "Expenses Users");
       if (!ok) return res.status(401).json({ success: false, error: "Invalid Admin password." });
 
       const { updated } = await _sbPatchExpenseRowFromUserPayload(expenseId, payload);
@@ -32381,7 +32557,7 @@ app.delete(
       if (!expenseId) return res.status(400).json({ success: false, error: "Missing expense ID." });
       if (!adminPassword) return res.status(400).json({ success: false, error: "Admin password is required." });
 
-      const ok = await verifyAdminPassword(adminPassword);
+      const ok = await _verifyPageAdminPassword(req, adminPassword, "Expenses Users");
       if (!ok) return res.status(401).json({ success: false, error: "Invalid Admin password." });
 
       const row = await supabaseDb.selectById(_sbExpensesTable(), expenseId);
@@ -33412,7 +33588,7 @@ async function _verifySVOrderActionPassword(req, res) {
     res.status(400).json({ error: "adminPassword required" });
     return false;
   }
-  const ok = await verifyAdminPassword(pwd);
+  const ok = await _verifyPageAdminPassword(req, pwd, "Orders Review");
   if (!ok) {
     res.status(401).json({ error: "Invalid admin password" });
     return false;
