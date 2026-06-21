@@ -1,0 +1,119 @@
+/* =========================================================
+   Global page canvas alignment — 2026-06-21
+   - Keeps one translucent white page canvas per screen.
+   - Removes the opaque parent layer behind the canvas.
+   - Preserves inner content cards, forms, tables and page logic.
+   ========================================================= */
+
+:root{
+  --ops-page-canvas-alpha: 0.34;
+  --ops-page-canvas-gap: 14px;
+  --ops-page-canvas-radius: 28px;
+  --ops-page-canvas-border: rgba(255, 255, 255, 0.46);
+  --ops-page-canvas-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+}
+
+/* The area around the canvas remains transparent so the system cover is visible.
+   This removes the second page-sized backing layer. */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content{
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* The scrolling <main> is the one and only page-level white layer. */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
+  align-self: stretch !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 var(--ops-page-canvas-gap) var(--ops-page-canvas-gap) !important;
+  border: 1px solid var(--ops-page-canvas-border) !important;
+  border-radius: var(--ops-page-canvas-radius) !important;
+  background-color: rgba(255, 255, 255, var(--ops-page-canvas-alpha)) !important;
+  background-image: none !important;
+  background-clip: padding-box !important;
+  box-shadow: var(--ops-page-canvas-shadow) !important;
+}
+
+/* Keep all page layouts centred inside the shared canvas without changing their
+   own padding, grids, cards or responsive breakpoints. */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) :is(
+  main.products-shell,
+  main.expenses-layout,
+  main.history-page-shell,
+  main.backup-page-shell,
+  main.kpis-main,
+  main.tasks-v2-main,
+  main.messages-body,
+  main.page-body,
+  main.container-full-width,
+  main.ua-page-body
+){
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+
+/* Expenses by User used a narrow main wrapper, which made its canvas look like
+   a second centred layer. The shared main canvas now owns the full width. */
+main.expenses-layout{
+  max-width: none !important;
+  width: auto !important;
+}
+
+main.expenses-layout > :is(#userTabs, #usersInfo){
+  width: min(100%, 1080px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Products, Kits and Proposals: their workspace wrappers are layout-only.
+   The shared canvas supplies the page background, so these wrappers stay clear. */
+:where(body.products-page, body.proposals-page, body.kits-page) :where(
+  .products-proposals-view.proposals-folders-card,
+  .proposals-folders-card,
+  .products-proposal-detail,
+  .proposals-panel
+){
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* The Tasks stylesheet intentionally paints several full-screen white layers.
+   Clear those layout-only layers so Tasks follows the same single-canvas system. */
+body.tasks-v2 .main-content{
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.tasks-v2 .main-content > main.tasks-v2-main{
+  background-color: rgba(255, 255, 255, var(--ops-page-canvas-alpha)) !important;
+  background-image: none !important;
+}
+
+body.tasks-v2 .tasks-v2-panel,
+body.tasks-v2 .tasks-v2-panel--list{
+  background: transparent !important;
+  min-height: 0 !important;
+}
+
+body.tasks-v2 .main-header,
+body.tasks-v2 .main-header .header-row1,
+body.tasks-v2 .main-header .header-row1 .left,
+body.tasks-v2 .main-header .header-row1 .right,
+body.tasks-v2 .main-header .topbar-right{
+  background: transparent !important;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Preserve the same balanced breathing room on tablet and mobile screens. */
+@media (max-width: 900px){
+  :root{
+    --ops-page-canvas-gap: 10px;
+    --ops-page-canvas-radius: 24px;
+  }
+}
