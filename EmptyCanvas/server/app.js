@@ -1943,6 +1943,11 @@ async function _uaGetTeamMembersDbSchema() {
 
 function _uaAdminVerified(req) {
   // A page-level Admin in Users Center does not need a temporary password token.
+  // `requirePage()` has already resolved the level for all /api/user-access calls,
+  // so prefer that request-scoped value when available. This keeps Save Access
+  // working immediately for page-level Admin users even when their account cache
+  // has not refreshed yet.
+  if (req?.opsPageAccessLevel === PAGE_ACCESS_LEVELS.ADMIN) return true;
   if (_hasPageAdminAccess(req, USER_ACCESS_PAGE_ALIASES)) return true;
   const until = Number(req.session?.userAccessAdminVerifiedUntil || 0);
   return Number.isFinite(until) && until > Date.now();
@@ -19916,6 +19921,15 @@ app.post(
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
+      // Page-level Admin users bypass the shared password completely. The client
+      // probes this endpoint with an empty body before opening the password modal.
+      // The previous order checked for a password first, so that bypass could never
+      // be returned and Page Access saves could be rejected later as unverified.
+      if (_uaAdminVerified(req)) {
+        req.session.userAccessAdminVerifiedUntil = Date.now() + 5 * 60 * 1000;
+        return res.json({ ok: true, bypassed: true });
+      }
+
       const password = String(req.body?.password || "").trim();
       if (!password) return res.status(400).json({ ok: false, error: "Admin password is required." });
 
@@ -19923,7 +19937,7 @@ app.post(
       if (!ok) return res.status(401).json({ ok: false, error: "Invalid Admin password." });
 
       req.session.userAccessAdminVerifiedUntil = Date.now() + 5 * 60 * 1000;
-      return res.json({ ok: true });
+      return res.json({ ok: true, bypassed: false });
     } catch (error) {
       console.error("POST /api/user-access/admin/verify error:", error?.body || error);
       return res.status(500).json({ ok: false, error: "Failed to verify Admin password." });
