@@ -4491,3 +4491,68 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
 body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
   background-color: rgba(255, 255, 255, 0.50) !important;
 }
+
+/* =========================================================
+   2026-06-21: single rounded translucent page canvas
+   - Keeps one page-level white background only.
+   - The cover remains visible in the breathing room around the canvas.
+   - Removes the second solid/gradient white layer previously visible on
+     proposals and Expenses by User.
+   ========================================================= */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content{
+  background: rgba(15, 23, 42, 0.10) !important;
+}
+
+/* The scrolling page itself is the only white page background. */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
+  margin: 0 14px 14px !important;
+  border-radius: 28px !important;
+  background-color: rgba(255, 255, 255, 0.50) !important;
+  background-clip: padding-box !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.07) !important;
+}
+
+/* Use the cover as the backdrop around the rounded page canvas, without
+   adding another white fade layer behind the content. */
+body.ops-has-system-cover:not(.shell-embedded) .main-content::before{
+  inset: 0 !important;
+  height: auto !important;
+  border-radius: var(--ui-radius-main) !important;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.16) 100%),
+    var(--ops-system-cover-image) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  opacity: 0.96 !important;
+}
+
+body.ops-has-system-cover:not(.shell-embedded) .main-content::after{
+  display: none !important;
+}
+
+/* Proposal has a page wrapper for folder and detail views. It must stay
+   transparent so it does not become a second white page layer. */
+body.proposals-page .products-shell.proposals-shell,
+body.proposals-page .products-proposals-view,
+body.proposals-page .proposals-folders-card,
+body.proposals-page .products-proposal-detail{
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Expenses by User uses main.expenses-layout directly. Keep its layout only;
+   the unified main canvas above supplies the page background. */
+.main-content > main.expenses-layout{
+  background-image: none !important;
+}
+
+@media (max-width: 900px){
+  body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
+    margin: 0 10px 10px !important;
+    border-radius: 24px !important;
+  }
+}
