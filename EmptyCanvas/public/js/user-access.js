@@ -21,6 +21,7 @@
     pageAccessModalMemberId: '',
     pageAccessModalLoading: false,
     pageAccessSaving: false,
+    pendingPageAccessSave: null,
     svAccessCache: new Map(),
     svAccessModalRows: [],
     svAccessModalMemberId: '',
@@ -1832,7 +1833,11 @@
     const cleanAction = String(action || 'edit');
     const cleanTargetId = String(targetId || '');
     const member = state.membersById.get(cleanTargetId);
-    if (cleanAction === 'create') {
+    if (cleanAction === 'save-page-access') {
+      const pending = state.pendingPageAccessSave;
+      if (!pending || !pending.memberId || !Array.isArray(pending.rows)) return;
+      await persistPageAccessSave(pending.memberId, pending.rows);
+    } else if (cleanAction === 'create') {
       openFormModal('create');
     } else if (cleanAction === 'create-department') {
       openDepartmentModal('create');
@@ -1853,7 +1858,7 @@
   }
 
   async function runAdminProtectedAction(memberId = '', action = 'edit') {
-    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests']);
+    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests', 'save-page-access']);
     const cleanAction = allowedActions.has(action) ? action : 'edit';
     const cleanTargetId = String(memberId || '');
 
@@ -1881,7 +1886,7 @@
 
   function openPasswordModal(memberId, action = 'edit') {
     if (!els.passwordModal) return;
-    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests']);
+    const allowedActions = new Set(['edit', 'create', 'create-department', 'edit-department', 'move', 'delete-member', 'delete-department', 'signup-requests', 'save-page-access']);
     state.pendingEditMemberId = String(memberId || '');
     state.pendingPasswordAction = allowedActions.has(action) ? action : 'edit';
     if (els.passwordInput) els.passwordInput.value = '';
@@ -2360,6 +2365,7 @@
     if (!els.formModal || els.formModal.hidden) document.body.classList.remove('ua-modal-open');
     state.pageAccessModalRows = [];
     state.pageAccessModalMemberId = '';
+    if (!els.passwordModal || els.passwordModal.hidden) state.pendingPageAccessSave = null;
   }
 
   function collectPageAccessRowsFromModal() {
@@ -2373,15 +2379,29 @@
     }));
   }
 
+  function isAdminVerificationError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return /admin verification|admin password|verification expired|enter the admin password/.test(message);
+  }
+
   async function savePageAccessForMember(memberId, rows) {
     const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/page-access`, {
       method: 'PATCH',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
       body: JSON.stringify({ pages: rows }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to save page access.');
+    if (!res.ok || data?.ok === false) {
+      const error = new Error(data?.error || 'Failed to save page access.');
+      error.status = res.status;
+      error.code = data?.code || '';
+      throw error;
+    }
     const normalized = normalizeAccessRows(data.pages || rows);
     state.pageAccessCache.set(String(memberId), normalized);
     const member = state.membersById.get(String(memberId));
@@ -2392,11 +2412,36 @@
     return { data, rows: normalized };
   }
 
+  async function persistPageAccessSave(memberId, rows) {
+    const cleanMemberId = String(memberId || '').trim();
+    if (!cleanMemberId) throw new Error('Missing team member ID.');
+    setPageAccessSaving(true);
+    try {
+      await savePageAccessForMember(cleanMemberId, rows);
+      state.pendingPageAccessSave = null;
+      updatePageAccessSummaryText();
+      refreshConditionalAccessFields();
+      closePageAccessModal();
+      toast('success', 'Access updated', 'Page permissions were saved.');
+    } catch (error) {
+      if (isAdminVerificationError(error)) {
+        // The edit token may expire while the access matrix is open. Keep the
+        // selected rows and ask for the Admin password, then retry automatically.
+        state.pendingPageAccessSave = { memberId: cleanMemberId, rows: normalizeAccessRows(rows) };
+        openPasswordModal(cleanMemberId, 'save-page-access');
+        toast('info', 'Admin verification required', 'Enter the Admin password to save these page permissions.');
+        return;
+      }
+      throw error;
+    } finally {
+      setPageAccessSaving(false);
+    }
+  }
+
   async function submitPageAccessForm(event) {
     event?.preventDefault?.();
     if (state.pageAccessSaving || state.pageAccessModalLoading) return;
     const rows = collectPageAccessRowsFromModal();
-    setPageAccessSaving(true);
     try {
       if (state.formMode === 'create') {
         state.pageAccessDraft = normalizeAccessRows(rows);
@@ -2408,16 +2453,10 @@
       }
       const memberId = String(state.formMemberId || '').trim();
       if (!memberId) throw new Error('Missing team member ID.');
-      await savePageAccessForMember(memberId, rows);
-      updatePageAccessSummaryText();
-      refreshConditionalAccessFields();
-      closePageAccessModal();
-      toast('success', 'Access updated', 'Page permissions were saved.');
+      await persistPageAccessSave(memberId, rows);
     } catch (error) {
       console.error(error);
       toast('error', 'Save failed', error?.message || 'Failed to save page access.');
-    } finally {
-      setPageAccessSaving(false);
     }
   }
 
