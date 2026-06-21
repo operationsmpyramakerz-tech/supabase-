@@ -1,27 +1,27 @@
 /* =========================================================
-   Global page canvas alignment — 2026-06-21
-   - Keeps one translucent white page canvas per screen.
-   - Removes the opaque parent layer behind the canvas.
-   - Preserves inner content cards, forms, tables and page logic.
+   Global single page canvas — 2026-06-21 (v3)
+   - One translucent white canvas for every visible page.
+   - The desktop parent iframe host remains transparent so it never creates
+     a second white layer around the embedded page.
    ========================================================= */
 
 :root{
   --ops-page-canvas-alpha: 0.34;
   --ops-page-canvas-gap: 14px;
   --ops-page-canvas-radius: 28px;
-  --ops-page-canvas-border: rgba(255, 255, 255, 0.46);
-  --ops-page-canvas-shadow: 0 18px 44px rgba(15, 23, 42, 0.07);
+  --ops-page-canvas-border: rgba(255,255,255,0.46);
+  --ops-page-canvas-shadow: 0 18px 44px rgba(15,23,42,0.07);
 }
 
-/* The area around the canvas remains transparent so the system cover is visible.
-   This removes the second page-sized backing layer. */
+/* Do not paint another solid parent surface behind the page canvas. */
 body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content{
   background: transparent !important;
   box-shadow: none !important;
 }
 
-/* The scrolling <main> is the one and only page-level white layer. */
-body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
+/* This is the visible white background for a page. In persistent-shell mode,
+   it applies only inside the iframe page—not to the parent host. */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main:not(.ops-shell-host-main){
   align-self: stretch !important;
   box-sizing: border-box !important;
   width: auto !important;
@@ -30,14 +30,42 @@ body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main{
   margin: 0 var(--ops-page-canvas-gap) var(--ops-page-canvas-gap) !important;
   border: 1px solid var(--ops-page-canvas-border) !important;
   border-radius: var(--ops-page-canvas-radius) !important;
-  background-color: rgba(255, 255, 255, var(--ops-page-canvas-alpha)) !important;
+  background-color: rgba(255,255,255,var(--ops-page-canvas-alpha)) !important;
   background-image: none !important;
   background-clip: padding-box !important;
   box-shadow: var(--ops-page-canvas-shadow) !important;
 }
 
-/* Keep all page layouts centred inside the shared canvas without changing their
-   own padding, grids, cards or responsive breakpoints. */
+/* Desktop persistent iframe shell: transparent parent only. The iframe page
+   above is canvas #2 and must be the only visible background layer. */
+body.page-shell-host .main-content > main.ops-shell-host-main{
+  align-self: stretch !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+body.page-shell-host .ops-shell-frame-wrap,
+body.page-shell-host .ops-shell-frame{
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Some old page CSS uses display:block/grid !important for its main element.
+   The host marks that legacy element hidden once its iframe finishes loading;
+   enforce the hidden state to prevent Expenses from appearing twice. */
+body.page-shell-host .main-content > main[data-ops-shell-legacy="1"][hidden]{
+  display: none !important;
+}
+
+/* Keep all page layouts inside the same width rules without changing page logic. */
 body:not(.login-page):not(.pwa-offline):not(.pwa-start) :is(
   main.products-shell,
   main.expenses-layout,
@@ -54,22 +82,21 @@ body:not(.login-page):not(.pwa-offline):not(.pwa-start) :is(
   min-width: 0 !important;
 }
 
-/* Expenses by User used a narrow main wrapper, which made its canvas look like
-   a second centred layer. The shared main canvas now owns the full width. */
+/* Expenses by User: remove the narrow legacy layout canvas and centre its actual content. */
 main.expenses-layout{
   max-width: none !important;
   width: auto !important;
 }
 
-main.expenses-layout > :is(#userTabs, #usersInfo){
-  width: min(100%, 1080px) !important;
+main.expenses-layout > :is(#userTabs,#usersInfo){
+  width: min(100%,1080px) !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
 
-/* Products, Kits and Proposals: their workspace wrappers are layout-only.
-   The shared canvas supplies the page background, so these wrappers stay clear. */
-:where(body.products-page, body.proposals-page, body.kits-page) :where(
+/* Page-specific workspace wrappers are structural only; the shared canvas above
+   owns the visible page background. */
+:where(body.products-page,body.proposals-page,body.kits-page) :where(
   .products-proposals-view.proposals-folders-card,
   .proposals-folders-card,
   .products-proposal-detail,
@@ -82,21 +109,16 @@ main.expenses-layout > :is(#userTabs, #usersInfo){
   box-shadow: none !important;
 }
 
-/* The Tasks stylesheet intentionally paints several full-screen white layers.
-   Clear those layout-only layers so Tasks follows the same single-canvas system. */
-body.tasks-v2 .main-content{
+/* Tasks contains legacy full-screen white wrappers. Keep only the shared page canvas. */
+body.tasks-v2 .main-content,
+body.tasks-v2 .tasks-v2-panel,
+body.tasks-v2 .tasks-v2-panel--list{
   background: transparent !important;
   box-shadow: none !important;
 }
 
-body.tasks-v2 .main-content > main.tasks-v2-main{
-  background-color: rgba(255, 255, 255, var(--ops-page-canvas-alpha)) !important;
-  background-image: none !important;
-}
-
 body.tasks-v2 .tasks-v2-panel,
 body.tasks-v2 .tasks-v2-panel--list{
-  background: transparent !important;
   min-height: 0 !important;
 }
 
@@ -110,8 +132,7 @@ body.tasks-v2 .main-header .topbar-right{
   box-shadow: none !important;
 }
 
-/* Preserve the same balanced breathing room on tablet and mobile screens. */
-@media (max-width: 900px){
+@media (max-width:900px){
   :root{
     --ops-page-canvas-gap: 10px;
     --ops-page-canvas-radius: 24px;
