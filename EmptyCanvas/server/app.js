@@ -7719,6 +7719,12 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
+  if (set.has("Events")) {
+    set.add("Events");
+    set.add("Event Requests");
+    set.add("Event Components");
+    set.add("/events");
+  }
   if (set.has("History")) {
     set.add("History");
     set.add("System History");
@@ -7783,6 +7789,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Current Orders")) return "/orders";
   if (list.includes("Requested Orders")) return "/orders/requested";
   if (list.includes("Maintenance Orders")) return "/orders/maintenance-orders";
+  if (list.includes("Events") || list.includes("Event Requests")) return "/events";
   if (list.includes("Orders Review")) return "/orders/sv-orders";
   if (list.includes("Create New Order")) return "/orders/new";
   if (list.includes("Stocktaking")) return "/stocktaking";
@@ -9052,6 +9059,19 @@ app.get(
     res.sendFile(path.join(__dirname, "..", "public", "create-order-products.html"));
   },
 );
+
+// Events module — independent requests and event-components catalog
+app.get("/events", requireAuth, requirePage("Events"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "events.html"));
+});
+
+app.get("/events/new", requireAuth, requirePage("Events"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "events-new.html"));
+});
+
+app.get("/events/components", requireAuth, requirePage("Events"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "events-components.html"));
+});
 
 app.get("/stocktaking", requireAuth, requirePage("Stocktaking"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "stocktaking.html"));
@@ -25466,6 +25486,360 @@ app.post(
     }
   },
 );
+
+// -----------------------------------------------------------------------------
+// Events Module — independent event requests and event components catalog
+// -----------------------------------------------------------------------------
+function _sbEventsTable() {
+  return String(process.env.SUPABASE_EVENTS_TABLE || 'events').trim() || 'events';
+}
+
+function _sbEventComponentsTable() {
+  return String(process.env.SUPABASE_EVENT_COMPONENTS_TABLE || 'event_components').trim() || 'event_components';
+}
+
+function _sbEventsEnabled() {
+  return supabaseDb.isConfigured();
+}
+
+function _eventsText(value, maxLength = 500) {
+  return String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function _eventsLongText(value, maxLength = 5000) {
+  return String(value ?? '').replace(/\u0000/g, '').trim().slice(0, maxLength);
+}
+
+function _eventsUuid(value) {
+  const id = String(value || '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : '';
+}
+
+function _eventsDate(value) {
+  const raw = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
+function _eventsNumber(value, { min = 0, max = 1000000, fallback = 0, integer = false } = {}) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const safe = Math.max(min, Math.min(max, parsed));
+  return integer ? Math.round(safe) : safe;
+}
+
+function _eventsBoolean(value) {
+  return value === true || value === 1 || String(value || '').trim().toLowerCase() === 'true';
+}
+
+function _eventsArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+const EVENTS_TYPES = new Set(['tech_day', 'seminar', 'steam_fair', 'competition', 'exhibition', 'other']);
+const EVENTS_STATUSES = new Set(['submitted', 'under_review', 'approved', 'in_progress', 'completed', 'cancelled']);
+const EVENT_COMPONENT_CATEGORIES = new Set(['project', 'marketing_material', 'venue_equipment', 'other']);
+
+function _eventsNormalizeType(value) {
+  const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return EVENTS_TYPES.has(raw) ? raw : 'other';
+}
+
+function _eventsNormalizeStatus(value) {
+  const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return EVENTS_STATUSES.has(raw) ? raw : 'submitted';
+}
+
+function _eventsNormalizeComponentCategory(value) {
+  const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return EVENT_COMPONENT_CATEGORIES.has(raw) ? raw : 'other';
+}
+
+function _eventsNormalizeProjects(value) {
+  return _eventsArray(value)
+    .slice(0, 50)
+    .map((row) => ({
+      title: _eventsText(row?.title || row?.name, 180),
+      description: _eventsLongText(row?.description, 1500),
+      quantity: _eventsNumber(row?.quantity, { min: 0, max: 100000, fallback: 1, integer: true }),
+      notes: _eventsLongText(row?.notes, 1500),
+    }))
+    .filter((row) => row.title);
+}
+
+function _eventsNormalizeComponentRows(value) {
+  return _eventsArray(value)
+    .slice(0, 100)
+    .map((row) => ({
+      componentId: _eventsUuid(row?.componentId || row?.component_id || row?.id) || null,
+      name: _eventsText(row?.name || row?.componentName || row?.component_name, 180),
+      quantity: _eventsNumber(row?.quantity, { min: 0, max: 100000, fallback: 1 }),
+      unit: _eventsText(row?.unit, 50) || 'pcs',
+      notes: _eventsLongText(row?.notes, 1000),
+    }))
+    .filter((row) => row.name);
+}
+
+function _eventsSerializeComponent(row = {}) {
+  return {
+    id: String(row?.id || ''),
+    name: _eventsText(row?.name, 180),
+    category: _eventsNormalizeComponentCategory(row?.category),
+    description: _eventsLongText(row?.description, 2000),
+    defaultQuantity: _eventsNumber(row?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
+    unit: _eventsText(row?.unit, 50) || 'pcs',
+    isActive: row?.is_active !== false,
+    createdAt: row?.created_at || null,
+    updatedAt: row?.updated_at || null,
+  };
+}
+
+function _eventsSerializeRequest(row = {}) {
+  return {
+    id: String(row?.id || ''),
+    eventCode: _eventsText(row?.event_code, 80),
+    eventName: _eventsText(row?.event_name, 240),
+    eventType: _eventsNormalizeType(row?.event_type),
+    status: _eventsNormalizeStatus(row?.status),
+    organizationName: _eventsText(row?.organization_name, 240),
+    contactPerson: _eventsText(row?.contact_person, 160),
+    contactPhone: _eventsText(row?.contact_phone, 80),
+    contactEmail: _eventsText(row?.contact_email, 200),
+    eventStartDate: row?.event_start_date || null,
+    eventEndDate: row?.event_end_date || null,
+    expectedAttendees: _eventsNumber(row?.expected_attendees, { min: 0, max: 1000000, fallback: 0, integer: true }),
+    audience: _eventsLongText(row?.audience, 1000),
+    projects: _eventsNormalizeProjects(row?.projects),
+    marketingMaterials: _eventsNormalizeComponentRows(row?.marketing_materials),
+    venueRequirements: _eventsNormalizeComponentRows(row?.venue_requirements),
+    venueName: _eventsText(row?.venue_name, 240),
+    venueType: _eventsText(row?.venue_type, 120),
+    governorate: _eventsText(row?.governorate, 120),
+    city: _eventsText(row?.city, 120),
+    district: _eventsText(row?.district, 120),
+    address: _eventsLongText(row?.address, 1000),
+    locationUrl: _eventsText(row?.location_url, 1000),
+    venueSetupTime: row?.venue_setup_time || null,
+    requiresPower: _eventsBoolean(row?.requires_power),
+    requiresInternet: _eventsBoolean(row?.requires_internet),
+    requiresSoundSystem: _eventsBoolean(row?.requires_sound_system),
+    venueNotes: _eventsLongText(row?.venue_notes, 3000),
+    operationsNotes: _eventsLongText(row?.operations_notes, 3000),
+    requesterName: _eventsText(row?.requester_name, 160),
+    createdAt: row?.created_at || null,
+    updatedAt: row?.updated_at || null,
+  };
+}
+
+function _eventsRequestWriteRow(body = {}, req) {
+  const startDate = _eventsDate(body?.eventStartDate || body?.event_start_date);
+  const endDate = _eventsDate(body?.eventEndDate || body?.event_end_date);
+  if (startDate && endDate && endDate < startDate) {
+    const error = new Error('End date cannot be before the start date.');
+    error.status = 400;
+    throw error;
+  }
+
+  const eventName = _eventsText(body?.eventName || body?.event_name, 240);
+  if (!eventName) {
+    const error = new Error('Event name is required.');
+    error.status = 400;
+    throw error;
+  }
+
+  const requesterName = _eventsText(
+    req?.session?.accountCache?.name || req?.session?.username || body?.requesterName,
+    160,
+  );
+  const requesterId = _eventsUuid(req?.session?.userSupabaseId);
+
+  return {
+    event_name: eventName,
+    event_type: _eventsNormalizeType(body?.eventType || body?.event_type),
+    status: 'submitted',
+    organization_name: _eventsText(body?.organizationName || body?.organization_name, 240) || null,
+    contact_person: _eventsText(body?.contactPerson || body?.contact_person, 160) || null,
+    contact_phone: _eventsText(body?.contactPhone || body?.contact_phone, 80) || null,
+    contact_email: _eventsText(body?.contactEmail || body?.contact_email, 200) || null,
+    event_start_date: startDate,
+    event_end_date: endDate,
+    expected_attendees: _eventsNumber(body?.expectedAttendees || body?.expected_attendees, { min: 0, max: 1000000, fallback: 0, integer: true }),
+    audience: _eventsLongText(body?.audience, 1000) || null,
+    projects: _eventsNormalizeProjects(body?.projects),
+    marketing_materials: _eventsNormalizeComponentRows(body?.marketingMaterials || body?.marketing_materials),
+    venue_requirements: _eventsNormalizeComponentRows(body?.venueRequirements || body?.venue_requirements),
+    venue_name: _eventsText(body?.venueName || body?.venue_name, 240) || null,
+    venue_type: _eventsText(body?.venueType || body?.venue_type, 120) || null,
+    governorate: _eventsText(body?.governorate, 120) || null,
+    city: _eventsText(body?.city, 120) || null,
+    district: _eventsText(body?.district, 120) || null,
+    address: _eventsLongText(body?.address, 1000) || null,
+    location_url: _eventsText(body?.locationUrl || body?.location_url, 1000) || null,
+    venue_setup_time: _eventsText(body?.venueSetupTime || body?.venue_setup_time, 80) || null,
+    requires_power: _eventsBoolean(body?.requiresPower || body?.requires_power),
+    requires_internet: _eventsBoolean(body?.requiresInternet || body?.requires_internet),
+    requires_sound_system: _eventsBoolean(body?.requiresSoundSystem || body?.requires_sound_system),
+    venue_notes: _eventsLongText(body?.venueNotes || body?.venue_notes, 3000) || null,
+    requester_name: requesterName || null,
+    created_by_user_id: requesterId || null,
+  };
+}
+
+function _eventsModuleMissingError(error) {
+  const raw = String(error?.message || '');
+  return /event_components|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
+    ? 'Events tables are not installed. Run events_module_migration.sql in Supabase first.'
+    : raw || 'Events request failed.';
+}
+
+app.get('/api/events/components', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const activeOnly = String(req.query?.activeOnly || '').trim() === '1';
+    const params = ['select=*', 'order=is_active.desc,name.asc', 'limit=1000'];
+    if (activeOnly) params.push('is_active=eq.true');
+    const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?${params.join('&')}`);
+    return res.json({ ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) });
+  } catch (error) {
+    console.error('GET /api/events/components error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/components', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to manage event components.' });
+    const name = _eventsText(req.body?.name, 180);
+    if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
+    const inserted = await supabaseDb.insert(_sbEventComponentsTable(), {
+      name,
+      category: _eventsNormalizeComponentCategory(req.body?.category),
+      description: _eventsLongText(req.body?.description, 2000) || null,
+      default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
+      unit: _eventsText(req.body?.unit, 50) || 'pcs',
+      is_active: req.body?.isActive !== false,
+    });
+    return res.status(201).json({ ok: true, component: _eventsSerializeComponent(inserted || {}) });
+  } catch (error) {
+    console.error('POST /api/events/components error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to manage event components.' });
+    const id = _eventsUuid(req.params?.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'Invalid component ID.' });
+    const name = _eventsText(req.body?.name, 180);
+    if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
+    const updated = await supabaseDb.updateById(_sbEventComponentsTable(), id, {
+      name,
+      category: _eventsNormalizeComponentCategory(req.body?.category),
+      description: _eventsLongText(req.body?.description, 2000) || null,
+      default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
+      unit: _eventsText(req.body?.unit, 50) || 'pcs',
+      is_active: req.body?.isActive !== false,
+    });
+    return res.json({ ok: true, component: _eventsSerializeComponent(updated || {}) });
+  } catch (error) {
+    console.error('PATCH /api/events/components/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.delete('/api/events/components/:id', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to manage event components.' });
+    const id = _eventsUuid(req.params?.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'Invalid component ID.' });
+    await supabaseDb.deleteById(_sbEventComponentsTable(), id);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('DELETE /api/events/components/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.get('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const rows = await supabaseDb.selectAll(_sbEventsTable(), { limit: 2000, order: 'created_at.desc,event_code.desc' });
+    const search = _eventsText(req.query?.search, 200).toLowerCase();
+    const status = String(req.query?.status || '').trim().toLowerCase();
+    const list = (Array.isArray(rows) ? rows : []).map(_eventsSerializeRequest).filter((event) => {
+      if (status && status !== 'all' && event.status !== status) return false;
+      if (!search) return true;
+      return [event.eventCode, event.eventName, event.eventType, event.organizationName, event.governorate, event.requesterName]
+        .join(' ')
+        .toLowerCase()
+        .includes(search);
+    });
+    return res.json({ ok: true, events: list });
+  } catch (error) {
+    console.error('GET /api/events error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.get('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const id = _eventsUuid(req.params?.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
+    const row = await supabaseDb.selectById(_sbEventsTable(), id);
+    if (!row) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+    return res.json({ ok: true, event: _eventsSerializeRequest(row) });
+  } catch (error) {
+    console.error('GET /api/events/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const inserted = await supabaseDb.insert(_sbEventsTable(), _eventsRequestWriteRow(req.body || {}, req));
+    return res.status(201).json({ ok: true, event: _eventsSerializeRequest(inserted || {}) });
+  } catch (error) {
+    console.error('POST /api/events error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to update event status.' });
+    const id = _eventsUuid(req.params?.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'status')) patch.status = _eventsNormalizeStatus(req.body.status);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'operationsNotes')) patch.operations_notes = _eventsLongText(req.body.operationsNotes, 3000) || null;
+    if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'No supported event fields were provided.' });
+    const updated = await supabaseDb.updateById(_sbEventsTable(), id, patch);
+    if (!updated) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+    return res.json({ ok: true, event: _eventsSerializeRequest(updated) });
+  } catch (error) {
+    console.error('PATCH /api/events/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
 
 // Products Management — requires Products page access
 app.get(
