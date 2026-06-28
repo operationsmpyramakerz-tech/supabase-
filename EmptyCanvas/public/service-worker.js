@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-events-access-and-database-v2";
+const CACHE_NAME = "ops-cache-events-sidebar-access-v3";
 
 const PRECACHE_URLS = [
   "/pwa-start",
