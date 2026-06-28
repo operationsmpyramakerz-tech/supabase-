@@ -772,6 +772,9 @@ document.addEventListener('DOMContentLoaded', () => {
       expensesusers: ['expensesusers'],
       useraccess: ['userscenter', 'useraccessdata'],
       messages: ['mail'],
+      events: ['eventrequests', 'eventcomponents'],
+      eventrequests: ['events', 'eventcomponents'],
+      eventcomponents: ['events', 'eventrequests'],
     };
     const wants = new Set([routeKey, ...(known[routeKey] || [])]);
     return candidates.some((candidate) => wants.has(candidate));
@@ -2984,6 +2987,11 @@ if (document.querySelector('.sidebar')) {
         ensureDashboardHeaderLayout();
         ensureSidebarBranding();
         ensureOrderedSidebarLinks();
+        // The Events link is injected at runtime. Apply the current permissions
+        // again after injection so it is not left hidden by an earlier cached
+        // permission pass on existing pages.
+        const latestAllowed = getCachedAllowedPages() || [];
+        if (latestAllowed.length) applyAllowedPages(latestAllowed);
         reorderSidebarNav();
         syncMobileDockStructure();
         reorderSidebarNav();
