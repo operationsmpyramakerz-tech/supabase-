@@ -9125,6 +9125,15 @@ app.get("/events/new", requireAuth, requirePage("Events"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events-new.html"));
 });
 
+app.get("/events/components/new", requireAuth, requirePage("Events"), (req, res) => {
+  // Edit users reach this screen only after the one-time Admin authorization.
+  // Events page Admins are admitted immediately.
+  if (!_hasEventsComponentCreateAccess(req)) {
+    return res.redirect("/events/components?adminAuthorization=required");
+  }
+  return res.sendFile(path.join(__dirname, "..", "public", "events-components-new.html"));
+});
+
 app.get("/events/components", requireAuth, requirePage("Events"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events-components.html"));
 });
@@ -25754,6 +25763,22 @@ function _eventsRequestWriteRow(body = {}, req) {
   };
 }
 
+// An Events Admin can create immediately. Other users with Edit access may create one
+// component only after a successful shared Admin-password authorization.
+const EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS = 5 * 60 * 1000;
+
+function _hasEventsComponentCreateAccess(req) {
+  if (_hasPageAdminAccess(req, 'Events')) return true;
+  const until = Number(req?.session?.eventsComponentCreateAdminUnlockUntil || 0);
+  return Number.isFinite(until) && until > Date.now();
+}
+
+async function _clearEventsComponentCreateUnlock(req) {
+  if (!req?.session) return;
+  delete req.session.eventsComponentCreateAdminUnlockUntil;
+  try { await _saveSessionNow(req); } catch {}
+}
+
 function _eventsModuleMissingError(error) {
   const raw = String(error?.message || '');
   return /event_components|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
@@ -25776,10 +25801,26 @@ app.get('/api/events/components', requireAuth, requirePage('Events'), async (req
   }
 });
 
+app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const password = String(req.body?.password || req.body?.adminPassword || '').trim();
+    const verified = await _verifyPageAdminPassword(req, password, 'Events');
+    if (!verified) return res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
+
+    req.session.eventsComponentCreateAdminUnlockUntil = Date.now() + EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS;
+    await _saveSessionNow(req);
+    return res.json({ ok: true, expiresInSeconds: Math.floor(EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS / 1000) });
+  } catch (error) {
+    console.error('POST /api/events/admin/verify error:', error?.details || error);
+    return res.status(500).json({ ok: false, error: 'Failed to verify Admin password.' });
+  }
+});
+
 app.post('/api/events/components', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to manage event components.' });
+    if (!_hasEventsComponentCreateAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to add an event component.' });
     const name = _eventsText(req.body?.name, 180);
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
     const inserted = await supabaseDb.insert(_sbEventComponentsTable(), {
@@ -25790,6 +25831,7 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
       unit: _eventsText(req.body?.unit, 50) || 'pcs',
       is_active: req.body?.isActive !== false,
     });
+    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsComponentCreateUnlock(req);
     return res.status(201).json({ ok: true, component: _eventsSerializeComponent(inserted || {}) });
   } catch (error) {
     console.error('POST /api/events/components error:', error?.details || error);
