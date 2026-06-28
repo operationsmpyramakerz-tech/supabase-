@@ -3326,6 +3326,9 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     tasks: "Tasks",
     kpis: "KPIs",
     kpi: "KPIs",
+    events: "Events",
+    "event-requests": "Events",
+    "event-components": "Events",
     history: "History",
     "system-history": "History",
     backup: "Backup",
@@ -7719,7 +7722,10 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
-  if (set.has("Events")) {
+  // Events may be stored under the current page name (Events) or under
+  // earlier catalog labels (Event Requests / Event Components). Treat all of
+  // them as the same module so existing permissions always expose /events.
+  if (set.has("Events") || set.has("Event Requests") || set.has("Event Components")) {
     set.add("Events");
     set.add("Event Requests");
     set.add("Event Components");
@@ -8795,6 +8801,9 @@ function _pageAccessAliases(pageName = "") {
     kpis: ["kpis", "kpi"],
     proposals: ["proposals", "productproposals"],
     kits: ["kits", "productkits"],
+    events: ["events", "eventrequests", "eventcomponents"],
+    eventrequests: ["events", "eventrequests", "eventcomponents"],
+    eventcomponents: ["events", "eventrequests", "eventcomponents"],
   };
   return Array.from(new Set([token, ...(groups[token] || [])].filter(Boolean)));
 }
@@ -9426,6 +9435,8 @@ function _backupCatalog() {
     { key: 'stocktaking', pageName: 'Stocktaking', tableName: _sbStocktakingTable(), moduleName: 'Inventory', icon: 'archive', description: 'Inventory and stocktaking records.' },
     { key: 'products', pageName: 'Products', tableName: _sbProductsTable(), moduleName: 'Inventory', icon: 'package', description: 'Products and components records.' },
     { key: 'product-tags', pageName: 'Product Tags', tableName: _sbProductTagsTable(), moduleName: 'Inventory', icon: 'tag', description: 'Product tags and grouping data.' },
+    { key: 'events', pageName: 'Events', tableName: _sbEventsTable(), moduleName: 'Events', icon: 'calendar', description: 'Event execution requests, project requirements, marketing materials, and venue details.' },
+    { key: 'event-components', pageName: 'Event Components', tableName: _sbEventComponentsTable(), moduleName: 'Events', icon: 'box', description: 'Independent catalog of event projects, marketing materials, venue equipment, and other event components.' },
     { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
     { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
@@ -11000,7 +11011,10 @@ app.get("/api/account", requireAuth, async (req, res) => {
   try {
     const cached = req.session?.accountCache;
     const ts = Number(req.session?.accountCacheTs || 0);
-    if (cached && ts && Date.now() - ts < ACCOUNT_CACHE_TTL_MS && Array.isArray(cached.filesMedia) && cached.pageAccess) {
+    // Page permissions are operational controls. For Supabase users, always
+    // refresh them so a permission granted in Users Center appears immediately
+    // instead of waiting for the previous two-minute account-cache window.
+    if (!(_sbTeamMembersEnabled() && req.session?.userSupabaseId) && cached && ts && Date.now() - ts < ACCOUNT_CACHE_TTL_MS && Array.isArray(cached.filesMedia) && cached.pageAccess) {
       return res.json(cached);
     }
   } catch {}
