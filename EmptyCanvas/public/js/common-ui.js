@@ -2243,6 +2243,47 @@ if (document.querySelector('.sidebar')) {
   const toKey = (s) => String(s || '').trim().toLowerCase();
   const normPath = (s) => toKey(s).replace(/\/+$/, ''); // يشيل / في الآخر لو موجود
 
+  // Page access is the source of truth. Some older Supabase view definitions
+  // can return a stale legacy allowed-pages list even when a new page is
+  // enabled in the Page Access matrix. Merge the Events entitlement from the
+  // detailed matrix before filtering the sidebar.
+  function pageAccessGrantsEvents(pageAccess) {
+    const rows = Array.isArray(pageAccess?.pages)
+      ? pageAccess.pages
+      : (Array.isArray(pageAccess) ? pageAccess : []);
+
+    return rows.some((row) => {
+      if (!row || row.isEnabled === false || row.is_enabled === false || row.enabled === false) return false;
+      const candidates = [
+        row.pageName, row.page_name,
+        row.pageKey, row.page_key,
+        row.routePath, row.route_path,
+      ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+
+      return candidates.some((value) => {
+        const compact = value.replace(/[^a-z0-9/]+/g, '');
+        return compact === 'events'
+          || compact === 'eventrequests'
+          || compact === 'eventcomponents'
+          || compact === '/events'
+          || compact === '/events/new'
+          || compact === '/events/components';
+      });
+    });
+  }
+
+  function mergePageAccessIntoAllowedPages(allowed, pageAccess) {
+    const merged = Array.isArray(allowed) ? allowed.slice() : [];
+    if (pageAccessGrantsEvents(pageAccess)) {
+      ['Events', 'Event Requests', 'Event Components', '/events'].forEach((value) => {
+        if (!merged.some((item) => normPath(item) === normPath(value) || toKey(item) === toKey(value))) {
+          merged.push(value);
+        }
+      });
+    }
+    return merged;
+  }
+
   // IMPORTANT:
   // Our sidebar layout CSS uses `display: flex !important` on `<li>` items.
   // Normal inline `style.display = 'none'` will NOT override it.
@@ -2276,6 +2317,16 @@ if (document.querySelector('.sidebar')) {
   // أظهر المسموح وأخفِ غير المسموح (حتمي)
   function applyAllowedPages(allowed){
     if (!Array.isArray(allowed)) return;
+
+    // Add all known links before applying the hide/show pass. Previously the
+    // Events link could be injected after this pass and inherit an incorrect
+    // display state inside the mobile dock.
+    try { ensureOrderedSidebarLinks(); } catch {}
+
+    allowed = mergePageAccessIntoAllowedPages(
+      allowed,
+      window.__opsUserInfo?.pageAccess || readChromeCache()?.pageAccess || null
+    );
 
     // Default-deny for the sidebar: hide every first-level nav item.
     // (Some CSS rules use `display: flex !important`, so we use hideEl() which
@@ -2369,7 +2420,13 @@ if (document.querySelector('.sidebar')) {
   }
 
   function cacheAllowedPages(arr){
-    try { sessionStorage.setItem(CACHE_ALLOWED, JSON.stringify(arr || [])); } catch {}
+    try {
+      const merged = mergePageAccessIntoAllowedPages(
+        Array.isArray(arr) ? arr : [],
+        window.__opsUserInfo?.pageAccess || readChromeCache()?.pageAccess || null
+      );
+      sessionStorage.setItem(CACHE_ALLOWED, JSON.stringify(merged));
+    } catch {}
   }
   function getCachedAllowedPages(){
     try {
@@ -2403,7 +2460,11 @@ if (document.querySelector('.sidebar')) {
         email: String(safe.email || '').trim(),
         photoUrl: String(safe.photoUrl || '').trim(),
         coverPhotoUrl: String(safe.coverPhotoUrl || safe.coverPhoto || '').trim(),
-        allowedPages: Array.isArray(safe.allowedPages) ? safe.allowedPages : (getCachedAllowedPages() || []),
+        allowedPages: mergePageAccessIntoAllowedPages(
+          Array.isArray(safe.allowedPages) ? safe.allowedPages : (getCachedAllowedPages() || []),
+          safe.pageAccess || null
+        ),
+        pageAccess: safe.pageAccess || null,
         savedAt: Date.now(),
       };
       localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify(payload));
@@ -2473,9 +2534,12 @@ if (document.querySelector('.sidebar')) {
       } catch {}
     }
 
-    const cachedAllowed = Array.isArray(cachedChrome?.allowedPages)
-      ? cachedChrome.allowedPages
-      : (getCachedAllowedPages() || []);
+    const cachedAllowed = mergePageAccessIntoAllowedPages(
+      Array.isArray(cachedChrome?.allowedPages)
+        ? cachedChrome.allowedPages
+        : (getCachedAllowedPages() || []),
+      cachedChrome?.pageAccess || null
+    );
 
     if (cachedAllowed.length) {
       try { cacheAllowedPages(cachedAllowed); } catch {}
@@ -2965,18 +3029,23 @@ if (document.querySelector('.sidebar')) {
       });
 
       if (Array.isArray(data.allowedPages)) {
-        cacheAllowedPages(data.allowedPages);
-        writeChromeCache({ ...(window.__opsUserInfo || {}), allowedPages: data.allowedPages, pageAccess: data.pageAccess || { pages: [] } });
+        const resolvedAllowedPages = mergePageAccessIntoAllowedPages(
+          data.allowedPages,
+          data.pageAccess || { pages: [] }
+        );
+        data.allowedPages = resolvedAllowedPages;
+        cacheAllowedPages(resolvedAllowedPages);
+        writeChromeCache({ ...(window.__opsUserInfo || {}), allowedPages: resolvedAllowedPages, pageAccess: data.pageAccess || { pages: [] } });
 
         // 🔒 اخفي الكل ثم أظهر المسموح
         applyAllowedPages([]);
-        applyAllowedPages(data.allowedPages);
+        applyAllowedPages(resolvedAllowedPages);
 
         // Prime the app data in the background once per session/tab so page transitions
         // feel instant after the first load.
-        schedulePrefetchForAllowedPages(data.allowedPages);
+        schedulePrefetchForAllowedPages(resolvedAllowedPages);
 
-        try { window.__opsApplyMailAccess?.(data.allowedPages, data); } catch {}
+        try { window.__opsApplyMailAccess?.(resolvedAllowedPages, data); } catch {}
 
         // ✅ بعد ما طبقنا الصلاحيات، نكشف اللي مسموح بس (بدون فلاش)
         document.body.classList.remove('permissions-loading');
@@ -2990,7 +3059,10 @@ if (document.querySelector('.sidebar')) {
         // The Events link is injected at runtime. Apply the current permissions
         // again after injection so it is not left hidden by an earlier cached
         // permission pass on existing pages.
-        const latestAllowed = getCachedAllowedPages() || [];
+        const latestAllowed = mergePageAccessIntoAllowedPages(
+          getCachedAllowedPages() || [],
+          window.__opsUserInfo?.pageAccess || null
+        );
         if (latestAllowed.length) applyAllowedPages(latestAllowed);
         reorderSidebarNav();
         syncMobileDockStructure();
