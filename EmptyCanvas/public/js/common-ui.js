@@ -974,6 +974,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Maintenance Orders', '/orders/maintenance-orders'])) {
       urls.push('/api/orders/requested');
     }
+    if (hasAllowedPage(allowedPages, ['Events', 'Event Requests', 'Event Components', '/events'])) {
+      urls.push('/api/events', '/api/events/components?activeOnly=1');
+    }
     if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
       urls.push('/api/tasks?scope=mine', '/api/tasks/users');
     }
@@ -2202,6 +2205,11 @@ if (document.querySelector('.sidebar')) {
     'schools requested orders': 'a[href="/orders/requested"]',
     'maintenance orders': 'a[href="/orders/maintenance-orders"]',
 
+    // ===== Events =====
+    'events': 'a[href="/events"]',
+    'event requests': 'a[href="/events"]',
+    'event components': 'a[href="/events"]',
+
     // Orders Review (formerly: "S.V schools orders")
     'orders review': 'a[href="/orders/sv-orders"]',
     's.v schools orders': 'a[href="/orders/sv-orders"]',
@@ -2541,6 +2549,7 @@ if (document.querySelector('.sidebar')) {
     { href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' },
     { href: '/orders/requested', label: 'Operations Orders', icon: 'users' },
     { href: '/orders/maintenance-orders', label: 'Maintenance Orders', icon: 'tool' },
+    { href: '/events', label: 'Events', icon: 'calendar' },
     { href: '/orders/new', label: 'Shopping Cart', icon: 'shopping-cart' },
     { href: '/stocktaking', label: 'Stocktaking', icon: 'archive' },
     { href: '/b2b', label: 'B2B', icon: 'folder' },
