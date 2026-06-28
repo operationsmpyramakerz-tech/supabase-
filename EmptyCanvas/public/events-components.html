@@ -12,7 +12,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-module-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-component-admin-auth-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-components-page">
@@ -28,6 +28,28 @@
     </div>
   </div>
   <div class="events-modal-overlay" id="eventComponentModal" hidden aria-hidden="true"><form class="events-modal events-modal--form" id="eventComponentForm" role="dialog" aria-modal="true" aria-labelledby="eventComponentModalTitle"><button class="events-modal__close" id="eventComponentModalClose" type="button" aria-label="Close component form">×</button><div class="events-modal__header"><div><span class="events-eyebrow"><i data-feather="layers"></i> Catalog record</span><h2 id="eventComponentModalTitle">Add Event Component</h2><p id="eventComponentModalSubtitle">Create a reusable item for future event requests.</p></div></div><div class="events-form-grid"><label class="events-field events-field--wide"><span>Component Name <em>*</em></span><input id="eventComponentName" type="text" required maxlength="180" placeholder="Example: 3m × 1m branded backdrop" /></label><label class="events-field"><span>Category <em>*</em></span><select id="eventComponentCategory"><option value="project">Project Resource</option><option value="marketing_material">Marketing Material</option><option value="venue_equipment">Venue Equipment</option><option value="other">Other</option></select></label><label class="events-field"><span>Default Quantity</span><input id="eventComponentDefaultQuantity" type="number" min="0" step="0.01" value="1" /></label><label class="events-field"><span>Unit</span><input id="eventComponentUnit" type="text" maxlength="50" value="pcs" placeholder="pcs, sets, banners..." /></label><label class="events-field events-field--wide"><span>Description</span><textarea id="eventComponentDescription" rows="4" maxlength="2000" placeholder="Brief description or preparation notes"></textarea></label><label class="events-checkbox events-field--wide"><input id="eventComponentActive" type="checkbox" checked /><span>Available for new event requests</span></label></div><div class="events-form-error" id="eventComponentFormError" aria-live="polite"></div><div class="events-modal__actions"><button class="events-secondary-btn" id="eventComponentModalCancel" type="button">Cancel</button><button class="events-primary-btn" id="eventComponentSaveBtn" type="submit"><i data-feather="save"></i><span>Save Component</span></button></div></form></div>
-  <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script><script src="/js/events-components.js?v=events-module-v1"></script>
+  <div class="events-modal-overlay" id="eventComponentAdminModal" hidden aria-hidden="true">
+    <form class="events-modal events-modal--authorization" id="eventComponentAdminForm" role="dialog" aria-modal="true" aria-labelledby="eventComponentAdminTitle">
+      <button class="events-modal__close" id="eventComponentAdminClose" type="button" aria-label="Close authorization dialog">×</button>
+      <div class="events-modal__header">
+        <div>
+          <span class="events-eyebrow"><i data-feather="shield"></i> Admin authorization</span>
+          <h2 id="eventComponentAdminTitle">Authorization required</h2>
+          <p>Enter the Events Admin password to add a new reusable event component.</p>
+        </div>
+        <span class="events-admin-authorization-icon" aria-hidden="true"><i data-feather="lock"></i></span>
+      </div>
+      <label class="events-field">
+        <span>Admin password <em>*</em></span>
+        <input id="eventComponentAdminPassword" type="password" autocomplete="current-password" required placeholder="Enter Admin password" />
+      </label>
+      <div class="events-form-error" id="eventComponentAdminError" aria-live="polite"></div>
+      <div class="events-modal__actions">
+        <button class="events-secondary-btn" id="eventComponentAdminCancel" type="button">Cancel</button>
+        <button class="events-primary-btn" id="eventComponentAdminConfirm" type="submit"><i data-feather="shield-check"></i><span>Authorize &amp; Continue</span></button>
+      </div>
+    </form>
+  </div>
+  <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script><script src="/js/events-components.js?v=events-component-admin-auth-v1"></script>
 </body>
 </html>
