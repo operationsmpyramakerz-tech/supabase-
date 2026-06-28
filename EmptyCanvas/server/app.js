@@ -3373,6 +3373,17 @@ function _sbPageAccessSummaryFromRows(rows = []) {
 async function _sbSelectPageAccessViewForMember(teamMemberId) {
   const id = String(teamMemberId || "").trim();
   if (!_sbTeamMembersEnabled() || !id) return [];
+
+  // Resolve access rows directly against app_pages instead of relying only on
+  // team_member_page_access_view. Older database views can omit a newly-added
+  // page's page_key / route_path, which makes the account payload drop that
+  // permission even though the Page Access modal shows it as enabled.
+  try {
+    return await _sbSelectResolvedPageAccessForMember(id);
+  } catch (directError) {
+    console.warn("[user-access] direct page-access resolution failed; trying the database view:", directError?.message || directError);
+  }
+
   const rows = await supabaseDb.request(`/team_member_page_access_view?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&order=sort_order.asc&limit=1000`);
   return Array.isArray(rows) ? rows : [];
 }
@@ -3388,6 +3399,42 @@ async function _sbSelectRawPageAccessForMember(teamMemberId) {
   if (!_sbTeamMembersEnabled() || !id) return [];
   const rows = await supabaseDb.request(`/team_member_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
   return Array.isArray(rows) ? rows : [];
+}
+
+async function _sbSelectResolvedPageAccessForMember(teamMemberId) {
+  const id = String(teamMemberId || "").trim();
+  if (!_sbTeamMembersEnabled() || !id) return [];
+
+  const [pages, accessRows] = await Promise.all([
+    // Include all page records here. A permission must remain resolvable even
+    // if an older migration marked the page as non-assignable or its metadata
+    // changed after the access row had already been saved.
+    _sbSelectAppPages({ assignableOnly: false, activeOnly: false }),
+    _sbSelectRawPageAccessForMember(id),
+  ]);
+
+  const byPageId = new Map(
+    (Array.isArray(pages) ? pages : []).map((page) => [String(page?.pageId || page?.id || "").trim(), page])
+  );
+
+  return (Array.isArray(accessRows) ? accessRows : []).map((access) => {
+    const pageId = String(_sbGet(access, ["page_id", "pageId"]) ?? "").trim();
+    const page = byPageId.get(pageId) || {};
+    return {
+      ...access,
+      page_id: pageId || _sbGet(access, ["page_id", "pageId"]),
+      page_key: String(page?.pageKey || _sbGet(access, ["page_key", "pageKey"]) || "").trim(),
+      page_name: String(page?.pageName || _sbGet(access, ["page_name", "pageName", "name"]) || "").trim(),
+      route_path: String(page?.routePath || _sbGet(access, ["route_path", "routePath"]) || "").trim(),
+      route_pattern: String(page?.routePattern || _sbGet(access, ["route_pattern", "routePattern"]) || "").trim(),
+      module_name: String(page?.moduleName || _sbGet(access, ["module_name", "moduleName"]) || "").trim(),
+      parent_page_key: String(page?.parentPageKey || _sbGet(access, ["parent_page_key", "parentPageKey"]) || "").trim(),
+      sort_order: Number(page?.sortOrder ?? _sbGet(access, ["sort_order", "sortOrder"]) ?? 100),
+      is_active: page?.isActive ?? _sbBool(_sbGet(access, ["is_active", "isActive"]), true),
+      is_assignable: page?.isAssignable ?? _sbBool(_sbGet(access, ["is_assignable", "isAssignable"]), true),
+      visible_in_sidebar: page?.visibleInSidebar ?? _sbBool(_sbGet(access, ["visible_in_sidebar", "visibleInSidebar"]), true),
+    };
+  });
 }
 
 async function _sbResolveAllowedPagesForTeamMember(row = {}) {
