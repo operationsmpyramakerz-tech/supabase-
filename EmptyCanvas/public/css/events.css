@@ -90,3 +90,14 @@ body.events-page{
 
 @media(max-width:1050px){.events-hero{grid-template-columns:1fr;}.events-hero__stats{grid-template-columns:repeat(3,minmax(0,1fr));}.events-stat{align-items:flex-start;flex-direction:column;}.events-detail-content{grid-template-columns:1fr;}.events-detail-block--wide{grid-column:auto;}}
 @media(max-width:760px){.events-shell{padding:14px;}.events-subnav{width:100%;overflow:auto;}.events-subnav__link{white-space:nowrap;}.events-hero{padding:22px;border-radius:23px;}.events-hero h2{font-size:2rem;letter-spacing:-.055em;}.events-hero__stats{grid-template-columns:1fr;}.events-stat{flex-direction:row;align-items:center;}.events-panel{padding:16px;border-radius:21px;}.events-panel__header{flex-direction:column;}.events-list-controls,.events-search{width:100%;}.events-list-controls select{width:100%;}.events-form-top{align-items:flex-start;flex-direction:column;}.events-form-section{padding:18px;border-radius:20px;}.events-form-section__heading{flex-wrap:wrap;}.events-inline-add{margin-left:50px;}.events-form-grid{grid-template-columns:1fr;}.events-field--wide{grid-column:auto;}.events-repeat-row,.events-repeat-row--project{grid-template-columns:1fr;}.events-repeat-remove{width:100%;height:39px;}.events-form-submit{align-items:stretch;flex-direction:column-reverse;}.events-form-submit .events-primary-btn,.events-form-submit .events-secondary-btn{width:100%;}.events-modal-overlay{padding:10px;}.events-modal{padding:20px 16px;border-radius:20px;}.events-modal__header{padding-right:30px;}.events-detail-grid{grid-template-columns:1fr;}.events-status-control{align-items:stretch;flex-direction:column;}.events-status-control select,.events-status-control button{width:100%;}.events-checkbox-grid{flex-direction:column;align-items:flex-start;}}
+
+
+/* Events component creation: edit users can continue only after an Admin authorization. */
+.events-modal--authorization{width:min(500px,100%);}
+.events-modal--authorization .events-modal__header{align-items:center;}
+.events-admin-authorization-icon{flex:0 0 auto;display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);color:#6d28d9;box-shadow:inset 0 0 0 1px rgba(109,40,217,.12);}
+.events-admin-authorization-icon svg{width:23px;height:23px;}
+.events-modal--authorization .events-field{margin-top:2px;}
+.events-modal--authorization .events-primary-btn{min-width:182px;}
+body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
+@media(max-width:760px){.events-modal--authorization .events-modal__header{align-items:flex-start;}.events-admin-authorization-icon{width:42px;height:42px;border-radius:13px;}.events-modal--authorization .events-primary-btn{width:100%;}}
