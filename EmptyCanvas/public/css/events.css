@@ -142,3 +142,49 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   .events-photo-upload__button{min-height:43px;}
   .events-photo-upload__preview{min-height:96px;height:96px;width:100%;}
 }
+
+
+/* Events module refinement: compact actions and reusable modern selectors. */
+.events-modern-select__menu--scroll{
+  max-height:260px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.events-modern-select__option small{
+  margin-left:4px;
+  color:inherit;
+  opacity:.68;
+  font:700 .75rem/1.35 inherit;
+}
+.events-repeat-row .events-modern-select{
+  z-index:30;
+}
+.events-repeat-row .events-modern-select__trigger{
+  min-height:42px;
+  padding:8px 10px;
+  border-radius:10px;
+  font-size:.85rem;
+}
+.events-repeat-row .events-modern-select__menu{
+  z-index:100;
+}
+.events-location-link{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:12px;
+  padding:9px 12px;
+  border:1px solid rgba(109,40,217,.16);
+  border-radius:11px;
+  background:#faf5ff;
+  color:#5b21b6;
+  text-decoration:none;
+  font-size:.82rem;
+  font-weight:900;
+}
+.events-location-link:hover{background:#f3e8ff;}
+.events-location-link svg{width:16px;height:16px;}
+.events-components-page .events-panel__header>div:only-child{min-width:0;}
+@media(max-width:760px){
+  .events-modern-select__menu--scroll{max-height:210px;}
+}
