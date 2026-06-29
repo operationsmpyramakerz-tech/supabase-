@@ -9504,6 +9504,7 @@ function _backupCatalog() {
     { key: 'events', pageName: 'Events', tableName: _sbEventsTable(), moduleName: 'Events', icon: 'calendar', description: 'Event execution requests, project requirements, marketing materials, and venue details.' },
     { key: 'event-components', pageName: 'Event Components', tableName: _sbEventComponentsTable(), moduleName: 'Events', icon: 'box', description: 'Independent catalog of event projects, marketing materials, venue equipment, and other event components.' },
     { key: 'event-types', pageName: 'Event Types', tableName: _sbEventTypesTable(), moduleName: 'Events', icon: 'tag', description: 'Reusable custom event types created from the Events request form.' },
+    { key: 'event-component-categories', pageName: 'Event Component Categories', tableName: _sbEventComponentCategoriesTable(), moduleName: 'Events', icon: 'layers', description: 'Reusable custom categories created from the Event Components form.' },
     { key: 'event-governorate-transport-rates', pageName: 'Governorate Transport Rates', tableName: _sbEventsGovernorateRatesTable(), moduleName: 'Events', icon: 'map-pin', description: 'Approximate round-trip transport cost settings for every governorate or area used in event estimates.', sensitive: true },
     { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
@@ -25584,6 +25585,10 @@ function _sbEventTypesTable() {
   return String(process.env.SUPABASE_EVENT_TYPES_TABLE || 'event_type_catalog').trim() || 'event_type_catalog';
 }
 
+function _sbEventComponentCategoriesTable() {
+  return String(process.env.SUPABASE_EVENT_COMPONENT_CATEGORIES_TABLE || 'event_component_category_catalog').trim() || 'event_component_category_catalog';
+}
+
 function _sbEventsGovernorateRatesTable() {
   return String(process.env.SUPABASE_EVENTS_GOVERNORATE_RATES_TABLE || 'event_governorate_transport_rates').trim() || 'event_governorate_transport_rates';
 }
@@ -25648,7 +25653,12 @@ const EVENTS_STANDARD_TYPE_OPTIONS = Object.freeze([
 ]);
 const EVENTS_TYPES = new Set([...EVENTS_STANDARD_TYPE_OPTIONS.map((item) => item.code), 'other']);
 const EVENTS_STATUSES = new Set(['submitted', 'under_review', 'approved', 'in_progress', 'completed', 'cancelled']);
-const EVENT_COMPONENT_CATEGORIES = new Set(['project', 'marketing_material', 'venue_equipment', 'other']);
+const EVENTS_STANDARD_COMPONENT_CATEGORY_OPTIONS = Object.freeze([
+  { code: 'project', label: 'Project Resource', isCustom: false },
+  { code: 'marketing_material', label: 'Marketing Material', isCustom: false },
+  { code: 'venue_equipment', label: 'Venue Equipment', isCustom: false },
+]);
+const EVENT_COMPONENT_CATEGORIES = new Set([...EVENTS_STANDARD_COMPONENT_CATEGORY_OPTIONS.map((item) => item.code), 'other']);
 const EVENT_COMPONENT_OWNERSHIP_TYPES = new Set(['company_owned', 'external_rental']);
 
 function _eventsTypeCode(value) {
@@ -25668,7 +25678,8 @@ function _eventsNormalizeStatus(value) {
 
 function _eventsNormalizeComponentCategory(value) {
   const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return EVENT_COMPONENT_CATEGORIES.has(raw) ? raw : 'other';
+  if (EVENT_COMPONENT_CATEGORIES.has(raw)) return raw;
+  return /^custom_[a-z0-9_]{1,64}$/.test(raw) ? raw : 'other';
 }
 
 
@@ -26007,6 +26018,95 @@ async function _eventsResolveRequestType(body = {}) {
   return { code: matched.code, label: matched.label };
 }
 
+
+function _eventsSerializeComponentCategory(row = {}) {
+  const code = _eventsNormalizeComponentCategory(row?.code);
+  const label = _eventsText(row?.label, 80);
+  return {
+    code: /^custom_/.test(code) ? code : '',
+    label,
+    isCustom: true,
+    isActive: row?.is_active !== false,
+    createdAt: row?.created_at || null,
+  };
+}
+
+function _eventsComponentCategoryLabelKey(value) {
+  return _eventsText(value, 80).toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function _eventsCustomComponentCategoryCode(label, usedCodes = new Set()) {
+  const baseSlug = _eventsTypeCode(label).replace(/^custom_/, '') || 'component_category';
+  const base = `custom_${baseSlug.slice(0, 52)}`;
+  let code = base;
+  let index = 2;
+  while (usedCodes.has(code)) {
+    code = `${base.slice(0, Math.max(1, 66 - String(index).length))}_${index}`;
+    index += 1;
+  }
+  return code;
+}
+
+async function _eventsListComponentCategoryOptions() {
+  const rows = await supabaseDb.selectAll(_sbEventComponentCategoriesTable(), { limit: 1000, order: 'label.asc' });
+  const standard = EVENTS_STANDARD_COMPONENT_CATEGORY_OPTIONS.map((item) => ({ ...item }));
+  const seenCodes = new Set(standard.map((item) => item.code));
+  const custom = (Array.isArray(rows) ? rows : [])
+    .map(_eventsSerializeComponentCategory)
+    .filter((item) => item.code && item.label && item.isActive !== false && !seenCodes.has(item.code));
+  return [...standard, ...custom];
+}
+
+async function _eventsCreateComponentCategoryOption(label) {
+  const cleanLabel = _eventsText(label, 80);
+  if (!cleanLabel) {
+    const error = new Error('Component category name is required.');
+    error.status = 400;
+    throw error;
+  }
+
+  const existing = await _eventsListComponentCategoryOptions();
+  const key = _eventsComponentCategoryLabelKey(cleanLabel);
+  const same = existing.find((item) => _eventsComponentCategoryLabelKey(item.label) === key);
+  if (same) return same;
+
+  const usedCodes = new Set(existing.map((item) => item.code).filter(Boolean));
+  const code = _eventsCustomComponentCategoryCode(cleanLabel, usedCodes);
+  const inserted = await supabaseDb.insert(_sbEventComponentCategoriesTable(), {
+    code,
+    label: cleanLabel,
+    is_active: true,
+  });
+  const saved = _eventsSerializeComponentCategory(inserted || {});
+  if (!saved.code || !saved.label) {
+    const error = new Error('Component category could not be saved.');
+    error.status = 500;
+    throw error;
+  }
+  return saved;
+}
+
+async function _eventsResolveComponentCategory(body = {}) {
+  const requested = _eventsNormalizeComponentCategory(body?.category || body?.componentCategory || body?.component_category);
+  if (EVENT_COMPONENT_CATEGORIES.has(requested)) {
+    const customLabel = _eventsText(body?.categoryCustom || body?.componentCategoryCustom || body?.component_category_custom, 80);
+    if (requested === 'other' && customLabel) {
+      const custom = await _eventsCreateComponentCategoryOption(customLabel);
+      return { code: custom.code, label: custom.label };
+    }
+    return { code: requested, label: null };
+  }
+
+  const options = await _eventsListComponentCategoryOptions();
+  const matched = options.find((item) => item.code === requested && item.isCustom);
+  if (!matched) {
+    const error = new Error('The selected component category is not available. Please select an existing category or add a new one under Other.');
+    error.status = 400;
+    throw error;
+  }
+  return { code: matched.code, label: matched.label };
+}
+
 function _eventsPhotoFileName(value = '') {
   const raw = String(value || 'component-photo').trim() || 'component-photo';
   const name = raw.replace(/[^a-z0-9._-]/gi, '_').replace(/^_+|_+$/g, '') || 'component-photo';
@@ -26240,10 +26340,37 @@ function _eventsModuleMissingError(error) {
   if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
     return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
   }
-  return /event_components|event_type_catalog|event_governorate_transport_rates|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
-    ? 'Events tables are not installed. Run the latest Events governorate transport rates SQL migration in Supabase first.'
+  return /event_components|event_type_catalog|event_component_category_catalog|event_governorate_transport_rates|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
+    ? 'Events tables are not installed. Run the latest Events component categories SQL migration in Supabase first.'
     : raw || 'Events request failed.';
 }
+
+app.get('/api/events/component-categories', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const categories = await _eventsListComponentCategoryOptions();
+    return res.json({ ok: true, categories });
+  } catch (error) {
+    console.error('GET /api/events/component-categories error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/component-categories', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
+    const canCreate = _hasPageAdminAccess(req, 'Events') || _hasEventsComponentCreateAccess(req) || _hasEventsComponentEditAccess(req, componentId);
+    if (!canCreate) return res.status(403).json({ ok: false, error: 'Admin authorization is required to add a component category.' });
+    const category = await _eventsCreateComponentCategoryOption(req.body?.label || req.body?.name);
+    const categories = await _eventsListComponentCategoryOptions();
+    return res.status(201).json({ ok: true, category, categories });
+  } catch (error) {
+    console.error('POST /api/events/component-categories error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
 
 app.get('/api/events/components', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -26304,9 +26431,10 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
     if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
       return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
     }
+    const category = await _eventsResolveComponentCategory(req.body || {});
     const inserted = await supabaseDb.insert(_sbEventComponentsTable(), {
       name,
-      category: _eventsNormalizeComponentCategory(req.body?.category),
+      category: category.code,
       description: _eventsLongText(req.body?.description, 2000) || null,
       default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
       ownership_type: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type),
@@ -26339,9 +26467,10 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), asyn
     if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
       return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
     }
+    const category = await _eventsResolveComponentCategory(req.body || {});
     const updated = await supabaseDb.updateById(_sbEventComponentsTable(), id, {
       name,
-      category: _eventsNormalizeComponentCategory(req.body?.category),
+      category: category.code,
       description: _eventsLongText(req.body?.description, 2000) || null,
       default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
       ownership_type: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type),
