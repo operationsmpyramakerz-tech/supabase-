@@ -528,3 +528,20 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   .events-field__edit span{display:none;}
   .events-field__edit{width:32px;padding:0;}
 }
+
+
+/* Events workspace cleanup: category tabs and component status filter. */
+.events-components-workspace{margin-top:0;}
+.events-components-workspace__header{align-items:center;}
+.events-components-workspace__controls{justify-content:flex-end;}
+.events-components-workspace__controls .events-primary-btn{min-height:44px;white-space:nowrap;}
+.events-component-filters-toolbar{margin-top:0;margin-bottom:18px;}
+.events-component-status-filter .orders-type-filter__panel{top:calc(100% + 12px);right:0;left:auto;z-index:9999;width:min(365px,calc(100vw - 34px));}
+.events-requests-page .events-request-workspace{margin-top:0;}
+@media(max-width:760px){
+  .events-components-workspace__header{align-items:stretch;flex-direction:column;}
+  .events-components-workspace__controls{width:100%;justify-content:stretch;}
+  .events-components-workspace__controls .events-search{width:100%;}
+  .events-components-workspace__controls .events-primary-btn{flex:0 0 auto;min-height:44px;padding:0 13px;}
+  .events-components-workspace__controls .events-primary-btn span{font-size:.78rem;}
+}
