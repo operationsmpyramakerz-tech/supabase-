@@ -25732,10 +25732,7 @@ function _eventsSerializeRequest(row = {}) {
     venueName: _eventsText(row?.venue_name, 240),
     venueType: _eventsText(row?.venue_type, 120),
     governorate: _eventsText(row?.governorate, 120),
-    city: _eventsText(row?.city, 120),
-    district: _eventsText(row?.district, 120),
-    address: _eventsLongText(row?.address, 1000),
-    locationUrl: _eventsText(row?.location_url, 1000),
+    locationUrl: _eventsHttpUrl(row?.location_url, 1000),
     venueSetupTime: row?.venue_setup_time || null,
     requiresPower: _eventsBoolean(row?.requires_power),
     requiresInternet: _eventsBoolean(row?.requires_internet),
@@ -25764,6 +25761,13 @@ function _eventsRequestWriteRow(body = {}, req) {
     throw error;
   }
 
+  const locationUrl = _eventsHttpUrl(body?.locationUrl || body?.location_url, 1000);
+  if (!locationUrl) {
+    const error = new Error('Google Maps / Location URL is required and must start with http:// or https://.');
+    error.status = 400;
+    throw error;
+  }
+
   const requesterName = _eventsText(
     req?.session?.accountCache?.name || req?.session?.username || body?.requesterName,
     160,
@@ -25788,10 +25792,7 @@ function _eventsRequestWriteRow(body = {}, req) {
     venue_name: _eventsText(body?.venueName || body?.venue_name, 240) || null,
     venue_type: _eventsText(body?.venueType || body?.venue_type, 120) || null,
     governorate: _eventsText(body?.governorate, 120) || null,
-    city: _eventsText(body?.city, 120) || null,
-    district: _eventsText(body?.district, 120) || null,
-    address: _eventsLongText(body?.address, 1000) || null,
-    location_url: _eventsText(body?.locationUrl || body?.location_url, 1000) || null,
+    location_url: locationUrl,
     venue_setup_time: _eventsText(body?.venueSetupTime || body?.venue_setup_time, 80) || null,
     requires_power: _eventsBoolean(body?.requiresPower || body?.requires_power),
     requires_internet: _eventsBoolean(body?.requiresInternet || body?.requires_internet),
@@ -25802,9 +25803,10 @@ function _eventsRequestWriteRow(body = {}, req) {
   };
 }
 
-// An Events Admin can create immediately. Other users with Edit access may create one
-// component only after a successful shared Admin-password authorization.
+// Events Admins can manage catalog records directly. Users with Edit access may
+// create one component or edit one selected component after shared Admin-password authorization.
 const EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS = 5 * 60 * 1000;
+const EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS = 5 * 60 * 1000;
 
 function _hasEventsComponentCreateAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
@@ -25812,9 +25814,24 @@ function _hasEventsComponentCreateAccess(req) {
   return Number.isFinite(until) && until > Date.now();
 }
 
+function _hasEventsComponentEditAccess(req, componentId) {
+  if (_hasPageAdminAccess(req, 'Events')) return true;
+  const expectedId = _eventsUuid(componentId);
+  const grantedId = _eventsUuid(req?.session?.eventsComponentEditAdminUnlockComponentId);
+  const until = Number(req?.session?.eventsComponentEditAdminUnlockUntil || 0);
+  return !!expectedId && expectedId === grantedId && Number.isFinite(until) && until > Date.now();
+}
+
 async function _clearEventsComponentCreateUnlock(req) {
   if (!req?.session) return;
   delete req.session.eventsComponentCreateAdminUnlockUntil;
+  try { await _saveSessionNow(req); } catch {}
+}
+
+async function _clearEventsComponentEditUnlock(req) {
+  if (!req?.session) return;
+  delete req.session.eventsComponentEditAdminUnlockUntil;
+  delete req.session.eventsComponentEditAdminUnlockComponentId;
   try { await _saveSessionNow(req); } catch {}
 }
 
@@ -25847,12 +25864,22 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
   res.set('Cache-Control', 'no-store');
   try {
     const password = String(req.body?.password || req.body?.adminPassword || '').trim();
+    const intent = _eventsText(req.body?.intent, 20).toLowerCase() === 'edit' ? 'edit' : 'create';
+    const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
     const verified = await _verifyPageAdminPassword(req, password, 'Events');
     if (!verified) return res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
 
+    if (intent === 'edit') {
+      if (!componentId) return res.status(400).json({ ok: false, error: 'Select a valid event component to edit.' });
+      req.session.eventsComponentEditAdminUnlockUntil = Date.now() + EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS;
+      req.session.eventsComponentEditAdminUnlockComponentId = componentId;
+      await _saveSessionNow(req);
+      return res.json({ ok: true, intent, expiresInSeconds: Math.floor(EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS / 1000) });
+    }
+
     req.session.eventsComponentCreateAdminUnlockUntil = Date.now() + EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS;
     await _saveSessionNow(req);
-    return res.json({ ok: true, expiresInSeconds: Math.floor(EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS / 1000) });
+    return res.json({ ok: true, intent, expiresInSeconds: Math.floor(EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS / 1000) });
   } catch (error) {
     console.error('POST /api/events/admin/verify error:', error?.details || error);
     return res.status(500).json({ ok: false, error: 'Failed to verify Admin password.' });
@@ -25890,9 +25917,9 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
 app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to manage event components.' });
     const id = _eventsUuid(req.params?.id);
     if (!id) return res.status(400).json({ ok: false, error: 'Invalid component ID.' });
+    if (!_hasEventsComponentEditAccess(req, id)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to edit this event component.' });
     const name = _eventsText(req.body?.name, 180);
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
     const existing = await supabaseDb.selectById(_sbEventComponentsTable(), id);
@@ -25911,6 +25938,7 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), asyn
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
+    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsComponentEditUnlock(req);
     return res.json({ ok: true, component: _eventsSerializeComponent(updated || {}) });
   } catch (error) {
     console.error('PATCH /api/events/components/:id error:', error?.details || error);
