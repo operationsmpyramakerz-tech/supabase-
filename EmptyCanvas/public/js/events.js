@@ -109,7 +109,7 @@
     if (!Array.isArray(items) || !items.length) return `<p class="events-table-muted">${escapeHTML(empty)}</p>`;
     return `<ul class="events-detail-list">${items.map((item) => {
       const title = component ? item.name : item.title;
-      const line = component ? `${item.quantity || 0} ${item.unit || 'pcs'}` : `${item.quantity || 0} required`;
+      const line = component ? `${item.quantity || 0} required` : `${item.quantity || 0} required`;
       const notes = component ? item.notes : [item.description, item.notes].filter(Boolean).join(' · ');
       return `<li><strong>${escapeHTML(title || 'Untitled item')}</strong><small>${escapeHTML(line)}${notes ? ` · ${escapeHTML(notes)}` : ''}</small></li>`;
     }).join('')}</ul>`;

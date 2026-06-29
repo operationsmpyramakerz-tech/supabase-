@@ -52,7 +52,7 @@
     return Array.from(els.projects?.querySelectorAll('.events-repeat-row') || []).map((row) => ({ title: String($('[data-project-title]', row)?.value || '').trim(), quantity: Number($('[data-project-quantity]', row)?.value || 0), description: String($('[data-project-notes]', row)?.value || '').trim() })).filter((item) => item.title);
   }
   function collectComponents(root) {
-    return Array.from(root?.querySelectorAll('.events-repeat-row') || []).map((row) => { const id = String($('[data-component-select]', row)?.value || '').trim(); const component = state.components.find((item) => item.id === id); return { componentId: id, name: component?.name || '', quantity: Number($('[data-component-quantity]', row)?.value || 0), unit: component?.unit || 'pcs', notes: String($('[data-component-notes]', row)?.value || '').trim() }; }).filter((item) => item.componentId && item.name);
+    return Array.from(root?.querySelectorAll('.events-repeat-row') || []).map((row) => { const id = String($('[data-component-select]', row)?.value || '').trim(); const component = state.components.find((item) => item.id === id); return { componentId: id, name: component?.name || '', quantity: Number($('[data-component-quantity]', row)?.value || 0), notes: String($('[data-component-notes]', row)?.value || '').trim() }; }).filter((item) => item.componentId && item.name);
   }
   function readPayload() {
     const setupRaw = String(field('venueSetupTime')?.value || '').trim(); let setup = null; if (setupRaw) { const d = new Date(setupRaw); if (!Number.isNaN(d.getTime())) setup = d.toISOString(); }
