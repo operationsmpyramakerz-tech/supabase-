@@ -1,10 +1,11 @@
 (() => {
   'use strict';
   const $ = (selector, root = document) => root.querySelector(selector);
-  const state = { events: [], loading: false, query: '', status: 'all', activeEvent: null };
+  const state = { events: [], loading: false, query: '', status: 'all', typeFilter: 'all', activeEvent: null };
   const els = {
     cards: $('#eventsRequestCards'), total: $('#eventsTotalCount'), pending: $('#eventsPendingCount'), progress: $('#eventsProgressCount'),
     search: $('#eventsSearchInput'), tabs: Array.from(document.querySelectorAll('[data-event-status-tab]')), refresh: $('#eventsRefreshBtn'),
+    typeFilter: $('#eventsTypeFilter'), typeFilterBtn: $('#eventsTypeFilterBtn'), typeFilterPanel: $('#eventsTypeFilterPanel'), typeFilterDot: $('#eventsTypeFilterDot'),
     modal: $('#eventDetailsModal'), modalClose: $('#eventDetailsClose'), modalDone: $('#eventDetailsDone'),
     modalTitle: $('#eventDetailsTitle'), modalSub: $('#eventDetailsSubtitle'), modalStatus: $('#eventDetailsStatus'), modalContent: $('#eventDetailsContent'),
   };
@@ -21,9 +22,23 @@
   function typeLabel(event) { const custom = String(event?.eventTypeCustom || '').trim(); if (custom) return custom; const key = String(event?.eventType || 'other'); if (typeLabels[key]) return typeLabels[key]; return key.replace(/^custom_/, '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Other'; }
   function statusMarkup(status) { const safe = String(status || 'submitted').replace(/[^a-z_]/g, '') || 'submitted'; return `<span class="events-status events-status--${escapeHTML(safe)}">${escapeHTML(statusLabels[safe] || safe.replace(/_/g, ' '))}</span>`; }
   function safeUrl(value) { const raw = String(value || '').trim(); if (!raw) return ''; try { const url = new URL(raw, window.location.origin); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; } }
-  function filteredEvents() { const query = String(state.query || '').trim().toLowerCase(); const status = String(state.status || 'all'); return (state.events || []).filter((event) => { if (status !== 'all' && event.status !== status) return false; if (!query) return true; return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName].join(' ').toLowerCase().includes(query); }); }
+  function eventTypeKey(event) { const custom = String(event?.eventTypeCustom || '').trim(); if (custom) return `custom:${custom.toLocaleLowerCase()}`; const value = String(event?.eventType || 'other').trim().toLocaleLowerCase() || 'other'; return `built:${value}`; }
+  function eventTypeOption(event) { const raw = String(event?.eventType || 'other').trim().toLocaleLowerCase() || 'other'; return { key: eventTypeKey(event), label: typeLabel(event), icon: typeIcons[raw] || 'calendar' }; }
+  function getEventTypeFilterOptions() { const map = new Map(); (state.events || []).forEach((event) => { const option = eventTypeOption(event); const current = map.get(option.key) || { ...option, count: 0 }; current.count += 1; map.set(option.key, current); }); const items = Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })); return [{ key: 'all', label: 'All event types', icon: 'layers', count: (state.events || []).length }, ...items]; }
+  function filteredEvents() { const query = String(state.query || '').trim().toLowerCase(); const status = String(state.status || 'all'); const typeFilter = String(state.typeFilter || 'all'); return (state.events || []).filter((event) => { if (status !== 'all' && event.status !== status) return false; if (typeFilter !== 'all' && eventTypeKey(event) !== typeFilter) return false; if (!query) return true; return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName].join(' ').toLowerCase().includes(query); }); }
   function updateStats() { const list = state.events || []; if (els.total) els.total.textContent = String(list.length); if (els.pending) els.pending.textContent = String(list.filter((item) => ['submitted', 'under_review'].includes(item.status)).length); if (els.progress) els.progress.textContent = String(list.filter((item) => item.status === 'in_progress').length); }
   function renderTabs() { els.tabs.forEach((tab) => { const active = tab.dataset.eventStatusTab === state.status; tab.classList.toggle('is-active', active); tab.setAttribute('aria-selected', active ? 'true' : 'false'); }); }
+  function closeTypeFilter() { if (!els.typeFilterPanel) return; els.typeFilterPanel.hidden = true; els.typeFilter?.classList.remove('is-open'); els.typeFilterBtn?.setAttribute('aria-expanded', 'false'); }
+  function renderTypeFilter() {
+    if (!els.typeFilterPanel || !els.typeFilter) return;
+    const options = getEventTypeFilterOptions();
+    if (!options.some((option) => option.key === state.typeFilter)) state.typeFilter = 'all';
+    const isFiltered = state.typeFilter !== 'all';
+    els.typeFilter.classList.toggle('is-filtered', isFiltered);
+    if (els.typeFilterDot) els.typeFilterDot.hidden = !isFiltered;
+    els.typeFilterPanel.innerHTML = `<div class="orders-type-filter__panel-head"><div class="orders-type-filter__panel-title">Filter by event type</div><div class="orders-type-filter__panel-sub">${escapeHTML(`${options[0]?.count || 0} event${(options[0]?.count || 0) === 1 ? '' : 's'}`)}</div></div><div class="orders-type-filter__options">${options.map((option) => `<button type="button" class="orders-type-filter__option${option.key === state.typeFilter ? ' is-active' : ''}" role="menuitemradio" aria-checked="${option.key === state.typeFilter ? 'true' : 'false'}" data-event-type-filter="${escapeHTML(option.key)}"><span class="orders-type-filter__option-icon"><i data-feather="${escapeHTML(option.icon)}"></i></span><span class="orders-type-filter__option-body"><span class="orders-type-filter__option-title">${escapeHTML(option.label)}</span><span class="orders-type-filter__option-sub">${escapeHTML(`${option.count} event${option.count === 1 ? '' : 's'}`)}</span></span><span class="orders-type-filter__option-check"><i data-feather="check"></i></span></button>`).join('')}</div>`;
+    icons(els.typeFilterPanel);
+  }
   function cardMarkup(event) {
     const type = String(event?.eventType || 'other'); const icon = typeIcons[type] || 'calendar'; const className = type.replace(/[^a-z0-9_]/gi, '') || 'other';
     const location = [event?.venueName, event?.governorate].filter(Boolean).join(' · ') || 'Location to be confirmed';
@@ -42,7 +57,7 @@
     if (!list.length) { els.cards.innerHTML = '<div class="events-empty"><i data-feather="calendar"></i><span>No event requests match this view.</span></div>'; icons(els.cards); return; }
     els.cards.innerHTML = list.map(cardMarkup).join(''); icons(els.cards);
   }
-  async function loadEvents({ silent = false } = {}) { if (!silent) { state.loading = true; renderCards(); } try { const response = await fetch(`/api/events?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event requests.'); state.events = Array.isArray(data?.events) ? data.events : []; updateStats(); state.loading = false; renderTabs(); renderCards(); } catch (error) { state.loading = false; if (els.cards) els.cards.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event requests.')}</span></div>`; icons(els.cards); toast('error', 'Events', error?.message || 'Could not load event requests.'); } }
+  async function loadEvents({ silent = false } = {}) { if (!silent) { state.loading = true; renderCards(); } try { const response = await fetch(`/api/events?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event requests.'); state.events = Array.isArray(data?.events) ? data.events : []; updateStats(); state.loading = false; renderTabs(); renderTypeFilter(); renderCards(); } catch (error) { state.loading = false; if (els.cards) els.cards.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event requests.')}</span></div>`; icons(els.cards); toast('error', 'Events', error?.message || 'Could not load event requests.'); } }
   function detailItem(label, value) { return `<div class="events-detail-item"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value || '—')}</strong></div>`; }
   function detailList(items, { empty = 'No items were added.', component = false } = {}) { if (!Array.isArray(items) || !items.length) return `<p class="events-table-muted">${escapeHTML(empty)}</p>`; return `<ul class="events-detail-list">${items.map((item) => { const title = component ? item.name : item.title; const notes = component ? item.notes : [item.description, item.notes].filter(Boolean).join(' · '); return `<li><strong>${escapeHTML(title || 'Untitled item')}</strong><small>${escapeHTML(`${item.quantity || 0} required${notes ? ` · ${notes}` : ''}`)}</small></li>`; }).join('')}</ul>`; }
   function renderDetails(event) {
@@ -55,6 +70,30 @@
   async function openDetails(id) { const clean = String(id || '').trim(); if (!clean || !els.modal) return; els.modal.hidden = false; els.modal.setAttribute('aria-hidden', 'false'); if (els.modalContent) els.modalContent.innerHTML = '<div class="events-loading"><span></span> Loading request details...</div>'; try { const response = await fetch(`/api/events/${encodeURIComponent(clean)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event details.'); state.activeEvent = data.event; renderDetails(data.event); } catch (error) { if (els.modalContent) els.modalContent.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event details.')}</span></div>`; icons(els.modalContent); } }
   function closeDetails() { if (!els.modal) return; els.modal.hidden = true; els.modal.setAttribute('aria-hidden', 'true'); state.activeEvent = null; }
   async function updateStatus(id) { const select = $('#eventStatusEdit'); const status = select?.value; if (!id || !status) return; const save = $('#eventStatusSave'); if (save) { save.disabled = true; save.textContent = 'Updating...'; } try { const response = await fetch(`/api/events/${encodeURIComponent(id)}`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update event status.'); state.events = state.events.map((item) => item.id === id ? data.event : item); updateStats(); renderCards(); renderDetails(data.event); toast('success', 'Events', 'Event status updated.'); } catch (error) { toast('error', 'Events', error?.message || 'Could not update event status.'); if (save) { save.disabled = false; save.textContent = 'Update'; } } }
-  function bind() { els.search?.addEventListener('input', (event) => { state.query = event.target.value; renderCards(); }); els.tabs.forEach((tab) => tab.addEventListener('click', () => { state.status = tab.dataset.eventStatusTab || 'all'; renderTabs(); renderCards(); })); els.refresh?.addEventListener('click', () => loadEvents()); els.cards?.addEventListener('click', (event) => { const card = event.target.closest('[data-event-open]'); if (card) openDetails(card.dataset.eventOpen); }); els.cards?.addEventListener('keydown', (event) => { const card = event.target.closest('[data-event-open]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openDetails(card.dataset.eventOpen); } }); els.modalClose?.addEventListener('click', closeDetails); els.modalDone?.addEventListener('click', closeDetails); els.modal?.addEventListener('click', (event) => { if (event.target === els.modal) closeDetails(); }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && els.modal && !els.modal.hidden) closeDetails(); }); }
+  function bind() {
+    els.search?.addEventListener('input', (event) => { state.query = event.target.value; renderCards(); });
+    els.tabs.forEach((tab) => tab.addEventListener('click', () => { state.status = tab.dataset.eventStatusTab || 'all'; renderTabs(); renderCards(); }));
+    els.refresh?.addEventListener('click', () => loadEvents());
+    els.typeFilterBtn?.addEventListener('click', () => {
+      const shouldOpen = !!els.typeFilterPanel?.hidden;
+      if (shouldOpen) { renderTypeFilter(); if (els.typeFilterPanel) els.typeFilterPanel.hidden = false; els.typeFilter?.classList.add('is-open'); els.typeFilterBtn?.setAttribute('aria-expanded', 'true'); }
+      else closeTypeFilter();
+    });
+    els.typeFilterPanel?.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-event-type-filter]');
+      if (!option) return;
+      state.typeFilter = option.dataset.eventTypeFilter || 'all';
+      renderTypeFilter();
+      renderCards();
+      closeTypeFilter();
+    });
+    els.cards?.addEventListener('click', (event) => { const card = event.target.closest('[data-event-open]'); if (card) openDetails(card.dataset.eventOpen); });
+    els.cards?.addEventListener('keydown', (event) => { const card = event.target.closest('[data-event-open]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openDetails(card.dataset.eventOpen); } });
+    els.modalClose?.addEventListener('click', closeDetails);
+    els.modalDone?.addEventListener('click', closeDetails);
+    els.modal?.addEventListener('click', (event) => { if (event.target === els.modal) closeDetails(); });
+    document.addEventListener('click', (event) => { if (els.typeFilter && !els.typeFilter.contains(event.target)) closeTypeFilter(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { if (els.modal && !els.modal.hidden) closeDetails(); closeTypeFilter(); } });
+  }
   document.addEventListener('DOMContentLoaded', () => { bind(); icons(); loadEvents(); });
 })();
