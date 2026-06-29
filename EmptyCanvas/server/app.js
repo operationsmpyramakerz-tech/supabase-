@@ -25644,6 +25644,7 @@ const EVENTS_STANDARD_TYPE_OPTIONS = Object.freeze([
 const EVENTS_TYPES = new Set([...EVENTS_STANDARD_TYPE_OPTIONS.map((item) => item.code), 'other']);
 const EVENTS_STATUSES = new Set(['submitted', 'under_review', 'approved', 'in_progress', 'completed', 'cancelled']);
 const EVENT_COMPONENT_CATEGORIES = new Set(['project', 'marketing_material', 'venue_equipment', 'other']);
+const EVENT_COMPONENT_OWNERSHIP_TYPES = new Set(['company_owned', 'external_rental']);
 
 function _eventsTypeCode(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 72);
@@ -25665,6 +25666,26 @@ function _eventsNormalizeComponentCategory(value) {
   return EVENT_COMPONENT_CATEGORIES.has(raw) ? raw : 'other';
 }
 
+
+function _eventsNormalizeComponentOwnership(value) {
+  const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return EVENT_COMPONENT_OWNERSHIP_TYPES.has(raw) ? raw : 'company_owned';
+}
+
+function _eventsCost(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.round(Math.max(0, Math.min(100000000, parsed)) * 100) / 100;
+}
+
+function _eventsComponentUnitCost(ownershipType, operatingCost, rentalCost) {
+  const operating = _eventsCost(operatingCost, 0);
+  const rental = _eventsNormalizeComponentOwnership(ownershipType) === 'external_rental'
+    ? _eventsCost(rentalCost, 0)
+    : 0;
+  return Math.round((operating + rental) * 100) / 100;
+}
+
 function _eventsNormalizeProjects(value) {
   return _eventsArray(value)
     .slice(0, 50)
@@ -25680,13 +25701,59 @@ function _eventsNormalizeProjects(value) {
 function _eventsNormalizeComponentRows(value) {
   return _eventsArray(value)
     .slice(0, 100)
-    .map((row) => ({
-      componentId: _eventsUuid(row?.componentId || row?.component_id || row?.id) || null,
-      name: _eventsText(row?.name || row?.componentName || row?.component_name, 180),
-      quantity: _eventsNumber(row?.quantity, { min: 0, max: 100000, fallback: 1 }),
-      notes: _eventsLongText(row?.notes, 1000),
-    }))
+    .map((row) => {
+      const quantity = _eventsNumber(row?.quantity, { min: 0, max: 100000, fallback: 1 });
+      const ownershipType = _eventsNormalizeComponentOwnership(row?.ownershipType || row?.ownership_type);
+      const operatingCost = _eventsCost(row?.operatingCost ?? row?.operating_cost, 0);
+      const rentalCost = ownershipType === 'external_rental' ? _eventsCost(row?.rentalCost ?? row?.rental_cost, 0) : 0;
+      const unitCost = _eventsComponentUnitCost(ownershipType, operatingCost, rentalCost);
+      return {
+        componentId: _eventsUuid(row?.componentId || row?.component_id || row?.id) || null,
+        name: _eventsText(row?.name || row?.componentName || row?.component_name, 180),
+        quantity,
+        notes: _eventsLongText(row?.notes, 1000),
+        ownershipType,
+        operatingCost,
+        rentalCost,
+        unitCost,
+        totalCost: Math.round((unitCost * quantity) * 100) / 100,
+        linkUrl: _eventsHttpUrl(row?.linkUrl || row?.link_url, 1000),
+        photoUrl: _eventsHttpUrl(row?.photoUrl || row?.photo_url, 2000),
+      };
+    })
     .filter((row) => row.name);
+}
+
+async function _eventsResolveComponentRows(value) {
+  const submittedRows = _eventsNormalizeComponentRows(value);
+  if (!submittedRows.length) return [];
+  const catalogRows = await supabaseDb.selectAll(_sbEventComponentsTable(), { limit: 1000, order: 'name.asc' });
+  const catalog = new Map((Array.isArray(catalogRows) ? catalogRows : []).map((row) => {
+    const serialized = _eventsSerializeComponent(row);
+    return [serialized.id, serialized];
+  }));
+
+  return submittedRows.map((submitted) => {
+    const component = submitted.componentId ? catalog.get(submitted.componentId) : null;
+    if (!component) return submitted;
+    const ownershipType = _eventsNormalizeComponentOwnership(component.ownershipType);
+    const operatingCost = _eventsCost(component.operatingCost, 0);
+    const rentalCost = ownershipType === 'external_rental' ? _eventsCost(component.rentalCost, 0) : 0;
+    const unitCost = _eventsComponentUnitCost(ownershipType, operatingCost, rentalCost);
+    return {
+      componentId: component.id || submitted.componentId,
+      name: component.name || submitted.name,
+      quantity: submitted.quantity,
+      notes: submitted.notes,
+      ownershipType,
+      operatingCost,
+      rentalCost,
+      unitCost,
+      totalCost: Math.round((unitCost * submitted.quantity) * 100) / 100,
+      linkUrl: component.linkUrl || '',
+      photoUrl: component.photoUrl || '',
+    };
+  });
 }
 
 function _eventsHttpUrl(value, maxLength = 1000) {
@@ -25817,12 +25884,19 @@ async function _eventsComponentPhotoUrl(body = {}, { existingUrl = '' } = {}) {
 }
 
 function _eventsSerializeComponent(row = {}) {
+  const ownershipType = _eventsNormalizeComponentOwnership(row?.ownership_type || row?.ownershipType);
+  const operatingCost = _eventsCost(row?.operating_cost ?? row?.operatingCost, 0);
+  const rentalCost = ownershipType === 'external_rental' ? _eventsCost(row?.rental_cost ?? row?.rentalCost, 0) : 0;
   return {
     id: String(row?.id || ''),
     name: _eventsText(row?.name, 180),
     category: _eventsNormalizeComponentCategory(row?.category),
     description: _eventsLongText(row?.description, 2000),
     defaultQuantity: _eventsNumber(row?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
+    ownershipType,
+    operatingCost,
+    rentalCost,
+    unitCost: _eventsComponentUnitCost(ownershipType, operatingCost, rentalCost),
     photoUrl: _eventsHttpUrl(row?.photo_url || row?.photoUrl, 2000),
     linkUrl: _eventsHttpUrl(row?.link_url || row?.linkUrl, 1000),
     isActive: row?.is_active !== false,
@@ -25915,8 +25989,8 @@ async function _eventsRequestWriteRow(body = {}, req) {
     expected_attendees: _eventsNumber(body?.expectedAttendees || body?.expected_attendees, { min: 0, max: 1000000, fallback: 0, integer: true }),
     audience: _eventsLongText(body?.audience, 1000) || null,
     projects: _eventsNormalizeProjects(body?.projects),
-    marketing_materials: _eventsNormalizeComponentRows(body?.marketingMaterials || body?.marketing_materials),
-    venue_requirements: _eventsNormalizeComponentRows(body?.venueRequirements || body?.venue_requirements),
+    marketing_materials: await _eventsResolveComponentRows(body?.marketingMaterials || body?.marketing_materials),
+    venue_requirements: await _eventsResolveComponentRows(body?.venueRequirements || body?.venue_requirements),
     venue_name: _eventsText(body?.venueName || body?.venue_name, 240) || null,
     venue_type: _eventsText(body?.venueType || body?.venue_type, 120) || null,
     governorate: _eventsText(body?.governorate, 120) || null,
@@ -26030,6 +26104,9 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
       category: _eventsNormalizeComponentCategory(req.body?.category),
       description: _eventsLongText(req.body?.description, 2000) || null,
       default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
+      ownership_type: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type),
+      operating_cost: _eventsCost(req.body?.operatingCost ?? req.body?.operating_cost, 0),
+      rental_cost: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type) === 'external_rental' ? _eventsCost(req.body?.rentalCost ?? req.body?.rental_cost, 0) : 0,
       photo_url: photoUrl,
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
@@ -26062,6 +26139,9 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), asyn
       category: _eventsNormalizeComponentCategory(req.body?.category),
       description: _eventsLongText(req.body?.description, 2000) || null,
       default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
+      ownership_type: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type),
+      operating_cost: _eventsCost(req.body?.operatingCost ?? req.body?.operating_cost, 0),
+      rental_cost: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type) === 'external_rental' ? _eventsCost(req.body?.rentalCost ?? req.body?.rental_cost, 0) : 0,
       photo_url: photoUrl,
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
