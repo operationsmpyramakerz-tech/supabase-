@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-calendar-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-calendar-refine-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-calendar-page">
@@ -61,8 +61,8 @@
 
       <main class="events-shell events-calendar-shell">
         <nav class="events-subnav" aria-label="Events workspace">
-          <a class="events-subnav__link" href="/events"><i data-feather="calendar"></i><span>Event Requests</span></a>
           <a class="events-subnav__link is-active" href="/events/calendar"><i data-feather="calendar"></i><span>Calendar</span></a>
+          <a class="events-subnav__link" href="/events/requests"><i data-feather="clipboard"></i><span>Event Requests</span></a>
           <a class="events-subnav__link" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a>
         </nav>
 
@@ -71,11 +71,10 @@
             <div>
               <span class="events-eyebrow"><i data-feather="calendar"></i> Event schedule</span>
               <h2 id="eventsCalendarTitle">Calendar</h2>
-              <p>View submitted events by date and keep the upcoming execution plan visible.</p>
             </div>
             <div class="events-calendar-toolbar">
               <button class="events-secondary-btn events-calendar-today" id="eventsCalendarToday" type="button"><i data-feather="crosshair"></i><span>Today</span></button>
-              <a class="events-primary-btn" href="/events/new"><i data-feather="plus-circle"></i><span>Add New Event</span></a>
+              <button class="events-primary-btn" id="eventsCalendarAddNew" type="button"><i data-feather="plus-circle"></i><span>Add New Event</span></button>
             </div>
           </div>
 
@@ -92,14 +91,15 @@
             </section>
 
             <aside class="events-calendar-sidebar">
-              <section class="events-calendar-day-card" aria-labelledby="eventsCalendarSelectedTitle">
-                <div class="events-calendar-section-heading"><div><span class="events-calendar-section-label">Selected date</span><h3 id="eventsCalendarSelectedTitle">Events</h3></div><span class="events-calendar-count" id="eventsCalendarSelectedCount">0</span></div>
-                <div class="events-calendar-day-list" id="eventsCalendarDayList"><div class="events-loading"><span></span> Loading schedule...</div></div>
-              </section>
-
-              <section class="events-calendar-upcoming-card" aria-labelledby="eventsCalendarUpcomingTitle">
-                <div class="events-calendar-section-heading"><div><span class="events-calendar-section-label">Execution plan</span><h3 id="eventsCalendarUpcomingTitle">Upcoming Events</h3></div><a class="events-calendar-view-all" href="/events">View requests <i data-feather="arrow-up-right"></i></a></div>
-                <div class="events-calendar-upcoming-list" id="eventsCalendarUpcomingList"><div class="events-loading"><span></span> Loading events...</div></div>
+              <section class="events-calendar-events-card" aria-labelledby="eventsCalendarListTitle">
+                <div class="events-calendar-list-tabs" role="tablist" aria-label="Event schedule lists">
+                  <button class="events-calendar-list-tab is-active" id="eventsCalendarUpcomingTab" type="button" role="tab" aria-selected="true" aria-controls="eventsCalendarEventList" data-calendar-list-tab="upcoming"><i data-feather="clock"></i><span>Upcoming Events</span><b id="eventsCalendarUpcomingCount">0</b></button>
+                  <button class="events-calendar-list-tab" id="eventsCalendarPastTab" type="button" role="tab" aria-selected="false" aria-controls="eventsCalendarEventList" data-calendar-list-tab="past"><i data-feather="archive"></i><span>Past Events</span><b id="eventsCalendarPastCount">0</b></button>
+                </div>
+                <div class="events-calendar-events-card__body">
+                  <div class="events-calendar-section-heading"><div><span class="events-calendar-section-label" id="eventsCalendarListLabel">From selected date</span><h3 id="eventsCalendarListTitle">Upcoming Events</h3></div><span class="events-calendar-count" id="eventsCalendarListCount">0</span></div>
+                  <div class="events-calendar-upcoming-list" id="eventsCalendarEventList" role="tabpanel" aria-labelledby="eventsCalendarUpcomingTab"><div class="events-loading"><span></span> Loading events...</div></div>
+                </div>
               </section>
             </aside>
           </div>
@@ -113,11 +113,11 @@
       <button class="events-modal__close" id="eventCalendarDetailsClose" type="button" aria-label="Close event details">×</button>
       <div class="events-modal__header"><div><span class="events-eyebrow"><i data-feather="calendar"></i> Event schedule</span><h2 id="eventCalendarDetailsTitle">Event Details</h2><p id="eventCalendarDetailsSubtitle">Review the scheduled event.</p></div><div id="eventCalendarDetailsStatus"></div></div>
       <div class="events-calendar-detail-content" id="eventCalendarDetailsContent"></div>
-      <div class="events-modal__actions"><a class="events-secondary-btn" href="/events">Open requests</a><button class="events-primary-btn" id="eventCalendarDetailsDone" type="button">Close</button></div>
+      <div class="events-modal__actions"><a class="events-secondary-btn" href="/events/requests">Open requests</a><button class="events-primary-btn" id="eventCalendarDetailsDone" type="button">Close</button></div>
     </section>
   </div>
 
   <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-  <script src="/js/events-calendar.js?v=events-calendar-v1"></script>
+  <script src="/js/events-calendar.js?v=events-calendar-refine-v2"></script>
 </body>
 </html>
