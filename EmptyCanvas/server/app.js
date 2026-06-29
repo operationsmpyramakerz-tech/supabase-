@@ -9117,7 +9117,13 @@ app.get(
 );
 
 // Events module — independent requests and event-components catalog
+// Calendar is the Events landing view. The requests workspace remains available
+// at /events/requests so existing users can review all submitted requests.
 app.get("/events", requireAuth, requirePage("Events"), (req, res) => {
+  res.redirect("/events/calendar");
+});
+
+app.get("/events/requests", requireAuth, requirePage("Events"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events.html"));
 });
 
