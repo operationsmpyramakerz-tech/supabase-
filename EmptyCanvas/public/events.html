@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-module-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-module-refine-v3" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page">
@@ -65,11 +65,9 @@
           <a class="events-subnav__link" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a>
         </nav>
 
-        <section class="events-hero" aria-labelledby="eventsHeroTitle">
+        <section class="events-hero" aria-label="Events workspace">
           <div class="events-hero__content">
             <span class="events-eyebrow"><i data-feather="calendar"></i> Events workspace</span>
-            <h2 id="eventsHeroTitle">Turn every event lead into a complete execution request.</h2>
-            <p>Sales submits the full brief once. Operations receives projects, materials, venue needs, and exact location details in one structured request.</p>
             <div class="events-hero__actions">
               <a class="events-primary-btn" href="/events/new"><i data-feather="plus-circle"></i><span>Add New Event</span></a>
               <button class="events-secondary-btn" id="eventsRefreshBtn" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
@@ -84,7 +82,7 @@
 
         <section class="events-panel" aria-labelledby="eventsListTitle">
           <div class="events-panel__header">
-            <div><h3 id="eventsListTitle">Event Requests</h3><p>Open any request to review the submitted execution brief.</p></div>
+            <div><h3 id="eventsListTitle">Event Requests</h3></div>
             <div class="events-list-controls">
               <label class="events-search"><i data-feather="search"></i><input id="eventsSearchInput" type="search" placeholder="Search name, organization, reference..." autocomplete="off" /></label>
               <select id="eventsStatusFilter" aria-label="Filter by event status">
@@ -122,6 +120,6 @@
   </div>
 
   <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-  <script src="/js/events.js?v=events-module-v1"></script>
+  <script src="/js/events.js?v=events-module-refine-v3"></script>
 </body>
 </html>
