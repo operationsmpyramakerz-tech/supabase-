@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-request-cards-datetime-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-status-tabs-type-filter-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-requests-page">
@@ -69,6 +69,14 @@
               <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="completed"><span class="order-status-tab__icon"><i data-feather="check"></i></span><span class="order-status-tab__label">Completed</span></button>
               <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="cancelled"><span class="order-status-tab__icon"><i data-feather="x-circle"></i></span><span class="order-status-tab__label">Cancelled</span></button>
             </div></div>
+            <div class="orders-type-filter events-type-filter" id="eventsTypeFilter">
+              <button type="button" class="orders-type-filter__button" id="eventsTypeFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="eventsTypeFilterPanel" aria-label="Filter event requests by event type">
+                <span class="orders-type-filter__button-icon"><i data-feather="filter"></i></span>
+                <span class="orders-type-filter__button-label">Filter</span>
+                <span class="orders-type-filter__button-dot" id="eventsTypeFilterDot" hidden></span>
+              </button>
+              <div class="orders-type-filter__panel" id="eventsTypeFilterPanel" role="menu" aria-label="Filter event requests by event type" hidden></div>
+            </div>
           </div>
           <div class="events-request-cards" id="eventsRequestCards" aria-live="polite"><div class="events-loading"><span></span> Loading event requests...</div></div>
         </section>
@@ -86,6 +94,6 @@
   </div>
 
   <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-  <script src="/js/events.js?v=events-request-cards-datetime-v1"></script>
+  <script src="/js/events.js?v=events-status-tabs-type-filter-v1"></script>
 </body>
 </html>
