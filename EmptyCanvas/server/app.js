@@ -25652,10 +25652,48 @@ function _eventsNormalizeComponentRows(value) {
       componentId: _eventsUuid(row?.componentId || row?.component_id || row?.id) || null,
       name: _eventsText(row?.name || row?.componentName || row?.component_name, 180),
       quantity: _eventsNumber(row?.quantity, { min: 0, max: 100000, fallback: 1 }),
-      unit: _eventsText(row?.unit, 50) || 'pcs',
       notes: _eventsLongText(row?.notes, 1000),
     }))
     .filter((row) => row.name);
+}
+
+function _eventsHttpUrl(value, maxLength = 1000) {
+  const raw = _eventsText(value, maxLength);
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    return /^https?:$/i.test(url.protocol) ? url.href.slice(0, maxLength) : '';
+  } catch {
+    return '';
+  }
+}
+
+function _eventsPhotoFileName(value = '') {
+  const raw = String(value || 'component-photo').trim() || 'component-photo';
+  const name = raw.replace(/[^a-z0-9._-]/gi, '_').replace(/^_+|_+$/g, '') || 'component-photo';
+  return name.slice(0, 120);
+}
+
+async function _eventsComponentPhotoUrl(body = {}, { existingUrl = '' } = {}) {
+  if (_eventsBoolean(body?.removePhoto || body?.remove_photo)) return null;
+  const dataUrl = String(body?.photoDataUrl || body?.photo_data_url || '').trim();
+  if (!dataUrl) return _eventsHttpUrl(existingUrl, 2000) || null;
+
+  const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+  if (!/^image\/(png|jpeg|webp|gif)$/i.test(String(mime || ''))) {
+    const error = new Error('Component photo must be a PNG, JPG, WEBP, or GIF image.');
+    error.status = 400;
+    throw error;
+  }
+  if (buf.length > 8 * 1024 * 1024) {
+    const error = new Error('Component photo must be 8 MB or less.');
+    error.status = 413;
+    throw error;
+  }
+
+  const original = _eventsPhotoFileName(body?.photoFileName || body?.photo_file_name);
+  const objectPath = `events/components/${Date.now()}-${Math.random().toString(16).slice(2)}-${original}`;
+  return await uploadToBlobFromBase64(dataUrl, objectPath);
 }
 
 function _eventsSerializeComponent(row = {}) {
@@ -25665,7 +25703,8 @@ function _eventsSerializeComponent(row = {}) {
     category: _eventsNormalizeComponentCategory(row?.category),
     description: _eventsLongText(row?.description, 2000),
     defaultQuantity: _eventsNumber(row?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
-    unit: _eventsText(row?.unit, 50) || 'pcs',
+    photoUrl: _eventsHttpUrl(row?.photo_url || row?.photoUrl, 2000),
+    linkUrl: _eventsHttpUrl(row?.link_url || row?.linkUrl, 1000),
     isActive: row?.is_active !== false,
     createdAt: row?.created_at || null,
     updatedAt: row?.updated_at || null,
@@ -25781,6 +25820,9 @@ async function _clearEventsComponentCreateUnlock(req) {
 
 function _eventsModuleMissingError(error) {
   const raw = String(error?.message || '');
+  if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
+    return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
+  }
   return /event_components|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
     ? 'Events tables are not installed. Run events_module_migration.sql in Supabase first.'
     : raw || 'Events request failed.';
@@ -25823,12 +25865,18 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
     if (!_hasEventsComponentCreateAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to add an event component.' });
     const name = _eventsText(req.body?.name, 180);
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
+    const photoUrl = await _eventsComponentPhotoUrl(req.body || {});
+    const linkUrl = _eventsHttpUrl(req.body?.linkUrl || req.body?.link_url, 1000);
+    if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
+      return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
+    }
     const inserted = await supabaseDb.insert(_sbEventComponentsTable(), {
       name,
       category: _eventsNormalizeComponentCategory(req.body?.category),
       description: _eventsLongText(req.body?.description, 2000) || null,
       default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
-      unit: _eventsText(req.body?.unit, 50) || 'pcs',
+      photo_url: photoUrl,
+      link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
     if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsComponentCreateUnlock(req);
@@ -25847,12 +25895,20 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), asyn
     if (!id) return res.status(400).json({ ok: false, error: 'Invalid component ID.' });
     const name = _eventsText(req.body?.name, 180);
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
+    const existing = await supabaseDb.selectById(_sbEventComponentsTable(), id);
+    if (!existing) return res.status(404).json({ ok: false, error: 'Event component was not found.' });
+    const photoUrl = await _eventsComponentPhotoUrl(req.body || {}, { existingUrl: existing?.photo_url || existing?.photoUrl || '' });
+    const linkUrl = _eventsHttpUrl(req.body?.linkUrl || req.body?.link_url, 1000);
+    if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
+      return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
+    }
     const updated = await supabaseDb.updateById(_sbEventComponentsTable(), id, {
       name,
       category: _eventsNormalizeComponentCategory(req.body?.category),
       description: _eventsLongText(req.body?.description, 2000) || null,
       default_quantity: _eventsNumber(req.body?.defaultQuantity || req.body?.default_quantity, { min: 0, max: 100000, fallback: 1 }),
-      unit: _eventsText(req.body?.unit, 50) || 'pcs',
+      photo_url: photoUrl,
+      link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
     return res.json({ ok: true, component: _eventsSerializeComponent(updated || {}) });
