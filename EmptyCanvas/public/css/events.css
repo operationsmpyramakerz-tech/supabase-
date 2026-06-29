@@ -545,3 +545,37 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   .events-components-workspace__controls .events-primary-btn{flex:0 0 auto;min-height:44px;padding:0 13px;}
   .events-components-workspace__controls .events-primary-btn span{font-size:.78rem;}
 }
+
+
+/* Event Components: ensure status filter stays above catalog cards and active category labels never truncate. */
+.events-component-filters-toolbar{
+  position:relative;
+  z-index:120;
+  overflow:visible;
+}
+.events-components-workspace{overflow:visible;}
+.events-component-filters-toolbar .events-component-status-filter{position:relative;z-index:130;}
+.events-component-filters-toolbar .events-component-status-filter.is-open{z-index:1500;}
+.events-component-filters-toolbar .events-component-status-filter .orders-type-filter__panel{z-index:1600;}
+.events-component-cards{position:relative;z-index:1;}
+.events-component-filters-toolbar .events-order-status-tab.is-active{
+  flex:0 0 max-content!important;
+  width:max-content!important;
+  min-width:max-content!important;
+  max-width:none!important;
+}
+.events-component-filters-toolbar .events-order-status-tab.is-active .order-status-tab__label{
+  display:block!important;
+  width:max-content!important;
+  max-width:none!important;
+  min-width:max-content!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  white-space:nowrap!important;
+}
+.events-modern-select--component-category .events-modern-select__menu{overflow:visible;}
+.events-modern-select--component-category .events-modern-select__custom{margin-top:7px;}
+@media(max-width:760px){
+  .events-component-filters-toolbar .events-order-status-tab.is-active{padding-left:14px!important;padding-right:14px!important;}
+  .events-component-filters-toolbar .events-order-status-tab.is-active .order-status-tab__label{font-size:.76rem!important;}
+}
