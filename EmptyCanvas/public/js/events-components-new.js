@@ -73,6 +73,13 @@
   }
   function isOtherCategory(value) { return value === 'other'; }
 
+  function toggleOtherCategoryEditor(root, visible) {
+    const editor = $('[data-component-category-custom-editor]', root);
+    if (!editor) return;
+    editor.hidden = !visible;
+    if (visible) window.setTimeout(() => $('[data-component-category-custom-input]', editor)?.focus(), 0);
+  }
+
   function setSaving(value) {
     state.saving = !!value;
     if (!els.submit) return;
@@ -88,6 +95,7 @@
       const menu = $('.events-modern-select__menu', root);
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
       if (menu) menu.hidden = true;
+      toggleOtherCategoryEditor(root, false);
     });
   }
   function syncOwnershipFields() {
@@ -119,6 +127,7 @@
       item.classList.toggle('is-selected', selected);
       item.setAttribute('aria-selected', selected ? 'true' : 'false');
     });
+    if (input.id === 'eventComponentCategory') toggleOtherCategoryEditor(root, input.value === 'other');
     if (input.id === 'eventComponentOwnership') syncOwnershipFields();
   }
   function renderCategoryOptions({ preserveValue = true } = {}) {

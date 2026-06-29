@@ -230,6 +230,7 @@
       const menu = $('.events-modern-select__menu', root);
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
       if (menu) menu.hidden = true;
+      toggleOtherCategoryEditor(root, false);
     });
   }
   function syncOwnershipFields() {
@@ -245,6 +246,12 @@
     const root = input?.closest('[data-events-modern-select]');
     return root ? Array.from(root.querySelectorAll('[data-events-select-option]')).find((item) => item.dataset.value === value) : null;
   }
+  function toggleOtherCategoryEditor(root, visible) {
+    const editor = $('[data-component-category-custom-editor]', root);
+    if (!editor) return;
+    editor.hidden = !visible;
+    if (visible) window.setTimeout(() => $('[data-component-category-custom-input]', editor)?.focus(), 0);
+  }
   function setModernSelectValue(input, value) {
     if (!input) return;
     const root = input.closest('[data-events-modern-select]');
@@ -259,6 +266,7 @@
       item.classList.toggle('is-selected', selected);
       item.setAttribute('aria-selected', selected ? 'true' : 'false');
     });
+    if (input.id === 'eventComponentCategory') toggleOtherCategoryEditor(root, input.value === 'other');
     if (input.id === 'eventComponentOwnership') syncOwnershipFields();
   }
   function renderCategoryOptions({ preserveValue = true } = {}) {
