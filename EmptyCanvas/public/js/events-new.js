@@ -17,11 +17,8 @@
     scheduledEventsLoaded: false,
     lastConflictSignature: '',
     submitting: false,
-    transportSettings: { hubLocationUrl: '', transportCostPerKm: 0 },
-    transportQuote: null,
-    transportRequestId: 0,
-    transportDebounce: null,
-    transportSettingsAuthorized: false,
+    governorateRates: [],
+    governorateRatesAuthorized: false,
   };
 
   const els = {
@@ -38,31 +35,27 @@
     eventTypeMenu: $('#eventTypeMenu'),
     locationUrl: $('#locationUrl'),
     locationValidation: $('#locationUrlValidation'),
-    hubLocationDisplay: $('#hubLocationDisplay'),
-    transportCostDisplay: $('#transportCostPerKmDisplay'),
-    transportNotice: $('#transportSettingsNotice'),
-    transportDistance: $('#transportDistancePreview'),
-    editHub: $('#editHubLocationBtn'),
-    editRate: $('#editTransportRateBtn'),
+    governorateRatesMenu: $('#governorateRatesMenu'),
+    editGovernorateRates: $('#editGovernorateRatesBtn'),
     workingTotal: $('#workingCostTotal'),
     transportTotal: $('#transportCostTotal'),
     total: $('#eventTotalCost'),
     transportSummaryNote: $('#transportCostSummaryNote'),
-    settingsModal: $('#eventTransportSettingsModal'),
-    settingsForm: $('#eventTransportSettingsForm'),
-    settingsClose: $('#eventTransportSettingsClose'),
-    settingsCancel: $('#eventTransportSettingsCancel'),
-    settingsSave: $('#eventTransportSettingsSave'),
-    settingsError: $('#eventTransportSettingsError'),
-    settingsHubInput: $('#eventHubLocationInput'),
-    settingsRateInput: $('#eventTransportCostInput'),
-    adminModal: $('#eventTransportAdminModal'),
-    adminForm: $('#eventTransportAdminForm'),
-    adminClose: $('#eventTransportAdminClose'),
-    adminCancel: $('#eventTransportAdminCancel'),
-    adminConfirm: $('#eventTransportAdminConfirm'),
-    adminPassword: $('#eventTransportAdminPassword'),
-    adminError: $('#eventTransportAdminError'),
+    ratesModal: $('#eventGovernorateRatesModal'),
+    ratesForm: $('#eventGovernorateRatesForm'),
+    ratesClose: $('#eventGovernorateRatesClose'),
+    ratesCancel: $('#eventGovernorateRatesCancel'),
+    ratesSave: $('#eventGovernorateRatesSave'),
+    ratesError: $('#eventGovernorateRatesError'),
+    ratesList: $('#governorateRatesList'),
+    addRate: $('#addGovernorateRateBtn'),
+    adminModal: $('#eventGovernorateRatesAdminModal'),
+    adminForm: $('#eventGovernorateRatesAdminForm'),
+    adminClose: $('#eventGovernorateRatesAdminClose'),
+    adminCancel: $('#eventGovernorateRatesAdminCancel'),
+    adminConfirm: $('#eventGovernorateRatesAdminConfirm'),
+    adminPassword: $('#eventGovernorateRatesAdminPassword'),
+    adminError: $('#eventGovernorateRatesAdminError'),
   };
   const field = (id) => $(`#${id}`);
 
@@ -495,141 +488,90 @@
     els.locationValidation.textContent = message || '';
   }
 
-  function displayTransportSettings() {
-    const settings = state.transportSettings || {};
-    const configured = !!settings.hubLocationUrl;
-    if (els.hubLocationDisplay) els.hubLocationDisplay.value = configured ? settings.hubLocationUrl : 'Not configured';
-    if (els.transportCostDisplay) els.transportCostDisplay.value = configured ? `${money(settings.transportCostPerKm)} / km` : 'Not configured';
-    if (els.transportNotice) els.transportNotice.textContent = configured
-      ? 'Saved settings are used for this event cost calculation.'
-      : 'Hub Location and the transport rate must be configured by an Events Admin.';
-    syncTransportEditButtons();
+  function normaliseGovernorateName(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
   }
 
-  function setTransportPreview({ status = 'idle', title = '', detail = '' } = {}) {
-    if (!els.transportDistance) return;
-    els.transportDistance.classList.toggle('is-loading', status === 'loading');
-    els.transportDistance.classList.toggle('is-error', status === 'error');
-    els.transportDistance.innerHTML = `<span>Route distance</span><strong>${escapeHTML(title || 'Waiting for Google Maps link')}</strong><small>${escapeHTML(detail || 'Transport cost will be calculated automatically.')}</small>`;
+  function selectedGovernorateRate() {
+    const selected = String(field('governorate')?.value || '').trim();
+    if (!selected) return null;
+    const key = normaliseGovernorateName(selected);
+    return state.governorateRates.find((rate) => rate.isActive !== false && normaliseGovernorateName(rate.areaName) === key) || null;
   }
 
-  function syncTransportEditButtons() {
-    const disabled = isViewOnly();
-    [els.editHub, els.editRate].forEach((button) => {
-      if (!button) return;
-      button.hidden = disabled;
-      button.disabled = disabled;
-    });
+  function governorateTransportCost() {
+    const rate = selectedGovernorateRate();
+    return rate ? nonNegative(rate.transportCost) * 2 : 0;
   }
 
-  async function loadTransportSettings() {
-    try {
-      const response = await fetch(`/api/events/transport-settings?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not load transport settings.');
-      state.transportSettings = data?.settings || { hubLocationUrl: '', transportCostPerKm: 0 };
-      displayTransportSettings();
-      if (els.locationUrl?.value) scheduleTransportCalculation();
-    } catch (error) {
-      state.transportSettings = { hubLocationUrl: '', transportCostPerKm: 0 };
-      displayTransportSettings();
-      setTransportPreview({ status: 'error', title: 'Transport settings unavailable', detail: error?.message || 'Could not load transport settings.' });
-    }
-  }
-
-  async function calculateTransport({ force = false, notify = false } = {}) {
-    const url = String(els.locationUrl?.value || '').trim();
-    state.transportQuote = null;
-    if (!url) {
-      setLocationValidation('');
-      setTransportPreview({ title: 'Waiting for Google Maps link', detail: 'Transport cost will be calculated automatically.' });
-      renderCostSummary();
-      return null;
-    }
-    if (!isGoogleMapsUrl(url)) {
-      const message = 'Paste a Google Maps link. Example: https://www.google.com/maps/... or https://maps.app.goo.gl/...';
-      setLocationValidation(message);
-      setTransportPreview({ status: 'error', title: 'Google Maps link required', detail: message });
-      renderCostSummary();
-      if (notify) toast('info', 'Google Maps link required', message);
-      throw new Error(message);
-    }
-    setLocationValidation('');
-    if (!state.transportSettings?.hubLocationUrl) {
-      const message = 'Hub Location is not configured. Ask an Events Admin to set the company hub location and transport rate.';
-      setTransportPreview({ status: 'error', title: 'Hub Location not configured', detail: message });
-      renderCostSummary();
-      throw new Error(message);
-    }
-    const requestId = ++state.transportRequestId;
-    setTransportPreview({ status: 'loading', title: 'Calculating driving distance…', detail: 'Checking the route from the Hub Location.' });
-    try {
-      const response = await fetch('/api/events/transport/estimate', {
-        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locationUrl: url }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not calculate transport cost.');
-      if (requestId !== state.transportRequestId && !force) return null;
-      state.transportQuote = data.quote || null;
-      const quote = state.transportQuote;
-      setTransportPreview({
-        title: `${Number(quote?.distanceKm || 0).toLocaleString('en-EG', { maximumFractionDigits: 2 })} km`,
-        detail: `${money(quote?.transportCost || 0)} at ${money(quote?.transportCostPerKm || 0)} / km`,
-      });
-      renderCostSummary();
-      return quote;
-    } catch (error) {
-      if (requestId !== state.transportRequestId && !force) return null;
-      state.transportQuote = null;
-      setTransportPreview({ status: 'error', title: 'Transport cost unavailable', detail: error?.message || 'Could not calculate transport cost.' });
-      renderCostSummary();
-      throw error;
-    }
-  }
-
-  function scheduleTransportCalculation() {
-    window.clearTimeout(state.transportDebounce);
-    state.transportDebounce = window.setTimeout(() => {
-      calculateTransport().catch(() => undefined);
-    }, 500);
-  }
-
-  function calculateWorkingCost() {
-    const projectCost = Array.from(els.projects?.querySelectorAll('.events-repeat-row') || [])
-      .reduce((sum, row) => sum + nonNegative($('[data-project-working-cost]', row)?.value), 0);
-    const componentCost = [els.marketing, els.venueReqs].reduce((sum, root) => sum + Array.from(root?.querySelectorAll('.events-repeat-row') || [])
-      .reduce((inner, row) => {
-        const component = state.components.find((item) => item.id === String($('[data-component-select]', row)?.value || '').trim());
-        return inner + componentCostSummary(component, $('[data-component-quantity]', row)?.value).total;
-      }, 0), 0);
-    return projectCost + componentCost;
-  }
-
-  function renderCostSummary() {
-    const working = calculateWorkingCost();
-    const transport = nonNegative(state.transportQuote?.transportCost);
-    if (els.workingTotal) els.workingTotal.textContent = money(working);
-    if (els.transportTotal) els.transportTotal.textContent = money(transport);
-    if (els.total) els.total.textContent = money(working + transport);
-    if (els.transportSummaryNote) {
-      els.transportSummaryNote.textContent = state.transportQuote
-        ? `${Number(state.transportQuote.distanceKm || 0).toLocaleString('en-EG', { maximumFractionDigits: 2 })} km × ${money(state.transportQuote.transportCostPerKm || 0)} / km`
-        : 'Calculated from the hub location';
-    }
-  }
-
-  function openSettingsModal() {
-    if (els.settingsHubInput) els.settingsHubInput.value = state.transportSettings?.hubLocationUrl || '';
-    if (els.settingsRateInput) els.settingsRateInput.value = Number(state.transportSettings?.transportCostPerKm || 0);
-    if (els.settingsError) els.settingsError.textContent = '';
-    if (els.settingsSave) { els.settingsSave.disabled = false; const label = els.settingsSave.querySelector('span'); if (label) label.textContent = 'Save Settings'; }
-    if (els.settingsModal) { els.settingsModal.hidden = false; els.settingsModal.setAttribute('aria-hidden', 'false'); }
+  function renderGovernorateRateOptions({ preserveValue = true } = {}) {
+    const input = field('governorate');
+    if (!input || !els.governorateRatesMenu) return;
+    const previous = preserveValue ? String(input.value || '') : '';
+    const active = state.governorateRates.filter((rate) => rate.isActive !== false && String(rate.areaName || '').trim());
+    els.governorateRatesMenu.innerHTML = active.length
+      ? active.map((rate) => `<button class="events-modern-select__option" type="button" data-events-select-option data-value="${escapeHTML(rate.areaName)}">${escapeHTML(rate.areaName)}</button>`).join('')
+      : '<button class="events-modern-select__option" type="button" disabled>No governorates or areas configured</button>';
+    const available = active.some((rate) => String(rate.areaName) === previous);
+    setModernSelectValue(input, available ? previous : '');
     icons();
-    window.setTimeout(() => els.settingsHubInput?.focus(), 25);
   }
 
-  function closeSettingsModal() {
-    if (els.settingsModal) { els.settingsModal.hidden = true; els.settingsModal.setAttribute('aria-hidden', 'true'); }
+  function syncGovernorateEditButton() {
+    const disabled = isViewOnly();
+    if (!els.editGovernorateRates) return;
+    els.editGovernorateRates.hidden = disabled;
+    els.editGovernorateRates.disabled = disabled;
+  }
+
+  async function loadGovernorateRates({ includeInactive = false } = {}) {
+    try {
+      const response = await fetch(`/api/events/governorate-rates?includeInactive=${includeInactive ? '1' : '0'}&_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not load governorate transport rates.');
+      state.governorateRates = Array.isArray(data?.rates) ? data.rates : [];
+      renderGovernorateRateOptions();
+      syncGovernorateEditButton();
+      renderCostSummary();
+      return state.governorateRates;
+    } catch (error) {
+      state.governorateRates = [];
+      renderGovernorateRateOptions();
+      syncGovernorateEditButton();
+      renderCostSummary();
+      toast('error', 'Transport rates', error?.message || 'Could not load governorate transport rates.');
+      return [];
+    }
+  }
+
+  function governorateRateRow(rate = {}, index = 0) {
+    const row = document.createElement('div');
+    row.className = 'events-governorate-rate-row';
+    row.dataset.rateId = String(rate.id || '');
+    row.innerHTML = `<label><span>Governorate / Area</span><input data-rate-name type="text" maxlength="120" value="${escapeHTML(rate.areaName || '')}" placeholder="Example: North Coast" /></label><label><span>Transport Cost (EGP)</span><input data-rate-cost type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHTML(rate.transportCost ?? 0)}" placeholder="0.00" /></label>`;
+    return row;
+  }
+
+  function renderGovernorateRatesEditor() {
+    if (!els.ratesList) return;
+    const rates = state.governorateRates.length ? state.governorateRates : [];
+    els.ratesList.innerHTML = '';
+    rates.forEach((rate, index) => els.ratesList.appendChild(governorateRateRow(rate, index)));
+    if (!rates.length) els.ratesList.appendChild(governorateRateRow({}, 0));
+    icons();
+  }
+
+  function openRatesModal() {
+    renderGovernorateRatesEditor();
+    if (els.ratesError) els.ratesError.textContent = '';
+    if (els.ratesSave) { els.ratesSave.disabled = false; const label = els.ratesSave.querySelector('span'); if (label) label.textContent = 'Save Transport Rates'; }
+    if (els.ratesModal) { els.ratesModal.hidden = false; els.ratesModal.setAttribute('aria-hidden', 'false'); }
+    icons();
+    window.setTimeout(() => $('[data-rate-name]', els.ratesList)?.focus(), 25);
+  }
+
+  function closeRatesModal() {
+    if (els.ratesModal) { els.ratesModal.hidden = true; els.ratesModal.setAttribute('aria-hidden', 'true'); }
   }
 
   function openAdminModal() {
@@ -645,28 +587,29 @@
     if (els.adminModal) { els.adminModal.hidden = true; els.adminModal.setAttribute('aria-hidden', 'true'); }
   }
 
-  function requestTransportSettingsEdit() {
+  function requestGovernorateRatesEdit() {
     if (isViewOnly()) { try { window.OpsPageAccess?.showViewOnlyNotice?.(); } catch {} return; }
-    if (isAdmin() || state.transportSettingsAuthorized) { openSettingsModal(); return; }
+    if (isAdmin() || state.governorateRatesAuthorized) { openRatesModal(); return; }
     openAdminModal();
   }
 
-  async function authorizeTransportSettings(event) {
+  async function authorizeGovernorateRates(event) {
     event.preventDefault();
-    if (isAdmin()) { closeAdminModal(); openSettingsModal(); return; }
+    if (isAdmin()) { closeAdminModal(); openRatesModal(); return; }
     const password = String(els.adminPassword?.value || '').trim();
     if (!password) { if (els.adminError) els.adminError.textContent = 'Please enter the Admin password.'; els.adminPassword?.focus(); return; }
     if (els.adminConfirm) { els.adminConfirm.disabled = true; const label = els.adminConfirm.querySelector('span'); if (label) label.textContent = 'Authorizing…'; }
     if (els.adminError) els.adminError.textContent = '';
     try {
       const response = await fetch('/api/events/admin/verify', {
-        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, intent: 'transport_settings' }),
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, intent: 'governorate_rates' }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Invalid Admin password.');
-      state.transportSettingsAuthorized = true;
+      state.governorateRatesAuthorized = true;
       closeAdminModal();
-      openSettingsModal();
+      await loadGovernorateRates({ includeInactive: true });
+      openRatesModal();
     } catch (error) {
       if (els.adminError) els.adminError.textContent = error?.message || 'Invalid Admin password.';
       if (els.adminConfirm) { els.adminConfirm.disabled = false; const label = els.adminConfirm.querySelector('span'); if (label) label.textContent = 'Authorize & Continue'; }
@@ -674,34 +617,66 @@
     }
   }
 
-  async function saveTransportSettings(event) {
+  function collectGovernorateRates() {
+    return Array.from(els.ratesList?.querySelectorAll('.events-governorate-rate-row') || []).map((row, index) => ({
+      id: String(row.dataset.rateId || '').trim(),
+      areaName: String($('[data-rate-name]', row)?.value || '').trim(),
+      transportCost: nonNegative($('[data-rate-cost]', row)?.value),
+      isActive: true,
+      sortOrder: index + 1,
+    })).filter((rate) => rate.areaName);
+  }
+
+  async function saveGovernorateRates(event) {
     event.preventDefault();
-    const hubLocationUrl = String(els.settingsHubInput?.value || '').trim();
-    const transportCostPerKm = nonNegative(els.settingsRateInput?.value);
-    if (!isGoogleMapsUrl(hubLocationUrl)) {
-      const message = 'Hub Location must be a Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...';
-      if (els.settingsError) els.settingsError.textContent = message;
-      els.settingsHubInput?.focus();
-      return;
+    const rates = collectGovernorateRates();
+    if (!rates.length) { if (els.ratesError) els.ratesError.textContent = 'Add at least one governorate or area.'; return; }
+    const seen = new Set();
+    for (const rate of rates) {
+      const key = normaliseGovernorateName(rate.areaName);
+      if (seen.has(key)) { if (els.ratesError) els.ratesError.textContent = `Duplicate governorate or area: ${rate.areaName}.`; return; }
+      seen.add(key);
     }
-    if (els.settingsError) els.settingsError.textContent = '';
-    if (els.settingsSave) { els.settingsSave.disabled = true; const label = els.settingsSave.querySelector('span'); if (label) label.textContent = 'Saving…'; }
+    if (els.ratesError) els.ratesError.textContent = '';
+    if (els.ratesSave) { els.ratesSave.disabled = true; const label = els.ratesSave.querySelector('span'); if (label) label.textContent = 'Saving…'; }
     try {
-      const response = await fetch('/api/events/transport-settings', {
-        method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hubLocationUrl, transportCostPerKm }),
+      const response = await fetch('/api/events/governorate-rates', {
+        method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rates }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not save transport settings.');
-      state.transportSettings = data.settings || { hubLocationUrl, transportCostPerKm };
-      state.transportSettingsAuthorized = false;
-      state.transportQuote = null;
-      displayTransportSettings();
-      closeSettingsModal();
-      toast('success', 'Transport settings', 'Hub Location and transport cost were updated.');
-      if (els.locationUrl?.value) calculateTransport({ notify: false }).catch(() => undefined);
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not save governorate transport rates.');
+      state.governorateRatesAuthorized = false;
+      await loadGovernorateRates();
+      closeRatesModal();
+      toast('success', 'Transport rates', 'Governorate transport rates were updated.');
     } catch (error) {
-      if (els.settingsError) els.settingsError.textContent = error?.message || 'Could not save transport settings.';
-      if (els.settingsSave) { els.settingsSave.disabled = false; const label = els.settingsSave.querySelector('span'); if (label) label.textContent = 'Save Settings'; }
+      if (els.ratesError) els.ratesError.textContent = error?.message || 'Could not save governorate transport rates.';
+      if (els.ratesSave) { els.ratesSave.disabled = false; const label = els.ratesSave.querySelector('span'); if (label) label.textContent = 'Save Transport Rates'; }
+    }
+  }
+
+  function calculateWorkingCost() {
+    const projectCost = Array.from(els.projects?.querySelectorAll('.events-repeat-row') || [])
+      .reduce((sum, row) => sum + nonNegative($('[data-project-working-cost]', row)?.value), 0);
+    const componentCost = [els.marketing, els.venueReqs].reduce((sum, root) => sum + Array.from(root?.querySelectorAll('.events-repeat-row') || [])
+      .reduce((inner, row) => {
+        const component = state.components.find((item) => item.id === String($('[data-component-select]', row)?.value || '').trim());
+        return inner + componentCostSummary(component, $('[data-component-quantity]', row)?.value).total;
+      }, 0), 0);
+    return projectCost + componentCost;
+  }
+
+  function renderCostSummary() {
+    const working = calculateWorkingCost();
+    const rate = selectedGovernorateRate();
+    const transport = governorateTransportCost();
+    if (els.workingTotal) els.workingTotal.textContent = money(working);
+    if (els.transportTotal) els.transportTotal.textContent = money(transport);
+    if (els.total) els.total.textContent = money(working + transport);
+    if (els.transportSummaryNote) {
+      els.transportSummaryNote.textContent = rate
+        ? `${money(rate.transportCost)} × 2 · ${rate.areaName}`
+        : 'Select a governorate to calculate transport cost';
     }
   }
 
@@ -781,6 +756,7 @@
     if (field('eventType')?.value === 'other' || !payload.eventType) return 'Choose a saved event type or add a new type under Other.';
     if (!isDateTimeValue(startRaw) || (endRaw && !isDateTimeValue(endRaw))) return 'Enter valid event date and time values.';
     if (!isGoogleMapsUrl(payload.locationUrl)) return 'Google Maps / Location URL must be a Google Maps link. Example: https://www.google.com/maps/... or https://maps.app.goo.gl/...';
+    if (!selectedGovernorateRate()) return 'Transport cost for the selected governorate or area is not configured. Ask an Events Admin to add it first.';
     if (payload.eventEndDate && new Date(payload.eventEndDate).getTime() < new Date(payload.eventStartDate).getTime()) return 'End date and time cannot be before the start date and time.';
     return '';
   }
@@ -803,7 +779,6 @@
     if (error) return;
     setSubmitting(true);
     try {
-      await calculateTransport({ force: true, notify: false });
       const response = await fetch('/api/events', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
@@ -831,28 +806,33 @@
     });
 
     els.locationUrl?.addEventListener('input', () => {
-      state.transportQuote = null;
-      renderCostSummary();
       const value = String(els.locationUrl.value || '').trim();
       if (!value) setLocationValidation('');
       else if (!isGoogleMapsUrl(value)) setLocationValidation('Paste a Google Maps link. Example: https://www.google.com/maps/... or https://maps.app.goo.gl/...');
-      else { setLocationValidation(''); scheduleTransportCalculation(); }
+      else setLocationValidation('');
     });
-    els.locationUrl?.addEventListener('change', () => calculateTransport({ notify: true }).catch(() => undefined));
-    els.locationUrl?.addEventListener('blur', () => calculateTransport({ notify: false }).catch(() => undefined));
+    els.locationUrl?.addEventListener('change', () => {
+      const value = String(els.locationUrl.value || '').trim();
+      setLocationValidation(value && !isGoogleMapsUrl(value) ? 'Paste a Google Maps link. Example: https://www.google.com/maps/... or https://maps.app.goo.gl/...' : '');
+    });
+    field('governorate')?.addEventListener('change', renderCostSummary);
 
-    els.editHub?.addEventListener('click', requestTransportSettingsEdit);
-    els.editRate?.addEventListener('click', requestTransportSettingsEdit);
+    els.editGovernorateRates?.addEventListener('click', requestGovernorateRatesEdit);
     els.adminClose?.addEventListener('click', closeAdminModal);
     els.adminCancel?.addEventListener('click', closeAdminModal);
     els.adminModal?.addEventListener('click', (event) => { if (event.target === els.adminModal) closeAdminModal(); });
-    els.adminForm?.addEventListener('submit', authorizeTransportSettings);
-    els.settingsClose?.addEventListener('click', closeSettingsModal);
-    els.settingsCancel?.addEventListener('click', closeSettingsModal);
-    els.settingsModal?.addEventListener('click', (event) => { if (event.target === els.settingsModal) closeSettingsModal(); });
-    els.settingsForm?.addEventListener('submit', saveTransportSettings);
+    els.adminForm?.addEventListener('submit', authorizeGovernorateRates);
+    els.ratesClose?.addEventListener('click', closeRatesModal);
+    els.ratesCancel?.addEventListener('click', closeRatesModal);
+    els.ratesModal?.addEventListener('click', (event) => { if (event.target === els.ratesModal) closeRatesModal(); });
+    els.ratesForm?.addEventListener('submit', saveGovernorateRates);
+    els.addRate?.addEventListener('click', () => {
+      els.ratesList?.appendChild(governorateRateRow({}, els.ratesList?.children?.length || 0));
+      icons();
+      window.setTimeout(() => els.ratesList?.lastElementChild?.querySelector('[data-rate-name]')?.focus(), 0);
+    });
     els.form?.addEventListener('submit', submit);
-    window.addEventListener('ops:userinfo', syncTransportEditButtons);
+    window.addEventListener('ops:userinfo', syncGovernorateEditButton);
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
@@ -864,7 +844,7 @@
     icons();
     refreshEmptyStates();
     renderCostSummary();
-    await Promise.all([loadEventTypes(), loadComponents(), loadScheduledEvents(), loadTransportSettings()]);
+    await Promise.all([loadEventTypes(), loadComponents(), loadScheduledEvents(), loadGovernorateRates()]);
     renderCostSummary();
   });
 
