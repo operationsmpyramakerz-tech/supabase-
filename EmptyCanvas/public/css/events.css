@@ -493,3 +493,38 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
 /* Five-column project rows include the project working-cost input. */
 .events-repeat-row--project{grid-template-columns:minmax(0,1.1fr) 110px 150px minmax(0,1.1fr) 42px;}
 @media(max-width:760px){.events-repeat-row--project{grid-template-columns:1fr;}}
+
+/* Governorate-based Event transport rates */
+.events-field__label-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px;}
+.events-field__label-row>span{color:#475569;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;font-weight:900;}
+.events-field__label-row em{color:#dc2626;font-style:normal;}
+.events-field__edit{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:29px;border:1px solid rgba(109,40,217,.18);border-radius:9px;background:#f5f3ff;color:#5b21b6;padding:0 9px;font:900 .7rem/1 inherit;cursor:pointer;}
+.events-field__edit:hover{background:#ede9fe;}
+.events-field__edit:disabled{opacity:.55;cursor:not-allowed;}
+.events-field__edit svg{width:13px;height:13px;}
+.events-modal--governorate-rates{width:min(760px,100%);}
+.events-governorate-rates__header,.events-governorate-rate-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.48fr);gap:12px;align-items:end;}
+.events-governorate-rates__header{margin:2px 0 8px;padding:0 3px;color:#64748b;font-size:.67rem;letter-spacing:.045em;text-transform:uppercase;font-weight:950;}
+.events-governorate-rates__list{display:grid;gap:9px;max-height:min(48vh,430px);overflow:auto;padding:2px 3px 3px;}
+.events-governorate-rate-row{padding:11px;border:1px solid rgba(15,23,42,.09);border-radius:14px;background:#fbfcff;}
+.events-governorate-rate-row label{display:flex;min-width:0;flex-direction:column;gap:6px;}
+.events-governorate-rate-row label span{color:#64748b;font-size:.64rem;letter-spacing:.04em;text-transform:uppercase;font-weight:900;}
+.events-governorate-rate-row input{box-sizing:border-box;width:100%;min-height:41px;border:1px solid rgba(15,23,42,.13);border-radius:10px;background:#fff;color:#0f172a;padding:9px 10px;font:800 .84rem/1.35 inherit;outline:0;}
+.events-governorate-rate-row input:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.11);}
+.events-add-governorate-rate{display:inline-flex;align-items:center;justify-content:center;gap:7px;margin-top:13px;min-height:42px;border:1px dashed rgba(109,40,217,.35);border-radius:12px;background:#faf5ff;color:#5b21b6;padding:0 14px;font:900 .78rem/1 inherit;cursor:pointer;}
+.events-add-governorate-rate:hover{background:#f3e8ff;}
+.events-add-governorate-rate svg{width:16px;height:16px;}
+
+/* Keep an opened component category dropdown above the next form field. */
+.events-modern-select.is-open{z-index:600;}
+.events-modern-select.is-open .events-modern-select__menu{z-index:700;}
+.events-components-new-page .events-field{position:relative;z-index:1;}
+.events-components-new-page .events-field:focus-within{z-index:650;}
+.events-components-new-page .events-field:has(.events-modern-select.is-open){z-index:700;}
+
+@media(max-width:760px){
+  .events-governorate-rates__header{display:none;}
+  .events-governorate-rate-row{grid-template-columns:1fr;}
+  .events-field__edit span{display:none;}
+  .events-field__edit{width:32px;padding:0;}
+}
