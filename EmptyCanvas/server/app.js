@@ -9121,6 +9121,10 @@ app.get("/events", requireAuth, requirePage("Events"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events.html"));
 });
 
+app.get("/events/calendar", requireAuth, requirePage("Events"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "events-calendar.html"));
+});
+
 app.get("/events/new", requireAuth, requirePage("Events"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events-new.html"));
 });
