@@ -12,7 +12,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-module-refine-v3" rel="stylesheet" />
+  <link href="/css/events.css?v=events-calendar-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-components-page">
@@ -21,7 +21,7 @@
     <div class="main-content">
       <header class="main-header"><div class="header-row1"><div class="left"><div aria-live="polite" class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Maintain the reusable components available in event requests</div></div></div></div><div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div></div><div class="header-row2"><h1 class="page-title">Events</h1></div></header>
       <main class="events-shell">
-        <nav class="events-subnav" aria-label="Events workspace"><a class="events-subnav__link" href="/events"><i data-feather="calendar"></i><span>Event Requests</span></a><a class="events-subnav__link is-active" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a></nav>
+        <nav class="events-subnav" aria-label="Events workspace"><a class="events-subnav__link" href="/events"><i data-feather="calendar"></i><span>Event Requests</span></a><a class="events-subnav__link" href="/events/calendar"><i data-feather="calendar"></i><span>Calendar</span></a><a class="events-subnav__link is-active" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a></nav>
         <section class="events-hero events-hero--components"><div class="events-hero__content"><span class="events-eyebrow"><i data-feather="layers"></i> Components catalog</span><div class="events-hero__actions"><button class="events-primary-btn" id="eventComponentAddBtn" type="button" hidden><i data-feather="plus-circle"></i><span>Add Event Component</span></button></div></div><div class="events-hero__stats"><article class="events-stat"><span>Catalog Items</span><strong id="eventComponentsTotalCount">—</strong></article><article class="events-stat"><span>Active Items</span><strong id="eventComponentsActiveCount">—</strong></article><article class="events-stat"><span>Inactive Items</span><strong id="eventComponentsInactiveCount">—</strong></article></div></section>
         <section class="events-panel"><div class="events-panel__header"><div><h3>Event Components</h3></div><label class="events-search"><i data-feather="search"></i><input id="eventComponentsSearchInput" type="search" placeholder="Search components..." autocomplete="off" /></label></div><div class="events-table-wrap"><table class="events-table events-table--components"><thead><tr><th>Component</th><th>Category</th><th>Default Qty.</th><th>Photo &amp; Link</th><th>Status</th><th>Last Updated</th><th></th></tr></thead><tbody id="eventComponentsTableBody"><tr><td colspan="7"><div class="events-loading"><span></span> Loading event components...</div></td></tr></tbody></table></div></section>
       </main>

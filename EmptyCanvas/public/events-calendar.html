@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Events Calendar | Operations Hub</title>
+  <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
+  <link href="/css/events.css?v=events-calendar-v1" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading events-page events-calendar-page">
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Dashboard</h2>
+        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button>
+      </div>
+      <nav class="sidebar-nav">
+        <ul class="nav-list">
+          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+          <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
+          <li><a class="nav-link" href="/proposals"><i data-feather="file-text"></i><span class="nav-label">Proposals</span></a></li>
+          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+          <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+          <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+          <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header">
+        <div class="header-row1">
+          <div class="left">
+            <div aria-live="polite" class="greeting-pill">
+              <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
+              <div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Plan and monitor the event execution schedule</div></div>
+            </div>
+          </div>
+          <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
+        </div>
+        <div class="header-row2"><h1 class="page-title">Events</h1></div>
+      </header>
+
+      <main class="events-shell events-calendar-shell">
+        <nav class="events-subnav" aria-label="Events workspace">
+          <a class="events-subnav__link" href="/events"><i data-feather="calendar"></i><span>Event Requests</span></a>
+          <a class="events-subnav__link is-active" href="/events/calendar"><i data-feather="calendar"></i><span>Calendar</span></a>
+          <a class="events-subnav__link" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a>
+        </nav>
+
+        <section class="events-calendar-workspace" aria-labelledby="eventsCalendarTitle">
+          <div class="events-calendar-workspace__top">
+            <div>
+              <span class="events-eyebrow"><i data-feather="calendar"></i> Event schedule</span>
+              <h2 id="eventsCalendarTitle">Calendar</h2>
+              <p>View submitted events by date and keep the upcoming execution plan visible.</p>
+            </div>
+            <div class="events-calendar-toolbar">
+              <button class="events-secondary-btn events-calendar-today" id="eventsCalendarToday" type="button"><i data-feather="crosshair"></i><span>Today</span></button>
+              <a class="events-primary-btn" href="/events/new"><i data-feather="plus-circle"></i><span>Add New Event</span></a>
+            </div>
+          </div>
+
+          <div class="events-calendar-layout">
+            <section class="events-calendar-card" aria-label="Monthly event calendar">
+              <div class="events-calendar-card__header">
+                <button class="events-calendar-nav" id="eventsCalendarPrev" type="button" aria-label="Previous month"><i data-feather="chevron-left"></i></button>
+                <div class="events-calendar-month-title"><h3 id="eventsCalendarMonthLabel">Month</h3><span id="eventsCalendarYearLabel">Year</span></div>
+                <button class="events-calendar-nav" id="eventsCalendarNext" type="button" aria-label="Next month"><i data-feather="chevron-right"></i></button>
+              </div>
+              <div class="events-calendar-weekdays" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+              <div class="events-calendar-grid" id="eventsCalendarGrid" aria-live="polite"></div>
+              <div class="events-calendar-legend"><span><i class="events-calendar-dot events-calendar-dot--selected"></i>Selected date</span><span><i class="events-calendar-dot events-calendar-dot--has-events"></i>Event scheduled</span></div>
+            </section>
+
+            <aside class="events-calendar-sidebar">
+              <section class="events-calendar-day-card" aria-labelledby="eventsCalendarSelectedTitle">
+                <div class="events-calendar-section-heading"><div><span class="events-calendar-section-label">Selected date</span><h3 id="eventsCalendarSelectedTitle">Events</h3></div><span class="events-calendar-count" id="eventsCalendarSelectedCount">0</span></div>
+                <div class="events-calendar-day-list" id="eventsCalendarDayList"><div class="events-loading"><span></span> Loading schedule...</div></div>
+              </section>
+
+              <section class="events-calendar-upcoming-card" aria-labelledby="eventsCalendarUpcomingTitle">
+                <div class="events-calendar-section-heading"><div><span class="events-calendar-section-label">Execution plan</span><h3 id="eventsCalendarUpcomingTitle">Upcoming Events</h3></div><a class="events-calendar-view-all" href="/events">View requests <i data-feather="arrow-up-right"></i></a></div>
+                <div class="events-calendar-upcoming-list" id="eventsCalendarUpcomingList"><div class="events-loading"><span></span> Loading events...</div></div>
+              </section>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="events-modal-overlay" id="eventCalendarDetailsModal" hidden aria-hidden="true">
+    <section class="events-modal events-modal--calendar-detail" role="dialog" aria-modal="true" aria-labelledby="eventCalendarDetailsTitle">
+      <button class="events-modal__close" id="eventCalendarDetailsClose" type="button" aria-label="Close event details">×</button>
+      <div class="events-modal__header"><div><span class="events-eyebrow"><i data-feather="calendar"></i> Event schedule</span><h2 id="eventCalendarDetailsTitle">Event Details</h2><p id="eventCalendarDetailsSubtitle">Review the scheduled event.</p></div><div id="eventCalendarDetailsStatus"></div></div>
+      <div class="events-calendar-detail-content" id="eventCalendarDetailsContent"></div>
+      <div class="events-modal__actions"><a class="events-secondary-btn" href="/events">Open requests</a><button class="events-primary-btn" id="eventCalendarDetailsDone" type="button">Close</button></div>
+    </section>
+  </div>
+
+  <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
+  <script src="/js/events-calendar.js?v=events-calendar-v1"></script>
+</body>
+</html>
