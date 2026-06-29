@@ -76,10 +76,12 @@
 
   function localDate(value) {
     if (!value) return null;
+    const date = value instanceof Date ? new Date(value) : new Date(value);
+    if (!Number.isNaN(date.getTime())) return new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const match = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!match) return null;
-    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-    return Number.isNaN(date.getTime()) ? null : date;
+    const fallback = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
   }
 
   function startOfDay(value = new Date()) {
@@ -104,11 +106,20 @@
   }
 
   function formatDateRange(event) {
-    const start = localDate(event?.eventStartDate);
-    const end = localDate(event?.eventEndDate) || start;
+    const rawStart = event?.eventStartDate;
+    const rawEnd = event?.eventEndDate;
+    const startTime = rawStart ? new Date(rawStart) : null;
+    const endTime = rawEnd ? new Date(rawEnd) : null;
+    const start = localDate(rawStart);
+    const end = localDate(rawEnd) || start;
     if (!start) return 'Date to be confirmed';
-    if (!end || sameDate(start, end)) return formatDate(start);
-    return `${formatDate(start, { day: 'numeric', month: 'short' })} – ${formatDate(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    const timeOptions = { hour: '2-digit', minute: '2-digit' };
+    const startDateText = formatDate(start);
+    const startClock = startTime && !Number.isNaN(startTime.getTime()) ? startTime.toLocaleTimeString('en-GB', timeOptions) : '';
+    if (!end || !rawEnd || (endTime && startTime && endTime.getTime() === startTime.getTime())) return `${startDateText}${startClock ? ` · ${startClock}` : ''}`;
+    const endClock = endTime && !Number.isNaN(endTime.getTime()) ? endTime.toLocaleTimeString('en-GB', timeOptions) : '';
+    if (sameDate(start, end)) return `${startDateText}${startClock ? ` · ${startClock}` : ''}${endClock ? ` – ${endClock}` : ''}`;
+    return `${startDateText}${startClock ? ` · ${startClock}` : ''} – ${formatDate(end)}${endClock ? ` · ${endClock}` : ''}`;
   }
 
   function startDate(event) {
@@ -130,6 +141,14 @@
   function statusMarkup(status) {
     const safe = String(status || 'submitted').replace(/[^a-z_]/g, '') || 'submitted';
     return `<span class="events-status events-status--${escapeHTML(safe)}">${escapeHTML(statusLabels[safe] || safe.replace(/_/g, ' '))}</span>`;
+  }
+
+  function eventTypeLabel(event) {
+    const custom = String(event?.eventTypeCustom || '').trim();
+    if (custom) return custom;
+    const code = String(event?.eventType || 'other');
+    if (typeLabels[code]) return typeLabels[code];
+    return code.replace(/^custom_/, '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'Other';
   }
 
   function eventTypeClass(type) {
@@ -265,7 +284,7 @@
         <span class="events-calendar-upcoming-item__body">
           <span class="events-calendar-upcoming-item__meta">${escapeHTML(event.organizationName || event.governorate || 'Event execution')}</span>
           <strong>${escapeHTML(event.eventName || 'Untitled Event')}</strong>
-          <small>${escapeHTML(typeLabels[event.eventType] || 'Other')} · ${escapeHTML(event.governorate || 'Location to be confirmed')}</small>
+          <small>${escapeHTML(eventTypeLabel(event))} · ${escapeHTML(event.governorate || 'Location to be confirmed')}</small>
         </span>
         <i data-feather="arrow-up-right"></i>
       </button>
@@ -296,7 +315,7 @@
     ].filter(Boolean).join(' · ') || 'No special utilities selected';
 
     els.modalContent.innerHTML = `
-      <section class="events-detail-block"><h4><i data-feather="calendar"></i> Overview</h4><div class="events-detail-grid">${detailItem('Type', typeLabels[event.eventType] || 'Other')}${detailItem('Event dates', formatDateRange(event))}${detailItem('Organization', event.organizationName)}${detailItem('Expected attendees', event.expectedAttendees ? String(event.expectedAttendees) : '—')}</div></section>
+      <section class="events-detail-block"><h4><i data-feather="calendar"></i> Overview</h4><div class="events-detail-grid">${detailItem('Type', eventTypeLabel(event))}${detailItem('Event dates', formatDateRange(event))}${detailItem('Organization', event.organizationName)}${detailItem('Expected attendees', event.expectedAttendees ? String(event.expectedAttendees) : '—')}</div></section>
       <section class="events-detail-block"><h4><i data-feather="map-pin"></i> Venue</h4><div class="events-detail-grid">${detailItem('Venue', event.venueName)}${detailItem('Governorate', event.governorate)}${detailItem('Setup time', event.venueSetupTime || '—')}</div>${validMap ? `<a class="events-location-link" target="_blank" rel="noopener noreferrer" href="${escapeHTML(validMap)}"><i data-feather="external-link"></i><span>Open map location</span></a>` : ''}</section>
       <section class="events-detail-block"><h4><i data-feather="user"></i> Contact</h4><div class="events-detail-grid">${detailItem('Contact person', event.contactPerson)}${detailItem('Phone', event.contactPhone)}${detailItem('Email', event.contactEmail)}${detailItem('Requested by', event.requesterName)}</div></section>
       <section class="events-detail-block"><h4><i data-feather="cpu"></i> Projects</h4>${detailList(event.projects, 'No projects were added.')}</section>
