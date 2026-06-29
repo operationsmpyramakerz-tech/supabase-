@@ -26192,6 +26192,7 @@ function _eventsSerializeRequest(row = {}) {
     totalCost: _eventsCost(row?.total_cost, 0),
     operationsNotes: _eventsLongText(row?.operations_notes, 3000),
     requesterName: _eventsText(row?.requester_name, 160),
+    createdByUserId: _eventsUuid(row?.created_by_user_id) || null,
     createdAt: row?.created_at || null,
     updatedAt: row?.updated_at || null,
   };
