@@ -9503,6 +9503,7 @@ function _backupCatalog() {
     { key: 'product-tags', pageName: 'Product Tags', tableName: _sbProductTagsTable(), moduleName: 'Inventory', icon: 'tag', description: 'Product tags and grouping data.' },
     { key: 'events', pageName: 'Events', tableName: _sbEventsTable(), moduleName: 'Events', icon: 'calendar', description: 'Event execution requests, project requirements, marketing materials, and venue details.' },
     { key: 'event-components', pageName: 'Event Components', tableName: _sbEventComponentsTable(), moduleName: 'Events', icon: 'box', description: 'Independent catalog of event projects, marketing materials, venue equipment, and other event components.' },
+    { key: 'event-types', pageName: 'Event Types', tableName: _sbEventTypesTable(), moduleName: 'Events', icon: 'tag', description: 'Reusable custom event types created from the Events request form.' },
     { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
     { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
@@ -25578,6 +25579,10 @@ function _sbEventComponentsTable() {
   return String(process.env.SUPABASE_EVENT_COMPONENTS_TABLE || 'event_components').trim() || 'event_components';
 }
 
+function _sbEventTypesTable() {
+  return String(process.env.SUPABASE_EVENT_TYPES_TABLE || 'event_type_catalog').trim() || 'event_type_catalog';
+}
+
 function _sbEventsEnabled() {
   return supabaseDb.isConfigured();
 }
@@ -25595,9 +25600,14 @@ function _eventsUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : '';
 }
 
-function _eventsDate(value) {
+function _eventsDateTime(value) {
   const raw = String(value || '').trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+  if (!raw) return null;
+  // Preserve legacy date-only records as a midnight UTC timestamp while all
+  // new event requests send a full ISO timestamp from the browser.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T00:00:00.000Z`;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function _eventsNumber(value, { min = 0, max = 1000000, fallback = 0, integer = false } = {}) {
@@ -25624,13 +25634,25 @@ function _eventsArray(value) {
   return [];
 }
 
-const EVENTS_TYPES = new Set(['tech_day', 'seminar', 'steam_fair', 'competition', 'exhibition', 'other']);
+const EVENTS_STANDARD_TYPE_OPTIONS = Object.freeze([
+  { code: 'tech_day', label: 'Tech Day', isCustom: false },
+  { code: 'seminar', label: 'Seminar', isCustom: false },
+  { code: 'steam_fair', label: 'STEAM Fair', isCustom: false },
+  { code: 'competition', label: 'Competition', isCustom: false },
+  { code: 'exhibition', label: 'Exhibition', isCustom: false },
+]);
+const EVENTS_TYPES = new Set([...EVENTS_STANDARD_TYPE_OPTIONS.map((item) => item.code), 'other']);
 const EVENTS_STATUSES = new Set(['submitted', 'under_review', 'approved', 'in_progress', 'completed', 'cancelled']);
 const EVENT_COMPONENT_CATEGORIES = new Set(['project', 'marketing_material', 'venue_equipment', 'other']);
 
+function _eventsTypeCode(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 72);
+}
+
 function _eventsNormalizeType(value) {
-  const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return EVENTS_TYPES.has(raw) ? raw : 'other';
+  const raw = _eventsTypeCode(value);
+  if (EVENTS_TYPES.has(raw)) return raw;
+  return /^custom_[a-z0-9_]{1,64}$/.test(raw) ? raw : 'other';
 }
 
 function _eventsNormalizeStatus(value) {
@@ -25676,6 +25698,94 @@ function _eventsHttpUrl(value, maxLength = 1000) {
   } catch {
     return '';
   }
+}
+
+function _eventsSerializeType(row = {}) {
+  const code = _eventsNormalizeType(row?.code);
+  const label = _eventsText(row?.label, 80);
+  return {
+    code: /^custom_/.test(code) ? code : '',
+    label,
+    isCustom: true,
+    isActive: row?.is_active !== false,
+    createdAt: row?.created_at || null,
+  };
+}
+
+function _eventsTypeLabelKey(value) {
+  return _eventsText(value, 80).toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function _eventsCustomTypeCode(label, usedCodes = new Set()) {
+  const baseSlug = _eventsTypeCode(label).replace(/^custom_/, '') || 'event_type';
+  const base = `custom_${baseSlug.slice(0, 52)}`;
+  let code = base;
+  let index = 2;
+  while (usedCodes.has(code)) {
+    code = `${base.slice(0, Math.max(1, 66 - String(index).length))}_${index}`;
+    index += 1;
+  }
+  return code;
+}
+
+async function _eventsListTypeOptions() {
+  const rows = await supabaseDb.selectAll(_sbEventTypesTable(), { limit: 1000, order: 'label.asc' });
+  const standard = EVENTS_STANDARD_TYPE_OPTIONS.map((item) => ({ ...item }));
+  const seenCodes = new Set(standard.map((item) => item.code));
+  const custom = (Array.isArray(rows) ? rows : [])
+    .map(_eventsSerializeType)
+    .filter((item) => item.code && item.label && item.isActive !== false && !seenCodes.has(item.code));
+  return [...standard, ...custom];
+}
+
+async function _eventsCreateTypeOption(label) {
+  const cleanLabel = _eventsText(label, 80);
+  if (!cleanLabel) {
+    const error = new Error('Event type name is required.');
+    error.status = 400;
+    throw error;
+  }
+
+  const existing = await _eventsListTypeOptions();
+  const key = _eventsTypeLabelKey(cleanLabel);
+  const same = existing.find((item) => _eventsTypeLabelKey(item.label) === key);
+  if (same) return same;
+
+  const usedCodes = new Set(existing.map((item) => item.code).filter(Boolean));
+  const code = _eventsCustomTypeCode(cleanLabel, usedCodes);
+  const inserted = await supabaseDb.insert(_sbEventTypesTable(), {
+    code,
+    label: cleanLabel,
+    is_active: true,
+  });
+  const saved = _eventsSerializeType(inserted || {});
+  if (!saved.code || !saved.label) {
+    const error = new Error('Event type could not be saved.');
+    error.status = 500;
+    throw error;
+  }
+  return saved;
+}
+
+async function _eventsResolveRequestType(body = {}) {
+  const requested = _eventsNormalizeType(body?.eventType || body?.event_type);
+  if (EVENTS_TYPES.has(requested)) {
+    const customLabel = _eventsText(body?.eventTypeCustom || body?.event_type_custom, 80);
+    if (requested === 'other' && customLabel) {
+      const custom = await _eventsCreateTypeOption(customLabel);
+      return { code: custom.code, label: custom.label };
+    }
+    return { code: requested, label: null };
+  }
+
+  const options = await _eventsListTypeOptions();
+  const matched = options.find((item) => item.code === requested && item.isCustom);
+  if (!matched) {
+    const error = new Error('The selected event type is not available. Please select an existing type or add a new one under Other.');
+    error.status = 400;
+    throw error;
+  }
+  return { code: matched.code, label: matched.label };
 }
 
 function _eventsPhotoFileName(value = '') {
@@ -25727,6 +25837,7 @@ function _eventsSerializeRequest(row = {}) {
     eventCode: _eventsText(row?.event_code, 80),
     eventName: _eventsText(row?.event_name, 240),
     eventType: _eventsNormalizeType(row?.event_type),
+    eventTypeCustom: _eventsText(row?.event_type_custom, 80) || null,
     status: _eventsNormalizeStatus(row?.status),
     organizationName: _eventsText(row?.organization_name, 240),
     contactPerson: _eventsText(row?.contact_person, 160),
@@ -25755,11 +25866,16 @@ function _eventsSerializeRequest(row = {}) {
   };
 }
 
-function _eventsRequestWriteRow(body = {}, req) {
-  const startDate = _eventsDate(body?.eventStartDate || body?.event_start_date);
-  const endDate = _eventsDate(body?.eventEndDate || body?.event_end_date);
-  if (startDate && endDate && endDate < startDate) {
-    const error = new Error('End date cannot be before the start date.');
+async function _eventsRequestWriteRow(body = {}, req) {
+  const startDate = _eventsDateTime(body?.eventStartDate || body?.event_start_date);
+  const endDate = _eventsDateTime(body?.eventEndDate || body?.event_end_date);
+  if (!startDate) {
+    const error = new Error('Event start date and time are required.');
+    error.status = 400;
+    throw error;
+  }
+  if (endDate && new Date(endDate).getTime() < new Date(startDate).getTime()) {
+    const error = new Error('End date and time cannot be before the start date and time.');
     error.status = 400;
     throw error;
   }
@@ -25778,6 +25894,7 @@ function _eventsRequestWriteRow(body = {}, req) {
     throw error;
   }
 
+  const eventType = await _eventsResolveRequestType(body);
   const requesterName = _eventsText(
     req?.session?.accountCache?.name || req?.session?.username || body?.requesterName,
     160,
@@ -25786,7 +25903,8 @@ function _eventsRequestWriteRow(body = {}, req) {
 
   return {
     event_name: eventName,
-    event_type: _eventsNormalizeType(body?.eventType || body?.event_type),
+    event_type: eventType.code,
+    event_type_custom: eventType.label || null,
     status: 'submitted',
     organization_name: _eventsText(body?.organizationName || body?.organization_name, 240) || null,
     contact_person: _eventsText(body?.contactPerson || body?.contact_person, 160) || null,
@@ -25803,7 +25921,7 @@ function _eventsRequestWriteRow(body = {}, req) {
     venue_type: _eventsText(body?.venueType || body?.venue_type, 120) || null,
     governorate: _eventsText(body?.governorate, 120) || null,
     location_url: locationUrl,
-    venue_setup_time: _eventsText(body?.venueSetupTime || body?.venue_setup_time, 80) || null,
+    venue_setup_time: _eventsDateTime(body?.venueSetupTime || body?.venue_setup_time) || null,
     requires_power: _eventsBoolean(body?.requiresPower || body?.requires_power),
     requires_internet: _eventsBoolean(body?.requiresInternet || body?.requires_internet),
     requires_sound_system: _eventsBoolean(body?.requiresSoundSystem || body?.requires_sound_system),
@@ -25850,7 +25968,7 @@ function _eventsModuleMissingError(error) {
   if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
     return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
   }
-  return /event_components|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
+  return /event_components|event_type_catalog|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
     ? 'Events tables are not installed. Run events_module_migration.sql in Supabase first.'
     : raw || 'Events request failed.';
 }
@@ -25970,6 +26088,30 @@ app.delete('/api/events/components/:id', requireAuth, requirePage('Events'), asy
   }
 });
 
+app.get('/api/events/types', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const types = await _eventsListTypeOptions();
+    return res.json({ ok: true, types });
+  } catch (error) {
+    console.error('GET /api/events/types error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/types', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const type = await _eventsCreateTypeOption(req.body?.label || req.body?.name);
+    const types = await _eventsListTypeOptions();
+    return res.status(201).json({ ok: true, type, types });
+  } catch (error) {
+    console.error('POST /api/events/types error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
 app.get('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -26010,7 +26152,7 @@ app.post('/api/events', requireAuth, requirePage('Events'), async (req, res) => 
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const inserted = await supabaseDb.insert(_sbEventsTable(), _eventsRequestWriteRow(req.body || {}, req));
+    const inserted = await supabaseDb.insert(_sbEventsTable(), await _eventsRequestWriteRow(req.body || {}, req));
     return res.status(201).json({ ok: true, event: _eventsSerializeRequest(inserted || {}) });
   } catch (error) {
     console.error('POST /api/events error:', error?.details || error);
