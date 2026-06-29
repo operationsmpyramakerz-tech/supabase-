@@ -9504,7 +9504,7 @@ function _backupCatalog() {
     { key: 'events', pageName: 'Events', tableName: _sbEventsTable(), moduleName: 'Events', icon: 'calendar', description: 'Event execution requests, project requirements, marketing materials, and venue details.' },
     { key: 'event-components', pageName: 'Event Components', tableName: _sbEventComponentsTable(), moduleName: 'Events', icon: 'box', description: 'Independent catalog of event projects, marketing materials, venue equipment, and other event components.' },
     { key: 'event-types', pageName: 'Event Types', tableName: _sbEventTypesTable(), moduleName: 'Events', icon: 'tag', description: 'Reusable custom event types created from the Events request form.' },
-    { key: 'event-transport-settings', pageName: 'Event Transport Settings', tableName: _sbEventsTransportSettingsTable(), moduleName: 'Events', icon: 'navigation', description: 'Company hub location and transport cost per kilometre used for future event estimates.', sensitive: true },
+    { key: 'event-governorate-transport-rates', pageName: 'Governorate Transport Rates', tableName: _sbEventsGovernorateRatesTable(), moduleName: 'Events', icon: 'map-pin', description: 'Approximate round-trip transport cost settings for every governorate or area used in event estimates.', sensitive: true },
     { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
     { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
@@ -25584,8 +25584,8 @@ function _sbEventTypesTable() {
   return String(process.env.SUPABASE_EVENT_TYPES_TABLE || 'event_type_catalog').trim() || 'event_type_catalog';
 }
 
-function _sbEventsTransportSettingsTable() {
-  return String(process.env.SUPABASE_EVENTS_TRANSPORT_SETTINGS_TABLE || 'event_transport_settings').trim() || 'event_transport_settings';
+function _sbEventsGovernorateRatesTable() {
+  return String(process.env.SUPABASE_EVENTS_GOVERNORATE_RATES_TABLE || 'event_governorate_transport_rates').trim() || 'event_governorate_transport_rates';
 }
 
 function _sbEventsEnabled() {
@@ -25773,9 +25773,9 @@ function _eventsHttpUrl(value, maxLength = 1000) {
   }
 }
 
-// Event transport settings are stored independently from request records. Each
-// event receives a cost snapshot at submission time, so later rate updates do
-// not change historical event budgets.
+// Transport is estimated by the selected governorate/area. Each event stores a
+// snapshot of the per-governorate rate used at submission time so future rate
+// changes do not modify historic event budgets.
 function _eventsGoogleMapsUrl(value, maxLength = 2000) {
   const raw = _eventsHttpUrl(value, maxLength);
   if (!raw) return '';
@@ -25796,227 +25796,120 @@ function _eventsGoogleMapsUrl(value, maxLength = 2000) {
   }
 }
 
-function _eventsCoordinatesFromGoogleMapsUrl(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return null;
-  let decoded = raw;
-  try { decoded = decodeURIComponent(raw); } catch {}
-  const candidates = [raw, decoded];
-  const patterns = [
-    /@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/,
-    /!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/,
-    /(?:[?&#](?:q|query|ll|destination|origin)=|(?:^|[/?])search\/)(?:loc:)?(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/i,
-  ];
-  for (const text of candidates) {
-    for (const pattern of patterns) {
-      const match = String(text || '').match(pattern);
-      if (!match) continue;
-      const latitude = Number(match[1]);
-      const longitude = Number(match[2]);
-      if (Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) {
-        return { latitude, longitude };
-      }
-    }
-  }
-  return null;
-}
-
-function _eventsMapsAddressHint(value) {
-  try {
-    const url = new URL(value);
-    for (const key of ['query', 'q', 'destination', 'origin']) {
-      const candidate = String(url.searchParams.get(key) || '').trim();
-      if (candidate && !_eventsCoordinatesFromGoogleMapsUrl(`?${key}=${candidate}`)) return candidate.slice(0, 500);
-    }
-    const decodedPath = decodeURIComponent(String(url.pathname || ''));
-    const placeMatch = decodedPath.match(/\/maps\/(?:place|search)\/([^/?#]+)/i);
-    if (placeMatch?.[1]) return String(placeMatch[1]).replace(/\+/g, ' ').trim().slice(0, 500);
-  } catch {}
-  return '';
-}
-
-async function _eventsFollowGoogleMapsLink(value) {
-  let current = _eventsGoogleMapsUrl(value, 2000);
-  if (!current) return '';
-  for (let hop = 0; hop < 5; hop += 1) {
-    let response;
-    try {
-      response = await fetch(current, {
-        redirect: 'manual',
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OperationsHub/1.0)' },
-      });
-    } catch {
-      return current;
-    }
-    if (response.status >= 300 && response.status < 400) {
-      const location = String(response.headers.get('location') || '').trim();
-      if (!location) return current;
-      let next = '';
-      try { next = new URL(location, current).href; } catch { return current; }
-      const safeNext = _eventsGoogleMapsUrl(next, 2000);
-      if (!safeNext) return current;
-      current = safeNext;
-      continue;
-    }
-    return current;
-  }
-  return current;
-}
-
-function _eventsGoogleMapsApiKey() {
-  return String(process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_ROUTES_API_KEY || '').trim();
-}
-
-async function _eventsGeocodeAddressHint(hint, apiKey) {
-  const text = _eventsText(hint, 500);
-  if (!text || !apiKey) return null;
-  const endpoint = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(text)}&key=${encodeURIComponent(apiKey)}`;
-  let response;
-  try { response = await fetch(endpoint); } catch { return null; }
-  const data = await response.json().catch(() => ({}));
-  const location = data?.results?.[0]?.geometry?.location;
-  const latitude = Number(location?.lat);
-  const longitude = Number(location?.lng);
-  return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null;
-}
-
-async function _eventsResolveGoogleMapsCoordinates(value, { apiKey = '' } = {}) {
-  const original = _eventsGoogleMapsUrl(value, 2000);
-  if (!original) {
-    const error = new Error('Please use a valid Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...');
-    error.status = 400;
-    throw error;
-  }
-  const direct = _eventsCoordinatesFromGoogleMapsUrl(original);
-  if (direct) return direct;
-  const resolved = await _eventsFollowGoogleMapsLink(original);
-  const followed = _eventsCoordinatesFromGoogleMapsUrl(resolved);
-  if (followed) return followed;
-  const hint = _eventsMapsAddressHint(resolved || original);
-  const geocoded = await _eventsGeocodeAddressHint(hint, apiKey);
-  if (geocoded) return geocoded;
-  const error = new Error('Could not read a location from this Google Maps link. Open the location in Google Maps, use Share, and paste the full Google Maps link.');
-  error.status = 400;
-  throw error;
-}
-
 function _eventsRoundMoney(value) {
   return Math.round(Math.max(0, Number(value || 0) || 0) * 100) / 100;
 }
 
-function _eventsRoundDistance(value) {
-  return Math.round(Math.max(0, Number(value || 0) || 0) * 100) / 100;
+function _eventsGovernorateKey(value) {
+  return _eventsText(value, 120).toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function _eventsSerializeTransportSettings(row = {}) {
+function _eventsSerializeGovernorateRate(row = {}) {
   return {
     id: String(row?.id || ''),
-    hubLocationUrl: _eventsGoogleMapsUrl(row?.hub_location_url || row?.hubLocationUrl, 2000),
-    transportCostPerKm: _eventsCost(row?.transport_cost_per_km ?? row?.transportCostPerKm, 0),
+    areaName: _eventsText(row?.area_name || row?.areaName, 120),
+    transportCost: _eventsCost(row?.transport_cost ?? row?.transportCost, 0),
+    isActive: row?.is_active !== false,
+    sortOrder: _eventsNumber(row?.sort_order ?? row?.sortOrder, { min: 0, max: 100000, fallback: 100, integer: true }),
     updatedAt: row?.updated_at || row?.updatedAt || null,
   };
 }
 
-async function _eventsGetTransportSettings({ createIfMissing = true } = {}) {
-  const table = _sbEventsTransportSettingsTable();
-  const rows = await supabaseDb.request(`/${encodeURIComponent(table)}?select=*&settings_key=eq.default&limit=1`);
-  let row = Array.isArray(rows) ? rows[0] || null : null;
-  if (!row && createIfMissing) {
-    row = await supabaseDb.insert(table, { settings_key: 'default', hub_location_url: null, transport_cost_per_km: 0 });
-  }
-  return _eventsSerializeTransportSettings(row || {});
+async function _eventsListGovernorateRates({ includeInactive = false } = {}) {
+  const table = _sbEventsGovernorateRatesTable();
+  const params = ['select=*', 'order=sort_order.asc,area_name.asc', 'limit=1000'];
+  if (!includeInactive) params.push('is_active=eq.true');
+  const rows = await supabaseDb.request(`/${encodeURIComponent(table)}?${params.join('&')}`);
+  return (Array.isArray(rows) ? rows : []).map(_eventsSerializeGovernorateRate)
+    .filter((item) => item.areaName);
 }
 
-async function _eventsSaveTransportSettings(body = {}, req) {
-  const hubLocationUrl = _eventsGoogleMapsUrl(body?.hubLocationUrl || body?.hub_location_url, 2000);
-  if (!hubLocationUrl) {
-    const error = new Error('Hub Location must be a valid Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...');
-    error.status = 400;
-    throw error;
-  }
-  const transportCostPerKm = _eventsCost(body?.transportCostPerKm ?? body?.transport_cost_per_km, 0);
-  const table = _sbEventsTransportSettingsTable();
-  const currentRows = await supabaseDb.request(`/${encodeURIComponent(table)}?select=*&settings_key=eq.default&limit=1`);
-  const current = Array.isArray(currentRows) ? currentRows[0] || null : null;
-  const patch = {
-    hub_location_url: hubLocationUrl,
-    transport_cost_per_km: transportCostPerKm,
-    updated_by_user_id: _eventsUuid(req?.session?.userSupabaseId) || null,
-  };
-  const saved = current?.id
-    ? await supabaseDb.updateById(table, current.id, patch)
-    : await supabaseDb.insert(table, { settings_key: 'default', ...patch });
-  return _eventsSerializeTransportSettings(saved || {});
+async function _eventsFindGovernorateRate(areaName) {
+  const key = _eventsGovernorateKey(areaName);
+  if (!key) return null;
+  const rates = await _eventsListGovernorateRates();
+  return rates.find((item) => _eventsGovernorateKey(item.areaName) === key) || null;
 }
 
-async function _eventsCalculateTransportQuote(destinationUrl) {
-  const settings = await _eventsGetTransportSettings();
-  if (!settings.hubLocationUrl) {
-    const error = new Error('Hub Location is not configured. An Events Admin must set the company hub location first.');
+async function _eventsCalculateGovernorateTransportQuote(areaName) {
+  const governorate = _eventsText(areaName, 120);
+  if (!governorate) {
+    const error = new Error('Governorate is required to calculate transport cost.');
     error.status = 400;
     throw error;
   }
-  const apiKey = _eventsGoogleMapsApiKey();
-  if (!apiKey) {
-    const error = new Error('Automatic transport distance needs GOOGLE_MAPS_API_KEY in Vercel with Google Routes API enabled.');
-    error.status = 503;
-    throw error;
-  }
-  const safeDestinationUrl = _eventsGoogleMapsUrl(destinationUrl, 2000);
-  if (!safeDestinationUrl) {
-    const error = new Error('Google Maps / Location URL must be a Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...');
+  const rate = await _eventsFindGovernorateRate(governorate);
+  if (!rate) {
+    const error = new Error(`Transport cost for ${governorate} is not configured. Ask an Events Admin to add this governorate or area.`);
     error.status = 400;
     throw error;
   }
-  const [origin, destination] = await Promise.all([
-    _eventsResolveGoogleMapsCoordinates(settings.hubLocationUrl, { apiKey }),
-    _eventsResolveGoogleMapsCoordinates(safeDestinationUrl, { apiKey }),
-  ]);
-  let response;
-  try {
-    response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
-      },
-      body: JSON.stringify({
-        origin: { location: { latLng: origin } },
-        destination: { location: { latLng: destination } },
-        travelMode: 'DRIVE',
-        routingPreference: 'TRAFFIC_UNAWARE',
-        computeAlternativeRoutes: false,
-        units: 'METRIC',
-      }),
-    });
-  } catch {
-    const error = new Error('Could not reach Google Routes API to calculate transport distance.');
-    error.status = 502;
-    throw error;
-  }
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = _eventsText(data?.error?.message || data?.message || '', 500);
-    const error = new Error(message ? `Google Routes API: ${message}` : 'Google Routes API could not calculate the driving distance.');
-    error.status = response.status || 502;
-    throw error;
-  }
-  const distanceMeters = Number(data?.routes?.[0]?.distanceMeters);
-  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
-    const error = new Error('Google Routes API did not return a driving distance for these locations.');
-    error.status = 422;
-    throw error;
-  }
-  const distanceKm = _eventsRoundDistance(distanceMeters / 1000);
-  const transportCost = _eventsRoundMoney(distanceKm * settings.transportCostPerKm);
+  const transportRate = _eventsCost(rate.transportCost, 0);
   return {
-    hubLocationUrl: settings.hubLocationUrl,
-    transportCostPerKm: settings.transportCostPerKm,
-    distanceKm,
-    transportCost,
-    locationUrl: safeDestinationUrl,
+    governorate: rate.areaName,
+    transportRate,
+    transportCost: _eventsRoundMoney(transportRate * 2),
+    calculation: 'governorate_x2',
   };
+}
+
+async function _eventsSaveGovernorateRates(body = {}, req) {
+  const requested = _eventsArray(body?.rates).slice(0, 200);
+  if (!requested.length) {
+    const error = new Error('Add at least one governorate or area rate.');
+    error.status = 400;
+    throw error;
+  }
+
+  const cleaned = [];
+  const seen = new Set();
+  for (let index = 0; index < requested.length; index += 1) {
+    const source = requested[index] || {};
+    const id = _eventsUuid(source?.id);
+    const areaName = _eventsText(source?.areaName || source?.area_name, 120);
+    if (!areaName) continue;
+    const key = _eventsGovernorateKey(areaName);
+    if (seen.has(key)) {
+      const error = new Error(`Duplicate governorate/area: ${areaName}.`);
+      error.status = 400;
+      throw error;
+    }
+    seen.add(key);
+    cleaned.push({
+      id,
+      areaName,
+      transportCost: _eventsCost(source?.transportCost ?? source?.transport_cost, 0),
+      isActive: source?.isActive !== false,
+      sortOrder: _eventsNumber(source?.sortOrder ?? source?.sort_order, { min: 0, max: 100000, fallback: index + 1, integer: true }),
+    });
+  }
+  if (!cleaned.length) {
+    const error = new Error('Add a valid governorate or area name.');
+    error.status = 400;
+    throw error;
+  }
+
+  const table = _sbEventsGovernorateRatesTable();
+  const existing = await _eventsListGovernorateRates({ includeInactive: true });
+  const existingById = new Map(existing.map((item) => [item.id, item]));
+  const existingByKey = new Map(existing.map((item) => [_eventsGovernorateKey(item.areaName), item]));
+  const saved = [];
+
+  for (const rate of cleaned) {
+    const existingRow = (rate.id && existingById.get(rate.id)) || existingByKey.get(_eventsGovernorateKey(rate.areaName)) || null;
+    const payload = {
+      area_name: rate.areaName,
+      transport_cost: rate.transportCost,
+      is_active: rate.isActive,
+      sort_order: rate.sortOrder,
+      updated_by_user_id: _eventsUuid(req?.session?.userSupabaseId) || null,
+    };
+    const row = existingRow?.id
+      ? await supabaseDb.updateById(table, existingRow.id, payload)
+      : await supabaseDb.insert(table, payload);
+    saved.push(_eventsSerializeGovernorateRate(row || payload));
+  }
+  return saved;
 }
 
 function _eventsWorkingCost(projects = [], marketingMaterials = [], venueRequirements = []) {
@@ -26024,32 +25917,6 @@ function _eventsWorkingCost(projects = [], marketingMaterials = [], venueRequire
   const componentCost = [...(Array.isArray(marketingMaterials) ? marketingMaterials : []), ...(Array.isArray(venueRequirements) ? venueRequirements : [])]
     .reduce((total, row) => total + _eventsCost(row?.totalCost ?? row?.total_cost, 0), 0);
   return _eventsRoundMoney(projectCost + componentCost);
-}
-
-const EVENTS_TRANSPORT_QUOTE_TTL_MS = 10 * 60 * 1000;
-
-async function _eventsGetOrCalculateTransportQuote(locationUrl, req) {
-  const safeLocationUrl = _eventsGoogleMapsUrl(locationUrl, 2000);
-  if (!safeLocationUrl) return await _eventsCalculateTransportQuote(locationUrl);
-  const currentSettings = await _eventsGetTransportSettings();
-  const cached = req?.session?.eventsTransportQuote;
-  const validCached = cached
-    && Number(cached.expiresAt || 0) > Date.now()
-    && String(cached.locationUrl || '') === safeLocationUrl
-    && String(cached.hubLocationUrl || '') === String(currentSettings.hubLocationUrl || '')
-    && Number(cached.transportCostPerKm || 0) === Number(currentSettings.transportCostPerKm || 0)
-    && Number.isFinite(Number(cached.distanceKm))
-    && Number.isFinite(Number(cached.transportCost));
-  if (validCached) {
-    return {
-      hubLocationUrl: String(cached.hubLocationUrl || ''),
-      transportCostPerKm: _eventsCost(cached.transportCostPerKm, 0),
-      distanceKm: _eventsRoundDistance(cached.distanceKm),
-      transportCost: _eventsCost(cached.transportCost, 0),
-      locationUrl: safeLocationUrl,
-    };
-  }
-  return await _eventsCalculateTransportQuote(safeLocationUrl);
 }
 
 function _eventsSerializeType(row = {}) {
@@ -26218,9 +26085,8 @@ function _eventsSerializeRequest(row = {}) {
     requiresInternet: _eventsBoolean(row?.requires_internet),
     requiresSoundSystem: _eventsBoolean(row?.requires_sound_system),
     venueNotes: _eventsLongText(row?.venue_notes, 3000),
-    hubLocationUrl: _eventsGoogleMapsUrl(row?.hub_location_url, 2000),
-    transportCostPerKm: _eventsCost(row?.transport_cost_per_km, 0),
-    transportDistanceKm: _eventsRoundDistance(row?.transport_distance_km),
+    transportRate: _eventsCost(row?.transport_rate, 0),
+    transportCalculation: _eventsText(row?.transport_calculation, 80) || 'governorate_x2',
     workingCost: _eventsCost(row?.working_cost, 0),
     transportCost: _eventsCost(row?.transport_cost, 0),
     totalCost: _eventsCost(row?.total_cost, 0),
@@ -26259,12 +26125,18 @@ async function _eventsRequestWriteRow(body = {}, req) {
     throw error;
   }
 
+  const governorate = _eventsText(body?.governorate, 120);
+  if (!governorate) {
+    const error = new Error('Governorate is required.');
+    error.status = 400;
+    throw error;
+  }
   const eventType = await _eventsResolveRequestType(body);
   const projects = _eventsNormalizeProjects(body?.projects);
   const marketingMaterials = await _eventsResolveComponentRows(body?.marketingMaterials || body?.marketing_materials);
   const venueRequirements = await _eventsResolveComponentRows(body?.venueRequirements || body?.venue_requirements);
   const workingCost = _eventsWorkingCost(projects, marketingMaterials, venueRequirements);
-  const transport = await _eventsGetOrCalculateTransportQuote(locationUrl, req);
+  const transport = await _eventsCalculateGovernorateTransportQuote(governorate);
   const totalCost = _eventsRoundMoney(workingCost + transport.transportCost);
   const requesterName = _eventsText(
     req?.session?.accountCache?.name || req?.session?.username || body?.requesterName,
@@ -26290,16 +26162,15 @@ async function _eventsRequestWriteRow(body = {}, req) {
     venue_requirements: venueRequirements,
     venue_name: _eventsText(body?.venueName || body?.venue_name, 240) || null,
     venue_type: _eventsText(body?.venueType || body?.venue_type, 120) || null,
-    governorate: _eventsText(body?.governorate, 120) || null,
+    governorate: transport.governorate || governorate,
     location_url: locationUrl,
     venue_setup_time: _eventsDateTime(body?.venueSetupTime || body?.venue_setup_time) || null,
     requires_power: _eventsBoolean(body?.requiresPower || body?.requires_power),
     requires_internet: _eventsBoolean(body?.requiresInternet || body?.requires_internet),
     requires_sound_system: _eventsBoolean(body?.requiresSoundSystem || body?.requires_sound_system),
     venue_notes: _eventsLongText(body?.venueNotes || body?.venue_notes, 3000) || null,
-    hub_location_url: transport.hubLocationUrl,
-    transport_cost_per_km: transport.transportCostPerKm,
-    transport_distance_km: transport.distanceKm,
+    transport_rate: transport.transportRate,
+    transport_calculation: transport.calculation,
     working_cost: workingCost,
     transport_cost: transport.transportCost,
     total_cost: totalCost,
@@ -26311,7 +26182,7 @@ async function _eventsRequestWriteRow(body = {}, req) {
 // create one component or edit one selected component after shared Admin-password authorization.
 const EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS = 5 * 60 * 1000;
 const EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS = 5 * 60 * 1000;
-const EVENTS_TRANSPORT_SETTINGS_UNLOCK_TTL_MS = 5 * 60 * 1000;
+const EVENTS_GOVERNORATE_RATES_UNLOCK_TTL_MS = 5 * 60 * 1000;
 
 function _hasEventsComponentCreateAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
@@ -26330,6 +26201,12 @@ function _hasEventsComponentEditAccess(req, componentId) {
 function _hasEventsTransportSettingsAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
   const until = Number(req?.session?.eventsTransportSettingsAdminUnlockUntil || 0);
+  return Number.isFinite(until) && until > Date.now();
+}
+
+function _hasEventsGovernorateRatesAccess(req) {
+  if (_hasPageAdminAccess(req, 'Events')) return true;
+  const until = Number(req?.session?.eventsGovernorateRatesAdminUnlockUntil || 0);
   return Number.isFinite(until) && until > Date.now();
 }
 
@@ -26352,13 +26229,19 @@ async function _clearEventsTransportSettingsUnlock(req) {
   try { await _saveSessionNow(req); } catch {}
 }
 
+async function _clearEventsGovernorateRatesUnlock(req) {
+  if (!req?.session) return;
+  delete req.session.eventsGovernorateRatesAdminUnlockUntil;
+  try { await _saveSessionNow(req); } catch {}
+}
+
 function _eventsModuleMissingError(error) {
   const raw = String(error?.message || '');
   if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
     return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
   }
-  return /event_components|event_type_catalog|event_transport_settings|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
-    ? 'Events tables are not installed. Run events_module_migration.sql in Supabase first.'
+  return /event_components|event_type_catalog|event_governorate_transport_rates|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
+    ? 'Events tables are not installed. Run the latest Events governorate transport rates SQL migration in Supabase first.'
     : raw || 'Events request failed.';
 }
 
@@ -26382,15 +26265,15 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
   try {
     const password = String(req.body?.password || req.body?.adminPassword || '').trim();
     const requestedIntent = _eventsText(req.body?.intent, 32).toLowerCase();
-    const intent = requestedIntent === 'edit' || requestedIntent === 'transport_settings' ? requestedIntent : 'create';
+    const intent = ['edit', 'governorate_rates'].includes(requestedIntent) ? requestedIntent : 'create';
     const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
     const verified = await _verifyPageAdminPassword(req, password, 'Events');
     if (!verified) return res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
 
-    if (intent === 'transport_settings') {
-      req.session.eventsTransportSettingsAdminUnlockUntil = Date.now() + EVENTS_TRANSPORT_SETTINGS_UNLOCK_TTL_MS;
+    if (intent === 'governorate_rates') {
+      req.session.eventsGovernorateRatesAdminUnlockUntil = Date.now() + EVENTS_GOVERNORATE_RATES_UNLOCK_TTL_MS;
       await _saveSessionNow(req);
-      return res.json({ ok: true, intent, expiresInSeconds: Math.floor(EVENTS_TRANSPORT_SETTINGS_UNLOCK_TTL_MS / 1000) });
+      return res.json({ ok: true, intent, expiresInSeconds: Math.floor(EVENTS_GOVERNORATE_RATES_UNLOCK_TTL_MS / 1000) });
     }
 
     if (intent === 'edit') {
@@ -26514,44 +26397,28 @@ app.post('/api/events/types', requireAuth, requirePage('Events'), async (req, re
   }
 });
 
-app.get('/api/events/transport-settings', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/governorate-rates', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const settings = await _eventsGetTransportSettings();
-    return res.json({ ok: true, settings, canEdit: _hasPageAdminAccess(req, 'Events') || _hasEventsTransportSettingsAccess(req) });
+    const rates = await _eventsListGovernorateRates({ includeInactive: String(req.query?.includeInactive || '') === '1' });
+    return res.json({ ok: true, rates, canEdit: _hasPageAdminAccess(req, 'Events') || _hasEventsGovernorateRatesAccess(req) });
   } catch (error) {
-    console.error('GET /api/events/transport-settings error:', error?.details || error);
+    console.error('GET /api/events/governorate-rates error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
 
-app.patch('/api/events/transport-settings', requireAuth, requirePage('Events'), async (req, res) => {
+app.patch('/api/events/governorate-rates', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasEventsTransportSettingsAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to update Hub Location and transport cost.' });
-    const settings = await _eventsSaveTransportSettings(req.body || {}, req);
-    if (req?.session) delete req.session.eventsTransportQuote;
-    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsTransportSettingsUnlock(req);
+    if (!_hasEventsGovernorateRatesAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to update governorate transport rates.' });
+    const rates = await _eventsSaveGovernorateRates(req.body || {}, req);
+    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsGovernorateRatesUnlock(req);
     else { try { await _saveSessionNow(req); } catch {} }
-    return res.json({ ok: true, settings });
+    return res.json({ ok: true, rates });
   } catch (error) {
-    console.error('PATCH /api/events/transport-settings error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
-  }
-});
-
-app.post('/api/events/transport/estimate', requireAuth, requirePage('Events'), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    const quote = await _eventsCalculateTransportQuote(req.body?.locationUrl || req.body?.location_url);
-    if (req?.session) {
-      req.session.eventsTransportQuote = { ...quote, expiresAt: Date.now() + EVENTS_TRANSPORT_QUOTE_TTL_MS };
-      await _saveSessionNow(req);
-    }
-    return res.json({ ok: true, quote });
-  } catch (error) {
-    console.error('POST /api/events/transport/estimate error:', error?.details || error);
+    console.error('PATCH /api/events/governorate-rates error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
