@@ -12,7 +12,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-component-category-other-editor-v3" rel="stylesheet" />
+  <link href="/css/events.css?v=events-header-card-cleanup-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-components-page">
@@ -23,13 +23,10 @@
       <main class="events-shell">
         <nav class="events-subnav" aria-label="Events workspace"><a class="events-subnav__link" href="/events/calendar"><i data-feather="calendar"></i><span>Calendar</span></a><a class="events-subnav__link" href="/events/requests"><i data-feather="clipboard"></i><span>Event Requests</span></a><a class="events-subnav__link is-active" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a></nav>
         <section class="events-panel events-components-workspace">
-          <div class="events-panel__header events-components-workspace__header">
-            <div>
-              <h3>Event Components</h3>
-              <p>Reusable components with their ownership source, linked reference, and event cost.</p>
-            </div>
+          <div class="events-panel__header events-components-workspace__header events-components-workspace__header--actions-only">
+            <h3 class="events-visually-hidden">Event Components</h3>
+            <input id="eventComponentsSearchInput" class="events-global-search-bridge" type="search" aria-label="Search event components" autocomplete="off" tabindex="-1" />
             <div class="events-list-controls events-components-workspace__controls">
-              <label class="events-search"><i data-feather="search"></i><input id="eventComponentsSearchInput" type="search" placeholder="Search components..." autocomplete="off" /></label>
               <button class="events-primary-btn" id="eventComponentAddBtn" type="button" hidden><i data-feather="plus-circle"></i><span>Add Event Component</span></button>
             </div>
           </div>
@@ -77,6 +74,6 @@
       </div>
     </form>
   </div>
-  <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script><script src="/js/events-components.js?v=events-component-category-other-editor-v3"></script>
+  <script src="/js/common-ui.js?v=events-global-search-v1"></script><script src="/js/events-components.js?v=events-global-search-v1"></script>
 </body>
 </html>

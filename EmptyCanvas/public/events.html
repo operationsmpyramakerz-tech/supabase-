@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-workspace-cleanup-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-header-card-cleanup-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-requests-page">
@@ -53,7 +53,8 @@
         </nav>
 
         <section class="events-request-workspace" aria-labelledby="eventsListTitle">
-          <div class="events-request-workspace__heading"><div><h3 id="eventsListTitle">Event Requests</h3><p>Open a card to review the full execution brief.</p></div><label class="events-search"><i data-feather="search"></i><input id="eventsSearchInput" type="search" placeholder="Search name, organization, reference..." autocomplete="off" /></label></div>
+          <h3 class="events-visually-hidden" id="eventsListTitle">Event Requests</h3>
+          <input id="requestedSearch" class="events-global-search-bridge" type="search" aria-label="Search event requests" autocomplete="off" tabindex="-1" />
           <div class="events-orders-toolbar" aria-label="Event request status">
             <div class="events-orders-toolbar__scroll"><div class="events-orders-tabs" id="eventsStatusTabs" role="tablist" aria-label="Event request status tabs">
               <button class="events-order-status-tab is-active" type="button" role="tab" aria-selected="true" data-event-status-tab="all"><span class="order-status-tab__icon"><i data-feather="layers"></i></span><span class="order-status-tab__label">All</span></button>
@@ -88,7 +89,7 @@
     </section>
   </div>
 
-  <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-  <script src="/js/events.js?v=events-workspace-cleanup-v1"></script>
+  <script src="/js/common-ui.js?v=events-global-search-v1"></script>
+  <script src="/js/events.js?v=events-request-cards-profile-v1"></script>
 </body>
 </html>
