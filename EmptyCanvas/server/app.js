@@ -9504,6 +9504,7 @@ function _backupCatalog() {
     { key: 'events', pageName: 'Events', tableName: _sbEventsTable(), moduleName: 'Events', icon: 'calendar', description: 'Event execution requests, project requirements, marketing materials, and venue details.' },
     { key: 'event-components', pageName: 'Event Components', tableName: _sbEventComponentsTable(), moduleName: 'Events', icon: 'box', description: 'Independent catalog of event projects, marketing materials, venue equipment, and other event components.' },
     { key: 'event-types', pageName: 'Event Types', tableName: _sbEventTypesTable(), moduleName: 'Events', icon: 'tag', description: 'Reusable custom event types created from the Events request form.' },
+    { key: 'event-transport-settings', pageName: 'Event Transport Settings', tableName: _sbEventsTransportSettingsTable(), moduleName: 'Events', icon: 'navigation', description: 'Company hub location and transport cost per kilometre used for future event estimates.', sensitive: true },
     { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
     { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
@@ -25583,6 +25584,10 @@ function _sbEventTypesTable() {
   return String(process.env.SUPABASE_EVENT_TYPES_TABLE || 'event_type_catalog').trim() || 'event_type_catalog';
 }
 
+function _sbEventsTransportSettingsTable() {
+  return String(process.env.SUPABASE_EVENTS_TRANSPORT_SETTINGS_TABLE || 'event_transport_settings').trim() || 'event_transport_settings';
+}
+
 function _sbEventsEnabled() {
   return supabaseDb.isConfigured();
 }
@@ -25693,6 +25698,7 @@ function _eventsNormalizeProjects(value) {
       title: _eventsText(row?.title || row?.name, 180),
       description: _eventsLongText(row?.description, 1500),
       quantity: _eventsNumber(row?.quantity, { min: 0, max: 100000, fallback: 1, integer: true }),
+      workingCost: _eventsCost(row?.workingCost ?? row?.working_cost ?? row?.cost, 0),
       notes: _eventsLongText(row?.notes, 1500),
     }))
     .filter((row) => row.title);
@@ -25765,6 +25771,285 @@ function _eventsHttpUrl(value, maxLength = 1000) {
   } catch {
     return '';
   }
+}
+
+// Event transport settings are stored independently from request records. Each
+// event receives a cost snapshot at submission time, so later rate updates do
+// not change historical event budgets.
+function _eventsGoogleMapsUrl(value, maxLength = 2000) {
+  const raw = _eventsHttpUrl(value, maxLength);
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    const host = String(url.hostname || '').toLowerCase().replace(/^www\./, '');
+    const path = String(url.pathname || '');
+    const isGoogleDomain = /(^|\.)google\.[a-z.]+$/i.test(host);
+    const isMapsShortLink = host === 'maps.app.goo.gl' || (host === 'goo.gl' && /^\/maps(?:\/|$)/i.test(path));
+    const isGoogleMapsPath = isGoogleDomain && (
+      host === 'maps.google.com' ||
+      /^\/maps(?:\/|$)/i.test(path) ||
+      /(?:^|[?&])(?:q|query|ll|destination|origin|place_id)=/i.test(url.search)
+    );
+    return isMapsShortLink || isGoogleMapsPath ? url.href.slice(0, maxLength) : '';
+  } catch {
+    return '';
+  }
+}
+
+function _eventsCoordinatesFromGoogleMapsUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch {}
+  const candidates = [raw, decoded];
+  const patterns = [
+    /@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/,
+    /!3d(-?\d{1,2}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/,
+    /(?:[?&#](?:q|query|ll|destination|origin)=|(?:^|[/?])search\/)(?:loc:)?(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/i,
+  ];
+  for (const text of candidates) {
+    for (const pattern of patterns) {
+      const match = String(text || '').match(pattern);
+      if (!match) continue;
+      const latitude = Number(match[1]);
+      const longitude = Number(match[2]);
+      if (Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) {
+        return { latitude, longitude };
+      }
+    }
+  }
+  return null;
+}
+
+function _eventsMapsAddressHint(value) {
+  try {
+    const url = new URL(value);
+    for (const key of ['query', 'q', 'destination', 'origin']) {
+      const candidate = String(url.searchParams.get(key) || '').trim();
+      if (candidate && !_eventsCoordinatesFromGoogleMapsUrl(`?${key}=${candidate}`)) return candidate.slice(0, 500);
+    }
+    const decodedPath = decodeURIComponent(String(url.pathname || ''));
+    const placeMatch = decodedPath.match(/\/maps\/(?:place|search)\/([^/?#]+)/i);
+    if (placeMatch?.[1]) return String(placeMatch[1]).replace(/\+/g, ' ').trim().slice(0, 500);
+  } catch {}
+  return '';
+}
+
+async function _eventsFollowGoogleMapsLink(value) {
+  let current = _eventsGoogleMapsUrl(value, 2000);
+  if (!current) return '';
+  for (let hop = 0; hop < 5; hop += 1) {
+    let response;
+    try {
+      response = await fetch(current, {
+        redirect: 'manual',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OperationsHub/1.0)' },
+      });
+    } catch {
+      return current;
+    }
+    if (response.status >= 300 && response.status < 400) {
+      const location = String(response.headers.get('location') || '').trim();
+      if (!location) return current;
+      let next = '';
+      try { next = new URL(location, current).href; } catch { return current; }
+      const safeNext = _eventsGoogleMapsUrl(next, 2000);
+      if (!safeNext) return current;
+      current = safeNext;
+      continue;
+    }
+    return current;
+  }
+  return current;
+}
+
+function _eventsGoogleMapsApiKey() {
+  return String(process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_ROUTES_API_KEY || '').trim();
+}
+
+async function _eventsGeocodeAddressHint(hint, apiKey) {
+  const text = _eventsText(hint, 500);
+  if (!text || !apiKey) return null;
+  const endpoint = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(text)}&key=${encodeURIComponent(apiKey)}`;
+  let response;
+  try { response = await fetch(endpoint); } catch { return null; }
+  const data = await response.json().catch(() => ({}));
+  const location = data?.results?.[0]?.geometry?.location;
+  const latitude = Number(location?.lat);
+  const longitude = Number(location?.lng);
+  return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null;
+}
+
+async function _eventsResolveGoogleMapsCoordinates(value, { apiKey = '' } = {}) {
+  const original = _eventsGoogleMapsUrl(value, 2000);
+  if (!original) {
+    const error = new Error('Please use a valid Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...');
+    error.status = 400;
+    throw error;
+  }
+  const direct = _eventsCoordinatesFromGoogleMapsUrl(original);
+  if (direct) return direct;
+  const resolved = await _eventsFollowGoogleMapsLink(original);
+  const followed = _eventsCoordinatesFromGoogleMapsUrl(resolved);
+  if (followed) return followed;
+  const hint = _eventsMapsAddressHint(resolved || original);
+  const geocoded = await _eventsGeocodeAddressHint(hint, apiKey);
+  if (geocoded) return geocoded;
+  const error = new Error('Could not read a location from this Google Maps link. Open the location in Google Maps, use Share, and paste the full Google Maps link.');
+  error.status = 400;
+  throw error;
+}
+
+function _eventsRoundMoney(value) {
+  return Math.round(Math.max(0, Number(value || 0) || 0) * 100) / 100;
+}
+
+function _eventsRoundDistance(value) {
+  return Math.round(Math.max(0, Number(value || 0) || 0) * 100) / 100;
+}
+
+function _eventsSerializeTransportSettings(row = {}) {
+  return {
+    id: String(row?.id || ''),
+    hubLocationUrl: _eventsGoogleMapsUrl(row?.hub_location_url || row?.hubLocationUrl, 2000),
+    transportCostPerKm: _eventsCost(row?.transport_cost_per_km ?? row?.transportCostPerKm, 0),
+    updatedAt: row?.updated_at || row?.updatedAt || null,
+  };
+}
+
+async function _eventsGetTransportSettings({ createIfMissing = true } = {}) {
+  const table = _sbEventsTransportSettingsTable();
+  const rows = await supabaseDb.request(`/${encodeURIComponent(table)}?select=*&settings_key=eq.default&limit=1`);
+  let row = Array.isArray(rows) ? rows[0] || null : null;
+  if (!row && createIfMissing) {
+    row = await supabaseDb.insert(table, { settings_key: 'default', hub_location_url: null, transport_cost_per_km: 0 });
+  }
+  return _eventsSerializeTransportSettings(row || {});
+}
+
+async function _eventsSaveTransportSettings(body = {}, req) {
+  const hubLocationUrl = _eventsGoogleMapsUrl(body?.hubLocationUrl || body?.hub_location_url, 2000);
+  if (!hubLocationUrl) {
+    const error = new Error('Hub Location must be a valid Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...');
+    error.status = 400;
+    throw error;
+  }
+  const transportCostPerKm = _eventsCost(body?.transportCostPerKm ?? body?.transport_cost_per_km, 0);
+  const table = _sbEventsTransportSettingsTable();
+  const currentRows = await supabaseDb.request(`/${encodeURIComponent(table)}?select=*&settings_key=eq.default&limit=1`);
+  const current = Array.isArray(currentRows) ? currentRows[0] || null : null;
+  const patch = {
+    hub_location_url: hubLocationUrl,
+    transport_cost_per_km: transportCostPerKm,
+    updated_by_user_id: _eventsUuid(req?.session?.userSupabaseId) || null,
+  };
+  const saved = current?.id
+    ? await supabaseDb.updateById(table, current.id, patch)
+    : await supabaseDb.insert(table, { settings_key: 'default', ...patch });
+  return _eventsSerializeTransportSettings(saved || {});
+}
+
+async function _eventsCalculateTransportQuote(destinationUrl) {
+  const settings = await _eventsGetTransportSettings();
+  if (!settings.hubLocationUrl) {
+    const error = new Error('Hub Location is not configured. An Events Admin must set the company hub location first.');
+    error.status = 400;
+    throw error;
+  }
+  const apiKey = _eventsGoogleMapsApiKey();
+  if (!apiKey) {
+    const error = new Error('Automatic transport distance needs GOOGLE_MAPS_API_KEY in Vercel with Google Routes API enabled.');
+    error.status = 503;
+    throw error;
+  }
+  const safeDestinationUrl = _eventsGoogleMapsUrl(destinationUrl, 2000);
+  if (!safeDestinationUrl) {
+    const error = new Error('Google Maps / Location URL must be a Google Maps link, for example https://www.google.com/maps/... or https://maps.app.goo.gl/...');
+    error.status = 400;
+    throw error;
+  }
+  const [origin, destination] = await Promise.all([
+    _eventsResolveGoogleMapsCoordinates(settings.hubLocationUrl, { apiKey }),
+    _eventsResolveGoogleMapsCoordinates(safeDestinationUrl, { apiKey }),
+  ]);
+  let response;
+  try {
+    response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: origin } },
+        destination: { location: { latLng: destination } },
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_UNAWARE',
+        computeAlternativeRoutes: false,
+        units: 'METRIC',
+      }),
+    });
+  } catch {
+    const error = new Error('Could not reach Google Routes API to calculate transport distance.');
+    error.status = 502;
+    throw error;
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = _eventsText(data?.error?.message || data?.message || '', 500);
+    const error = new Error(message ? `Google Routes API: ${message}` : 'Google Routes API could not calculate the driving distance.');
+    error.status = response.status || 502;
+    throw error;
+  }
+  const distanceMeters = Number(data?.routes?.[0]?.distanceMeters);
+  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
+    const error = new Error('Google Routes API did not return a driving distance for these locations.');
+    error.status = 422;
+    throw error;
+  }
+  const distanceKm = _eventsRoundDistance(distanceMeters / 1000);
+  const transportCost = _eventsRoundMoney(distanceKm * settings.transportCostPerKm);
+  return {
+    hubLocationUrl: settings.hubLocationUrl,
+    transportCostPerKm: settings.transportCostPerKm,
+    distanceKm,
+    transportCost,
+    locationUrl: safeDestinationUrl,
+  };
+}
+
+function _eventsWorkingCost(projects = [], marketingMaterials = [], venueRequirements = []) {
+  const projectCost = (Array.isArray(projects) ? projects : []).reduce((total, row) => total + _eventsCost(row?.workingCost ?? row?.working_cost, 0), 0);
+  const componentCost = [...(Array.isArray(marketingMaterials) ? marketingMaterials : []), ...(Array.isArray(venueRequirements) ? venueRequirements : [])]
+    .reduce((total, row) => total + _eventsCost(row?.totalCost ?? row?.total_cost, 0), 0);
+  return _eventsRoundMoney(projectCost + componentCost);
+}
+
+const EVENTS_TRANSPORT_QUOTE_TTL_MS = 10 * 60 * 1000;
+
+async function _eventsGetOrCalculateTransportQuote(locationUrl, req) {
+  const safeLocationUrl = _eventsGoogleMapsUrl(locationUrl, 2000);
+  if (!safeLocationUrl) return await _eventsCalculateTransportQuote(locationUrl);
+  const currentSettings = await _eventsGetTransportSettings();
+  const cached = req?.session?.eventsTransportQuote;
+  const validCached = cached
+    && Number(cached.expiresAt || 0) > Date.now()
+    && String(cached.locationUrl || '') === safeLocationUrl
+    && String(cached.hubLocationUrl || '') === String(currentSettings.hubLocationUrl || '')
+    && Number(cached.transportCostPerKm || 0) === Number(currentSettings.transportCostPerKm || 0)
+    && Number.isFinite(Number(cached.distanceKm))
+    && Number.isFinite(Number(cached.transportCost));
+  if (validCached) {
+    return {
+      hubLocationUrl: String(cached.hubLocationUrl || ''),
+      transportCostPerKm: _eventsCost(cached.transportCostPerKm, 0),
+      distanceKm: _eventsRoundDistance(cached.distanceKm),
+      transportCost: _eventsCost(cached.transportCost, 0),
+      locationUrl: safeLocationUrl,
+    };
+  }
+  return await _eventsCalculateTransportQuote(safeLocationUrl);
 }
 
 function _eventsSerializeType(row = {}) {
@@ -25933,6 +26218,12 @@ function _eventsSerializeRequest(row = {}) {
     requiresInternet: _eventsBoolean(row?.requires_internet),
     requiresSoundSystem: _eventsBoolean(row?.requires_sound_system),
     venueNotes: _eventsLongText(row?.venue_notes, 3000),
+    hubLocationUrl: _eventsGoogleMapsUrl(row?.hub_location_url, 2000),
+    transportCostPerKm: _eventsCost(row?.transport_cost_per_km, 0),
+    transportDistanceKm: _eventsRoundDistance(row?.transport_distance_km),
+    workingCost: _eventsCost(row?.working_cost, 0),
+    transportCost: _eventsCost(row?.transport_cost, 0),
+    totalCost: _eventsCost(row?.total_cost, 0),
     operationsNotes: _eventsLongText(row?.operations_notes, 3000),
     requesterName: _eventsText(row?.requester_name, 160),
     createdAt: row?.created_at || null,
@@ -25961,14 +26252,20 @@ async function _eventsRequestWriteRow(body = {}, req) {
     throw error;
   }
 
-  const locationUrl = _eventsHttpUrl(body?.locationUrl || body?.location_url, 1000);
+  const locationUrl = _eventsGoogleMapsUrl(body?.locationUrl || body?.location_url, 2000);
   if (!locationUrl) {
-    const error = new Error('Google Maps / Location URL is required and must start with http:// or https://.');
+    const error = new Error('Google Maps / Location URL is required. Paste a Google Maps link such as https://www.google.com/maps/... or https://maps.app.goo.gl/...');
     error.status = 400;
     throw error;
   }
 
   const eventType = await _eventsResolveRequestType(body);
+  const projects = _eventsNormalizeProjects(body?.projects);
+  const marketingMaterials = await _eventsResolveComponentRows(body?.marketingMaterials || body?.marketing_materials);
+  const venueRequirements = await _eventsResolveComponentRows(body?.venueRequirements || body?.venue_requirements);
+  const workingCost = _eventsWorkingCost(projects, marketingMaterials, venueRequirements);
+  const transport = await _eventsGetOrCalculateTransportQuote(locationUrl, req);
+  const totalCost = _eventsRoundMoney(workingCost + transport.transportCost);
   const requesterName = _eventsText(
     req?.session?.accountCache?.name || req?.session?.username || body?.requesterName,
     160,
@@ -25988,9 +26285,9 @@ async function _eventsRequestWriteRow(body = {}, req) {
     event_end_date: endDate,
     expected_attendees: _eventsNumber(body?.expectedAttendees || body?.expected_attendees, { min: 0, max: 1000000, fallback: 0, integer: true }),
     audience: _eventsLongText(body?.audience, 1000) || null,
-    projects: _eventsNormalizeProjects(body?.projects),
-    marketing_materials: await _eventsResolveComponentRows(body?.marketingMaterials || body?.marketing_materials),
-    venue_requirements: await _eventsResolveComponentRows(body?.venueRequirements || body?.venue_requirements),
+    projects,
+    marketing_materials: marketingMaterials,
+    venue_requirements: venueRequirements,
     venue_name: _eventsText(body?.venueName || body?.venue_name, 240) || null,
     venue_type: _eventsText(body?.venueType || body?.venue_type, 120) || null,
     governorate: _eventsText(body?.governorate, 120) || null,
@@ -26000,15 +26297,21 @@ async function _eventsRequestWriteRow(body = {}, req) {
     requires_internet: _eventsBoolean(body?.requiresInternet || body?.requires_internet),
     requires_sound_system: _eventsBoolean(body?.requiresSoundSystem || body?.requires_sound_system),
     venue_notes: _eventsLongText(body?.venueNotes || body?.venue_notes, 3000) || null,
+    hub_location_url: transport.hubLocationUrl,
+    transport_cost_per_km: transport.transportCostPerKm,
+    transport_distance_km: transport.distanceKm,
+    working_cost: workingCost,
+    transport_cost: transport.transportCost,
+    total_cost: totalCost,
     requester_name: requesterName || null,
     created_by_user_id: requesterId || null,
   };
 }
-
 // Events Admins can manage catalog records directly. Users with Edit access may
 // create one component or edit one selected component after shared Admin-password authorization.
 const EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS = 5 * 60 * 1000;
 const EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS = 5 * 60 * 1000;
+const EVENTS_TRANSPORT_SETTINGS_UNLOCK_TTL_MS = 5 * 60 * 1000;
 
 function _hasEventsComponentCreateAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
@@ -26024,6 +26327,12 @@ function _hasEventsComponentEditAccess(req, componentId) {
   return !!expectedId && expectedId === grantedId && Number.isFinite(until) && until > Date.now();
 }
 
+function _hasEventsTransportSettingsAccess(req) {
+  if (_hasPageAdminAccess(req, 'Events')) return true;
+  const until = Number(req?.session?.eventsTransportSettingsAdminUnlockUntil || 0);
+  return Number.isFinite(until) && until > Date.now();
+}
+
 async function _clearEventsComponentCreateUnlock(req) {
   if (!req?.session) return;
   delete req.session.eventsComponentCreateAdminUnlockUntil;
@@ -26037,12 +26346,18 @@ async function _clearEventsComponentEditUnlock(req) {
   try { await _saveSessionNow(req); } catch {}
 }
 
+async function _clearEventsTransportSettingsUnlock(req) {
+  if (!req?.session) return;
+  delete req.session.eventsTransportSettingsAdminUnlockUntil;
+  try { await _saveSessionNow(req); } catch {}
+}
+
 function _eventsModuleMissingError(error) {
   const raw = String(error?.message || '');
   if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
     return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
   }
-  return /event_components|event_type_catalog|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
+  return /event_components|event_type_catalog|event_transport_settings|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
     ? 'Events tables are not installed. Run events_module_migration.sql in Supabase first.'
     : raw || 'Events request failed.';
 }
@@ -26066,10 +26381,17 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
   res.set('Cache-Control', 'no-store');
   try {
     const password = String(req.body?.password || req.body?.adminPassword || '').trim();
-    const intent = _eventsText(req.body?.intent, 20).toLowerCase() === 'edit' ? 'edit' : 'create';
+    const requestedIntent = _eventsText(req.body?.intent, 32).toLowerCase();
+    const intent = requestedIntent === 'edit' || requestedIntent === 'transport_settings' ? requestedIntent : 'create';
     const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
     const verified = await _verifyPageAdminPassword(req, password, 'Events');
     if (!verified) return res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
+
+    if (intent === 'transport_settings') {
+      req.session.eventsTransportSettingsAdminUnlockUntil = Date.now() + EVENTS_TRANSPORT_SETTINGS_UNLOCK_TTL_MS;
+      await _saveSessionNow(req);
+      return res.json({ ok: true, intent, expiresInSeconds: Math.floor(EVENTS_TRANSPORT_SETTINGS_UNLOCK_TTL_MS / 1000) });
+    }
 
     if (intent === 'edit') {
       if (!componentId) return res.status(400).json({ ok: false, error: 'Select a valid event component to edit.' });
@@ -26188,6 +26510,48 @@ app.post('/api/events/types', requireAuth, requirePage('Events'), async (req, re
     return res.status(201).json({ ok: true, type, types });
   } catch (error) {
     console.error('POST /api/events/types error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.get('/api/events/transport-settings', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const settings = await _eventsGetTransportSettings();
+    return res.json({ ok: true, settings, canEdit: _hasPageAdminAccess(req, 'Events') || _hasEventsTransportSettingsAccess(req) });
+  } catch (error) {
+    console.error('GET /api/events/transport-settings error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.patch('/api/events/transport-settings', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_hasEventsTransportSettingsAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to update Hub Location and transport cost.' });
+    const settings = await _eventsSaveTransportSettings(req.body || {}, req);
+    if (req?.session) delete req.session.eventsTransportQuote;
+    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsTransportSettingsUnlock(req);
+    else { try { await _saveSessionNow(req); } catch {} }
+    return res.json({ ok: true, settings });
+  } catch (error) {
+    console.error('PATCH /api/events/transport-settings error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/transport/estimate', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const quote = await _eventsCalculateTransportQuote(req.body?.locationUrl || req.body?.location_url);
+    if (req?.session) {
+      req.session.eventsTransportQuote = { ...quote, expiresAt: Date.now() + EVENTS_TRANSPORT_QUOTE_TTL_MS };
+      await _saveSessionNow(req);
+    }
+    return res.json({ ok: true, quote });
+  } catch (error) {
+    console.error('POST /api/events/transport/estimate error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
