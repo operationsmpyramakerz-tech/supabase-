@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-status-tabs-type-filter-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-workspace-cleanup-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-requests-page">
@@ -51,11 +51,6 @@
           <a class="events-subnav__link is-active" href="/events/requests"><i data-feather="clipboard"></i><span>Event Requests</span></a>
           <a class="events-subnav__link" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a>
         </nav>
-
-        <section class="events-hero events-hero--requests" aria-label="Event request summary">
-          <div class="events-hero__content"><span class="events-eyebrow"><i data-feather="clipboard"></i> Event requests</span><div class="events-hero__actions"><button class="events-secondary-btn" id="eventsRefreshBtn" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button></div></div>
-          <div class="events-hero__stats" aria-label="Events summary"><article class="events-stat"><span>Total Requests</span><strong id="eventsTotalCount">—</strong></article><article class="events-stat"><span>Awaiting Review</span><strong id="eventsPendingCount">—</strong></article><article class="events-stat"><span>In Progress</span><strong id="eventsProgressCount">—</strong></article></div>
-        </section>
 
         <section class="events-request-workspace" aria-labelledby="eventsListTitle">
           <div class="events-request-workspace__heading"><div><h3 id="eventsListTitle">Event Requests</h3><p>Open a card to review the full execution brief.</p></div><label class="events-search"><i data-feather="search"></i><input id="eventsSearchInput" type="search" placeholder="Search name, organization, reference..." autocomplete="off" /></label></div>
@@ -94,6 +89,6 @@
   </div>
 
   <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-  <script src="/js/events.js?v=events-status-tabs-type-filter-v1"></script>
+  <script src="/js/events.js?v=events-workspace-cleanup-v1"></script>
 </body>
 </html>
