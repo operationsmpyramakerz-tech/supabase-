@@ -49,7 +49,7 @@
     return (state.events || []).filter((event) => {
       if (status !== 'all' && event.status !== status) return false;
       if (!query) return true;
-      return [event.eventCode, event.eventName, event.eventType, event.organizationName, event.governorate, event.city, event.requesterName].join(' ').toLowerCase().includes(query);
+      return [event.eventCode, event.eventName, event.eventType, event.organizationName, event.governorate, event.requesterName].join(' ').toLowerCase().includes(query);
     });
   }
   function updateStats() {
@@ -72,7 +72,7 @@
     }
     els.body.innerHTML = list.map((event) => {
       const dates = event.eventStartDate ? `${formatDate(event.eventStartDate)}${event.eventEndDate && event.eventEndDate !== event.eventStartDate ? ` – ${formatDate(event.eventEndDate)}` : ''}` : '—';
-      const location = [event.city, event.governorate].filter(Boolean).join(', ') || '—';
+      const location = event.governorate || '—';
       return `<tr>
         <td><span class="events-ref">${escapeHTML(event.eventCode || 'Pending ref.')}</span></td>
         <td><strong class="events-table-title" title="${escapeHTML(event.eventName)}">${escapeHTML(event.eventName || 'Untitled Event')}</strong><span class="events-table-muted">${escapeHTML(typeLabels[event.eventType] || 'Other')}</span></td>
@@ -118,9 +118,10 @@
     if (!els.modalContent) return;
     const mapUrl = safeUrl(event.locationUrl);
     const venueItems = [
-      detailItem('Venue', event.venueName), detailItem('Type', event.venueType),
-      detailItem('Governorate', event.governorate), detailItem('City / Area', event.city),
-      detailItem('District', event.district), detailItem('Setup time', formatDateTime(event.venueSetupTime)),
+      detailItem('Venue', event.venueName),
+      detailItem('Type', event.venueType),
+      detailItem('Governorate', event.governorate),
+      detailItem('Setup time', formatDateTime(event.venueSetupTime)),
     ].join('');
     const requirements = [event.requiresPower && 'Power points', event.requiresInternet && 'Internet', event.requiresSoundSystem && 'Sound system'].filter(Boolean).join(' · ') || 'No special utilities selected';
     els.modalContent.innerHTML = `
@@ -130,7 +131,7 @@
       <section class="events-detail-block"><h4><i data-feather="cpu"></i> Projects</h4>${detailList(event.projects, { empty: 'No projects were added.' })}</section>
       <section class="events-detail-block"><h4><i data-feather="image"></i> Marketing Materials</h4>${detailList(event.marketingMaterials, { empty: 'No marketing materials were added.', component: true })}</section>
       <section class="events-detail-block"><h4><i data-feather="tool"></i> Venue Requirements</h4>${detailList(event.venueRequirements, { empty: 'No venue requirements were added.', component: true })}</section>
-      <section class="events-detail-block"><h4><i data-feather="map-pin"></i> Venue & Location</h4><div class="events-detail-grid">${venueItems}</div><div class="events-detail-item" style="margin-top:12px"><span>Address</span><p>${escapeHTML(event.address || '—')}</p></div>${mapUrl ? `<a class="events-back-link" style="margin-top:12px" target="_blank" rel="noopener noreferrer" href="${escapeHTML(mapUrl)}"><i data-feather="external-link"></i><span>Open map location</span></a>` : ''}</section>
+      <section class="events-detail-block"><h4><i data-feather="map-pin"></i> Venue & Location</h4><div class="events-detail-grid">${venueItems}</div>${mapUrl ? `<a class="events-location-link" target="_blank" rel="noopener noreferrer" href="${escapeHTML(mapUrl)}"><i data-feather="external-link"></i><span>Open map location</span></a>` : '<div class="events-detail-item" style="margin-top:12px"><span>Google Maps / Location URL</span><p>—</p></div>'}</section>
       <section class="events-detail-block"><h4><i data-feather="sliders"></i> Site Notes</h4><div class="events-detail-item"><span>Utilities</span><p>${escapeHTML(requirements)}</p></div><div class="events-detail-item" style="margin-top:12px"><span>Venue Notes</span><p>${escapeHTML(event.venueNotes || 'No venue notes were added.')}</p></div></section>
       ${event.operationsNotes ? `<section class="events-detail-block events-detail-block--wide"><h4><i data-feather="clipboard"></i> Operations Notes</h4><div class="events-detail-item"><p>${escapeHTML(event.operationsNotes)}</p></div></section>` : ''}
     `;

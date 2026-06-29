@@ -9,6 +9,9 @@
     loading: false,
     query: '',
     createAuthorized: false,
+    editAuthorized: false,
+    pendingEditId: '',
+    authorizationIntent: 'create',
     photoDataUrl: '',
     photoFileName: '',
   };
@@ -135,6 +138,7 @@
     }
 
     const admin = isAdmin();
+    const canEdit = !isViewOnly();
     els.body.innerHTML = list.map((row) => `
       <tr>
         <td>
@@ -146,7 +150,7 @@
         <td>${mediaCell(row)}</td>
         <td>${row.isActive ? '<span class="events-status events-status--approved">Active</span>' : '<span class="events-status events-status--cancelled">Inactive</span>'}</td>
         <td>${escapeHTML(formatDate(row.updatedAt || row.createdAt))}</td>
-        <td>${admin ? `<div class="events-action-row"><button class="events-action-btn" data-edit-component="${escapeHTML(row.id)}" type="button"><i data-feather="edit-3"></i><span>Edit</span></button><button class="events-action-btn events-action-btn--danger" data-delete-component="${escapeHTML(row.id)}" type="button"><i data-feather="trash-2"></i></button></div>` : '—'}</td>
+        <td>${canEdit ? `<div class="events-action-row"><button class="events-action-btn" data-edit-component="${escapeHTML(row.id)}" type="button"><i data-feather="edit-3"></i><span>Edit</span></button>${admin ? `<button class="events-action-btn events-action-btn--danger" data-delete-component="${escapeHTML(row.id)}" type="button" aria-label="Delete component"><i data-feather="trash-2"></i></button>` : ''}</div>` : '—'}</td>
       </tr>
     `).join('');
     icons();
@@ -297,8 +301,9 @@
 
   function openComponentModal(id) {
     const component = state.components.find((row) => row.id === id);
-    if (!component || !isAdmin()) {
-      toast('info', 'Event Components', 'Events Admin access is required to edit catalog records.');
+    if (!component) return;
+    if (!isAdmin() && !state.editAuthorized) {
+      requestEditAuthorization(id);
       return;
     }
     resetForm(component);
@@ -328,7 +333,8 @@
     }
   }
 
-  function openAdminAuthorizationModal() {
+  function openAdminAuthorizationModal(intent = 'create') {
+    state.authorizationIntent = intent === 'edit' ? 'edit' : 'create';
     resetAdminAuthorizationForm();
     if (els.adminModal) {
       els.adminModal.hidden = false;
@@ -354,41 +360,87 @@
       window.location.assign('/events/components/new');
       return;
     }
-    openAdminAuthorizationModal();
+    openAdminAuthorizationModal('create');
+  }
+
+  function requestEditAuthorization(id) {
+    if (isViewOnly()) {
+      try { window.OpsPageAccess?.showViewOnlyNotice?.(); } catch {}
+      return;
+    }
+    const component = state.components.find((row) => row.id === id);
+    if (!component) return;
+    if (isAdmin()) {
+      state.editAuthorized = true;
+      openComponentModal(id);
+      return;
+    }
+    state.pendingEditId = id;
+    state.editAuthorized = false;
+    openAdminAuthorizationModal('edit');
   }
 
   async function authorizeCreate(event) {
     event.preventDefault();
+    const intent = state.authorizationIntent === 'edit' ? 'edit' : 'create';
+
     if (isAdmin()) {
       closeAdminAuthorizationModal();
-      state.createAuthorized = true;
-      window.location.assign('/events/components/new');
+      if (intent === 'edit') {
+        state.editAuthorized = true;
+        const id = state.pendingEditId;
+        state.pendingEditId = '';
+        openComponentModal(id);
+      } else {
+        state.createAuthorized = true;
+        window.location.assign('/events/components/new');
+      }
       return;
     }
+
     const password = String(els.adminPassword?.value || '').trim();
     if (!password) {
       if (els.adminError) els.adminError.textContent = 'Please enter the Admin password.';
       els.adminPassword?.focus();
       return;
     }
+
+    if (intent === 'edit' && !state.pendingEditId) {
+      if (els.adminError) els.adminError.textContent = 'Choose the component to edit again.';
+      return;
+    }
+
     if (els.adminError) els.adminError.textContent = '';
     if (els.adminConfirm) {
       els.adminConfirm.disabled = true;
       const label = els.adminConfirm.querySelector('span');
       if (label) label.textContent = 'Authorizing...';
     }
+
     try {
       const response = await fetch('/api/events/admin/verify', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({
+          password,
+          intent,
+          componentId: intent === 'edit' ? state.pendingEditId : '',
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Invalid Admin password.');
-      state.createAuthorized = true;
+
       closeAdminAuthorizationModal();
-      window.location.assign('/events/components/new');
+      if (intent === 'edit') {
+        state.editAuthorized = true;
+        const id = state.pendingEditId;
+        state.pendingEditId = '';
+        openComponentModal(id);
+      } else {
+        state.createAuthorized = true;
+        window.location.assign('/events/components/new');
+      }
     } catch (error) {
       if (els.adminError) els.adminError.textContent = error?.message || 'Invalid Admin password.';
       if (els.adminConfirm) {
@@ -402,8 +454,12 @@
 
   async function save(event) {
     event.preventDefault();
-    if (!isAdmin() || !state.editingId) {
-      if (els.error) els.error.textContent = 'Events Admin access is required to edit catalog records.';
+    if (isViewOnly()) {
+      try { window.OpsPageAccess?.showViewOnlyNotice?.(); } catch {}
+      return;
+    }
+    if (!state.editingId || (!isAdmin() && !state.editAuthorized)) {
+      if (els.error) els.error.textContent = 'Admin authorization is required to edit this component.';
       return;
     }
     const name = String(els.name?.value || '').trim();
@@ -444,6 +500,7 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update event component.');
       toast('success', 'Event Components', 'Component updated.');
+      if (!isAdmin()) state.editAuthorized = false;
       closeComponentModal();
       load({ silent: true });
     } catch (error) {
@@ -483,7 +540,7 @@
     els.body?.addEventListener('click', (event) => {
       const edit = event.target.closest('[data-edit-component]');
       const del = event.target.closest('[data-delete-component]');
-      if (edit) openComponentModal(edit.dataset.editComponent);
+      if (edit) requestEditAuthorization(edit.dataset.editComponent);
       if (del) remove(del.dataset.deleteComponent);
     });
     els.close?.addEventListener('click', closeComponentModal);
