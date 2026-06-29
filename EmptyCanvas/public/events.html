@@ -11,51 +11,37 @@
   <script src="/pwa-register.js" defer></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Events | Operations Hub</title>
+  <title>Event Requests | Operations Hub</title>
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-calendar-refine-v2" rel="stylesheet" />
+  <link href="/css/events.css?v=events-request-cards-datetime-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
-<body class="permissions-loading events-page">
+<body class="permissions-loading events-page events-requests-page">
   <div class="app-container">
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <h2>Dashboard</h2>
-        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button>
-      </div>
-      <nav class="sidebar-nav">
-        <ul class="nav-list">
-          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
-          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
-          <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
-          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
-          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
-          <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
-          <li><a class="nav-link" href="/proposals"><i data-feather="file-text"></i><span class="nav-label">Proposals</span></a></li>
-          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
-          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
-          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
-          <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
-          <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
-          <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li>
-        </ul>
-      </nav>
+      <div class="sidebar-header"><h2>Dashboard</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
+      <nav class="sidebar-nav"><ul class="nav-list">
+        <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+        <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+        <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
+        <li><a class="nav-link" href="/proposals"><i data-feather="file-text"></i><span class="nav-label">Proposals</span></a></li>
+        <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+        <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+        <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by User</span></a></li>
+        <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+        <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+        <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li>
+      </ul></nav>
       <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
     </aside>
-
     <div class="main-content">
       <header class="main-header">
-        <div class="header-row1">
-          <div class="left">
-            <div aria-live="polite" class="greeting-pill">
-              <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
-              <div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Capture, review, and follow up on event execution requests</div></div>
-            </div>
-          </div>
-          <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
-        </div>
+        <div class="header-row1"><div class="left"><div aria-live="polite" class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Review submitted event execution requests</div></div></div></div><div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div></div>
         <div class="header-row2"><h1 class="page-title">Events</h1></div>
       </header>
 
@@ -66,42 +52,25 @@
           <a class="events-subnav__link" href="/events/components"><i data-feather="layers"></i><span>Event Components</span></a>
         </nav>
 
-        <section class="events-hero" aria-label="Events workspace">
-          <div class="events-hero__content">
-            <span class="events-eyebrow"><i data-feather="calendar"></i> Events workspace</span>
-            <div class="events-hero__actions">
-              <button class="events-secondary-btn" id="eventsRefreshBtn" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
-            </div>
-          </div>
-          <div class="events-hero__stats" aria-label="Events summary">
-            <article class="events-stat"><span>Total Requests</span><strong id="eventsTotalCount">—</strong></article>
-            <article class="events-stat"><span>Awaiting Review</span><strong id="eventsPendingCount">—</strong></article>
-            <article class="events-stat"><span>In Progress</span><strong id="eventsProgressCount">—</strong></article>
-          </div>
+        <section class="events-hero events-hero--requests" aria-label="Event request summary">
+          <div class="events-hero__content"><span class="events-eyebrow"><i data-feather="clipboard"></i> Event requests</span><div class="events-hero__actions"><button class="events-secondary-btn" id="eventsRefreshBtn" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button></div></div>
+          <div class="events-hero__stats" aria-label="Events summary"><article class="events-stat"><span>Total Requests</span><strong id="eventsTotalCount">—</strong></article><article class="events-stat"><span>Awaiting Review</span><strong id="eventsPendingCount">—</strong></article><article class="events-stat"><span>In Progress</span><strong id="eventsProgressCount">—</strong></article></div>
         </section>
 
-        <section class="events-panel" aria-labelledby="eventsListTitle">
-          <div class="events-panel__header">
-            <div><h3 id="eventsListTitle">Event Requests</h3></div>
-            <div class="events-list-controls">
-              <label class="events-search"><i data-feather="search"></i><input id="eventsSearchInput" type="search" placeholder="Search name, organization, reference..." autocomplete="off" /></label>
-              <select id="eventsStatusFilter" aria-label="Filter by event status">
-                <option value="all">All statuses</option>
-                <option value="submitted">Submitted</option>
-                <option value="under_review">Under review</option>
-                <option value="approved">Approved</option>
-                <option value="in_progress">In progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
+        <section class="events-request-workspace" aria-labelledby="eventsListTitle">
+          <div class="events-request-workspace__heading"><div><h3 id="eventsListTitle">Event Requests</h3><p>Open a card to review the full execution brief.</p></div><label class="events-search"><i data-feather="search"></i><input id="eventsSearchInput" type="search" placeholder="Search name, organization, reference..." autocomplete="off" /></label></div>
+          <div class="events-orders-toolbar" aria-label="Event request status">
+            <div class="events-orders-toolbar__scroll"><div class="events-orders-tabs" id="eventsStatusTabs" role="tablist" aria-label="Event request status tabs">
+              <button class="events-order-status-tab is-active" type="button" role="tab" aria-selected="true" data-event-status-tab="all"><span class="order-status-tab__icon"><i data-feather="layers"></i></span><span class="order-status-tab__label">All</span></button>
+              <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="submitted"><span class="order-status-tab__icon"><i data-feather="send"></i></span><span class="order-status-tab__label">Submitted</span></button>
+              <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="under_review"><span class="order-status-tab__icon"><i data-feather="eye"></i></span><span class="order-status-tab__label">Under review</span></button>
+              <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="approved"><span class="order-status-tab__icon"><i data-feather="check-circle"></i></span><span class="order-status-tab__label">Approved</span></button>
+              <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="in_progress"><span class="order-status-tab__icon"><i data-feather="activity"></i></span><span class="order-status-tab__label">In progress</span></button>
+              <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="completed"><span class="order-status-tab__icon"><i data-feather="check"></i></span><span class="order-status-tab__label">Completed</span></button>
+              <button class="events-order-status-tab" type="button" role="tab" aria-selected="false" data-event-status-tab="cancelled"><span class="order-status-tab__icon"><i data-feather="x-circle"></i></span><span class="order-status-tab__label">Cancelled</span></button>
+            </div></div>
           </div>
-          <div class="events-table-wrap">
-            <table class="events-table">
-              <thead><tr><th>Reference</th><th>Event</th><th>Organization</th><th>Date</th><th>Location</th><th>Requested by</th><th>Status</th><th></th></tr></thead>
-              <tbody id="eventsTableBody"><tr><td colspan="8"><div class="events-loading"><span></span> Loading event requests...</div></td></tr></tbody>
-            </table>
-          </div>
+          <div class="events-request-cards" id="eventsRequestCards" aria-live="polite"><div class="events-loading"><span></span> Loading event requests...</div></div>
         </section>
       </main>
     </div>
@@ -110,16 +79,13 @@
   <div class="events-modal-overlay" id="eventDetailsModal" hidden aria-hidden="true">
     <section class="events-modal events-modal--detail" role="dialog" aria-modal="true" aria-labelledby="eventDetailsTitle">
       <button class="events-modal__close" id="eventDetailsClose" type="button" aria-label="Close event details">×</button>
-      <div class="events-modal__header">
-        <div><span class="events-eyebrow"><i data-feather="clipboard"></i> Event request</span><h2 id="eventDetailsTitle">Event Details</h2><p id="eventDetailsSubtitle">Review the full request brief.</p></div>
-        <div class="events-detail-status" id="eventDetailsStatus"></div>
-      </div>
+      <div class="events-modal__header"><div><span class="events-eyebrow"><i data-feather="clipboard"></i> Event request</span><h2 id="eventDetailsTitle">Event Details</h2><p id="eventDetailsSubtitle">Review the full request brief.</p></div><div class="events-detail-status" id="eventDetailsStatus"></div></div>
       <div class="events-detail-content" id="eventDetailsContent"></div>
       <div class="events-modal__actions"><button type="button" class="events-secondary-btn" id="eventDetailsDone">Close</button></div>
     </section>
   </div>
 
   <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-  <script src="/js/events.js?v=events-calendar-refine-v2"></script>
+  <script src="/js/events.js?v=events-request-cards-datetime-v1"></script>
 </body>
 </html>
