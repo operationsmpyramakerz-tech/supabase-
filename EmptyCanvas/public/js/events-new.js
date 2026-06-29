@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = (selector, root = document) => root.querySelector(selector);
-  const state = { components: [], submitting: false };
+  const state = { components: [], submitting: false, scheduledEvents: [], scheduledEventsLoaded: false, lastConflictSignature: '' };
 
   const els = {
     form: $('#eventRequestForm'),
@@ -14,6 +14,7 @@
     addProject: $('#addProjectRow'),
     addMarketing: $('#addMarketingRow'),
     addVenueReq: $('#addVenueRequirementRow'),
+    dateConflict: $('#eventDateConflict'),
   };
 
   const field = (id) => $(`#${id}`);
@@ -29,8 +30,12 @@
   }
 
   function toast(type, title, message) {
-    try { if (window.UI?.toast) return window.UI.toast(type, title, message); } catch {}
-    if (type === 'error') window.alert(`${title}: ${message}`);
+    try {
+      if (window.UI?.toast) return window.UI.toast({ type, title, message, duration: 6000 });
+    } catch {}
+    if (type === 'error' || type === 'info') {
+      try { window.alert(`${title}: ${message}`); } catch {}
+    }
   }
 
   function safeHttpUrl(value) {
@@ -217,6 +222,97 @@
     }
   }
 
+  function isDateKey(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+  }
+
+  function eventDateConflicts() {
+    const selectedStart = String(field('eventStartDate')?.value || '').trim();
+    if (!isDateKey(selectedStart)) return [];
+
+    const selectedEndRaw = String(field('eventEndDate')?.value || '').trim();
+    const selectedEnd = isDateKey(selectedEndRaw) && selectedEndRaw >= selectedStart
+      ? selectedEndRaw
+      : selectedStart;
+
+    return state.scheduledEvents.filter((event) => {
+      if (String(event?.status || '') === 'cancelled') return false;
+      const start = String(event?.eventStartDate || '').slice(0, 10);
+      const end = String(event?.eventEndDate || event?.eventStartDate || '').slice(0, 10);
+      return isDateKey(start) && isDateKey(end) && start <= selectedEnd && end >= selectedStart;
+    });
+  }
+
+  function renderDateConflict({ notify = false } = {}) {
+    if (!els.dateConflict) return;
+
+    const selectedStart = String(field('eventStartDate')?.value || '').trim();
+    if (!isDateKey(selectedStart) || !state.scheduledEventsLoaded) {
+      els.dateConflict.hidden = true;
+      els.dateConflict.innerHTML = '';
+      return;
+    }
+
+    const conflicts = eventDateConflicts();
+    if (!conflicts.length) {
+      els.dateConflict.hidden = true;
+      els.dateConflict.innerHTML = '';
+      state.lastConflictSignature = '';
+      return;
+    }
+
+    const codes = Array.from(new Set(conflicts.map((event) => String(event?.eventCode || '').trim()).filter(Boolean)));
+    const names = conflicts.map((event) => String(event?.eventName || 'Untitled Event').trim()).filter(Boolean);
+    const signature = `${selectedStart}|${String(field('eventEndDate')?.value || '')}|${codes.join(',')}|${names.join(',')}`;
+    const codeText = codes.length ? ` (${codes.join(', ')})` : '';
+    const nameText = names.slice(0, 2).join(', ');
+
+    els.dateConflict.hidden = false;
+    els.dateConflict.innerHTML = `<i data-feather="info"></i><div><strong>Schedule notice</strong><span>An event is already scheduled for the selected date${escapeHTML(codeText)}${nameText ? `: ${escapeHTML(nameText)}` : ''}. You can continue, but coordinate the schedule and resources.</span></div>`;
+    icons(els.dateConflict);
+
+    if (notify && signature !== state.lastConflictSignature) {
+      toast('info', 'Schedule notice', `An event is already scheduled for the selected date${codeText}. You can continue, but coordinate the schedule and resources.`);
+    }
+    state.lastConflictSignature = signature;
+  }
+
+  async function loadScheduledEvents() {
+    try {
+      const response = await fetch(`/api/events?_ts=${Date.now()}`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load scheduled events.');
+      state.scheduledEvents = Array.isArray(data?.events) ? data.events : [];
+    } catch {
+      // Schedule conflict hints are helpful but must never block event creation.
+      state.scheduledEvents = [];
+    } finally {
+      state.scheduledEventsLoaded = true;
+      renderDateConflict();
+    }
+  }
+
+  function applyCalendarPrefill() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const startDate = String(params.get('startDate') || '').trim();
+      const conflictCodes = String(params.get('conflictCodes') || '').trim();
+
+      if (isDateKey(startDate) && field('eventStartDate')) {
+        field('eventStartDate').value = startDate;
+      }
+
+      if (conflictCodes) {
+        window.setTimeout(() => {
+          toast('info', 'Schedule notice', `Event ${conflictCodes} is already scheduled on the selected date. You can continue, but coordinate the schedule and resources.`);
+        }, 120);
+      }
+    } catch {}
+  }
+
   function collectProjects() {
     return Array.from(els.projects?.querySelectorAll('.events-repeat-row') || [])
       .map((row) => ({
@@ -318,7 +414,7 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to submit event request.');
       toast('success', 'Events', 'Event request submitted successfully.');
-      window.location.assign('/events');
+      window.location.assign('/events/calendar');
     } catch (error) {
       if (els.error) els.error.textContent = error?.message || 'Could not submit event request.';
       setSubmitting(false);
@@ -332,15 +428,19 @@
     wireRepeatHandlers(els.projects);
     wireRepeatHandlers(els.marketing);
     wireRepeatHandlers(els.venueReqs);
+    [field('eventStartDate'), field('eventEndDate')].forEach((input) => {
+      input?.addEventListener('change', () => renderDateConflict({ notify: true }));
+    });
     els.form?.addEventListener('submit', submit);
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
     bindModernSelects();
     prepareModernSelects();
+    applyCalendarPrefill();
     bind();
     icons();
     refreshEmptyStates();
-    await loadComponents();
+    await Promise.all([loadComponents(), loadScheduledEvents()]);
   });
 })();
