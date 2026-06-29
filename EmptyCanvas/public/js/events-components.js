@@ -3,9 +3,11 @@
 
   const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
   const $ = (selector, root = document) => root.querySelector(selector);
-  const state = { components: [], editingId: '', loading: false, query: '', createAuthorized: false, editAuthorized: false, pendingEditId: '', authorizationIntent: 'create', photoDataUrl: '', photoFileName: '' };
+  const state = { components: [], editingId: '', loading: false, query: '', category: 'all', statusFilter: 'all', createAuthorized: false, editAuthorized: false, pendingEditId: '', authorizationIntent: 'create', photoDataUrl: '', photoFileName: '' };
   const els = {
     cards: $('#eventComponentsCards'), total: $('#eventComponentsTotalCount'), active: $('#eventComponentsActiveCount'), inactive: $('#eventComponentsInactiveCount'), search: $('#eventComponentsSearchInput'), add: $('#eventComponentAddBtn'),
+    categoryTabs: Array.from(document.querySelectorAll('[data-component-category-tab]')),
+    statusFilter: $('#eventComponentsStatusFilter'), statusFilterBtn: $('#eventComponentsStatusFilterBtn'), statusFilterPanel: $('#eventComponentsStatusFilterPanel'), statusFilterDot: $('#eventComponentsStatusFilterDot'),
     modal: $('#eventComponentModal'), form: $('#eventComponentForm'), close: $('#eventComponentModalClose'), cancel: $('#eventComponentModalCancel'), error: $('#eventComponentFormError'), title: $('#eventComponentModalTitle'), save: $('#eventComponentSaveBtn'),
     name: $('#eventComponentName'), category: $('#eventComponentCategory'), quantity: $('#eventComponentDefaultQuantity'), ownership: $('#eventComponentOwnership'), operatingCost: $('#eventComponentOperatingCost'), rentalCost: $('#eventComponentRentalCost'), rentalCostField: $('[data-rental-cost-field]'), costPreview: $('#eventComponentCostPreview'),
     photo: $('#eventComponentPhoto'), photoPreview: $('#eventComponentPhotoPreview'), link: $('#eventComponentLink'), description: $('#eventComponentDescription'), activeBox: $('#eventComponentActive'),
@@ -26,8 +28,49 @@
   function ownershipType(row) { return row?.ownershipType === 'external_rental' ? 'external_rental' : 'company_owned'; }
   function costSummary(row) { const operating = Math.max(0, Number(row?.operatingCost || 0) || 0); const rental = ownershipType(row) === 'external_rental' ? Math.max(0, Number(row?.rentalCost || 0) || 0) : 0; return { operating, rental, unit: operating + rental }; }
   function formatDate(value) { const d = new Date(value || ''); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
-  function filtered() { const q = String(state.query || '').trim().toLowerCase(); return state.components.filter((row) => !q || [row.name, row.category, row.description, row.linkUrl, ownershipLabels[ownershipType(row)]].join(' ').toLowerCase().includes(q)); }
+  function filtered() {
+    const q = String(state.query || '').trim().toLowerCase();
+    const category = String(state.category || 'all');
+    const status = String(state.statusFilter || 'all');
+    return state.components.filter((row) => {
+      const rowCategory = String(row?.category || 'other');
+      const active = row?.isActive !== false;
+      if (category !== 'all' && rowCategory !== category) return false;
+      if (status === 'active' && !active) return false;
+      if (status === 'inactive' && active) return false;
+      if (!q) return true;
+      return [row.name, row.category, row.description, row.linkUrl, ownershipLabels[ownershipType(row)]].join(' ').toLowerCase().includes(q);
+    });
+  }
   function stats() { const all = state.components || []; if (els.total) els.total.textContent = String(all.length); if (els.active) els.active.textContent = String(all.filter((row) => row.isActive).length); if (els.inactive) els.inactive.textContent = String(all.filter((row) => !row.isActive).length); }
+  function renderCategoryTabs() {
+    els.categoryTabs.forEach((tab) => {
+      const active = tab.dataset.componentCategoryTab === state.category;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+  function closeStatusFilter() {
+    if (!els.statusFilterPanel) return;
+    els.statusFilterPanel.hidden = true;
+    els.statusFilter?.classList.remove('is-open');
+    els.statusFilterBtn?.setAttribute('aria-expanded', 'false');
+  }
+  function renderStatusFilter() {
+    if (!els.statusFilterPanel || !els.statusFilter) return;
+    const all = state.components || [];
+    const options = [
+      { key: 'all', label: 'All statuses', icon: 'layers', count: all.length },
+      { key: 'active', label: 'Active', icon: 'check-circle', count: all.filter((row) => row?.isActive !== false).length },
+      { key: 'inactive', label: 'Inactive', icon: 'x-circle', count: all.filter((row) => row?.isActive === false).length },
+    ];
+    if (!options.some((option) => option.key === state.statusFilter)) state.statusFilter = 'all';
+    const isFiltered = state.statusFilter !== 'all';
+    els.statusFilter.classList.toggle('is-filtered', isFiltered);
+    if (els.statusFilterDot) els.statusFilterDot.hidden = !isFiltered;
+    els.statusFilterPanel.innerHTML = `<div class="orders-type-filter__panel-head"><div class="orders-type-filter__panel-title">Filter by status</div><div class="orders-type-filter__panel-sub">${escapeHTML(`${all.length} component${all.length === 1 ? '' : 's'}`)}</div></div><div class="orders-type-filter__options">${options.map((option) => `<button type="button" class="orders-type-filter__option${option.key === state.statusFilter ? ' is-active' : ''}" role="menuitemradio" aria-checked="${option.key === state.statusFilter ? 'true' : 'false'}" data-component-status-filter="${escapeHTML(option.key)}"><span class="orders-type-filter__option-icon"><i data-feather="${escapeHTML(option.icon)}"></i></span><span class="orders-type-filter__option-body"><span class="orders-type-filter__option-title">${escapeHTML(option.label)}</span><span class="orders-type-filter__option-sub">${escapeHTML(`${option.count} component${option.count === 1 ? '' : 's'}`)}</span></span><span class="orders-type-filter__option-check"><i data-feather="check"></i></span></button>`).join('')}</div>`;
+    icons();
+  }
 
   function componentCardMarkup(row, canEdit, admin) {
     const photoUrl = safeImageSource(row?.photoUrl); const linkUrl = safeHttpUrl(row?.linkUrl); const costs = costSummary(row); const type = ownershipType(row); const active = row.isActive !== false;
@@ -43,8 +86,8 @@
       <div class="events-component-card__footer"><div>${linkUrl ? `<a class="events-component-card__link" href="${escapeHTML(linkUrl)}" target="_blank" rel="noopener noreferrer"><i data-feather="external-link"></i><span>Open Link</span></a>` : '<span class="events-component-card__no-link">No link</span>'}</div>${canEdit ? `<div class="events-component-card__actions"><button class="events-action-btn" data-edit-component="${escapeHTML(row.id)}" type="button"><i data-feather="edit-3"></i><span>Edit</span></button>${admin ? `<button class="events-action-btn events-action-btn--danger" data-delete-component="${escapeHTML(row.id)}" type="button" aria-label="Delete component"><i data-feather="trash-2"></i></button>` : ''}</div>` : ''}</div>
     </article>`;
   }
-  function render() { if (!els.cards) return; if (state.loading) { els.cards.innerHTML = '<div class="events-loading"><span></span> Loading event components...</div>'; return; } const list = filtered(); if (!list.length) { els.cards.innerHTML = '<div class="events-empty events-component-cards__empty"><i data-feather="layers"></i><span>No event components found.</span></div>'; icons(); return; } const admin = isAdmin(); const canEdit = !isViewOnly(); els.cards.innerHTML = list.map((row) => componentCardMarkup(row, canEdit, admin)).join(''); icons(); }
-  async function load({ silent = false } = {}) { if (!silent) { state.loading = true; render(); } try { const response = await fetch(`/api/events/components?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event components.'); state.components = Array.isArray(data.components) ? data.components : []; state.loading = false; stats(); render(); } catch (error) { state.loading = false; if (els.cards) els.cards.innerHTML = `<div class="events-empty events-component-cards__empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event components.')}</span></div>`; icons(); toast('error', 'Event Components', error?.message || 'Could not load event components.'); } }
+  function render() { if (!els.cards) return; if (state.loading) { els.cards.innerHTML = '<div class="events-loading"><span></span> Loading event components...</div>'; return; } const list = filtered(); if (!list.length) { els.cards.innerHTML = '<div class="events-empty events-component-cards__empty"><i data-feather="layers"></i><span>No event components match this view.</span></div>'; icons(); return; } const admin = isAdmin(); const canEdit = !isViewOnly(); els.cards.innerHTML = list.map((row) => componentCardMarkup(row, canEdit, admin)).join(''); icons(); }
+  async function load({ silent = false } = {}) { if (!silent) { state.loading = true; render(); } try { const response = await fetch(`/api/events/components?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event components.'); state.components = Array.isArray(data.components) ? data.components : []; state.loading = false; stats(); renderCategoryTabs(); renderStatusFilter(); render(); } catch (error) { state.loading = false; if (els.cards) els.cards.innerHTML = `<div class="events-empty events-component-cards__empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event components.')}</span></div>`; icons(); toast('error', 'Event Components', error?.message || 'Could not load event components.'); } }
   function syncAdminUi() { if (els.add) els.add.hidden = isViewOnly(); render(); }
 
   function closeAllModernSelects(except = null) { document.querySelectorAll('[data-events-modern-select]').forEach((root) => { if (root === except) return; root.classList.remove('is-open'); const trigger = $('.events-modern-select__trigger', root); const menu = $('.events-modern-select__menu', root); if (trigger) trigger.setAttribute('aria-expanded', 'false'); if (menu) menu.hidden = true; }); }
@@ -64,6 +107,30 @@
   async function authorizeCreate(event) { event.preventDefault(); const intent = state.authorizationIntent === 'edit' ? 'edit' : 'create'; if (isAdmin()) { closeAdminAuthorizationModal(); if (intent === 'edit') { state.editAuthorized = true; const id = state.pendingEditId; state.pendingEditId = ''; openComponentModal(id); } else { state.createAuthorized = true; window.location.assign('/events/components/new'); } return; } const password = String(els.adminPassword?.value || '').trim(); if (!password) { if (els.adminError) els.adminError.textContent = 'Please enter the Admin password.'; els.adminPassword?.focus(); return; } if (intent === 'edit' && !state.pendingEditId) { if (els.adminError) els.adminError.textContent = 'Choose the component to edit again.'; return; } if (els.adminError) els.adminError.textContent = ''; if (els.adminConfirm) { els.adminConfirm.disabled = true; const label = els.adminConfirm.querySelector('span'); if (label) label.textContent = 'Authorizing...'; } try { const response = await fetch('/api/events/admin/verify', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, intent, componentId: intent === 'edit' ? state.pendingEditId : '' }) }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Invalid Admin password.'); closeAdminAuthorizationModal(); if (intent === 'edit') { state.editAuthorized = true; const id = state.pendingEditId; state.pendingEditId = ''; openComponentModal(id); } else { state.createAuthorized = true; window.location.assign('/events/components/new'); } } catch (error) { if (els.adminError) els.adminError.textContent = error?.message || 'Invalid Admin password.'; if (els.adminConfirm) { els.adminConfirm.disabled = false; const label = els.adminConfirm.querySelector('span'); if (label) label.textContent = 'Authorize & Continue'; } els.adminPassword?.focus(); } }
   async function save(event) { event.preventDefault(); if (isViewOnly()) { try { window.OpsPageAccess?.showViewOnlyNotice?.(); } catch {} return; } if (!state.editingId || (!isAdmin() && !state.editAuthorized)) { if (els.error) els.error.textContent = 'Admin authorization is required to edit this component.'; return; } const name = String(els.name?.value || '').trim(); if (!name) { if (els.error) els.error.textContent = 'Component name is required.'; els.name?.focus(); return; } const link = String(els.link?.value || '').trim(); if (link && !safeHttpUrl(link)) { if (els.error) els.error.textContent = 'Link must start with http:// or https://.'; els.link?.focus(); return; } const ownershipType = els.ownership?.value === 'external_rental' ? 'external_rental' : 'company_owned'; const body = { name, category: els.category?.value || 'other', defaultQuantity: Number(els.quantity?.value || 0), ownershipType, operatingCost: costValue(els.operatingCost), rentalCost: ownershipType === 'external_rental' ? costValue(els.rentalCost) : 0, photoDataUrl: state.photoDataUrl || '', photoFileName: state.photoFileName || '', linkUrl: link, description: String(els.description?.value || '').trim(), isActive: !!els.activeBox?.checked }; if (els.error) els.error.textContent = ''; if (els.save) { els.save.disabled = true; const label = els.save.querySelector('span'); if (label) label.textContent = 'Saving...'; } try { const response = await fetch(`/api/events/components/${encodeURIComponent(state.editingId)}`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update event component.'); toast('success', 'Event Components', 'Component updated.'); if (!isAdmin()) state.editAuthorized = false; closeComponentModal(); load({ silent: true }); } catch (error) { if (els.error) els.error.textContent = error?.message || 'Could not save component.'; if (els.save) { els.save.disabled = false; const label = els.save.querySelector('span'); if (label) label.textContent = 'Save Changes'; } } }
   async function remove(id) { if (!isAdmin() || !id) return; const component = state.components.find((row) => row.id === id); if (!window.confirm(`Delete “${component?.name || 'this component'}”? Existing event requests will keep their saved snapshot.`)) return; try { const response = await fetch(`/api/events/components/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to delete component.'); toast('success', 'Event Components', 'Component deleted.'); load({ silent: true }); } catch (error) { toast('error', 'Event Components', error?.message || 'Could not delete component.'); } }
-  function bind() { els.search?.addEventListener('input', (event) => { state.query = event.target.value; render(); }); els.add?.addEventListener('click', requestCreateAuthorization); els.cards?.addEventListener('click', (event) => { const edit = event.target.closest('[data-edit-component]'); const del = event.target.closest('[data-delete-component]'); if (edit) requestEditAuthorization(edit.dataset.editComponent); if (del) remove(del.dataset.deleteComponent); }); els.close?.addEventListener('click', closeComponentModal); els.cancel?.addEventListener('click', closeComponentModal); els.modal?.addEventListener('click', (event) => { if (event.target === els.modal) closeComponentModal(); }); els.form?.addEventListener('submit', save); els.photo?.addEventListener('change', handlePhotoChange); [els.operatingCost, els.rentalCost].forEach((input) => input?.addEventListener('input', syncOwnershipFields)); els.adminClose?.addEventListener('click', closeAdminAuthorizationModal); els.adminCancel?.addEventListener('click', closeAdminAuthorizationModal); els.adminModal?.addEventListener('click', (event) => { if (event.target === els.adminModal) closeAdminAuthorizationModal(); }); els.adminForm?.addEventListener('submit', authorizeCreate); window.addEventListener('ops:userinfo', syncAdminUi); window.setTimeout(syncAdminUi, 650); }
+  function bind() {
+    els.search?.addEventListener('input', (event) => { state.query = event.target.value; render(); });
+    els.categoryTabs.forEach((tab) => tab.addEventListener('click', () => {
+      state.category = tab.dataset.componentCategoryTab || 'all';
+      renderCategoryTabs();
+      render();
+    }));
+    els.statusFilterBtn?.addEventListener('click', () => {
+      const shouldOpen = !!els.statusFilterPanel?.hidden;
+      if (shouldOpen) {
+        renderStatusFilter();
+        if (els.statusFilterPanel) els.statusFilterPanel.hidden = false;
+        els.statusFilter?.classList.add('is-open');
+        els.statusFilterBtn?.setAttribute('aria-expanded', 'true');
+      } else closeStatusFilter();
+    });
+    els.statusFilterPanel?.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-component-status-filter]');
+      if (!option) return;
+      state.statusFilter = option.dataset.componentStatusFilter || 'all';
+      renderStatusFilter();
+      render();
+      closeStatusFilter();
+    });
+    els.add?.addEventListener('click', requestCreateAuthorization); els.cards?.addEventListener('click', (event) => { const edit = event.target.closest('[data-edit-component]'); const del = event.target.closest('[data-delete-component]'); if (edit) requestEditAuthorization(edit.dataset.editComponent); if (del) remove(del.dataset.deleteComponent); }); els.close?.addEventListener('click', closeComponentModal); els.cancel?.addEventListener('click', closeComponentModal); els.modal?.addEventListener('click', (event) => { if (event.target === els.modal) closeComponentModal(); }); els.form?.addEventListener('submit', save); els.photo?.addEventListener('change', handlePhotoChange); [els.operatingCost, els.rentalCost].forEach((input) => input?.addEventListener('input', syncOwnershipFields)); els.adminClose?.addEventListener('click', closeAdminAuthorizationModal); els.adminCancel?.addEventListener('click', closeAdminAuthorizationModal); els.adminModal?.addEventListener('click', (event) => { if (event.target === els.adminModal) closeAdminAuthorizationModal(); }); els.adminForm?.addEventListener('submit', authorizeCreate); window.addEventListener('ops:userinfo', syncAdminUi); document.addEventListener('click', (event) => { if (els.statusFilter && !els.statusFilter.contains(event.target)) closeStatusFilter(); }); document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeStatusFilter(); }); window.setTimeout(syncAdminUi, 650); }
   document.addEventListener('DOMContentLoaded', () => { bindModernSelects(); syncOwnershipFields(); bind(); icons(); load(); });
 })();
