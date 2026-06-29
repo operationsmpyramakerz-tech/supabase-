@@ -5901,7 +5901,8 @@ function applyOpsShellSearchToFrame(query) {
     '#b2bSearch',
     '#stockSearch',
     '#schoolStockSearch',
-    '#notifSearch'
+    '#notifSearch',
+    '#eventComponentsSearchInput'
   ].join(',');
 
   const linked = Array.from(frameDoc.querySelectorAll(selector));

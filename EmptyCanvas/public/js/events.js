@@ -4,7 +4,7 @@
   const state = { events: [], loading: false, query: '', status: 'all', typeFilter: 'all', activeEvent: null };
   const els = {
     cards: $('#eventsRequestCards'), total: $('#eventsTotalCount'), pending: $('#eventsPendingCount'), progress: $('#eventsProgressCount'),
-    search: $('#eventsSearchInput'), tabs: Array.from(document.querySelectorAll('[data-event-status-tab]')), refresh: $('#eventsRefreshBtn'),
+    search: $('#requestedSearch'), tabs: Array.from(document.querySelectorAll('[data-event-status-tab]')), refresh: $('#eventsRefreshBtn'),
     typeFilter: $('#eventsTypeFilter'), typeFilterBtn: $('#eventsTypeFilterBtn'), typeFilterPanel: $('#eventsTypeFilterPanel'), typeFilterDot: $('#eventsTypeFilterDot'),
     modal: $('#eventDetailsModal'), modalClose: $('#eventDetailsClose'), modalDone: $('#eventDetailsDone'),
     modalTitle: $('#eventDetailsTitle'), modalSub: $('#eventDetailsSubtitle'), modalStatus: $('#eventDetailsStatus'), modalContent: $('#eventDetailsContent'),
@@ -39,15 +39,23 @@
     els.typeFilterPanel.innerHTML = `<div class="orders-type-filter__panel-head"><div class="orders-type-filter__panel-title">Filter by event type</div><div class="orders-type-filter__panel-sub">${escapeHTML(`${options[0]?.count || 0} event${(options[0]?.count || 0) === 1 ? '' : 's'}`)}</div></div><div class="orders-type-filter__options">${options.map((option) => `<button type="button" class="orders-type-filter__option${option.key === state.typeFilter ? ' is-active' : ''}" role="menuitemradio" aria-checked="${option.key === state.typeFilter ? 'true' : 'false'}" data-event-type-filter="${escapeHTML(option.key)}"><span class="orders-type-filter__option-icon"><i data-feather="${escapeHTML(option.icon)}"></i></span><span class="orders-type-filter__option-body"><span class="orders-type-filter__option-title">${escapeHTML(option.label)}</span><span class="orders-type-filter__option-sub">${escapeHTML(`${option.count} event${option.count === 1 ? '' : 's'}`)}</span></span><span class="orders-type-filter__option-check"><i data-feather="check"></i></span></button>`).join('')}</div>`;
     icons(els.typeFilterPanel);
   }
+  function creatorButtonMarkup(userId, name) {
+    const cleanId = String(userId || '').trim();
+    const cleanName = String(name || '').trim() || 'Creator';
+    return `<button class="co-right-ico co-creator-btn" type="button" data-event-creator-id="${escapeHTML(cleanId)}" data-event-creator-name="${escapeHTML(cleanName)}" aria-label="Created by ${escapeHTML(cleanName)}" title="Created by ${escapeHTML(cleanName)}"><i data-feather="user"></i></button>`;
+  }
+  function eventLocationMarkup(event) {
+    const governorate = String(event?.governorate || '').trim() || 'Location to be confirmed';
+    const mapUrl = safeUrl(event?.locationUrl);
+    if (!mapUrl) return `<span class="events-request-card__location is-disabled"><i data-feather="map-pin"></i><span>${escapeHTML(governorate)}</span></span>`;
+    return `<a class="events-request-card__location events-request-card__location-link" href="${escapeHTML(mapUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHTML(governorate)} in Google Maps" title="Open location"><i data-feather="map-pin"></i><span>${escapeHTML(governorate)}</span></a>`;
+  }
   function cardMarkup(event) {
     const type = String(event?.eventType || 'other'); const icon = typeIcons[type] || 'calendar'; const className = type.replace(/[^a-z0-9_]/gi, '') || 'other';
-    const location = [event?.venueName, event?.governorate].filter(Boolean).join(' · ') || 'Location to be confirmed';
-    const projectsCount = Array.isArray(event?.projects) ? event.projects.length : 0;
-    const componentsCount = (Array.isArray(event?.marketingMaterials) ? event.marketingMaterials.length : 0) + (Array.isArray(event?.venueRequirements) ? event.venueRequirements.length : 0);
-    return `<article class="events-request-card co-card" role="button" tabindex="0" data-event-open="${escapeHTML(event.id)}">
+    return `<article class="events-request-card co-card" role="button" tabindex="0" data-event-open="${escapeHTML(event.id)}" data-search="${escapeHTML([event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.governorate, event.requesterName].join(' '))}">
       <div class="co-top"><span class="events-request-card__thumb events-request-card__thumb--${escapeHTML(className)}"><i data-feather="${escapeHTML(icon)}"></i></span><div class="co-main"><div class="co-title">${escapeHTML(event.eventCode || 'Pending reference')}</div><div class="co-sub">${escapeHTML(formatDateRange(event))}</div><div class="co-createdby">${escapeHTML(event.eventName || 'Untitled Event')}</div></div><div class="events-request-card__count">${escapeHTML(typeLabel(event))}</div></div>
       <div class="co-divider"></div>
-      <div class="co-bottom"><div class="co-est"><div class="co-est-label">${escapeHTML(event.organizationName || 'Organization not provided')}</div><div class="events-request-card__location"><i data-feather="map-pin"></i><span>${escapeHTML(location)}</span></div><div class="co-received-by">Requested by: ${escapeHTML(event.requesterName || '—')} · ${projectsCount} project${projectsCount === 1 ? '' : 's'} · ${componentsCount} component${componentsCount === 1 ? '' : 's'}</div></div><div class="co-actions">${statusMarkup(event.status)}<span class="co-right-ico events-request-card__open"><i data-feather="arrow-up-right"></i></span></div></div>
+      <div class="co-bottom"><div class="co-est">${eventLocationMarkup(event)}</div><div class="co-actions">${statusMarkup(event.status)}${creatorButtonMarkup(event.createdByUserId, event.requesterName)}</div></div>
     </article>`;
   }
   function renderCards() {
@@ -70,6 +78,77 @@
   async function openDetails(id) { const clean = String(id || '').trim(); if (!clean || !els.modal) return; els.modal.hidden = false; els.modal.setAttribute('aria-hidden', 'false'); if (els.modalContent) els.modalContent.innerHTML = '<div class="events-loading"><span></span> Loading request details...</div>'; try { const response = await fetch(`/api/events/${encodeURIComponent(clean)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event details.'); state.activeEvent = data.event; renderDetails(data.event); } catch (error) { if (els.modalContent) els.modalContent.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event details.')}</span></div>`; icons(els.modalContent); } }
   function closeDetails() { if (!els.modal) return; els.modal.hidden = true; els.modal.setAttribute('aria-hidden', 'true'); state.activeEvent = null; }
   async function updateStatus(id) { const select = $('#eventStatusEdit'); const status = select?.value; if (!id || !status) return; const save = $('#eventStatusSave'); if (save) { save.disabled = true; save.textContent = 'Updating...'; } try { const response = await fetch(`/api/events/${encodeURIComponent(id)}`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update event status.'); state.events = state.events.map((item) => item.id === id ? data.event : item); updateStats(); renderCards(); renderDetails(data.event); toast('success', 'Events', 'Event status updated.'); } catch (error) { toast('error', 'Events', error?.message || 'Could not update event status.'); if (save) { save.disabled = false; save.textContent = 'Update'; } } }
+  const creatorProfileCache = new Map();
+  let creatorProfilePopover = null;
+  let creatorProfileListenersBound = false;
+  function creatorInitials(name) { return String(name || 'Creator').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('') || 'C'; }
+  function creatorSafeHttpUrl(value) { return safeUrl(value); }
+  function creatorFieldMarkup(label, value) { return value ? `<div class="creator-profile-field"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>` : ''; }
+  function renderCreatorProfile(profile, fallbackName, mode = 'ready') {
+    const name = String(profile?.name || fallbackName || 'Creator').trim() || 'Creator';
+    const position = String(profile?.position || '').trim();
+    const department = String(profile?.department || '').trim();
+    const subtitle = [position, department].filter(Boolean).join(' • ') || 'Team member';
+    const photo = creatorSafeHttpUrl(profile?.photoUrl);
+    const avatar = photo ? `<img src="${escapeHTML(photo)}" alt="${escapeHTML(name)}" decoding="async" />` : `<span>${escapeHTML(creatorInitials(name))}</span>`;
+    if (mode === 'loading') {
+      return `<div class="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile"><button type="button" class="creator-profile-close" aria-label="Close" title="Close"><span class="creator-profile-close-x" aria-hidden="true">&times;</span></button><div class="creator-profile-head"><div class="creator-profile-avatar ${photo ? 'has-image' : ''}">${avatar}</div><div class="creator-profile-title-wrap"><div class="creator-profile-kicker">Created by</div><div class="creator-profile-name">${escapeHTML(name)}</div><div class="creator-profile-subtitle">${escapeHTML(subtitle)}</div></div></div><div class="creator-profile-state"><i class="loading-icon" data-feather="loader"></i><span>Loading user details...</span></div></div>`;
+    }
+    if (mode === 'error') {
+      return `<div class="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile"><button type="button" class="creator-profile-close" aria-label="Close" title="Close"><span class="creator-profile-close-x" aria-hidden="true">&times;</span></button><div class="creator-profile-head"><div class="creator-profile-avatar ${photo ? 'has-image' : ''}">${avatar}</div><div class="creator-profile-title-wrap"><div class="creator-profile-kicker">Created by</div><div class="creator-profile-name">${escapeHTML(name)}</div><div class="creator-profile-subtitle">${escapeHTML(subtitle)}</div></div></div><div class="creator-profile-state creator-profile-state--error"><i data-feather="alert-circle"></i><span>Could not load this user details.</span></div></div>`;
+    }
+    const fields = [
+      ['Name', profile?.name || profile?.username],
+      ['Department', department],
+      ['Position', position],
+      ['Phone', profile?.phone],
+      ['Email', profile?.email],
+      ['Employee Code', profile?.employeeCode],
+    ].map(([label, value]) => creatorFieldMarkup(label, String(value || '').trim())).filter(Boolean).join('') || '<div class="creator-profile-empty creator-profile-empty--fields"><i data-feather="info"></i><span>No profile details available.</span></div>';
+    return `<div class="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile"><button type="button" class="creator-profile-close" aria-label="Close" title="Close"><span class="creator-profile-close-x" aria-hidden="true">&times;</span></button><div class="creator-profile-head"><div class="creator-profile-avatar ${photo ? 'has-image' : ''}">${avatar}</div><div class="creator-profile-title-wrap"><div class="creator-profile-kicker">Created by</div><div class="creator-profile-name">${escapeHTML(name)}</div><div class="creator-profile-subtitle">${escapeHTML(subtitle)}</div></div></div><div class="creator-profile-section-title">Profile details</div><div class="creator-profile-fields">${fields}</div></div>`;
+  }
+  function closeCreatorProfilePopover() {
+    if (!creatorProfilePopover) return;
+    creatorProfilePopover.classList.remove('is-open');
+    creatorProfilePopover.setAttribute('aria-hidden', 'true');
+    creatorProfilePopover.style.left = '';
+    creatorProfilePopover.style.top = '';
+  }
+  function ensureCreatorProfilePopover() {
+    if (creatorProfilePopover) return creatorProfilePopover;
+    creatorProfilePopover = document.createElement('div');
+    creatorProfilePopover.className = 'creator-profile-popover';
+    creatorProfilePopover.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(creatorProfilePopover);
+    creatorProfilePopover.addEventListener('click', (event) => { if (event.target.closest('.creator-profile-close')) closeCreatorProfilePopover(); });
+    if (!creatorProfileListenersBound) {
+      creatorProfileListenersBound = true;
+      document.addEventListener('pointerdown', (event) => { if (!creatorProfilePopover?.classList.contains('is-open')) return; if (creatorProfilePopover.contains(event.target) || event.target.closest?.('.co-creator-btn')) return; closeCreatorProfilePopover(); }, true);
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeCreatorProfilePopover(); });
+      window.addEventListener('resize', closeCreatorProfilePopover);
+    }
+    return creatorProfilePopover;
+  }
+  function positionCreatorProfilePopover(anchor) {
+    const pop = ensureCreatorProfilePopover();
+    const margin = 14; const rect = anchor.getBoundingClientRect(); const popRect = pop.getBoundingClientRect();
+    const width = popRect.width || 360; const height = popRect.height || 420;
+    let left = Math.min(Math.max(margin, rect.right - width), Math.max(margin, window.innerWidth - width - margin));
+    let top = rect.bottom + 10; if (top + height > window.innerHeight - margin) top = rect.top - height - 10;
+    top = Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin));
+    pop.style.left = `${Math.round(left)}px`; pop.style.top = `${Math.round(top)}px`;
+  }
+  async function openCreatorProfilePopover(anchor, userId, fallbackName = '') {
+    const pop = ensureCreatorProfilePopover(); const cleanId = String(userId || '').trim(); const cleanName = String(fallbackName || '').trim() || 'Creator';
+    pop.innerHTML = renderCreatorProfile({ name: cleanName }, cleanName, 'loading'); pop.classList.add('is-open'); pop.setAttribute('aria-hidden', 'false'); icons(pop); requestAnimationFrame(() => positionCreatorProfilePopover(anchor));
+    if (!cleanId) { pop.innerHTML = renderCreatorProfile({ name: cleanName }, cleanName, 'error'); icons(pop); requestAnimationFrame(() => positionCreatorProfilePopover(anchor)); return; }
+    try {
+      let profile = creatorProfileCache.get(cleanId);
+      if (!profile) { const response = await fetch(`/api/team-members/${encodeURIComponent(cleanId)}/public`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data?.error || 'Profile request failed.'); profile = data; creatorProfileCache.set(cleanId, profile); }
+      pop.innerHTML = renderCreatorProfile(profile, cleanName, 'ready');
+    } catch { pop.innerHTML = renderCreatorProfile({ name: cleanName }, cleanName, 'error'); }
+    icons(pop); requestAnimationFrame(() => positionCreatorProfilePopover(anchor));
+  }
   function bind() {
     els.search?.addEventListener('input', (event) => { state.query = event.target.value; renderCards(); });
     els.tabs.forEach((tab) => tab.addEventListener('click', () => { state.status = tab.dataset.eventStatusTab || 'all'; renderTabs(); renderCards(); }));
@@ -87,7 +166,13 @@
       renderCards();
       closeTypeFilter();
     });
-    els.cards?.addEventListener('click', (event) => { const card = event.target.closest('[data-event-open]'); if (card) openDetails(card.dataset.eventOpen); });
+    els.cards?.addEventListener('click', (event) => {
+      const creator = event.target.closest('[data-event-creator-id]');
+      if (creator) { event.preventDefault(); event.stopPropagation(); openCreatorProfilePopover(creator, creator.dataset.eventCreatorId, creator.dataset.eventCreatorName); return; }
+      if (event.target.closest('.events-request-card__location-link')) return;
+      const card = event.target.closest('[data-event-open]');
+      if (card) openDetails(card.dataset.eventOpen);
+    });
     els.cards?.addEventListener('keydown', (event) => { const card = event.target.closest('[data-event-open]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openDetails(card.dataset.eventOpen); } });
     els.modalClose?.addEventListener('click', closeDetails);
     els.modalDone?.addEventListener('click', closeDetails);
