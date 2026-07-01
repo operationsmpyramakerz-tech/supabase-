@@ -268,15 +268,28 @@
     });
   }
 
-  function componentChoices() {
-    const active = state.components.filter((item) => item.isActive !== false);
-    if (!active.length) return '<button class="events-modern-select__option" type="button" disabled>No active event components available</button>';
+  function activeComponentsForCategory(categoryCode = '') {
+    const requested = String(categoryCode || '').trim();
+    return state.components.filter((item) => item.isActive !== false && (!requested || String(item.category || '').trim() === requested));
+  }
+
+  function componentChoices(categoryCode = '') {
+    const active = activeComponentsForCategory(categoryCode);
+    if (!active.length) {
+      const categoryNames = {
+        project: 'Project Resource',
+        marketing_material: 'Marketing Material',
+        venue_equipment: 'Venue Equipment',
+      };
+      const label = categoryNames[categoryCode] || 'Event Component';
+      return `<button class="events-modern-select__option" type="button" disabled>No active ${escapeHTML(label)} components available</button>`;
+    }
     return active.map((item) => `<button class="events-modern-select__option" type="button" data-events-select-option data-value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</button>`).join('');
   }
 
-  function componentSelectMarkup(selectedId = '') {
-    const selected = state.components.find((item) => item.id === selectedId && item.isActive !== false);
-    return `<div class="events-modern-select" data-events-modern-select><input data-component-select data-placeholder="Select component" type="hidden" value="${escapeHTML(selected?.id || '')}" /><button class="events-modern-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span data-events-select-label>${escapeHTML(selected?.name || 'Select component')}</span><i data-feather="chevron-down"></i></button><div class="events-modern-select__menu events-modern-select__menu--scroll" role="listbox" hidden>${componentChoices()}</div></div>`;
+  function componentSelectMarkup(selectedId = '', categoryCode = '', selectAttribute = 'data-component-select') {
+    const selected = activeComponentsForCategory(categoryCode).find((item) => item.id === selectedId) || null;
+    return `<div class="events-modern-select" data-events-modern-select data-component-category="${escapeHTML(categoryCode)}"><input ${selectAttribute} data-placeholder="Select component" type="hidden" value="${escapeHTML(selected?.id || '')}" /><button class="events-modern-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span data-events-select-label>${escapeHTML(selected?.name || 'Select component')}</span><i data-feather="chevron-down"></i></button><div class="events-modern-select__menu events-modern-select__menu--scroll" role="listbox" hidden>${componentChoices(categoryCode)}</div></div>`;
   }
 
   function refreshEmptyStates() {
@@ -291,8 +304,14 @@
   function projectRow(data = {}) {
     const row = document.createElement('div');
     row.className = 'events-repeat-row events-repeat-row--project';
-    row.innerHTML = `<label><span>Project / Activity</span><input data-project-title type="text" maxlength="180" placeholder="Example: Smart Home workshop" value="${escapeHTML(data.title || '')}" /></label><label><span>Quantity</span><input data-project-quantity type="number" min="0" step="1" value="${escapeHTML(data.quantity ?? 1)}" /></label><label><span>Working Cost</span><input data-project-working-cost type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" value="${escapeHTML(data.workingCost ?? data.working_cost ?? 0)}" /></label><label><span>Description / Notes</span><textarea data-project-notes rows="2" maxlength="1500" placeholder="Required kits, objective, execution notes...">${escapeHTML(data.description || data.notes || '')}</textarea></label><button type="button" class="events-repeat-remove" data-remove-row aria-label="Remove project"><i data-feather="trash-2"></i></button>`;
+    const requestedId = String(data.componentId || data.component_id || '').trim();
+    const matchedLegacyComponent = !requestedId
+      ? activeComponentsForCategory('project').find((item) => String(item.name || '').trim().toLocaleLowerCase() === String(data.title || '').trim().toLocaleLowerCase())
+      : null;
+    const selectedId = requestedId || matchedLegacyComponent?.id || '';
+    row.innerHTML = `<label><span>Project / Activity</span>${componentSelectMarkup(selectedId, 'project', 'data-project-select')}</label><label><span>Quantity</span><input data-project-quantity type="number" min="0" step="1" value="${escapeHTML(data.quantity ?? 1)}" /></label><label><span>Working Cost</span><input data-project-working-cost type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" value="${escapeHTML(data.workingCost ?? data.working_cost ?? 0)}" /></label><label><span>Description / Notes</span><textarea data-project-notes rows="2" maxlength="1500" placeholder="Required kits, objective, execution notes...">${escapeHTML(data.description || data.notes || '')}</textarea></label><button type="button" class="events-repeat-remove" data-remove-row aria-label="Remove project"><i data-feather="trash-2"></i></button>`;
     els.projects?.appendChild(row);
+    prepareModernSelects(row);
     refreshEmptyStates();
     renderCostSummary();
     icons();
@@ -330,15 +349,18 @@
 
   function componentRow(kind, data = {}) {
     const host = kind === 'marketing' ? els.marketing : els.venueReqs;
+    const categoryCode = kind === 'marketing' ? 'marketing_material' : 'venue_equipment';
+    const categoryLabel = kind === 'marketing' ? 'Marketing Material' : 'Venue Equipment';
     if (!host) return;
-    if (!state.components.filter((item) => item.isActive !== false).length) {
-      toast('info', 'Event Components', 'The Event Components catalog is empty. Ask an Events Admin to add components first.');
+    if (!activeComponentsForCategory(categoryCode).length) {
+      toast('info', 'Event Components', `There are no active ${categoryLabel} components in the catalog. Ask an Events Admin to add one first.`);
       return;
     }
     const row = document.createElement('div');
     row.className = 'events-repeat-row events-repeat-row--component';
     row.dataset.componentKind = kind;
-    row.innerHTML = `<label><span>Component</span>${componentSelectMarkup(data.componentId || '')}</label><label><span>Quantity</span><input data-component-quantity type="number" min="0" step="0.01" value="${escapeHTML(data.quantity ?? 1)}" /></label><div class="events-component-cost" data-component-cost><span>Cost</span><strong>Select a component</strong><small>Cost details appear here.</small></div><label><span>Notes</span><textarea data-component-notes rows="2" maxlength="1000" placeholder="Optional notes">${escapeHTML(data.notes || '')}</textarea></label><div class="events-component-row-actions"><a class="events-component-open-link" data-component-open-link target="_blank" rel="noopener noreferrer" hidden><i data-feather="external-link"></i><span>Open Link</span></a><button type="button" class="events-repeat-remove" data-remove-row aria-label="Remove component"><i data-feather="trash-2"></i></button></div>`;
+    row.dataset.componentCategory = categoryCode;
+    row.innerHTML = `<label><span>Component</span>${componentSelectMarkup(data.componentId || '', categoryCode)}</label><label><span>Quantity</span><input data-component-quantity type="number" min="0" step="0.01" value="${escapeHTML(data.quantity ?? 1)}" /></label><div class="events-component-cost" data-component-cost><span>Cost</span><strong>Select a component</strong><small>Cost details appear here.</small></div><label><span>Notes</span><textarea data-component-notes rows="2" maxlength="1000" placeholder="Optional notes">${escapeHTML(data.notes || '')}</textarea></label><div class="events-component-row-actions"><a class="events-component-open-link" data-component-open-link target="_blank" rel="noopener noreferrer" hidden><i data-feather="external-link"></i><span>Open Link</span></a><button type="button" class="events-repeat-remove" data-remove-row aria-label="Remove component"><i data-feather="trash-2"></i></button></div>`;
     host.appendChild(row);
     prepareModernSelects(row);
     updateComponentRowMeta(row);
@@ -358,13 +380,17 @@
     root?.addEventListener('change', (event) => {
       const row = event.target.closest('.events-repeat-row');
       if (!row) return;
-      const select = event.target.closest('[data-component-select]');
+      const select = event.target.closest('[data-component-select], [data-project-select]');
       if (select) {
         const component = state.components.find((item) => item.id === select.value);
-        const qty = $('[data-component-quantity]', row);
+        const qty = $('[data-component-quantity], [data-project-quantity]', row);
         if (component && qty) qty.value = component.defaultQuantity ?? 1;
+        if (component && select.matches?.('[data-project-select]')) {
+          const projectCost = $('[data-project-working-cost]', row);
+          if (projectCost) projectCost.value = componentCostSummary(component, qty?.value ?? component.defaultQuantity ?? 1).total;
+        }
       }
-      if (select || event.target.matches?.('[data-component-quantity]')) updateComponentRowMeta(row);
+      if (select?.matches?.('[data-component-select]') || event.target.matches?.('[data-component-quantity]')) updateComponentRowMeta(row);
       renderCostSummary();
     });
     root?.addEventListener('input', (event) => {
@@ -690,12 +716,17 @@
   }
 
   function collectProjects() {
-    return Array.from(els.projects?.querySelectorAll('.events-repeat-row') || []).map((row) => ({
-      title: String($('[data-project-title]', row)?.value || '').trim(),
-      quantity: nonNegative($('[data-project-quantity]', row)?.value),
-      workingCost: nonNegative($('[data-project-working-cost]', row)?.value),
-      description: String($('[data-project-notes]', row)?.value || '').trim(),
-    })).filter((item) => item.title);
+    return Array.from(els.projects?.querySelectorAll('.events-repeat-row') || []).map((row) => {
+      const componentId = String($('[data-project-select]', row)?.value || '').trim();
+      const component = state.components.find((item) => item.id === componentId && String(item.category || '') === 'project') || null;
+      return {
+        componentId,
+        title: component?.name || '',
+        quantity: nonNegative($('[data-project-quantity]', row)?.value),
+        workingCost: nonNegative($('[data-project-working-cost]', row)?.value),
+        description: String($('[data-project-notes]', row)?.value || '').trim(),
+      };
+    }).filter((item) => item.componentId && item.title);
   }
 
   function collectComponents(root) {

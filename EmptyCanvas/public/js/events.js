@@ -55,7 +55,7 @@
     return `<article class="events-request-card co-card" role="button" tabindex="0" data-event-open="${escapeHTML(event.id)}" data-search="${escapeHTML([event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.governorate, event.requesterName].join(' '))}">
       <div class="co-top"><span class="events-request-card__thumb events-request-card__thumb--${escapeHTML(className)}"><i data-feather="${escapeHTML(icon)}"></i></span><div class="co-main"><div class="co-title">${escapeHTML(event.eventCode || 'Pending reference')}</div><div class="co-sub">${escapeHTML(formatDateRange(event))}</div><div class="co-createdby">${escapeHTML(event.eventName || 'Untitled Event')}</div></div><div class="events-request-card__count">${escapeHTML(typeLabel(event))}</div></div>
       <div class="co-divider"></div>
-      <div class="co-bottom"><div class="co-est">${eventLocationMarkup(event)}</div><div class="co-actions">${statusMarkup(event.status)}${creatorButtonMarkup(event.createdByUserId, event.requesterName)}</div></div>
+      <div class="co-bottom"><div class="co-est">${eventLocationMarkup(event)}</div><div class="co-actions">${statusMarkup(event.status)}${creatorButtonMarkup(event.createdByUserId || event.requesterName, event.requesterName)}</div></div>
     </article>`;
   }
   function renderCards() {
@@ -143,8 +143,24 @@
     pop.innerHTML = renderCreatorProfile({ name: cleanName }, cleanName, 'loading'); pop.classList.add('is-open'); pop.setAttribute('aria-hidden', 'false'); icons(pop); requestAnimationFrame(() => positionCreatorProfilePopover(anchor));
     if (!cleanId) { pop.innerHTML = renderCreatorProfile({ name: cleanName }, cleanName, 'error'); icons(pop); requestAnimationFrame(() => positionCreatorProfilePopover(anchor)); return; }
     try {
-      let profile = creatorProfileCache.get(cleanId);
-      if (!profile) { const response = await fetch(`/api/team-members/${encodeURIComponent(cleanId)}/public`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data?.error || 'Profile request failed.'); profile = data; creatorProfileCache.set(cleanId, profile); }
+      let profile = creatorProfileCache.get(cleanId) || creatorProfileCache.get(cleanName);
+      if (!profile) {
+        const lookupKeys = Array.from(new Set([cleanId, cleanName].map((value) => String(value || '').trim()).filter(Boolean)));
+        let lastError = null;
+        for (const lookupKey of lookupKeys) {
+          const response = await fetch(`/api/team-members/${encodeURIComponent(lookupKey)}/public`, { credentials: 'same-origin', cache: 'no-store' });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok) {
+            profile = data;
+            creatorProfileCache.set(lookupKey, profile);
+            if (cleanId) creatorProfileCache.set(cleanId, profile);
+            if (cleanName) creatorProfileCache.set(cleanName, profile);
+            break;
+          }
+          lastError = new Error(data?.error || 'Profile request failed.');
+        }
+        if (!profile) throw lastError || new Error('Profile request failed.');
+      }
       pop.innerHTML = renderCreatorProfile(profile, cleanName, 'ready');
     } catch { pop.innerHTML = renderCreatorProfile({ name: cleanName }, cleanName, 'error'); }
     icons(pop); requestAnimationFrame(() => positionCreatorProfilePopover(anchor));
