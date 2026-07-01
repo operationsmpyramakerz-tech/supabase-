@@ -25741,9 +25741,10 @@ function _eventsNormalizeComponentRows(value) {
     .filter((row) => row.name);
 }
 
-async function _eventsResolveComponentRows(value) {
+async function _eventsResolveComponentRows(value, expectedCategory = '') {
   const submittedRows = _eventsNormalizeComponentRows(value);
   if (!submittedRows.length) return [];
+  const expectedCategoryCode = String(expectedCategory || '').trim() ? _eventsNormalizeComponentCategory(expectedCategory) : '';
   const catalogRows = await supabaseDb.selectAll(_sbEventComponentsTable(), { limit: 1000, order: 'name.asc' });
   const catalog = new Map((Array.isArray(catalogRows) ? catalogRows : []).map((row) => {
     const serialized = _eventsSerializeComponent(row);
@@ -25753,6 +25754,16 @@ async function _eventsResolveComponentRows(value) {
   return submittedRows.map((submitted) => {
     const component = submitted.componentId ? catalog.get(submitted.componentId) : null;
     if (!component) return submitted;
+    if (expectedCategoryCode && String(component.category || '') !== expectedCategoryCode) {
+      const expectedLabels = {
+        project: 'Project Resource',
+        marketing_material: 'Marketing Material',
+        venue_equipment: 'Venue Equipment',
+      };
+      const error = new Error(`Selected component "${component.name}" must be from the ${expectedLabels[expectedCategoryCode] || 'required'} category.`);
+      error.status = 400;
+      throw error;
+    }
     const ownershipType = _eventsNormalizeComponentOwnership(component.ownershipType);
     const operatingCost = _eventsCost(component.operatingCost, 0);
     const rentalCost = ownershipType === 'external_rental' ? _eventsCost(component.rentalCost, 0) : 0;
@@ -26192,7 +26203,7 @@ function _eventsSerializeRequest(row = {}) {
     totalCost: _eventsCost(row?.total_cost, 0),
     operationsNotes: _eventsLongText(row?.operations_notes, 3000),
     requesterName: _eventsText(row?.requester_name, 160),
-    createdByUserId: _eventsUuid(row?.created_by_user_id) || null,
+    createdByUserId: _eventsText(row?.created_by_user_id, 180) || null,
     createdAt: row?.created_at || null,
     updatedAt: row?.updated_at || null,
   };
@@ -26234,8 +26245,8 @@ async function _eventsRequestWriteRow(body = {}, req) {
   }
   const eventType = await _eventsResolveRequestType(body);
   const projects = _eventsNormalizeProjects(body?.projects);
-  const marketingMaterials = await _eventsResolveComponentRows(body?.marketingMaterials || body?.marketing_materials);
-  const venueRequirements = await _eventsResolveComponentRows(body?.venueRequirements || body?.venue_requirements);
+  const marketingMaterials = await _eventsResolveComponentRows(body?.marketingMaterials || body?.marketing_materials, 'marketing_material');
+  const venueRequirements = await _eventsResolveComponentRows(body?.venueRequirements || body?.venue_requirements, 'venue_equipment');
   const workingCost = _eventsWorkingCost(projects, marketingMaterials, venueRequirements);
   const transport = await _eventsCalculateGovernorateTransportQuote(governorate);
   const totalCost = _eventsRoundMoney(workingCost + transport.transportCost);
@@ -26243,7 +26254,10 @@ async function _eventsRequestWriteRow(body = {}, req) {
     req?.session?.accountCache?.name || req?.session?.username || body?.requesterName,
     160,
   );
-  const requesterId = _eventsUuid(req?.session?.userSupabaseId);
+  const currentTeamMember = await _sbFindSessionTeamMember(req).catch(() => null);
+  const requesterId = _eventsUuid(
+    _sbGet(currentTeamMember || {}, ['id', 'ID']) || req?.session?.userSupabaseId
+  );
 
   return {
     event_name: eventName,
