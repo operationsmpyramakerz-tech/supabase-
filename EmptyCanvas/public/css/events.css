@@ -809,3 +809,20 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   .events-modal--workflow-confirm .events-modal__actions{display:grid;grid-template-columns:1fr;gap:10px;}
   .events-modal--workflow-confirm .events-modal__actions button{width:100%;}
 }
+
+
+/* Workflow action visibility fix: actions are always shown in the request
+   detail header and remain usable while the password confirmation protects
+   the server-side status transition. */
+.events-modal--detail .events-detail-status .events-workflow-action{
+  display:inline-flex!important;
+  width:100%;
+  min-height:48px;
+  align-items:center;
+  justify-content:center;
+}
+@media (min-width:761px){
+  .events-modal--detail .events-detail-status .events-workflow-action{
+    min-width:280px;
+  }
+}
