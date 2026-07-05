@@ -244,3 +244,27 @@ body.task-management-page{--tm-ink:#151922;--tm-muted:#6b7280;--tm-line:#e7e9ee;
   .task-management-page .tm-builder-toolbar__actions .tm-btn{flex:1;}
   .task-management-page .tm-dialog--meta,.task-management-page .tm-dialog--block{padding:18px;}
 }
+
+
+/* Workflow builder: socket-to-socket arrows + zoom controls ------------------ */
+.task-management-page .tm-builder-zoom{display:inline-flex;align-items:center;gap:4px;padding:3px;border:1px solid #e0e3ea;border-radius:12px;background:#fff;}
+.task-management-page .tm-builder-tool--icon{width:34px;min-width:34px;padding:0;}
+.task-management-page .tm-builder-zoom__label{min-width:48px;height:30px;padding:0 8px;border:0;border-radius:8px;background:#f4f2ff;color:#5942d5;font-size:11px;font-weight:950;cursor:pointer;}
+.task-management-page .tm-builder-zoom__label:hover{background:#e9e4ff;}
+.task-management-page .tm-builder-board{transform-origin:0 0;}
+.task-management-page .tm-builder-board.is-awaiting-target .tm-builder-socket--in{border-color:#3191ff;background:#e9f4ff;box-shadow:0 0 0 5px rgba(49,145,255,.16);animation:tmSocketPulse 1.2s ease-in-out infinite;}
+.task-management-page .tm-builder-socket{display:grid;place-items:center;width:16px;height:16px;padding:0;border:2px solid #7a65e4;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(49,43,105,.14);cursor:crosshair;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease,background .16s ease;}
+.task-management-page .tm-builder-socket:hover{border-color:#2d8cff;background:#eaf4ff;box-shadow:0 0 0 5px rgba(45,140,255,.15);transform:translateY(-50%) scale(1.14);}
+.task-management-page .tm-builder-socket:focus-visible{outline:3px solid rgba(38,126,235,.3);outline-offset:3px;}
+.task-management-page .tm-builder-socket--in{left:-9px;}
+.task-management-page .tm-builder-socket--out{right:-9px;}
+.task-management-page .tm-builder-block.is-connect-source .tm-builder-socket--out{border-color:#2286ff;background:#1f8cff;box-shadow:0 0 0 6px rgba(31,140,255,.19),0 0 16px rgba(31,140,255,.55);animation:tmSocketPulse .9s ease-in-out infinite;}
+.task-management-page .tm-builder-arrow{pointer-events:stroke;cursor:pointer;stroke-width:4.5px;stroke-opacity:.92;}
+.task-management-page .tm-builder-arrow:hover,.task-management-page .tm-builder-arrow.is-selected{stroke:#2188ff;stroke-width:6px;filter:drop-shadow(0 2px 4px rgba(33,136,255,.32));}
+.task-management-page .tm-builder-edge-delete{position:absolute;z-index:6;display:grid;place-items:center;width:32px;height:32px;margin:0;border:2px solid #fff;border-radius:50%;background:#e03f4f;color:#fff;box-shadow:0 7px 18px rgba(188,45,60,.3);transform:translate(-50%,-50%);cursor:pointer;transition:transform .16s ease,background .16s ease;}
+.task-management-page .tm-builder-edge-delete:hover{background:#c72f40;transform:translate(-50%,-50%) scale(1.09);}
+.task-management-page .tm-builder-edge-delete svg{width:16px;height:16px;}
+@keyframes tmSocketPulse{0%,100%{box-shadow:0 0 0 5px rgba(49,145,255,.16);}50%{box-shadow:0 0 0 9px rgba(49,145,255,.05),0 0 18px rgba(49,145,255,.42);}}
+@media(max-width:900px){
+  .task-management-page .tm-builder-zoom{flex:0 0 auto;}
+}
