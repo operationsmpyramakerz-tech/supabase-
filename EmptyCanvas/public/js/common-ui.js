@@ -983,6 +983,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
       urls.push('/api/tasks?scope=mine', '/api/tasks/users');
     }
+    if (hasAllowedPage(allowedPages, ['Task Management', '/task-management'])) {
+      urls.push('/api/task-management', '/api/task-management/meta');
+    }
     if (hasAllowedPage(allowedPages, ['KPIs', 'KPI', '/kpis'])) {
       urls.push('/api/kpis/meta', '/api/kpis/reviews');
     }
@@ -2189,6 +2192,8 @@ if (document.querySelector('.sidebar')) {
     'saved kits': 'a[href="/kits"]',
     'saved quotations': 'a[href="/proposals"]',
     'tasks': 'a[href="/tasks"]',
+    'task management': 'a[href="/task-management"]',
+    'department tickets': 'a[href="/task-management"]',
     'kpis': 'a[href="/kpis"]',
     'kpi': 'a[href="/kpis"]',
     'key performance indicators': 'a[href="/kpis"]',
@@ -2626,6 +2631,7 @@ if (document.querySelector('.sidebar')) {
     { href: '/expenses', label: 'Expenses', icon: 'dollar-sign' },
     { href: '/expenses/users', label: 'Expenses by Users', icon: 'credit-card' },
     { href: '/tasks', label: 'Tasks', icon: 'check-square' },
+    { href: '/task-management', label: 'Task Management', icon: 'git-branch' },
     { href: '/kpis', label: 'KPIs', icon: 'bar-chart-2' },
     { href: '/user-access', label: 'Users Center', icon: 'shield' },
   ];
