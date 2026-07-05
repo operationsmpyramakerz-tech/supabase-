@@ -13,10 +13,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Task Management</title>
   <style>body.permissions-loading .sidebar li { display:none !important; }</style>
-  <link href="/css/style.css?v=task-management-free-canvas-pan-v2" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=task-management-free-canvas-pan-v2" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=task-management-free-canvas-pan-v2" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-free-canvas-pan-v2" rel="stylesheet" />
+  <link href="/css/style.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -92,8 +92,11 @@
       <div class="tm-builder-toolbar" role="toolbar" aria-label="Workflow builder tools">
         <div class="tm-builder-toolbar__tools">
           <button type="button" class="tm-builder-tool tm-builder-tool--primary" id="tmAddBlockBtn"><i data-feather="plus-square"></i><span>Add Block</span></button>
-          <button type="button" class="tm-builder-tool" id="tmAddArrowBtn"><i data-feather="git-commit"></i><span>Add Arrow</span></button>
-          <button type="button" class="tm-builder-tool" id="tmUndoArrowBtn" title="Remove last arrow"><i data-feather="corner-up-left"></i><span>Undo Arrow</span></button>
+          <div class="tm-builder-zoom" role="group" aria-label="Canvas zoom controls">
+            <button type="button" class="tm-builder-tool tm-builder-tool--icon" id="tmZoomOutBtn" aria-label="Zoom out" title="Zoom out"><i data-feather="minus"></i></button>
+            <button type="button" class="tm-builder-zoom__label" id="tmZoomResetBtn" title="Reset canvas zoom to 100%"><span id="tmZoomLabel">100%</span></button>
+            <button type="button" class="tm-builder-tool tm-builder-tool--icon" id="tmZoomInBtn" aria-label="Zoom in" title="Zoom in"><i data-feather="plus"></i></button>
+          </div>
           <button type="button" class="tm-builder-tool" id="tmTaskDetailsBtn"><i data-feather="file-text"></i><span>Task Details</span></button>
         </div>
         <div class="tm-builder-toolbar__status" id="tmBuilderStatus" aria-live="polite">Add a block to begin designing the workflow.</div>
@@ -105,10 +108,10 @@
       <div class="tm-builder-canvas-wrap" id="tmBuilderCanvasWrap">
         <div class="tm-builder-board" id="tmBuilderBoard" aria-label="Task workflow design canvas">
           <svg class="tm-connection-layer" id="tmBuilderArrows" aria-hidden="true"></svg>
-          <div class="tm-builder-empty" id="tmBuilderEmpty"><i data-feather="git-branch"></i><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then use <strong>Add Arrow</strong> to connect the execution path.</span></div>
+          <div class="tm-builder-empty" id="tmBuilderEmpty"><i data-feather="git-branch"></i><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span></div>
         </div>
       </div>
-      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block is one department section</span><span><i class="tm-legend-arrow">→</i>Arrows define prerequisites and execution flow</span><span><i class="tm-legend-handle"></i>Press and drag any empty part of a block to move it</span><span><i class="tm-legend-handle"></i>Drag the empty grid to pan the unlimited workspace</span></div>
+      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block is one department section</span><span><i class="tm-legend-arrow">→</i>Click an output point, then an input point to create an arrow</span><span><i class="tm-legend-handle"></i>Press and drag any empty part of a block to move it</span><span><i class="tm-legend-handle"></i>Drag the empty grid to pan · Ctrl + wheel or the zoom controls to zoom</span></div>
     </section>
   </div>
 
@@ -174,7 +177,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=task-management-free-canvas-pan-v2"></script>
-  <script src="/js/task-management.js?v=task-management-free-canvas-pan-v2"></script>
+  <script src="/js/common-ui.js?v=task-management-socket-zoom-v3"></script>
+  <script src="/js/task-management.js?v=task-management-socket-zoom-v3"></script>
 </body>
 </html>
