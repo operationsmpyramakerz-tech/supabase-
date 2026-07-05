@@ -158,8 +158,10 @@ body.task-management-page{--tm-ink:#151922;--tm-muted:#6b7280;--tm-line:#e7e9ee;
 .task-management-page .tm-builder-tool--primary{border-color:#6046e8;background:#6046e8;color:#fff;box-shadow:0 8px 18px rgba(96,70,232,.22);}
 .task-management-page .tm-builder-tool--primary:hover{border-color:#5136d5;background:#5136d5;color:#fff;}
 .task-management-page .tm-builder-tool:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;}
-.task-management-page .tm-builder-canvas-wrap,.task-management-page .tm-workflow-canvas-wrap{position:relative;overflow:auto;border:1px solid #dfe4ec;border-radius:18px;background:#f9fafc;box-shadow:inset 0 0 0 1px rgba(255,255,255,.75);}
-.task-management-page .tm-builder-canvas-wrap{flex:1 1 auto;min-height:430px;}
+.task-management-page .tm-builder-canvas-wrap,.task-management-page .tm-workflow-canvas-wrap{position:relative;border:1px solid #dfe4ec;border-radius:18px;background:#f9fafc;box-shadow:inset 0 0 0 1px rgba(255,255,255,.75);}
+.task-management-page .tm-builder-canvas-wrap{flex:1 1 auto;min-height:430px;overflow:hidden;cursor:grab;touch-action:none;overscroll-behavior:contain;}
+.task-management-page .tm-builder-canvas-wrap.is-panning{cursor:grabbing;}
+.task-management-page .tm-workflow-canvas-wrap{overflow:auto;}
 .task-management-page .tm-builder-board,.task-management-page .tm-workflow-board{position:relative;min-width:980px;min-height:650px;background-color:#fafbfe;background-image:radial-gradient(circle,rgba(103,111,129,.22) 1.2px,transparent 1.35px);background-size:20px 20px;}
 .task-management-page .tm-connection-layer{position:absolute;z-index:1;inset:0;overflow:visible;pointer-events:none;}
 .task-management-page .tm-arrow-marker{fill:#6551d9;}
@@ -171,11 +173,12 @@ body.task-management-page{--tm-ink:#151922;--tm-muted:#6b7280;--tm-line:#e7e9ee;
 .task-management-page .tm-builder-empty b{color:#2d3442;font-size:15px;}
 .task-management-page .tm-builder-empty span{font-size:12px;line-height:1.55;}
 .task-management-page .tm-builder-empty strong{color:#5e46d8;}
-.task-management-page .tm-builder-block{position:absolute;z-index:2;width:300px;min-height:172px;display:flex;flex-direction:column;border:1px solid #dfe3eb;border-radius:16px;overflow:visible;background:#fff;box-shadow:0 15px 32px rgba(15,23,42,.12);transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;}
+.task-management-page .tm-builder-block{position:absolute;z-index:2;width:300px;min-height:172px;display:flex;flex-direction:column;border:1px solid #dfe3eb;border-radius:16px;overflow:visible;background:#fff;box-shadow:0 15px 32px rgba(15,23,42,.12);transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;touch-action:none;user-select:none;cursor:grab;}
 .task-management-page .tm-builder-block:hover{border-color:#bdb3f5;box-shadow:0 20px 38px rgba(15,23,42,.16);}
+.task-management-page .tm-builder-block.is-dragging{z-index:8;border-color:#7763e5;box-shadow:0 0 0 5px rgba(105,80,222,.14),0 25px 48px rgba(15,23,42,.20);transform:scale(1.015);cursor:grabbing;}
 .task-management-page .tm-builder-block.is-connect-source{border:2px solid #6950de;box-shadow:0 0 0 5px rgba(105,80,222,.16),0 20px 38px rgba(15,23,42,.16);}
-.task-management-page .tm-builder-block__head{display:flex;align-items:center;gap:9px;min-height:50px;padding:9px 10px;border-bottom:1px solid #eef0f4;background:#fff;cursor:grab;user-select:none;}
-.task-management-page .tm-builder-dragging .tm-builder-block__head{cursor:grabbing;}
+.task-management-page .tm-builder-block__head{display:flex;align-items:center;gap:9px;min-height:50px;padding:9px 10px;border-bottom:1px solid #eef0f4;background:#fff;cursor:inherit;user-select:none;}
+.task-management-page .tm-builder-dragging .tm-builder-block{cursor:grabbing;}
 .task-management-page .tm-builder-block__number{width:29px;height:29px;border-radius:9px;display:grid;place-items:center;background:#efedff;color:#5e46db;font-size:12px;font-weight:950;flex:0 0 auto;}
 .task-management-page .tm-builder-block__title{min-width:0;flex:1;}
 .task-management-page .tm-builder-block__title b{display:block;color:#2c3341;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
