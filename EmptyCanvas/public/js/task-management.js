@@ -54,6 +54,8 @@
       edges: [],
       connecting: false,
       connectFrom: null,
+      selectedEdgeKey: '',
+      zoom: 1,
       canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     },
@@ -193,6 +195,8 @@
       edges: [],
       connecting: false,
       connectFrom: null,
+      selectedEdgeKey: '',
+      zoom: 1,
       canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     };
@@ -202,12 +206,17 @@
     clearPendingBlockPress();
   }
 
+  function builderZoom() {
+    return clamp(safeNumber(state.builder?.zoom, 1), 0.4, 1.8);
+  }
+
   function nextBlockPosition() {
     const count = state.builder.nodes.length;
     const column = count % 3;
     const row = Math.floor(count / 3);
-    const visibleCenterX = safeNumber(builderCanvasWrap?.scrollLeft) + Math.max(620, safeNumber(builderCanvasWrap?.clientWidth, 920)) / 2;
-    const visibleCenterY = safeNumber(builderCanvasWrap?.scrollTop) + Math.max(360, safeNumber(builderCanvasWrap?.clientHeight, 560)) / 2;
+    const zoom = builderZoom();
+    const visibleCenterX = (safeNumber(builderCanvasWrap?.scrollLeft) + Math.max(620, safeNumber(builderCanvasWrap?.clientWidth, 920)) / 2) / zoom;
+    const visibleCenterY = (safeNumber(builderCanvasWrap?.scrollTop) + Math.max(360, safeNumber(builderCanvasWrap?.clientHeight, 560)) / 2) / zoom;
     return {
       x: Math.max(70, Math.round(visibleCenterX - 150 + (column - 1) * 330)),
       y: Math.max(80, Math.round(visibleCenterY - 86 + row * 230)),
@@ -227,34 +236,103 @@
 
   function edgeKey(edge) { return `${String(edge.from)}::${String(edge.to)}`; }
 
+  // Number blocks from the dependency graph, not from the order in which they were added.
+  // A serial path becomes 1 → 2 → 3. Nodes in the same dependency level are parallel
+  // and become 2.1 / 2.2, ordered by their visual placement in the canvas.
+  function workflowNumbering(nodes = [], edges = []) {
+    const records = (nodes || []).map((node, index) => ({ node, id: String(node?.id || ''), index }));
+    const recordById = new Map(records.filter((record) => record.id).map((record) => [record.id, record]));
+    const outgoing = new Map(records.map((record) => [record.id, []]));
+    const incoming = new Map(records.map((record) => [record.id, 0]));
+
+    (edges || []).forEach((edge) => {
+      const from = String(edge?.from ?? edge?.fromSectionId ?? edge?.from_section_id ?? '');
+      const to = String(edge?.to ?? edge?.toSectionId ?? edge?.to_section_id ?? '');
+      if (!recordById.has(from) || !recordById.has(to) || from === to) return;
+      outgoing.get(from).push(to);
+      incoming.set(to, (incoming.get(to) || 0) + 1);
+    });
+
+    const rank = new Map(records.map((record) => [record.id, 1]));
+    const queue = records
+      .filter((record) => incoming.get(record.id) === 0)
+      .sort((a, b) => (safeNumber(a.node?.x) - safeNumber(b.node?.x)) || (safeNumber(a.node?.y) - safeNumber(b.node?.y)) || (a.index - b.index))
+      .map((record) => record.id);
+    let processed = 0;
+
+    while (queue.length) {
+      const id = queue.shift();
+      processed += 1;
+      (outgoing.get(id) || []).forEach((nextId) => {
+        rank.set(nextId, Math.max(rank.get(nextId) || 1, (rank.get(id) || 1) + 1));
+        incoming.set(nextId, (incoming.get(nextId) || 0) - 1);
+        if (incoming.get(nextId) === 0) queue.push(nextId);
+      });
+    }
+
+    // A circular workflow cannot be saved, but keep every temporary block labelled while editing.
+    if (processed !== records.length) records.forEach((record, index) => rank.set(record.id, index + 1));
+
+    const layers = new Map();
+    records.forEach((record) => {
+      const level = rank.get(record.id) || 1;
+      if (!layers.has(level)) layers.set(level, []);
+      layers.get(level).push(record);
+    });
+
+    const labels = new Map();
+    [...layers.entries()].sort((a, b) => a[0] - b[0]).forEach(([level, layer]) => {
+      layer
+        .slice()
+        .sort((a, b) => (safeNumber(a.node?.y) - safeNumber(b.node?.y)) || (safeNumber(a.node?.x) - safeNumber(b.node?.x)) || (a.index - b.index))
+        .forEach((record, index) => labels.set(record.id, layer.length === 1 ? String(level) : `${level}.${index + 1}`));
+    });
+    return labels;
+  }
+
+  function orderedBuilderNodes() {
+    const labels = workflowNumbering(state.builder.nodes, state.builder.edges);
+    const labelParts = (label) => String(label || '').split('.').map((part) => safeNumber(part, 0));
+    return state.builder.nodes.slice().sort((a, b) => {
+      const aa = labelParts(labels.get(String(a.id)));
+      const bb = labelParts(labels.get(String(b.id)));
+      if (aa[0] !== bb[0]) return aa[0] - bb[0];
+      return (aa[1] || 0) - (bb[1] || 0);
+    });
+  }
+
   function renderBuilder() {
     if (!builderBoard) return;
     const empty = $('tmBuilderEmpty');
     if (empty) empty.hidden = state.builder.nodes.length > 0;
+    builderBoard.classList.toggle('is-awaiting-target', !!state.builder.connecting && !!state.builder.connectFrom);
 
     builderBoard.querySelectorAll('[data-builder-block]').forEach((node) => node.remove());
-    state.builder.nodes.forEach((node, index) => {
+    const labels = workflowNumbering(state.builder.nodes, state.builder.edges);
+    state.builder.nodes.forEach((node) => {
       const block = document.createElement('article');
       const isSource = state.builder.connecting && state.builder.connectFrom === node.id;
       block.className = `tm-builder-block${isSource ? ' is-connect-source' : ''}`;
       block.dataset.builderBlock = node.id;
       block.style.left = `${Math.max(16, safeNumber(node.x, 60))}px`;
       block.style.top = `${Math.max(16, safeNumber(node.y, 80))}px`;
+      const number = labels.get(String(node.id)) || '—';
       block.innerHTML = `
         <div class="tm-builder-block__head" data-tm-drag-handle>
-          <div class="tm-builder-block__number">${index + 1}</div>
+          <div class="tm-builder-block__number">${escapeHtml(number)}</div>
           <div class="tm-builder-block__title"><b>${escapeHtml(node.department || 'Workflow Block')}</b><small>${node.department ? 'Department section' : 'Needs configuration'}</small></div>
           <div class="tm-builder-block__actions">
             <button type="button" class="tm-builder-icon-btn" data-tm-edit-block="${escapeHtml(node.id)}" aria-label="Edit block"><i data-feather="edit-3"></i></button>
             <button type="button" class="tm-builder-icon-btn tm-builder-icon-btn--danger" data-tm-delete-block="${escapeHtml(node.id)}" aria-label="Delete block"><i data-feather="trash-2"></i></button>
           </div>
         </div>
-        <button type="button" class="tm-builder-block__body" data-tm-connect-node="${escapeHtml(node.id)}" aria-label="${state.builder.connecting ? 'Select workflow block for arrow' : 'Workflow block'}">
+        <div class="tm-builder-block__body">
           <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(node.request || 'Click Edit to configure this block')}</strong>
           ${node.details ? `<span class="tm-builder-block__details">${escapeHtml(node.details)}</span>` : '<span class="tm-builder-block__details tm-builder-block__details--empty">No implementation details</span>'}
-        </button>
-        <span class="tm-builder-socket tm-builder-socket--in" aria-hidden="true"></span><span class="tm-builder-socket tm-builder-socket--out" aria-hidden="true"></span>`;
+        </div>
+        <button type="button" class="tm-builder-socket tm-builder-socket--in" data-tm-socket="in" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Connect an incoming arrow to this block" title="Incoming connection"></button>
+        <button type="button" class="tm-builder-socket tm-builder-socket--out" data-tm-socket="out" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Start an arrow from this block" title="Start connection"></button>`;
       builderBoard.appendChild(block);
     });
     renderBuilderArrows();
@@ -270,7 +348,7 @@
     return { width: Math.ceil(maxX), height: Math.ceil(maxY) };
   }
 
-  function pathBetween(from, to, { blockWidth = 300, blockHeight = 172 } = {}) {
+  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 172 } = {}) {
     const sx = safeNumber(from.x) + blockWidth;
     const sy = safeNumber(from.y) + (blockHeight / 2);
     const tx = safeNumber(to.x);
@@ -279,19 +357,40 @@
     const direction = tx >= sx ? 1 : -1;
     const c1x = sx + (horizontalDistance * direction);
     const c2x = tx - (horizontalDistance * direction);
+    return { sx, sy, tx, ty, c1x, c2x };
+  }
+
+  function pathBetween(from, to, options = {}) {
+    const { sx, sy, tx, ty, c1x, c2x } = pathGeometry(from, to, options);
     return `M ${sx} ${sy} C ${c1x} ${sy}, ${c2x} ${ty}, ${tx} ${ty}`;
   }
 
-  function renderArrowLayer(svg, edges, getNode, dimensions, className = 'tm-builder-arrow') {
+  function cubicPointAtMidpoint(from, to) {
+    const { sx, sy, tx, ty, c1x, c2x } = pathGeometry(from, to);
+    const t = 0.5;
+    const mt = 1 - t;
+    return {
+      x: (mt ** 3 * sx) + (3 * mt ** 2 * t * c1x) + (3 * mt * t ** 2 * c2x) + (t ** 3 * tx),
+      y: (mt ** 3 * sy) + (3 * mt ** 2 * t * sy) + (3 * mt * t ** 2 * ty) + (t ** 3 * ty),
+    };
+  }
+
+  function renderArrowLayer(svg, edges, getNode, dimensions, className = 'tm-builder-arrow', options = {}) {
     if (!svg) return;
+    const markerId = options.markerId || (className === 'tm-builder-arrow' ? 'tmBuilderArrowHead' : 'tmWorkflowArrowHead');
+    const interactive = !!options.interactive;
+    const selectedEdgeKey = String(options.selectedEdgeKey || '');
     svg.setAttribute('width', String(dimensions.width));
     svg.setAttribute('height', String(dimensions.height));
     svg.setAttribute('viewBox', `0 0 ${dimensions.width} ${dimensions.height}`);
-    svg.innerHTML = `<defs><marker id="tmArrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3.7" orient="auto"><path d="M0,0 L0,7.4 L8.8,3.7 z" class="tm-arrow-marker" /></marker></defs>${(edges || []).map((edge) => {
+    svg.innerHTML = `<defs><marker id="${markerId}" markerWidth="10" markerHeight="10" refX="8" refY="3.7" orient="auto"><path d="M0,0 L0,7.4 L8.8,3.7 z" class="tm-arrow-marker" /></marker></defs>${(edges || []).map((edge) => {
       const from = getNode(edge.from ?? edge.fromSectionId ?? edge.from_section_id);
       const to = getNode(edge.to ?? edge.toSectionId ?? edge.to_section_id);
       if (!from || !to) return '';
-      return `<path class="${className}" d="${pathBetween(from, to)}" marker-end="url(#tmArrowHead)"></path>`;
+      const key = edgeKey({ from: edge.from ?? edge.fromSectionId ?? edge.from_section_id, to: edge.to ?? edge.toSectionId ?? edge.to_section_id });
+      const selectedClass = selectedEdgeKey && selectedEdgeKey === key ? ' is-selected' : '';
+      const interactiveAttr = interactive ? ` data-tm-builder-edge="${escapeHtml(key)}"` : '';
+      return `<path class="${className}${selectedClass}" d="${pathBetween(from, to)}" marker-end="url(#${markerId})"${interactiveAttr}></path>`;
     }).join('')}`;
   }
 
@@ -302,7 +401,39 @@
     state.builder.canvas.height = Math.max(safeNumber(state.builder.canvas?.height, 900), dimensions.height);
     builderBoard.style.width = `${dimensions.width}px`;
     builderBoard.style.height = `${dimensions.height}px`;
-    renderArrowLayer(builderArrows, state.builder.edges, (id) => findBuilderNode(id), dimensions, 'tm-builder-arrow');
+    builderBoard.style.zoom = String(builderZoom());
+    renderArrowLayer(builderArrows, state.builder.edges, (id) => findBuilderNode(id), dimensions, 'tm-builder-arrow', {
+      interactive: true,
+      selectedEdgeKey: state.builder.selectedEdgeKey,
+      markerId: 'tmBuilderArrowHead',
+    });
+    renderBuilderEdgeDeleteControl();
+  }
+
+  function renderBuilderEdgeDeleteControl() {
+    if (!builderBoard) return;
+    builderBoard.querySelectorAll('[data-builder-edge-delete]').forEach((element) => element.remove());
+    const selectedKey = String(state.builder.selectedEdgeKey || '');
+    if (!selectedKey) return;
+    const edge = state.builder.edges.find((item) => edgeKey(item) === selectedKey);
+    const from = edge ? findBuilderNode(edge.from) : null;
+    const to = edge ? findBuilderNode(edge.to) : null;
+    if (!edge || !from || !to) {
+      state.builder.selectedEdgeKey = '';
+      return;
+    }
+    const midpoint = cubicPointAtMidpoint(from, to);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tm-builder-edge-delete';
+    button.dataset.builderEdgeDelete = selectedKey;
+    button.setAttribute('aria-label', 'Delete selected arrow');
+    button.setAttribute('title', 'Delete arrow');
+    button.style.left = `${Math.round(midpoint.x)}px`;
+    button.style.top = `${Math.round(midpoint.y)}px`;
+    button.innerHTML = '<i data-feather="x"></i>';
+    builderBoard.appendChild(button);
+    hydrateIcons(button);
   }
 
   function paintBuilderNodePositions() {
@@ -342,8 +473,8 @@
     renderBuilderArrows();
     paintBuilderNodePositions();
     if (builderCanvasWrap) {
-      if (shiftX) builderCanvasWrap.scrollLeft += shiftX;
-      if (shiftY) builderCanvasWrap.scrollTop += shiftY;
+      if (shiftX) builderCanvasWrap.scrollLeft += shiftX * builderZoom();
+      if (shiftY) builderCanvasWrap.scrollTop += shiftY * builderZoom();
     }
   }
 
@@ -379,18 +510,18 @@
     if (nextTop > maxTop - edge) bottom = 520;
     if (!(left || top || right || bottom)) return;
     expandBuilderCanvas({ left, top, right, bottom });
-    pan.startScrollLeft += left;
-    pan.startScrollTop += top;
+    pan.startScrollLeft += left * builderZoom();
+    pan.startScrollTop += top * builderZoom();
   }
 
   function updateBuilderToolbar() {
-    const arrowButton = $('tmAddArrowBtn');
-    const undoButton = $('tmUndoArrowBtn');
-    if (arrowButton) {
-      arrowButton.classList.toggle('is-active', state.builder.connecting);
-      arrowButton.setAttribute('aria-pressed', state.builder.connecting ? 'true' : 'false');
-    }
-    if (undoButton) undoButton.disabled = !state.builder.edges.length;
+    const zoom = builderZoom();
+    const label = $('tmZoomLabel');
+    if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+    const zoomOut = $('tmZoomOutBtn');
+    const zoomIn = $('tmZoomInBtn');
+    if (zoomOut) zoomOut.disabled = zoom <= 0.4;
+    if (zoomIn) zoomIn.disabled = zoom >= 1.8;
   }
 
   function updateBuilderStatus(message = '') {
@@ -398,8 +529,7 @@
     if (!el) return;
     if (message) { el.textContent = message; return; }
     if (!state.builder.nodes.length) { el.textContent = 'Add a block to begin designing the workflow.'; return; }
-    if (state.builder.connecting && state.builder.connectFrom) { el.textContent = 'Now select the destination block to create the arrow.'; return; }
-    if (state.builder.connecting) { el.textContent = 'Select the source block for the new arrow.'; return; }
+    if (state.builder.connecting && state.builder.connectFrom) { el.textContent = 'Now click the input point on the destination block.'; return; }
     el.textContent = `${state.builder.nodes.length} block${state.builder.nodes.length === 1 ? '' : 's'} · ${state.builder.edges.length} arrow${state.builder.edges.length === 1 ? '' : 's'}`;
   }
 
@@ -412,29 +542,54 @@
     setOverlay(builderOverlay, true);
   }
 
-  function toggleArrowMode() {
-    if (state.builder.nodes.length < 2) { showToast('info', 'Add blocks first', 'Create at least two blocks before adding a workflow arrow.'); return; }
-    state.builder.connecting = !state.builder.connecting;
-    state.builder.connectFrom = null;
-    renderBuilder();
-    updateBuilderStatus();
+  function setBuilderZoom(value, { clientX, clientY, announce = true } = {}) {
+    if (!builderCanvasWrap) return;
+    const oldZoom = builderZoom();
+    const nextZoom = clamp(safeNumber(value, oldZoom), 0.4, 1.8);
+    if (Math.abs(nextZoom - oldZoom) < 0.001) return;
+    const rect = builderCanvasWrap.getBoundingClientRect();
+    const localX = clamp(safeNumber(clientX, rect.left + (rect.width / 2)) - rect.left, 0, rect.width);
+    const localY = clamp(safeNumber(clientY, rect.top + (rect.height / 2)) - rect.top, 0, rect.height);
+    const worldX = (safeNumber(builderCanvasWrap.scrollLeft) + localX) / oldZoom;
+    const worldY = (safeNumber(builderCanvasWrap.scrollTop) + localY) / oldZoom;
+    state.builder.zoom = nextZoom;
+    renderBuilderArrows();
+    window.requestAnimationFrame(() => {
+      builderCanvasWrap.scrollLeft = Math.max(0, (worldX * nextZoom) - localX);
+      builderCanvasWrap.scrollTop = Math.max(0, (worldY * nextZoom) - localY);
+    });
+    updateBuilderToolbar();
+    if (announce) updateBuilderStatus(`Canvas zoom ${Math.round(nextZoom * 100)}%.`);
   }
 
-  function selectArrowNode(nodeId) {
-    if (!state.builder.connecting) return;
-    const target = findBuilderNode(nodeId);
-    if (!target) return;
-    if (!state.builder.connectFrom) {
-      state.builder.connectFrom = target.id;
+  function selectBuilderSocket(direction, nodeId) {
+    const node = findBuilderNode(nodeId);
+    if (!node) return;
+    if (direction === 'out') {
+      if (state.builder.connecting && String(state.builder.connectFrom) === String(node.id)) {
+        state.builder.connecting = false;
+        state.builder.connectFrom = null;
+        renderBuilder();
+        updateBuilderStatus('Connection cancelled.');
+        return;
+      }
+      state.builder.connecting = true;
+      state.builder.connectFrom = node.id;
+      state.builder.selectedEdgeKey = '';
       renderBuilder();
       updateBuilderStatus();
       return;
     }
-    if (String(state.builder.connectFrom) === String(target.id)) {
+
+    if (!state.builder.connecting || !state.builder.connectFrom) {
+      showToast('info', 'Select a source first', 'Click the right connection point on the source block, then this input point.');
+      return;
+    }
+    if (String(state.builder.connectFrom) === String(node.id)) {
       showToast('info', 'Choose another block', 'An arrow must connect two different blocks.');
       return;
     }
-    const candidate = { from: state.builder.connectFrom, to: target.id };
+    const candidate = { from: state.builder.connectFrom, to: node.id };
     if (state.builder.edges.some((edge) => edgeKey(edge) === edgeKey(candidate))) {
       showToast('info', 'Arrow already exists', 'These blocks are already connected.');
       return;
@@ -447,8 +602,27 @@
     state.builder.edges = draftEdges;
     state.builder.connecting = false;
     state.builder.connectFrom = null;
+    state.builder.selectedEdgeKey = edgeKey(candidate);
     renderBuilder();
-    updateBuilderStatus('Arrow added. It will unlock the target block after the source block is completed.');
+    updateBuilderStatus('Arrow added. Click the arrow to show its delete button.');
+  }
+
+  function selectBuilderEdge(key) {
+    if (!state.builder.edges.some((edge) => edgeKey(edge) === key)) return;
+    state.builder.selectedEdgeKey = key;
+    renderBuilderArrows();
+    updateBuilderStatus('Arrow selected. Use the floating × button to delete it.');
+  }
+
+  function deleteBuilderEdge(key) {
+    const before = state.builder.edges.length;
+    state.builder.edges = state.builder.edges.filter((edge) => edgeKey(edge) !== key);
+    if (state.builder.edges.length === before) return;
+    state.builder.selectedEdgeKey = '';
+    state.builder.connecting = false;
+    state.builder.connectFrom = null;
+    renderBuilder();
+    updateBuilderStatus('Arrow removed.');
   }
 
   function deleteBuilderNode(nodeId) {
@@ -457,17 +631,9 @@
     state.builder.nodes = state.builder.nodes.filter((item) => String(item.id) !== String(nodeId));
     state.builder.edges = state.builder.edges.filter((edge) => String(edge.from) !== String(nodeId) && String(edge.to) !== String(nodeId));
     if (String(state.builder.connectFrom) === String(nodeId)) state.builder.connectFrom = null;
+    if (state.builder.selectedEdgeKey && !state.builder.edges.some((edge) => edgeKey(edge) === state.builder.selectedEdgeKey)) state.builder.selectedEdgeKey = '';
     renderBuilder();
     updateBuilderStatus('Block removed together with any connected arrows.');
-  }
-
-  function undoLastArrow() {
-    if (!state.builder.edges.length) return;
-    state.builder.edges.pop();
-    state.builder.connecting = false;
-    state.builder.connectFrom = null;
-    renderBuilder();
-    updateBuilderStatus('Last arrow removed.');
   }
 
   function openTicketMeta() {
@@ -499,7 +665,7 @@
     const node = findBuilderNode(nodeId);
     if (!node) return;
     state.editingBlockId = node.id;
-    $('tmBlockEditorKicker').textContent = `Workflow block ${state.builder.nodes.findIndex((item) => item.id === node.id) + 1}`;
+    $('tmBlockEditorKicker').textContent = `Workflow block ${workflowNumbering(state.builder.nodes, state.builder.edges).get(String(node.id)) || '—'}`;
     const select = $('tmBlockDepartmentInput');
     select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
     $('tmBlockRequestInput').value = node.request || '';
@@ -563,7 +729,7 @@
       priority: state.builder.meta.priority || 'Normal',
       dueDate: state.builder.meta.dueDate || '',
       description: state.builder.meta.description || '',
-      sections: state.builder.nodes.map((node, index) => ({
+      sections: orderedBuilderNodes().map((node, index) => ({
         clientId: node.id,
         department: node.department,
         request: node.request,
@@ -616,7 +782,7 @@
 
   function queueBlockDrag(event, nodeId) {
     if (event.button !== 0 || event.isPrimary === false || state.builder.connecting) return;
-    if (event.target.closest('[data-tm-edit-block],[data-tm-delete-block]')) return;
+    if (event.target.closest('[data-tm-edit-block],[data-tm-delete-block],[data-tm-socket],[data-builder-edge-delete]')) return;
     const node = findBuilderNode(nodeId);
     if (!node) return;
     event.preventDefault();
@@ -648,8 +814,9 @@
     const node = findBuilderNode(state.drag.nodeId);
     if (!node) return false;
     event.preventDefault();
-    node.x = state.drag.startX + (event.clientX - state.drag.startClientX);
-    node.y = state.drag.startY + (event.clientY - state.drag.startClientY);
+    const zoom = builderZoom();
+    node.x = state.drag.startX + ((event.clientX - state.drag.startClientX) / zoom);
+    node.y = state.drag.startY + ((event.clientY - state.drag.startClientY) / zoom);
     ensureBuilderRoomForNode(node);
     const element = [...(builderBoard?.querySelectorAll('[data-builder-block]') || [])]
       .find((item) => String(item.dataset.builderBlock) === String(node.id));
@@ -673,7 +840,7 @@
 
   function startCanvasPan(event) {
     if (event.button !== 0 || event.isPrimary === false || state.builder.connecting || state.drag || state.pendingBlockPress) return;
-    if (event.target.closest('[data-builder-block]')) return;
+    if (event.target.closest('[data-builder-block],[data-builder-edge-delete],[data-tm-builder-edge]')) return;
     event.preventDefault();
     state.pan = {
       pointerId: event.pointerId,
@@ -706,6 +873,13 @@
     builderCanvasWrap?.classList.remove('is-panning');
     state.pan = null;
     return true;
+  }
+
+  function handleBuilderWheel(event) {
+    if (!isOverlayOpen(builderOverlay) || !(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    const factor = Math.exp(-safeNumber(event.deltaY) * 0.0018);
+    setBuilderZoom(builderZoom() * factor, { clientX: event.clientX, clientY: event.clientY, announce: false });
   }
 
   // ---------------------------------------------------------------------------
@@ -807,7 +981,8 @@
       x: safeNumber(node.x) - minX + 64,
       y: safeNumber(node.y) - minY + 64,
     }));
-    return { nodes, edges };
+    const labels = workflowNumbering(nodes, edges);
+    return { nodes: nodes.map((node) => ({ ...node, workflowNumber: labels.get(String(node.id)) || '—' })), edges };
   }
 
   function isSectionUnlocked(ticket, section) {
@@ -830,7 +1005,7 @@
       : (section.completedAt ? `Completed ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
     return `
       <article class="tm-workflow-card ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
-        <div class="tm-workflow-card__top"><div class="tm-department-mark"><i data-feather="briefcase"></i></div><div class="tm-workflow-card__main"><span class="tm-workflow-card__kicker">Workflow block ${nodeIndex + 1}</span><h3>${escapeHtml(section.department || 'Department')}</h3></div>${statusPill(section.status)}</div>
+        <div class="tm-workflow-card__top"><div class="tm-department-mark"><i data-feather="briefcase"></i></div><div class="tm-workflow-card__main"><span class="tm-workflow-card__kicker">Workflow block ${escapeHtml(section.workflowNumber || String(nodeIndex + 1))}</span><h3>${escapeHtml(section.department || 'Department')}</h3></div>${statusPill(section.status)}</div>
         <div class="tm-workflow-card__body"><span class="tm-workflow-card__label">Requested action</span><p>${escapeHtml(section.request || '—')}</p>${section.details ? `<div class="tm-workflow-card__details"><span>Details</span><p>${escapeHtml(section.details)}</p></div>` : ''}${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}</div>
         <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${allowed && unlocked ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
       </article>`;
@@ -852,7 +1027,7 @@
     flow.style.width = `${dimensions.width}px`;
     flow.style.height = `${dimensions.height}px`;
     flow.innerHTML = `<svg class="tm-connection-layer tm-workflow-arrows" id="tmWorkflowArrows" aria-hidden="true"></svg>${nodes.map((section, index) => renderWorkflowCard(ticket, section, index)).join('') || '<div class="tm-empty-state"><h2>No workflow sections</h2><p>This task has no configured department sections.</p></div>'}`;
-    renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow');
+    renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow', { markerId: 'tmWorkflowArrowHead' });
     hydrateIcons(workflowOverlay);
   }
 
@@ -942,8 +1117,9 @@
     blockForm?.addEventListener('submit', saveBlockEditor);
     updateForm?.addEventListener('submit', submitSectionUpdate);
     $('tmAddBlockBtn')?.addEventListener('click', addBuilderNode);
-    $('tmAddArrowBtn')?.addEventListener('click', toggleArrowMode);
-    $('tmUndoArrowBtn')?.addEventListener('click', undoLastArrow);
+    $('tmZoomOutBtn')?.addEventListener('click', () => setBuilderZoom(builderZoom() - 0.1));
+    $('tmZoomResetBtn')?.addEventListener('click', () => setBuilderZoom(1));
+    $('tmZoomInBtn')?.addEventListener('click', () => setBuilderZoom(builderZoom() + 0.1));
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
     searchInput?.addEventListener('input', () => { state.query = norm(searchInput.value); renderTickets(); });
@@ -963,7 +1139,18 @@
       const block = event.target.closest('[data-builder-block]');
       if (block) queueBlockDrag(event, block.dataset.builderBlock);
     });
+    builderArrows?.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('[data-tm-builder-edge]')) event.stopPropagation();
+    });
+    builderArrows?.addEventListener('click', (event) => {
+      const arrow = event.target.closest('[data-tm-builder-edge]');
+      if (!arrow) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectBuilderEdge(arrow.dataset.tmBuilderEdge);
+    });
     builderCanvasWrap?.addEventListener('pointerdown', startCanvasPan);
+    builderCanvasWrap?.addEventListener('wheel', handleBuilderWheel, { passive: false });
     document.addEventListener('pointermove', (event) => {
       if (moveBlockDrag(event)) return;
       moveCanvasPan(event);
@@ -1000,8 +1187,14 @@
       if (editBlock) { openBlockEditor(editBlock.dataset.tmEditBlock); return; }
       const deleteBlock = event.target.closest('[data-tm-delete-block]');
       if (deleteBlock) { deleteBuilderNode(deleteBlock.dataset.tmDeleteBlock); return; }
-      const connectNode = event.target.closest('[data-tm-connect-node]');
-      if (connectNode) { selectArrowNode(connectNode.dataset.tmConnectNode); return; }
+      const socket = event.target.closest('[data-tm-socket]');
+      if (socket) {
+        event.preventDefault();
+        selectBuilderSocket(socket.dataset.tmSocket, socket.dataset.tmSocketNode);
+        return;
+      }
+      const deleteEdge = event.target.closest('[data-builder-edge-delete]');
+      if (deleteEdge) { deleteBuilderEdge(deleteEdge.dataset.builderEdgeDelete); return; }
 
       const statusAction = event.target.closest('[data-tm-section-status]');
       if (statusAction) { openSectionUpdate(statusAction.dataset.sectionId, statusAction.dataset.tmSectionStatus); return; }
@@ -1021,6 +1214,12 @@
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
         else if (isOverlayOpen(metaOverlay)) setOverlay(metaOverlay, false);
         else if (isOverlayOpen(workflowOverlay)) setOverlay(workflowOverlay, false);
+        else if (isOverlayOpen(builderOverlay) && state.builder.connecting) {
+          state.builder.connecting = false;
+          state.builder.connectFrom = null;
+          renderBuilder();
+          updateBuilderStatus('Connection cancelled.');
+        }
         else if (isOverlayOpen(builderOverlay)) setOverlay(builderOverlay, false);
       }
       if (event.key === 'Enter' || event.key === ' ') {
