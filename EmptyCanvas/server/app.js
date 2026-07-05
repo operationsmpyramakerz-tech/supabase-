@@ -2051,7 +2051,11 @@ const ALL_PAGES = [
   "Event Calendar",
   "Event Requests",
   "Event Components",
+  // Task Management is retained for legacy broad access only. New access is
+  // granted independently through the two child pages below.
   "Task Management",
+  "My Tasks",
+  "Delegated Tasks",
   USER_ACCESS_PAGE_NAME,
 ];
 
@@ -2090,6 +2094,10 @@ function normalizePages(names = []) {
   if (set.has("task management") || set.has("taskmanagement") || set.has("department tickets") || set.has("department ticket") || set.has("/task-management")) {
     out.push("Task Management");
   }
+  // Task Management child pages are independently assignable. Keep the old
+  // broad parent permission intact only for legacy users.
+  if (set.has("my tasks") || set.has("my task") || set.has("/task-management/my-tasks")) out.push("My Tasks");
+  if (set.has("delegated tasks") || set.has("delegated task") || set.has("/task-management/delegated-tasks")) out.push("Delegated Tasks");
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
   if (set.has("history") || set.has("system history") || set.has("audit history") || set.has("audit log") || set.has("system audit") || set.has("/history")) out.push("History");
   if (set.has("backup") || set.has("back up") || set.has("database") || set.has("system database") || set.has("system backup") || set.has("data backup") || set.has("/backup")) out.push("Backup");
@@ -3354,6 +3362,10 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     taskmanagement: "Task Management",
     "department-tickets": "Task Management",
     departmenttickets: "Task Management",
+    "task-management-my-tasks": "My Tasks",
+    "task-management-delegated-tasks": "Delegated Tasks",
+    "my-tasks": "My Tasks",
+    "delegated-tasks": "Delegated Tasks",
     kpis: "KPIs",
     kpi: "KPIs",
     events: "Events",
@@ -7801,6 +7813,14 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
+  // Task Management follows the same parent-shell model as Events. The old
+  // broad parent remains compatible, while each new child stays independent.
+  if (set.has("Task Management")) {
+    ["My Tasks", "Delegated Tasks", "/task-management", "/task-management/my-tasks", "/task-management/delegated-tasks"].forEach((value) => set.add(value));
+  } else {
+    if (set.has("My Tasks")) set.add("/task-management/my-tasks");
+    if (set.has("Delegated Tasks")) set.add("/task-management/delegated-tasks");
+  }
   // Events now has independent child pages. Keep a legacy broad "Events"
   // permission compatible by expanding it to all children, but never expand a
   // child permission into another child. This preserves separate access.
@@ -7875,6 +7895,8 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Current Orders")) return "/orders";
   if (list.includes("Requested Orders")) return "/orders/requested";
   if (list.includes("Maintenance Orders")) return "/orders/maintenance-orders";
+  if (list.includes("My Tasks")) return "/task-management/my-tasks";
+  if (list.includes("Delegated Tasks")) return "/task-management/delegated-tasks";
   if (list.includes("Event Calendar")) return "/events/calendar";
   if (list.includes("Event Requests")) return "/events/requests";
   if (list.includes("Event Components")) return "/events/components";
@@ -8891,8 +8913,13 @@ function _pageAccessAliases(pageName = "") {
     eventcalendar: ["eventcalendar", "eventscalendar", "events"],
     eventrequests: ["eventrequests", "events"],
     eventcomponents: ["eventcomponents", "events"],
+    // Task Management is a legacy broad entitlement. Child pages deliberately
+    // do not alias each other. A legacy parent can open either child, but a
+    // child permission never grants the other child.
     taskmanagement: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
     departmenttickets: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
+    mytasks: ["mytasks", "taskmanagement", "departmenttickets", "taskmanagementtickets"],
+    delegatedtasks: ["delegatedtasks", "taskmanagement", "departmenttickets", "taskmanagementtickets"],
   };
   return Array.from(new Set([token, ...(groups[token] || [])].filter(Boolean)));
 }
@@ -9083,6 +9110,57 @@ function _hasEventComponentsAdminAccess(req) {
   return _hasPageAdminAccess(req, "Event Components");
 }
 
+// Task Management sub-page access ----------------------------------------------
+// The Task Management parent is a sidebar shell. My Tasks contains tickets that
+// target the current user's department, while Delegated Tasks contains tickets
+// created by the current user. The legacy broad Task Management page remains a
+// backward-compatible entitlement for users created before this split.
+const TASK_MANAGEMENT_SUBPAGES = Object.freeze([
+  { view: "my", pageName: "My Tasks", routePath: "/task-management/my-tasks", icon: "check-square", label: "My Tasks" },
+  { view: "delegated", pageName: "Delegated Tasks", routePath: "/task-management/delegated-tasks", icon: "send", label: "Delegated Tasks" },
+]);
+
+function _taskManagementSubpageByView(view) {
+  const key = String(view || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
+  if (["my", "my-task", "my-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[0];
+  if (["delegated", "delegated-task", "delegated-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[1];
+  return null;
+}
+
+function _taskManagementAccessibleSubpages(req) {
+  return TASK_MANAGEMENT_SUBPAGES.filter((page) => !!_sessionPageAccessLevel(req, page.pageName));
+}
+
+function _taskManagementPreferredRoute(req) {
+  return _taskManagementAccessibleSubpages(req)[0]?.routePath || "/home";
+}
+
+function _taskManagementViewFromRequest(req) {
+  return _taskManagementSubpageByView(req?.query?.view || req?.body?.view || "")?.view || "";
+}
+
+function _taskManagementViewAccessPage(view) {
+  return _taskManagementSubpageByView(view)?.pageName || "";
+}
+
+function _taskManagementViewIsAdmin(req, view) {
+  const pageName = _taskManagementViewAccessPage(view);
+  return !!(pageName && (_hasPageAdminAccess(req, pageName) || _hasPageAdminAccess(req, "Task Management")));
+}
+
+function requireTaskManagementView() {
+  return (req, res, next) => {
+    const view = _taskManagementViewFromRequest(req);
+    const pageName = _taskManagementViewAccessPage(view);
+    if (!view || !pageName) {
+      res.set("Cache-Control", "no-store");
+      return res.status(400).json({ ok: false, error: "A valid Task Management view is required." });
+    }
+    req.taskManagementView = view;
+    return requirePage(pageName)(req, res, next);
+  };
+}
+
 // --- Page Serving Routes --- //
 
 // Public PWA start URL used by manifest.start_url.
@@ -9233,7 +9311,16 @@ app.get("/tasks", requireAuth, requirePage("Tasks"), (req, res) => {
 });
 
 // Department task management — cross-department tickets and ordered workflow sections.
-app.get("/task-management", requireAuth, requirePage("Task Management"), (req, res) => {
+// Task Management module — two independently protected child pages under one sidebar icon.
+app.get("/task-management", requireAuth, requirePage(["My Tasks", "Delegated Tasks", "Task Management"]), (req, res) => {
+  return res.redirect(_taskManagementPreferredRoute(req));
+});
+
+app.get("/task-management/my-tasks", requireAuth, requirePage("My Tasks"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
+});
+
+app.get("/task-management/delegated-tasks", requireAuth, requirePage("Delegated Tasks"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
 });
 
@@ -37146,23 +37233,16 @@ async function _tmSyncTicketStatus(ticketId) {
   return ticket;
 }
 
-function _tmCanUpdateSection(req, ticket = {}, currentMember = {}) {
-  if (_hasPageAdminAccess(req, "Task Management")) return true;
-  if (currentMember?.id && String(ticket.createdById || "") === String(currentMember.id)) return true;
-  const myDepartment = _tmText(currentMember?.department || "", 120);
-  const matchingSection = (ticket.sections || []).find((section) => _tmSameText(section.department, myDepartment));
-  return !!matchingSection;
-}
-
-app.get("/api/task-management/meta", requireAuth, requirePage("Task Management"), async (req, res) => {
+app.get("/api/task-management/meta", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const [currentUser, departments] = await Promise.all([_tmCurrentMember(req), _tmDepartmentOptions()]);
     return res.json({
       ok: true,
+      view: req.taskManagementView,
       currentUser,
       departments,
-      isPageAdmin: _hasPageAdminAccess(req, "Task Management"),
+      isPageAdmin: _taskManagementViewIsAdmin(req, req.taskManagementView),
     });
   } catch (error) {
     console.error("[task-management] meta error:", error?.details || error?.message || error);
@@ -37170,12 +37250,39 @@ app.get("/api/task-management/meta", requireAuth, requirePage("Task Management")
   }
 });
 
-app.get("/api/task-management", requireAuth, requirePage("Task Management"), async (req, res) => {
+function _tmSameMember(ticket = {}, currentMember = {}) {
+  const currentId = _tmText(currentMember?.id || "", 120);
+  const ticketCreatorId = _tmText(ticket?.createdById || "", 120);
+  if (currentId && ticketCreatorId) return currentId === ticketCreatorId;
+  const currentName = _tmText(currentMember?.name || "", 180);
+  const ticketCreatorName = _tmText(ticket?.createdByName || "", 180);
+  return !!(currentName && ticketCreatorName && _tmSameText(currentName, ticketCreatorName));
+}
+
+function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
+  if (view === "delegated") return _tmSameMember(ticket, currentMember);
+  if (view === "my") {
+    const department = _tmText(currentMember?.department || "", 120);
+    return !!(department && (ticket.sections || []).some((section) => _tmSameText(section?.department || "", department)));
+  }
+  return false;
+}
+
+function _tmCanUpdateSectionInView(req, ticket = {}, section = {}, currentMember = {}, view = "") {
+  if (_taskManagementViewIsAdmin(req, view)) return true;
+  if (view === "delegated") return _tmSameMember(ticket, currentMember);
+  if (view === "my") return _tmSameText(section?.department || "", currentMember?.department || "");
+  return false;
+}
+
+app.get("/api/task-management", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const requestedStatus = _tmStatus(req.query?.status || "", "all");
     const query = norm(_tmText(req.query?.q || "", 200));
+    const currentUser = await _tmCurrentMember(req);
     let tickets = await _tmLoadAllTickets();
+    tickets = tickets.filter((ticket) => _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView));
     if (requestedStatus !== "all") tickets = tickets.filter((ticket) => ticket.status === requestedStatus);
     if (query) {
       tickets = tickets.filter((ticket) => {
@@ -37193,11 +37300,15 @@ app.get("/api/task-management", requireAuth, requirePage("Task Management"), asy
   }
 });
 
-app.get("/api/task-management/:id", requireAuth, requirePage("Task Management"), async (req, res) => {
+app.get("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const ticket = await _tmLoadTicketById(req.params.id);
     if (!ticket) return res.status(404).json({ ok: false, error: "Ticket not found." });
+    const currentUser = await _tmCurrentMember(req);
+    if (!_tmTicketBelongsToView(ticket, currentUser, req.taskManagementView)) {
+      return res.status(403).json({ ok: false, error: "This ticket is not available in the selected Task Management view." });
+    }
     return res.json({ ok: true, ticket });
   } catch (error) {
     console.error("[task-management] detail error:", error?.details || error?.message || error);
@@ -37205,7 +37316,7 @@ app.get("/api/task-management/:id", requireAuth, requirePage("Task Management"),
   }
 });
 
-app.post("/api/task-management", requireAuth, requirePage("Task Management"), async (req, res) => {
+app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
@@ -37269,7 +37380,7 @@ app.post("/api/task-management", requireAuth, requirePage("Task Management"), as
   }
 });
 
-app.patch("/api/task-management/sections/:id", requireAuth, requirePage("Task Management"), async (req, res) => {
+app.patch("/api/task-management/sections/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const sectionId = String(req.params.id || "").trim();
@@ -37281,10 +37392,11 @@ app.patch("/api/task-management/sections/:id", requireAuth, requirePage("Task Ma
     if (!ticket) return res.status(404).json({ ok: false, error: "Ticket not found." });
     const currentUser = await _tmCurrentMember(req);
     const section = (ticket.sections || []).find((item) => String(item.id) === sectionId);
-    const canUpdate = _hasPageAdminAccess(req, "Task Management")
-      || (currentUser.id && String(ticket.createdById || "") === String(currentUser.id))
-      || _tmSameText(section?.department || "", currentUser.department || "");
-    if (!canUpdate) return res.status(403).json({ ok: false, error: "Only the ticket creator, the targeted department, or a page admin can update this section." });
+    if (!_tmTicketBelongsToView(ticket, currentUser, req.taskManagementView)) {
+      return res.status(403).json({ ok: false, error: "This ticket is not available in the selected Task Management view." });
+    }
+    const canUpdate = _tmCanUpdateSectionInView(req, ticket, section, currentUser, req.taskManagementView);
+    if (!canUpdate) return res.status(403).json({ ok: false, error: "You can update only the workflow work assigned to you in this view." });
 
     const requestedStatus = req.body && Object.prototype.hasOwnProperty.call(req.body, "status")
       ? _tmStatus(req.body.status, "")
