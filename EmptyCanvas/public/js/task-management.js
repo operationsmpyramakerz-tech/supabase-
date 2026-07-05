@@ -383,7 +383,10 @@
     svg.setAttribute('width', String(dimensions.width));
     svg.setAttribute('height', String(dimensions.height));
     svg.setAttribute('viewBox', `0 0 ${dimensions.width} ${dimensions.height}`);
-    svg.innerHTML = `<defs><marker id="${markerId}" markerWidth="10" markerHeight="10" refX="8" refY="3.7" orient="auto"><path d="M0,0 L0,7.4 L8.8,3.7 z" class="tm-arrow-marker" /></marker></defs>${(edges || []).map((edge) => {
+    const markerMarkup = className === 'tm-builder-arrow'
+      ? `<marker id="${markerId}" markerWidth="6.5" markerHeight="6.5" refX="5.5" refY="2.45" orient="auto"><path d="M0,0 L0,4.9 L5.8,2.45 z" class="tm-arrow-marker" /></marker>`
+      : `<marker id="${markerId}" markerWidth="10" markerHeight="10" refX="8" refY="3.7" orient="auto"><path d="M0,0 L0,7.4 L8.8,3.7 z" class="tm-arrow-marker" /></marker>`;
+    svg.innerHTML = `<defs>${markerMarkup}</defs>${(edges || []).map((edge) => {
       const from = getNode(edge.from ?? edge.fromSectionId ?? edge.from_section_id);
       const to = getNode(edge.to ?? edge.toSectionId ?? edge.to_section_id);
       if (!from || !to) return '';
