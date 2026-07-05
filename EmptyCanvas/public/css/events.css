@@ -826,3 +826,68 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
     min-width:280px;
   }
 }
+
+
+/* Event request details cleanup: workflow actions live beside Download. */
+.events-modal--detail .events-modal__header--request-details{
+  padding-left:42px;
+  padding-right:42px;
+  margin-bottom:16px;
+}
+.events-modal--detail .events-modal__header--request-details h2{
+  margin:8px 0 0;
+}
+.events-modal--detail .events-modal__actions--request-details{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+}
+.events-detail-workflow-actions{
+  display:flex;
+  align-items:stretch;
+  min-width:0;
+}
+.events-detail-workflow-actions:empty{display:none;}
+.events-detail-workflow-actions .events-workflow-action{
+  width:auto!important;
+  min-width:214px;
+  min-height:46px;
+  white-space:nowrap;
+}
+.events-modal--detail .events-modal__actions--request-details #eventDetailsDone{
+  min-width:94px;
+}
+.events-modal--detail .events-modal__actions--request-details #eventDetailsDownload{
+  min-width:162px;
+}
+.events-modal--workflow-auth .events-modal__header--compact,
+.events-modal--workflow-confirm .events-modal__header--compact{
+  padding-right:38px;
+  margin-bottom:18px;
+}
+.events-modal--workflow-auth .events-modal__header--compact h2,
+.events-modal--workflow-confirm .events-modal__header--compact h2{
+  margin-bottom:0;
+}
+@media(max-width:760px){
+  .events-modal--detail .events-modal__header--request-details{
+    padding-left:38px;
+    padding-right:30px;
+  }
+  .events-modal--detail .events-modal__actions--request-details{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.22fr);
+    gap:10px;
+  }
+  .events-modal--detail .events-modal__actions--request-details #eventDetailsDone{
+    grid-column:1 / -1;
+    width:100%;
+  }
+  .events-detail-workflow-actions{min-width:0;width:100%;}
+  .events-detail-workflow-actions .events-workflow-action{width:100%!important;min-width:0;white-space:normal;}
+  .events-modal--detail .events-modal__actions--request-details #eventDetailsDownload{
+    min-width:0;
+    width:100%;
+  }
+}
