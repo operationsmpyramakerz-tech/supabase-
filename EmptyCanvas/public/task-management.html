@@ -13,10 +13,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Task Management</title>
   <style>body.permissions-loading .sidebar li { display:none !important; }</style>
-  <link href="/css/style.css?v=task-management-all-parallel-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=task-management-all-parallel-v1" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=task-management-all-parallel-v1" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-all-parallel-v1" rel="stylesheet" />
+  <link href="/css/style.css?v=task-management-workflow-canvas-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=task-management-workflow-canvas-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=task-management-workflow-canvas-v1" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-workflow-canvas-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -81,35 +81,73 @@
     </div>
   </div>
 
-  <div class="tm-overlay" id="tmTicketFormOverlay" hidden aria-hidden="true">
-    <div class="tm-overlay__backdrop" data-tm-close="form"></div>
-    <section class="tm-dialog tm-dialog--form" role="dialog" aria-modal="true" aria-labelledby="tmTicketFormTitle">
-      <div class="tm-dialog__top"><div><span class="tm-eyebrow">Cross-department workflow</span><h2 id="tmTicketFormTitle">Create New Ticket</h2><p>Add each department section in the exact execution order.</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="form"><i data-feather="x"></i></button></div>
-      <form id="tmTicketForm" novalidate>
+  <!-- New Ticket: visual workflow builder -->
+  <div class="tm-overlay" id="tmBuilderOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="builder"></div>
+    <section class="tm-dialog tm-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="tmBuilderTitle">
+      <div class="tm-builder-header">
+        <div><span class="tm-eyebrow">Workflow builder</span><h2 id="tmBuilderTitle">Create Task Workflow</h2><p>Create blocks, connect them with arrows, then save the complete task.</p></div>
+        <button type="button" class="tm-icon-btn" aria-label="Close workflow builder" data-tm-close="builder"><i data-feather="x"></i></button>
+      </div>
+      <div class="tm-builder-toolbar" role="toolbar" aria-label="Workflow builder tools">
+        <div class="tm-builder-toolbar__tools">
+          <button type="button" class="tm-builder-tool tm-builder-tool--primary" id="tmAddBlockBtn"><i data-feather="plus-square"></i><span>Add Block</span></button>
+          <button type="button" class="tm-builder-tool" id="tmAddArrowBtn"><i data-feather="git-commit"></i><span>Add Arrow</span></button>
+          <button type="button" class="tm-builder-tool" id="tmUndoArrowBtn" title="Remove last arrow"><i data-feather="corner-up-left"></i><span>Undo Arrow</span></button>
+          <button type="button" class="tm-builder-tool" id="tmTaskDetailsBtn"><i data-feather="file-text"></i><span>Task Details</span></button>
+        </div>
+        <div class="tm-builder-toolbar__status" id="tmBuilderStatus" aria-live="polite">Add a block to begin designing the workflow.</div>
+        <div class="tm-builder-toolbar__actions">
+          <button type="button" class="tm-btn tm-btn--secondary" data-tm-close="builder">Cancel</button>
+          <button type="button" class="tm-btn tm-btn--primary" id="tmSaveWorkflowBtn"><i data-feather="save"></i><span>Create Task</span></button>
+        </div>
+      </div>
+      <div class="tm-builder-canvas-wrap" id="tmBuilderCanvasWrap">
+        <div class="tm-builder-board" id="tmBuilderBoard" aria-label="Task workflow design canvas">
+          <svg class="tm-connection-layer" id="tmBuilderArrows" aria-hidden="true"></svg>
+          <div class="tm-builder-empty" id="tmBuilderEmpty"><i data-feather="git-branch"></i><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then use <strong>Add Arrow</strong> to connect the execution path.</span></div>
+        </div>
+      </div>
+      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block is one department section</span><span><i class="tm-legend-arrow">→</i>Arrows define prerequisites and execution flow</span><span><i class="tm-legend-handle"></i>Drag a block by its header to arrange the view</span></div>
+    </section>
+  </div>
+
+  <!-- Ticket details entered separately to keep the canvas clear -->
+  <div class="tm-overlay tm-overlay--above" id="tmTicketMetaOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="meta"></div>
+    <section class="tm-dialog tm-dialog--meta" role="dialog" aria-modal="true" aria-labelledby="tmTicketMetaTitle">
+      <div class="tm-dialog__top"><div><span class="tm-eyebrow">Ticket details</span><h2 id="tmTicketMetaTitle">Task information</h2><p>This information is shown on the task card and workflow header.</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="meta"><i data-feather="x"></i></button></div>
+      <form id="tmTicketMetaForm" novalidate>
         <div class="tm-form-grid">
-          <label class="tm-field tm-field--wide"><span>Ticket title <b>*</b></span><input id="tmTitleInput" name="title" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
-          <label class="tm-field"><span>Priority</span><select id="tmPriorityInput" name="priority"><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
-          <label class="tm-field"><span>Target date</span><input id="tmDueDateInput" name="dueDate" type="date" /></label>
-          <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmDescriptionInput" name="description" rows="3" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
+          <label class="tm-field tm-field--wide"><span>Task title <b>*</b></span><input id="tmMetaTitleInput" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
+          <label class="tm-field"><span>Priority</span><select id="tmMetaPriorityInput"><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
+          <label class="tm-field"><span>Target date</span><input id="tmMetaDueDateInput" type="date" /></label>
+          <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmMetaDescriptionInput" rows="4" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
         </div>
-        <div class="tm-sections-head">
-          <div>
-            <span class="tm-eyebrow">Workflow design</span>
-            <h3>Workflow Sections</h3>
-            <p>Add a parallel section for work that starts at the same time, or a series section for the next stage after the current stage is complete.</p>
-          </div>
-          <div class="tm-add-section-actions" role="group" aria-label="Add workflow section">
-            <button class="tm-add-section tm-add-section--parallel" type="button" id="tmAddParallelSectionBtn"><i data-feather="git-merge"></i><span>Add parallel</span></button>
-            <button class="tm-add-section" type="button" id="tmAddSeriesSectionBtn"><i data-feather="arrow-right"></i><span>Add series</span></button>
-          </div>
-        </div>
-        <div class="tm-section-editor-list" id="tmSectionEditorList"></div>
-        <div class="tm-form-error" id="tmFormError" role="alert" aria-live="polite"></div>
-        <div class="tm-dialog__actions"><button class="tm-btn tm-btn--secondary" type="button" data-tm-close="form">Cancel</button><button class="tm-btn tm-btn--primary" type="submit" id="tmCreateTicketBtn"><i data-feather="send"></i><span>Create Ticket</span></button></div>
+        <div class="tm-form-error" id="tmMetaError" role="alert" aria-live="polite"></div>
+        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="meta">Cancel</button><button type="submit" class="tm-btn tm-btn--primary"><i data-feather="check"></i><span>Save Details</span></button></div>
       </form>
     </section>
   </div>
 
+  <!-- Per-block editor -->
+  <div class="tm-overlay tm-overlay--above" id="tmBlockEditorOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="block"></div>
+    <section class="tm-dialog tm-dialog--block" role="dialog" aria-modal="true" aria-labelledby="tmBlockEditorTitle">
+      <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmBlockEditorKicker">Workflow block</span><h2 id="tmBlockEditorTitle">Edit Block</h2><p>Set the department and work required for this section.</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="block"><i data-feather="x"></i></button></div>
+      <form id="tmBlockEditorForm" novalidate>
+        <div class="tm-form-grid tm-form-grid--single">
+          <label class="tm-field"><span>Responsible department <b>*</b></span><select id="tmBlockDepartmentInput" required><option value="">Select department</option></select></label>
+          <label class="tm-field tm-field--wide"><span>Requested action <b>*</b></span><input id="tmBlockRequestInput" maxlength="4000" required placeholder="What should this department deliver?" /></label>
+          <label class="tm-field tm-field--wide"><span>Implementation details</span><textarea id="tmBlockDetailsInput" rows="4" maxlength="8000" placeholder="Optional notes, dependencies, or handover criteria."></textarea></label>
+        </div>
+        <div class="tm-form-error" id="tmBlockEditorError" role="alert" aria-live="polite"></div>
+        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="block">Cancel</button><button type="submit" class="tm-btn tm-btn--primary"><i data-feather="save"></i><span>Save Block</span></button></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- Saved Ticket workflow -->
   <div class="tm-overlay" id="tmWorkflowOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="workflow"></div>
     <section class="tm-dialog tm-dialog--workflow" role="dialog" aria-modal="true" aria-labelledby="tmWorkflowTitle">
@@ -118,11 +156,11 @@
         <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
       </div>
       <div class="tm-workflow-summary" id="tmWorkflowSummary"></div>
-      <div class="tm-flow" id="tmWorkflowFlow"></div>
+      <div class="tm-workflow-canvas-wrap" id="tmWorkflowCanvasWrap"><div class="tm-workflow-board" id="tmWorkflowFlow"></div></div>
     </section>
   </div>
 
-  <div class="tm-overlay" id="tmUpdateSectionOverlay" hidden aria-hidden="true">
+  <div class="tm-overlay tm-overlay--above" id="tmUpdateSectionOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="update"></div>
     <section class="tm-dialog tm-dialog--update" role="dialog" aria-modal="true" aria-labelledby="tmUpdateSectionTitle">
       <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmUpdateSectionDepartment">Department</span><h2 id="tmUpdateSectionTitle">Update workflow section</h2><p id="tmUpdateSectionRequest">—</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="update"><i data-feather="x"></i></button></div>
@@ -136,7 +174,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=task-management-all-parallel-v1"></script>
-  <script src="/js/task-management.js?v=task-management-all-parallel-v1"></script>
+  <script src="/js/common-ui.js?v=task-management-workflow-canvas-v1"></script>
+  <script src="/js/task-management.js?v=task-management-workflow-canvas-v1"></script>
 </body>
 </html>
