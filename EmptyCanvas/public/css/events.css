@@ -629,3 +629,113 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   .events-modal__actions{align-items:stretch;flex-direction:column-reverse;}
   .events-modal__actions button{width:100%;}
 }
+
+
+/* Event request detail modal — fixed shell with an internal scroll region.
+   Keeps the status editor and PDF actions visible on desktop and mobile. */
+.events-modal-overlay:has(.events-modal--detail){
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.events-modal--detail{
+  box-sizing:border-box;
+  width:min(1000px,calc(100vw - 44px));
+  max-height:calc(100dvh - 44px);
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.events-modal--detail .events-modal__header{
+  flex:0 0 auto;
+  min-width:0;
+  margin-bottom:16px;
+}
+.events-modal--detail .events-modal__header>div:first-child{
+  min-width:0;
+  flex:1 1 0;
+}
+.events-modal--detail .events-detail-content{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  padding:0 8px 0 0;
+  scrollbar-gutter:stable;
+}
+.events-modal--detail .events-modal__actions{
+  flex:0 0 auto;
+  position:relative;
+  z-index:3;
+  margin-top:16px;
+  padding-top:15px;
+  background:#fff;
+}
+.events-modal--detail .events-detail-status{
+  flex:0 1 360px;
+  min-width:280px;
+  display:flex!important;
+  align-items:flex-end;
+  justify-content:flex-end;
+  flex-direction:column;
+  gap:10px;
+}
+.events-modal--detail .events-status-control{
+  width:100%;
+  display:grid;
+  grid-template-columns:minmax(170px,1fr) 120px;
+  align-items:stretch;
+  gap:8px;
+  margin-top:0;
+}
+.events-modal--detail .events-status-control>.events-status-modern-select{min-width:0;}
+.events-modal--detail .events-status-control .events-primary-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:0;
+  min-height:47px;
+  white-space:nowrap;
+}
+@media(max-width:760px){
+  .events-modal-overlay:has(.events-modal--detail){
+    align-items:flex-start;
+    padding:12px 10px;
+  }
+  .events-modal--detail{
+    width:100%;
+    max-height:calc(100dvh - 24px);
+    padding:20px 16px;
+    border-radius:20px;
+  }
+  .events-modal--detail .events-modal__header{
+    display:block;
+    padding-left:38px;
+    padding-right:30px;
+  }
+  .events-modal--detail .events-detail-status{
+    width:100%;
+    min-width:0;
+    margin-top:14px;
+    align-items:stretch;
+  }
+  .events-modal--detail .events-status-control{grid-template-columns:1fr;}
+  .events-modal--detail .events-status-control>.events-status-modern-select,
+  .events-modal--detail .events-status-control .events-primary-btn{width:100%;min-width:0;}
+  .events-modal--detail .events-detail-content{
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding-right:3px;
+  }
+  .events-modal--detail .events-modal__actions{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);
+    align-items:stretch;
+    flex-direction:initial;
+    gap:10px;
+  }
+  .events-modal--detail .events-modal__actions button{width:100%;min-width:0;}
+}
