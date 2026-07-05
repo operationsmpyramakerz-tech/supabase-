@@ -473,6 +473,7 @@ function _historyResolvePage(pathname = '') {
     [/^\/expenses/i, 'Expenses', 'expenses'],
     [/^\/b2b/i, 'B2B', 'b2b'],
     [/^\/tasks/i, 'Tasks', 'tasks'],
+    [/^\/task-management|^\/department-tickets/i, 'Task Management', 'task_management'],
     [/^\/backup/i, 'Backup', 'backup'],
     [/^\/kpis/i, 'KPIs', 'kpis'],
     [/^\/messages|^\/emails/i, 'Mail', 'mail'],
@@ -9166,6 +9167,11 @@ app.get("/kits", requireAuth, requirePage(["Kits", "Products"]), (req, res) => {
 
 app.get("/tasks", requireAuth, requirePage("Tasks"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "tasks.html"));
+});
+
+// Department task management — cross-department tickets and ordered workflow sections.
+app.get("/task-management", requireAuth, requirePage("Task Management"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
 });
 
 app.get("/kpis", requireAuth, requirePage("KPIs"), (req, res) => {
@@ -36859,6 +36865,405 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
     _NOTIF_SCAN_IN_FLIGHT = null;
   }
 }
+
+
+// =============================================================================
+// Department Task Management — Supabase-only workflow tickets
+// =============================================================================
+// Each ticket is a cross-department request. Its sections are intentionally
+// stored as ordered records so the workflow UI can render an execution path
+// without relying on a nested JSON column or Notion relation.
+function _tmTicketsTable() {
+  return String(process.env.SUPABASE_DEPARTMENT_TICKETS_TABLE || "department_tickets").trim() || "department_tickets";
+}
+
+function _tmSectionsTable() {
+  return String(process.env.SUPABASE_DEPARTMENT_TICKET_SECTIONS_TABLE || "department_ticket_sections").trim() || "department_ticket_sections";
+}
+
+function _tmText(value, max = 0) {
+  const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
+  return max > 0 ? text.slice(0, max) : text;
+}
+
+function _tmDate(value) {
+  const text = _tmText(value, 24);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function _tmStatus(value, fallback = "not_started") {
+  const raw = _tmText(value, 40).toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = {
+    "notstarted": "not_started",
+    "not_started": "not_started",
+    "new": "not_started",
+    "inprogress": "in_progress",
+    "in_progress": "in_progress",
+    "working": "in_progress",
+    "completed": "completed",
+    "complete": "completed",
+    "done": "completed",
+    "cancelled": "cancelled",
+    "canceled": "cancelled",
+  };
+  return aliases[raw] || fallback;
+}
+
+function _tmStatusLabel(value) {
+  const status = _tmStatus(value);
+  return ({
+    not_started: "Not started",
+    in_progress: "In progress",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  })[status] || "Not started";
+}
+
+function _tmPriority(value) {
+  const raw = _tmText(value, 30).toLowerCase();
+  if (["urgent", "high", "normal", "low"].includes(raw)) return raw.charAt(0).toUpperCase() + raw.slice(1);
+  return "Normal";
+}
+
+function _tmId(row = {}) {
+  return String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+}
+
+function _tmTicketCode(row = {}) {
+  const existing = _tmText(_sbGet(row, ["ticket_code", "ticketCode", "code", "Code"]), 80);
+  if (existing) return existing;
+  const id = _tmId(row);
+  const numeric = Number(id);
+  return Number.isFinite(numeric) ? `TKT-${String(Math.max(0, numeric)).padStart(5, "0")}` : (id ? `TKT-${id}` : "TKT");
+}
+
+function _tmSameText(left, right) {
+  return norm(String(left || "")) === norm(String(right || ""));
+}
+
+async function _tmCurrentMember(req) {
+  const row = await _sbFindSessionTeamMember(req).catch(() => null);
+  const id = _tmId(row);
+  return {
+    id,
+    name: _sbString(_sbValueForLabel(row || {}, "Name")) || _tmText(req?.session?.username || "", 180) || "User",
+    department: _sbString(_sbValueForLabel(row || {}, "Department")) || "",
+    position: _sbString(_sbValueForLabel(row || {}, "Position")) || "",
+  };
+}
+
+async function _tmDepartmentOptions() {
+  const rows = await _sbSelectTeamMembersRows();
+  const values = new Map();
+  for (const row of rows || []) {
+    const department = _tmText(_sbValueForLabel(row, "Department"), 120);
+    if (!department) continue;
+    const key = norm(department);
+    if (key && !values.has(key)) values.set(key, department);
+  }
+  return Array.from(values.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function _tmSerializeSection(row = {}) {
+  const status = _tmStatus(_sbGet(row, ["status", "Status"]));
+  return {
+    id: _tmId(row),
+    ticketId: String(_sbGet(row, ["ticket_id", "ticketId"]) ?? "").trim(),
+    department: _tmText(_sbGet(row, ["department", "Department"]), 120),
+    request: _tmText(_sbGet(row, ["request_text", "request", "Request", "title", "Title"]), 4000),
+    details: _tmText(_sbGet(row, ["details", "description", "Description"]), 8000),
+    sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
+    status,
+    statusLabel: _tmStatusLabel(status),
+    completionNote: _tmText(_sbGet(row, ["completion_note", "completionNote", "work_note", "workNote"]), 8000),
+    startedAt: _sbGet(row, ["started_at", "startedAt"]) || null,
+    completedAt: _sbGet(row, ["completed_at", "completedAt"]) || null,
+    completedByName: _tmText(_sbGet(row, ["completed_by_name", "completedByName"]), 180),
+    updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
+  };
+}
+
+function _tmTicketStatusFromSections(sections = []) {
+  const statuses = (sections || []).map((section) => _tmStatus(section?.status)).filter(Boolean);
+  if (!statuses.length) return "not_started";
+  if (statuses.every((status) => status === "completed")) return "completed";
+  if (statuses.every((status) => status === "cancelled")) return "cancelled";
+  if (statuses.some((status) => status === "in_progress" || status === "completed" || status === "cancelled")) return "in_progress";
+  return "not_started";
+}
+
+function _tmSerializeTicket(row = {}, sectionRows = []) {
+  const id = _tmId(row);
+  const sections = (sectionRows || []).map(_tmSerializeSection).sort((a, b) => (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
+  const calculatedStatus = _tmTicketStatusFromSections(sections);
+  const completedCount = sections.filter((section) => section.status === "completed").length;
+  return {
+    id,
+    ticketCode: _tmTicketCode(row),
+    title: _tmText(_sbGet(row, ["title", "Title", "name", "Name"]), 500) || "Untitled ticket",
+    description: _tmText(_sbGet(row, ["description", "details", "Description"]), 8000),
+    priority: _tmPriority(_sbGet(row, ["priority", "Priority"])),
+    dueDate: _tmDate(_sbGet(row, ["due_date", "dueDate", "deadline", "Deadline"])),
+    status: _tmStatus(_sbGet(row, ["status", "Status"]), calculatedStatus),
+    statusLabel: _tmStatusLabel(_tmStatus(_sbGet(row, ["status", "Status"]), calculatedStatus)),
+    createdAt: _sbGet(row, ["created_at", "createdAt"]) || null,
+    updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
+    createdById: _tmText(_sbGet(row, ["created_by_id", "createdById"]), 120),
+    createdByName: _tmText(_sbGet(row, ["created_by_name", "createdByName"]), 180) || "—",
+    sections,
+    sectionsCount: sections.length,
+    completedCount,
+    progress: sections.length ? Math.round((completedCount / sections.length) * 100) : 0,
+  };
+}
+
+async function _tmLoadAllTickets() {
+  if (!supabaseDb.isConfigured()) {
+    const error = new Error("Supabase is not configured.");
+    error.status = 503;
+    throw error;
+  }
+
+  let ticketRows;
+  let sectionRows;
+  try {
+    [ticketRows, sectionRows] = await Promise.all([
+      supabaseDb.selectAll(_tmTicketsTable(), { limit: 5000, order: "created_at.desc,id.desc" }),
+      supabaseDb.selectAll(_tmSectionsTable(), { limit: 20000, order: "sort_order.asc,id.asc" }),
+    ]);
+  } catch (error) {
+    const detail = String(error?.message || "");
+    if (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)) {
+      const missing = new Error("Task Management tables are not installed. Run the supplied Supabase SQL migration, then refresh this page.");
+      missing.status = 503;
+      throw missing;
+    }
+    throw error;
+  }
+
+  const sectionsByTicket = new Map();
+  for (const row of Array.isArray(sectionRows) ? sectionRows : []) {
+    const ticketId = String(_sbGet(row, ["ticket_id", "ticketId"]) ?? "").trim();
+    if (!ticketId) continue;
+    if (!sectionsByTicket.has(ticketId)) sectionsByTicket.set(ticketId, []);
+    sectionsByTicket.get(ticketId).push(row);
+  }
+
+  return (Array.isArray(ticketRows) ? ticketRows : [])
+    .map((row) => _tmSerializeTicket(row, sectionsByTicket.get(_tmId(row)) || []));
+}
+
+async function _tmLoadTicketById(ticketId) {
+  const cleanId = String(ticketId || "").trim();
+  if (!cleanId) return null;
+  const ticket = await supabaseDb.selectById(_tmTicketsTable(), cleanId);
+  if (!ticket) return null;
+  const sections = await supabaseDb.select(_tmSectionsTable(), {
+    select: "*",
+    ticket_id: `eq.${_sbRestFilterValue(cleanId)}`,
+    limit: 1000,
+    order: "sort_order.asc,id.asc",
+  });
+  return _tmSerializeTicket(ticket, Array.isArray(sections) ? sections : []);
+}
+
+async function _tmSyncTicketStatus(ticketId) {
+  const ticket = await _tmLoadTicketById(ticketId);
+  if (!ticket) return null;
+  const status = _tmTicketStatusFromSections(ticket.sections || []);
+  const current = _tmStatus(ticket.status, status);
+  if (status !== current) {
+    await supabaseDb.updateById(_tmTicketsTable(), ticket.id, { status, updated_at: new Date().toISOString() });
+    ticket.status = status;
+    ticket.statusLabel = _tmStatusLabel(status);
+  }
+  return ticket;
+}
+
+function _tmCanUpdateSection(req, ticket = {}, currentMember = {}) {
+  if (_hasPageAdminAccess(req, "Task Management")) return true;
+  if (currentMember?.id && String(ticket.createdById || "") === String(currentMember.id)) return true;
+  const myDepartment = _tmText(currentMember?.department || "", 120);
+  const matchingSection = (ticket.sections || []).find((section) => _tmSameText(section.department, myDepartment));
+  return !!matchingSection;
+}
+
+app.get("/api/task-management/meta", requireAuth, requirePage("Task Management"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const [currentUser, departments] = await Promise.all([_tmCurrentMember(req), _tmDepartmentOptions()]);
+    return res.json({
+      ok: true,
+      currentUser,
+      departments,
+      isPageAdmin: _hasPageAdminAccess(req, "Task Management"),
+    });
+  } catch (error) {
+    console.error("[task-management] meta error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load Task Management options." });
+  }
+});
+
+app.get("/api/task-management", requireAuth, requirePage("Task Management"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const requestedStatus = _tmStatus(req.query?.status || "", "all");
+    const query = norm(_tmText(req.query?.q || "", 200));
+    let tickets = await _tmLoadAllTickets();
+    if (requestedStatus !== "all") tickets = tickets.filter((ticket) => ticket.status === requestedStatus);
+    if (query) {
+      tickets = tickets.filter((ticket) => {
+        const haystack = [
+          ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
+          ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details]),
+        ].map(norm).join(" ");
+        return haystack.includes(query);
+      });
+    }
+    return res.json({ ok: true, tickets });
+  } catch (error) {
+    console.error("[task-management] list error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load tickets." });
+  }
+});
+
+app.get("/api/task-management/:id", requireAuth, requirePage("Task Management"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const ticket = await _tmLoadTicketById(req.params.id);
+    if (!ticket) return res.status(404).json({ ok: false, error: "Ticket not found." });
+    return res.json({ ok: true, ticket });
+  } catch (error) {
+    console.error("[task-management] detail error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load ticket." });
+  }
+});
+
+app.post("/api/task-management", requireAuth, requirePage("Task Management"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
+
+    const title = _tmText(req.body?.title, 500);
+    const description = _tmText(req.body?.description, 8000);
+    const priority = _tmPriority(req.body?.priority);
+    const dueDate = _tmDate(req.body?.dueDate);
+    const rawSections = Array.isArray(req.body?.sections) ? req.body.sections : [];
+    const sections = rawSections.slice(0, 40).map((item, index) => ({
+      department: _tmText(item?.department, 120),
+      request: _tmText(item?.request || item?.requestText || item?.title, 4000),
+      details: _tmText(item?.details || item?.description, 8000),
+      sortOrder: index + 1,
+    }));
+
+    if (!title) return res.status(400).json({ ok: false, error: "Ticket title is required." });
+    if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow section." });
+    const invalid = sections.find((section) => !section.department || !section.request);
+    if (invalid) return res.status(400).json({ ok: false, error: "Each section requires a department and a requested action." });
+
+    const currentUser = await _tmCurrentMember(req);
+    const created = await supabaseDb.insert(_tmTicketsTable(), {
+      title,
+      description: description || null,
+      priority,
+      due_date: dueDate,
+      status: "not_started",
+      created_by_id: currentUser.id || null,
+      created_by_name: currentUser.name || null,
+    });
+    const ticketId = _tmId(created);
+    if (!ticketId) throw new Error("Ticket was created without an ID.");
+
+    try {
+      for (const section of sections) {
+        await supabaseDb.insert(_tmSectionsTable(), {
+          ticket_id: ticketId,
+          department: section.department,
+          request_text: section.request,
+          details: section.details || null,
+          sort_order: section.sortOrder,
+          status: "not_started",
+        });
+      }
+    } catch (sectionError) {
+      // Do not leave a half-created ticket if a section insert fails.
+      await supabaseDb.deleteById(_tmTicketsTable(), ticketId).catch(() => null);
+      throw sectionError;
+    }
+
+    const ticket = await _tmLoadTicketById(ticketId);
+    return res.status(201).json({ ok: true, ticket });
+  } catch (error) {
+    console.error("[task-management] create error:", error?.details || error?.message || error);
+    const detail = String(error?.message || "");
+    const message = /relation .* does not exist|Could not find the table|schema cache/i.test(detail)
+      ? "Task Management tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
+      : (error?.message || "Failed to create ticket.");
+    return res.status(error?.status || 500).json({ ok: false, error: message });
+  }
+});
+
+app.patch("/api/task-management/sections/:id", requireAuth, requirePage("Task Management"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const sectionId = String(req.params.id || "").trim();
+    if (!sectionId) return res.status(400).json({ ok: false, error: "Missing section ID." });
+    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
+    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
+
+    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
+    if (!ticket) return res.status(404).json({ ok: false, error: "Ticket not found." });
+    const currentUser = await _tmCurrentMember(req);
+    const section = (ticket.sections || []).find((item) => String(item.id) === sectionId);
+    const canUpdate = _hasPageAdminAccess(req, "Task Management")
+      || (currentUser.id && String(ticket.createdById || "") === String(currentUser.id))
+      || _tmSameText(section?.department || "", currentUser.department || "");
+    if (!canUpdate) return res.status(403).json({ ok: false, error: "Only the ticket creator, the targeted department, or a page admin can update this section." });
+
+    const requestedStatus = req.body && Object.prototype.hasOwnProperty.call(req.body, "status")
+      ? _tmStatus(req.body.status, "")
+      : "";
+    if (!requestedStatus) return res.status(400).json({ ok: false, error: "A valid section status is required." });
+
+    // Sections are an execution sequence, not independent checklist items.
+    // A later department may add a note only after all earlier sections are complete.
+    const orderedSections = (ticket.sections || []).slice().sort((a, b) => (Number(a.sortOrder) - Number(b.sortOrder)) || Number(a.id) - Number(b.id));
+    const currentIndex = orderedSections.findIndex((item) => String(item.id) === sectionId);
+    const earlierOpenSection = currentIndex > 0
+      ? orderedSections.slice(0, currentIndex).find((item) => _tmStatus(item.status) !== "completed")
+      : null;
+    if (earlierOpenSection && ["in_progress", "completed"].includes(requestedStatus)) {
+      return res.status(409).json({
+        ok: false,
+        error: `Complete ${earlierOpenSection.department || "the previous department"} section first before starting this step.`,
+      });
+    }
+
+    const completionNote = req.body && Object.prototype.hasOwnProperty.call(req.body, "completionNote")
+      ? _tmText(req.body.completionNote, 8000)
+      : undefined;
+    const now = new Date().toISOString();
+    const patch = { status: requestedStatus, updated_at: now };
+    if (typeof completionNote !== "undefined") patch.completion_note = completionNote || null;
+    if (requestedStatus === "in_progress" && !section?.startedAt) patch.started_at = now;
+    if (requestedStatus === "completed") {
+      patch.completed_at = now;
+      patch.completed_by_id = currentUser.id || null;
+      patch.completed_by_name = currentUser.name || null;
+    } else if (requestedStatus !== "completed") {
+      patch.completed_at = null;
+      patch.completed_by_id = null;
+      patch.completed_by_name = null;
+    }
+
+    await supabaseDb.updateById(_tmSectionsTable(), sectionId, patch);
+    const updatedTicket = await _tmSyncTicketStatus(ticket.id);
+    return res.json({ ok: true, ticket: updatedTicket || await _tmLoadTicketById(ticket.id) });
+  } catch (error) {
+    console.error("[task-management] section update error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update workflow section." });
+  }
+});
 
 // ---- API: notifications list / read ----
 
