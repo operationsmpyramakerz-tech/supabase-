@@ -146,6 +146,12 @@ app.use(
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         res.setHeader("Service-Worker-Allowed", "/");
       }
+      // Shared navigation and page-access behavior must always refresh after a
+      // deployment; otherwise a browser can keep an older sidebar script even
+      // after a user receives a newly enabled page permission.
+      if (filePath.endsWith("common-ui.js")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
       if (filePath.endsWith("manifest.webmanifest") || filePath.endsWith("manifest.json")) {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
@@ -3325,6 +3331,10 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     "expenses-users": "Expenses Users",
     b2b: "B2B",
     tasks: "Tasks",
+    "task-management": "Task Management",
+    taskmanagement: "Task Management",
+    "department-tickets": "Task Management",
+    departmenttickets: "Task Management",
     kpis: "KPIs",
     kpi: "KPIs",
     events: "Events",
@@ -8852,6 +8862,8 @@ function _pageAccessAliases(pageName = "") {
     events: ["events", "eventrequests", "eventcomponents"],
     eventrequests: ["events", "eventrequests", "eventcomponents"],
     eventcomponents: ["events", "eventrequests", "eventcomponents"],
+    taskmanagement: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
+    departmenttickets: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
   };
   return Array.from(new Set([token, ...(groups[token] || [])].filter(Boolean)));
 }
@@ -9520,6 +9532,8 @@ function _backupCatalog() {
     { key: 'kit-items', pageName: 'Kit Items', tableName: _sbProductKitItemsTable(), moduleName: 'Proposals', icon: 'layers', description: 'Components saved inside kits.' },
     { key: 'tasks', pageName: 'Tasks', tableName: _sbTasksTable(), moduleName: 'Tasks', icon: 'check-square', description: 'Task cards and assignments.' },
     { key: 'task-checkpoints', pageName: 'Task Checkpoints', tableName: _sbTaskCheckpointsTable(), moduleName: 'Tasks', icon: 'check-circle', description: 'Task checklist/checkpoint records.' },
+    { key: 'department-tickets', pageName: 'Department Tickets', tableName: _tmTicketsTable(), moduleName: 'Task Management', icon: 'git-branch', description: 'Cross-department workflow tickets and their overall request details.' },
+    { key: 'department-ticket-sections', pageName: 'Department Ticket Sections', tableName: _tmSectionsTable(), moduleName: 'Task Management', icon: 'git-pull-request', description: 'Ordered department workflow sections attached to each ticket.' },
     { key: 'kpi-standards', pageName: 'KPI Standards', tableName: KPI_STANDARD_TABLE, moduleName: 'KPIs', icon: 'target', description: 'KPI standard headers.' },
     { key: 'kpi-sections', pageName: 'KPI Sections', tableName: KPI_STANDARD_SECTIONS_TABLE, moduleName: 'KPIs', icon: 'columns', description: 'KPI standard sections.' },
     { key: 'kpi-items', pageName: 'KPI Items', tableName: KPI_STANDARD_ITEMS_TABLE, moduleName: 'KPIs', icon: 'list', description: 'KPI standard subsections/items.' },
