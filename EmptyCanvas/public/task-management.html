@@ -13,10 +13,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Task Management</title>
   <style>body.permissions-loading .sidebar li { display:none !important; }</style>
-  <link href="/css/style.css?v=task-management-subpages-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=task-management-subpages-v1" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=task-management-subpages-v1" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-subpages-v1" rel="stylesheet" />
+  <link href="/css/style.css?v=task-management-all-parallel-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=task-management-all-parallel-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=task-management-all-parallel-v1" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-all-parallel-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -54,7 +54,10 @@
           </div>
           <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
         </div>
-        <div class="header-row2 tm-header-row2"><div class="tm-page-title-wrap"><span class="tm-page-module">Task Management</span><h1 class="page-title" id="tmViewTitle">My Tasks</h1></div><button type="button" class="tm-new-ticket" id="tmNewTicketBtn" hidden><i data-feather="plus"></i><span>New Ticket</span></button></div>
+        <div class="header-row2 tm-header-row2">
+          <div class="tm-page-title-wrap"><span class="tm-page-module">Task Management</span><h1 class="page-title" id="tmViewTitle">My Tasks</h1></div>
+          <button type="button" class="tm-new-ticket tm-new-ticket--header" id="tmNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Task</span></button>
+        </div>
       </header>
 
       <main class="container-full-width tm-main">
@@ -65,7 +68,10 @@
             <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false"><span class="tm-tab__icon"><i data-feather="activity"></i></span><span class="tm-tab__label">In progress</span></button>
             <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false"><span class="tm-tab__icon"><i data-feather="check-circle"></i></span><span class="tm-tab__label">Completed</span></button>
           </div>
-          <div class="tm-toolbar-note" id="tmToolbarNote" aria-live="polite">Loading tickets…</div>
+          <div class="tm-toolbar-actions">
+            <div class="tm-toolbar-note" id="tmToolbarNote" aria-live="polite">Loading tickets…</div>
+            <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Task</span></button>
+          </div>
         </div>
 
         <section class="tm-ticket-grid" id="tmTicketGrid" aria-live="polite">
@@ -86,7 +92,17 @@
           <label class="tm-field"><span>Target date</span><input id="tmDueDateInput" name="dueDate" type="date" /></label>
           <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmDescriptionInput" name="description" rows="3" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
         </div>
-        <div class="tm-sections-head"><div><span class="tm-eyebrow">Ordered execution</span><h3>Workflow Sections</h3><p>Section 1 starts first, then the next department receives its work.</p></div><button class="tm-add-section" type="button" id="tmAddSectionBtn"><i data-feather="plus"></i> Add section</button></div>
+        <div class="tm-sections-head">
+          <div>
+            <span class="tm-eyebrow">Workflow design</span>
+            <h3>Workflow Sections</h3>
+            <p>Add a parallel section for work that starts at the same time, or a series section for the next stage after the current stage is complete.</p>
+          </div>
+          <div class="tm-add-section-actions" role="group" aria-label="Add workflow section">
+            <button class="tm-add-section tm-add-section--parallel" type="button" id="tmAddParallelSectionBtn"><i data-feather="git-merge"></i><span>Add parallel</span></button>
+            <button class="tm-add-section" type="button" id="tmAddSeriesSectionBtn"><i data-feather="arrow-right"></i><span>Add series</span></button>
+          </div>
+        </div>
         <div class="tm-section-editor-list" id="tmSectionEditorList"></div>
         <div class="tm-form-error" id="tmFormError" role="alert" aria-live="polite"></div>
         <div class="tm-dialog__actions"><button class="tm-btn tm-btn--secondary" type="button" data-tm-close="form">Cancel</button><button class="tm-btn tm-btn--primary" type="submit" id="tmCreateTicketBtn"><i data-feather="send"></i><span>Create Ticket</span></button></div>
@@ -120,7 +136,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=task-management-subpages-v1"></script>
-  <script src="/js/task-management.js?v=task-management-subpages-v1"></script>
+  <script src="/js/common-ui.js?v=task-management-all-parallel-v1"></script>
+  <script src="/js/task-management.js?v=task-management-all-parallel-v1"></script>
 </body>
 </html>
