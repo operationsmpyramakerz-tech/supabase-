@@ -74,6 +74,24 @@
     },
   });
 
+  // The 3-dot request actions deliberately use the same shared Events Admin
+  // verification as the workflow buttons. They are visible to Events users,
+  // while the server enforces an event-specific, short-lived unlock.
+  const requestActions = Object.freeze({
+    edit: {
+      key: 'edit',
+      title: 'Edit event request',
+      confirmationTitle: '',
+      confirmationLabel: '',
+    },
+    cancel: {
+      key: 'cancel',
+      title: 'Cancel event request',
+      confirmationTitle: 'Cancel event request?',
+      confirmationLabel: 'Confirm cancellation',
+    },
+  });
+
   function pageAccessLevel() {
     try {
       return String(window.OpsPageAccess?.level || document.body?.dataset?.pageAccessLevel || '').trim().toLowerCase();
@@ -142,7 +160,18 @@
       closeStatusSelect();
     });
   }
-  function renderActionMenu(event, isAdmin) { if (!els.actionWrap || !els.actionMenu || !els.actionToggle) return; els.actionWrap.hidden = !isAdmin; if (!isAdmin) { els.actionMenu.hidden = true; return; } els.actionMenu.innerHTML = `<button type="button" role="menuitem" data-event-action="edit"><i data-feather="edit-3"></i><span>Edit</span></button><button type="button" role="menuitem" class="is-danger" data-event-action="archive"><i data-feather="archive"></i><span>Archive</span></button>`; els.actionToggle.setAttribute('aria-expanded', 'false'); els.actionMenu.hidden = true; }
+  function renderActionMenu() {
+    if (!els.actionWrap || !els.actionMenu || !els.actionToggle) return;
+    // Do not hide the action menu based on cached Page Access. Each action
+    // performs explicit Events Admin verification before it can continue.
+    els.actionWrap.hidden = false;
+    els.actionMenu.innerHTML = `
+      <button type="button" role="menuitem" data-event-action="edit"><i data-feather="edit-3"></i><span>Edit</span></button>
+      <button type="button" role="menuitem" class="is-danger" data-event-action="cancel"><i data-feather="x-circle"></i><span>Cancel</span></button>
+    `;
+    els.actionToggle.setAttribute('aria-expanded', 'false');
+    els.actionMenu.hidden = true;
+  }
   function closeActionMenu() { if (!els.actionMenu || !els.actionToggle) return; els.actionMenu.hidden = true; els.actionToggle.setAttribute('aria-expanded', 'false'); }
   function renderDetails(event) {
     if (!els.modalContent) return;
@@ -150,17 +179,26 @@
     const venueItems = [detailItem('Venue', event.venueName), detailItem('Type', event.venueType), detailItem('Governorate', event.governorate), detailItem('Setup time', formatDateTime(event.venueSetupTime))].join('');
     const requirements = [event.requiresPower && 'Power points', event.requiresInternet && 'Internet', event.requiresSoundSystem && 'Sound system'].filter(Boolean).join(' · ') || 'No special utilities selected';
     els.modalContent.innerHTML = `<section class="events-detail-block"><h4><i data-feather="calendar"></i> Overview</h4><div class="events-detail-grid">${detailItem('Type', typeLabel(event))}${detailItem('Event dates', formatDateRange(event))}${detailItem('Organization', event.organizationName)}${detailItem('Expected attendees', event.expectedAttendees ? String(event.expectedAttendees) : '—')}</div></section><section class="events-detail-block"><h4><i data-feather="user"></i> Contact</h4><div class="events-detail-grid">${detailItem('Contact person', event.contactPerson)}${detailItem('Phone', event.contactPhone)}${detailItem('Email', event.contactEmail)}${detailItem('Requested by', event.requesterName)}</div></section><section class="events-detail-block events-detail-block--wide"><h4><i data-feather="users"></i> Target audience</h4><div class="events-detail-item"><p>${escapeHTML(event.audience || 'No audience details were added.')}</p></div></section><section class="events-detail-block"><h4><i data-feather="cpu"></i> Projects</h4>${detailList(event.projects, { empty: 'No projects were added.' })}</section><section class="events-detail-block"><h4><i data-feather="image"></i> Marketing Materials</h4>${detailList(event.marketingMaterials, { empty: 'No marketing materials were added.', component: true })}</section><section class="events-detail-block"><h4><i data-feather="tool"></i> Venue Requirements</h4>${detailList(event.venueRequirements, { empty: 'No venue requirements were added.', component: true })}</section><section class="events-detail-block"><h4><i data-feather="map-pin"></i> Venue &amp; Location</h4><div class="events-detail-grid">${venueItems}</div>${mapUrl ? `<a class="events-location-link" target="_blank" rel="noopener noreferrer" href="${escapeHTML(mapUrl)}"><i data-feather="external-link"></i><span>Open map location</span></a>` : '<div class="events-detail-item" style="margin-top:12px"><span>Google Maps / Location URL</span><p>—</p></div>'}</section><section class="events-detail-block"><h4><i data-feather="sliders"></i> Site Notes</h4><div class="events-detail-item"><span>Utilities</span><p>${escapeHTML(requirements)}</p></div><div class="events-detail-item" style="margin-top:12px"><span>Venue Notes</span><p>${escapeHTML(event.venueNotes || 'No venue notes were added.')}</p></div></section><section class="events-detail-block events-detail-block--wide events-detail-costs"><h4><i data-feather="credit-card"></i> Cost Summary</h4><div class="events-detail-grid">${detailItem('Working cost', `EGP ${Number(event.workingCost || 0).toFixed(2)}`)}${detailItem('Transport cost', `EGP ${Number(event.transportCost || 0).toFixed(2)}`)}${detailItem('Total cost', `EGP ${Number(event.totalCost || 0).toFixed(2)}`)}</div></section>${event.operationsNotes ? `<section class="events-detail-block events-detail-block--wide"><h4><i data-feather="clipboard"></i> Operations Notes</h4><div class="events-detail-item"><p>${escapeHTML(event.operationsNotes)}</p></div></section>` : ''}`;
-    if (els.modalTitle) els.modalTitle.textContent = event.eventName || 'Event Details';
-    const isAdmin = canManageEventStatus();
-    // The request status is intentionally not edited from this detail panel.
+    // The request title is intentionally not repeated in the details modal.
+    // Keep an accessible generic label only; the visible header is reserved for
+    // the More and Close controls.
+    if (els.modalTitle) els.modalTitle.textContent = 'Event request details';
     // Workflow transitions are available only through the protected action next
     // to Download in the footer.
     if (els.modalStatus) els.modalStatus.innerHTML = workflowActionMarkup(event);
-    renderActionMenu(event, isAdmin);
+    renderActionMenu();
     icons(els.modal);
   }
   async function openDetails(id) { const clean = String(id || '').trim(); if (!clean || !els.modal) return; els.modal.hidden = false; els.modal.setAttribute('aria-hidden', 'false'); if (els.modalContent) els.modalContent.innerHTML = '<div class="events-loading"><span></span> Loading request details...</div>'; try { const response = await fetch(`/api/events/${encodeURIComponent(clean)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event details.'); state.activeEvent = { ...data.event, status: normaliseStatus(data.event?.status) }; renderDetails(state.activeEvent); } catch (error) { if (els.modalContent) els.modalContent.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event details.')}</span></div>`; icons(els.modalContent); } }
-  function closeDetails() { if (!els.modal) return; closeActionMenu(); closeStatusSelect(); els.modal.hidden = true; els.modal.setAttribute('aria-hidden', 'true'); state.activeEvent = null; }
+  function closeDetails() {
+    if (!els.modal) return;
+    closeActionMenu();
+    closeStatusSelect();
+    state.pendingWorkflow = null;
+    els.modal.hidden = true;
+    els.modal.setAttribute('aria-hidden', 'true');
+    state.activeEvent = null;
+  }
   async function updateStatus(id) { const input = $('#eventStatusEdit', els.modalStatus); const status = normaliseStatus(input?.value); if (!id || !status) return; const save = $('#eventStatusSave'); if (save) { save.disabled = true; save.querySelector('span')?.replaceChildren('Updating...'); } try { const response = await fetch(`/api/events/${encodeURIComponent(id)}`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update event status.'); const updated = { ...data.event, status: normaliseStatus(data.event?.status) }; state.events = state.events.map((item) => item.id === id ? updated : item); renderCards(); renderDetails(updated); toast('success', 'Events', 'Event status updated.'); } catch (error) { toast('error', 'Events', error?.message || 'Could not update event status.'); if (save) { save.disabled = false; save.querySelector('span')?.replaceChildren('Update'); } } }
   function resetWorkflowAuthorizationForm() {
     if (els.workflowAuthPassword) els.workflowAuthPassword.value = '';
@@ -190,7 +228,21 @@
   function openWorkflowAuthorization(action) {
     const event = state.activeEvent;
     if (!event || !action) return;
-    state.pendingWorkflow = { eventId: String(event.id || ''), targetStatus: action.targetStatus, action };
+    state.pendingWorkflow = { kind: 'workflow', eventId: String(event.id || ''), targetStatus: action.targetStatus, action };
+    resetWorkflowAuthorizationForm();
+    if (els.workflowAuthTitle) els.workflowAuthTitle.textContent = action.title;
+    if (els.workflowAuthModal) {
+      els.workflowAuthModal.hidden = false;
+      els.workflowAuthModal.setAttribute('aria-hidden', 'false');
+    }
+    icons(els.workflowAuthModal || document);
+    window.setTimeout(() => els.workflowAuthPassword?.focus(), 20);
+  }
+
+  function openRequestActionAuthorization(action) {
+    const event = state.activeEvent;
+    if (!event || !action) return;
+    state.pendingWorkflow = { kind: 'request_action', eventId: String(event.id || ''), requestAction: action };
     resetWorkflowAuthorizationForm();
     if (els.workflowAuthTitle) els.workflowAuthTitle.textContent = action.title;
     if (els.workflowAuthModal) {
@@ -203,12 +255,16 @@
 
   function openWorkflowConfirmation() {
     const pending = state.pendingWorkflow;
-    if (!pending?.action) return;
-    const { action } = pending;
-    if (els.workflowConfirmTitle) els.workflowConfirmTitle.textContent = action.confirmationTitle;
+    const action = pending?.kind === 'request_action' ? pending.requestAction : pending?.action;
+    if (!action) return;
+    const eventCode = String(state.activeEvent?.eventCode || 'This event request');
+    const isCancel = pending?.kind === 'request_action' && action.key === 'cancel';
+    if (els.workflowConfirmTitle) els.workflowConfirmTitle.textContent = isCancel ? action.confirmationTitle : action.confirmationTitle;
     if (els.workflowConfirmNote) {
-      const eventCode = String(state.activeEvent?.eventCode || 'this event request');
-      els.workflowConfirmNote.innerHTML = `<i data-feather="info"></i><span>${escapeHTML(`${eventCode} will be updated after confirmation.`)}</span>`;
+      const note = isCancel
+        ? `${eventCode} will be changed to Cancelled after confirmation.`
+        : `${eventCode} will be updated after confirmation.`;
+      els.workflowConfirmNote.innerHTML = `<i data-feather="info"></i><span>${escapeHTML(note)}</span>`;
     }
     if (els.workflowConfirmSubmit) {
       els.workflowConfirmSubmit.disabled = false;
@@ -239,11 +295,17 @@
       if (label) label.textContent = 'Verifying...';
     }
     try {
+      const isRequestAction = pending.kind === 'request_action';
       const response = await fetch('/api/events/admin/verify', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(isRequestAction ? {
+          password,
+          intent: 'request_action',
+          eventId: pending.eventId,
+          action: pending.requestAction?.key,
+        } : {
           password,
           intent: 'request_workflow',
           eventId: pending.eventId,
@@ -253,6 +315,12 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Invalid Admin password.');
       closeWorkflowAuthorization();
+      if (isRequestAction && pending.requestAction?.key === 'edit') {
+        const editId = String(pending.eventId || '').trim();
+        state.pendingWorkflow = null;
+        if (editId) window.location.assign(`/events/new?edit=${encodeURIComponent(editId)}`);
+        return;
+      }
       openWorkflowConfirmation();
     } catch (error) {
       if (els.workflowAuthError) els.workflowAuthError.textContent = error?.message || 'Invalid Admin password.';
@@ -267,18 +335,24 @@
 
   async function confirmWorkflowTransition() {
     const pending = state.pendingWorkflow;
-    if (!pending?.eventId || !pending?.targetStatus || !pending?.action) return;
+    if (!pending?.eventId) return;
+    const isRequestCancel = pending.kind === 'request_action' && pending.requestAction?.key === 'cancel';
+    if (!isRequestCancel && (!pending?.targetStatus || !pending?.action)) return;
     if (els.workflowConfirmSubmit) {
       els.workflowConfirmSubmit.disabled = true;
       const label = els.workflowConfirmSubmit.querySelector('span');
-      if (label) label.textContent = 'Updating...';
+      if (label) label.textContent = isRequestCancel ? 'Cancelling...' : 'Updating...';
     }
     try {
-      const response = await fetch(`/api/events/${encodeURIComponent(pending.eventId)}/workflow-transition`, {
+      const endpoint = isRequestCancel
+        ? `/api/events/${encodeURIComponent(pending.eventId)}/request-action`
+        : `/api/events/${encodeURIComponent(pending.eventId)}/workflow-transition`;
+      const body = isRequestCancel ? { action: 'cancel' } : { targetStatus: pending.targetStatus };
+      const response = await fetch(endpoint, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetStatus: pending.targetStatus }),
+        body: JSON.stringify(body),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not update event request status.');
@@ -290,19 +364,21 @@
       renderCards();
       renderDetails(updated);
       closeWorkflowConfirmation();
-      toast('success', 'Events', pending.targetStatus === 'completed' ? 'Event request marked as Done.' : 'Event request marked as In progress.');
+      toast('success', 'Events', isRequestCancel
+        ? 'Event request cancelled.'
+        : (pending.targetStatus === 'completed' ? 'Event request marked as Done.' : 'Event request marked as In progress.'));
     } catch (error) {
       toast('error', 'Events', error?.message || 'Could not update event request status.');
       if (els.workflowConfirmSubmit) {
         els.workflowConfirmSubmit.disabled = false;
         const label = els.workflowConfirmSubmit.querySelector('span');
-        if (label) label.textContent = pending.action.confirmationLabel;
+        if (label) label.textContent = isRequestCancel ? 'Confirm cancellation' : pending.action?.confirmationLabel || 'Confirm';
       }
     }
   }
 
+
   function downloadActiveEvent() { const id = String(state.activeEvent?.id || '').trim(); if (!id) return; window.location.assign(`/api/events/${encodeURIComponent(id)}/pdf`); }
-  async function archiveActiveEvent() { const event = state.activeEvent; const id = String(event?.id || '').trim(); if (!id) return; if (!window.confirm(`Archive ${event.eventCode || 'this event request'}? It will be removed from Event Requests.`)) return; try { const response = await fetch(`/api/events/${encodeURIComponent(id)}/archive`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not archive event request.'); state.events = state.events.filter((item) => item.id !== id); renderTypeFilter(); renderCards(); closeDetails(); toast('success', 'Events', 'Event request archived.'); } catch (error) { toast('error', 'Events', error?.message || 'Could not archive event request.'); } }
 
   const creatorProfileCache = new Map(); let creatorProfilePopover = null; let creatorProfileListenersBound = false;
   function creatorInitials(name) { return String(name || 'Creator').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('') || 'C'; }
@@ -336,7 +412,13 @@
     els.workflowConfirmCancel?.addEventListener('click', () => closeWorkflowConfirmation());
     els.workflowConfirmModal?.addEventListener('click', (event) => { if (event.target === els.workflowConfirmModal) closeWorkflowConfirmation(); });
     els.actionToggle?.addEventListener('click', () => { const opening = !!els.actionMenu?.hidden; if (els.actionMenu) els.actionMenu.hidden = !opening; els.actionToggle.setAttribute('aria-expanded', opening ? 'true' : 'false'); });
-    els.actionMenu?.addEventListener('click', (event) => { const action = event.target.closest('[data-event-action]')?.dataset.eventAction; if (!action) return; closeActionMenu(); if (action === 'edit' && state.activeEvent?.id) window.location.assign(`/events/new?edit=${encodeURIComponent(state.activeEvent.id)}`); if (action === 'archive') archiveActiveEvent(); });
+    els.actionMenu?.addEventListener('click', (event) => {
+      const actionKey = event.target.closest('[data-event-action]')?.dataset.eventAction;
+      if (!actionKey) return;
+      closeActionMenu();
+      const action = requestActions[actionKey];
+      if (action) openRequestActionAuthorization(action);
+    });
     document.addEventListener('click', (event) => { if (els.typeFilter && !els.typeFilter.contains(event.target)) closeTypeFilter(); if (els.actionWrap && !els.actionWrap.contains(event.target)) closeActionMenu(); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { if (els.modal && !els.modal.hidden) closeDetails(); closeWorkflowAuthorization(); closeWorkflowConfirmation(); closeTypeFilter(); closeActionMenu(); } });
   }
