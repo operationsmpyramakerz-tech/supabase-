@@ -2054,6 +2054,7 @@ const ALL_PAGES = [
   // Task Management is retained for legacy broad access only. New access is
   // granted independently through the two child pages below.
   "Task Management",
+  "All Tasks",
   "My Tasks",
   "Delegated Tasks",
   USER_ACCESS_PAGE_NAME,
@@ -2096,6 +2097,7 @@ function normalizePages(names = []) {
   }
   // Task Management child pages are independently assignable. Keep the old
   // broad parent permission intact only for legacy users.
+  if (set.has("all tasks") || set.has("all task") || set.has("/task-management/all-tasks")) out.push("All Tasks");
   if (set.has("my tasks") || set.has("my task") || set.has("/task-management/my-tasks")) out.push("My Tasks");
   if (set.has("delegated tasks") || set.has("delegated task") || set.has("/task-management/delegated-tasks")) out.push("Delegated Tasks");
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
@@ -3362,6 +3364,8 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     taskmanagement: "Task Management",
     "department-tickets": "Task Management",
     departmenttickets: "Task Management",
+    "task-management-all-tasks": "All Tasks",
+    "all-tasks": "All Tasks",
     "task-management-my-tasks": "My Tasks",
     "task-management-delegated-tasks": "Delegated Tasks",
     "my-tasks": "My Tasks",
@@ -7816,8 +7820,9 @@ function expandAllowedForUI(list = []) {
   // Task Management follows the same parent-shell model as Events. The old
   // broad parent remains compatible, while each new child stays independent.
   if (set.has("Task Management")) {
-    ["My Tasks", "Delegated Tasks", "/task-management", "/task-management/my-tasks", "/task-management/delegated-tasks"].forEach((value) => set.add(value));
+    ["All Tasks", "My Tasks", "Delegated Tasks", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"].forEach((value) => set.add(value));
   } else {
+    if (set.has("All Tasks")) set.add("/task-management/all-tasks");
     if (set.has("My Tasks")) set.add("/task-management/my-tasks");
     if (set.has("Delegated Tasks")) set.add("/task-management/delegated-tasks");
   }
@@ -7895,6 +7900,7 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Current Orders")) return "/orders";
   if (list.includes("Requested Orders")) return "/orders/requested";
   if (list.includes("Maintenance Orders")) return "/orders/maintenance-orders";
+  if (list.includes("All Tasks")) return "/task-management/all-tasks";
   if (list.includes("My Tasks")) return "/task-management/my-tasks";
   if (list.includes("Delegated Tasks")) return "/task-management/delegated-tasks";
   if (list.includes("Event Calendar")) return "/events/calendar";
@@ -8918,6 +8924,7 @@ function _pageAccessAliases(pageName = "") {
     // child permission never grants the other child.
     taskmanagement: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
     departmenttickets: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
+    alltasks: ["alltasks", "taskmanagement", "departmenttickets", "taskmanagementtickets"],
     mytasks: ["mytasks", "taskmanagement", "departmenttickets", "taskmanagementtickets"],
     delegatedtasks: ["delegatedtasks", "taskmanagement", "departmenttickets", "taskmanagementtickets"],
   };
@@ -9111,19 +9118,21 @@ function _hasEventComponentsAdminAccess(req) {
 }
 
 // Task Management sub-page access ----------------------------------------------
-// The Task Management parent is a sidebar shell. My Tasks contains tickets that
-// target the current user's department, while Delegated Tasks contains tickets
-// created by the current user. The legacy broad Task Management page remains a
+// The Task Management parent is a sidebar shell. All Tasks provides company-wide
+// visibility, My Tasks contains tickets for the current user's department, and
+// Delegated Tasks contains tickets created by the current user. The legacy broad Task Management page remains a
 // backward-compatible entitlement for users created before this split.
 const TASK_MANAGEMENT_SUBPAGES = Object.freeze([
+  { view: "all", pageName: "All Tasks", routePath: "/task-management/all-tasks", icon: "layers", label: "All Tasks" },
   { view: "my", pageName: "My Tasks", routePath: "/task-management/my-tasks", icon: "check-square", label: "My Tasks" },
   { view: "delegated", pageName: "Delegated Tasks", routePath: "/task-management/delegated-tasks", icon: "send", label: "Delegated Tasks" },
 ]);
 
 function _taskManagementSubpageByView(view) {
   const key = String(view || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
-  if (["my", "my-task", "my-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[0];
-  if (["delegated", "delegated-task", "delegated-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[1];
+  if (["all", "all-task", "all-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[0];
+  if (["my", "my-task", "my-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[1];
+  if (["delegated", "delegated-task", "delegated-tasks"].includes(key)) return TASK_MANAGEMENT_SUBPAGES[2];
   return null;
 }
 
@@ -9311,9 +9320,13 @@ app.get("/tasks", requireAuth, requirePage("Tasks"), (req, res) => {
 });
 
 // Department task management — cross-department tickets and ordered workflow sections.
-// Task Management module — two independently protected child pages under one sidebar icon.
-app.get("/task-management", requireAuth, requirePage(["My Tasks", "Delegated Tasks", "Task Management"]), (req, res) => {
+// Task Management module — three independently protected child pages under one sidebar icon.
+app.get("/task-management", requireAuth, requirePage(["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"]), (req, res) => {
   return res.redirect(_taskManagementPreferredRoute(req));
+});
+
+app.get("/task-management/all-tasks", requireAuth, requirePage("All Tasks"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
 });
 
 app.get("/task-management/my-tasks", requireAuth, requirePage("My Tasks"), (req, res) => {
@@ -37126,6 +37139,7 @@ function _tmSerializeSection(row = {}) {
     request: _tmText(_sbGet(row, ["request_text", "request", "Request", "title", "Title"]), 4000),
     details: _tmText(_sbGet(row, ["details", "description", "Description"]), 8000),
     sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
+    executionGroup: Math.max(1, Number(_sbGet(row, ["execution_group", "executionGroup", "stage", "stage_number"]) || _sbGet(row, ["sort_order", "sortOrder"]) || 1)),
     status,
     statusLabel: _tmStatusLabel(status),
     completionNote: _tmText(_sbGet(row, ["completion_note", "completionNote", "work_note", "workNote"]), 8000),
@@ -37147,7 +37161,7 @@ function _tmTicketStatusFromSections(sections = []) {
 
 function _tmSerializeTicket(row = {}, sectionRows = []) {
   const id = _tmId(row);
-  const sections = (sectionRows || []).map(_tmSerializeSection).sort((a, b) => (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
+  const sections = (sectionRows || []).map(_tmSerializeSection).sort((a, b) => (a.executionGroup - b.executionGroup) || (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
   const calculatedStatus = _tmTicketStatusFromSections(sections);
   const completedCount = sections.filter((section) => section.status === "completed").length;
   return {
@@ -37260,6 +37274,7 @@ function _tmSameMember(ticket = {}, currentMember = {}) {
 }
 
 function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
+  if (view === "all") return true;
   if (view === "delegated") return _tmSameMember(ticket, currentMember);
   if (view === "my") {
     const department = _tmText(currentMember?.department || "", 120);
@@ -37270,8 +37285,13 @@ function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
 
 function _tmCanUpdateSectionInView(req, ticket = {}, section = {}, currentMember = {}, view = "") {
   if (_taskManagementViewIsAdmin(req, view)) return true;
-  if (view === "delegated") return _tmSameMember(ticket, currentMember);
-  if (view === "my") return _tmSameText(section?.department || "", currentMember?.department || "");
+  const isCreator = _tmSameMember(ticket, currentMember);
+  const isDepartment = _tmSameText(section?.department || "", currentMember?.department || "");
+  if (view === "delegated") return isCreator;
+  if (view === "my") return isDepartment;
+  // All Tasks is a company-wide visibility view. Edit users can update only
+  // their own delegated work or work assigned to their own department.
+  if (view === "all") return isCreator || isDepartment;
   return false;
 }
 
@@ -37326,12 +37346,18 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     const priority = _tmPriority(req.body?.priority);
     const dueDate = _tmDate(req.body?.dueDate);
     const rawSections = Array.isArray(req.body?.sections) ? req.body.sections : [];
-    const sections = rawSections.slice(0, 40).map((item, index) => ({
+    const rawPreparedSections = rawSections.slice(0, 40).map((item, index) => ({
       department: _tmText(item?.department, 120),
       request: _tmText(item?.request || item?.requestText || item?.title, 4000),
       details: _tmText(item?.details || item?.description, 8000),
       sortOrder: index + 1,
+      executionGroup: Math.max(1, Math.min(40, Number(item?.executionGroup ?? item?.execution_group ?? item?.stage ?? index + 1) || index + 1)),
     }));
+    // Normalize client-provided stage numbers into 1..N while keeping every
+    // section in the same parallel group together.
+    const distinctGroups = [...new Set(rawPreparedSections.map((section) => section.executionGroup))].sort((a, b) => a - b);
+    const groupMap = new Map(distinctGroups.map((group, index) => [group, index + 1]));
+    const sections = rawPreparedSections.map((section) => ({ ...section, executionGroup: groupMap.get(section.executionGroup) || 1 }));
 
     if (!title) return res.status(400).json({ ok: false, error: "Ticket title is required." });
     if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow section." });
@@ -37359,6 +37385,7 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
           request_text: section.request,
           details: section.details || null,
           sort_order: section.sortOrder,
+          execution_group: section.executionGroup,
           status: "not_started",
         });
       }
@@ -37403,17 +37430,17 @@ app.patch("/api/task-management/sections/:id", requireAuth, requireTaskManagemen
       : "";
     if (!requestedStatus) return res.status(400).json({ ok: false, error: "A valid section status is required." });
 
-    // Sections are an execution sequence, not independent checklist items.
-    // A later department may add a note only after all earlier sections are complete.
-    const orderedSections = (ticket.sections || []).slice().sort((a, b) => (Number(a.sortOrder) - Number(b.sortOrder)) || Number(a.id) - Number(b.id));
-    const currentIndex = orderedSections.findIndex((item) => String(item.id) === sectionId);
-    const earlierOpenSection = currentIndex > 0
-      ? orderedSections.slice(0, currentIndex).find((item) => _tmStatus(item.status) !== "completed")
-      : null;
+    // Sections with the same execution_group are parallel and may be worked on
+    // together. Only every section in earlier stages must be completed before
+    // the current stage can start or complete.
+    const currentGroup = Math.max(1, Number(section?.executionGroup || section?.sortOrder || 1));
+    const earlierOpenSection = (ticket.sections || [])
+      .filter((item) => Math.max(1, Number(item?.executionGroup || item?.sortOrder || 1)) < currentGroup)
+      .find((item) => _tmStatus(item.status) !== "completed");
     if (earlierOpenSection && ["in_progress", "completed"].includes(requestedStatus)) {
       return res.status(409).json({
         ok: false,
-        error: `Complete ${earlierOpenSection.department || "the previous department"} section first before starting this step.`,
+        error: `Complete the previous workflow stage first before starting this section.`,
       });
     }
 
