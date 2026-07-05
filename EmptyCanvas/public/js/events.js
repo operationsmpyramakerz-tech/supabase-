@@ -83,8 +83,12 @@
   }
 
   function canInitiateWorkflow() {
-    const level = pageAccessLevel();
-    return level === 'edit' || level === 'admin' || window.OpsPageAccess?.isAdmin?.() === true;
+    // Workflow buttons must be visible to every Events user who can open the
+    // request. The actual transition is still protected server-side by an
+    // explicit Events Admin password verification for the selected request.
+    // Do not rely on the client-side page-access cache here: it can briefly be
+    // stale after permissions are saved, which previously hid both actions.
+    return true;
   }
 
   function workflowActionFor(event) {
@@ -97,7 +101,7 @@
   function workflowActionMarkup(event) {
     const action = workflowActionFor(event);
     if (!action || !canInitiateWorkflow()) return '';
-    return `<button class="events-workflow-action events-workflow-action--${escapeHTML(action.targetStatus)}" type="button" data-event-workflow-action="${escapeHTML(action.targetStatus)}"><i data-feather="${escapeHTML(action.icon)}"></i><span>${escapeHTML(action.buttonLabel)}</span></button>`;
+    return `<button class="events-workflow-action events-workflow-action--${escapeHTML(action.targetStatus)}" type="button" data-event-workflow-action="${escapeHTML(action.targetStatus)}" aria-label="${escapeHTML(action.buttonLabel)}"><i data-feather="${escapeHTML(action.icon)}"></i><span>${escapeHTML(action.buttonLabel)}</span></button>`;
   }
   function canManageEventStatus() {
     try {
