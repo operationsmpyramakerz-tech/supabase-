@@ -2674,7 +2674,8 @@
 
 
 /* Events hierarchy inside Users Center > Page Access ------------------------- */
-.ua-page-access-group--events{
+.ua-page-access-group--events,
+.ua-page-access-group--task-management{
   display:grid;
   gap:8px;
   padding:10px;
@@ -2722,6 +2723,17 @@
   transform:translateY(-3px);
 }
 @media (max-width:720px){
-  .ua-page-access-group--events{padding:9px;}
+  .ua-page-access-group--events,
+  .ua-page-access-group--task-management{padding:9px;}
   .ua-page-access-group__heading{padding:0 3px;}
 }
+
+
+/* Task Management hierarchy inside Users Center > Page Access */
+.ua-page-access-group--task-management{
+  border-color:rgba(8,145,178,.18);
+  background:linear-gradient(135deg,rgba(236,254,255,.92),rgba(255,255,255,.98));
+}
+.ua-page-access-group--task-management .ua-page-access-group__heading{color:#155e75;}
+.ua-page-access-group--task-management .ua-page-access-group__heading small{color:#4c8a9e;}
+.ua-page-access-group--task-management .ua-page-access-row--subpage{border-color:rgba(8,145,178,.13);}

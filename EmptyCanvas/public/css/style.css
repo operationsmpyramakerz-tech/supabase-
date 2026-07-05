@@ -10674,3 +10674,41 @@ body.orders-review-page #sv-list{
 @media(max-width:768px){
   .events-subpage-flyout{width:min(220px,calc(100vw - 24px));border-radius:16px;}
 }
+
+/* Task Management sidebar child-page flyout ----------------------------------- */
+.task-management-subpage-flyout{
+  position:fixed;
+  z-index:10040;
+  width:min(224px,calc(100vw - 24px));
+  padding:10px;
+  border:1px solid rgba(189,221,229,.95);
+  border-radius:18px;
+  background:rgba(255,255,255,.98);
+  box-shadow:0 18px 42px rgba(17,24,39,.20),0 3px 12px rgba(17,24,39,.09);
+  backdrop-filter:blur(14px);
+  transform:translateX(-5px) scale(.98);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .16s ease,transform .16s ease;
+}
+.task-management-subpage-flyout.is-open{opacity:1;transform:translateX(0) scale(1);pointer-events:auto;}
+.task-management-subpage-flyout[hidden]{display:none !important;}
+.task-management-subpage-flyout__list{display:grid;gap:4px;}
+.task-management-subpage-flyout__link{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:42px;
+  padding:0 11px;
+  border-radius:11px;
+  color:#4b5563;
+  font-size:.82rem;
+  font-weight:700;
+  text-decoration:none;
+  transition:background .15s ease,color .15s ease,transform .15s ease;
+}
+.task-management-subpage-flyout__link svg{width:17px;height:17px;stroke-width:2.2;color:#0f766e;}
+.task-management-subpage-flyout__link:hover{background:#edfafa;color:#115e59;transform:translateX(2px);}
+.task-management-subpage-flyout__link.is-active{background:linear-gradient(135deg,#0f172a,#0f766e);color:#fff;box-shadow:0 7px 16px rgba(15,118,110,.18);}
+.task-management-subpage-flyout__link.is-active svg{color:currentColor;}
+@media(max-width:768px){.task-management-subpage-flyout{width:min(220px,calc(100vw - 24px));border-radius:16px;}}
