@@ -772,9 +772,17 @@ document.addEventListener('DOMContentLoaded', () => {
       expensesusers: ['expensesusers'],
       useraccess: ['userscenter', 'useraccessdata'],
       messages: ['mail'],
-      events: ['eventrequests', 'eventcomponents'],
-      eventrequests: ['events', 'eventcomponents'],
-      eventcomponents: ['events', 'eventrequests'],
+      // Events is a legacy broad entitlement. Child pages must never match
+      // each other here, otherwise a user with one child could inherit the
+      // runtime View/Edit/Admin level of another child.
+      events: [],
+      eventscalendar: ['events'],
+      eventrequests: ['events'],
+      eventcomponents: ['events'],
+      // Creation/edit workspaces inherit the same access level as their
+      // owning child page, so View access remains read-only there as well.
+      eventsnew: ['eventrequests', 'events'],
+      eventscomponentsnew: ['eventcomponents', 'events'],
     };
     const wants = new Set([routeKey, ...(known[routeKey] || [])]);
     return candidates.some((candidate) => wants.has(candidate));
@@ -977,8 +985,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Maintenance Orders', '/orders/maintenance-orders'])) {
       urls.push('/api/orders/requested');
     }
-    if (hasAllowedPage(allowedPages, ['Events', 'Event Requests', 'Event Components', '/events'])) {
-      urls.push('/api/events', '/api/events/components?activeOnly=1');
+    if (hasAllowedPage(allowedPages, ['Events', 'Event Calendar', 'Event Requests', '/events', '/events/calendar', '/events/requests'])) {
+      urls.push('/api/events');
+    }
+    if (hasAllowedPage(allowedPages, ['Events', 'Event Requests', 'Event Components', '/events', '/events/requests', '/events/components'])) {
+      urls.push('/api/events/components?activeOnly=1');
     }
     if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
       urls.push('/api/tasks?scope=mine', '/api/tasks/users');
@@ -2217,10 +2228,12 @@ if (document.querySelector('.sidebar')) {
     'schools requested orders': 'a[href="/orders/requested"]',
     'maintenance orders': 'a[href="/orders/maintenance-orders"]',
 
-    // ===== Events =====
+    // ===== Events parent + independently authorized child pages =====
     'events': 'a[href="/events"]',
-    'event requests': 'a[href="/events"]',
-    'event components': 'a[href="/events"]',
+    'event calendar': 'a[href="/events/calendar"]',
+    'events calendar': 'a[href="/events/calendar"]',
+    'event requests': 'a[href="/events/requests"]',
+    'event components': 'a[href="/events/components"]',
 
     // Orders Review (formerly: "S.V schools orders")
     'orders review': 'a[href="/orders/sv-orders"]',
@@ -2286,13 +2299,19 @@ if (document.querySelector('.sidebar')) {
         ...(Array.isArray(row.aliases) ? row.aliases : []),
       ].forEach((value) => addAllowedPageValue(merged, value));
 
-      // Events has historically behaved as one shared entitlement. Keep that
-      // existing behavior while the rest of pages are merged generically.
+      // Events sub-pages are intentionally independent. Only the legacy
+      // broad "Events" page expands into all three child entries.
       const tokens = [row.pageName, row.page_name, row.pageKey, row.page_key, row.routePath, row.route_path]
         .map((value) => String(value || '').toLowerCase().replace(/[^a-z0-9/]+/g, ''))
         .filter(Boolean);
-      if (tokens.some((value) => ['events', 'eventrequests', 'eventcomponents', '/events', '/events/new', '/events/components'].includes(value))) {
-        ['Events', 'Event Requests', 'Event Components', '/events'].forEach((value) => addAllowedPageValue(merged, value));
+      if (tokens.some((value) => ['events', '/events'].includes(value))) {
+        ['Events', 'Event Calendar', 'Event Requests', 'Event Components', '/events', '/events/calendar', '/events/requests', '/events/components'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['eventcalendar', 'eventscalendar', '/events/calendar'].includes(value))) {
+        ['Event Calendar', '/events/calendar'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['eventrequests', '/events/requests'].includes(value))) {
+        ['Event Requests', '/events/requests'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['eventcomponents', '/events/components'].includes(value))) {
+        ['Event Components', '/events/components'].forEach((value) => addAllowedPageValue(merged, value));
       }
     });
 
@@ -2328,6 +2347,142 @@ if (document.querySelector('.sidebar')) {
       });
     } catch {}
   }
+
+  const EVENTS_SUBPAGE_CONFIG = Object.freeze([
+    { key: 'calendar', name: 'Event Calendar', route: '/events/calendar', label: 'Calendar', icon: 'calendar' },
+    { key: 'requests', name: 'Event Requests', route: '/events/requests', label: 'Event Requests', icon: 'clipboard' },
+    { key: 'components', name: 'Event Components', route: '/events/components', label: 'Event Components', icon: 'layers' },
+  ]);
+
+  function eventSubpagesAllowed(allowed = []) {
+    const set = new Set((allowed || []).flatMap((value) => {
+      const raw = String(value || '').trim();
+      const normalized = normPath(raw);
+      return [toKey(raw), normalized, normalized.startsWith('/') ? normalized.slice(1) : `/${normalized}`];
+    }));
+    const legacyBroad = set.has('events') || set.has('/events');
+    return EVENTS_SUBPAGE_CONFIG.filter((page) => legacyBroad || set.has(toKey(page.name)) || set.has(normPath(page.route)));
+  }
+
+  function ensureEventsSubpageFlyout() {
+    let panel = document.getElementById('events-subpage-flyout');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'events-subpage-flyout';
+    panel.className = 'events-subpage-flyout';
+    panel.hidden = true;
+    panel.setAttribute('role', 'menu');
+    panel.setAttribute('aria-label', 'Events pages');
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  function closeEventsSubpageFlyout() {
+    const panel = document.getElementById('events-subpage-flyout');
+    if (!panel) return;
+    panel.hidden = true;
+    panel.classList.remove('is-open');
+    try { document.querySelector('a.nav-link[href="/events"]')?.setAttribute('aria-expanded', 'false'); } catch {}
+  }
+
+  function renderEventsSubpageFlyout(pages = [], trigger) {
+    const panel = ensureEventsSubpageFlyout();
+    if (!pages.length || !trigger) return closeEventsSubpageFlyout();
+    const current = sidebarPath(window.location.pathname);
+    panel.innerHTML = `
+      <div class="events-subpage-flyout__heading"><i data-feather="calendar"></i><span>Events</span></div>
+      <div class="events-subpage-flyout__list">
+        ${pages.map((page) => `
+          <a class="events-subpage-flyout__link${current === page.route || current.startsWith(`${page.route}/`) ? ' is-active' : ''}" href="${page.route}" role="menuitem">
+            <i data-feather="${page.icon}"></i><span>${page.label}</span>
+          </a>
+        `).join('')}
+      </div>
+    `;
+    const rect = trigger.getBoundingClientRect();
+    // Dock the child-page window immediately to the right of the Events icon.
+    // This gives the same nested-sidebar feeling in both expanded and compact
+    // sidebar layouts without covering the parent item.
+    const left = Math.min(window.innerWidth - 236, Math.max(12, rect.right + 10));
+    const top = Math.min(window.innerHeight - 210, Math.max(12, rect.top - 10));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.hidden = false;
+    panel.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    if (window.feather) feather.replace({ width: 17, height: 17 });
+  }
+
+  function syncEventsSubpageNavigation(allowed = []) {
+    const pages = eventSubpagesAllowed(allowed);
+    const parent = document.querySelector('a.nav-link[href="/events"]');
+    const parentLi = parent?.closest('li');
+    const allowedRoutes = new Set(pages.map((page) => page.route));
+
+    // The single parent icon appears whenever the user has one or more child pages.
+    if (parent) {
+      if (pages.length) showEl(parentLi || parent);
+      else hideEl(parentLi || parent);
+      parent.dataset.eventsSubpageCount = String(pages.length);
+      // Keep the canonical parent href stable. This is important because the
+      // permission filter and sidebar order both identify the parent by /events.
+      parent.href = '/events';
+      parent.setAttribute('aria-haspopup', pages.length > 1 ? 'menu' : 'false');
+      parent.setAttribute('aria-expanded', 'false');
+      parent.title = pages.length === 1 ? `Events · ${pages[0].label}` : 'Events';
+      parent.setAttribute('aria-label', parent.title);
+      if (!parent.dataset.eventsSubpageBound) {
+        parent.dataset.eventsSubpageBound = '1';
+        parent.addEventListener('click', (event) => {
+          const currentPages = eventSubpagesAllowed(getCachedAllowedPages() || []);
+          if (!currentPages.length) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (currentPages.length === 1) {
+            window.location.assign(currentPages[0].route);
+            return;
+          }
+          const flyout = document.getElementById('events-subpage-flyout');
+          if (flyout?.classList.contains('is-open')) closeEventsSubpageFlyout();
+          else renderEventsSubpageFlyout(currentPages, parent);
+        });
+      }
+    }
+
+    // Existing Events top tabs/actions stay available only for their own child page.
+    document.querySelectorAll('.events-subnav a[href], a[href="/events/new"], a[href="/events/requests"][data-events-optional], a[href="/events/components"][data-events-optional]').forEach((link) => {
+      const route = sidebarPath(link.getAttribute('href') || '');
+      const pageRoute = route === '/events/new' ? '/events/requests' : route;
+      const allowedForLink = allowedRoutes.has(pageRoute);
+      const holder = link.closest('.events-subnav__link') || link;
+      if (allowedForLink) showEl(holder);
+      else hideEl(holder);
+    });
+
+    // Calendar-only users may view the schedule but cannot create or open the
+    // request workspace. Keep this control out of their view.
+    document.querySelectorAll('#eventsCalendarAddNew, a[href="/events/requests"][data-events-calendar-open-requests]').forEach((el) => {
+      if (allowedRoutes.has('/events/requests')) showEl(el);
+      else hideEl(el);
+    });
+
+    const currentRoute = sidebarPath(window.location.pathname);
+    if (currentRoute.startsWith('/events/') && !allowedRoutes.has(currentRoute) && currentRoute !== '/events/new' && currentRoute !== '/events/components/new') {
+      // Route protection on the server remains authoritative; this only prevents
+      // a stale cached client UI from presenting inaccessible child tabs.
+      closeEventsSubpageFlyout();
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    const panel = document.getElementById('events-subpage-flyout');
+    const parent = document.querySelector('a.nav-link[href="/events"]');
+    if (!panel?.classList.contains('is-open')) return;
+    if (panel.contains(event.target) || parent?.contains(event.target)) return;
+    closeEventsSubpageFlyout();
+  });
+  window.addEventListener('resize', () => closeEventsSubpageFlyout());
+  window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeEventsSubpageFlyout(); });
 
   // أظهر المسموح وأخفِ غير المسموح (حتمي)
   function applyAllowedPages(allowed){
@@ -2392,6 +2547,10 @@ if (document.querySelector('.sidebar')) {
         showEl(li);
       }
     });
+
+    // Events is a parent shell: show it when any independently permitted
+    // Events child page is available, then apply the subpage flyout logic.
+    try { syncEventsSubpageNavigation(allowed); } catch {}
 
     // Home is available for every authenticated user (not tied to Allowed Pages)
     try {
@@ -2776,6 +2935,7 @@ if (document.querySelector('.sidebar')) {
         }
       });
 
+      if (!best && current.startsWith('/events/')) best = links.find((link) => sidebarPath(link.getAttribute('href') || '') === '/events') || null;
       if (!best) best = links.find((link) => sidebarPath(link.getAttribute('href') || '') === '/home') || links[0];
       if (best) best.classList.add('active');
     } catch {}

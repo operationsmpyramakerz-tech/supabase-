@@ -2298,12 +2298,14 @@
       els.pageAccessList.innerHTML = window.OpsNoData?.html({ compact: true }) || '<div class="ua-empty">Sorry, No data available</div>';
       return;
     }
-    els.pageAccessList.innerHTML = rows.map((row) => {
+    const eventChildKeys = new Set(['event-calendar', 'event-requests', 'event-components']);
+    const isEventsChild = (row) => eventChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
+    const renderRow = (row, { isSubpage = false } = {}) => {
       const enabled = !!row.isEnabled;
       return `
-        <div class="ua-page-access-row ${enabled ? '' : 'is-disabled'}" data-page-id="${escapeHTML(row.pageId)}" data-page-key="${escapeHTML(row.pageKey)}">
+        <div class="ua-page-access-row ${enabled ? '' : 'is-disabled'}${isSubpage ? ' ua-page-access-row--subpage' : ''}" data-page-id="${escapeHTML(row.pageId)}" data-page-key="${escapeHTML(row.pageKey)}">
           <div class="ua-page-access-name">
-            <strong>${escapeHTML(row.pageName)}</strong>
+            <strong>${isSubpage ? '<span class="ua-page-access-branch" aria-hidden="true"></span>' : ''}${escapeHTML(row.pageName)}</strong>
             <small>${escapeHTML(row.moduleName)}${row.routePath ? ` • ${escapeHTML(row.routePath)}` : ''}</small>
           </div>
           <div>
@@ -2331,7 +2333,25 @@
           </div>
         </div>
       `;
-    }).join('');
+    };
+
+    // Event pages remain independently configurable, but are visually nested
+    // under their Events parent so the hierarchy is obvious in Allowed Pages.
+    const eventRows = rows.filter(isEventsChild);
+    const firstEventIndex = rows.findIndex(isEventsChild);
+    const markup = [];
+    rows.forEach((row, index) => {
+      if (index === firstEventIndex && eventRows.length) {
+        markup.push(`
+          <section class="ua-page-access-group ua-page-access-group--events" aria-label="Events sub-pages">
+            <div class="ua-page-access-group__heading"><i data-feather="calendar"></i><span>Events</span><small>Sub-pages</small></div>
+            <div class="ua-page-access-group__rows">${eventRows.map((eventRow) => renderRow(eventRow, { isSubpage: true })).join('')}</div>
+          </section>
+        `);
+      }
+      if (!isEventsChild(row)) markup.push(renderRow(row));
+    });
+    els.pageAccessList.innerHTML = markup.join('');
     hydrateIcons(els.pageAccessList);
   }
 
