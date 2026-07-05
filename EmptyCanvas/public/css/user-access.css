@@ -2671,3 +2671,57 @@
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
+
+
+/* Events hierarchy inside Users Center > Page Access ------------------------- */
+.ua-page-access-group--events{
+  display:grid;
+  gap:8px;
+  padding:10px;
+  border:1px solid rgba(67,56,202,.16);
+  border-radius:20px;
+  background:linear-gradient(135deg,rgba(245,243,255,.92),rgba(255,255,255,.98));
+}
+.ua-page-access-group__heading{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:30px;
+  padding:0 4px;
+  color:#26225f;
+  font-size:13px;
+  font-weight:950;
+}
+.ua-page-access-group__heading svg{width:17px;height:17px;stroke-width:2.6;}
+.ua-page-access-group__heading small{
+  margin-left:auto;
+  color:#817eb1;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.ua-page-access-group__rows{display:grid;gap:8px;}
+.ua-page-access-row--subpage{
+  position:relative;
+  border-color:rgba(67,56,202,.11);
+  background:rgba(255,255,255,.94);
+}
+.ua-page-access-row--subpage .ua-page-access-name strong{
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+.ua-page-access-branch{
+  display:inline-block;
+  width:16px;
+  height:12px;
+  border-left:1.5px solid rgba(84,74,176,.45);
+  border-bottom:1.5px solid rgba(84,74,176,.45);
+  border-radius:0 0 0 7px;
+  transform:translateY(-3px);
+}
+@media (max-width:720px){
+  .ua-page-access-group--events{padding:9px;}
+  .ua-page-access-group__heading{padding:0 3px;}
+}
