@@ -25652,7 +25652,7 @@ const EVENTS_STANDARD_TYPE_OPTIONS = Object.freeze([
   { code: 'exhibition', label: 'Exhibition', isCustom: false },
 ]);
 const EVENTS_TYPES = new Set([...EVENTS_STANDARD_TYPE_OPTIONS.map((item) => item.code), 'other']);
-const EVENTS_STATUSES = new Set(['submitted', 'under_review', 'approved', 'in_progress', 'completed', 'cancelled']);
+const EVENTS_STATUSES = new Set(['submitted', 'in_progress', 'completed', 'cancelled']);
 const EVENTS_STANDARD_COMPONENT_CATEGORY_OPTIONS = Object.freeze([
   { code: 'project', label: 'Project Resource', isCustom: false },
   { code: 'marketing_material', label: 'Marketing Material', isCustom: false },
@@ -25673,6 +25673,9 @@ function _eventsNormalizeType(value) {
 
 function _eventsNormalizeStatus(value) {
   const raw = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  // The Events workflow no longer uses separate Under review or Approved states.
+  // Legacy records are displayed and handled as Submitted so they remain visible.
+  if (raw === 'under_review' || raw === 'approved') return 'submitted';
   return EVENTS_STATUSES.has(raw) ? raw : 'submitted';
 }
 
@@ -26176,6 +26179,8 @@ function _eventsSerializeRequest(row = {}) {
     eventType: _eventsNormalizeType(row?.event_type),
     eventTypeCustom: _eventsText(row?.event_type_custom, 80) || null,
     status: _eventsNormalizeStatus(row?.status),
+    isArchived: _eventsBoolean(row?.is_archived ?? row?.isArchived),
+    archivedAt: row?.archived_at || row?.archivedAt || null,
     organizationName: _eventsText(row?.organization_name, 240),
     contactPerson: _eventsText(row?.contact_person, 160),
     contactPhone: _eventsText(row?.contact_phone, 80),
@@ -26291,7 +26296,20 @@ async function _eventsRequestWriteRow(body = {}, req) {
     total_cost: totalCost,
     requester_name: requesterName || null,
     created_by_user_id: requesterId || null,
+    is_archived: false,
+    archived_at: null,
   };
+}
+
+async function _eventsRequestUpdateRow(body = {}, req, existing = {}) {
+  const next = await _eventsRequestWriteRow(body, req);
+  // Preserve request ownership, reference code and the current workflow state.
+  next.status = _eventsNormalizeStatus(existing?.status);
+  next.requester_name = existing?.requester_name || next.requester_name || null;
+  next.created_by_user_id = existing?.created_by_user_id || next.created_by_user_id || null;
+  next.is_archived = _eventsBoolean(existing?.is_archived);
+  next.archived_at = existing?.archived_at || null;
+  return next;
 }
 // Events Admins can manage catalog records directly. Users with Edit access may
 // create one component or edit one selected component after shared Admin-password authorization.
@@ -26573,11 +26591,16 @@ app.get('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
     const rows = await supabaseDb.selectAll(_sbEventsTable(), { limit: 2000, order: 'created_at.desc,event_code.desc' });
     const search = _eventsText(req.query?.search, 200).toLowerCase();
-    const status = String(req.query?.status || '').trim().toLowerCase();
+    const requestedStatus = String(req.query?.status || '').trim();
+    const status = requestedStatus && requestedStatus.toLowerCase() !== 'all'
+      ? _eventsNormalizeStatus(requestedStatus)
+      : 'all';
+    const includeArchived = String(req.query?.includeArchived || '') === '1';
     const list = (Array.isArray(rows) ? rows : []).map(_eventsSerializeRequest).filter((event) => {
+      if (!includeArchived && event.isArchived) return false;
       if (status && status !== 'all' && event.status !== status) return false;
       if (!search) return true;
-      return [event.eventCode, event.eventName, event.eventType, event.organizationName, event.governorate, event.requesterName]
+      return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName]
         .join(' ')
         .toLowerCase()
         .includes(search);
@@ -26586,6 +26609,29 @@ app.get('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
   } catch (error) {
     console.error('GET /api/events error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.get('/api/events/:id/pdf', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const id = _eventsUuid(req.params?.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
+    const row = await supabaseDb.selectById(_sbEventsTable(), id);
+    if (!row) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+    const event = _eventsSerializeRequest(row);
+    const safeName = String(event.eventCode || event.eventName || 'event_request')
+      .replace(/[\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, '_')
+      .slice(0, 80);
+    const fileName = `event_request_${safeName}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    const { pipeEventRequestPDF } = require('./eventRequestPdf');
+    await pipeEventRequestPDF(event, res);
+  } catch (error) {
+    console.error('GET /api/events/:id/pdf error:', error?.details || error);
+    try { if (!res.headersSent) res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) }); } catch {}
   }
 });
 
@@ -26618,18 +26664,45 @@ app.post('/api/events', requireAuth, requirePage('Events'), async (req, res) => 
 app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to update event status.' });
+    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to update event requests.' });
     const id = _eventsUuid(req.params?.id);
     if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
+    const existing = await supabaseDb.selectById(_sbEventsTable(), id);
+    if (!existing) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+
+    const body = req.body || {};
     const patch = {};
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'status')) patch.status = _eventsNormalizeStatus(req.body.status);
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'operationsNotes')) patch.operations_notes = _eventsLongText(req.body.operationsNotes, 3000) || null;
+    const isFullRequestEdit = [
+      'eventName', 'event_name', 'eventStartDate', 'event_start_date', 'organizationName',
+      'organization_name', 'projects', 'marketingMaterials', 'marketing_materials',
+      'venueRequirements', 'venue_requirements', 'venueName', 'venue_name', 'governorate', 'locationUrl', 'location_url',
+    ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
+
+    if (isFullRequestEdit) Object.assign(patch, await _eventsRequestUpdateRow(body, req, existing));
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) patch.status = _eventsNormalizeStatus(body.status);
+    if (Object.prototype.hasOwnProperty.call(body, 'operationsNotes')) patch.operations_notes = _eventsLongText(body.operationsNotes, 3000) || null;
     if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'No supported event fields were provided.' });
+
     const updated = await supabaseDb.updateById(_sbEventsTable(), id, patch);
     if (!updated) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
     return res.json({ ok: true, event: _eventsSerializeRequest(updated) });
   } catch (error) {
     console.error('PATCH /api/events/:id error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/:id/archive', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to archive event requests.' });
+    const id = _eventsUuid(req.params?.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
+    const updated = await supabaseDb.updateById(_sbEventsTable(), id, { is_archived: true, archived_at: new Date().toISOString() });
+    if (!updated) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+    return res.json({ ok: true, event: _eventsSerializeRequest(updated) });
+  } catch (error) {
+    console.error('POST /api/events/:id/archive error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
