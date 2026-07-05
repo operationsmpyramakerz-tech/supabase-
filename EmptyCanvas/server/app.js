@@ -9684,7 +9684,8 @@ function _backupCatalog() {
     { key: 'tasks', pageName: 'Tasks', tableName: _sbTasksTable(), moduleName: 'Tasks', icon: 'check-square', description: 'Task cards and assignments.' },
     { key: 'task-checkpoints', pageName: 'Task Checkpoints', tableName: _sbTaskCheckpointsTable(), moduleName: 'Tasks', icon: 'check-circle', description: 'Task checklist/checkpoint records.' },
     { key: 'department-tickets', pageName: 'Department Tickets', tableName: _tmTicketsTable(), moduleName: 'Task Management', icon: 'git-branch', description: 'Cross-department workflow tickets and their overall request details.' },
-    { key: 'department-ticket-sections', pageName: 'Department Ticket Sections', tableName: _tmSectionsTable(), moduleName: 'Task Management', icon: 'git-pull-request', description: 'Ordered department workflow sections attached to each ticket.' },
+    { key: 'department-ticket-sections', pageName: 'Department Ticket Sections', tableName: _tmSectionsTable(), moduleName: 'Task Management', icon: 'git-pull-request', description: 'Department workflow blocks attached to each ticket.' },
+    { key: 'department-ticket-section-edges', pageName: 'Department Ticket Workflow Arrows', tableName: _tmEdgesTable(), moduleName: 'Task Management', icon: 'git-merge', description: 'Workflow arrow connections and block prerequisites for department tickets.' },
     { key: 'kpi-standards', pageName: 'KPI Standards', tableName: KPI_STANDARD_TABLE, moduleName: 'KPIs', icon: 'target', description: 'KPI standard headers.' },
     { key: 'kpi-sections', pageName: 'KPI Sections', tableName: KPI_STANDARD_SECTIONS_TABLE, moduleName: 'KPIs', icon: 'columns', description: 'KPI standard sections.' },
     { key: 'kpi-items', pageName: 'KPI Items', tableName: KPI_STANDARD_ITEMS_TABLE, moduleName: 'KPIs', icon: 'list', description: 'KPI standard subsections/items.' },
@@ -37047,6 +37048,10 @@ function _tmSectionsTable() {
   return String(process.env.SUPABASE_DEPARTMENT_TICKET_SECTIONS_TABLE || "department_ticket_sections").trim() || "department_ticket_sections";
 }
 
+function _tmEdgesTable() {
+  return String(process.env.SUPABASE_DEPARTMENT_TICKET_EDGES_TABLE || "department_ticket_section_edges").trim() || "department_ticket_section_edges";
+}
+
 function _tmText(value, max = 0) {
   const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
   return max > 0 ? text.slice(0, max) : text;
@@ -37140,6 +37145,8 @@ function _tmSerializeSection(row = {}) {
     details: _tmText(_sbGet(row, ["details", "description", "Description"]), 8000),
     sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
     executionGroup: Math.max(1, Number(_sbGet(row, ["execution_group", "executionGroup", "stage", "stage_number"]) || _sbGet(row, ["sort_order", "sortOrder"]) || 1)),
+    canvasX: Number(_sbGet(row, ["canvas_x", "canvasX", "node_x", "nodeX"]) || 0),
+    canvasY: Number(_sbGet(row, ["canvas_y", "canvasY", "node_y", "nodeY"]) || 0),
     status,
     statusLabel: _tmStatusLabel(status),
     completionNote: _tmText(_sbGet(row, ["completion_note", "completionNote", "work_note", "workNote"]), 8000),
@@ -37147,6 +37154,15 @@ function _tmSerializeSection(row = {}) {
     completedAt: _sbGet(row, ["completed_at", "completedAt"]) || null,
     completedByName: _tmText(_sbGet(row, ["completed_by_name", "completedByName"]), 180),
     updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
+  };
+}
+
+function _tmSerializeEdge(row = {}) {
+  return {
+    id: _tmId(row),
+    ticketId: String(_sbGet(row, ["ticket_id", "ticketId"]) ?? "").trim(),
+    from: String(_sbGet(row, ["from_section_id", "fromSectionId", "from"]) ?? "").trim(),
+    to: String(_sbGet(row, ["to_section_id", "toSectionId", "to"]) ?? "").trim(),
   };
 }
 
@@ -37159,9 +37175,10 @@ function _tmTicketStatusFromSections(sections = []) {
   return "not_started";
 }
 
-function _tmSerializeTicket(row = {}, sectionRows = []) {
+function _tmSerializeTicket(row = {}, sectionRows = [], edgeRows = []) {
   const id = _tmId(row);
   const sections = (sectionRows || []).map(_tmSerializeSection).sort((a, b) => (a.executionGroup - b.executionGroup) || (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
+  const edges = (edgeRows || []).map(_tmSerializeEdge).filter((edge) => edge.from && edge.to);
   const calculatedStatus = _tmTicketStatusFromSections(sections);
   const completedCount = sections.filter((section) => section.status === "completed").length;
   return {
@@ -37178,6 +37195,7 @@ function _tmSerializeTicket(row = {}, sectionRows = []) {
     createdById: _tmText(_sbGet(row, ["created_by_id", "createdById"]), 120),
     createdByName: _tmText(_sbGet(row, ["created_by_name", "createdByName"]), 180) || "—",
     sections,
+    edges,
     sectionsCount: sections.length,
     completedCount,
     progress: sections.length ? Math.round((completedCount / sections.length) * 100) : 0,
@@ -37193,15 +37211,17 @@ async function _tmLoadAllTickets() {
 
   let ticketRows;
   let sectionRows;
+  let edgeRows;
   try {
-    [ticketRows, sectionRows] = await Promise.all([
+    [ticketRows, sectionRows, edgeRows] = await Promise.all([
       supabaseDb.selectAll(_tmTicketsTable(), { limit: 5000, order: "created_at.desc,id.desc" }),
       supabaseDb.selectAll(_tmSectionsTable(), { limit: 20000, order: "sort_order.asc,id.asc" }),
+      supabaseDb.selectAll(_tmEdgesTable(), { limit: 30000, order: "id.asc" }),
     ]);
   } catch (error) {
     const detail = String(error?.message || "");
     if (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)) {
-      const missing = new Error("Task Management tables are not installed. Run the supplied Supabase SQL migration, then refresh this page.");
+      const missing = new Error("Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page.");
       missing.status = 503;
       throw missing;
     }
@@ -37215,9 +37235,16 @@ async function _tmLoadAllTickets() {
     if (!sectionsByTicket.has(ticketId)) sectionsByTicket.set(ticketId, []);
     sectionsByTicket.get(ticketId).push(row);
   }
+  const edgesByTicket = new Map();
+  for (const row of Array.isArray(edgeRows) ? edgeRows : []) {
+    const ticketId = String(_sbGet(row, ["ticket_id", "ticketId"]) ?? "").trim();
+    if (!ticketId) continue;
+    if (!edgesByTicket.has(ticketId)) edgesByTicket.set(ticketId, []);
+    edgesByTicket.get(ticketId).push(row);
+  }
 
   return (Array.isArray(ticketRows) ? ticketRows : [])
-    .map((row) => _tmSerializeTicket(row, sectionsByTicket.get(_tmId(row)) || []));
+    .map((row) => _tmSerializeTicket(row, sectionsByTicket.get(_tmId(row)) || [], edgesByTicket.get(_tmId(row)) || []));
 }
 
 async function _tmLoadTicketById(ticketId) {
@@ -37225,13 +37252,21 @@ async function _tmLoadTicketById(ticketId) {
   if (!cleanId) return null;
   const ticket = await supabaseDb.selectById(_tmTicketsTable(), cleanId);
   if (!ticket) return null;
-  const sections = await supabaseDb.select(_tmSectionsTable(), {
-    select: "*",
-    ticket_id: `eq.${_sbRestFilterValue(cleanId)}`,
-    limit: 1000,
-    order: "sort_order.asc,id.asc",
-  });
-  return _tmSerializeTicket(ticket, Array.isArray(sections) ? sections : []);
+  const [sections, edges] = await Promise.all([
+    supabaseDb.select(_tmSectionsTable(), {
+      select: "*",
+      ticket_id: `eq.${_sbRestFilterValue(cleanId)}`,
+      limit: 1000,
+      order: "sort_order.asc,id.asc",
+    }),
+    supabaseDb.select(_tmEdgesTable(), {
+      select: "*",
+      ticket_id: `eq.${_sbRestFilterValue(cleanId)}`,
+      limit: 3000,
+      order: "id.asc",
+    }),
+  ]);
+  return _tmSerializeTicket(ticket, Array.isArray(sections) ? sections : [], Array.isArray(edges) ? edges : []);
 }
 
 async function _tmSyncTicketStatus(ticketId) {
@@ -37336,6 +37371,84 @@ app.get("/api/task-management/:id", requireAuth, requireTaskManagementView(), as
   }
 });
 
+function _tmCanvasNumber(value, fallback = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(10000, Math.round(number)));
+}
+
+function _tmBuildWorkflowPlan(rawSections = [], rawEdges) {
+  const sourceSections = (Array.isArray(rawSections) ? rawSections : []).slice(0, 40);
+  const hasGraphDefinition = Array.isArray(rawEdges);
+  const prepared = sourceSections.map((item, index) => ({
+    clientId: _tmText(item?.clientId || item?.client_id || item?.id || `section-${index + 1}`, 120) || `section-${index + 1}`,
+    department: _tmText(item?.department, 120),
+    request: _tmText(item?.request || item?.requestText || item?.title, 4000),
+    details: _tmText(item?.details || item?.description, 8000),
+    sortOrder: index + 1,
+    canvasX: _tmCanvasNumber(item?.canvasX ?? item?.canvas_x ?? item?.nodeX ?? item?.node_x, 0),
+    canvasY: _tmCanvasNumber(item?.canvasY ?? item?.canvas_y ?? item?.nodeY ?? item?.node_y, 0),
+    executionGroup: Math.max(1, Math.min(40, Number(item?.executionGroup ?? item?.execution_group ?? item?.stage ?? index + 1) || index + 1)),
+  }));
+  const ids = new Set();
+  for (const section of prepared) {
+    if (ids.has(section.clientId)) throw new Error("Workflow blocks must have unique IDs.");
+    ids.add(section.clientId);
+  }
+
+  if (!hasGraphDefinition) {
+    const distinctGroups = [...new Set(prepared.map((section) => section.executionGroup))].sort((a, b) => a - b);
+    const groupMap = new Map(distinctGroups.map((group, index) => [group, index + 1]));
+    return { sections: prepared.map((section) => ({ ...section, executionGroup: groupMap.get(section.executionGroup) || 1 })), edges: [] };
+  }
+
+  const edgeMap = new Map();
+  for (const item of rawEdges.slice(0, 120)) {
+    const from = _tmText(item?.from ?? item?.fromClientId ?? item?.from_section_id, 120);
+    const to = _tmText(item?.to ?? item?.toClientId ?? item?.to_section_id, 120);
+    if (!from || !to) throw new Error("Every workflow arrow needs a source and destination block.");
+    if (!ids.has(from) || !ids.has(to)) throw new Error("A workflow arrow references an unknown block.");
+    if (from === to) throw new Error("A workflow arrow cannot point to the same block.");
+    edgeMap.set(`${from}::${to}`, { from, to });
+  }
+  const edges = [...edgeMap.values()];
+  const outgoing = new Map(prepared.map((section) => [section.clientId, []]));
+  const incomingCount = new Map(prepared.map((section) => [section.clientId, 0]));
+  edges.forEach((edge) => {
+    outgoing.get(edge.from).push(edge.to);
+    incomingCount.set(edge.to, (incomingCount.get(edge.to) || 0) + 1);
+  });
+  const rank = new Map(prepared.map((section) => [section.clientId, 1]));
+  const queue = prepared.filter((section) => incomingCount.get(section.clientId) === 0).map((section) => section.clientId);
+  let processed = 0;
+  while (queue.length) {
+    const current = queue.shift();
+    processed += 1;
+    for (const next of outgoing.get(current) || []) {
+      rank.set(next, Math.max(rank.get(next) || 1, (rank.get(current) || 1) + 1));
+      incomingCount.set(next, (incomingCount.get(next) || 0) - 1);
+      if (incomingCount.get(next) === 0) queue.push(next);
+    }
+  }
+  if (processed !== prepared.length) throw new Error("The workflow contains a circular arrow. Remove the loop and try again.");
+  return { sections: prepared.map((section) => ({ ...section, executionGroup: rank.get(section.clientId) || 1 })), edges };
+}
+
+function _tmSectionPrerequisites(ticket = {}, section = {}) {
+  const sectionId = String(section?.id || "");
+  const edgeRows = Array.isArray(ticket?.edges) ? ticket.edges : [];
+  const predecessors = edgeRows
+    .filter((edge) => String(edge?.to ?? edge?.toSectionId ?? edge?.to_section_id ?? "") === sectionId)
+    .map((edge) => String(edge?.from ?? edge?.fromSectionId ?? edge?.from_section_id ?? ""))
+    .filter(Boolean);
+  if (predecessors.length) {
+    const byId = new Map((ticket.sections || []).map((item) => [String(item.id), item]));
+    return predecessors.map((id) => byId.get(id)).filter(Boolean);
+  }
+  const currentGroup = Math.max(1, Number(section?.executionGroup || section?.sortOrder || 1));
+  return (ticket.sections || []).filter((item) => Math.max(1, Number(item?.executionGroup || item?.sortOrder || 1)) < currentGroup);
+}
+
 app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
@@ -37345,24 +37458,14 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     const description = _tmText(req.body?.description, 8000);
     const priority = _tmPriority(req.body?.priority);
     const dueDate = _tmDate(req.body?.dueDate);
-    const rawSections = Array.isArray(req.body?.sections) ? req.body.sections : [];
-    const rawPreparedSections = rawSections.slice(0, 40).map((item, index) => ({
-      department: _tmText(item?.department, 120),
-      request: _tmText(item?.request || item?.requestText || item?.title, 4000),
-      details: _tmText(item?.details || item?.description, 8000),
-      sortOrder: index + 1,
-      executionGroup: Math.max(1, Math.min(40, Number(item?.executionGroup ?? item?.execution_group ?? item?.stage ?? index + 1) || index + 1)),
-    }));
-    // Normalize client-provided stage numbers into 1..N while keeping every
-    // section in the same parallel group together.
-    const distinctGroups = [...new Set(rawPreparedSections.map((section) => section.executionGroup))].sort((a, b) => a - b);
-    const groupMap = new Map(distinctGroups.map((group, index) => [group, index + 1]));
-    const sections = rawPreparedSections.map((section) => ({ ...section, executionGroup: groupMap.get(section.executionGroup) || 1 }));
+    const plan = _tmBuildWorkflowPlan(req.body?.sections, req.body?.edges);
+    const sections = plan.sections;
+    const edges = plan.edges;
 
     if (!title) return res.status(400).json({ ok: false, error: "Ticket title is required." });
-    if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow section." });
+    if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
     const invalid = sections.find((section) => !section.department || !section.request);
-    if (invalid) return res.status(400).json({ ok: false, error: "Each section requires a department and a requested action." });
+    if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department and a requested action." });
 
     const currentUser = await _tmCurrentMember(req);
     const created = await supabaseDb.insert(_tmTicketsTable(), {
@@ -37378,19 +37481,35 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     if (!ticketId) throw new Error("Ticket was created without an ID.");
 
     try {
+      const createdSectionIds = new Map();
       for (const section of sections) {
-        await supabaseDb.insert(_tmSectionsTable(), {
+        const createdSection = await supabaseDb.insert(_tmSectionsTable(), {
           ticket_id: ticketId,
           department: section.department,
           request_text: section.request,
           details: section.details || null,
           sort_order: section.sortOrder,
           execution_group: section.executionGroup,
+          canvas_x: section.canvasX || null,
+          canvas_y: section.canvasY || null,
           status: "not_started",
+        });
+        const createdId = _tmId(createdSection);
+        if (!createdId) throw new Error("Workflow block was created without an ID.");
+        createdSectionIds.set(section.clientId, createdId);
+      }
+      for (const edge of edges) {
+        const fromSectionId = createdSectionIds.get(edge.from);
+        const toSectionId = createdSectionIds.get(edge.to);
+        if (!fromSectionId || !toSectionId) throw new Error("Workflow arrow could not be linked to its blocks.");
+        await supabaseDb.insert(_tmEdgesTable(), {
+          ticket_id: ticketId,
+          from_section_id: fromSectionId,
+          to_section_id: toSectionId,
         });
       }
     } catch (sectionError) {
-      // Do not leave a half-created ticket if a section insert fails.
+      // Cascading deletion keeps sections and workflow arrows from being orphaned.
       await supabaseDb.deleteById(_tmTicketsTable(), ticketId).catch(() => null);
       throw sectionError;
     }
@@ -37401,7 +37520,7 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     console.error("[task-management] create error:", error?.details || error?.message || error);
     const detail = String(error?.message || "");
     const message = /relation .* does not exist|Could not find the table|schema cache/i.test(detail)
-      ? "Task Management tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
+      ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
       : (error?.message || "Failed to create ticket.");
     return res.status(error?.status || 500).json({ ok: false, error: message });
   }
@@ -37430,17 +37549,15 @@ app.patch("/api/task-management/sections/:id", requireAuth, requireTaskManagemen
       : "";
     if (!requestedStatus) return res.status(400).json({ ok: false, error: "A valid section status is required." });
 
-    // Sections with the same execution_group are parallel and may be worked on
-    // together. Only every section in earlier stages must be completed before
-    // the current stage can start or complete.
-    const currentGroup = Math.max(1, Number(section?.executionGroup || section?.sortOrder || 1));
-    const earlierOpenSection = (ticket.sections || [])
-      .filter((item) => Math.max(1, Number(item?.executionGroup || item?.sortOrder || 1)) < currentGroup)
+    // A block can start only after the blocks directly connected to it are
+    // completed. Older tickets without saved arrows still fall back to their
+    // serial/parallel execution-group behavior.
+    const prerequisiteOpenSection = _tmSectionPrerequisites(ticket, section)
       .find((item) => _tmStatus(item.status) !== "completed");
-    if (earlierOpenSection && ["in_progress", "completed"].includes(requestedStatus)) {
+    if (prerequisiteOpenSection && ["in_progress", "completed"].includes(requestedStatus)) {
       return res.status(409).json({
         ok: false,
-        error: `Complete the previous workflow stage first before starting this section.`,
+        error: `Complete the connected prerequisite block first before starting this section.`,
       });
     }
 
