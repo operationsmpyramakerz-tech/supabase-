@@ -26318,6 +26318,9 @@ const EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS = 5 * 60 * 1000;
 const EVENTS_GOVERNORATE_RATES_UNLOCK_TTL_MS = 5 * 60 * 1000;
 // Event-request workflow actions are protected by a short, event-specific Admin verification.
 const EVENTS_REQUEST_WORKFLOW_UNLOCK_TTL_MS = 5 * 60 * 1000;
+// Request-level Edit and Cancel actions are also explicitly authorized by the
+// shared Events Admin password, even for an Events Admin account.
+const EVENTS_REQUEST_ACTION_UNLOCK_TTL_MS = 5 * 60 * 1000;
 
 function _hasEventsComponentCreateAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
@@ -26374,11 +26377,33 @@ function _hasEventsRequestWorkflowAccess(req, eventId, targetStatus) {
   );
 }
 
+function _eventsRequestAction(value) {
+  const action = String(value || '').trim().toLowerCase();
+  return action === 'edit' || action === 'cancel' ? action : '';
+}
+
+function _hasEventsRequestActionAccess(req, eventId, action) {
+  const expectedId = _eventsUuid(eventId);
+  const expectedAction = _eventsRequestAction(action);
+  const grantedId = _eventsUuid(req?.session?.eventsRequestActionUnlockEventId);
+  const grantedAction = _eventsRequestAction(req?.session?.eventsRequestActionUnlockAction);
+  const until = Number(req?.session?.eventsRequestActionUnlockUntil || 0);
+  return !!(expectedId && expectedAction && expectedId === grantedId && expectedAction === grantedAction && Number.isFinite(until) && until > Date.now());
+}
+
 async function _clearEventsRequestWorkflowUnlock(req) {
   if (!req?.session) return;
   delete req.session.eventsRequestWorkflowUnlockUntil;
   delete req.session.eventsRequestWorkflowUnlockEventId;
   delete req.session.eventsRequestWorkflowUnlockTargetStatus;
+  try { await _saveSessionNow(req); } catch {}
+}
+
+async function _clearEventsRequestActionUnlock(req) {
+  if (!req?.session) return;
+  delete req.session.eventsRequestActionUnlockUntil;
+  delete req.session.eventsRequestActionUnlockEventId;
+  delete req.session.eventsRequestActionUnlockAction;
   try { await _saveSessionNow(req); } catch {}
 }
 
@@ -26464,15 +26489,15 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
   try {
     const password = String(req.body?.password || req.body?.adminPassword || '').trim();
     const requestedIntent = _eventsText(req.body?.intent, 32).toLowerCase();
-    const intent = ['edit', 'governorate_rates', 'request_workflow'].includes(requestedIntent) ? requestedIntent : 'create';
+    const intent = ['edit', 'governorate_rates', 'request_workflow', 'request_action'].includes(requestedIntent) ? requestedIntent : 'create';
     const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
     const eventId = _eventsUuid(req.body?.eventId || req.body?.event_id);
     const targetStatus = _eventsNormalizeStatus(req.body?.targetStatus || req.body?.target_status);
+    const requestAction = _eventsRequestAction(req.body?.action);
 
-    // Request workflow actions deliberately require the shared Events Admin
-    // password even when the current account is an Events Admin. This keeps
-    // the user-requested “Admin verification → confirmation” flow explicit.
-    const verified = intent === 'request_workflow'
+    // Request workflow and request actions deliberately require the shared
+    // Events Admin password even when the current account is an Events Admin.
+    const verified = (intent === 'request_workflow' || intent === 'request_action')
       ? (!!password && password !== PAGE_ADMIN_BYPASS_TOKEN && await verifyAdminPassword(password))
       : await _verifyPageAdminPassword(req, password, 'Events');
 
@@ -26493,6 +26518,23 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
         eventId,
         targetStatus: transition.to,
         expiresInSeconds: Math.floor(EVENTS_REQUEST_WORKFLOW_UNLOCK_TTL_MS / 1000),
+      });
+    }
+
+    if (intent === 'request_action') {
+      if (!eventId || !requestAction) {
+        return res.status(400).json({ ok: false, error: 'Choose a valid event request action.' });
+      }
+      req.session.eventsRequestActionUnlockUntil = Date.now() + EVENTS_REQUEST_ACTION_UNLOCK_TTL_MS;
+      req.session.eventsRequestActionUnlockEventId = eventId;
+      req.session.eventsRequestActionUnlockAction = requestAction;
+      await _saveSessionNow(req);
+      return res.json({
+        ok: true,
+        intent,
+        eventId,
+        action: requestAction,
+        expiresInSeconds: Math.floor(EVENTS_REQUEST_ACTION_UNLOCK_TTL_MS / 1000),
       });
     }
 
@@ -26770,10 +26812,37 @@ app.post('/api/events/:id/workflow-transition', requireAuth, requirePage('Events
   }
 });
 
+app.post('/api/events/:id/request-action', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const id = _eventsUuid(req.params?.id);
+    const action = _eventsRequestAction(req.body?.action);
+    if (!id || action !== 'cancel') {
+      return res.status(400).json({ ok: false, error: 'Invalid event request action.' });
+    }
+    if (!_hasEventsRequestActionAccess(req, id, action)) {
+      return res.status(403).json({ ok: false, error: 'Admin verification is required before cancelling this event request.' });
+    }
+    const existing = await supabaseDb.selectById(_sbEventsTable(), id);
+    if (!existing) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+    const currentStatus = _eventsNormalizeStatus(existing?.status);
+    if (currentStatus === 'cancelled') {
+      await _clearEventsRequestActionUnlock(req);
+      return res.status(409).json({ ok: false, error: 'This event request is already cancelled.' });
+    }
+    const updated = await supabaseDb.updateById(_sbEventsTable(), id, { status: 'cancelled' });
+    await _clearEventsRequestActionUnlock(req);
+    if (!updated) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+    return res.json({ ok: true, action, event: _eventsSerializeRequest(updated) });
+  } catch (error) {
+    console.error('POST /api/events/:id/request-action error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
 app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to update event requests.' });
     const id = _eventsUuid(req.params?.id);
     if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
     const existing = await supabaseDb.selectById(_sbEventsTable(), id);
@@ -26786,13 +26855,27 @@ app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res
       'organization_name', 'projects', 'marketingMaterials', 'marketing_materials',
       'venueRequirements', 'venue_requirements', 'venueName', 'venue_name', 'governorate', 'locationUrl', 'location_url',
     ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
+    const isPageAdmin = _hasPageAdminAccess(req, 'Events');
+    const hasEditAuthorization = _hasEventsRequestActionAccess(req, id, 'edit');
 
-    if (isFullRequestEdit) Object.assign(patch, await _eventsRequestUpdateRow(body, req, existing));
-    if (Object.prototype.hasOwnProperty.call(body, 'status')) patch.status = _eventsNormalizeStatus(body.status);
-    if (Object.prototype.hasOwnProperty.call(body, 'operationsNotes')) patch.operations_notes = _eventsLongText(body.operationsNotes, 3000) || null;
+    if (isFullRequestEdit) {
+      if (!isPageAdmin && !hasEditAuthorization) {
+        return res.status(403).json({ ok: false, error: 'Admin verification is required to edit this event request.' });
+      }
+      Object.assign(patch, await _eventsRequestUpdateRow(body, req, existing));
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      if (!isPageAdmin) return res.status(403).json({ ok: false, error: 'Events Admin access is required to update event request status.' });
+      patch.status = _eventsNormalizeStatus(body.status);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'operationsNotes')) {
+      if (!isPageAdmin) return res.status(403).json({ ok: false, error: 'Events Admin access is required to update operations notes.' });
+      patch.operations_notes = _eventsLongText(body.operationsNotes, 3000) || null;
+    }
     if (!Object.keys(patch).length) return res.status(400).json({ ok: false, error: 'No supported event fields were provided.' });
 
     const updated = await supabaseDb.updateById(_sbEventsTable(), id, patch);
+    if (isFullRequestEdit && hasEditAuthorization) await _clearEventsRequestActionUnlock(req);
     if (!updated) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
     return res.json({ ok: true, event: _eventsSerializeRequest(updated) });
   } catch (error) {
