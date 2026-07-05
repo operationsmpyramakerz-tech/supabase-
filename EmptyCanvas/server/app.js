@@ -2045,6 +2045,13 @@ const ALL_PAGES = [
   "Expenses",
   "Expenses Users",
   "Orders Review",
+  // Events is retained for legacy broad access only. New access is granted
+  // independently through the three child pages below.
+  "Events",
+  "Event Calendar",
+  "Event Requests",
+  "Event Components",
+  "Task Management",
   USER_ACCESS_PAGE_NAME,
 ];
 
@@ -2071,6 +2078,18 @@ function normalizePages(names = []) {
   if (set.has("proposals") || set.has("quotation proposals") || set.has("saved quotations")) out.push("Proposals");
   if (set.has("kits") || set.has("product kits") || set.has("saved kits")) out.push("Kits");
   if (set.has("tasks") || set.has("task")) out.push("Tasks");
+
+  // Events now supports independently assignable child pages. The old broad
+  // Events entitlement remains valid for legacy users, but it is not used to
+  // collapse direct child access back into one permission.
+  if (set.has("events") || set.has("event")) out.push("Events");
+  if (set.has("event calendar") || set.has("events calendar") || set.has("/events/calendar")) out.push("Event Calendar");
+  if (set.has("event requests") || set.has("event request") || set.has("/events/requests")) out.push("Event Requests");
+  if (set.has("event components") || set.has("event component") || set.has("/events/components")) out.push("Event Components");
+
+  if (set.has("task management") || set.has("taskmanagement") || set.has("department tickets") || set.has("department ticket") || set.has("/task-management")) {
+    out.push("Task Management");
+  }
   if (set.has("kpis") || set.has("kpi") || set.has("key performance indicators")) out.push("KPIs");
   if (set.has("history") || set.has("system history") || set.has("audit history") || set.has("audit log") || set.has("system audit") || set.has("/history")) out.push("History");
   if (set.has("backup") || set.has("back up") || set.has("database") || set.has("system database") || set.has("system backup") || set.has("data backup") || set.has("/backup")) out.push("Backup");
@@ -3338,8 +3357,10 @@ function _sbLegacyAllowedPagesFromAppPage(page = {}) {
     kpis: "KPIs",
     kpi: "KPIs",
     events: "Events",
-    "event-requests": "Events",
-    "event-components": "Events",
+    "event-calendar": "Event Calendar",
+    "events-calendar": "Event Calendar",
+    "event-requests": "Event Requests",
+    "event-components": "Event Components",
     history: "History",
     "system-history": "History",
     backup: "Backup",
@@ -7780,14 +7801,15 @@ function expandAllowedForUI(list = []) {
   }  if (set.has("Tasks")) {
     set.add("Tasks");
   }
-  // Events may be stored under the current page name (Events) or under
-  // earlier catalog labels (Event Requests / Event Components). Treat all of
-  // them as the same module so existing permissions always expose /events.
-  if (set.has("Events") || set.has("Event Requests") || set.has("Event Components")) {
-    set.add("Events");
-    set.add("Event Requests");
-    set.add("Event Components");
-    set.add("/events");
+  // Events now has independent child pages. Keep a legacy broad "Events"
+  // permission compatible by expanding it to all children, but never expand a
+  // child permission into another child. This preserves separate access.
+  if (set.has("Events")) {
+    ["Event Calendar", "Event Requests", "Event Components", "/events", "/events/calendar", "/events/requests", "/events/components"].forEach((value) => set.add(value));
+  } else {
+    if (set.has("Event Calendar")) set.add("/events/calendar");
+    if (set.has("Event Requests")) set.add("/events/requests");
+    if (set.has("Event Components")) set.add("/events/components");
   }
   if (set.has("History")) {
     set.add("History");
@@ -7853,7 +7875,10 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Current Orders")) return "/orders";
   if (list.includes("Requested Orders")) return "/orders/requested";
   if (list.includes("Maintenance Orders")) return "/orders/maintenance-orders";
-  if (list.includes("Events") || list.includes("Event Requests")) return "/events";
+  if (list.includes("Event Calendar")) return "/events/calendar";
+  if (list.includes("Event Requests")) return "/events/requests";
+  if (list.includes("Event Components")) return "/events/components";
+  if (list.includes("Events")) return "/events";
   if (list.includes("Orders Review")) return "/orders/sv-orders";
   if (list.includes("Create New Order")) return "/orders/new";
   if (list.includes("Stocktaking")) return "/stocktaking";
@@ -8859,9 +8884,13 @@ function _pageAccessAliases(pageName = "") {
     kpis: ["kpis", "kpi"],
     proposals: ["proposals", "productproposals"],
     kits: ["kits", "productkits"],
-    events: ["events", "eventrequests", "eventcomponents"],
-    eventrequests: ["events", "eventrequests", "eventcomponents"],
-    eventcomponents: ["events", "eventrequests", "eventcomponents"],
+    // "Events" is retained only as a legacy broad permission. Child pages
+    // intentionally do not alias one another, so each one can be granted
+    // independently in Users Center > Page Access.
+    events: ["events", "eventcalendar", "eventrequests", "eventcomponents"],
+    eventcalendar: ["eventcalendar", "eventscalendar", "events"],
+    eventrequests: ["eventrequests", "events"],
+    eventcomponents: ["eventcomponents", "events"],
     taskmanagement: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
     departmenttickets: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
   };
@@ -9030,6 +9059,30 @@ function requirePage(pageNameOrNames) {
   };
 }
 
+// Events sub-page access -------------------------------------------------------
+// The parent Events icon is a shell only. Actual access is granted page by page.
+const EVENTS_SUBPAGES = Object.freeze([
+  { pageName: "Event Calendar", routePath: "/events/calendar", icon: "calendar", label: "Calendar" },
+  { pageName: "Event Requests", routePath: "/events/requests", icon: "clipboard", label: "Event Requests" },
+  { pageName: "Event Components", routePath: "/events/components", icon: "layers", label: "Event Components" },
+]);
+
+function _eventsAccessibleSubpages(req) {
+  return EVENTS_SUBPAGES.filter((page) => !!_sessionPageAccessLevel(req, page.pageName));
+}
+
+function _eventsPreferredRoute(req) {
+  return _eventsAccessibleSubpages(req)[0]?.routePath || "/home";
+}
+
+function _hasEventRequestsAdminAccess(req) {
+  return _hasPageAdminAccess(req, "Event Requests");
+}
+
+function _hasEventComponentsAdminAccess(req) {
+  return _hasPageAdminAccess(req, "Event Components");
+}
+
 // --- Page Serving Routes --- //
 
 // Public PWA start URL used by manifest.start_url.
@@ -9129,35 +9182,33 @@ app.get(
   },
 );
 
-// Events module — independent requests and event-components catalog
-// Calendar is the Events landing view. The requests workspace remains available
-// at /events/requests so existing users can review all submitted requests.
-app.get("/events", requireAuth, requirePage("Events"), (req, res) => {
-  res.redirect("/events/calendar");
+// Events module — three separately protected child pages under one sidebar icon.
+app.get("/events", requireAuth, requirePage(["Event Calendar", "Event Requests", "Event Components"]), (req, res) => {
+  return res.redirect(_eventsPreferredRoute(req));
 });
 
-app.get("/events/requests", requireAuth, requirePage("Events"), (req, res) => {
+app.get("/events/requests", requireAuth, requirePage("Event Requests"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events.html"));
 });
 
-app.get("/events/calendar", requireAuth, requirePage("Events"), (req, res) => {
+app.get("/events/calendar", requireAuth, requirePage("Event Calendar"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events-calendar.html"));
 });
 
-app.get("/events/new", requireAuth, requirePage("Events"), (req, res) => {
+app.get("/events/new", requireAuth, requirePage("Event Requests"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events-new.html"));
 });
 
-app.get("/events/components/new", requireAuth, requirePage("Events"), (req, res) => {
+app.get("/events/components/new", requireAuth, requirePage("Event Components"), (req, res) => {
   // Edit users reach this screen only after the one-time Admin authorization.
-  // Events page Admins are admitted immediately.
+  // Event Components Admins are admitted immediately.
   if (!_hasEventsComponentCreateAccess(req)) {
     return res.redirect("/events/components?adminAuthorization=required");
   }
   return res.sendFile(path.join(__dirname, "..", "public", "events-components-new.html"));
 });
 
-app.get("/events/components", requireAuth, requirePage("Events"), (req, res) => {
+app.get("/events/components", requireAuth, requirePage("Event Components"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "events-components.html"));
 });
 
@@ -26343,13 +26394,13 @@ const EVENTS_REQUEST_WORKFLOW_UNLOCK_TTL_MS = 5 * 60 * 1000;
 const EVENTS_REQUEST_ACTION_UNLOCK_TTL_MS = 5 * 60 * 1000;
 
 function _hasEventsComponentCreateAccess(req) {
-  if (_hasPageAdminAccess(req, 'Events')) return true;
+  if (_hasEventComponentsAdminAccess(req)) return true;
   const until = Number(req?.session?.eventsComponentCreateAdminUnlockUntil || 0);
   return Number.isFinite(until) && until > Date.now();
 }
 
 function _hasEventsComponentEditAccess(req, componentId) {
-  if (_hasPageAdminAccess(req, 'Events')) return true;
+  if (_hasEventComponentsAdminAccess(req)) return true;
   const expectedId = _eventsUuid(componentId);
   const grantedId = _eventsUuid(req?.session?.eventsComponentEditAdminUnlockComponentId);
   const until = Number(req?.session?.eventsComponentEditAdminUnlockUntil || 0);
@@ -26357,13 +26408,13 @@ function _hasEventsComponentEditAccess(req, componentId) {
 }
 
 function _hasEventsTransportSettingsAccess(req) {
-  if (_hasPageAdminAccess(req, 'Events')) return true;
+  if (_hasEventRequestsAdminAccess(req)) return true;
   const until = Number(req?.session?.eventsTransportSettingsAdminUnlockUntil || 0);
   return Number.isFinite(until) && until > Date.now();
 }
 
 function _hasEventsGovernorateRatesAccess(req) {
-  if (_hasPageAdminAccess(req, 'Events')) return true;
+  if (_hasEventRequestsAdminAccess(req)) return true;
   const until = Number(req?.session?.eventsGovernorateRatesAdminUnlockUntil || 0);
   return Number.isFinite(until) && until > Date.now();
 }
@@ -26462,7 +26513,7 @@ function _eventsModuleMissingError(error) {
     : raw || 'Events request failed.';
 }
 
-app.get('/api/events/component-categories', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/component-categories', requireAuth, requirePage(['Event Requests', 'Event Components']), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -26474,11 +26525,11 @@ app.get('/api/events/component-categories', requireAuth, requirePage('Events'), 
   }
 });
 
-app.post('/api/events/component-categories', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/component-categories', requireAuth, requirePage('Event Components'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
-    const canCreate = _hasPageAdminAccess(req, 'Events') || _hasEventsComponentCreateAccess(req) || _hasEventsComponentEditAccess(req, componentId);
+    const canCreate = _hasEventComponentsAdminAccess(req) || _hasEventsComponentCreateAccess(req) || _hasEventsComponentEditAccess(req, componentId);
     if (!canCreate) return res.status(403).json({ ok: false, error: 'Admin authorization is required to add a component category.' });
     const category = await _eventsCreateComponentCategoryOption(req.body?.label || req.body?.name);
     const categories = await _eventsListComponentCategoryOptions();
@@ -26489,7 +26540,7 @@ app.post('/api/events/component-categories', requireAuth, requirePage('Events'),
   }
 });
 
-app.get('/api/events/components', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/components', requireAuth, requirePage(['Event Requests', 'Event Components']), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -26504,7 +26555,7 @@ app.get('/api/events/components', requireAuth, requirePage('Events'), async (req
   }
 });
 
-app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/admin/verify', requireAuth, requirePage(['Event Requests', 'Event Components']), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const password = String(req.body?.password || req.body?.adminPassword || '').trim();
@@ -26517,9 +26568,10 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
 
     // Request workflow and request actions deliberately require the shared
     // Events Admin password even when the current account is an Events Admin.
+    const intentPage = (intent === 'edit' || intent === 'create') ? 'Event Components' : 'Event Requests';
     const verified = (intent === 'request_workflow' || intent === 'request_action')
       ? (!!password && password !== PAGE_ADMIN_BYPASS_TOKEN && await verifyAdminPassword(password))
-      : await _verifyPageAdminPassword(req, password, 'Events');
+      : await _verifyPageAdminPassword(req, password, intentPage);
 
     if (!verified) return res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
 
@@ -26581,7 +26633,7 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
   }
 });
 
-app.post('/api/events/components', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/components', requireAuth, requirePage('Event Components'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_hasEventsComponentCreateAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to add an event component.' });
@@ -26605,7 +26657,7 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
-    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsComponentCreateUnlock(req);
+    if (!_hasEventComponentsAdminAccess(req)) await _clearEventsComponentCreateUnlock(req);
     return res.status(201).json({ ok: true, component: _eventsSerializeComponent(inserted || {}) });
   } catch (error) {
     console.error('POST /api/events/components error:', error?.details || error);
@@ -26613,7 +26665,7 @@ app.post('/api/events/components', requireAuth, requirePage('Events'), async (re
   }
 });
 
-app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), async (req, res) => {
+app.patch('/api/events/components/:id', requireAuth, requirePage('Event Components'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const id = _eventsUuid(req.params?.id);
@@ -26641,7 +26693,7 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), asyn
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
-    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsComponentEditUnlock(req);
+    if (!_hasEventComponentsAdminAccess(req)) await _clearEventsComponentEditUnlock(req);
     return res.json({ ok: true, component: _eventsSerializeComponent(updated || {}) });
   } catch (error) {
     console.error('PATCH /api/events/components/:id error:', error?.details || error);
@@ -26649,10 +26701,10 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Events'), asyn
   }
 });
 
-app.delete('/api/events/components/:id', requireAuth, requirePage('Events'), async (req, res) => {
+app.delete('/api/events/components/:id', requireAuth, requirePage('Event Components'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to manage event components.' });
+    if (!_hasEventComponentsAdminAccess(req)) return res.status(403).json({ ok: false, error: 'Event Components Admin access is required to manage event components.' });
     const id = _eventsUuid(req.params?.id);
     if (!id) return res.status(400).json({ ok: false, error: 'Invalid component ID.' });
     await supabaseDb.deleteById(_sbEventComponentsTable(), id);
@@ -26663,7 +26715,7 @@ app.delete('/api/events/components/:id', requireAuth, requirePage('Events'), asy
   }
 });
 
-app.get('/api/events/types', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/types', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -26675,7 +26727,7 @@ app.get('/api/events/types', requireAuth, requirePage('Events'), async (req, res
   }
 });
 
-app.post('/api/events/types', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/types', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const type = await _eventsCreateTypeOption(req.body?.label || req.body?.name);
@@ -26687,24 +26739,24 @@ app.post('/api/events/types', requireAuth, requirePage('Events'), async (req, re
   }
 });
 
-app.get('/api/events/governorate-rates', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/governorate-rates', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
     const rates = await _eventsListGovernorateRates({ includeInactive: String(req.query?.includeInactive || '') === '1' });
-    return res.json({ ok: true, rates, canEdit: _hasPageAdminAccess(req, 'Events') || _hasEventsGovernorateRatesAccess(req) });
+    return res.json({ ok: true, rates, canEdit: _hasEventRequestsAdminAccess(req) || _hasEventsGovernorateRatesAccess(req) });
   } catch (error) {
     console.error('GET /api/events/governorate-rates error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
 
-app.patch('/api/events/governorate-rates', requireAuth, requirePage('Events'), async (req, res) => {
+app.patch('/api/events/governorate-rates', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_hasEventsGovernorateRatesAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to update governorate transport rates.' });
     const rates = await _eventsSaveGovernorateRates(req.body || {}, req);
-    if (!_hasPageAdminAccess(req, 'Events')) await _clearEventsGovernorateRatesUnlock(req);
+    if (!_hasEventRequestsAdminAccess(req)) await _clearEventsGovernorateRatesUnlock(req);
     else { try { await _saveSessionNow(req); } catch {} }
     return res.json({ ok: true, rates });
   } catch (error) {
@@ -26713,7 +26765,7 @@ app.patch('/api/events/governorate-rates', requireAuth, requirePage('Events'), a
   }
 });
 
-app.get('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events', requireAuth, requirePage(['Event Calendar', 'Event Requests']), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -26740,7 +26792,7 @@ app.get('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
   }
 });
 
-app.get('/api/events/:id/pdf', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/:id/pdf', requireAuth, requirePage(['Event Calendar', 'Event Requests']), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const id = _eventsUuid(req.params?.id);
@@ -26763,7 +26815,7 @@ app.get('/api/events/:id/pdf', requireAuth, requirePage('Events'), async (req, r
   }
 });
 
-app.get('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) => {
+app.get('/api/events/:id', requireAuth, requirePage(['Event Calendar', 'Event Requests']), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const id = _eventsUuid(req.params?.id);
@@ -26777,7 +26829,7 @@ app.get('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) 
   }
 });
 
-app.post('/api/events', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
@@ -26789,7 +26841,7 @@ app.post('/api/events', requireAuth, requirePage('Events'), async (req, res) => 
   }
 });
 
-app.post('/api/events/:id/workflow-transition', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/:id/workflow-transition', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const id = _eventsUuid(req.params?.id);
@@ -26832,7 +26884,7 @@ app.post('/api/events/:id/workflow-transition', requireAuth, requirePage('Events
   }
 });
 
-app.post('/api/events/:id/request-action', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/:id/request-action', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const id = _eventsUuid(req.params?.id);
@@ -26860,7 +26912,7 @@ app.post('/api/events/:id/request-action', requireAuth, requirePage('Events'), a
   }
 });
 
-app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res) => {
+app.patch('/api/events/:id', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const id = _eventsUuid(req.params?.id);
@@ -26875,7 +26927,7 @@ app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res
       'organization_name', 'projects', 'marketingMaterials', 'marketing_materials',
       'venueRequirements', 'venue_requirements', 'venueName', 'venue_name', 'governorate', 'locationUrl', 'location_url',
     ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
-    const isPageAdmin = _hasPageAdminAccess(req, 'Events');
+    const isPageAdmin = _hasEventRequestsAdminAccess(req);
     const hasEditAuthorization = _hasEventsRequestActionAccess(req, id, 'edit');
 
     if (isFullRequestEdit) {
@@ -26904,10 +26956,10 @@ app.patch('/api/events/:id', requireAuth, requirePage('Events'), async (req, res
   }
 });
 
-app.post('/api/events/:id/archive', requireAuth, requirePage('Events'), async (req, res) => {
+app.post('/api/events/:id/archive', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!_hasPageAdminAccess(req, 'Events')) return res.status(403).json({ ok: false, error: 'Events Admin access is required to archive event requests.' });
+    if (!_hasEventRequestsAdminAccess(req)) return res.status(403).json({ ok: false, error: 'Event Requests Admin access is required to archive event requests.' });
     const id = _eventsUuid(req.params?.id);
     if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
     const updated = await supabaseDb.updateById(_sbEventsTable(), id, { is_archived: true, archived_at: new Date().toISOString() });
