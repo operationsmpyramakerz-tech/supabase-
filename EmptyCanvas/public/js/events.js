@@ -9,7 +9,7 @@
     tabs: Array.from(document.querySelectorAll('[data-event-status-tab]')),
     typeFilter: $('#eventsTypeFilter'), typeFilterBtn: $('#eventsTypeFilterBtn'), typeFilterPanel: $('#eventsTypeFilterPanel'), typeFilterDot: $('#eventsTypeFilterDot'),
     modal: $('#eventDetailsModal'), modalClose: $('#eventDetailsClose'), modalDone: $('#eventDetailsDone'), modalDownload: $('#eventDetailsDownload'),
-    modalTitle: $('#eventDetailsTitle'), modalSub: $('#eventDetailsSubtitle'), modalStatus: $('#eventDetailsStatus'), modalContent: $('#eventDetailsContent'),
+    modalTitle: $('#eventDetailsTitle'), modalStatus: $('#eventDetailsStatus'), modalContent: $('#eventDetailsContent'),
     actionWrap: $('#eventDetailsActionWrap'), actionToggle: $('#eventDetailsActions'), actionMenu: $('#eventDetailsActionsMenu'),
     workflowAuthModal: $('#eventWorkflowAuthModal'), workflowAuthForm: $('#eventWorkflowAuthForm'), workflowAuthClose: $('#eventWorkflowAuthClose'),
     workflowAuthCancel: $('#eventWorkflowAuthCancel'), workflowAuthPassword: $('#eventWorkflowAuthPassword'), workflowAuthError: $('#eventWorkflowAuthError'),
@@ -151,11 +151,12 @@
     const requirements = [event.requiresPower && 'Power points', event.requiresInternet && 'Internet', event.requiresSoundSystem && 'Sound system'].filter(Boolean).join(' · ') || 'No special utilities selected';
     els.modalContent.innerHTML = `<section class="events-detail-block"><h4><i data-feather="calendar"></i> Overview</h4><div class="events-detail-grid">${detailItem('Type', typeLabel(event))}${detailItem('Event dates', formatDateRange(event))}${detailItem('Organization', event.organizationName)}${detailItem('Expected attendees', event.expectedAttendees ? String(event.expectedAttendees) : '—')}</div></section><section class="events-detail-block"><h4><i data-feather="user"></i> Contact</h4><div class="events-detail-grid">${detailItem('Contact person', event.contactPerson)}${detailItem('Phone', event.contactPhone)}${detailItem('Email', event.contactEmail)}${detailItem('Requested by', event.requesterName)}</div></section><section class="events-detail-block events-detail-block--wide"><h4><i data-feather="users"></i> Target audience</h4><div class="events-detail-item"><p>${escapeHTML(event.audience || 'No audience details were added.')}</p></div></section><section class="events-detail-block"><h4><i data-feather="cpu"></i> Projects</h4>${detailList(event.projects, { empty: 'No projects were added.' })}</section><section class="events-detail-block"><h4><i data-feather="image"></i> Marketing Materials</h4>${detailList(event.marketingMaterials, { empty: 'No marketing materials were added.', component: true })}</section><section class="events-detail-block"><h4><i data-feather="tool"></i> Venue Requirements</h4>${detailList(event.venueRequirements, { empty: 'No venue requirements were added.', component: true })}</section><section class="events-detail-block"><h4><i data-feather="map-pin"></i> Venue &amp; Location</h4><div class="events-detail-grid">${venueItems}</div>${mapUrl ? `<a class="events-location-link" target="_blank" rel="noopener noreferrer" href="${escapeHTML(mapUrl)}"><i data-feather="external-link"></i><span>Open map location</span></a>` : '<div class="events-detail-item" style="margin-top:12px"><span>Google Maps / Location URL</span><p>—</p></div>'}</section><section class="events-detail-block"><h4><i data-feather="sliders"></i> Site Notes</h4><div class="events-detail-item"><span>Utilities</span><p>${escapeHTML(requirements)}</p></div><div class="events-detail-item" style="margin-top:12px"><span>Venue Notes</span><p>${escapeHTML(event.venueNotes || 'No venue notes were added.')}</p></div></section><section class="events-detail-block events-detail-block--wide events-detail-costs"><h4><i data-feather="credit-card"></i> Cost Summary</h4><div class="events-detail-grid">${detailItem('Working cost', `EGP ${Number(event.workingCost || 0).toFixed(2)}`)}${detailItem('Transport cost', `EGP ${Number(event.transportCost || 0).toFixed(2)}`)}${detailItem('Total cost', `EGP ${Number(event.totalCost || 0).toFixed(2)}`)}</div></section>${event.operationsNotes ? `<section class="events-detail-block events-detail-block--wide"><h4><i data-feather="clipboard"></i> Operations Notes</h4><div class="events-detail-item"><p>${escapeHTML(event.operationsNotes)}</p></div></section>` : ''}`;
     if (els.modalTitle) els.modalTitle.textContent = event.eventName || 'Event Details';
-    if (els.modalSub) els.modalSub.textContent = `${event.eventCode || 'Event request'} · Submitted ${formatDateTime(event.createdAt)}`;
     const isAdmin = canManageEventStatus();
-    if (els.modalStatus) els.modalStatus.innerHTML = `${statusMarkup(event.status)}${workflowActionMarkup(event)}${isAdmin ? statusControlMarkup(event) : ''}`;
+    // The request status is intentionally not edited from this detail panel.
+    // Workflow transitions are available only through the protected action next
+    // to Download in the footer.
+    if (els.modalStatus) els.modalStatus.innerHTML = workflowActionMarkup(event);
     renderActionMenu(event, isAdmin);
-    setupStatusControl(event);
     icons(els.modal);
   }
   async function openDetails(id) { const clean = String(id || '').trim(); if (!clean || !els.modal) return; els.modal.hidden = false; els.modal.setAttribute('aria-hidden', 'false'); if (els.modalContent) els.modalContent.innerHTML = '<div class="events-loading"><span></span> Loading request details...</div>'; try { const response = await fetch(`/api/events/${encodeURIComponent(clean)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event details.'); state.activeEvent = { ...data.event, status: normaliseStatus(data.event?.status) }; renderDetails(state.activeEvent); } catch (error) { if (els.modalContent) els.modalContent.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event details.')}</span></div>`; icons(els.modalContent); } }
@@ -192,7 +193,6 @@
     state.pendingWorkflow = { eventId: String(event.id || ''), targetStatus: action.targetStatus, action };
     resetWorkflowAuthorizationForm();
     if (els.workflowAuthTitle) els.workflowAuthTitle.textContent = action.title;
-    if (els.workflowAuthText) els.workflowAuthText.textContent = 'Enter the Events Admin password to continue.';
     if (els.workflowAuthModal) {
       els.workflowAuthModal.hidden = false;
       els.workflowAuthModal.setAttribute('aria-hidden', 'false');
@@ -206,7 +206,6 @@
     if (!pending?.action) return;
     const { action } = pending;
     if (els.workflowConfirmTitle) els.workflowConfirmTitle.textContent = action.confirmationTitle;
-    if (els.workflowConfirmText) els.workflowConfirmText.textContent = action.confirmationText;
     if (els.workflowConfirmNote) {
       const eventCode = String(state.activeEvent?.eventCode || 'this event request');
       els.workflowConfirmNote.innerHTML = `<i data-feather="info"></i><span>${escapeHTML(`${eventCode} will be updated after confirmation.`)}</span>`;
@@ -338,7 +337,7 @@
     els.workflowConfirmModal?.addEventListener('click', (event) => { if (event.target === els.workflowConfirmModal) closeWorkflowConfirmation(); });
     els.actionToggle?.addEventListener('click', () => { const opening = !!els.actionMenu?.hidden; if (els.actionMenu) els.actionMenu.hidden = !opening; els.actionToggle.setAttribute('aria-expanded', opening ? 'true' : 'false'); });
     els.actionMenu?.addEventListener('click', (event) => { const action = event.target.closest('[data-event-action]')?.dataset.eventAction; if (!action) return; closeActionMenu(); if (action === 'edit' && state.activeEvent?.id) window.location.assign(`/events/new?edit=${encodeURIComponent(state.activeEvent.id)}`); if (action === 'archive') archiveActiveEvent(); });
-    document.addEventListener('click', (event) => { if (els.typeFilter && !els.typeFilter.contains(event.target)) closeTypeFilter(); if (els.actionWrap && !els.actionWrap.contains(event.target)) closeActionMenu(); if (els.modalStatus && !els.modalStatus.contains(event.target)) closeStatusSelect(); });
+    document.addEventListener('click', (event) => { if (els.typeFilter && !els.typeFilter.contains(event.target)) closeTypeFilter(); if (els.actionWrap && !els.actionWrap.contains(event.target)) closeActionMenu(); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { if (els.modal && !els.modal.hidden) closeDetails(); closeWorkflowAuthorization(); closeWorkflowConfirmation(); closeTypeFilter(); closeActionMenu(); } });
   }
   // common-ui hydrates page access asynchronously. Refresh an open modal after
