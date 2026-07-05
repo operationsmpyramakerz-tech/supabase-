@@ -12,6 +12,13 @@
   const formatDate = (value) => { const date = toDate(value); return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'; };
   const formatDateTime = (value) => { const date = toDate(value); return date && !Number.isNaN(date.getTime()) ? date.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
 
+  const pathname = String(window.location?.pathname || '');
+  const TASK_VIEW = /^\/task-management\/delegated-tasks(?:\/|$)/.test(pathname) ? 'delegated' : 'my';
+  const VIEW_CONFIG = {
+    my: { label: 'My Tasks', header: 'My Tasks', subtitle: 'Tickets with workflow work assigned to your department.', emptyTitle: 'No tasks assigned to you', emptyText: 'You do not have any active workflow work assigned to your department yet.' },
+    delegated: { label: 'Delegated Tasks', header: 'Delegated Tasks', subtitle: 'Tickets you created and delegated to other departments.', emptyTitle: 'No delegated tasks found', emptyText: 'Create a ticket to start an ordered workflow between departments.' },
+  };
+
   const state = {
     tickets: [],
     filtered: [],
@@ -20,6 +27,8 @@
     query: '',
     selectedTicket: null,
     selectedSection: null,
+    view: TASK_VIEW,
+    currentUser: {},
   };
 
   const grid = $('tmTicketGrid');
@@ -83,14 +92,15 @@
   function renderTickets() {
     if (!grid) return;
     state.filtered = (state.tickets || []).filter(ticketMatches);
-    toolbarNote.textContent = `${state.filtered.length} ticket${state.filtered.length === 1 ? '' : 's'}`;
+    const noun = state.view === 'delegated' ? 'delegated ticket' : 'assigned ticket';
+    toolbarNote.textContent = `${state.filtered.length} ${noun}${state.filtered.length === 1 ? '' : 's'}`;
     if (!state.filtered.length) {
       grid.innerHTML = `
         <div class="tm-empty-state">
           <div class="tm-empty-state__icon"><i data-feather="git-branch"></i></div>
-          <h2>No tickets found</h2>
-          <p>Create a ticket to start an ordered workflow between departments.</p>
-          <button class="tm-btn tm-btn--primary" type="button" data-tm-new-ticket><i data-feather="plus"></i>Create Ticket</button>
+          <h2>${escapeHtml(VIEW_CONFIG[state.view].emptyTitle)}</h2>
+          <p>${escapeHtml(VIEW_CONFIG[state.view].emptyText)}</p>
+          ${state.view === 'delegated' ? '<button class="tm-btn tm-btn--primary" type="button" data-tm-new-ticket><i data-feather="plus"></i>Create Ticket</button>' : ''}
         </div>`;
       hydrateIcons(grid);
       return;
@@ -118,7 +128,7 @@
   async function loadTickets({ preserve = true } = {}) {
     if (!preserve) renderLoading();
     try {
-      const data = await api('/api/task-management');
+      const data = await api(`/api/task-management?view=${encodeURIComponent(state.view)}`);
       state.tickets = Array.isArray(data.tickets) ? data.tickets : [];
       renderTickets();
       if (state.selectedTicket?.id) {
@@ -149,6 +159,7 @@
   }
 
   function openCreateForm() {
+    if (state.view !== 'delegated') { showToast('info', 'Delegated Tasks only', 'Create new tickets from the Delegated Tasks page.'); return; }
     if (window.OpsPageAccess?.isViewOnly?.()) { window.OpsPageAccess.showViewOnlyNotice(); return; }
     form.reset();
     formError.textContent = '';
@@ -168,6 +179,7 @@
 
   async function submitCreateForm(event) {
     event.preventDefault();
+    if (state.view !== 'delegated') { showToast('info', 'Delegated Tasks only', 'Create new tickets from the Delegated Tasks page.'); return; }
     if (window.OpsPageAccess?.isViewOnly?.()) { window.OpsPageAccess.showViewOnlyNotice(); return; }
     const payload = { title: $('tmTitleInput').value.trim(), priority: $('tmPriorityInput').value, dueDate: $('tmDueDateInput').value, description: $('tmDescriptionInput').value.trim(), sections: collectSections() };
     if (!payload.title) { formError.textContent = 'Enter a ticket title.'; return; }
@@ -194,10 +206,12 @@
   }
 
   function sectionActionAllowed(ticket, section) {
-    const myDepartment = norm(window.__tmCurrentUser?.department || '');
-    const isCreator = window.__tmCurrentUser?.id && String(ticket.createdById || '') === String(window.__tmCurrentUser.id);
+    const currentUser = state.currentUser || window.__tmCurrentUser || {};
+    const myDepartment = norm(currentUser?.department || '');
+    const isCreator = currentUser?.id && String(ticket.createdById || '') === String(currentUser.id);
     const isDepartment = myDepartment && myDepartment === norm(section.department || '');
-    return !!(window.__tmIsPageAdmin || isCreator || isDepartment);
+    if (window.__tmIsPageAdmin) return true;
+    return state.view === 'delegated' ? !!isCreator : !!isDepartment;
   }
 
   function renderWorkflow(ticket) {
@@ -252,7 +266,7 @@
     const submit = $('tmUpdateSectionSubmit');
     submit.disabled = true; updateError.textContent = '';
     try {
-      const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}`, { method: 'PATCH', body: { status: $('tmSectionStatusInput').value, completionNote: $('tmCompletionNoteInput').value.trim() } });
+      const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}`, { method: 'PATCH', body: { view: state.view, status: $('tmSectionStatusInput').value, completionNote: $('tmCompletionNoteInput').value.trim() } });
       state.selectedTicket = data.ticket;
       setOverlay(updateOverlay, false);
       await loadTickets();
@@ -264,14 +278,30 @@
     finally { submit.disabled = false; }
   }
 
+  function applyViewChrome() {
+    const view = VIEW_CONFIG[state.view] || VIEW_CONFIG.my;
+    document.title = `${view.label} | Task Management`;
+    $('tmViewTitle')?.replaceChildren(document.createTextNode(view.header));
+    const subtitle = $('tmViewSubtitle');
+    if (subtitle) subtitle.textContent = view.subtitle;
+    const newTicket = $('tmNewTicketBtn');
+    if (newTicket) {
+      newTicket.hidden = state.view !== 'delegated';
+      newTicket.setAttribute('aria-hidden', state.view === 'delegated' ? 'false' : 'true');
+    }
+  }
+
   async function init() {
+    applyViewChrome();
     try {
-      const meta = await api('/api/task-management/meta');
+      const meta = await api(`/api/task-management/meta?view=${encodeURIComponent(state.view)}`);
       state.departments = Array.isArray(meta.departments) ? meta.departments : [];
-      window.__tmCurrentUser = meta.currentUser || {};
+      state.currentUser = meta.currentUser || {};
+      window.__tmCurrentUser = state.currentUser;
       window.__tmIsPageAdmin = !!meta.isPageAdmin;
     } catch (error) {
       state.departments = [];
+      state.currentUser = {};
     }
     await loadTickets({ preserve: false });
   }

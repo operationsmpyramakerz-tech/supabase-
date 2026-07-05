@@ -2299,7 +2299,9 @@
       return;
     }
     const eventChildKeys = new Set(['event-calendar', 'event-requests', 'event-components']);
+    const taskManagementChildKeys = new Set(['task-management-my-tasks', 'task-management-delegated-tasks', 'my-tasks', 'delegated-tasks']);
     const isEventsChild = (row) => eventChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
+    const isTaskManagementChild = (row) => taskManagementChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
     const renderRow = (row, { isSubpage = false } = {}) => {
       const enabled = !!row.isEnabled;
       return `
@@ -2335,10 +2337,12 @@
       `;
     };
 
-    // Event pages remain independently configurable, but are visually nested
-    // under their Events parent so the hierarchy is obvious in Allowed Pages.
+    // Child pages remain independently configurable, but are visually nested
+    // under their parent modules so the hierarchy is obvious in Allowed Pages.
     const eventRows = rows.filter(isEventsChild);
+    const taskManagementRows = rows.filter(isTaskManagementChild);
     const firstEventIndex = rows.findIndex(isEventsChild);
+    const firstTaskManagementIndex = rows.findIndex(isTaskManagementChild);
     const markup = [];
     rows.forEach((row, index) => {
       if (index === firstEventIndex && eventRows.length) {
@@ -2349,7 +2353,15 @@
           </section>
         `);
       }
-      if (!isEventsChild(row)) markup.push(renderRow(row));
+      if (index === firstTaskManagementIndex && taskManagementRows.length) {
+        markup.push(`
+          <section class="ua-page-access-group ua-page-access-group--task-management" aria-label="Task Management sub-pages">
+            <div class="ua-page-access-group__heading"><i data-feather="git-branch"></i><span>Task Management</span><small>Sub-pages</small></div>
+            <div class="ua-page-access-group__rows">${taskManagementRows.map((taskRow) => renderRow(taskRow, { isSubpage: true })).join('')}</div>
+          </section>
+        `);
+      }
+      if (!isEventsChild(row) && !isTaskManagementChild(row)) markup.push(renderRow(row));
     });
     els.pageAccessList.innerHTML = markup.join('');
     hydrateIcons(els.pageAccessList);

@@ -783,6 +783,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // owning child page, so View access remains read-only there as well.
       eventsnew: ['eventrequests', 'events'],
       eventscomponentsnew: ['eventcomponents', 'events'],
+      // Task Management parent is legacy-broad only. Child pages must remain
+      // independent so View/Edit/Admin levels never leak between the two views.
+      taskmanagement: [],
+      taskmanagementmytasks: ['mytasks', 'taskmanagement'],
+      taskmanagementdelegatedtasks: ['delegatedtasks', 'taskmanagement'],
     };
     const wants = new Set([routeKey, ...(known[routeKey] || [])]);
     return candidates.some((candidate) => wants.has(candidate));
@@ -2209,6 +2214,10 @@ if (document.querySelector('.sidebar')) {
     'department tickets': 'a[href="/task-management"]',
     'department-tickets': 'a[href="/task-management"]',
     'departmenttickets': 'a[href="/task-management"]',
+    'my tasks': 'a[href="/task-management"]',
+    'my task': 'a[href="/task-management"]',
+    'delegated tasks': 'a[href="/task-management"]',
+    'delegated task': 'a[href="/task-management"]',
     'kpis': 'a[href="/kpis"]',
     'kpi': 'a[href="/kpis"]',
     'key performance indicators': 'a[href="/kpis"]',
@@ -2299,12 +2308,18 @@ if (document.querySelector('.sidebar')) {
         ...(Array.isArray(row.aliases) ? row.aliases : []),
       ].forEach((value) => addAllowedPageValue(merged, value));
 
-      // Events sub-pages are intentionally independent. Only the legacy
-      // broad "Events" page expands into all three child entries.
+      // Task Management and Events sub-pages are intentionally independent.
+      // Only their legacy broad parent pages expand into all child entries.
       const tokens = [row.pageName, row.page_name, row.pageKey, row.page_key, row.routePath, row.route_path]
         .map((value) => String(value || '').toLowerCase().replace(/[^a-z0-9/]+/g, ''))
         .filter(Boolean);
-      if (tokens.some((value) => ['events', '/events'].includes(value))) {
+      if (tokens.some((value) => ['taskmanagement', 'departmenttickets', '/taskmanagement', '/departmenttickets'].includes(value))) {
+        ['Task Management', 'My Tasks', 'Delegated Tasks', '/task-management', '/task-management/my-tasks', '/task-management/delegated-tasks'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['mytasks', 'taskmanagementmytasks', '/taskmanagement/mytasks'].includes(value))) {
+        ['My Tasks', '/task-management/my-tasks'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['delegatedtasks', 'taskmanagementdelegatedtasks', '/taskmanagement/delegatedtasks'].includes(value))) {
+        ['Delegated Tasks', '/task-management/delegated-tasks'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['events', '/events'].includes(value))) {
         ['Events', 'Event Calendar', 'Event Requests', 'Event Components', '/events', '/events/calendar', '/events/requests', '/events/components'].forEach((value) => addAllowedPageValue(merged, value));
       } else if (tokens.some((value) => ['eventcalendar', 'eventscalendar', '/events/calendar'].includes(value))) {
         ['Event Calendar', '/events/calendar'].forEach((value) => addAllowedPageValue(merged, value));
@@ -2473,6 +2488,117 @@ if (document.querySelector('.sidebar')) {
     }
   }
 
+  const TASK_MANAGEMENT_SUBPAGE_CONFIG = Object.freeze([
+    { key: 'my-tasks', name: 'My Tasks', route: '/task-management/my-tasks', label: 'My Tasks', icon: 'check-square' },
+    { key: 'delegated-tasks', name: 'Delegated Tasks', route: '/task-management/delegated-tasks', label: 'Delegated Tasks', icon: 'send' },
+  ]);
+
+  function taskManagementSubpagesAllowed(allowed = []) {
+    const set = new Set((allowed || []).flatMap((value) => {
+      const raw = String(value || '').trim();
+      const normalized = normPath(raw);
+      return [toKey(raw), normalized, normalized.startsWith('/') ? normalized.slice(1) : `/${normalized}`];
+    }));
+    const legacyBroad = set.has('task management') || set.has('taskmanagement') || set.has('/task-management');
+    return TASK_MANAGEMENT_SUBPAGE_CONFIG.filter((page) => legacyBroad || set.has(toKey(page.name)) || set.has(normPath(page.route)));
+  }
+
+  function ensureTaskManagementSubpageFlyout() {
+    let panel = document.getElementById('task-management-subpage-flyout');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'task-management-subpage-flyout';
+    panel.className = 'task-management-subpage-flyout';
+    panel.hidden = true;
+    panel.setAttribute('role', 'menu');
+    panel.setAttribute('aria-label', 'Task Management pages');
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  function closeTaskManagementSubpageFlyout() {
+    const panel = document.getElementById('task-management-subpage-flyout');
+    if (!panel) return;
+    panel.hidden = true;
+    panel.classList.remove('is-open');
+    try { document.querySelector('a.nav-link[href="/task-management"]')?.setAttribute('aria-expanded', 'false'); } catch {}
+  }
+
+  function renderTaskManagementSubpageFlyout(pages = [], trigger) {
+    const panel = ensureTaskManagementSubpageFlyout();
+    if (!pages.length || !trigger) return closeTaskManagementSubpageFlyout();
+    const current = sidebarPath(window.location.pathname);
+    panel.innerHTML = `
+      <div class="task-management-subpage-flyout__list">
+        ${pages.map((page) => `
+          <a class="task-management-subpage-flyout__link${current === page.route || current.startsWith(`${page.route}/`) ? ' is-active' : ''}" href="${page.route}" role="menuitem">
+            <i data-feather="${page.icon}"></i><span>${page.label}</span>
+          </a>
+        `).join('')}
+      </div>
+    `;
+    const rect = trigger.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - 236, Math.max(12, rect.right + 10));
+    const top = Math.min(window.innerHeight - 170, Math.max(12, rect.top - 10));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.hidden = false;
+    panel.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    if (window.feather) feather.replace({ width: 17, height: 17 });
+  }
+
+  function syncTaskManagementSubpageNavigation(allowed = []) {
+    const pages = taskManagementSubpagesAllowed(allowed);
+    const parent = document.querySelector('a.nav-link[href="/task-management"]');
+    const parentLi = parent?.closest('li');
+    const currentRoute = sidebarPath(window.location.pathname);
+    if (!parent) return;
+
+    if (pages.length) showEl(parentLi || parent);
+    else hideEl(parentLi || parent);
+
+    parent.dataset.taskManagementSubpageCount = String(pages.length);
+    parent.href = '/task-management';
+    parent.setAttribute('aria-haspopup', pages.length > 1 ? 'menu' : 'false');
+    parent.setAttribute('aria-expanded', 'false');
+    parent.title = pages.length === 1 ? `Task Management · ${pages[0].label}` : 'Task Management';
+    parent.setAttribute('aria-label', parent.title);
+    parent.classList.toggle('active', pages.some((page) => currentRoute === page.route || currentRoute.startsWith(`${page.route}/`)));
+
+    if (!parent.dataset.taskManagementSubpageBound) {
+      parent.dataset.taskManagementSubpageBound = '1';
+      parent.addEventListener('click', (event) => {
+        const currentPages = taskManagementSubpagesAllowed(getCachedAllowedPages() || []);
+        if (!currentPages.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (currentPages.length === 1) {
+          window.location.assign(currentPages[0].route);
+          return;
+        }
+        const flyout = document.getElementById('task-management-subpage-flyout');
+        if (flyout?.classList.contains('is-open')) closeTaskManagementSubpageFlyout();
+        else renderTaskManagementSubpageFlyout(currentPages, parent);
+      });
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    const panel = document.getElementById('task-management-subpage-flyout');
+    const parent = document.querySelector('a.nav-link[href="/task-management"]');
+    if (!panel?.classList.contains('is-open')) return;
+    if (panel.contains(event.target)) {
+      if (event.target.closest?.('.task-management-subpage-flyout__link')) closeTaskManagementSubpageFlyout();
+      return;
+    }
+    if (parent?.contains(event.target)) return;
+    closeTaskManagementSubpageFlyout();
+  });
+  window.addEventListener('resize', () => closeTaskManagementSubpageFlyout());
+  window.addEventListener('pagehide', () => closeTaskManagementSubpageFlyout());
+  window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeTaskManagementSubpageFlyout(); });
+
   document.addEventListener('click', (event) => {
     const panel = document.getElementById('events-subpage-flyout');
     const parent = document.querySelector('a.nav-link[href="/events"]');
@@ -2555,9 +2681,10 @@ if (document.querySelector('.sidebar')) {
       }
     });
 
-    // Events is a parent shell: show it when any independently permitted
-    // Events child page is available, then apply the subpage flyout logic.
+    // Events and Task Management are parent shells: show them when one or
+    // more independently permitted child pages are available.
     try { syncEventsSubpageNavigation(allowed); } catch {}
+    try { syncTaskManagementSubpageNavigation(allowed); } catch {}
 
     // Home is available for every authenticated user (not tied to Allowed Pages)
     try {
