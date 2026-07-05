@@ -739,3 +739,73 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   }
   .events-modal--detail .events-modal__actions button{width:100%;min-width:0;}
 }
+
+
+/* Event request workflow actions: Admin verification followed by an explicit confirmation. */
+.events-workflow-action{
+  width:100%;
+  min-height:47px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:0 14px;
+  border:1px solid rgba(109,40,217,.22);
+  border-radius:13px;
+  background:linear-gradient(135deg,#fff,#f5f3ff);
+  color:#4c1d95;
+  font:900 .86rem/1.2 inherit;
+  cursor:pointer;
+  box-shadow:0 10px 20px rgba(76,29,149,.09);
+  transition:transform .17s ease,box-shadow .17s ease,border-color .17s ease;
+}
+.events-workflow-action:hover{
+  transform:translateY(-1px);
+  border-color:rgba(109,40,217,.45);
+  box-shadow:0 14px 26px rgba(76,29,149,.16);
+}
+.events-workflow-action svg{width:18px;height:18px;}
+.events-workflow-action--completed{
+  border-color:rgba(5,150,105,.22);
+  background:linear-gradient(135deg,#ecfdf5,#f0fdf4);
+  color:#047857;
+}
+.events-modal--workflow-confirm{
+  width:min(510px,100%);
+  overflow:visible;
+}
+.events-workflow-confirm-icon{
+  flex:0 0 auto;
+  display:grid;
+  place-items:center;
+  width:48px;
+  height:48px;
+  border-radius:15px;
+  background:linear-gradient(135deg,#ecfdf5,#dcfce7);
+  color:#047857;
+  box-shadow:inset 0 0 0 1px rgba(5,150,105,.12);
+}
+.events-workflow-confirm-icon svg{width:23px;height:23px;}
+.events-workflow-confirm-note{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  min-height:54px;
+  padding:14px 15px;
+  border:1px solid rgba(109,40,217,.16);
+  border-radius:14px;
+  background:#faf5ff;
+  color:#5b21b6;
+  font-size:.88rem;
+  font-weight:800;
+  line-height:1.45;
+}
+.events-workflow-confirm-note svg{flex:0 0 auto;width:18px;height:18px;margin-top:1px;}
+.events-modal--workflow-auth .events-modal__header p{max-width:330px;}
+@media(max-width:760px){
+  .events-workflow-action{min-height:46px;}
+  .events-modal--workflow-confirm{padding:20px 16px;}
+  .events-modal--workflow-confirm .events-modal__header{align-items:flex-start;}
+  .events-modal--workflow-confirm .events-modal__actions{display:grid;grid-template-columns:1fr;gap:10px;}
+  .events-modal--workflow-confirm .events-modal__actions button{width:100%;}
+}
