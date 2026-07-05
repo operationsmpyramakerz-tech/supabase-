@@ -891,3 +891,44 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
     width:100%;
   }
 }
+
+
+/* Event request actions: no repeated event title, white close / more controls,
+   and the More menu stays available on desktop and mobile. */
+.events-modal--detail .events-modal__menu-wrap{
+  display:block!important;
+  left:20px;
+  top:18px;
+  z-index:60;
+}
+.events-modal--detail .events-modal__close,
+.events-modal--detail .events-modal__more{
+  width:42px;
+  height:42px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:14px;
+  background:#fff;
+  color:#334155;
+  box-shadow:0 10px 24px rgba(15,23,42,.09);
+}
+.events-modal--detail .events-modal__close:hover,
+.events-modal--detail .events-modal__more:hover{
+  background:#fff;
+  color:#111827;
+  box-shadow:0 13px 28px rgba(15,23,42,.14);
+}
+.events-modal--detail .events-modal__close{right:20px;top:18px;font-size:1.55rem;}
+.events-modal--detail .events-modal__more svg{width:21px;height:21px;}
+.events-modal--detail{padding-top:76px;}
+.events-modal--detail .events-modal__header--request-details{display:none!important;}
+.events-modal--detail .events-detail-content{padding-top:0;}
+@media(max-width:760px){
+  .events-modal--detail{padding-top:72px;}
+  .events-modal--detail .events-modal__menu-wrap{left:16px;top:15px;}
+  .events-modal--detail .events-modal__close{right:16px;top:15px;}
+  .events-modal--detail .events-modal__close,
+  .events-modal--detail .events-modal__more{width:40px;height:40px;border-radius:13px;}
+}
