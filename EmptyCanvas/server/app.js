@@ -26316,6 +26316,8 @@ async function _eventsRequestUpdateRow(body = {}, req, existing = {}) {
 const EVENTS_COMPONENT_CREATE_UNLOCK_TTL_MS = 5 * 60 * 1000;
 const EVENTS_COMPONENT_EDIT_UNLOCK_TTL_MS = 5 * 60 * 1000;
 const EVENTS_GOVERNORATE_RATES_UNLOCK_TTL_MS = 5 * 60 * 1000;
+// Event-request workflow actions are protected by a short, event-specific Admin verification.
+const EVENTS_REQUEST_WORKFLOW_UNLOCK_TTL_MS = 5 * 60 * 1000;
 
 function _hasEventsComponentCreateAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
@@ -26341,6 +26343,43 @@ function _hasEventsGovernorateRatesAccess(req) {
   if (_hasPageAdminAccess(req, 'Events')) return true;
   const until = Number(req?.session?.eventsGovernorateRatesAdminUnlockUntil || 0);
   return Number.isFinite(until) && until > Date.now();
+}
+
+/**
+ * Resolve the only status transitions that can be carried out through the
+ * Events request workflow buttons. The database remains normalized using
+ * `completed`, while the UI calls that final state “Done”.
+ */
+function _eventsWorkflowTransition(targetStatus) {
+  const to = _eventsNormalizeStatus(targetStatus);
+  if (to === 'in_progress') return { action: 'approve', from: 'submitted', to };
+  if (to === 'completed') return { action: 'deliver', from: 'in_progress', to };
+  return null;
+}
+
+function _hasEventsRequestWorkflowAccess(req, eventId, targetStatus) {
+  const expectedId = _eventsUuid(eventId);
+  const transition = _eventsWorkflowTransition(targetStatus);
+  const grantedId = _eventsUuid(req?.session?.eventsRequestWorkflowUnlockEventId);
+  const grantedTarget = _eventsNormalizeStatus(req?.session?.eventsRequestWorkflowUnlockTargetStatus);
+  const until = Number(req?.session?.eventsRequestWorkflowUnlockUntil || 0);
+
+  return !!(
+    expectedId
+    && transition
+    && expectedId === grantedId
+    && transition.to === grantedTarget
+    && Number.isFinite(until)
+    && until > Date.now()
+  );
+}
+
+async function _clearEventsRequestWorkflowUnlock(req) {
+  if (!req?.session) return;
+  delete req.session.eventsRequestWorkflowUnlockUntil;
+  delete req.session.eventsRequestWorkflowUnlockEventId;
+  delete req.session.eventsRequestWorkflowUnlockTargetStatus;
+  try { await _saveSessionNow(req); } catch {}
 }
 
 async function _clearEventsComponentCreateUnlock(req) {
@@ -26425,10 +26464,37 @@ app.post('/api/events/admin/verify', requireAuth, requirePage('Events'), async (
   try {
     const password = String(req.body?.password || req.body?.adminPassword || '').trim();
     const requestedIntent = _eventsText(req.body?.intent, 32).toLowerCase();
-    const intent = ['edit', 'governorate_rates'].includes(requestedIntent) ? requestedIntent : 'create';
+    const intent = ['edit', 'governorate_rates', 'request_workflow'].includes(requestedIntent) ? requestedIntent : 'create';
     const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
-    const verified = await _verifyPageAdminPassword(req, password, 'Events');
+    const eventId = _eventsUuid(req.body?.eventId || req.body?.event_id);
+    const targetStatus = _eventsNormalizeStatus(req.body?.targetStatus || req.body?.target_status);
+
+    // Request workflow actions deliberately require the shared Events Admin
+    // password even when the current account is an Events Admin. This keeps
+    // the user-requested “Admin verification → confirmation” flow explicit.
+    const verified = intent === 'request_workflow'
+      ? (!!password && password !== PAGE_ADMIN_BYPASS_TOKEN && await verifyAdminPassword(password))
+      : await _verifyPageAdminPassword(req, password, 'Events');
+
     if (!verified) return res.status(401).json({ ok: false, error: 'Invalid Admin password.' });
+
+    if (intent === 'request_workflow') {
+      const transition = _eventsWorkflowTransition(targetStatus);
+      if (!eventId || !transition) {
+        return res.status(400).json({ ok: false, error: 'Choose a valid event request workflow action.' });
+      }
+      req.session.eventsRequestWorkflowUnlockUntil = Date.now() + EVENTS_REQUEST_WORKFLOW_UNLOCK_TTL_MS;
+      req.session.eventsRequestWorkflowUnlockEventId = eventId;
+      req.session.eventsRequestWorkflowUnlockTargetStatus = transition.to;
+      await _saveSessionNow(req);
+      return res.json({
+        ok: true,
+        intent,
+        eventId,
+        targetStatus: transition.to,
+        expiresInSeconds: Math.floor(EVENTS_REQUEST_WORKFLOW_UNLOCK_TTL_MS / 1000),
+      });
+    }
 
     if (intent === 'governorate_rates') {
       req.session.eventsGovernorateRatesAdminUnlockUntil = Date.now() + EVENTS_GOVERNORATE_RATES_UNLOCK_TTL_MS;
@@ -26657,6 +26723,49 @@ app.post('/api/events', requireAuth, requirePage('Events'), async (req, res) => 
     return res.status(201).json({ ok: true, event: _eventsSerializeRequest(inserted || {}) });
   } catch (error) {
     console.error('POST /api/events error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/:id/workflow-transition', requireAuth, requirePage('Events'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const id = _eventsUuid(req.params?.id);
+    const transition = _eventsWorkflowTransition(req.body?.targetStatus || req.body?.target_status);
+    if (!id || !transition) {
+      return res.status(400).json({ ok: false, error: 'Invalid event request workflow action.' });
+    }
+
+    if (!_hasEventsRequestWorkflowAccess(req, id, transition.to)) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Admin verification is required before changing this event request status.',
+      });
+    }
+
+    const existing = await supabaseDb.selectById(_sbEventsTable(), id);
+    if (!existing) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+
+    const currentStatus = _eventsNormalizeStatus(existing?.status);
+    if (currentStatus !== transition.from) {
+      await _clearEventsRequestWorkflowUnlock(req);
+      return res.status(409).json({
+        ok: false,
+        error: `This action is only available while the request is ${transition.from.replace('_', ' ')}.`,
+      });
+    }
+
+    const updated = await supabaseDb.updateById(_sbEventsTable(), id, { status: transition.to });
+    await _clearEventsRequestWorkflowUnlock(req);
+    if (!updated) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
+
+    return res.json({
+      ok: true,
+      action: transition.action,
+      event: _eventsSerializeRequest(updated),
+    });
+  } catch (error) {
+    console.error('POST /api/events/:id/workflow-transition error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
