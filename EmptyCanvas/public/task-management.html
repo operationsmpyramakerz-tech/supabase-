@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task Management</title>
+  <style>body.permissions-loading .sidebar li { display:none !important; }</style>
+  <link href="/css/style.css?v=task-management-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=task-management-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=task-management-v1" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-v1" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading task-management-page">
+  <script>
+    (function(){ try { if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') document.body.classList.add('sidebar-mini'); } catch(e){} })();
+  </script>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header"><h2>Dashboard</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
+      <nav class="sidebar-nav"><ul class="nav-list">
+        <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Shopping Cart</span></a></li>
+        <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+        <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
+        <li><a class="nav-link active" href="/task-management"><i data-feather="git-branch"></i><span class="nav-label">Task Management</span></a></li>
+        <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+        <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+        <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+        <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses by Users</span></a></li>
+      </ul></nav>
+      <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header tm-page-header">
+        <div class="header-row1">
+          <div class="left">
+            <div aria-live="polite" class="greeting-pill">
+              <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
+              <div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Coordinate work between departments</div></div>
+            </div>
+            <label class="tm-search" for="tmSearch"><i data-feather="search"></i><input id="tmSearch" type="search" placeholder="Search tickets, departments, or requests..." autocomplete="off" /></label>
+          </div>
+          <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
+        </div>
+        <div class="header-row2 tm-header-row2"><h1 class="page-title">Task Management</h1><button type="button" class="tm-new-ticket" id="tmNewTicketBtn"><i data-feather="plus"></i><span>New Ticket</span></button></div>
+      </header>
+
+      <main class="container-full-width tm-main">
+        <div class="tm-toolbar" role="toolbar" aria-label="Task Management filters">
+          <div class="tm-tabs" id="tmTabs" role="tablist">
+            <button class="tm-tab is-active" type="button" data-status="all" role="tab" aria-selected="true"><i data-feather="layers"></i><span>All</span></button>
+            <button class="tm-tab" type="button" data-status="not_started" role="tab" aria-selected="false"><i data-feather="circle"></i><span>Not started</span></button>
+            <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false"><i data-feather="activity"></i><span>In progress</span></button>
+            <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false"><i data-feather="check-circle"></i><span>Completed</span></button>
+          </div>
+          <div class="tm-toolbar-note" id="tmToolbarNote" aria-live="polite">Loading tickets…</div>
+        </div>
+
+        <section class="tm-ticket-grid" id="tmTicketGrid" aria-live="polite">
+          <div class="modern-loading" role="status"><div class="modern-loading__spinner" aria-hidden="true"></div><div class="modern-loading__text">Loading tickets <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="tm-overlay" id="tmTicketFormOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="form"></div>
+    <section class="tm-dialog tm-dialog--form" role="dialog" aria-modal="true" aria-labelledby="tmTicketFormTitle">
+      <div class="tm-dialog__top"><div><span class="tm-eyebrow">Cross-department workflow</span><h2 id="tmTicketFormTitle">Create New Ticket</h2><p>Add each department section in the exact execution order.</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="form"><i data-feather="x"></i></button></div>
+      <form id="tmTicketForm" novalidate>
+        <div class="tm-form-grid">
+          <label class="tm-field tm-field--wide"><span>Ticket title <b>*</b></span><input id="tmTitleInput" name="title" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
+          <label class="tm-field"><span>Priority</span><select id="tmPriorityInput" name="priority"><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
+          <label class="tm-field"><span>Target date</span><input id="tmDueDateInput" name="dueDate" type="date" /></label>
+          <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmDescriptionInput" name="description" rows="3" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
+        </div>
+        <div class="tm-sections-head"><div><span class="tm-eyebrow">Ordered execution</span><h3>Workflow Sections</h3><p>Section 1 starts first, then the next department receives its work.</p></div><button class="tm-add-section" type="button" id="tmAddSectionBtn"><i data-feather="plus"></i> Add section</button></div>
+        <div class="tm-section-editor-list" id="tmSectionEditorList"></div>
+        <div class="tm-form-error" id="tmFormError" role="alert" aria-live="polite"></div>
+        <div class="tm-dialog__actions"><button class="tm-btn tm-btn--secondary" type="button" data-tm-close="form">Cancel</button><button class="tm-btn tm-btn--primary" type="submit" id="tmCreateTicketBtn"><i data-feather="send"></i><span>Create Ticket</span></button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="tm-overlay" id="tmWorkflowOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="workflow"></div>
+    <section class="tm-dialog tm-dialog--workflow" role="dialog" aria-modal="true" aria-labelledby="tmWorkflowTitle">
+      <div class="tm-workflow-header">
+        <div class="tm-workflow-header__title"><span class="tm-ticket-code" id="tmWorkflowCode">TKT-00000</span><h2 id="tmWorkflowTitle">Ticket workflow</h2><p id="tmWorkflowSub">—</p></div>
+        <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
+      </div>
+      <div class="tm-workflow-summary" id="tmWorkflowSummary"></div>
+      <div class="tm-flow" id="tmWorkflowFlow"></div>
+    </section>
+  </div>
+
+  <div class="tm-overlay" id="tmUpdateSectionOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="update"></div>
+    <section class="tm-dialog tm-dialog--update" role="dialog" aria-modal="true" aria-labelledby="tmUpdateSectionTitle">
+      <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmUpdateSectionDepartment">Department</span><h2 id="tmUpdateSectionTitle">Update workflow section</h2><p id="tmUpdateSectionRequest">—</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="update"><i data-feather="x"></i></button></div>
+      <form id="tmUpdateSectionForm">
+        <label class="tm-field"><span>Status</span><select id="tmSectionStatusInput"><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+        <label class="tm-field tm-field--wide"><span>Execution note</span><textarea id="tmCompletionNoteInput" rows="4" maxlength="8000" placeholder="Add a short progress note or completion handover."></textarea></label>
+        <div class="tm-form-error" id="tmUpdateSectionError" role="alert" aria-live="polite"></div>
+        <div class="tm-dialog__actions"><button class="tm-btn tm-btn--secondary" type="button" data-tm-close="update">Cancel</button><button class="tm-btn tm-btn--primary" type="submit" id="tmUpdateSectionSubmit">Save update</button></div>
+      </form>
+    </section>
+  </div>
+
+  <script>if (window.feather) feather.replace();</script>
+  <script src="/js/common-ui.js?v=task-management-v1"></script>
+  <script src="/js/task-management.js?v=task-management-v1"></script>
+</body>
+</html>
