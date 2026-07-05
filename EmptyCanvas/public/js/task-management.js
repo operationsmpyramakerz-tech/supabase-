@@ -47,11 +47,14 @@
     currentUser: {},
     editingBlockId: null,
     drag: null,
+    pan: null,
+    pendingBlockPress: null,
     builder: {
       nodes: [],
       edges: [],
       connecting: false,
       connectFrom: null,
+      canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     },
   };
@@ -71,6 +74,7 @@
   const updateError = $('tmUpdateSectionError');
   const builderBoard = $('tmBuilderBoard');
   const builderArrows = $('tmBuilderArrows');
+  const builderCanvasWrap = $('tmBuilderCanvasWrap');
 
   function hydrateIcons(root = document) {
     try { if (window.feather) window.feather.replace({ width: 18, height: 18 }); } catch {}
@@ -189,17 +193,25 @@
       edges: [],
       connecting: false,
       connectFrom: null,
+      canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     };
     state.editingBlockId = null;
     state.drag = null;
+    state.pan = null;
+    clearPendingBlockPress();
   }
 
   function nextBlockPosition() {
     const count = state.builder.nodes.length;
-    const column = count % 4;
-    const row = Math.floor(count / 4);
-    return { x: 70 + column * 340, y: 90 + row * 255 };
+    const column = count % 3;
+    const row = Math.floor(count / 3);
+    const visibleCenterX = safeNumber(builderCanvasWrap?.scrollLeft) + Math.max(620, safeNumber(builderCanvasWrap?.clientWidth, 920)) / 2;
+    const visibleCenterY = safeNumber(builderCanvasWrap?.scrollTop) + Math.max(360, safeNumber(builderCanvasWrap?.clientHeight, 560)) / 2;
+    return {
+      x: Math.max(70, Math.round(visibleCenterX - 150 + (column - 1) * 330)),
+      y: Math.max(80, Math.round(visibleCenterY - 86 + row * 230)),
+    };
   }
 
   function addBuilderNode() {
@@ -250,10 +262,12 @@
     updateBuilderToolbar();
   }
 
-  function getBoardDimensions(nodes = []) {
-    const maxX = Math.max(980, ...nodes.map((node) => safeNumber(node.x, 0) + 310));
-    const maxY = Math.max(650, ...nodes.map((node) => safeNumber(node.y, 0) + 220));
-    return { width: Math.ceil(maxX + 80), height: Math.ceil(maxY + 80) };
+  function getBoardDimensions(nodes = [], minimum = {}) {
+    const minWidth = Math.max(980, safeNumber(minimum.width, 980));
+    const minHeight = Math.max(650, safeNumber(minimum.height, 650));
+    const maxX = Math.max(minWidth, ...nodes.map((node) => safeNumber(node.x, 0) + 390));
+    const maxY = Math.max(minHeight, ...nodes.map((node) => safeNumber(node.y, 0) + 300));
+    return { width: Math.ceil(maxX), height: Math.ceil(maxY) };
   }
 
   function pathBetween(from, to, { blockWidth = 300, blockHeight = 172 } = {}) {
@@ -282,11 +296,91 @@
   }
 
   function renderBuilderArrows() {
-    if (!builderArrows) return;
-    const dimensions = getBoardDimensions(state.builder.nodes);
+    if (!builderArrows || !builderBoard) return;
+    const dimensions = getBoardDimensions(state.builder.nodes, state.builder.canvas || {});
+    state.builder.canvas.width = Math.max(safeNumber(state.builder.canvas?.width, 1280), dimensions.width);
+    state.builder.canvas.height = Math.max(safeNumber(state.builder.canvas?.height, 900), dimensions.height);
     builderBoard.style.width = `${dimensions.width}px`;
     builderBoard.style.height = `${dimensions.height}px`;
     renderArrowLayer(builderArrows, state.builder.edges, (id) => findBuilderNode(id), dimensions, 'tm-builder-arrow');
+  }
+
+  function paintBuilderNodePositions() {
+    if (!builderBoard) return;
+    state.builder.nodes.forEach((node) => {
+      const block = [...builderBoard.querySelectorAll('[data-builder-block]')].find((item) => String(item.dataset.builderBlock) === String(node.id));
+      if (!block) return;
+      block.style.left = `${safeNumber(node.x, 60)}px`;
+      block.style.top = `${safeNumber(node.y, 80)}px`;
+    });
+  }
+
+  function expandBuilderCanvas({ left = 0, top = 0, right = 0, bottom = 0 } = {}) {
+    const shiftX = Math.max(0, Math.ceil(safeNumber(left, 0)));
+    const shiftY = Math.max(0, Math.ceil(safeNumber(top, 0)));
+    const growRight = Math.max(0, Math.ceil(safeNumber(right, 0)));
+    const growBottom = Math.max(0, Math.ceil(safeNumber(bottom, 0)));
+    if (!(shiftX || shiftY || growRight || growBottom)) return;
+
+    if (shiftX || shiftY) {
+      state.builder.nodes.forEach((node) => {
+        node.x = safeNumber(node.x) + shiftX;
+        node.y = safeNumber(node.y) + shiftY;
+      });
+      if (state.drag) {
+        state.drag.startX += shiftX;
+        state.drag.startY += shiftY;
+      }
+      if (state.pendingBlockPress) {
+        state.pendingBlockPress.startX += shiftX;
+        state.pendingBlockPress.startY += shiftY;
+      }
+    }
+
+    state.builder.canvas.width = Math.max(1280, safeNumber(state.builder.canvas?.width, 1280) + shiftX + growRight);
+    state.builder.canvas.height = Math.max(900, safeNumber(state.builder.canvas?.height, 900) + shiftY + growBottom);
+    renderBuilderArrows();
+    paintBuilderNodePositions();
+    if (builderCanvasWrap) {
+      if (shiftX) builderCanvasWrap.scrollLeft += shiftX;
+      if (shiftY) builderCanvasWrap.scrollTop += shiftY;
+    }
+  }
+
+  function ensureBuilderRoomForNode(node) {
+    if (!node) return;
+    const margin = 180;
+    const blockWidth = 300;
+    const blockHeight = 172;
+    const canvas = state.builder.canvas || { width: 1280, height: 900 };
+    const left = safeNumber(node.x) < margin ? (margin - safeNumber(node.x) + 560) : 0;
+    const top = safeNumber(node.y) < margin ? (margin - safeNumber(node.y) + 420) : 0;
+    if (left || top) expandBuilderCanvas({ left, top });
+
+    const activeCanvas = state.builder.canvas || canvas;
+    const right = safeNumber(node.x) + blockWidth + margin > safeNumber(activeCanvas.width, 1280)
+      ? safeNumber(node.x) + blockWidth + margin - safeNumber(activeCanvas.width, 1280) + 560
+      : 0;
+    const bottom = safeNumber(node.y) + blockHeight + margin > safeNumber(activeCanvas.height, 900)
+      ? safeNumber(node.y) + blockHeight + margin - safeNumber(activeCanvas.height, 900) + 420
+      : 0;
+    if (right || bottom) expandBuilderCanvas({ right, bottom });
+  }
+
+  function ensureBuilderPanRoom(pan, nextLeft, nextTop) {
+    if (!builderCanvasWrap || !builderBoard || !pan) return;
+    const edge = 120;
+    const maxLeft = Math.max(0, builderBoard.scrollWidth - builderCanvasWrap.clientWidth);
+    const maxTop = Math.max(0, builderBoard.scrollHeight - builderCanvasWrap.clientHeight);
+    let left = 0; let top = 0; let right = 0; let bottom = 0;
+    if (nextLeft < edge) left = 700;
+    if (nextTop < edge) top = 520;
+    if (nextLeft > maxLeft - edge) right = 700;
+    if (nextTop > maxTop - edge) bottom = 520;
+    if (!(left || top || right || bottom)) return;
+    expandBuilderCanvas({ left, top, right, bottom });
+    pan.startScrollLeft += left;
+    pan.startScrollTop += top;
   }
 
   function updateBuilderToolbar() {
@@ -494,37 +588,124 @@
       .finally(() => { if (button) { button.disabled = false; button.classList.remove('is-loading'); } });
   }
 
-  function startBlockDrag(event, nodeId) {
-    if (event.button !== 0 || state.builder.connecting || event.target.closest('button')) return;
+  function clearPendingBlockPress() {
+    if (!state.pendingBlockPress) return;
+    if (state.pendingBlockPress.timer) window.clearTimeout(state.pendingBlockPress.timer);
+    state.pendingBlockPress = null;
+  }
+
+  function beginBlockDrag(gesture) {
+    if (!gesture || state.drag) return;
+    const node = findBuilderNode(gesture.nodeId);
+    if (!node) return;
+    clearPendingBlockPress();
+    state.drag = {
+      nodeId: gesture.nodeId,
+      pointerId: gesture.pointerId,
+      startClientX: gesture.startClientX,
+      startClientY: gesture.startClientY,
+      startX: safeNumber(node.x),
+      startY: safeNumber(node.y),
+    };
+    try { builderBoard?.setPointerCapture?.(gesture.pointerId); } catch {}
+    const element = [...(builderBoard?.querySelectorAll('[data-builder-block]') || [])]
+      .find((item) => String(item.dataset.builderBlock) === String(gesture.nodeId));
+    element?.classList.add('is-dragging');
+    document.body.classList.add('tm-builder-dragging');
+  }
+
+  function queueBlockDrag(event, nodeId) {
+    if (event.button !== 0 || event.isPrimary === false || state.builder.connecting) return;
+    if (event.target.closest('[data-tm-edit-block],[data-tm-delete-block]')) return;
     const node = findBuilderNode(nodeId);
     if (!node) return;
     event.preventDefault();
-    state.drag = {
+    clearPendingBlockPress();
+    const gesture = {
       nodeId,
+      pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startX: safeNumber(node.x),
       startY: safeNumber(node.y),
+      timer: null,
     };
-    document.body.classList.add('tm-builder-dragging');
+    gesture.timer = window.setTimeout(() => {
+      if (state.pendingBlockPress === gesture) beginBlockDrag(gesture);
+    }, 160);
+    state.pendingBlockPress = gesture;
   }
 
   function moveBlockDrag(event) {
-    if (!state.drag) return;
+    const pending = state.pendingBlockPress;
+    if (pending && event.pointerId === pending.pointerId) {
+      const dx = event.clientX - pending.startClientX;
+      const dy = event.clientY - pending.startClientY;
+      if (Math.hypot(dx, dy) >= 6) beginBlockDrag(pending);
+    }
+
+    if (!state.drag || event.pointerId !== state.drag.pointerId) return false;
     const node = findBuilderNode(state.drag.nodeId);
-    if (!node) return;
-    node.x = clamp(state.drag.startX + (event.clientX - state.drag.startClientX), 20, 3600);
-    node.y = clamp(state.drag.startY + (event.clientY - state.drag.startClientY), 20, 2600);
+    if (!node) return false;
+    event.preventDefault();
+    node.x = state.drag.startX + (event.clientX - state.drag.startClientX);
+    node.y = state.drag.startY + (event.clientY - state.drag.startClientY);
+    ensureBuilderRoomForNode(node);
     const element = [...(builderBoard?.querySelectorAll('[data-builder-block]') || [])]
       .find((item) => String(item.dataset.builderBlock) === String(node.id));
     if (element) { element.style.left = `${node.x}px`; element.style.top = `${node.y}px`; }
     renderBuilderArrows();
+    return true;
   }
 
-  function endBlockDrag() {
-    if (!state.drag) return;
+  function endBlockDrag(event) {
+    const pending = state.pendingBlockPress;
+    if (pending && (!event || event.pointerId === pending.pointerId)) clearPendingBlockPress();
+    if (!state.drag || (event && event.pointerId !== state.drag.pointerId)) return false;
+    const element = [...(builderBoard?.querySelectorAll('[data-builder-block]') || [])]
+      .find((item) => String(item.dataset.builderBlock) === String(state.drag.nodeId));
+    element?.classList.remove('is-dragging');
+    try { builderBoard?.releasePointerCapture?.(state.drag.pointerId); } catch {}
     state.drag = null;
     document.body.classList.remove('tm-builder-dragging');
+    return true;
+  }
+
+  function startCanvasPan(event) {
+    if (event.button !== 0 || event.isPrimary === false || state.builder.connecting || state.drag || state.pendingBlockPress) return;
+    if (event.target.closest('[data-builder-block]')) return;
+    event.preventDefault();
+    state.pan = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startScrollLeft: safeNumber(builderCanvasWrap?.scrollLeft),
+      startScrollTop: safeNumber(builderCanvasWrap?.scrollTop),
+    };
+    builderCanvasWrap?.classList.add('is-panning');
+    try { builderCanvasWrap?.setPointerCapture?.(event.pointerId); } catch {}
+  }
+
+  function moveCanvasPan(event) {
+    const pan = state.pan;
+    if (!pan || event.pointerId !== pan.pointerId || !builderCanvasWrap) return false;
+    event.preventDefault();
+    let nextLeft = pan.startScrollLeft - (event.clientX - pan.startClientX);
+    let nextTop = pan.startScrollTop - (event.clientY - pan.startClientY);
+    ensureBuilderPanRoom(pan, nextLeft, nextTop);
+    nextLeft = pan.startScrollLeft - (event.clientX - pan.startClientX);
+    nextTop = pan.startScrollTop - (event.clientY - pan.startClientY);
+    builderCanvasWrap.scrollLeft = Math.max(0, nextLeft);
+    builderCanvasWrap.scrollTop = Math.max(0, nextTop);
+    return true;
+  }
+
+  function endCanvasPan(event) {
+    if (!state.pan || (event && event.pointerId !== state.pan.pointerId)) return false;
+    try { builderCanvasWrap?.releasePointerCapture?.(state.pan.pointerId); } catch {}
+    builderCanvasWrap?.classList.remove('is-panning');
+    state.pan = null;
+    return true;
   }
 
   // ---------------------------------------------------------------------------
@@ -606,7 +787,7 @@
       layerSections.forEach((section, index) => fallbackPosition.set(String(section.id), { x: 64 + layer * 355, y: 74 + index * 242 }));
     });
 
-    const nodes = sections.map((section) => {
+    const positionedNodes = sections.map((section) => {
       const fallback = fallbackPosition.get(String(section.id)) || { x: 64, y: 74 };
       const hasPosition = Number.isFinite(Number(section.canvasX)) && Number.isFinite(Number(section.canvasY)) && Number(section.canvasX) > 0 && Number(section.canvasY) > 0;
       return {
@@ -616,6 +797,16 @@
         dependencies: incoming.get(String(section.id)) || [],
       };
     });
+    // The builder can pan endlessly and may shift its internal origin. Normalize
+    // the stored coordinates only for the read-only viewer so every ticket opens
+    // focused around its workflow instead of starting far away on a huge canvas.
+    const minX = positionedNodes.length ? Math.min(...positionedNodes.map((node) => safeNumber(node.x))) : 0;
+    const minY = positionedNodes.length ? Math.min(...positionedNodes.map((node) => safeNumber(node.y))) : 0;
+    const nodes = positionedNodes.map((node) => ({
+      ...node,
+      x: safeNumber(node.x) - minX + 64,
+      y: safeNumber(node.y) - minY + 64,
+    }));
     return { nodes, edges };
   }
 
@@ -769,20 +960,33 @@
     });
 
     builderBoard?.addEventListener('pointerdown', (event) => {
-      const handle = event.target.closest('[data-tm-drag-handle]');
-      if (!handle) return;
-      const block = handle.closest('[data-builder-block]');
-      if (block) startBlockDrag(event, block.dataset.builderBlock);
+      const block = event.target.closest('[data-builder-block]');
+      if (block) queueBlockDrag(event, block.dataset.builderBlock);
     });
-    document.addEventListener('pointermove', moveBlockDrag);
-    document.addEventListener('pointerup', endBlockDrag);
-    document.addEventListener('pointercancel', endBlockDrag);
+    builderCanvasWrap?.addEventListener('pointerdown', startCanvasPan);
+    document.addEventListener('pointermove', (event) => {
+      if (moveBlockDrag(event)) return;
+      moveCanvasPan(event);
+    });
+    document.addEventListener('pointerup', (event) => {
+      if (endBlockDrag(event)) return;
+      endCanvasPan(event);
+    });
+    document.addEventListener('pointercancel', (event) => {
+      if (endBlockDrag(event)) return;
+      endCanvasPan(event);
+    });
 
     document.addEventListener('click', (event) => {
       const close = event.target.closest('[data-tm-close]');
       if (close) {
         const which = close.dataset.tmClose;
-        if (which === 'builder') setOverlay(builderOverlay, false);
+        if (which === 'builder') {
+          clearPendingBlockPress();
+          endBlockDrag();
+          endCanvasPan();
+          setOverlay(builderOverlay, false);
+        }
         if (which === 'meta') setOverlay(metaOverlay, false);
         if (which === 'block') setOverlay(blockOverlay, false);
         if (which === 'workflow') setOverlay(workflowOverlay, false);
