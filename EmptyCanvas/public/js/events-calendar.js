@@ -49,7 +49,7 @@
     under_review: 'Under review',
     approved: 'Approved',
     in_progress: 'In progress',
-    completed: 'Completed',
+    completed: 'Done',
     cancelled: 'Cancelled',
   };
 

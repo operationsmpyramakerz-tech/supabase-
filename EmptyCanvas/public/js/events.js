@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = (selector, root = document) => root.querySelector(selector);
-  const state = { events: [], loading: false, query: '', status: 'all', typeFilter: 'all', activeEvent: null };
+  const state = { events: [], loading: false, query: '', status: 'all', typeFilter: 'all', activeEvent: null, pendingWorkflow: null };
   const els = {
     cards: $('#eventsRequestCards'),
     search: $('#requestedSearch'),
@@ -11,11 +11,17 @@
     modal: $('#eventDetailsModal'), modalClose: $('#eventDetailsClose'), modalDone: $('#eventDetailsDone'), modalDownload: $('#eventDetailsDownload'),
     modalTitle: $('#eventDetailsTitle'), modalSub: $('#eventDetailsSubtitle'), modalStatus: $('#eventDetailsStatus'), modalContent: $('#eventDetailsContent'),
     actionWrap: $('#eventDetailsActionWrap'), actionToggle: $('#eventDetailsActions'), actionMenu: $('#eventDetailsActionsMenu'),
+    workflowAuthModal: $('#eventWorkflowAuthModal'), workflowAuthForm: $('#eventWorkflowAuthForm'), workflowAuthClose: $('#eventWorkflowAuthClose'),
+    workflowAuthCancel: $('#eventWorkflowAuthCancel'), workflowAuthPassword: $('#eventWorkflowAuthPassword'), workflowAuthError: $('#eventWorkflowAuthError'),
+    workflowAuthSubmit: $('#eventWorkflowAuthSubmit'), workflowAuthTitle: $('#eventWorkflowAuthTitle'), workflowAuthText: $('#eventWorkflowAuthText'),
+    workflowConfirmModal: $('#eventWorkflowConfirmModal'), workflowConfirmClose: $('#eventWorkflowConfirmClose'), workflowConfirmCancel: $('#eventWorkflowConfirmCancel'),
+    workflowConfirmSubmit: $('#eventWorkflowConfirmSubmit'), workflowConfirmTitle: $('#eventWorkflowConfirmTitle'), workflowConfirmText: $('#eventWorkflowConfirmText'),
+    workflowConfirmNote: $('#eventWorkflowConfirmNote'),
   };
 
   const typeLabels = { tech_day: 'Tech Day', seminar: 'Seminar', steam_fair: 'STEAM Fair', competition: 'Competition', exhibition: 'Exhibition', other: 'Other' };
   const typeIcons = { tech_day: 'cpu', seminar: 'mic', steam_fair: 'star', competition: 'award', exhibition: 'image', other: 'calendar' };
-  const statusLabels = { submitted: 'Submitted', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' };
+  const statusLabels = { submitted: 'Submitted', in_progress: 'In progress', completed: 'Done', cancelled: 'Cancelled' };
   const statusOptions = Object.keys(statusLabels);
 
   function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char])); }
@@ -45,6 +51,54 @@
   function detailItem(label, value) { return `<div class="events-detail-item"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value || '—')}</strong></div>`; }
   function detailList(items, { empty = 'No items were added.', component = false } = {}) { if (!Array.isArray(items) || !items.length) return `<p class="events-table-muted">${escapeHTML(empty)}</p>`; return `<ul class="events-detail-list">${items.map((item) => { const title = component ? item.name : item.title; const notes = component ? item.notes : [item.description, item.notes].filter(Boolean).join(' · '); const unit = Number(item.unitCost || item.workingCost || 0); const total = Number(item.totalCost || ((item.quantity || 0) * unit) || 0); const money = Number.isFinite(total) ? `EGP ${total.toFixed(2)}` : ''; return `<li><strong>${escapeHTML(title || 'Untitled item')}</strong><small>${escapeHTML(`${item.quantity || 0} required${notes ? ` · ${notes}` : ''}${money ? ` · ${money}` : ''}`)}</small></li>`; }).join('')}</ul>`; }
   function statusControlMarkup(event) { const status = normaliseStatus(event.status); return `<div class="events-status-control"><div class="events-modern-select events-status-modern-select" id="eventStatusSelect"><input id="eventStatusEdit" type="hidden" value="${escapeHTML(status)}" /><button type="button" class="events-modern-select__trigger" id="eventStatusTrigger" aria-haspopup="listbox" aria-expanded="false"><span data-event-status-label>${escapeHTML(statusLabels[status])}</span><i data-feather="chevron-down"></i></button><div class="events-modern-select__menu" id="eventStatusMenu" role="listbox" hidden>${statusOptions.map((key) => `<button class="events-modern-select__option${key === status ? ' is-selected' : ''}" type="button" role="option" aria-selected="${key === status ? 'true' : 'false'}" data-event-status-option="${key}">${escapeHTML(statusLabels[key])}</button>`).join('')}</div></div><button class="events-primary-btn" id="eventStatusSave" type="button"><span>Update</span></button></div>`; }
+  const workflowActions = Object.freeze({
+    approve: {
+      targetStatus: 'in_progress',
+      from: 'submitted',
+      buttonLabel: 'Mark as approved',
+      title: 'Mark as approved',
+      confirmationTitle: 'Approve event request?',
+      confirmationText: 'This will change the request status from Submitted to In progress.',
+      confirmationLabel: 'Confirm approval',
+      icon: 'check-circle',
+    },
+    deliver: {
+      targetStatus: 'completed',
+      from: 'in_progress',
+      buttonLabel: 'Mark as delivered',
+      title: 'Mark as delivered',
+      confirmationTitle: 'Mark event as delivered?',
+      confirmationText: 'This will change the request status from In progress to Done.',
+      confirmationLabel: 'Confirm delivery',
+      icon: 'truck',
+    },
+  });
+
+  function pageAccessLevel() {
+    try {
+      return String(window.OpsPageAccess?.level || document.body?.dataset?.pageAccessLevel || '').trim().toLowerCase();
+    } catch {
+      return String(document.body?.dataset?.pageAccessLevel || '').trim().toLowerCase();
+    }
+  }
+
+  function canInitiateWorkflow() {
+    const level = pageAccessLevel();
+    return level === 'edit' || level === 'admin' || window.OpsPageAccess?.isAdmin?.() === true;
+  }
+
+  function workflowActionFor(event) {
+    const status = normaliseStatus(event?.status);
+    if (status === 'submitted') return workflowActions.approve;
+    if (status === 'in_progress') return workflowActions.deliver;
+    return null;
+  }
+
+  function workflowActionMarkup(event) {
+    const action = workflowActionFor(event);
+    if (!action || !canInitiateWorkflow()) return '';
+    return `<button class="events-workflow-action events-workflow-action--${escapeHTML(action.targetStatus)}" type="button" data-event-workflow-action="${escapeHTML(action.targetStatus)}"><i data-feather="${escapeHTML(action.icon)}"></i><span>${escapeHTML(action.buttonLabel)}</span></button>`;
+  }
   function canManageEventStatus() {
     try {
       const runtimeLevel = String(window.OpsPageAccess?.level || document.body?.dataset?.pageAccessLevel || '').trim().toLowerCase();
@@ -95,7 +149,7 @@
     if (els.modalTitle) els.modalTitle.textContent = event.eventName || 'Event Details';
     if (els.modalSub) els.modalSub.textContent = `${event.eventCode || 'Event request'} · Submitted ${formatDateTime(event.createdAt)}`;
     const isAdmin = canManageEventStatus();
-    if (els.modalStatus) els.modalStatus.innerHTML = `${statusMarkup(event.status)}${isAdmin ? statusControlMarkup(event) : ''}`;
+    if (els.modalStatus) els.modalStatus.innerHTML = `${statusMarkup(event.status)}${workflowActionMarkup(event)}${isAdmin ? statusControlMarkup(event) : ''}`;
     renderActionMenu(event, isAdmin);
     setupStatusControl(event);
     icons(els.modal);
@@ -103,6 +157,147 @@
   async function openDetails(id) { const clean = String(id || '').trim(); if (!clean || !els.modal) return; els.modal.hidden = false; els.modal.setAttribute('aria-hidden', 'false'); if (els.modalContent) els.modalContent.innerHTML = '<div class="events-loading"><span></span> Loading request details...</div>'; try { const response = await fetch(`/api/events/${encodeURIComponent(clean)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load event details.'); state.activeEvent = { ...data.event, status: normaliseStatus(data.event?.status) }; renderDetails(state.activeEvent); } catch (error) { if (els.modalContent) els.modalContent.innerHTML = `<div class="events-empty"><i data-feather="alert-circle"></i><span>${escapeHTML(error?.message || 'Could not load event details.')}</span></div>`; icons(els.modalContent); } }
   function closeDetails() { if (!els.modal) return; closeActionMenu(); closeStatusSelect(); els.modal.hidden = true; els.modal.setAttribute('aria-hidden', 'true'); state.activeEvent = null; }
   async function updateStatus(id) { const input = $('#eventStatusEdit', els.modalStatus); const status = normaliseStatus(input?.value); if (!id || !status) return; const save = $('#eventStatusSave'); if (save) { save.disabled = true; save.querySelector('span')?.replaceChildren('Updating...'); } try { const response = await fetch(`/api/events/${encodeURIComponent(id)}`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to update event status.'); const updated = { ...data.event, status: normaliseStatus(data.event?.status) }; state.events = state.events.map((item) => item.id === id ? updated : item); renderCards(); renderDetails(updated); toast('success', 'Events', 'Event status updated.'); } catch (error) { toast('error', 'Events', error?.message || 'Could not update event status.'); if (save) { save.disabled = false; save.querySelector('span')?.replaceChildren('Update'); } } }
+  function resetWorkflowAuthorizationForm() {
+    if (els.workflowAuthPassword) els.workflowAuthPassword.value = '';
+    if (els.workflowAuthError) els.workflowAuthError.textContent = '';
+    if (els.workflowAuthSubmit) {
+      els.workflowAuthSubmit.disabled = false;
+      const label = els.workflowAuthSubmit.querySelector('span');
+      if (label) label.textContent = 'Verify & Continue';
+    }
+  }
+
+  function closeWorkflowAuthorization() {
+    if (els.workflowAuthModal) {
+      els.workflowAuthModal.hidden = true;
+      els.workflowAuthModal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function closeWorkflowConfirmation({ clearPending = true } = {}) {
+    if (els.workflowConfirmModal) {
+      els.workflowConfirmModal.hidden = true;
+      els.workflowConfirmModal.setAttribute('aria-hidden', 'true');
+    }
+    if (clearPending) state.pendingWorkflow = null;
+  }
+
+  function openWorkflowAuthorization(action) {
+    const event = state.activeEvent;
+    if (!event || !action) return;
+    state.pendingWorkflow = { eventId: String(event.id || ''), targetStatus: action.targetStatus, action };
+    resetWorkflowAuthorizationForm();
+    if (els.workflowAuthTitle) els.workflowAuthTitle.textContent = action.title;
+    if (els.workflowAuthText) els.workflowAuthText.textContent = 'Enter the Events Admin password to continue.';
+    if (els.workflowAuthModal) {
+      els.workflowAuthModal.hidden = false;
+      els.workflowAuthModal.setAttribute('aria-hidden', 'false');
+    }
+    icons(els.workflowAuthModal || document);
+    window.setTimeout(() => els.workflowAuthPassword?.focus(), 20);
+  }
+
+  function openWorkflowConfirmation() {
+    const pending = state.pendingWorkflow;
+    if (!pending?.action) return;
+    const { action } = pending;
+    if (els.workflowConfirmTitle) els.workflowConfirmTitle.textContent = action.confirmationTitle;
+    if (els.workflowConfirmText) els.workflowConfirmText.textContent = action.confirmationText;
+    if (els.workflowConfirmNote) {
+      const eventCode = String(state.activeEvent?.eventCode || 'this event request');
+      els.workflowConfirmNote.innerHTML = `<i data-feather="info"></i><span>${escapeHTML(`${eventCode} will be updated after confirmation.`)}</span>`;
+    }
+    if (els.workflowConfirmSubmit) {
+      els.workflowConfirmSubmit.disabled = false;
+      const label = els.workflowConfirmSubmit.querySelector('span');
+      if (label) label.textContent = action.confirmationLabel;
+    }
+    if (els.workflowConfirmModal) {
+      els.workflowConfirmModal.hidden = false;
+      els.workflowConfirmModal.setAttribute('aria-hidden', 'false');
+    }
+    icons(els.workflowConfirmModal || document);
+  }
+
+  async function authorizeWorkflow(event) {
+    event.preventDefault();
+    const pending = state.pendingWorkflow;
+    if (!pending?.eventId || !pending?.action) return;
+    const password = String(els.workflowAuthPassword?.value || '').trim();
+    if (!password) {
+      if (els.workflowAuthError) els.workflowAuthError.textContent = 'Please enter the Admin password.';
+      els.workflowAuthPassword?.focus();
+      return;
+    }
+    if (els.workflowAuthError) els.workflowAuthError.textContent = '';
+    if (els.workflowAuthSubmit) {
+      els.workflowAuthSubmit.disabled = true;
+      const label = els.workflowAuthSubmit.querySelector('span');
+      if (label) label.textContent = 'Verifying...';
+    }
+    try {
+      const response = await fetch('/api/events/admin/verify', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password,
+          intent: 'request_workflow',
+          eventId: pending.eventId,
+          targetStatus: pending.targetStatus,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Invalid Admin password.');
+      closeWorkflowAuthorization();
+      openWorkflowConfirmation();
+    } catch (error) {
+      if (els.workflowAuthError) els.workflowAuthError.textContent = error?.message || 'Invalid Admin password.';
+      if (els.workflowAuthSubmit) {
+        els.workflowAuthSubmit.disabled = false;
+        const label = els.workflowAuthSubmit.querySelector('span');
+        if (label) label.textContent = 'Verify & Continue';
+      }
+      els.workflowAuthPassword?.focus();
+    }
+  }
+
+  async function confirmWorkflowTransition() {
+    const pending = state.pendingWorkflow;
+    if (!pending?.eventId || !pending?.targetStatus || !pending?.action) return;
+    if (els.workflowConfirmSubmit) {
+      els.workflowConfirmSubmit.disabled = true;
+      const label = els.workflowConfirmSubmit.querySelector('span');
+      if (label) label.textContent = 'Updating...';
+    }
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(pending.eventId)}/workflow-transition`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetStatus: pending.targetStatus }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not update event request status.');
+      const updated = { ...data.event, status: normaliseStatus(data.event?.status) };
+      state.events = state.events.map((item) => item.id === updated.id ? updated : item);
+      state.activeEvent = updated;
+      renderTabs();
+      renderTypeFilter();
+      renderCards();
+      renderDetails(updated);
+      closeWorkflowConfirmation();
+      toast('success', 'Events', pending.targetStatus === 'completed' ? 'Event request marked as Done.' : 'Event request marked as In progress.');
+    } catch (error) {
+      toast('error', 'Events', error?.message || 'Could not update event request status.');
+      if (els.workflowConfirmSubmit) {
+        els.workflowConfirmSubmit.disabled = false;
+        const label = els.workflowConfirmSubmit.querySelector('span');
+        if (label) label.textContent = pending.action.confirmationLabel;
+      }
+    }
+  }
+
   function downloadActiveEvent() { const id = String(state.activeEvent?.id || '').trim(); if (!id) return; window.location.assign(`/api/events/${encodeURIComponent(id)}/pdf`); }
   async function archiveActiveEvent() { const event = state.activeEvent; const id = String(event?.id || '').trim(); if (!id) return; if (!window.confirm(`Archive ${event.eventCode || 'this event request'}? It will be removed from Event Requests.`)) return; try { const response = await fetch(`/api/events/${encodeURIComponent(id)}/archive`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); const data = await response.json().catch(() => ({})); if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not archive event request.'); state.events = state.events.filter((item) => item.id !== id); renderTypeFilter(); renderCards(); closeDetails(); toast('success', 'Events', 'Event request archived.'); } catch (error) { toast('error', 'Events', error?.message || 'Could not archive event request.'); } }
 
@@ -123,10 +318,24 @@
     els.cards?.addEventListener('click', (event) => { const creator = event.target.closest('[data-event-creator-id]'); if (creator) { event.preventDefault(); event.stopPropagation(); openCreatorProfilePopover(creator, creator.dataset.eventCreatorId, creator.dataset.eventCreatorName); return; } if (event.target.closest('.events-request-card__location-link')) return; const card = event.target.closest('[data-event-open]'); if (card) openDetails(card.dataset.eventOpen); });
     els.cards?.addEventListener('keydown', (event) => { const card = event.target.closest('[data-event-open]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openDetails(card.dataset.eventOpen); } });
     els.modalClose?.addEventListener('click', closeDetails); els.modalDone?.addEventListener('click', closeDetails); els.modalDownload?.addEventListener('click', downloadActiveEvent); els.modal?.addEventListener('click', (event) => { if (event.target === els.modal) closeDetails(); });
+    els.modalStatus?.addEventListener('click', (event) => {
+      const targetStatus = event.target.closest('[data-event-workflow-action]')?.dataset.eventWorkflowAction;
+      if (!targetStatus) return;
+      const action = Object.values(workflowActions).find((item) => item.targetStatus === targetStatus);
+      if (action) openWorkflowAuthorization(action);
+    });
+    els.workflowAuthForm?.addEventListener('submit', authorizeWorkflow);
+    els.workflowAuthClose?.addEventListener('click', () => closeWorkflowAuthorization());
+    els.workflowAuthCancel?.addEventListener('click', () => closeWorkflowAuthorization());
+    els.workflowAuthModal?.addEventListener('click', (event) => { if (event.target === els.workflowAuthModal) closeWorkflowAuthorization(); });
+    els.workflowConfirmSubmit?.addEventListener('click', confirmWorkflowTransition);
+    els.workflowConfirmClose?.addEventListener('click', () => closeWorkflowConfirmation());
+    els.workflowConfirmCancel?.addEventListener('click', () => closeWorkflowConfirmation());
+    els.workflowConfirmModal?.addEventListener('click', (event) => { if (event.target === els.workflowConfirmModal) closeWorkflowConfirmation(); });
     els.actionToggle?.addEventListener('click', () => { const opening = !!els.actionMenu?.hidden; if (els.actionMenu) els.actionMenu.hidden = !opening; els.actionToggle.setAttribute('aria-expanded', opening ? 'true' : 'false'); });
     els.actionMenu?.addEventListener('click', (event) => { const action = event.target.closest('[data-event-action]')?.dataset.eventAction; if (!action) return; closeActionMenu(); if (action === 'edit' && state.activeEvent?.id) window.location.assign(`/events/new?edit=${encodeURIComponent(state.activeEvent.id)}`); if (action === 'archive') archiveActiveEvent(); });
     document.addEventListener('click', (event) => { if (els.typeFilter && !els.typeFilter.contains(event.target)) closeTypeFilter(); if (els.actionWrap && !els.actionWrap.contains(event.target)) closeActionMenu(); if (els.modalStatus && !els.modalStatus.contains(event.target)) closeStatusSelect(); });
-    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { if (els.modal && !els.modal.hidden) closeDetails(); closeTypeFilter(); closeActionMenu(); } });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { if (els.modal && !els.modal.hidden) closeDetails(); closeWorkflowAuthorization(); closeWorkflowConfirmation(); closeTypeFilter(); closeActionMenu(); } });
   }
   // common-ui hydrates page access asynchronously. Refresh an open modal after
   // hydration so an Events Admin always sees the desktop status controls.
