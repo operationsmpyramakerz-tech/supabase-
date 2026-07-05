@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-request-workflow-actions-v2" rel="stylesheet" />
+  <link href="/css/events.css?v=events-request-details-clean-workflow-footer-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-requests-page">
@@ -85,21 +85,19 @@
         <div class="events-modal__menu" id="eventDetailsActionsMenu" role="menu" hidden></div>
       </div>
       <button class="events-modal__close" id="eventDetailsClose" type="button" aria-label="Close event details">×</button>
-      <div class="events-modal__header"><div><span class="events-eyebrow"><i data-feather="clipboard"></i> Event request</span><h2 id="eventDetailsTitle">Event Details</h2><p id="eventDetailsSubtitle">Review the full request brief.</p></div><div class="events-detail-status" id="eventDetailsStatus"></div></div>
+      <div class="events-modal__header events-modal__header--request-details"><div><h2 id="eventDetailsTitle">Event Details</h2></div></div>
       <div class="events-detail-content" id="eventDetailsContent"></div>
-      <div class="events-modal__actions"><button type="button" class="events-secondary-btn" id="eventDetailsDone">Close</button><button type="button" class="events-primary-btn" id="eventDetailsDownload"><i data-feather="download"></i><span>Download</span></button></div>
+      <div class="events-modal__actions events-modal__actions--request-details"><button type="button" class="events-secondary-btn" id="eventDetailsDone">Close</button><div class="events-detail-workflow-actions" id="eventDetailsStatus" aria-live="polite"></div><button type="button" class="events-primary-btn" id="eventDetailsDownload"><i data-feather="download"></i><span>Download</span></button></div>
     </section>
   </div>
   <div class="events-modal-overlay" id="eventWorkflowAuthModal" hidden aria-hidden="true">
     <form class="events-modal events-modal--authorization events-modal--workflow-auth" id="eventWorkflowAuthForm" role="dialog" aria-modal="true" aria-labelledby="eventWorkflowAuthTitle">
       <button class="events-modal__close" id="eventWorkflowAuthClose" type="button" aria-label="Close Admin verification">×</button>
-      <div class="events-modal__header">
+      <div class="events-modal__header events-modal__header--compact">
         <div>
           <span class="events-eyebrow"><i data-feather="shield"></i> Admin verification</span>
           <h2 id="eventWorkflowAuthTitle">Authorization required</h2>
-          <p id="eventWorkflowAuthText">Enter the Events Admin password to continue.</p>
         </div>
-        <span class="events-admin-authorization-icon" aria-hidden="true"><i data-feather="lock"></i></span>
       </div>
       <label class="events-field">
         <span>Admin password <em>*</em></span>
@@ -116,13 +114,11 @@
   <div class="events-modal-overlay" id="eventWorkflowConfirmModal" hidden aria-hidden="true">
     <section class="events-modal events-modal--workflow-confirm" role="dialog" aria-modal="true" aria-labelledby="eventWorkflowConfirmTitle">
       <button class="events-modal__close" id="eventWorkflowConfirmClose" type="button" aria-label="Close confirmation">×</button>
-      <div class="events-modal__header">
+      <div class="events-modal__header events-modal__header--compact">
         <div>
           <span class="events-eyebrow"><i data-feather="check-circle"></i> Confirm status change</span>
           <h2 id="eventWorkflowConfirmTitle">Confirm update</h2>
-          <p id="eventWorkflowConfirmText">Please confirm this request workflow update.</p>
         </div>
-        <span class="events-workflow-confirm-icon" aria-hidden="true"><i data-feather="repeat"></i></span>
       </div>
       <div class="events-workflow-confirm-note" id="eventWorkflowConfirmNote"></div>
       <div class="events-modal__actions">
@@ -133,6 +129,6 @@
   </div>
 
   <script src="/js/common-ui.js?v=events-global-search-v1"></script>
-  <script src="/js/events.js?v=events-request-workflow-actions-v2"></script>
+  <script src="/js/events.js?v=events-request-details-clean-workflow-footer-v1"></script>
 </body>
 </html>
