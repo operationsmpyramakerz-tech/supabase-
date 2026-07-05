@@ -2390,7 +2390,6 @@ if (document.querySelector('.sidebar')) {
     if (!pages.length || !trigger) return closeEventsSubpageFlyout();
     const current = sidebarPath(window.location.pathname);
     panel.innerHTML = `
-      <div class="events-subpage-flyout__heading"><i data-feather="calendar"></i><span>Events</span></div>
       <div class="events-subpage-flyout__list">
         ${pages.map((page) => `
           <a class="events-subpage-flyout__link${current === page.route || current.startsWith(`${page.route}/`) ? ' is-active' : ''}" href="${page.route}" role="menuitem">
@@ -2449,8 +2448,8 @@ if (document.querySelector('.sidebar')) {
       }
     }
 
-    // Existing Events top tabs/actions stay available only for their own child page.
-    document.querySelectorAll('.events-subnav a[href], a[href="/events/new"], a[href="/events/requests"][data-events-optional], a[href="/events/components"][data-events-optional]').forEach((link) => {
+    // Keep any optional Event-page action links aligned with the matching child-page access.
+    document.querySelectorAll('a[href="/events/new"], a[href="/events/requests"][data-events-optional], a[href="/events/components"][data-events-optional]').forEach((link) => {
       const route = sidebarPath(link.getAttribute('href') || '');
       const pageRoute = route === '/events/new' ? '/events/requests' : route;
       const allowedForLink = allowedRoutes.has(pageRoute);
@@ -2478,10 +2477,18 @@ if (document.querySelector('.sidebar')) {
     const panel = document.getElementById('events-subpage-flyout');
     const parent = document.querySelector('a.nav-link[href="/events"]');
     if (!panel?.classList.contains('is-open')) return;
-    if (panel.contains(event.target) || parent?.contains(event.target)) return;
+
+    // Close immediately when a child page is selected. This also clears the
+    // flyout before navigation is cached by the browser/PWA back-forward cache.
+    if (panel.contains(event.target)) {
+      if (event.target.closest?.('.events-subpage-flyout__link')) closeEventsSubpageFlyout();
+      return;
+    }
+    if (parent?.contains(event.target)) return;
     closeEventsSubpageFlyout();
   });
   window.addEventListener('resize', () => closeEventsSubpageFlyout());
+  window.addEventListener('pagehide', () => closeEventsSubpageFlyout());
   window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeEventsSubpageFlyout(); });
 
   // أظهر المسموح وأخفِ غير المسموح (حتمي)
