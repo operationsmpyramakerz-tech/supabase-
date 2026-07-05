@@ -786,6 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Task Management parent is legacy-broad only. Child pages must remain
       // independent so View/Edit/Admin levels never leak between the two views.
       taskmanagement: [],
+      taskmanagementalltasks: ['alltasks', 'taskmanagement'],
       taskmanagementmytasks: ['mytasks', 'taskmanagement'],
       taskmanagementdelegatedtasks: ['delegatedtasks', 'taskmanagement'],
     };
@@ -999,8 +1000,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
       urls.push('/api/tasks?scope=mine', '/api/tasks/users');
     }
-    if (hasAllowedPage(allowedPages, ['Task Management', '/task-management'])) {
-      urls.push('/api/task-management', '/api/task-management/meta');
+    if (hasAllowedPage(allowedPages, ['Task Management', 'All Tasks', 'My Tasks', 'Delegated Tasks', '/task-management', '/task-management/all-tasks', '/task-management/my-tasks', '/task-management/delegated-tasks'])) {
+      const taskManagementView = hasAllowedPage(allowedPages, ['All Tasks', '/task-management/all-tasks'])
+        ? 'all'
+        : (hasAllowedPage(allowedPages, ['My Tasks', '/task-management/my-tasks']) ? 'my' : 'delegated');
+      urls.push(`/api/task-management?view=${taskManagementView}`, `/api/task-management/meta?view=${taskManagementView}`);
     }
     if (hasAllowedPage(allowedPages, ['KPIs', 'KPI', '/kpis'])) {
       urls.push('/api/kpis/meta', '/api/kpis/reviews');
@@ -2214,6 +2218,8 @@ if (document.querySelector('.sidebar')) {
     'department tickets': 'a[href="/task-management"]',
     'department-tickets': 'a[href="/task-management"]',
     'departmenttickets': 'a[href="/task-management"]',
+    'all tasks': 'a[href="/task-management"]',
+    'all task': 'a[href="/task-management"]',
     'my tasks': 'a[href="/task-management"]',
     'my task': 'a[href="/task-management"]',
     'delegated tasks': 'a[href="/task-management"]',
@@ -2314,7 +2320,9 @@ if (document.querySelector('.sidebar')) {
         .map((value) => String(value || '').toLowerCase().replace(/[^a-z0-9/]+/g, ''))
         .filter(Boolean);
       if (tokens.some((value) => ['taskmanagement', 'departmenttickets', '/taskmanagement', '/departmenttickets'].includes(value))) {
-        ['Task Management', 'My Tasks', 'Delegated Tasks', '/task-management', '/task-management/my-tasks', '/task-management/delegated-tasks'].forEach((value) => addAllowedPageValue(merged, value));
+        ['Task Management', 'All Tasks', 'My Tasks', 'Delegated Tasks', '/task-management', '/task-management/all-tasks', '/task-management/my-tasks', '/task-management/delegated-tasks'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['alltasks', 'taskmanagementalltasks', '/taskmanagement/alltasks'].includes(value))) {
+        ['All Tasks', '/task-management/all-tasks'].forEach((value) => addAllowedPageValue(merged, value));
       } else if (tokens.some((value) => ['mytasks', 'taskmanagementmytasks', '/taskmanagement/mytasks'].includes(value))) {
         ['My Tasks', '/task-management/my-tasks'].forEach((value) => addAllowedPageValue(merged, value));
       } else if (tokens.some((value) => ['delegatedtasks', 'taskmanagementdelegatedtasks', '/taskmanagement/delegatedtasks'].includes(value))) {
@@ -2489,6 +2497,7 @@ if (document.querySelector('.sidebar')) {
   }
 
   const TASK_MANAGEMENT_SUBPAGE_CONFIG = Object.freeze([
+    { key: 'all-tasks', name: 'All Tasks', route: '/task-management/all-tasks', label: 'All Tasks', icon: 'layers' },
     { key: 'my-tasks', name: 'My Tasks', route: '/task-management/my-tasks', label: 'My Tasks', icon: 'check-square' },
     { key: 'delegated-tasks', name: 'Delegated Tasks', route: '/task-management/delegated-tasks', label: 'Delegated Tasks', icon: 'send' },
   ]);

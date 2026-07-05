@@ -2299,7 +2299,7 @@
       return;
     }
     const eventChildKeys = new Set(['event-calendar', 'event-requests', 'event-components']);
-    const taskManagementChildKeys = new Set(['task-management-my-tasks', 'task-management-delegated-tasks', 'my-tasks', 'delegated-tasks']);
+    const taskManagementChildKeys = new Set(['task-management-all-tasks', 'task-management-my-tasks', 'task-management-delegated-tasks', 'all-tasks', 'my-tasks', 'delegated-tasks']);
     const isEventsChild = (row) => eventChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
     const isTaskManagementChild = (row) => taskManagementChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
     const renderRow = (row, { isSubpage = false } = {}) => {
