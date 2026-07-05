@@ -19,6 +19,8 @@
     submitting: false,
     governorateRates: [],
     governorateRatesAuthorized: false,
+    editingEventId: '',
+    editingEvent: null,
   };
 
   const els = {
@@ -459,6 +461,7 @@
     const selectedEndRaw = dateKeyFrom(field('eventEndDate')?.value);
     const selectedEnd = selectedEndRaw && selectedEndRaw >= selectedStart ? selectedEndRaw : selectedStart;
     return state.scheduledEvents.filter((event) => {
+      if (state.editingEventId && String(event?.id || '') === state.editingEventId) return false;
       if (String(event?.status || '') === 'cancelled') return false;
       const start = dateKeyFrom(event?.eventStartDate);
       const end = dateKeyFrom(event?.eventEndDate) || start;
@@ -707,6 +710,7 @@
   }
 
   function initializeBlankDateInputs() {
+    if (state.editingEventId) return;
     [field('eventStartDate'), field('eventEndDate')].forEach((input) => {
       if (!input) return;
       input.value = '';
@@ -797,7 +801,7 @@
     if (!els.submit) return;
     els.submit.disabled = state.submitting;
     const label = els.submit.querySelector('span');
-    if (label) label.textContent = state.submitting ? 'Submitting…' : 'Submit Event Request';
+    if (label) label.textContent = state.submitting ? (state.editingEventId ? 'Updating…' : 'Submitting…') : (state.editingEventId ? 'Update Event Request' : 'Submit Event Request');
   }
 
   async function submit(event) {
@@ -810,16 +814,98 @@
     if (error) return;
     setSubmitting(true);
     try {
-      const response = await fetch('/api/events', {
-        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      const editId = String(state.editingEventId || '').trim();
+      const response = await fetch(editId ? `/api/events/${encodeURIComponent(editId)}` : '/api/events', {
+        method: editId ? 'PATCH' : 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Failed to submit event request.');
-      toast('success', 'Events', 'Event request submitted successfully.');
-      window.location.assign('/events/calendar');
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || (editId ? 'Failed to update event request.' : 'Failed to submit event request.'));
+      toast('success', 'Events', editId ? 'Event request updated successfully.' : 'Event request submitted successfully.');
+      window.location.assign('/events/requests');
     } catch (submitError) {
       if (els.error) els.error.textContent = submitError?.message || 'Could not submit event request.';
       setSubmitting(false);
+    }
+  }
+
+  function toDateTimeLocal(value) {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return '';
+    const pad = (number) => String(number).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function setFieldValue(id, value) {
+    const input = field(id);
+    if (input) input.value = value == null ? '' : String(value);
+  }
+
+  function clearRequestRows() {
+    [els.projects, els.marketing, els.venueReqs].forEach((root) => root?.querySelectorAll('.events-repeat-row').forEach((row) => row.remove()));
+    refreshEmptyStates();
+  }
+
+  function populateEditRequest(event) {
+    state.editingEvent = event || null;
+    state.editingEventId = String(event?.id || '').trim();
+    if (!state.editingEventId) return;
+    document.title = 'Edit Event Request | Operations Hub';
+    document.querySelector('.page-title')?.replaceChildren('Edit Event Request');
+    const submitLabel = els.submit?.querySelector('span');
+    if (submitLabel) submitLabel.textContent = 'Update Event Request';
+    document.querySelector('.events-back-link')?.setAttribute('href', '/events/requests');
+
+    setFieldValue('eventName', event.eventName);
+    setFieldValue('expectedAttendees', event.expectedAttendees || '');
+    setFieldValue('eventStartDate', toDateTimeLocal(event.eventStartDate));
+    setFieldValue('eventEndDate', toDateTimeLocal(event.eventEndDate));
+    setFieldValue('organizationName', event.organizationName);
+    setFieldValue('contactPerson', event.contactPerson);
+    setFieldValue('contactPhone', event.contactPhone);
+    setFieldValue('contactEmail', event.contactEmail);
+    setFieldValue('audience', event.audience);
+    setFieldValue('venueName', event.venueName);
+    setFieldValue('venueType', event.venueType);
+    setFieldValue('locationUrl', event.locationUrl);
+    setFieldValue('venueSetupTime', toDateTimeLocal(event.venueSetupTime));
+    setFieldValue('venueNotes', event.venueNotes);
+    const power = field('requiresPower'); const internet = field('requiresInternet'); const sound = field('requiresSoundSystem');
+    if (power) power.checked = !!event.requiresPower;
+    if (internet) internet.checked = !!event.requiresInternet;
+    if (sound) sound.checked = !!event.requiresSoundSystem;
+
+    const typeCode = String(event.eventType || 'other').trim();
+    const typeInput = field('eventType');
+    if (typeInput) {
+      const inOptions = Array.from(els.eventTypeMenu?.querySelectorAll('[data-events-select-option]') || []).some((item) => item.dataset.value === typeCode);
+      setModernSelectValue(typeInput, inOptions ? typeCode : 'other');
+      setFieldValue('eventTypeCustom', event.eventTypeCustom || '');
+    }
+    const governorate = field('governorate');
+    if (governorate) setModernSelectValue(governorate, event.governorate || '', { dispatch: true });
+
+    clearRequestRows();
+    (Array.isArray(event.projects) ? event.projects : []).forEach((item) => projectRow(item));
+    (Array.isArray(event.marketingMaterials) ? event.marketingMaterials : []).forEach((item) => componentRow('marketing', item));
+    (Array.isArray(event.venueRequirements) ? event.venueRequirements : []).forEach((item) => componentRow('venue-requirements', item));
+    renderCostSummary();
+    setLocationValidation(String(event.locationUrl || '').trim() && !isGoogleMapsUrl(event.locationUrl) ? 'Paste a Google Maps link. Example: https://www.google.com/maps/... or https://maps.app.goo.gl/...' : '');
+    renderDateConflict({ notify: false });
+    icons();
+  }
+
+  async function loadEditRequest() {
+    const requestedId = new URLSearchParams(window.location.search).get('edit') || '';
+    const id = String(requestedId || '').trim();
+    if (!id) return;
+    try {
+      const response = await fetch(`/api/events/${encodeURIComponent(id)}?_ts=${Date.now()}`, { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || 'Could not load event request for editing.');
+      populateEditRequest(data.event || {});
+    } catch (error) {
+      toast('error', 'Events', error?.message || 'Could not load event request for editing.');
+      window.location.replace('/events/requests');
     }
   }
 
@@ -876,10 +962,11 @@
     refreshEmptyStates();
     renderCostSummary();
     await Promise.all([loadEventTypes(), loadComponents(), loadScheduledEvents(), loadGovernorateRates()]);
+    await loadEditRequest();
     renderCostSummary();
   });
 
   window.addEventListener('pageshow', (event) => {
-    if (!event.persisted) initializeBlankDateInputs();
+    if (!event.persisted && !state.editingEventId) initializeBlankDateInputs();
   });
 })();
