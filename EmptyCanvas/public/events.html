@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/events.css?v=events-request-details-clean-workflow-footer-v1" rel="stylesheet" />
+  <link href="/css/events.css?v=events-request-action-menu-admin-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading events-page events-requests-page">
@@ -80,12 +80,12 @@
 
   <div class="events-modal-overlay" id="eventDetailsModal" hidden aria-hidden="true">
     <section class="events-modal events-modal--detail" role="dialog" aria-modal="true" aria-labelledby="eventDetailsTitle">
+      <h2 class="events-visually-hidden" id="eventDetailsTitle">Event request details</h2>
       <div class="events-modal__menu-wrap" id="eventDetailsActionWrap" hidden>
         <button class="events-modal__more" id="eventDetailsActions" type="button" aria-label="More request actions" aria-haspopup="menu" aria-expanded="false"><i data-feather="more-vertical"></i></button>
         <div class="events-modal__menu" id="eventDetailsActionsMenu" role="menu" hidden></div>
       </div>
       <button class="events-modal__close" id="eventDetailsClose" type="button" aria-label="Close event details">×</button>
-      <div class="events-modal__header events-modal__header--request-details"><div><h2 id="eventDetailsTitle">Event Details</h2></div></div>
       <div class="events-detail-content" id="eventDetailsContent"></div>
       <div class="events-modal__actions events-modal__actions--request-details"><button type="button" class="events-secondary-btn" id="eventDetailsDone">Close</button><div class="events-detail-workflow-actions" id="eventDetailsStatus" aria-live="polite"></div><button type="button" class="events-primary-btn" id="eventDetailsDownload"><i data-feather="download"></i><span>Download</span></button></div>
     </section>
@@ -129,6 +129,6 @@
   </div>
 
   <script src="/js/common-ui.js?v=events-global-search-v1"></script>
-  <script src="/js/events.js?v=events-request-details-clean-workflow-footer-v1"></script>
+  <script src="/js/events.js?v=events-request-action-menu-admin-v2"></script>
 </body>
 </html>
