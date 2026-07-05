@@ -259,11 +259,12 @@ body.task-management-page{--tm-ink:#151922;--tm-muted:#6b7280;--tm-line:#e7e9ee;
 .task-management-page .tm-builder-socket--in{left:-9px;}
 .task-management-page .tm-builder-socket--out{right:-9px;}
 .task-management-page .tm-builder-block.is-connect-source .tm-builder-socket--out{border-color:#2286ff;background:#1f8cff;box-shadow:0 0 0 6px rgba(31,140,255,.19),0 0 16px rgba(31,140,255,.55);animation:tmSocketPulse .9s ease-in-out infinite;}
-.task-management-page .tm-builder-arrow{pointer-events:stroke;cursor:pointer;stroke-width:4.5px;stroke-opacity:.92;}
-.task-management-page .tm-builder-arrow:hover,.task-management-page .tm-builder-arrow.is-selected{stroke:#2188ff;stroke-width:6px;filter:drop-shadow(0 2px 4px rgba(33,136,255,.32));}
-.task-management-page .tm-builder-edge-delete{position:absolute;z-index:6;display:grid;place-items:center;width:32px;height:32px;margin:0;border:2px solid #fff;border-radius:50%;background:#e03f4f;color:#fff;box-shadow:0 7px 18px rgba(188,45,60,.3);transform:translate(-50%,-50%);cursor:pointer;transition:transform .16s ease,background .16s ease;}
-.task-management-page .tm-builder-edge-delete:hover{background:#c72f40;transform:translate(-50%,-50%) scale(1.09);}
-.task-management-page .tm-builder-edge-delete svg{width:16px;height:16px;}
+.task-management-page .tm-builder-board .tm-arrow-marker{fill:#b8bec8;}
+.task-management-page .tm-builder-arrow{pointer-events:stroke;cursor:pointer;stroke:#b8bec8;stroke-width:1.55px;stroke-opacity:.9;filter:none;}
+.task-management-page .tm-builder-arrow:hover,.task-management-page .tm-builder-arrow.is-selected{stroke:#8e97a4;stroke-width:2.15px;filter:none;}
+.task-management-page .tm-builder-edge-delete{position:absolute;z-index:6;display:grid;place-items:center;width:20px;height:20px;margin:0;border:1px solid #fff;border-radius:50%;background:#9ba3ae;color:#fff;box-shadow:0 3px 8px rgba(55,65,81,.18);transform:translate(-50%,-50%);cursor:pointer;transition:transform .16s ease,background .16s ease,box-shadow .16s ease;}
+.task-management-page .tm-builder-edge-delete:hover{background:#737d89;box-shadow:0 4px 10px rgba(55,65,81,.24);transform:translate(-50%,-50%) scale(1.05);}
+.task-management-page .tm-builder-edge-delete svg{width:11px;height:11px;stroke-width:2.2;}
 @keyframes tmSocketPulse{0%,100%{box-shadow:0 0 0 5px rgba(49,145,255,.16);}50%{box-shadow:0 0 0 9px rgba(49,145,255,.05),0 0 18px rgba(49,145,255,.42);}}
 @media(max-width:900px){
   .task-management-page .tm-builder-zoom{flex:0 0 auto;}
