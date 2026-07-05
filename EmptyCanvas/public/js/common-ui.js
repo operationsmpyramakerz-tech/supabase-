@@ -2193,7 +2193,11 @@ if (document.querySelector('.sidebar')) {
     'saved quotations': 'a[href="/proposals"]',
     'tasks': 'a[href="/tasks"]',
     'task management': 'a[href="/task-management"]',
+    'task-management': 'a[href="/task-management"]',
+    'taskmanagement': 'a[href="/task-management"]',
     'department tickets': 'a[href="/task-management"]',
+    'department-tickets': 'a[href="/task-management"]',
+    'departmenttickets': 'a[href="/task-management"]',
     'kpis': 'a[href="/kpis"]',
     'kpi': 'a[href="/kpis"]',
     'key performance indicators': 'a[href="/kpis"]',
@@ -2248,44 +2252,50 @@ if (document.querySelector('.sidebar')) {
   const toKey = (s) => String(s || '').trim().toLowerCase();
   const normPath = (s) => toKey(s).replace(/\/+$/, ''); // يشيل / في الآخر لو موجود
 
-  // Page access is the source of truth. Some older Supabase view definitions
-  // can return a stale legacy allowed-pages list even when a new page is
-  // enabled in the Page Access matrix. Merge the Events entitlement from the
-  // detailed matrix before filtering the sidebar.
-  function pageAccessGrantsEvents(pageAccess) {
+  // Page access is the source of truth. The legacy allowed-pages list can be
+  // stale after a newly added app_pages record is enabled for a user, so merge
+  // every enabled page-access row before filtering the sidebar.
+  function enabledPageAccessRows(pageAccess) {
     const rows = Array.isArray(pageAccess?.pages)
       ? pageAccess.pages
       : (Array.isArray(pageAccess) ? pageAccess : []);
 
-    return rows.some((row) => {
-      if (!row || row.isEnabled === false || row.is_enabled === false || row.enabled === false) return false;
-      const candidates = [
-        row.pageName, row.page_name,
-        row.pageKey, row.page_key,
-        row.routePath, row.route_path,
-      ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
-
-      return candidates.some((value) => {
-        const compact = value.replace(/[^a-z0-9/]+/g, '');
-        return compact === 'events'
-          || compact === 'eventrequests'
-          || compact === 'eventcomponents'
-          || compact === '/events'
-          || compact === '/events/new'
-          || compact === '/events/components';
-      });
+    return rows.filter((row) => {
+      if (!row) return false;
+      return row.isEnabled !== false && row.is_enabled !== false && row.enabled !== false;
     });
+  }
+
+  function addAllowedPageValue(target, value) {
+    const clean = String(value || '').trim();
+    if (!clean) return;
+    const exists = target.some((item) => normPath(item) === normPath(clean) || toKey(item) === toKey(clean));
+    if (!exists) target.push(clean);
   }
 
   function mergePageAccessIntoAllowedPages(allowed, pageAccess) {
     const merged = Array.isArray(allowed) ? allowed.slice() : [];
-    if (pageAccessGrantsEvents(pageAccess)) {
-      ['Events', 'Event Requests', 'Event Components', '/events'].forEach((value) => {
-        if (!merged.some((item) => normPath(item) === normPath(value) || toKey(item) === toKey(value))) {
-          merged.push(value);
-        }
-      });
-    }
+
+    enabledPageAccessRows(pageAccess).forEach((row) => {
+      // Add all identifiers because older app_pages views sometimes return only
+      // one of page_name, page_key, or route_path for an enabled page.
+      [
+        row.pageName, row.page_name,
+        row.pageKey, row.page_key,
+        row.routePath, row.route_path,
+        ...(Array.isArray(row.aliases) ? row.aliases : []),
+      ].forEach((value) => addAllowedPageValue(merged, value));
+
+      // Events has historically behaved as one shared entitlement. Keep that
+      // existing behavior while the rest of pages are merged generically.
+      const tokens = [row.pageName, row.page_name, row.pageKey, row.page_key, row.routePath, row.route_path]
+        .map((value) => String(value || '').toLowerCase().replace(/[^a-z0-9/]+/g, ''))
+        .filter(Boolean);
+      if (tokens.some((value) => ['events', 'eventrequests', 'eventcomponents', '/events', '/events/new', '/events/components'].includes(value))) {
+        ['Events', 'Event Requests', 'Event Components', '/events'].forEach((value) => addAllowedPageValue(merged, value));
+      }
+    });
+
     return merged;
   }
 
