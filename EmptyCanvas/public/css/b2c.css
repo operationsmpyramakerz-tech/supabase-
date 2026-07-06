@@ -650,3 +650,96 @@ body.b2c-builder-reordering *{
   .b2c-column-card{grid-template-columns:36px minmax(0,1fr)}
   .b2c-column-actions{grid-column:2/3;grid-row:auto;justify-content:flex-start}
 }
+
+/* --------------------------------------------------------------------------
+   B2C table builder – precise drag handle and compact neutral icon actions
+   -------------------------------------------------------------------------- */
+.b2c-dialog--builder .b2c-dialog__header--builder{
+  min-height:20px;
+  padding-right:42px;
+}
+.b2c-dialog--builder .b2c-dialog__close{
+  width:30px;
+  height:30px;
+  min-width:30px;
+  min-height:30px;
+  padding:0;
+  border:1px solid #e6e8ee;
+  border-radius:9px;
+  background:#fff;
+  color:#7e8795;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+  display:grid;
+  place-items:center;
+}
+.b2c-dialog--builder .b2c-dialog__close:hover{
+  background:#f8f9fb;
+  border-color:#dce0e8;
+  color:#4d5665;
+}
+.b2c-dialog--builder .b2c-dialog__close svg{
+  width:15px;
+  height:15px;
+}
+.b2c-column-card{
+  cursor:default;
+}
+.b2c-column-actions{
+  justify-content:flex-end;
+  gap:6px;
+}
+.b2c-column-actions button{
+  width:30px;
+  height:30px;
+  min-width:30px;
+  min-height:30px;
+  padding:0;
+  border:1px solid #e5e8ef;
+  border-radius:9px;
+  background:#fff;
+  color:#858d9a;
+  display:grid;
+  place-items:center;
+  box-shadow:none;
+}
+.b2c-column-actions button:hover{
+  background:#f8f9fb;
+  border-color:#dce0e8;
+  color:#596270;
+}
+.b2c-column-actions button:last-child{
+  color:#a76e76;
+  border-color:#e7e8ed;
+  background:#fff;
+}
+.b2c-column-actions button:last-child:hover{
+  color:#925861;
+  border-color:#dfe1e6;
+  background:#fafafa;
+}
+.b2c-column-actions button svg{
+  width:14px;
+  height:14px;
+  display:block;
+}
+.b2c-column-drag-handle{
+  cursor:grab !important;
+  touch-action:none;
+}
+.b2c-column-drag-handle:active{
+  cursor:grabbing !important;
+}
+.b2c-column-drag-handle svg{
+  stroke-width:2.35;
+}
+.b2c-column-card.is-dragging{
+  border-color:#a79ae9;
+  box-shadow:0 26px 55px rgba(38,31,86,.25);
+  transform:rotate(.18deg) scale(1.012);
+}
+@media(max-width:700px){
+  .b2c-column-actions{
+    justify-content:flex-end;
+  }
+}
+
