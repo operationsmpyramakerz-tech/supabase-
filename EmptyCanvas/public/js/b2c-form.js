@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  const SELECT_TYPES = new Set(['select','status']);
-  const READ_ONLY_TYPES = new Set(['formula','rollup','id','button']);
+  const SELECT_TYPES = new Set(['select']);
+  const READ_ONLY_TYPES = new Set(['formula']);
   const state = { forms: [], databases: [], activeForm: null, fields: [], draft: [], currentFiles: {} };
   const $=(selector,root=document)=>root.querySelector(selector); const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
   const escapeHtml=(value)=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); const clean=(value)=>String(value??'').trim();
@@ -12,7 +12,7 @@
   function open(kind){const node=$(`#b2c${kind}Overlay`);if(!node)return;node.hidden=false;node.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';icons();}
   function close(kind){const node=$(`#b2c${kind}Overlay`);if(!node)return;node.hidden=true;node.setAttribute('aria-hidden','true');document.body.style.overflow='';}
   function options(field){return field?.options&&typeof field.options==='object'?field.options:{};}
-  function typeLabel(type){return ({text:'Text',number:'Number',select:'Select',multi_select:'Multi-select',status:'Status',date:'Date',person:'Person',files:'Files & media',checkbox:'Checkbox',url:'URL',email:'Email',phone:'Phone',relation:'Relation',formula:'Formula',rollup:'Rollup',id:'ID',button:'Button',place:'Place'})[type]||'Text';}
+  function typeLabel(type){return ({text:'Text',number:'Number',select:'Select',multi_select:'Multi-select',date:'Date',files:'Files & media',checkbox:'Checkbox',url:'URL',email:'Email',phone:'Phone',formula:'Formula',place:'Place'})[type]||'Text';}
   function conditionPass(condition,values){if(!condition?.enabled)return true;const value=values?.[condition.fieldKey];const valuesArray=Array.isArray(value)?value:[];switch(condition.operator){case'equals':return String(value??'')===String(condition.value??'');case'not_equals':return String(value??'')!==String(condition.value??'');case'contains':return valuesArray.includes(String(condition.value??''))||String(value??'').includes(String(condition.value??''));case'is_checked':return value===true||String(value).toLowerCase()==='true';case'not_checked':return !(value===true||String(value).toLowerCase()==='true');case'has_value':return Array.isArray(value)?value.length>0:clean(value)!=='';case'is_empty':return Array.isArray(value)?value.length===0:clean(value)==='';default:return true;}}
   function getInputValue(field,root=document){const input=$(`[data-form-field="${CSS.escape(field.key)}"]`,root);if(field.type==='checkbox')return!!input?.checked;if(field.type==='multi_select')return Array.from(input?.selectedOptions||[]).map((option)=>option.value);return input?.value??'';}
   function allCurrentValues(){const values={};state.fields.forEach((field)=>{if(field.type==='files')values[field.key]=[];else values[field.key]=getInputValue(field);});return values;}
