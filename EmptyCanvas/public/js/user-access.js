@@ -2300,8 +2300,10 @@
     }
     const eventChildKeys = new Set(['event-calendar', 'event-requests', 'event-components']);
     const taskManagementChildKeys = new Set(['task-management-all-tasks', 'task-management-my-tasks', 'task-management-delegated-tasks', 'all-tasks', 'my-tasks', 'delegated-tasks']);
+    const b2cChildKeys = new Set(['b2c-customer-database', 'customer-database', 'b2c-customer-form', 'customer-form']);
     const isEventsChild = (row) => eventChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
     const isTaskManagementChild = (row) => taskManagementChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
+    const isB2CChild = (row) => b2cChildKeys.has(String(row?.pageKey || '').trim().toLowerCase());
     const renderRow = (row, { isSubpage = false } = {}) => {
       const enabled = !!row.isEnabled;
       return `
@@ -2341,8 +2343,10 @@
     // under their parent modules so the hierarchy is obvious in Allowed Pages.
     const eventRows = rows.filter(isEventsChild);
     const taskManagementRows = rows.filter(isTaskManagementChild);
+    const b2cRows = rows.filter(isB2CChild);
     const firstEventIndex = rows.findIndex(isEventsChild);
     const firstTaskManagementIndex = rows.findIndex(isTaskManagementChild);
+    const firstB2CIndex = rows.findIndex(isB2CChild);
     const markup = [];
     rows.forEach((row, index) => {
       if (index === firstEventIndex && eventRows.length) {
@@ -2361,7 +2365,15 @@
           </section>
         `);
       }
-      if (!isEventsChild(row) && !isTaskManagementChild(row)) markup.push(renderRow(row));
+      if (index === firstB2CIndex && b2cRows.length) {
+        markup.push(`
+          <section class="ua-page-access-group ua-page-access-group--b2c" aria-label="B2C sub-pages">
+            <div class="ua-page-access-group__heading"><i data-feather="users"></i><span>B2C</span><small>Sub-pages</small></div>
+            <div class="ua-page-access-group__rows">${b2cRows.map((b2cRow) => renderRow(b2cRow, { isSubpage: true })).join('')}</div>
+          </section>
+        `);
+      }
+      if (!isEventsChild(row) && !isTaskManagementChild(row) && !isB2CChild(row)) markup.push(renderRow(row));
     });
     els.pageAccessList.innerHTML = markup.join('');
     hydrateIcons(els.pageAccessList);

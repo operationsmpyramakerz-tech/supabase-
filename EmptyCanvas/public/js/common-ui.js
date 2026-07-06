@@ -789,6 +789,9 @@ document.addEventListener('DOMContentLoaded', () => {
       taskmanagementalltasks: ['alltasks', 'taskmanagement'],
       taskmanagementmytasks: ['mytasks', 'taskmanagement'],
       taskmanagementdelegatedtasks: ['delegatedtasks', 'taskmanagement'],
+      b2c: [],
+      b2cdatabase: ['customerdatabase', 'b2c'],
+      b2cform: ['customerform', 'b2c'],
     };
     const wants = new Set([routeKey, ...(known[routeKey] || [])]);
     return candidates.some((candidate) => wants.has(candidate));
@@ -2257,6 +2260,13 @@ if (document.querySelector('.sidebar')) {
     // ===== B2B =====
     'b2b': 'a[href="/b2b"]',
 
+    // ===== B2C parent + independently authorized child pages =====
+    'b2c': 'a[href="/b2c"]',
+    'customer database': 'a[href="/b2c/database"]',
+    'b2c customer database': 'a[href="/b2c/database"]',
+    'customer form': 'a[href="/b2c/form"]',
+    'b2c customer form': 'a[href="/b2c/form"]',
+
     // ===== Expenses =====
     'my expenses': 'a[href="/expenses"]',
     'expenses': 'a[href="/expenses"]',
@@ -2335,6 +2345,12 @@ if (document.querySelector('.sidebar')) {
         ['Event Requests', '/events/requests'].forEach((value) => addAllowedPageValue(merged, value));
       } else if (tokens.some((value) => ['eventcomponents', '/events/components'].includes(value))) {
         ['Event Components', '/events/components'].forEach((value) => addAllowedPageValue(merged, value));
+            } else if (tokens.some((value) => ['b2c', '/b2c', 'businesstocustomer'].includes(value))) {
+        ['B2C', 'Customer Database', 'Customer Form', '/b2c', '/b2c/database', '/b2c/form'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['customerdatabase', 'b2ccustomerdatabase', '/b2c/database'].includes(value))) {
+        ['Customer Database', '/b2c/database'].forEach((value) => addAllowedPageValue(merged, value));
+      } else if (tokens.some((value) => ['customerform', 'b2ccustomerform', '/b2c/form'].includes(value))) {
+        ['Customer Form', '/b2c/form'].forEach((value) => addAllowedPageValue(merged, value));
       }
     });
 
@@ -2593,6 +2609,115 @@ if (document.querySelector('.sidebar')) {
     }
   }
 
+
+  const B2C_SUBPAGE_CONFIG = Object.freeze([
+    { key: 'database', name: 'Customer Database', route: '/b2c/database', label: 'Customer Database', icon: 'database' },
+    { key: 'form', name: 'Customer Form', route: '/b2c/form', label: 'Customer Form', icon: 'clipboard' },
+  ]);
+
+  function b2cSubpagesAllowed(allowed = []) {
+    const set = new Set((allowed || []).flatMap((value) => {
+      const raw = String(value || '').trim();
+      const normalized = normPath(raw);
+      return [toKey(raw), normalized, normalized.startsWith('/') ? normalized.slice(1) : `/${normalized}`];
+    }));
+    const legacyBroad = set.has('b2c') || set.has('/b2c') || set.has('businesstocustomer');
+    return B2C_SUBPAGE_CONFIG.filter((page) => legacyBroad || set.has(toKey(page.name)) || set.has(normPath(page.route)));
+  }
+
+  function ensureB2CSubpageFlyout() {
+    let panel = document.getElementById('b2c-subpage-flyout');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'b2c-subpage-flyout';
+    panel.className = 'b2c-subpage-flyout';
+    panel.hidden = true;
+    panel.setAttribute('role', 'menu');
+    panel.setAttribute('aria-label', 'B2C pages');
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  function closeB2CSubpageFlyout() {
+    const panel = document.getElementById('b2c-subpage-flyout');
+    if (!panel) return;
+    panel.hidden = true;
+    panel.classList.remove('is-open');
+    try { document.querySelector('a.nav-link[href="/b2c"]')?.setAttribute('aria-expanded', 'false'); } catch {}
+  }
+
+  function renderB2CSubpageFlyout(pages = [], trigger) {
+    const panel = ensureB2CSubpageFlyout();
+    if (!pages.length || !trigger) return closeB2CSubpageFlyout();
+    const current = sidebarPath(window.location.pathname);
+    panel.innerHTML = `
+      <div class="b2c-subpage-flyout__list">
+        ${pages.map((page) => `
+          <a class="b2c-subpage-flyout__link${current === page.route || current.startsWith(`${page.route}/`) ? ' is-active' : ''}" href="${page.route}" role="menuitem">
+            <i data-feather="${page.icon}"></i><span>${page.label}</span>
+          </a>
+        `).join('')}
+      </div>
+    `;
+    const rect = trigger.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - 248, Math.max(12, rect.right + 10));
+    const top = Math.min(window.innerHeight - 170, Math.max(12, rect.top - 10));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.hidden = false;
+    panel.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    if (window.feather) feather.replace({ width: 17, height: 17 });
+  }
+
+  function syncB2CSubpageNavigation(allowed = []) {
+    const pages = b2cSubpagesAllowed(allowed);
+    const parent = document.querySelector('a.nav-link[href="/b2c"]');
+    const parentLi = parent?.closest('li');
+    const currentRoute = sidebarPath(window.location.pathname);
+    if (!parent) return;
+    if (pages.length) showEl(parentLi || parent);
+    else hideEl(parentLi || parent);
+    parent.dataset.b2cSubpageCount = String(pages.length);
+    parent.href = '/b2c';
+    parent.setAttribute('aria-haspopup', pages.length > 1 ? 'menu' : 'false');
+    parent.setAttribute('aria-expanded', 'false');
+    parent.title = pages.length === 1 ? `B2C · ${pages[0].label}` : 'B2C';
+    parent.setAttribute('aria-label', parent.title);
+    parent.classList.toggle('active', pages.some((page) => currentRoute === page.route || currentRoute.startsWith(`${page.route}/`)));
+    if (!parent.dataset.b2cSubpageBound) {
+      parent.dataset.b2cSubpageBound = '1';
+      parent.addEventListener('click', (event) => {
+        const currentPages = b2cSubpagesAllowed(getCachedAllowedPages() || []);
+        if (!currentPages.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (currentPages.length === 1) {
+          window.location.assign(currentPages[0].route);
+          return;
+        }
+        const flyout = document.getElementById('b2c-subpage-flyout');
+        if (flyout?.classList.contains('is-open')) closeB2CSubpageFlyout();
+        else renderB2CSubpageFlyout(currentPages, parent);
+      });
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    const panel = document.getElementById('b2c-subpage-flyout');
+    const parent = document.querySelector('a.nav-link[href="/b2c"]');
+    if (!panel?.classList.contains('is-open')) return;
+    if (panel.contains(event.target)) {
+      if (event.target.closest?.('.b2c-subpage-flyout__link')) closeB2CSubpageFlyout();
+      return;
+    }
+    if (parent?.contains(event.target)) return;
+    closeB2CSubpageFlyout();
+  });
+  window.addEventListener('resize', () => closeB2CSubpageFlyout());
+  window.addEventListener('pagehide', () => closeB2CSubpageFlyout());
+  window.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeB2CSubpageFlyout(); });
+
   document.addEventListener('click', (event) => {
     const panel = document.getElementById('task-management-subpage-flyout');
     const parent = document.querySelector('a.nav-link[href="/task-management"]');
@@ -2694,6 +2819,7 @@ if (document.querySelector('.sidebar')) {
     // more independently permitted child pages are available.
     try { syncEventsSubpageNavigation(allowed); } catch {}
     try { syncTaskManagementSubpageNavigation(allowed); } catch {}
+    try { syncB2CSubpageNavigation(allowed); } catch {}
 
     // Home is available for every authenticated user (not tied to Allowed Pages)
     try {
@@ -2937,6 +3063,7 @@ if (document.querySelector('.sidebar')) {
     { href: '/orders/new', label: 'Shopping Cart', icon: 'shopping-cart' },
     { href: '/stocktaking', label: 'Stocktaking', icon: 'archive' },
     { href: '/b2b', label: 'B2B', icon: 'folder' },
+    { href: '/b2c', label: 'B2C', icon: 'users' },
     { href: '/products', label: 'Products', icon: 'package' },
     { href: '/kits', label: 'Kits', icon: 'briefcase' },
     { href: '/proposals', label: 'Proposals', icon: 'file-text' },
@@ -3079,6 +3206,7 @@ if (document.querySelector('.sidebar')) {
       });
 
       if (!best && current.startsWith('/events/')) best = links.find((link) => sidebarPath(link.getAttribute('href') || '') === '/events') || null;
+      if (!best && current.startsWith('/b2c/')) best = links.find((link) => sidebarPath(link.getAttribute('href') || '') === '/b2c') || null;
       if (!best) best = links.find((link) => sidebarPath(link.getAttribute('href') || '') === '/home') || links[0];
       if (best) best.classList.add('active');
     } catch {}
