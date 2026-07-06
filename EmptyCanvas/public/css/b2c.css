@@ -89,3 +89,291 @@
 .b2c-folder__actions-menu button{width:100%;border:0;border-radius:12px;display:flex;align-items:center;gap:8px;padding:10px 11px;background:transparent;color:#0f172a;font-weight:900;font-size:.78rem;cursor:pointer;text-align:left}
 .b2c-folder__actions-menu button:hover{background:#f8fafc}.b2c-folder__actions-menu button.is-danger{color:#dc2626}.b2c-folder__actions-menu button.is-danger:hover{background:#fef2f2}.b2c-folder__actions-menu button:disabled{opacity:.6;cursor:wait}.b2c-folder__actions-menu svg{width:15px;height:15px}
 @media(max-width:720px){.b2c-folders-grid{grid-template-columns:repeat(auto-fill,minmax(154px,154px)) !important;justify-content:center !important;padding:18px !important}}
+
+
+/* --------------------------------------------------------------------------
+   B2C database landing page: use the exact compact folder presentation used
+   by B2B and Kits. The former multi-table workspace shell is intentionally
+   removed only on the folder landing page; the dedicated table view is kept.
+   -------------------------------------------------------------------------- */
+body.b2c-library-page .b2c-shell{
+  padding:0 24px 28px !important;
+}
+
+body.b2c-library-page .b2c-library-workspace{
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+
+/* The global page header already carries the Database title. Keep the page
+   actions, but remove the extra workspace heading and statistics cards. */
+body.b2c-library-page .b2c-library-workspace__head{
+  display:flex !important;
+  justify-content:flex-end !important;
+  align-items:center !important;
+  min-height:52px !important;
+  margin:0 0 16px !important;
+}
+body.b2c-library-page .b2c-library-workspace__head > :first-child,
+body.b2c-library-page .b2c-library-summary,
+body.b2c-library-page .b2c-folders-panel__head{
+  display:none !important;
+}
+body.b2c-library-page .b2c-top-actions{
+  justify-content:flex-end !important;
+}
+
+/* No surrounding white panel behind the folders, matching B2B/Kits. */
+body.b2c-library-page .b2c-folders-panel{
+  border:0 !important;
+  border-radius:0 !important;
+  overflow:visible !important;
+  background:transparent !important;
+}
+
+/* Same grid dimensions, gap, and starting alignment as the B2B/Kits page. */
+body.b2c-library-page .b2c-folders-grid{
+  width:100% !important;
+  display:grid !important;
+  grid-template-columns:repeat(auto-fill, minmax(154px, 154px)) !important;
+  justify-content:start !important;
+  justify-items:start !important;
+  align-items:start !important;
+  gap:18px 16px !important;
+  padding:18px 0 28px !important;
+}
+
+/* Reset legacy folder-card styling completely. Previously it retained the
+   old 225px height, padding and black backing behind the compact folder. */
+body.b2c-library-page .b2c-folder-card{
+  position:relative !important;
+  display:block !important;
+  width:154px !important;
+  min-width:154px !important;
+  height:144px !important;
+  min-height:144px !important;
+  padding:0 !important;
+  margin:0 !important;
+  color:inherit !important;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  overflow:visible !important;
+  box-shadow:none !important;
+  isolation:isolate !important;
+  transform:none !important;
+  transition:none !important;
+}
+body.b2c-library-page .b2c-folder-card:hover{
+  background:transparent !important;
+  box-shadow:none !important;
+  transform:none !important;
+}
+
+/* Exact B2B/Kits folder visual size and proportions. */
+body.b2c-library-page .b2c-folder{
+  position:relative !important;
+  display:block !important;
+  width:154px !important;
+  height:144px !important;
+  min-height:144px !important;
+  padding:0 !important;
+  border:5px solid #101217 !important;
+  border-radius:20px !important;
+  overflow:hidden !important;
+  isolation:isolate !important;
+  text-align:left !important;
+  text-decoration:none !important;
+  background:
+    radial-gradient(circle at 23% 5%, rgba(255,255,255,.42) 0 14%, rgba(255,255,255,0) 36%),
+    radial-gradient(circle at 82% 0%, rgba(255,255,255,.18) 0 11%, rgba(255,255,255,0) 32%),
+    linear-gradient(135deg, #ff8a1f 0%, #f97316 46%, #e45512 100%) !important;
+  box-shadow:0 14px 26px rgba(15,23,42,.12) !important;
+  transform:none !important;
+  transition:transform .18s ease, box-shadow .18s ease !important;
+}
+body.b2c-library-page .b2c-folder:hover{
+  transform:translateY(-2px) !important;
+  box-shadow:0 20px 34px rgba(15,23,42,.16) !important;
+}
+body.b2c-library-page .b2c-folder:focus-visible{
+  outline:3px solid rgba(249,115,22,.22) !important;
+  outline-offset:3px !important;
+}
+body.b2c-library-page .b2c-folder::before{
+  content:'' !important;
+  position:absolute !important;
+  left:0 !important;
+  right:0 !important;
+  bottom:0 !important;
+  height:86px !important;
+  z-index:2 !important;
+  border-radius:0 0 15px 15px !important;
+  background:#272727 !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07) !important;
+}
+body.b2c-library-page .b2c-folder::after{
+  content:'' !important;
+  position:absolute !important;
+  top:43px !important;
+  left:0 !important;
+  width:130px !important;
+  height:28px !important;
+  z-index:3 !important;
+  display:block !important;
+  background:#272727 !important;
+  border-radius:0 13px 0 0 !important;
+  clip-path:polygon(0 0, 83px 0, 130px 100%, 100% 100%, 0 100%) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07) !important;
+}
+body.b2c-library-page .b2c-folder__figure{
+  position:absolute !important;
+  top:16px !important;
+  left:50% !important;
+  z-index:1 !important;
+  width:118px !important;
+  height:68px !important;
+  margin:0 !important;
+  transform:translateX(-50%) !important;
+  pointer-events:none !important;
+}
+body.b2c-library-page .b2c-folder__paper{
+  position:absolute !important;
+  top:0 !important;
+  width:50px !important;
+  height:54px !important;
+  border-radius:7px !important;
+  border:1px solid rgba(15,23,42,.05) !important;
+  background:linear-gradient(180deg,#ffffff 0%,#fafafa 100%) !important;
+  box-shadow:0 10px 18px rgba(15,23,42,.15) !important;
+}
+body.b2c-library-page .b2c-folder__paper::before{
+  content:'' !important;
+  position:absolute !important;
+  left:8px !important;
+  right:8px !important;
+  top:10px !important;
+  height:3px !important;
+  border-radius:999px !important;
+  background:rgba(203,213,225,.55) !important;
+  box-shadow:0 10px 0 rgba(203,213,225,.42), 0 20px 0 rgba(203,213,225,.32) !important;
+}
+body.b2c-library-page .b2c-folder__paper--left{left:9px !important;transform:rotate(-6deg) !important}
+body.b2c-library-page .b2c-folder__paper--middle{left:34px !important;top:-4px !important;z-index:2 !important;transform:rotate(1deg) !important}
+body.b2c-library-page .b2c-folder__paper--right{right:9px !important;transform:rotate(7deg) !important}
+body.b2c-library-page .b2c-folder__name{
+  position:absolute !important;
+  left:11px !important;
+  right:31px !important;
+  top:70px !important;
+  z-index:5 !important;
+  width:auto !important;
+  min-height:0 !important;
+  margin:0 !important;
+  color:#fff !important;
+  font-size:.72rem !important;
+  line-height:1.03 !important;
+  font-weight:850 !important;
+  letter-spacing:-.015em !important;
+  text-align:left !important;
+  display:block !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+body.b2c-library-page .b2c-folder__caption{
+  position:absolute !important;
+  left:11px !important;
+  right:7px !important;
+  bottom:10px !important;
+  z-index:5 !important;
+  width:auto !important;
+  min-height:0 !important;
+  margin:0 !important;
+  color:rgba(255,255,255,.55) !important;
+  font-size:.58rem !important;
+  line-height:1 !important;
+  font-weight:750 !important;
+  text-align:left !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:4px !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+body.b2c-library-page .b2c-folder__caption::before{
+  content:'' !important;
+  width:10px !important;
+  height:10px !important;
+  flex:0 0 auto !important;
+  opacity:.76 !important;
+}
+body.b2c-library-page .b2c-folder-actions{
+  position:absolute !important;
+  top:64px !important;
+  right:7px !important;
+  z-index:12 !important;
+}
+body.b2c-library-page .b2c-folder__menu-btn{
+  width:17px !important;
+  height:17px !important;
+  min-width:17px !important;
+  min-height:17px !important;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:999px !important;
+  background:transparent !important;
+  color:rgba(255,255,255,.86) !important;
+  box-shadow:none !important;
+  display:grid !important;
+  place-items:center !important;
+}
+body.b2c-library-page .b2c-folder__menu-btn:hover,
+body.b2c-library-page .b2c-folder__menu-btn[aria-expanded="true"]{
+  background:rgba(255,255,255,.10) !important;
+  color:#fff !important;
+  transform:none !important;
+}
+body.b2c-library-page .b2c-folder__menu-dots{
+  color:rgba(255,255,255,.86) !important;
+  font-size:9px !important;
+  line-height:1 !important;
+  letter-spacing:.7px !important;
+  transform:translateY(-1px) !important;
+  font-weight:950 !important;
+}
+body.b2c-library-page .b2c-folder__actions-menu{
+  top:27px !important;
+  right:0 !important;
+  z-index:40 !important;
+  width:128px !important;
+}
+
+/* Match B2B's black primary action while preserving the supporting actions. */
+body.b2c-library-page .b2c-primary-btn{
+  min-height:50px !important;
+  padding:0 24px !important;
+  border:1px solid #050b18 !important;
+  border-radius:18px !important;
+  background:#050b18 !important;
+  box-shadow:0 16px 34px rgba(15,23,42,.24) !important;
+}
+body.b2c-library-page .b2c-primary-btn:hover{
+  background:#0b1220 !important;
+  box-shadow:0 20px 40px rgba(15,23,42,.30) !important;
+}
+
+@media(max-width:720px){
+  body.b2c-library-page .b2c-shell{padding:0 18px 24px !important}
+  body.b2c-library-page .b2c-library-workspace__head{justify-content:stretch !important}
+  body.b2c-library-page .b2c-top-actions{width:100% !important}
+  body.b2c-library-page .b2c-top-actions > *{flex:1 1 auto !important}
+  body.b2c-library-page .b2c-folders-grid{justify-content:center !important;padding:18px 0 28px !important}
+}
