@@ -9355,6 +9355,11 @@ app.get("/b2c/database", requireAuth, requirePage("Customer Database"), (req, re
   res.sendFile(path.join(__dirname, "..", "public", "b2c-database.html"));
 });
 
+// Each B2C table opens in its own dedicated database view.
+app.get("/b2c/database/:id", requireAuth, requirePage("Customer Database"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "b2c-table.html"));
+});
+
 app.get("/b2c/form", requireAuth, requirePage("Customer Form"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "b2c-form.html"));
 });
@@ -37196,10 +37201,15 @@ function _b2cSerializeField(row = {}) {
   };
 }
 function _b2cSerializeRecord(row = {}) {
+  const recordNumber = _b2cNumber(_sbGet(row, ["record_number", "recordNumber", "sequence_number"]), 0, 0, Number.MAX_SAFE_INTEGER);
+  const fallbackNumber = recordNumber || _b2cNumber(_b2cId(row), 0, 0, Number.MAX_SAFE_INTEGER);
   return {
     id: _b2cId(row),
     databaseId: _b2cText(_sbGet(row, ["database_id", "databaseId"]), 60),
-    customerCode: _b2cText(_sbGet(row, ["customer_code", "customerCode", "record_code", "code"]), 80) || `REC-${String(_b2cId(row) || "").padStart(5, "0")}`,
+    // Record IDs are scoped to the selected table. The SQL trigger assigns a
+    // fresh record_number per database, so separate B2C tables both start at 1.
+    recordNumber: recordNumber || null,
+    customerCode: _b2cText(_sbGet(row, ["customer_code", "customerCode", "record_code", "code"]), 80) || `REC-${String(fallbackNumber).padStart(5, "0")}`,
     values: _b2cParseJson(_sbGet(row, ["data", "values", "customer_data", "customerData"]), {}),
     createdById: _b2cText(_sbGet(row, ["created_by_id", "createdById"]), 120),
     createdByName: _b2cText(_sbGet(row, ["created_by_name", "createdByName"]), 180) || "—",
@@ -37503,6 +37513,76 @@ app.get("/api/b2c/databases/:id/records", requireAuth, requirePage("Customer Dat
     const [fields, records, defaultForm] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id), _b2cEnsureDefaultForm(database)]);
     return res.json({ ok: true, database: { ...database, defaultFormId: defaultForm.id }, fields, records });
   } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] records read error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load table records." }); }
+});
+
+function _b2cExcelCellValue(record, field) {
+  const value = record?.values?.[field.key];
+  if (field.type === "id") return record.customerCode || "";
+  if (field.type === "files") {
+    return (Array.isArray(value) ? value : [])
+      .map((file) => `${_b2cText(file?.name || "Attachment", 240)}${file?.url ? ` (${_b2cText(file.url, 3000)})` : ""}`)
+      .join("; ");
+  }
+  if (Array.isArray(value)) return value.map((item) => _b2cText(item?.name || item, 500)).filter(Boolean).join("; ");
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === null || typeof value === "undefined") return "";
+  if (typeof value === "object") {
+    try { return JSON.stringify(value); } catch { return ""; }
+  }
+  return String(value);
+}
+
+function _b2cSafeExcelName(value, fallback = "b2c-table") {
+  const clean = _b2cText(value, 120).replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+  return clean || fallback;
+}
+
+// Export exactly the active B2C table. The generated spreadsheet never mixes
+// records from different tables, matching the separate record-ID sequence.
+app.get("/api/b2c/databases/:id/export.xlsx", requireAuth, requirePage("Customer Database"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const database = await _b2cLoadDatabase(_b2cText(req.params.id, 60));
+    if (!database) return res.status(404).json({ ok: false, error: "B2C table was not found." });
+    const [fields, records] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id)]);
+    const ExcelJS = require("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Operations";
+    workbook.created = new Date();
+    const sheetName = _b2cSafeExcelName(database.name, "B2C Table").slice(0, 31);
+    const worksheet = workbook.addWorksheet(sheetName || "B2C Table", { views: [{ state: "frozen", ySplit: 1 }] });
+    const headings = ["Record ID", ...fields.map((field) => field.label), "Submitted by", "Created"];
+    worksheet.addRow(headings);
+    records.forEach((record) => {
+      worksheet.addRow([
+        record.customerCode || "",
+        ...fields.map((field) => _b2cExcelCellValue(record, field)),
+        record.createdByName || "",
+        record.createdAt ? new Date(record.createdAt) : "",
+      ]);
+    });
+    worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, records.length + 1), column: Math.max(1, headings.length) } };
+    worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+    worksheet.getRow(1).alignment = { vertical: "middle" };
+    worksheet.getColumn(1).width = 15;
+    fields.forEach((field, index) => { worksheet.getColumn(index + 2).width = Math.min(45, Math.max(16, String(field.label || "").length + 8)); });
+    worksheet.getColumn(fields.length + 2).width = 22;
+    worksheet.getColumn(fields.length + 3).width = 22;
+    worksheet.eachRow((row, rowNumber) => {
+      row.alignment = { vertical: "top", wrapText: true };
+      if (rowNumber > 1) row.height = 28;
+    });
+    const fileName = `${_b2cSafeExcelName(database.name, "b2c-table").replace(/\s+/g, "-")}-records.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    const safe = _b2cSchemaError(error);
+    console.error("[b2c] table Excel export error:", safe?.message || safe);
+    if (!res.headersSent) return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to export B2C table." });
+  }
 });
 
 app.put("/api/b2c/databases/:id/fields", requireAuth, requirePage("Customer Database"), async (req, res) => {
