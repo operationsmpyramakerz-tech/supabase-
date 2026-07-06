@@ -1,66 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#FFFFFF" />
-  <link rel="icon" href="/icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <script src="/pwa-register.js" defer></script>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Customer Form | B2C</title>
-  <style>body.permissions-loading .sidebar li{display:none!important;}</style>
-  <link href="/css/style.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <link href="/css/b2c.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <script src="/js/vendor/feather-icons.min.js"></script>
+  <link rel="manifest" href="/manifest.webmanifest" /><meta name="theme-color" content="#FFFFFF" /><link rel="icon" href="/icons/icon-192.png" /><link rel="apple-touch-icon" href="/icons/icon-192.png" /><meta name="apple-mobile-web-app-capable" content="yes" /><meta name="apple-mobile-web-app-status-bar-style" content="default" /><meta name="mobile-web-app-capable" content="yes" /><script src="/pwa-register.js" defer></script>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Forms | B2C</title><style>body.permissions-loading .sidebar li{display:none!important}</style>
+  <link href="/css/style.css?v=b2c-multi-database-v1" rel="stylesheet" /><link href="/css/ui-redesign.css?v=b2c-multi-database-v1" rel="stylesheet" /><link href="/css/page-canvas-fix.css?v=b2c-multi-database-v1" rel="stylesheet" /><link href="/css/b2c.css?v=b2c-multi-database-v1" rel="stylesheet" /><script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading b2c-page b2c-form-page">
   <script>(function(){try{if(window.innerWidth>768&&localStorage.getItem('ui.sidebarMini')==='1')document.body.classList.add('sidebar-mini');}catch(e){}})();</script>
-  <div class="app-container">
-    <aside class="sidebar">
-      <div class="sidebar-header"><h2>Dashboard</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
-      <nav class="sidebar-nav"><ul class="nav-list">
-        <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
-        <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
-        <li><a class="nav-link" href="/events"><i data-feather="calendar"></i><span class="nav-label">Events</span></a></li>
-        <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
-        <li><a class="nav-link active" href="/b2c"><i data-feather="users"></i><span class="nav-label">B2C</span></a></li>
-        <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
-        <li><a class="nav-link" href="/task-management"><i data-feather="git-branch"></i><span class="nav-label">Task Management</span></a></li>
-        <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li>
-      </ul></nav>
-      <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
-    </aside>
-
-    <div class="main-content">
-      <header class="main-header b2c-page-header">
-        <div class="header-row1"><div class="left"><div class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Capture new customer details for the B2C database.</div></div></div></div><div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div></div>
-        <div class="header-row2"><div class="b2c-title-wrap"><span class="b2c-module-chip"><i data-feather="users"></i>B2C</span><h1 class="page-title">Customer Form</h1></div></div>
-      </header>
-
-      <main class="b2c-shell b2c-form-shell">
-        <section class="b2c-form-workspace" aria-labelledby="b2cFormTitle">
-          <div class="b2c-form-workspace__intro">
-            <div><span class="b2c-eyebrow"><i data-feather="clipboard"></i> Customer care entry</span><h2 id="b2cFormTitle">Add Customer Details</h2><p>Complete the fields below. This form automatically follows the columns configured in Customer Database.</p></div>
-            <a class="b2c-secondary-btn" href="/b2c/database"><i data-feather="database"></i><span>View Database</span></a>
-          </div>
-          <div class="b2c-form-progress" id="b2cFormProgress" hidden><span><i data-feather="check-circle"></i> Customer record saved successfully.</span><button type="button" id="b2cAddAnotherBtn">Add another customer</button></div>
-          <form class="b2c-customer-form" id="b2cCustomerForm" novalidate>
-            <div class="b2c-form-grid" id="b2cCustomerFormFields"><div class="b2c-form-loading"><span></span> Loading database fields…</div></div>
-            <div class="b2c-form-error" id="b2cCustomerFormError" aria-live="polite" hidden></div>
-            <div class="b2c-customer-form__actions"><button class="b2c-secondary-btn" type="reset" id="b2cResetFormBtn"><i data-feather="rotate-ccw"></i><span>Clear Form</span></button><button class="b2c-primary-btn" type="submit" id="b2cSubmitCustomerBtn"><i data-feather="save"></i><span>Save Customer</span></button></div>
-          </form>
-          <div class="b2c-no-fields" id="b2cNoFields" hidden><span class="b2c-no-fields__icon"><i data-feather="columns"></i></span><h3>Customer Database needs columns first</h3><p>Ask a B2C Database editor to configure the fields that Customer Care should complete.</p><a class="b2c-primary-btn" href="/b2c/database"><i data-feather="database"></i><span>Open Customer Database</span></a></div>
-        </section>
-      </main>
-    </div>
-  </div>
-  <script src="/js/common-ui.js?v=b2c-sidebar-repair-v1"></script>
-  <script src="/js/b2c-form.js?v=b2c-sidebar-repair-v1"></script>
-</body>
-</html>
+  <div class="app-container"><aside class="sidebar"><div class="sidebar-header"><h2>Dashboard</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div><nav class="sidebar-nav"><ul class="nav-list"><li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li><li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li><li><a class="nav-link" href="/events"><i data-feather="calendar"></i><span class="nav-label">Events</span></a></li><li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li><li><a class="nav-link active" href="/b2c"><i data-feather="users"></i><span class="nav-label">B2C</span></a></li><li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li><li><a class="nav-link" href="/task-management"><i data-feather="git-branch"></i><span class="nav-label">Task Management</span></a></li><li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li></ul></nav><div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div></aside>
+    <div class="main-content"><header class="main-header b2c-page-header"><div class="header-row1"><div class="left"><div class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Choose, build, and submit B2C forms.</div></div></div></div><div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div></div><div class="header-row2"><div class="b2c-title-wrap"><span class="b2c-module-chip"><i data-feather="users"></i>B2C</span><h1 class="page-title">Forms</h1></div></div></header>
+      <main class="b2c-shell b2c-form-shell"><section class="b2c-form-workspace" aria-labelledby="b2cFormTitle"><div class="b2c-form-workspace__intro"><div><span class="b2c-eyebrow"><i data-feather="clipboard"></i> Form library</span><h2 id="b2cFormTitle">B2C Forms</h2><p>Each form is linked to one B2C data table. Open a form to submit records or edit its order, required fields, and visibility conditions.</p></div><div class="b2c-top-actions"><a class="b2c-secondary-btn" href="/b2c/database"><i data-feather="database"></i><span>Database</span></a><button class="b2c-primary-btn" id="b2cNewFormBtn" type="button"><i data-feather="plus"></i><span>New Form</span></button></div></div>
+        <section id="b2cFormsLibrary" class="b2c-forms-library"><div class="b2c-form-loading"><span></span> Loading forms…</div></section>
+        <section id="b2cActiveFormPanel" class="b2c-active-form-panel" hidden><div class="b2c-active-form-heading"><div><button class="b2c-back-link" id="b2cBackToFormsBtn" type="button"><i data-feather="arrow-left"></i> All Forms</button><span class="b2c-eyebrow"><i data-feather="clipboard"></i> Linked form</span><h2 id="b2cActiveFormTitle">Form</h2><p id="b2cActiveFormDescription">Complete the available fields below.</p></div><button class="b2c-secondary-btn" id="b2cEditActiveFormBtn" type="button"><i data-feather="sliders"></i><span>Edit Form</span></button></div><div class="b2c-form-progress" id="b2cFormProgress" hidden><span><i data-feather="check-circle"></i> Record saved successfully.</span><button type="button" id="b2cAddAnotherBtn">Add another record</button></div><form class="b2c-customer-form" id="b2cCustomerForm" novalidate><div class="b2c-form-grid" id="b2cCustomerFormFields"></div><div class="b2c-form-error" id="b2cCustomerFormError" hidden></div><div class="b2c-customer-form__actions"><button class="b2c-secondary-btn" type="reset" id="b2cResetFormBtn"><i data-feather="rotate-ccw"></i><span>Clear Form</span></button><button class="b2c-primary-btn" type="submit" id="b2cSubmitCustomerBtn"><i data-feather="save"></i><span>Save Record</span></button></div></form></section>
+      </section></main></div></div>
+  <div class="b2c-overlay" id="b2cNewFormOverlay" hidden aria-hidden="true"><div class="b2c-overlay__backdrop" data-b2c-close="new-form"></div><form class="b2c-dialog b2c-dialog--small" id="b2cNewFormForm"><button class="b2c-dialog__close" type="button" data-b2c-close="new-form"><i data-feather="x"></i></button><div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="clipboard"></i> New form</span><h2>Create B2C Form</h2><p>Link this form to one existing data table.</p></div></div><div class="b2c-form-grid"><label class="b2c-form-control b2c-form-control--wide"><span>Form name <em>*</em></span><input id="b2cNewFormName" maxlength="120" required placeholder="e.g. Customer Update Form" /></label><label class="b2c-form-control b2c-form-control--wide"><span>Linked table <em>*</em></span><select id="b2cNewFormDatabase" required></select></label><label class="b2c-form-control b2c-form-control--wide"><span>Description</span><textarea id="b2cNewFormDescription" maxlength="500"></textarea></label></div><div class="b2c-dialog__error" id="b2cNewFormError" hidden></div><div class="b2c-dialog__actions"><button class="b2c-secondary-btn" type="button" data-b2c-close="new-form">Cancel</button><button class="b2c-primary-btn" type="submit"><i data-feather="plus"></i><span>Create Form</span></button></div></form></div>
+  <div class="b2c-overlay" id="b2cFormBuilderOverlay" hidden aria-hidden="true"><div class="b2c-overlay__backdrop" data-b2c-close="form-builder"></div><section class="b2c-dialog b2c-dialog--builder" role="dialog" aria-modal="true"><button class="b2c-dialog__close" type="button" data-b2c-close="form-builder"><i data-feather="x"></i></button><div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="sliders"></i> Form builder</span><h2 id="b2cFormBuilderTitle">Edit Form</h2><p>Reorder questions, decide which fields are required on this form, and use conditions to show a field only when another answer matches.</p></div></div><div class="b2c-builder-guide"><i data-feather="git-branch"></i><span>Conditions use answers from earlier fields. Required validation is applied only when the condition makes the field visible.</span></div><div class="b2c-form-builder-list" id="b2cFormBuilderList"></div><div class="b2c-dialog__error" id="b2cFormBuilderError" hidden></div><div class="b2c-dialog__actions"><button class="b2c-secondary-btn" type="button" data-b2c-close="form-builder">Cancel</button><button class="b2c-primary-btn" type="button" id="b2cSaveFormBuilderBtn"><i data-feather="save"></i><span>Save Form Builder</span></button></div></section></div>
+  <script src="/js/common-ui.js?v=b2c-multi-database-v1"></script><script src="/js/b2c-form.js?v=b2c-multi-database-v1"></script>
+</body></html>

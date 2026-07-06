@@ -11,12 +11,12 @@
   <script src="/pwa-register.js" defer></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Customer Database | B2C</title>
-  <style>body.permissions-loading .sidebar li{display:none!important;}</style>
-  <link href="/css/style.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
-  <link href="/css/b2c.css?v=b2c-sidebar-repair-v1" rel="stylesheet" />
+  <title>Database | B2C</title>
+  <style>body.permissions-loading .sidebar li{display:none!important}</style>
+  <link href="/css/style.css?v=b2c-multi-database-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=b2c-multi-database-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=b2c-multi-database-v1" rel="stylesheet" />
+  <link href="/css/b2c.css?v=b2c-multi-database-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading b2c-page b2c-database-page">
@@ -36,81 +36,37 @@
       </ul></nav>
       <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
     </aside>
-
     <div class="main-content">
       <header class="main-header b2c-page-header">
-        <div class="header-row1">
-          <div class="left">
-            <div class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Build and manage the B2C customer database.</div></div></div>
-          </div>
-          <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
-        </div>
-        <div class="header-row2"><div class="b2c-title-wrap"><span class="b2c-module-chip"><i data-feather="users"></i>B2C</span><h1 class="page-title">Customer Database</h1></div></div>
+        <div class="header-row1"><div class="left"><div class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Create and manage B2C data tables and forms.</div></div></div></div><div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div></div>
+        <div class="header-row2"><div class="b2c-title-wrap"><span class="b2c-module-chip"><i data-feather="users"></i>B2C</span><h1 class="page-title">Database</h1></div></div>
       </header>
-
       <main class="b2c-shell">
         <section class="b2c-workspace" aria-labelledby="b2cDatabaseTitle">
           <div class="b2c-workspace__top">
-            <div>
-              <span class="b2c-eyebrow"><i data-feather="database"></i> Dynamic customer database</span>
-              <h2 id="b2cDatabaseTitle">Customer Database</h2>
-              <p>Define your own columns, then review every B2C customer record in one organized table.</p>
-            </div>
-            <div class="b2c-top-actions">
-              <button type="button" class="b2c-secondary-btn" id="b2cRefreshBtn"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
-              <a class="b2c-secondary-btn" href="/b2c/form"><i data-feather="clipboard"></i><span>Open Form</span></a>
-              <button type="button" class="b2c-primary-btn" id="b2cConfigureBtn"><i data-feather="sliders"></i><span>Configure Database</span></button>
-            </div>
+            <div><span class="b2c-eyebrow"><i data-feather="database"></i> Multi-table workspace</span><h2 id="b2cDatabaseTitle">B2C Database</h2><p>Create independent customer data tables. Every table has its own columns, records, and linked form.</p></div>
+            <div class="b2c-top-actions"><button class="b2c-secondary-btn" id="b2cRefreshBtn" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button><a class="b2c-secondary-btn" href="/b2c/form"><i data-feather="clipboard"></i><span>Forms</span></a><button class="b2c-primary-btn" id="b2cNewTableBtn" type="button"><i data-feather="plus"></i><span>New Table</span></button></div>
           </div>
+          <div class="b2c-stat-grid"><article class="b2c-stat-card"><span class="b2c-stat-card__icon"><i data-feather="database"></i></span><div><span>Data Tables</span><strong id="b2cDatabaseCount">0</strong></div></article><article class="b2c-stat-card"><span class="b2c-stat-card__icon b2c-stat-card__icon--orange"><i data-feather="columns"></i></span><div><span>Columns in Current Table</span><strong id="b2cFieldCount">0</strong></div></article><article class="b2c-stat-card"><span class="b2c-stat-card__icon b2c-stat-card__icon--green"><i data-feather="layers"></i></span><div><span>Records in Current Table</span><strong id="b2cRecordCount">0</strong></div></article></div>
 
-          <div class="b2c-stat-grid" aria-label="Customer database summary">
-            <article class="b2c-stat-card"><span class="b2c-stat-card__icon"><i data-feather="users"></i></span><div><span>Total Customers</span><strong id="b2cCustomerCount">0</strong></div></article>
-            <article class="b2c-stat-card"><span class="b2c-stat-card__icon b2c-stat-card__icon--orange"><i data-feather="columns"></i></span><div><span>Database Columns</span><strong id="b2cFieldCount">0</strong></div></article>
-            <article class="b2c-stat-card"><span class="b2c-stat-card__icon b2c-stat-card__icon--green"><i data-feather="paperclip"></i></span><div><span>Photo &amp; File Fields</span><strong id="b2cFileFieldCount">0</strong></div></article>
-          </div>
+          <section class="b2c-database-strip" aria-label="B2C data tables"><div class="b2c-database-strip__title"><div><strong>Your tables</strong><span>Select a table to view its records and builder.</span></div><span id="b2cTableCountNote">Loading…</span></div><div class="b2c-database-list" id="b2cDatabaseList"></div></section>
 
-          <div class="b2c-table-panel">
-            <div class="b2c-table-panel__toolbar">
-              <div class="b2c-table-search"><i data-feather="search"></i><input id="b2cCustomerSearch" type="search" placeholder="Search any customer field..." autocomplete="off" /></div>
-              <div class="b2c-table-panel__note" id="b2cTableNote" aria-live="polite">Loading customer records…</div>
-            </div>
-            <div class="b2c-table-scroll" id="b2cTableScroll">
-              <table class="b2c-customer-table" id="b2cCustomerTable">
-                <thead id="b2cCustomerTableHead"></thead>
-                <tbody id="b2cCustomerTableBody"><tr><td class="b2c-table-loading" colspan="4"><span></span> Loading customer database…</td></tr></tbody>
-              </table>
-            </div>
-          </div>
+          <section class="b2c-table-panel" id="b2cDataPanel">
+            <div class="b2c-table-panel__toolbar"><div class="b2c-table-toolbar-title"><span class="b2c-table-name-icon"><i data-feather="table"></i></span><div><strong id="b2cSelectedTableName">Select a table</strong><span id="b2cSelectedTableMeta">Choose or create a B2C data table.</span></div></div><div class="b2c-table-toolbar-actions"><div class="b2c-table-search"><i data-feather="search"></i><input id="b2cRecordSearch" type="search" placeholder="Search this table…" autocomplete="off" /></div><button class="b2c-secondary-btn b2c-compact-btn" id="b2cOpenLinkedFormBtn" type="button" disabled><i data-feather="clipboard"></i><span>Open Form</span></button><button class="b2c-primary-btn b2c-compact-btn" id="b2cConfigureTableBtn" type="button" disabled><i data-feather="sliders"></i><span>Configure Table</span></button></div></div>
+            <div class="b2c-table-scroll"><table class="b2c-customer-table" id="b2cCustomerTable"><thead id="b2cCustomerTableHead"></thead><tbody id="b2cCustomerTableBody"><tr><td class="b2c-table-loading" colspan="5"><span></span> Loading B2C tables…</td></tr></tbody></table></div>
+          </section>
         </section>
       </main>
     </div>
   </div>
 
-  <div class="b2c-overlay" id="b2cBuilderOverlay" hidden aria-hidden="true">
-    <div class="b2c-overlay__backdrop" data-b2c-close="builder"></div>
-    <section class="b2c-dialog b2c-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="b2cBuilderTitle">
-      <button class="b2c-dialog__close" type="button" data-b2c-close="builder" aria-label="Close database builder"><i data-feather="x"></i></button>
-      <div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="sliders"></i> Database builder</span><h2 id="b2cBuilderTitle">Configure Customer Columns</h2><p>Create the fields your Customer Care team will complete from the B2C form.</p></div></div>
-      <div class="b2c-builder-guide"><i data-feather="info"></i><span>Columns are shown in this same order in both the database and customer form. Existing customer data remains safe when you rename a column.</span></div>
-      <div class="b2c-builder-list" id="b2cBuilderList"></div>
-      <button type="button" class="b2c-add-column" id="b2cAddColumnBtn"><i data-feather="plus"></i><span>Add Column</span></button>
-      <div class="b2c-dialog__error" id="b2cBuilderError" aria-live="polite" hidden></div>
-      <div class="b2c-dialog__actions"><button type="button" class="b2c-secondary-btn" data-b2c-close="builder">Cancel</button><button type="button" class="b2c-primary-btn" id="b2cSaveBuilderBtn"><i data-feather="save"></i><span>Save Database Layout</span></button></div>
-    </section>
-  </div>
+  <div class="b2c-overlay" id="b2cTableOverlay" hidden aria-hidden="true"><div class="b2c-overlay__backdrop" data-b2c-close="table"></div><form class="b2c-dialog b2c-dialog--small" id="b2cTableForm"><button class="b2c-dialog__close" type="button" data-b2c-close="table" aria-label="Close"><i data-feather="x"></i></button><div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="database"></i> New data table</span><h2>Create B2C Table</h2><p>Each table has a separate schema, records, and linked customer form.</p></div></div><div class="b2c-form-grid"><label class="b2c-form-control b2c-form-control--wide"><span>Table name <em>*</em></span><input id="b2cNewTableName" maxlength="120" required placeholder="e.g. Customers Data" /></label><label class="b2c-form-control b2c-form-control--wide"><span>Description</span><textarea id="b2cNewTableDescription" maxlength="500" placeholder="What information will this table store?"></textarea></label></div><div class="b2c-dialog__error" id="b2cTableError" hidden></div><div class="b2c-dialog__actions"><button class="b2c-secondary-btn" type="button" data-b2c-close="table">Cancel</button><button class="b2c-primary-btn" type="submit"><i data-feather="plus"></i><span>Create Table</span></button></div></form></div>
 
-  <div class="b2c-overlay" id="b2cCustomerOverlay" hidden aria-hidden="true">
-    <div class="b2c-overlay__backdrop" data-b2c-close="customer"></div>
-    <form class="b2c-dialog b2c-dialog--customer" id="b2cCustomerEditForm" role="dialog" aria-modal="true" aria-labelledby="b2cCustomerEditTitle">
-      <button class="b2c-dialog__close" type="button" data-b2c-close="customer" aria-label="Close customer record"><i data-feather="x"></i></button>
-      <div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="user"></i> Customer record</span><h2 id="b2cCustomerEditTitle">Edit Customer</h2><p id="b2cCustomerEditMeta">Review and update the customer information.</p></div></div>
-      <div class="b2c-form-grid" id="b2cCustomerEditFields"></div>
-      <div class="b2c-dialog__error" id="b2cCustomerEditError" aria-live="polite" hidden></div>
-      <div class="b2c-dialog__actions"><button type="button" class="b2c-secondary-btn" data-b2c-close="customer">Cancel</button><button type="submit" class="b2c-primary-btn" id="b2cSaveCustomerBtn"><i data-feather="save"></i><span>Save Customer</span></button></div>
-    </form>
-  </div>
+  <div class="b2c-overlay" id="b2cBuilderOverlay" hidden aria-hidden="true"><div class="b2c-overlay__backdrop" data-b2c-close="builder"></div><section class="b2c-dialog b2c-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="b2cBuilderTitle"><button class="b2c-dialog__close" type="button" data-b2c-close="builder" aria-label="Close"><i data-feather="x"></i></button><div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="sliders"></i> Table builder</span><h2 id="b2cBuilderTitle">Configure Table</h2><p>Set the database properties for this table. Use Form Builder to control field order, visibility conditions, and form-only requirements.</p></div></div><div class="b2c-builder-guide"><i data-feather="info"></i><span>Choose from Notion-style property types. Select, Multi-select, and Status accept options; Relation can link another B2C table; Formula and Button keep their setup here.</span></div><div class="b2c-builder-list" id="b2cBuilderList"></div><button type="button" class="b2c-add-column" id="b2cAddColumnBtn"><i data-feather="plus"></i><span>Add Property</span></button><div class="b2c-dialog__error" id="b2cBuilderError" hidden></div><div class="b2c-dialog__actions"><button class="b2c-secondary-btn" type="button" data-b2c-close="builder">Cancel</button><button class="b2c-primary-btn" type="button" id="b2cSaveBuilderBtn"><i data-feather="save"></i><span>Save Table Properties</span></button></div></section></div>
 
-  <script src="/js/common-ui.js?v=b2c-sidebar-repair-v1"></script>
-  <script src="/js/b2c-database.js?v=b2c-sidebar-repair-v1"></script>
+  <div class="b2c-overlay" id="b2cRecordOverlay" hidden aria-hidden="true"><div class="b2c-overlay__backdrop" data-b2c-close="record"></div><form class="b2c-dialog b2c-dialog--customer" id="b2cRecordEditForm"><button class="b2c-dialog__close" type="button" data-b2c-close="record" aria-label="Close"><i data-feather="x"></i></button><div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="edit-2"></i> Record editor</span><h2 id="b2cRecordEditTitle">Edit Record</h2><p id="b2cRecordEditMeta">Update the selected B2C record.</p></div></div><div class="b2c-form-grid" id="b2cRecordEditFields"></div><div class="b2c-dialog__error" id="b2cRecordEditError" hidden></div><div class="b2c-dialog__actions"><button class="b2c-secondary-btn" type="button" data-b2c-close="record">Cancel</button><button class="b2c-primary-btn" type="submit" id="b2cSaveRecordBtn"><i data-feather="save"></i><span>Save Record</span></button></div></form></div>
+
+  <script src="/js/common-ui.js?v=b2c-multi-database-v1"></script>
+  <script src="/js/b2c-database.js?v=b2c-multi-database-v1"></script>
 </body>
 </html>
