@@ -9205,8 +9205,8 @@ function requireTaskManagementView() {
 // lets authorized users review data; Customer Form is the controlled entry page
 // for the Customer Care team.
 const B2C_SUBPAGES = Object.freeze([
-  { pageName: "Customer Database", routePath: "/b2c/database", icon: "database", label: "Customer Database" },
-  { pageName: "Customer Form", routePath: "/b2c/form", icon: "clipboard", label: "Customer Form" },
+  { pageName: "Customer Database", routePath: "/b2c/database", icon: "database", label: "Database" },
+  { pageName: "Customer Form", routePath: "/b2c/form", icon: "clipboard", label: "Forms" },
 ]);
 
 function _b2cAccessibleSubpages(req) {
@@ -9737,8 +9737,11 @@ function _backupCatalog() {
     { key: 'event-governorate-transport-rates', pageName: 'Governorate Transport Rates', tableName: _sbEventsGovernorateRatesTable(), moduleName: 'Events', icon: 'map-pin', description: 'Approximate round-trip transport cost settings for every governorate or area used in event estimates.', sensitive: true },
     { key: 'expenses', pageName: 'Expenses', tableName: _sbExpensesTable(), moduleName: 'Finance', icon: 'dollar-sign', description: 'Cash in, cash out, and expense transactions.' },
     { key: 'b2b-schools', pageName: 'B2B Schools', tableName: _sbB2BSchoolsTable(), moduleName: 'B2B', icon: 'folder', description: 'B2B school folders and school data.' },
-    { key: 'b2c-customer-fields', pageName: 'B2C Customer Fields', tableName: _b2cFieldsTable(), moduleName: 'B2C', icon: 'columns', description: 'Customer database builder fields and column definitions.' },
-    { key: 'b2c-customers', pageName: 'B2C Customers', tableName: _b2cCustomersTable(), moduleName: 'B2C', icon: 'users', description: 'Customer records submitted through the B2C customer form.' },
+    { key: 'b2c-databases', pageName: 'B2C Data Tables', tableName: _b2cDatabasesTable(), moduleName: 'B2C', icon: 'database', description: 'Independent B2C database table definitions.' },
+    { key: 'b2c-customer-fields', pageName: 'B2C Customer Fields', tableName: _b2cFieldsTable(), moduleName: 'B2C', icon: 'columns', description: 'Per-table property definitions and Notion-style field settings.' },
+    { key: 'b2c-customers', pageName: 'B2C Records', tableName: _b2cCustomersTable(), moduleName: 'B2C', icon: 'users', description: 'B2C records stored in the selected data table.' },
+    { key: 'b2c-forms', pageName: 'B2C Forms', tableName: _b2cFormsTable(), moduleName: 'B2C', icon: 'clipboard', description: 'Forms linked to B2C data tables.' },
+    { key: 'b2c-form-fields', pageName: 'B2C Form Builder Fields', tableName: _b2cFormFieldsTable(), moduleName: 'B2C', icon: 'sliders', description: 'Per-form order, required rules, and conditional visibility settings.' },
     { key: 'proposals', pageName: 'Proposals', tableName: _sbProductProposalsTable(), moduleName: 'Proposals', icon: 'file-text', description: 'Saved proposal folders.' },
     { key: 'proposal-items', pageName: 'Proposal Items', tableName: _sbProductProposalItemsTable(), moduleName: 'Proposals', icon: 'list', description: 'Components saved inside proposals.' },
     { key: 'kits', pageName: 'Kits', tableName: _sbProductKitsTable(), moduleName: 'Proposals', icon: 'briefcase', description: 'Saved kit folders.' },
@@ -37098,76 +37101,105 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
 
 
 // =============================================================================
-// B2C Customer Database — Supabase-only dynamic customer records
+// B2C Multi-Database + Form Builder — Supabase-only dynamic records
 // =============================================================================
-// Field definitions are deliberately stored separately from customer values.
-// That allows the database owner to change the visible schema without changing
-// the underlying database table every time a new customer column is needed.
+// The B2C module uses a flexible JSONB record payload while database definitions,
+// field schemas, forms, and per-form layout rules are kept in relational tables.
+function _b2cDatabasesTable() {
+  return String(process.env.SUPABASE_B2C_DATABASES_TABLE || "b2c_databases").trim() || "b2c_databases";
+}
 function _b2cFieldsTable() {
   return String(process.env.SUPABASE_B2C_CUSTOMER_FIELDS_TABLE || "b2c_customer_fields").trim() || "b2c_customer_fields";
 }
-
 function _b2cCustomersTable() {
   return String(process.env.SUPABASE_B2C_CUSTOMERS_TABLE || "b2c_customers").trim() || "b2c_customers";
 }
+function _b2cFormsTable() {
+  return String(process.env.SUPABASE_B2C_FORMS_TABLE || "b2c_forms").trim() || "b2c_forms";
+}
+function _b2cFormFieldsTable() {
+  return String(process.env.SUPABASE_B2C_FORM_FIELDS_TABLE || "b2c_form_fields").trim() || "b2c_form_fields";
+}
 
-const B2C_FIELD_TYPES = new Set(["text", "number", "phone", "files"]);
+const B2C_FIELD_TYPES = new Set([
+  "text", "number", "select", "multi_select", "status", "date", "person", "files",
+  "checkbox", "url", "email", "phone", "relation", "formula", "rollup", "id", "button", "place",
+]);
+const B2C_READONLY_FIELD_TYPES = new Set(["formula", "rollup", "id", "button"]);
+const B2C_SELECT_FIELD_TYPES = new Set(["select", "multi_select", "status"]);
 
 function _b2cText(value, max = 0) {
   const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
   return max > 0 ? text.slice(0, max) : text;
 }
-
+function _b2cId(row = {}) { return String(_sbGet(row, ["id", "ID"]) ?? "").trim(); }
+function _b2cNumber(value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.round(number))) : fallback;
+}
+function _b2cParseJson(value, fallback = {}) {
+  if (value && typeof value === "object") return value;
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  try { const parsed = JSON.parse(text); return parsed ?? fallback; } catch { return fallback; }
+}
 function _b2cFieldType(value, fallback = "text") {
-  const type = _b2cText(value, 24).toLowerCase().replace(/[\s_-]+/g, "_");
-  const aliases = { photo: "files", photos: "files", file: "files", "photos_files": "files", "photos_and_files": "files", tel: "phone", telephone: "phone" };
+  const type = _b2cText(value, 40).toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = {
+    photo: "files", photos: "files", file: "files", media: "files", photos_files: "files", photos_and_files: "files",
+    multi: "multi_select", multiselect: "multi_select", "multi-select": "multi_select", tel: "phone", telephone: "phone",
+    files_media: "files", "files_&_media": "files", place: "place", location: "place",
+  };
   const resolved = aliases[type] || type;
   return B2C_FIELD_TYPES.has(resolved) ? resolved : fallback;
 }
-
 function _b2cFieldKey(value, fallback = "field") {
-  const base = _b2cText(value, 100)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 48);
+  const base = _b2cText(value, 120).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48);
   return base || fallback;
 }
-
-function _b2cId(row = {}) {
-  return String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+function _b2cOptions(raw, type = "text") {
+  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const optionList = Array.isArray(source.options)
+    ? source.options
+    : String(source.options || "").split(",");
+  const options = [...new Set(optionList.map((item) => _b2cText(item, 100)).filter(Boolean))].slice(0, 100);
+  return {
+    options: B2C_SELECT_FIELD_TYPES.has(type) ? options : [],
+    relationDatabaseId: _b2cText(source.relationDatabaseId || source.relation_database_id, 60) || null,
+    formula: _b2cText(source.formula, 500) || null,
+    buttonLabel: _b2cText(source.buttonLabel || source.button_label, 80) || "Run",
+  };
 }
-
-function _b2cSerializeField(row = {}) {
-  const type = _b2cFieldType(_sbGet(row, ["field_type", "fieldType", "type"]));
+function _b2cSerializeDatabase(row = {}) {
   return {
     id: _b2cId(row),
-    key: _b2cFieldKey(_sbGet(row, ["field_key", "fieldKey", "key"]), `field_${_b2cId(row) || "new"}`),
-    label: _b2cText(_sbGet(row, ["label", "name", "field_name", "fieldName"]), 120) || "Untitled field",
-    type,
-    required: _sbBool(_sbGet(row, ["is_required", "required", "isRequired"]), false),
-    sortOrder: Math.max(0, Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0)),
+    key: _b2cText(_sbGet(row, ["database_key", "databaseKey", "key"]), 100),
+    name: _b2cText(_sbGet(row, ["name", "database_name", "databaseName"]), 120) || "Untitled Table",
+    description: _b2cText(_sbGet(row, ["description"]), 500),
     createdAt: _sbGet(row, ["created_at", "createdAt"]) || null,
     updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
   };
 }
-
-function _b2cParseJson(value, fallback = {}) {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value;
-  const text = String(value || "").trim();
-  if (!text) return fallback;
-  try {
-    const parsed = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function _b2cSerializeCustomer(row = {}) {
+function _b2cSerializeField(row = {}) {
+  const type = _b2cFieldType(_sbGet(row, ["field_type", "fieldType", "type"]));
   return {
     id: _b2cId(row),
-    customerCode: _b2cText(_sbGet(row, ["customer_code", "customerCode", "code"]), 80) || `CUS-${String(_b2cId(row) || "").padStart(5, "0")}`,
+    databaseId: _b2cText(_sbGet(row, ["database_id", "databaseId"]), 60),
+    key: _b2cFieldKey(_sbGet(row, ["field_key", "fieldKey", "key"]), `field_${_b2cId(row) || "new"}`),
+    label: _b2cText(_sbGet(row, ["label", "name", "field_name", "fieldName"]), 120) || "Untitled field",
+    type,
+    required: _sbBool(_sbGet(row, ["is_required", "required", "isRequired"]), false),
+    sortOrder: _b2cNumber(_sbGet(row, ["sort_order", "sortOrder"]), 1, 1, 9999),
+    options: _b2cOptions(_b2cParseJson(_sbGet(row, ["field_options", "fieldOptions", "options"]), {}), type),
+    createdAt: _sbGet(row, ["created_at", "createdAt"]) || null,
+    updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
+  };
+}
+function _b2cSerializeRecord(row = {}) {
+  return {
+    id: _b2cId(row),
+    databaseId: _b2cText(_sbGet(row, ["database_id", "databaseId"]), 60),
+    customerCode: _b2cText(_sbGet(row, ["customer_code", "customerCode", "record_code", "code"]), 80) || `REC-${String(_b2cId(row) || "").padStart(5, "0")}`,
     values: _b2cParseJson(_sbGet(row, ["data", "values", "customer_data", "customerData"]), {}),
     createdById: _b2cText(_sbGet(row, ["created_by_id", "createdById"]), 120),
     createdByName: _b2cText(_sbGet(row, ["created_by_name", "createdByName"]), 180) || "—",
@@ -37175,42 +37207,62 @@ function _b2cSerializeCustomer(row = {}) {
     updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
   };
 }
-
-async function _b2cLoadFields() {
-  if (!supabaseDb?.isConfigured?.()) {
-    const error = new Error("B2C service is not ready.");
-    error.status = 503;
-    throw error;
-  }
-  try {
-    const rows = await supabaseDb.selectAll(_b2cFieldsTable(), { limit: 500, order: "sort_order.asc,id.asc" });
-    return (Array.isArray(rows) ? rows : []).map(_b2cSerializeField).sort((a, b) => (a.sortOrder - b.sortOrder) || Number(a.id) - Number(b.id));
-  } catch (error) {
-    const detail = String(error?.message || "");
-    if (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)) {
-      const missing = new Error("B2C tables are not installed yet. Run the supplied B2C SQL file, then refresh the page.");
-      missing.status = 503;
-      throw missing;
-    }
-    throw error;
-  }
+function _b2cSerializeForm(row = {}) {
+  return {
+    id: _b2cId(row),
+    databaseId: _b2cText(_sbGet(row, ["database_id", "databaseId"]), 60),
+    name: _b2cText(_sbGet(row, ["name", "form_name", "formName"]), 120) || "Untitled Form",
+    description: _b2cText(_sbGet(row, ["description"]), 500),
+    isDefault: _sbBool(_sbGet(row, ["is_default", "isDefault"]), false),
+    isActive: _sbBool(_sbGet(row, ["is_active", "isActive"]), true),
+    createdAt: _sbGet(row, ["created_at", "createdAt"]) || null,
+    updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
+  };
 }
-
-async function _b2cLoadCustomers() {
-  try {
-    const rows = await supabaseDb.selectAll(_b2cCustomersTable(), { limit: 10000, order: "created_at.desc,id.desc" });
-    return (Array.isArray(rows) ? rows : []).map(_b2cSerializeCustomer);
-  } catch (error) {
-    const detail = String(error?.message || "");
-    if (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)) {
-      const missing = new Error("B2C tables are not installed yet. Run the supplied B2C SQL file, then refresh the page.");
-      missing.status = 503;
-      throw missing;
-    }
-    throw error;
-  }
+function _b2cSerializeFormField(row = {}, field = {}) {
+  const override = _sbGet(row, ["is_required_override", "required_override", "isRequiredOverride"]);
+  const condition = _b2cParseJson(_sbGet(row, ["visibility_condition", "condition", "visibilityCondition"]), {});
+  return {
+    ...field,
+    fieldId: _b2cText(_sbGet(row, ["field_id", "fieldId"]), 60) || field.id,
+    sortOrder: _b2cNumber(_sbGet(row, ["sort_order", "sortOrder"]), field.sortOrder || 1, 1, 9999),
+    formRequired: typeof override === "boolean" ? override : field.required,
+    condition: {
+      enabled: _sbBool(condition?.enabled, false),
+      fieldKey: _b2cText(condition?.fieldKey || condition?.field_key, 80),
+      operator: _b2cText(condition?.operator, 40) || "equals",
+      value: condition?.value ?? "",
+    },
+  };
 }
-
+function _b2cPath(table, params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => { if (value !== null && typeof value !== "undefined" && value !== "") query.set(key, String(value)); });
+  const search = query.toString();
+  return `/${encodeURIComponent(String(table || "").trim())}${search ? `?${search}` : ""}`;
+}
+async function _b2cSelect(table, { filters = {}, order = null, limit = 5000, select = "*" } = {}) {
+  const params = { select, limit: Math.max(1, Math.min(10000, Number(limit) || 5000)) };
+  if (order) params.order = order;
+  Object.assign(params, filters || {});
+  return await supabaseDb.select(table, params);
+}
+async function _b2cUpdateWhere(table, filters = {}, patch = {}) {
+  const rows = await supabaseDb.request(_b2cPath(table, filters), { method: "PATCH", headers: { Prefer: "return=representation" }, body: patch });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+async function _b2cDeleteWhere(table, filters = {}) {
+  return await supabaseDb.request(_b2cPath(table, filters), { method: "DELETE", headers: { Prefer: "return=representation" } });
+}
+function _b2cMissingSchema(error) {
+  return /relation .* does not exist|Could not find the table|schema cache|column .* does not exist/i.test(String(error?.message || ""));
+}
+function _b2cSchemaError(error) {
+  if (!_b2cMissingSchema(error)) return error;
+  const missing = new Error("B2C multi-database tables are not installed yet. Run the supplied B2C SQL migration, then refresh the page.");
+  missing.status = 503;
+  return missing;
+}
 async function _b2cCurrentMember(req) {
   const row = await _sbFindSessionTeamMember(req).catch(() => null);
   return {
@@ -37218,228 +37270,366 @@ async function _b2cCurrentMember(req) {
     name: _sbString(_sbValueForLabel(row || {}, "Name")) || _b2cText(req?.session?.username || "", 180) || "User",
   };
 }
-
+async function _b2cLoadDatabase(databaseId) {
+  const row = await supabaseDb.selectById(_b2cDatabasesTable(), databaseId);
+  if (!row) return null;
+  return _b2cSerializeDatabase(row);
+}
+async function _b2cLoadDatabases() {
+  try {
+    const rows = await _b2cSelect(_b2cDatabasesTable(), { order: "created_at.asc,id.asc" });
+    return (Array.isArray(rows) ? rows : []).map(_b2cSerializeDatabase);
+  } catch (error) { throw _b2cSchemaError(error); }
+}
+async function _b2cLoadFields(databaseId) {
+  try {
+    const rows = await _b2cSelect(_b2cFieldsTable(), { filters: { database_id: `eq.${databaseId}` }, order: "sort_order.asc,id.asc" });
+    return (Array.isArray(rows) ? rows : []).map(_b2cSerializeField).sort((a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id));
+  } catch (error) { throw _b2cSchemaError(error); }
+}
+async function _b2cLoadRecords(databaseId) {
+  try {
+    const rows = await _b2cSelect(_b2cCustomersTable(), { filters: { database_id: `eq.${databaseId}` }, order: "created_at.desc,id.desc", limit: 10000 });
+    return (Array.isArray(rows) ? rows : []).map(_b2cSerializeRecord);
+  } catch (error) { throw _b2cSchemaError(error); }
+}
+async function _b2cLoadForms(databaseId = "") {
+  try {
+    const filters = databaseId ? { database_id: `eq.${databaseId}` } : {};
+    const rows = await _b2cSelect(_b2cFormsTable(), { filters, order: "is_default.desc,created_at.asc,id.asc" });
+    return (Array.isArray(rows) ? rows : []).map(_b2cSerializeForm);
+  } catch (error) { throw _b2cSchemaError(error); }
+}
+async function _b2cEnsureDefaultForm(database) {
+  const forms = await _b2cLoadForms(database.id);
+  if (forms.length) return forms.find((form) => form.isDefault) || forms[0];
+  const created = await supabaseDb.insert(_b2cFormsTable(), {
+    database_id: database.id,
+    name: `${database.name} Form`.slice(0, 120),
+    description: database.description || `Entry form for ${database.name}`,
+    is_default: true,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+  return _b2cSerializeForm(created || {});
+}
+async function _b2cEnsureFormFields(formId, fields = []) {
+  const rows = await _b2cSelect(_b2cFormFieldsTable(), { filters: { form_id: `eq.${formId}` }, order: "sort_order.asc,id.asc" });
+  const byFieldId = new Map((Array.isArray(rows) ? rows : []).map((row) => [String(_sbGet(row, ["field_id", "fieldId"])), row]));
+  for (const [index, field] of fields.entries()) {
+    if (byFieldId.has(String(field.id))) continue;
+    await supabaseDb.insert(_b2cFormFieldsTable(), {
+      form_id: formId,
+      field_id: field.id,
+      sort_order: index + 1,
+      is_required_override: null,
+      visibility_condition: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  }
+}
+async function _b2cLoadFormBundle(formId) {
+  const raw = await supabaseDb.selectById(_b2cFormsTable(), formId);
+  if (!raw) return null;
+  const form = _b2cSerializeForm(raw);
+  const database = await _b2cLoadDatabase(form.databaseId);
+  if (!database) return null;
+  const fields = await _b2cLoadFields(database.id);
+  await _b2cEnsureFormFields(form.id, fields);
+  const bindingRows = await _b2cSelect(_b2cFormFieldsTable(), { filters: { form_id: `eq.${form.id}` }, order: "sort_order.asc,id.asc" });
+  const bindingByField = new Map((Array.isArray(bindingRows) ? bindingRows : []).map((row) => [String(_sbGet(row, ["field_id", "fieldId"])), row]));
+  const formFields = fields.map((field, index) => _b2cSerializeFormField(bindingByField.get(String(field.id)) || { field_id: field.id, sort_order: index + 1 }, field))
+    .sort((a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id));
+  return { form, database, fields: formFields };
+}
+async function _b2cNextDatabaseKey(name) {
+  const base = _b2cFieldKey(name, "b2c_table");
+  const databases = await _b2cLoadDatabases();
+  const used = new Set(databases.map((item) => item.key));
+  if (!used.has(base)) return base;
+  for (let number = 2; number < 1000; number += 1) { const candidate = `${base}_${number}`.slice(0, 80); if (!used.has(candidate)) return candidate; }
+  return `${base}_${Date.now().toString(36)}`.slice(0, 80);
+}
+async function _b2cNextFieldKey(databaseId, label, excludingId = "") {
+  const base = _b2cFieldKey(label, "field");
+  const fields = await _b2cLoadFields(databaseId);
+  const used = new Set(fields.filter((field) => String(field.id) !== String(excludingId)).map((field) => field.key));
+  if (!used.has(base)) return base;
+  for (let number = 2; number < 1000; number += 1) { const candidate = `${base}_${number}`.slice(0, 60); if (!used.has(candidate)) return candidate; }
+  return `${base}_${Date.now().toString(36)}`.slice(0, 60);
+}
+function _b2cFieldPatch(body = {}) {
+  const label = _b2cText(body?.label, 120);
+  const type = _b2cFieldType(body?.type, "");
+  if (!label) throw new Error("Property name is required.");
+  if (!type) throw new Error("Choose a valid property type.");
+  return {
+    label,
+    field_type: type,
+    field_options: _b2cOptions(body?.options, type),
+    is_required: _sbBool(body?.required, false),
+    sort_order: _b2cNumber(body?.sortOrder, 1, 1, 9999),
+    updated_at: new Date().toISOString(),
+  };
+}
+function _b2cNormalizeCondition(raw, fields = [], selfKey = "") {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const enabled = _sbBool(source.enabled, false);
+  const validOperators = new Set(["equals", "not_equals", "contains", "has_value", "is_empty", "is_checked", "not_checked"]);
+  const condition = {
+    enabled,
+    fieldKey: _b2cText(source.fieldKey || source.field_key, 80),
+    operator: validOperators.has(_b2cText(source.operator, 40)) ? _b2cText(source.operator, 40) : "equals",
+    value: typeof source.value === "string" || typeof source.value === "number" || typeof source.value === "boolean" ? source.value : "",
+  };
+  if (!enabled) return { enabled: false, fieldKey: "", operator: "equals", value: "" };
+  if (!condition.fieldKey) throw new Error("Choose the controlling field for each conditional property.");
+  if (condition.fieldKey === selfKey) throw new Error("A field cannot use itself as its visibility condition.");
+  if (!fields.some((field) => field.key === condition.fieldKey)) throw new Error("A form condition references a field that does not exist in this table.");
+  return condition;
+}
+function _b2cConditionPass(condition, values = {}) {
+  if (!condition?.enabled) return true;
+  const value = values?.[condition.fieldKey];
+  const list = Array.isArray(value) ? value : [];
+  const valueString = String(value ?? "");
+  const target = String(condition.value ?? "");
+  switch (condition.operator) {
+    case "equals": return valueString === target;
+    case "not_equals": return valueString !== target;
+    case "contains": return list.includes(target) || valueString.includes(target);
+    case "has_value": return Array.isArray(value) ? value.length > 0 : !!_b2cText(value);
+    case "is_empty": return Array.isArray(value) ? value.length === 0 : !_b2cText(value);
+    case "is_checked": return value === true || valueString.toLowerCase() === "true";
+    case "not_checked": return !(value === true || valueString.toLowerCase() === "true");
+    default: return true;
+  }
+}
 function _b2cSafeFileEntry(value) {
   if (!value || typeof value !== "object") return null;
   const url = _b2cText(value.url || value.href || value.publicUrl, 3000);
-  if (!/^https?:\/\//i.test(url)) return null;
-  return {
-    name: _b2cText(value.name || value.filename || "Attachment", 240) || "Attachment",
-    url,
-    type: _b2cText(value.type || value.mime || "", 120),
-    size: Math.max(0, Math.min(100 * 1024 * 1024, Number(value.size) || 0)),
-  };
+  if (!/^https:\/\//i.test(url)) return null;
+  return { name: _b2cText(value.name || value.filename || "Attachment", 240) || "Attachment", url, type: _b2cText(value.type || value.mime || "", 120), size: Math.max(0, Math.min(100 * 1024 * 1024, Number(value.size) || 0)) };
 }
-
-function _b2cSanitizeCustomerValues(rawValues, fields = {}, { partial = false } = {}) {
+function _b2cSanitizeValues(rawValues, fields = [], { partial = false, formMode = false } = {}) {
   const incoming = rawValues && typeof rawValues === "object" && !Array.isArray(rawValues) ? rawValues : {};
   const output = {};
   const missing = [];
-  for (const field of fields || []) {
+  for (const field of fields) {
+    const visible = !formMode || _b2cConditionPass(field.condition, { ...incoming, ...output });
+    if (!visible || B2C_READONLY_FIELD_TYPES.has(field.type)) continue;
     const key = field.key;
     if (!Object.prototype.hasOwnProperty.call(incoming, key)) {
-      if (!partial && field.required) missing.push(field.label);
+      if (!partial && (formMode ? field.formRequired : field.required)) missing.push(field.label);
       continue;
     }
     const raw = incoming[key];
+    const required = formMode ? field.formRequired : field.required;
     if (field.type === "number") {
-      if (raw === "" || raw === null || typeof raw === "undefined") {
-        output[key] = null;
-      } else {
-        const number = Number(raw);
-        if (!Number.isFinite(number)) throw new Error(`${field.label} must be a valid number.`);
-        output[key] = number;
-      }
-      continue;
-    }
-    if (field.type === "files") {
+      if (raw === "" || raw === null || typeof raw === "undefined") output[key] = null;
+      else { const number = Number(raw); if (!Number.isFinite(number)) throw new Error(`${field.label} must be a valid number.`); output[key] = number; }
+    } else if (field.type === "files") {
       const files = (Array.isArray(raw) ? raw : []).map(_b2cSafeFileEntry).filter(Boolean).slice(0, 20);
-      if (!partial && field.required && !files.length) missing.push(field.label);
+      if (!partial && required && !files.length) missing.push(field.label);
       output[key] = files;
-      continue;
+    } else if (field.type === "checkbox") {
+      const checked = raw === true || String(raw).toLowerCase() === "true" || raw === 1 || raw === "1";
+      if (!partial && required && !checked) missing.push(field.label);
+      output[key] = checked;
+    } else if (field.type === "multi_select") {
+      const available = new Set(field.options?.options || []);
+      const values = (Array.isArray(raw) ? raw : []).map((value) => _b2cText(value, 100)).filter(Boolean).filter((value) => !available.size || available.has(value)).slice(0, 100);
+      if (!partial && required && !values.length) missing.push(field.label);
+      output[key] = values;
+    } else {
+      const value = _b2cText(raw, field.type === "phone" ? 80 : 5000);
+      if (field.type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new Error(`${field.label} must be a valid email.`);
+      if (field.type === "url" && value && !/^https?:\/\//i.test(value)) throw new Error(`${field.label} must start with http:// or https://.`);
+      if (B2C_SELECT_FIELD_TYPES.has(field.type) && value && (field.options?.options || []).length && !(field.options.options || []).includes(value)) throw new Error(`${field.label} must use one of its configured options.`);
+      if (!partial && required && !value) missing.push(field.label);
+      output[key] = value;
     }
-    const value = _b2cText(raw, field.type === "phone" ? 80 : 5000);
-    if (!partial && field.required && !value) missing.push(field.label);
-    output[key] = value;
   }
   if (missing.length) throw new Error(`Complete the required field${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}.`);
   return output;
 }
 
-async function _b2cNextFieldKey(label, excludingId = "") {
-  const base = _b2cFieldKey(label, "field");
-  const existing = await _b2cLoadFields();
-  const used = new Set(existing.filter((field) => String(field.id) !== String(excludingId)).map((field) => field.key));
-  if (!used.has(base)) return base;
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${base}_${n}`.slice(0, 60);
-    if (!used.has(candidate)) return candidate;
-  }
-  return `${base}_${Date.now().toString(36)}`.slice(0, 60);
-}
-
-function _b2cFieldPatch(body = {}, { isNew = false } = {}) {
-  const label = _b2cText(body?.label, 120);
-  const type = _b2cFieldType(body?.type, "");
-  if (!label) throw new Error("Column name is required.");
-  if (!type) throw new Error("Choose a valid column type.");
-  const sortOrder = Math.max(1, Math.min(9999, Math.round(Number(body?.sortOrder) || 1)));
-  return {
-    label,
-    field_type: type,
-    is_required: _sbBool(body?.required, false),
-    sort_order: sortOrder,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-app.get("/api/b2c/fields", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), async (req, res) => {
+app.get("/api/b2c/databases", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    return res.json({ ok: true, fields: await _b2cLoadFields() });
-  } catch (error) {
-    console.error("[b2c] fields read error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load customer fields." });
-  }
+    const databases = await _b2cLoadDatabases();
+    const [allFields, allRecords, allForms] = await Promise.all([
+      _b2cSelect(_b2cFieldsTable(), { order: "database_id.asc,sort_order.asc,id.asc" }),
+      _b2cSelect(_b2cCustomersTable(), { order: "database_id.asc,created_at.desc,id.desc", limit: 10000 }),
+      _b2cLoadForms(),
+    ]);
+    const fieldCount = new Map(); const recordCount = new Map(); const firstForm = new Map();
+    (Array.isArray(allFields) ? allFields : []).forEach((row) => { const key = String(_sbGet(row, ["database_id", "databaseId"]) || ""); fieldCount.set(key, (fieldCount.get(key) || 0) + 1); });
+    (Array.isArray(allRecords) ? allRecords : []).forEach((row) => { const key = String(_sbGet(row, ["database_id", "databaseId"]) || ""); recordCount.set(key, (recordCount.get(key) || 0) + 1); });
+    allForms.forEach((form) => { if (!firstForm.has(String(form.databaseId)) || form.isDefault) firstForm.set(String(form.databaseId), form.id); });
+    return res.json({ ok: true, databases: databases.map((database) => ({ ...database, fieldCount: fieldCount.get(String(database.id)) || 0, recordCount: recordCount.get(String(database.id)) || 0, defaultFormId: firstForm.get(String(database.id)) || null })) });
+  } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] databases read error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load B2C databases." }); }
 });
 
-app.get("/api/b2c/customers", requireAuth, requirePage("Customer Database"), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const [fields, customers] = await Promise.all([_b2cLoadFields(), _b2cLoadCustomers()]);
-    return res.json({ ok: true, fields, customers });
-  } catch (error) {
-    console.error("[b2c] customers read error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load customers." });
-  }
-});
-
-app.post("/api/b2c/fields", requireAuth, requirePage("Customer Database"), async (req, res) => {
+app.post("/api/b2c/databases", requireAuth, requirePage("Customer Database"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     if (!supabaseDb?.isConfigured?.()) return res.status(503).json({ ok: false, error: "B2C service is not ready." });
-    const patch = _b2cFieldPatch(req.body, { isNew: true });
-    patch.field_key = await _b2cNextFieldKey(patch.label);
-    patch.created_at = new Date().toISOString();
-    const row = await supabaseDb.insert(_b2cFieldsTable(), patch);
-    return res.status(201).json({ ok: true, field: _b2cSerializeField(row || patch) });
-  } catch (error) {
-    console.error("[b2c] field create error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add customer column." });
-  }
+    const name = _b2cText(req.body?.name, 120); const description = _b2cText(req.body?.description, 500);
+    if (!name) return res.status(400).json({ ok: false, error: "Table name is required." });
+    const database = await supabaseDb.insert(_b2cDatabasesTable(), { database_key: await _b2cNextDatabaseKey(name), name, description: description || null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const serialized = _b2cSerializeDatabase(database || {});
+    const defaultForm = await _b2cEnsureDefaultForm(serialized);
+    return res.status(201).json({ ok: true, database: { ...serialized, defaultFormId: defaultForm.id } });
+  } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] database create error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to create B2C table." }); }
 });
 
-app.patch("/api/b2c/fields/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
+app.patch("/api/b2c/databases/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const id = String(req.params.id || "").trim();
-    if (!id) return res.status(400).json({ ok: false, error: "Missing column ID." });
-    const existing = await supabaseDb.selectById(_b2cFieldsTable(), id);
-    if (!existing) return res.status(404).json({ ok: false, error: "Customer column was not found." });
-    const patch = _b2cFieldPatch(req.body);
-    const row = await supabaseDb.updateById(_b2cFieldsTable(), id, patch);
-    return res.json({ ok: true, field: _b2cSerializeField(row || { ...existing, ...patch }) });
-  } catch (error) {
-    console.error("[b2c] field update error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update customer column." });
-  }
+    const id = _b2cText(req.params.id, 60); const existing = await _b2cLoadDatabase(id); if (!existing) return res.status(404).json({ ok: false, error: "B2C table was not found." });
+    const name = _b2cText(req.body?.name, 120) || existing.name; const description = _b2cText(req.body?.description, 500);
+    const updated = await supabaseDb.updateById(_b2cDatabasesTable(), id, { name, description: description || null, updated_at: new Date().toISOString() });
+    return res.json({ ok: true, database: _b2cSerializeDatabase(updated || { ...existing, name, description }) });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to update B2C table." }); }
 });
 
-app.delete("/api/b2c/fields/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
+app.get("/api/b2c/databases/:id/records", requireAuth, requirePage("Customer Database"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const id = String(req.params.id || "").trim();
-    if (!id) return res.status(400).json({ ok: false, error: "Missing column ID." });
-    await supabaseDb.deleteById(_b2cFieldsTable(), id);
+    const database = await _b2cLoadDatabase(_b2cText(req.params.id, 60)); if (!database) return res.status(404).json({ ok: false, error: "B2C table was not found." });
+    const [fields, records, defaultForm] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id), _b2cEnsureDefaultForm(database)]);
+    return res.json({ ok: true, database: { ...database, defaultFormId: defaultForm.id }, fields, records });
+  } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] records read error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load table records." }); }
+});
+
+app.put("/api/b2c/databases/:id/fields", requireAuth, requirePage("Customer Database"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const database = await _b2cLoadDatabase(_b2cText(req.params.id, 60)); if (!database) return res.status(404).json({ ok: false, error: "B2C table was not found." });
+    const incoming = Array.isArray(req.body?.fields) ? req.body.fields.slice(0, 80) : [];
+    const existing = await _b2cLoadFields(database.id); const existingById = new Map(existing.map((field) => [String(field.id), field]));
+    const nextIds = new Set(); const saved = [];
+    for (const [index, raw] of incoming.entries()) {
+      const requestedId = _b2cText(raw?.id, 60); const current = existingById.get(requestedId); const patch = _b2cFieldPatch({ ...raw, sortOrder: index + 1 });
+      if (current) {
+        const row = await supabaseDb.updateById(_b2cFieldsTable(), current.id, patch); saved.push(_b2cSerializeField(row || { ...current, ...patch })); nextIds.add(String(current.id));
+      } else {
+        const fieldKey = await _b2cNextFieldKey(database.id, patch.label); const row = await supabaseDb.insert(_b2cFieldsTable(), { database_id: database.id, field_key: fieldKey, ...patch, created_at: new Date().toISOString() }); saved.push(_b2cSerializeField(row || { database_id: database.id, field_key: fieldKey, ...patch })); if (row?.id) nextIds.add(String(row.id));
+      }
+    }
+    for (const field of existing) if (!nextIds.has(String(field.id))) await supabaseDb.deleteById(_b2cFieldsTable(), field.id);
+    const fields = await _b2cLoadFields(database.id); const forms = await _b2cLoadForms(database.id); for (const form of forms) await _b2cEnsureFormFields(form.id, fields);
+    return res.json({ ok: true, fields });
+  } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] fields save error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to save table properties." }); }
+});
+
+app.get("/api/b2c/forms", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const [databases, forms, bindings] = await Promise.all([_b2cLoadDatabases(), _b2cLoadForms(), _b2cSelect(_b2cFormFieldsTable(), { order: "form_id.asc,sort_order.asc,id.asc" })]);
+    const databaseById = new Map(databases.map((database) => [String(database.id), database])); const fieldCount = new Map();
+    (Array.isArray(bindings) ? bindings : []).forEach((row) => { const id = String(_sbGet(row, ["form_id", "formId"]) || ""); fieldCount.set(id, (fieldCount.get(id) || 0) + 1); });
+    return res.json({ ok: true, databases, forms: forms.map((form) => ({ ...form, databaseName: databaseById.get(String(form.databaseId))?.name || "B2C Table", fieldCount: fieldCount.get(String(form.id)) || 0 })) });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load B2C forms." }); }
+});
+
+app.post("/api/b2c/forms", requireAuth, requirePage(["Customer Database", "Customer Form"]), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const database = await _b2cLoadDatabase(_b2cText(req.body?.databaseId, 60)); if (!database) return res.status(400).json({ ok: false, error: "Choose a valid B2C data table." });
+    const name = _b2cText(req.body?.name, 120); if (!name) return res.status(400).json({ ok: false, error: "Form name is required." });
+    const form = await supabaseDb.insert(_b2cFormsTable(), { database_id: database.id, name, description: _b2cText(req.body?.description, 500) || null, is_default: false, is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const serialized = _b2cSerializeForm(form || {}); await _b2cEnsureFormFields(serialized.id, await _b2cLoadFields(database.id));
+    return res.status(201).json({ ok: true, form: serialized });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to create B2C form." }); }
+});
+
+app.get("/api/b2c/forms/:id", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const bundle = await _b2cLoadFormBundle(_b2cText(req.params.id, 60)); if (!bundle) return res.status(404).json({ ok: false, error: "B2C form was not found." });
+    return res.json({ ok: true, form: { ...bundle.form, database: bundle.database }, fields: bundle.fields });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load B2C form." }); }
+});
+
+app.patch("/api/b2c/forms/:id", requireAuth, requirePage(["Customer Database", "Customer Form"]), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const id = _b2cText(req.params.id, 60); const existing = await supabaseDb.selectById(_b2cFormsTable(), id); if (!existing) return res.status(404).json({ ok: false, error: "B2C form was not found." });
+    const patch = { name: _b2cText(req.body?.name, 120) || _b2cSerializeForm(existing).name, description: _b2cText(req.body?.description, 500) || null, updated_at: new Date().toISOString() };
+    const updated = await supabaseDb.updateById(_b2cFormsTable(), id, patch); return res.json({ ok: true, form: _b2cSerializeForm(updated || { ...existing, ...patch }) });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to update B2C form." }); }
+});
+
+app.put("/api/b2c/forms/:id/builder", requireAuth, requirePage(["Customer Database", "Customer Form"]), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const bundle = await _b2cLoadFormBundle(_b2cText(req.params.id, 60)); if (!bundle) return res.status(404).json({ ok: false, error: "B2C form was not found." });
+    const incoming = Array.isArray(req.body?.fields) ? req.body.fields.slice(0, 80) : [];
+    const fieldById = new Map(bundle.fields.map((field) => [String(field.id), field]));
+    if (incoming.length !== bundle.fields.length) return res.status(400).json({ ok: false, error: "The form builder must include every property from the linked data table." });
+    const received = new Set();
+    for (const [index, item] of incoming.entries()) {
+      const fieldId = _b2cText(item?.fieldId || item?.id, 60); const field = fieldById.get(fieldId); if (!field || received.has(fieldId)) return res.status(400).json({ ok: false, error: "The form builder contains an invalid property." }); received.add(fieldId);
+      const condition = _b2cNormalizeCondition(item?.condition, bundle.fields, field.key);
+      const existingRows = await _b2cSelect(_b2cFormFieldsTable(), { filters: { form_id: `eq.${bundle.form.id}`, field_id: `eq.${field.id}` }, limit: 1 });
+      const patch = { sort_order: index + 1, is_required_override: _sbBool(item?.formRequired, field.required), visibility_condition: condition, updated_at: new Date().toISOString() };
+      if (existingRows?.[0]) await supabaseDb.updateById(_b2cFormFieldsTable(), _b2cId(existingRows[0]), patch);
+      else await supabaseDb.insert(_b2cFormFieldsTable(), { form_id: bundle.form.id, field_id: field.id, ...patch, created_at: new Date().toISOString() });
+    }
     return res.json({ ok: true });
-  } catch (error) {
-    console.error("[b2c] field delete error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to remove customer column." });
-  }
+  } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] form builder save error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to save B2C form builder." }); }
+});
+
+app.post("/api/b2c/forms/:id/submit", requireAuth, requirePage("Customer Form"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const bundle = await _b2cLoadFormBundle(_b2cText(req.params.id, 60)); if (!bundle) return res.status(404).json({ ok: false, error: "B2C form was not found." });
+    const values = _b2cSanitizeValues(req.body?.values, bundle.fields, { partial: false, formMode: true }); const current = await _b2cCurrentMember(req);
+    const created = await supabaseDb.insert(_b2cCustomersTable(), { database_id: bundle.database.id, data: values, created_by_id: current.id || null, created_by_name: current.name || null, updated_by_id: current.id || null, updated_by_name: current.name || null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    return res.status(201).json({ ok: true, record: _b2cSerializeRecord(created || {}) });
+  } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] form submit error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to save B2C record." }); }
+});
+
+app.patch("/api/b2c/records/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const recordId = _b2cText(req.params.id, 60); const databaseId = _b2cText(req.body?.databaseId, 60); const existing = await supabaseDb.selectById(_b2cCustomersTable(), recordId); if (!existing) return res.status(404).json({ ok: false, error: "B2C record was not found." });
+    const record = _b2cSerializeRecord(existing); if (databaseId && String(record.databaseId) !== String(databaseId)) return res.status(404).json({ ok: false, error: "This record does not belong to the selected table." });
+    const fields = await _b2cLoadFields(record.databaseId); const incoming = _b2cSanitizeValues(req.body?.values, fields, { partial: true }); const current = await _b2cCurrentMember(req); const values = { ...record.values, ...incoming };
+    const updated = await supabaseDb.updateById(_b2cCustomersTable(), recordId, { data: values, updated_by_id: current.id || null, updated_by_name: current.name || null, updated_at: new Date().toISOString() });
+    return res.json({ ok: true, record: _b2cSerializeRecord(updated || { ...existing, data: values }) });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to update B2C record." }); }
+});
+
+app.delete("/api/b2c/records/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const id = _b2cText(req.params.id, 60); const databaseId = _b2cText(req.query?.databaseId, 60); const existing = await supabaseDb.selectById(_b2cCustomersTable(), id); if (!existing) return res.status(404).json({ ok: false, error: "B2C record was not found." });
+    if (databaseId && String(_sbGet(existing, ["database_id", "databaseId"]) || "") !== databaseId) return res.status(404).json({ ok: false, error: "This record does not belong to the selected table." });
+    await supabaseDb.deleteById(_b2cCustomersTable(), id); return res.json({ ok: true });
+  } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to delete B2C record." }); }
 });
 
 app.post("/api/b2c/upload", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const dataUrl = String(req.body?.dataUrl || req.body?.data || "").trim();
-    const filename = _b2cText(req.body?.filename, 240) || "attachment";
-    const mime = _b2cText(req.body?.mime || "", 160);
-    const match = dataUrl.match(/^data:([^;,]+)?;base64,([\s\S]+)$/i);
-    if (!match) return res.status(400).json({ ok: false, error: "Choose a valid photo or file first." });
-    const encoded = match[2].replace(/\s/g, "");
-    const size = Buffer.byteLength(encoded, "base64");
-    if (!size) return res.status(400).json({ ok: false, error: "The selected file is empty." });
-    if (size > 10 * 1024 * 1024) return res.status(413).json({ ok: false, error: "Each file must be 10 MB or less." });
-    const cleanName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || `file-${Date.now()}`;
-    const objectPath = `b2c/customer-files/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
-    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
-    return res.status(201).json({ ok: true, file: { name: filename, url, type: mime || match[1] || "", size } });
-  } catch (error) {
-    console.error("[b2c] upload error:", error?.details || error?.message || error);
-    const message = String(error?.message || "").includes("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING")
-      ? "File upload is not configured yet."
-      : (error?.message || "Failed to upload the file.");
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
+    const dataUrl = String(req.body?.dataUrl || req.body?.data || "").trim(); const filename = _b2cText(req.body?.filename, 240) || "attachment"; const mime = _b2cText(req.body?.mime || req.body?.contentType || "", 160);
+    const match = dataUrl.match(/^data:([^;,]+)?;base64,([\s\S]+)$/i); if (!match) return res.status(400).json({ ok: false, error: "Choose a valid photo or file first." });
+    const bytes = Buffer.from(match[2], "base64"); const size = bytes.length; if (!size) return res.status(400).json({ ok: false, error: "The selected file is empty." }); if (size > 10 * 1024 * 1024) return res.status(413).json({ ok: false, error: "Each file must be 10 MB or less." });
+    const cleanName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || `file-${Date.now()}`; const objectPath = `b2c/customer-files/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+    const url = await uploadToBlobFromBase64(dataUrl, objectPath); return res.status(201).json({ ok: true, file: { name: filename, url, type: mime || match[1] || "", size } });
+  } catch (error) { console.error("[b2c] upload error:", error?.details || error?.message || error); const message = String(error?.message || "").includes("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING") ? "File upload is not configured yet." : (error?.message || "Failed to upload the file."); return res.status(error?.status || 500).json({ ok: false, error: message }); }
 });
 
-app.post("/api/b2c/customers", requireAuth, requirePage("Customer Form"), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (!supabaseDb?.isConfigured?.()) return res.status(503).json({ ok: false, error: "B2C service is not ready." });
-    const fields = await _b2cLoadFields();
-    if (!fields.length) return res.status(409).json({ ok: false, error: "Customer Database has no columns yet. Set up the database first." });
-    const values = _b2cSanitizeCustomerValues(req.body?.values, fields, { partial: false });
-    const current = await _b2cCurrentMember(req);
-    const created = await supabaseDb.insert(_b2cCustomersTable(), {
-      data: values,
-      created_by_id: current.id || null,
-      created_by_name: current.name || null,
-      updated_at: new Date().toISOString(),
-    });
-    return res.status(201).json({ ok: true, customer: _b2cSerializeCustomer(created || {}) });
-  } catch (error) {
-    console.error("[b2c] customer create error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save customer record." });
-  }
-});
-
-app.patch("/api/b2c/customers/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const id = String(req.params.id || "").trim();
-    if (!id) return res.status(400).json({ ok: false, error: "Missing customer ID." });
-    const existing = await supabaseDb.selectById(_b2cCustomersTable(), id);
-    if (!existing) return res.status(404).json({ ok: false, error: "Customer record was not found." });
-    const fields = await _b2cLoadFields();
-    const existingValues = _b2cParseJson(_sbGet(existing, ["data", "values"]), {});
-    const incoming = _b2cSanitizeCustomerValues(req.body?.values, fields, { partial: true });
-    const values = { ...existingValues, ...incoming };
-    const current = await _b2cCurrentMember(req);
-    const updated = await supabaseDb.updateById(_b2cCustomersTable(), id, {
-      data: values,
-      updated_at: new Date().toISOString(),
-      updated_by_id: current.id || null,
-      updated_by_name: current.name || null,
-    });
-    return res.json({ ok: true, customer: _b2cSerializeCustomer(updated || { ...existing, data: values }) });
-  } catch (error) {
-    console.error("[b2c] customer update error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update customer record." });
-  }
-});
-
-app.delete("/api/b2c/customers/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const id = String(req.params.id || "").trim();
-    if (!id) return res.status(400).json({ ok: false, error: "Missing customer ID." });
-    await supabaseDb.deleteById(_b2cCustomersTable(), id);
-    return res.json({ ok: true });
-  } catch (error) {
-    console.error("[b2c] customer delete error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete customer record." });
-  }
+// Legacy B2C endpoint retained for any older deployed tab. New screens use the
+// multi-table routes above.
+app.get("/api/b2c/fields", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), async (req, res) => {
+  try { const databases = await _b2cLoadDatabases(); const database = databases[0]; return res.json({ ok: true, fields: database ? await _b2cLoadFields(database.id) : [] }); }
+  catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load B2C fields." }); }
 });
 
 // =============================================================================
