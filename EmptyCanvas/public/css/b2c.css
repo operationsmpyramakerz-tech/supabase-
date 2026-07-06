@@ -1028,3 +1028,46 @@ body.b2c-builder-reordering *{
   .b2c-formula-layout{grid-template-columns:1fr}
   .b2c-formula-summary{align-items:flex-start;flex-direction:column}
 }
+
+/* B2C Formula Calculator v2 */
+.b2c-formula-cell--error{border-color:#f4c7c7;background:#fff8f8;color:#bb4c4c}
+.b2c-dialog--formula{width:min(1180px,calc(100vw - 32px));max-height:min(860px,calc(100vh - 26px));padding:24px}
+.b2c-dialog__header--formula{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-right:52px}
+.b2c-dialog__header--formula h2{margin-bottom:5px}
+.b2c-dialog__header--formula p{max-width:680px}
+.b2c-formula-test-control{display:grid;gap:6px;min-width:180px;flex:none}
+.b2c-formula-test-control label{color:#7c8492;font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.b2c-formula-test-control select,
+.b2c-formula-condition select,
+.b2c-formula-condition input{width:100%;min-height:38px;border:1px solid #dfe2eb;border-radius:10px;background:#fff;color:#303746;font:700 12px/1.2 inherit;outline:none;padding:0 10px}
+.b2c-formula-test-control select:focus,
+.b2c-formula-condition select:focus,
+.b2c-formula-condition input:focus{border-color:#a896f0;box-shadow:0 0 0 3px rgba(98,70,223,.10)}
+.b2c-formula-recipe-band{margin-top:16px;padding:13px;border:1px solid #ebe7fb;border-radius:14px;background:linear-gradient(120deg,#fbfaff,#f7fbff)}
+.b2c-formula-recipe-band__head{display:flex;align-items:baseline;gap:9px;margin:0 0 10px}
+.b2c-formula-recipe-band__head strong{color:#4937a8;font-size:12px;font-weight:900}
+.b2c-formula-recipe-band__head span{color:#8b92a0;font-size:11px}
+.b2c-formula-recipes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.b2c-formula-recipe{display:grid;gap:3px;min-width:0;padding:10px 11px;border:1px solid #e4e5ec;border-radius:11px;background:#fff;color:#404757;font:inherit;text-align:left;cursor:pointer;transition:.16s ease}
+.b2c-formula-recipe:hover{border-color:#cfc4fb;background:#fbfaff;transform:translateY(-1px);box-shadow:0 8px 18px rgba(63,46,147,.08)}
+.b2c-formula-recipe strong{font-size:11px;font-weight:900}.b2c-formula-recipe span{font-size:10px;line-height:1.35;color:#8a92a0}
+.b2c-formula-layout{grid-template-columns:minmax(0,1.3fr) minmax(270px,.7fr);gap:16px;margin-top:14px}
+.b2c-formula-editor{padding:15px}
+.b2c-formula-editor__heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.b2c-formula-editor__heading label{color:#3f4654;font-size:12px;font-weight:900}
+.b2c-formula-editor__heading span{padding:4px 7px;border-radius:999px;background:#f1effc;color:#6d56cc;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+.b2c-formula-toolbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+.b2c-formula-toolbar button{display:inline-flex;align-items:center;justify-content:center;min-width:31px;height:29px;padding:0 8px;border:1px solid #dfe2eb;border-radius:8px;background:#fff;color:#596170;font:800 12px/1 inherit;cursor:pointer}
+.b2c-formula-toolbar button:hover{border-color:#bcb0f4;background:#f8f7ff;color:#563ec7}
+.b2c-formula-toolbar svg{width:13px;height:13px}
+.b2c-formula-editor textarea{min-height:130px;background:#fdfdff}
+.b2c-formula-result{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;padding:11px 12px;border:1px solid #dce9df;border-radius:11px;background:#fbfefa}
+.b2c-formula-result>div{display:grid;gap:2px}.b2c-formula-result span{color:#718177;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em}.b2c-formula-result strong{color:#257445;font-size:16px;font-weight:900;word-break:break-word}
+.b2c-formula-result__hint{max-width:54%;margin:0;color:#748076;font-size:10px;line-height:1.4;text-align:right}.b2c-formula-result__hint.is-error{color:#b54b4b}.b2c-formula-result__hint.is-valid{color:#5d7465}
+.b2c-formula-condition{margin-top:14px;padding:13px;border:1px solid #e5e6ee;border-radius:12px;background:#fcfcfe}
+.b2c-formula-condition__head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:11px}.b2c-formula-condition__head>div{display:grid;gap:3px}.b2c-formula-condition__head span{color:#4d5667;font-size:12px;font-weight:900}.b2c-formula-condition__head p{margin:0;color:#8b93a0;font-size:10px;line-height:1.35}.b2c-formula-condition__head svg{width:17px;height:17px;color:#7157d6}
+.b2c-formula-condition__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.b2c-formula-condition__grid label{display:grid;gap:5px;min-width:0}.b2c-formula-condition__grid label>span{color:#8a91a0;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
+.b2c-condition-add{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;margin-top:auto;border:1px solid #d9d0fb;border-radius:10px;background:#f8f7ff;color:#5a43c9;font:800 11px/1 inherit;cursor:pointer}.b2c-condition-add:hover{background:#f0edff}.b2c-condition-add svg{width:14px;height:14px}
+.b2c-formula-library{max-height:560px;overflow:auto}.b2c-formula-property-list .b2c-formula-insert{justify-content:flex-start}.b2c-formula-property-list .b2c-formula-insert small{margin-left:auto;color:#939aa6;font-size:9px;font-weight:800;white-space:nowrap}.b2c-formula-function-categories{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px}.b2c-formula-function-categories button{padding:5px 8px;border:1px solid #e0e3ec;border-radius:999px;background:#fff;color:#74808e;font:800 10px/1 inherit;cursor:pointer}.b2c-formula-function-categories button:hover,.b2c-formula-function-categories button.is-active{border-color:#cfc2f7;background:#f3f0ff;color:#5b42c5}
+@media(max-width:900px){.b2c-dialog--formula{padding:18px}.b2c-dialog__header--formula{padding-right:42px}.b2c-formula-layout{grid-template-columns:1fr}.b2c-formula-library{max-height:none}.b2c-formula-recipes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.b2c-dialog--formula{width:calc(100vw - 18px);padding:15px}.b2c-dialog__header--formula{display:grid;gap:11px}.b2c-formula-test-control{min-width:0}.b2c-formula-recipe-band__head{display:grid;gap:3px}.b2c-formula-recipes{grid-template-columns:1fr}.b2c-formula-condition__grid{grid-template-columns:1fr}.b2c-formula-result{align-items:flex-start;flex-direction:column}.b2c-formula-result__hint{max-width:none;text-align:left}.b2c-formula-editor textarea{min-height:116px}}
