@@ -743,3 +743,57 @@ body.b2c-builder-reordering *{
   }
 }
 
+
+
+/* --------------------------------------------------------------------------
+   B2C Table Builder – visible drag handle, compact field widths, 50% drag
+   -------------------------------------------------------------------------- */
+/* A CSS-rendered six-dot grip avoids depending on icon replacement timing. */
+.b2c-dialog--builder .b2c-column-drag-handle{
+  display:grid;
+  place-items:center;
+  cursor:grab !important;
+  touch-action:none;
+}
+.b2c-dialog--builder .b2c-drag-dots{
+  display:block;
+  width:12px;
+  height:18px;
+  color:#727b89;
+  background-image:radial-gradient(circle, currentColor 1.25px, transparent 1.42px);
+  background-size:6px 6px;
+  background-position:0 0;
+  background-repeat:repeat;
+  opacity:.98;
+}
+.b2c-dialog--builder .b2c-column-drag-handle:hover .b2c-drag-dots{
+  color:#5d4bd2;
+}
+.b2c-dialog--builder .b2c-column-drag-handle:active .b2c-drag-dots{
+  color:#4c3db8;
+}
+/* The floating property is intentionally 50% transparent while it is moved. */
+.b2c-dialog--builder .b2c-column-card.is-dragging{
+  opacity:.5 !important;
+}
+/* Keep the name and type controls compact on desktop instead of stretching
+   across the full builder dialog. */
+.b2c-dialog--builder .b2c-column-card{
+  grid-template-columns:42px minmax(215px,390px) minmax(160px,250px) auto auto;
+  justify-content:start;
+}
+.b2c-dialog--builder .b2c-field-control input,
+.b2c-dialog--builder .b2c-type-picker__trigger{
+  height:38px;
+}
+@media(max-width:920px){
+  .b2c-dialog--builder .b2c-column-card{
+    grid-template-columns:38px minmax(0,1fr) minmax(170px,.72fr) auto;
+    justify-content:normal;
+  }
+}
+@media(max-width:700px){
+  .b2c-dialog--builder .b2c-column-card{
+    grid-template-columns:36px minmax(0,1fr);
+  }
+}
