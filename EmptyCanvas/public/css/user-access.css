@@ -2737,3 +2737,13 @@
 .ua-page-access-group--task-management .ua-page-access-group__heading{color:#155e75;}
 .ua-page-access-group--task-management .ua-page-access-group__heading small{color:#4c8a9e;}
 .ua-page-access-group--task-management .ua-page-access-row--subpage{border-color:rgba(8,145,178,.13);}
+
+
+/* B2C hierarchy inside Users Center > Page Access */
+.ua-page-access-group--b2c{
+  border-color:rgba(234,88,12,.19);
+  background:linear-gradient(135deg,rgba(255,247,237,.94),rgba(255,255,255,.98));
+}
+.ua-page-access-group--b2c .ua-page-access-group__heading{color:#9a3412;}
+.ua-page-access-group--b2c .ua-page-access-group__heading small{color:#c56b42;}
+.ua-page-access-group--b2c .ua-page-access-row--subpage{border-color:rgba(234,88,12,.14);}
