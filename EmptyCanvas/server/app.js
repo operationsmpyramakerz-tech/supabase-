@@ -37506,6 +37506,119 @@ app.patch("/api/b2c/databases/:id", requireAuth, requirePage("Customer Database"
   } catch (error) { const safe = _b2cSchemaError(error); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to update B2C table." }); }
 });
 
+
+// Copy a B2C table as a new independent database folder. The copy keeps the
+// table schema and every linked form layout, but intentionally starts with no
+// records so live customer data is never duplicated by accident.
+app.post("/api/b2c/databases/:id/copy", requireAuth, requirePage("Customer Database"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const source = await _b2cLoadDatabase(_b2cText(req.params.id, 60));
+    if (!source) return res.status(404).json({ ok: false, error: "B2C table was not found." });
+
+    const [sourceFields, sourceForms] = await Promise.all([
+      _b2cLoadFields(source.id),
+      _b2cLoadForms(source.id),
+    ]);
+    const now = new Date().toISOString();
+    const copyName = `${source.name} Copy`.slice(0, 120);
+    const rawDatabase = await supabaseDb.insert(_b2cDatabasesTable(), {
+      database_key: await _b2cNextDatabaseKey(copyName),
+      name: copyName,
+      description: source.description || null,
+      created_at: now,
+      updated_at: now,
+    });
+    const database = _b2cSerializeDatabase(rawDatabase || {});
+    if (!database.id) throw new Error("The copied B2C table could not be created.");
+
+    const fieldIdMap = new Map();
+    for (const field of sourceFields) {
+      const rawField = await supabaseDb.insert(_b2cFieldsTable(), {
+        database_id: database.id,
+        // Keys are scoped to each table. Preserving them also keeps copied
+        // visibility rules pointing to the same logical properties.
+        field_key: field.key,
+        label: field.label,
+        field_type: field.type,
+        field_options: _b2cOptions(field.options, field.type),
+        is_required: field.required,
+        sort_order: field.sortOrder,
+        created_at: now,
+        updated_at: now,
+      });
+      const copiedField = _b2cSerializeField(rawField || {});
+      if (!copiedField.id) throw new Error("A copied B2C property could not be created.");
+      fieldIdMap.set(String(field.id), copiedField.id);
+    }
+
+    // Preserve every form, its sort order, required overrides, and conditional
+    // visibility. Forms are copied independently from customer records.
+    for (const sourceForm of sourceForms) {
+      const rawForm = await supabaseDb.insert(_b2cFormsTable(), {
+        database_id: database.id,
+        name: sourceForm.name,
+        description: sourceForm.description || null,
+        is_default: sourceForm.isDefault,
+        is_active: sourceForm.isActive,
+        created_at: now,
+        updated_at: now,
+      });
+      const copiedForm = _b2cSerializeForm(rawForm || {});
+      if (!copiedForm.id) throw new Error("A copied B2C form could not be created.");
+      const bindings = await _b2cSelect(_b2cFormFieldsTable(), {
+        filters: { form_id: `eq.${sourceForm.id}` },
+        order: "sort_order.asc,id.asc",
+      });
+      for (const binding of Array.isArray(bindings) ? bindings : []) {
+        const oldFieldId = String(_sbGet(binding, ["field_id", "fieldId"]) || "");
+        const copiedFieldId = fieldIdMap.get(oldFieldId);
+        if (!copiedFieldId) continue;
+        await supabaseDb.insert(_b2cFormFieldsTable(), {
+          form_id: copiedForm.id,
+          field_id: copiedFieldId,
+          sort_order: _b2cNumber(_sbGet(binding, ["sort_order", "sortOrder"]), 1, 1, 9999),
+          is_required_override: _sbGet(binding, ["is_required_override", "required_override", "isRequiredOverride"]),
+          visibility_condition: _b2cParseJson(_sbGet(binding, ["visibility_condition", "condition", "visibilityCondition"]), {}),
+          created_at: now,
+          updated_at: now,
+        });
+      }
+    }
+
+    const defaultForm = await _b2cEnsureDefaultForm(database);
+    return res.status(201).json({ ok: true, database: { ...database, defaultFormId: defaultForm.id } });
+  } catch (error) {
+    const safe = _b2cSchemaError(error);
+    console.error("[b2c] database copy error:", safe?.message || safe);
+    return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to copy B2C table." });
+  }
+});
+
+// Remove a B2C table together with its isolated fields, records, forms, and
+// form-builder bindings. The operation is explicit so it works even when the
+// deployed Supabase foreign keys are not configured with ON DELETE CASCADE.
+app.delete("/api/b2c/databases/:id", requireAuth, requirePage("Customer Database"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const database = await _b2cLoadDatabase(_b2cText(req.params.id, 60));
+    if (!database) return res.status(404).json({ ok: false, error: "B2C table was not found." });
+    const forms = await _b2cLoadForms(database.id);
+    for (const form of forms) {
+      await _b2cDeleteWhere(_b2cFormFieldsTable(), { form_id: `eq.${form.id}` });
+      await supabaseDb.deleteById(_b2cFormsTable(), form.id);
+    }
+    await _b2cDeleteWhere(_b2cCustomersTable(), { database_id: `eq.${database.id}` });
+    await _b2cDeleteWhere(_b2cFieldsTable(), { database_id: `eq.${database.id}` });
+    await supabaseDb.deleteById(_b2cDatabasesTable(), database.id);
+    return res.json({ ok: true });
+  } catch (error) {
+    const safe = _b2cSchemaError(error);
+    console.error("[b2c] database delete error:", safe?.message || safe);
+    return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to delete B2C table." });
+  }
+});
+
 app.get("/api/b2c/databases/:id/records", requireAuth, requirePage("Customer Database"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
