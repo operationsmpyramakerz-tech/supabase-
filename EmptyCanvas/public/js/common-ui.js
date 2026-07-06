@@ -2611,18 +2611,111 @@ if (document.querySelector('.sidebar')) {
 
 
   const B2C_SUBPAGE_CONFIG = Object.freeze([
-    { key: 'database', name: 'Customer Database', route: '/b2c/database', label: 'Customer Database', icon: 'database' },
-    { key: 'form', name: 'Customer Form', route: '/b2c/form', label: 'Customer Form', icon: 'clipboard' },
+    {
+      key: 'database',
+      name: 'Customer Database',
+      route: '/b2c/database',
+      label: 'Customer Database',
+      icon: 'database',
+      aliases: ['customer database', 'b2c customer database', 'b2ccustomerdatabase', 'customer-database', '/b2c/database'],
+    },
+    {
+      key: 'form',
+      name: 'Customer Form',
+      route: '/b2c/form',
+      label: 'Customer Form',
+      icon: 'clipboard',
+      aliases: ['customer form', 'b2c customer form', 'b2ccustomerform', 'customer-form', '/b2c/form'],
+    },
   ]);
 
-  function b2cSubpagesAllowed(allowed = []) {
-    const set = new Set((allowed || []).flatMap((value) => {
+  // B2C is a parent sidebar shell. Resolve it from both the allowed-pages list
+  // and direct Page Access rows. This protects the sidebar from an older
+  // browser/session cache that may not yet contain a newly enabled B2C child.
+  function b2cPermissionValues(allowed = []) {
+    const values = Array.isArray(allowed) ? allowed.slice() : [];
+    const accessSources = [
+      window.__opsUserInfo?.pageAccess,
+      readChromeCache?.()?.pageAccess,
+      (() => {
+        try {
+          const cached = JSON.parse(sessionStorage.getItem('ops.currentPageAccess') || 'null');
+          return cached?.pages || null;
+        } catch {
+          return null;
+        }
+      })(),
+    ];
+
+    accessSources.forEach((source) => {
+      enabledPageAccessRows(source).forEach((row) => {
+        [
+          row.pageName, row.page_name,
+          row.pageKey, row.page_key,
+          row.routePath, row.route_path,
+          ...(Array.isArray(row.aliases) ? row.aliases : []),
+        ].forEach((value) => {
+          const clean = String(value || '').trim();
+          if (clean) values.push(clean);
+        });
+      });
+    });
+
+    return values;
+  }
+
+  function b2cPermissionSet(allowed = []) {
+    const set = new Set();
+    b2cPermissionValues(allowed).forEach((value) => {
       const raw = String(value || '').trim();
       const normalized = normPath(raw);
-      return [toKey(raw), normalized, normalized.startsWith('/') ? normalized.slice(1) : `/${normalized}`];
-    }));
+      const token = normalizeAllowedToken(raw);
+      if (raw) set.add(toKey(raw));
+      if (normalized) {
+        set.add(normalized);
+        set.add(normalized.startsWith('/') ? normalized.slice(1) : `/${normalized}`);
+      }
+      if (token) set.add(token);
+    });
+    return set;
+  }
+
+  function b2cSubpagesAllowed(allowed = []) {
+    const set = b2cPermissionSet(allowed);
     const legacyBroad = set.has('b2c') || set.has('/b2c') || set.has('businesstocustomer');
-    return B2C_SUBPAGE_CONFIG.filter((page) => legacyBroad || set.has(toKey(page.name)) || set.has(normPath(page.route)));
+
+    return B2C_SUBPAGE_CONFIG.filter((page) => {
+      if (legacyBroad) return true;
+      const values = [page.name, page.route, ...(page.aliases || [])];
+      return values.some((value) => {
+        const raw = String(value || '').trim();
+        return set.has(toKey(raw)) || set.has(normPath(raw)) || set.has(normalizeAllowedToken(raw));
+      });
+    });
+  }
+
+  function ensureB2CParentSidebarLink() {
+    let parent = document.querySelector('.sidebar a.nav-link[href="/b2c"]');
+    if (parent) return parent;
+
+    // On some mobile layouts the normal generic ensureLink() target can point
+    // at a stale/hidden list. Add the B2C parent directly to the active sidebar
+    // page list, then the standard sidebar reorder pass positions it after B2B.
+    const list = (typeof getSidebarPagesList === 'function' ? getSidebarPagesList() : null)
+      || document.querySelector('.sidebar .nav-list, .sidebar nav ul, .sidebar ul');
+    if (!list) return null;
+
+    const li = document.createElement('li');
+    parent = document.createElement('a');
+    parent.className = 'nav-link';
+    parent.href = '/b2c';
+    parent.title = 'B2C';
+    parent.setAttribute('aria-label', 'B2C');
+    parent.innerHTML = '<i data-feather="user-plus"></i><span class="nav-label">B2C</span>';
+    li.appendChild(parent);
+    list.appendChild(li);
+    hydratePendingFeatherIcons(list);
+    return parent;
   }
 
   function ensureB2CSubpageFlyout() {
@@ -2672,12 +2765,14 @@ if (document.querySelector('.sidebar')) {
 
   function syncB2CSubpageNavigation(allowed = []) {
     const pages = b2cSubpagesAllowed(allowed);
-    const parent = document.querySelector('a.nav-link[href="/b2c"]');
+    const parent = ensureB2CParentSidebarLink();
     const parentLi = parent?.closest('li');
     const currentRoute = sidebarPath(window.location.pathname);
     if (!parent) return;
+
     if (pages.length) showEl(parentLi || parent);
     else hideEl(parentLi || parent);
+
     parent.dataset.b2cSubpageCount = String(pages.length);
     parent.href = '/b2c';
     parent.setAttribute('aria-haspopup', pages.length > 1 ? 'menu' : 'false');
@@ -2685,6 +2780,7 @@ if (document.querySelector('.sidebar')) {
     parent.title = pages.length === 1 ? `B2C · ${pages[0].label}` : 'B2C';
     parent.setAttribute('aria-label', parent.title);
     parent.classList.toggle('active', pages.some((page) => currentRoute === page.route || currentRoute.startsWith(`${page.route}/`)));
+
     if (!parent.dataset.b2cSubpageBound) {
       parent.dataset.b2cSubpageBound = '1';
       parent.addEventListener('click', (event) => {
@@ -3063,7 +3159,7 @@ if (document.querySelector('.sidebar')) {
     { href: '/orders/new', label: 'Shopping Cart', icon: 'shopping-cart' },
     { href: '/stocktaking', label: 'Stocktaking', icon: 'archive' },
     { href: '/b2b', label: 'B2B', icon: 'folder' },
-    { href: '/b2c', label: 'B2C', icon: 'users' },
+    { href: '/b2c', label: 'B2C', icon: 'user-plus' },
     { href: '/products', label: 'Products', icon: 'package' },
     { href: '/kits', label: 'Kits', icon: 'briefcase' },
     { href: '/proposals', label: 'Proposals', icon: 'file-text' },
