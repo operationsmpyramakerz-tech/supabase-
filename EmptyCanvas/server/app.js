@@ -11,6 +11,16 @@ const { drawStocktakingHeader } = require("./pdfHeader");
 const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
 const supabaseDb = require("./supabaseRest");
 
+// B2C formulas are evaluated through a local, dependency-free parser with a
+// closed grammar and function allow-list. This avoids executing user input as
+// JavaScript while keeping the same evaluator available to the browser.
+let b2cFormulaEngine = null;
+try {
+  b2cFormulaEngine = require(path.join(__dirname, "..", "public", "js", "b2c-formula-engine.js"));
+} catch (error) {
+  console.warn("[b2c] formula engine could not be loaded:", error?.message || error);
+}
+
 // Web Push (Notifications)
 let webpush = null;
 try {
@@ -37133,6 +37143,28 @@ const B2C_FIELD_TYPES = new Set([
 const B2C_READONLY_FIELD_TYPES = new Set(["formula"]);
 const B2C_SELECT_FIELD_TYPES = new Set(["select", "multi_select"]);
 
+function _b2cAttachFormulaValues(record, fields = []) {
+  const source = record && typeof record === "object" ? record : {};
+  if (!b2cFormulaEngine || typeof b2cFormulaEngine.calculateFormulaValues !== "function") {
+    return { ...source, formulaValues: {}, formulaErrors: {} };
+  }
+  try {
+    const calculated = b2cFormulaEngine.calculateFormulaValues(fields, source.values || {});
+    return {
+      ...source,
+      formulaValues: calculated?.values && typeof calculated.values === "object" ? calculated.values : {},
+      formulaErrors: calculated?.errors && typeof calculated.errors === "object" ? calculated.errors : {},
+    };
+  } catch (error) {
+    console.warn("[b2c] formula calculation failed:", error?.message || error);
+    return { ...source, formulaValues: {}, formulaErrors: {} };
+  }
+}
+
+function _b2cAttachFormulaValuesToRecords(records = [], fields = []) {
+  return (Array.isArray(records) ? records : []).map((record) => _b2cAttachFormulaValues(record, fields));
+}
+
 function _b2cText(value, max = 0) {
   const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
   return max > 0 ? text.slice(0, max) : text;
@@ -37171,7 +37203,7 @@ function _b2cOptions(raw, type = "text") {
   return {
     options: B2C_SELECT_FIELD_TYPES.has(type) ? options : [],
     relationDatabaseId: _b2cText(source.relationDatabaseId || source.relation_database_id, 60) || null,
-    formula: _b2cText(source.formula, 500) || null,
+    formula: _b2cText(source.formula, 2000) || null,
     buttonLabel: _b2cText(source.buttonLabel || source.button_label, 80) || "Run",
   };
 }
@@ -37375,10 +37407,15 @@ function _b2cFieldPatch(body = {}) {
   const type = _b2cFieldType(body?.type, "");
   if (!label) throw new Error("Property name is required.");
   if (!type) throw new Error("Choose a valid property type.");
+  const fieldOptions = _b2cOptions(body?.options, type);
+  if (type === "formula" && fieldOptions.formula && b2cFormulaEngine?.expressionInfo) {
+    const validation = b2cFormulaEngine.expressionInfo(fieldOptions.formula);
+    if (!validation?.ok) throw new Error(`Formula is invalid: ${validation?.error || "check the expression."}`);
+  }
   return {
     label,
     field_type: type,
-    field_options: _b2cOptions(body?.options, type),
+    field_options: fieldOptions,
     is_required: _sbBool(body?.required, false),
     sort_order: _b2cNumber(body?.sortOrder, 1, 1, 9999),
     updated_at: new Date().toISOString(),
@@ -37623,13 +37660,16 @@ app.get("/api/b2c/databases/:id/records", requireAuth, requirePage("Customer Dat
   res.set("Cache-Control", "no-store");
   try {
     const database = await _b2cLoadDatabase(_b2cText(req.params.id, 60)); if (!database) return res.status(404).json({ ok: false, error: "B2C table was not found." });
-    const [fields, records, defaultForm] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id), _b2cEnsureDefaultForm(database)]);
+    const [fields, rawRecords, defaultForm] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id), _b2cEnsureDefaultForm(database)]);
+    const records = _b2cAttachFormulaValuesToRecords(rawRecords, fields);
     return res.json({ ok: true, database: { ...database, defaultFormId: defaultForm.id }, fields, records });
   } catch (error) { const safe = _b2cSchemaError(error); console.error("[b2c] records read error:", safe?.message || safe); return res.status(safe?.status || 500).json({ ok: false, error: safe?.message || "Failed to load table records." }); }
 });
 
 function _b2cExcelCellValue(record, field) {
-  const value = record?.values?.[field.key];
+  const value = field?.type === "formula"
+    ? record?.formulaValues?.[field.key]
+    : record?.values?.[field.key];
   if (field.type === "id") return record.customerCode || "";
   if (field.type === "files") {
     return (Array.isArray(value) ? value : [])
@@ -37657,7 +37697,8 @@ app.get("/api/b2c/databases/:id/export.xlsx", requireAuth, requirePage("Customer
   try {
     const database = await _b2cLoadDatabase(_b2cText(req.params.id, 60));
     if (!database) return res.status(404).json({ ok: false, error: "B2C table was not found." });
-    const [fields, records] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id)]);
+    const [fields, rawRecords] = await Promise.all([_b2cLoadFields(database.id), _b2cLoadRecords(database.id)]);
+    const records = _b2cAttachFormulaValuesToRecords(rawRecords, fields);
     const ExcelJS = require("exceljs");
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Operations";
