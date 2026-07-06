@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Database | B2C</title>
+  <style>body.permissions-loading .sidebar li{display:none!important;}</style>
+  <link href="/css/style.css?v=b2c-customer-builder-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=b2c-customer-builder-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=b2c-customer-builder-v1" rel="stylesheet" />
+  <link href="/css/b2c.css?v=b2c-customer-builder-v1" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading b2c-page b2c-database-page">
+  <script>(function(){try{if(window.innerWidth>768&&localStorage.getItem('ui.sidebarMini')==='1')document.body.classList.add('sidebar-mini');}catch(e){}})();</script>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header"><h2>Dashboard</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
+      <nav class="sidebar-nav"><ul class="nav-list">
+        <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+        <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+        <li><a class="nav-link" href="/events"><i data-feather="calendar"></i><span class="nav-label">Events</span></a></li>
+        <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+        <li><a class="nav-link active" href="/b2c"><i data-feather="users"></i><span class="nav-label">B2C</span></a></li>
+        <li><a class="nav-link" href="/products"><i data-feather="package"></i><span class="nav-label">Products</span></a></li>
+        <li><a class="nav-link" href="/task-management"><i data-feather="git-branch"></i><span class="nav-label">Task Management</span></a></li>
+        <li><a class="nav-link" href="/user-access"><i data-feather="shield"></i><span class="nav-label">Users Center</span></a></li>
+      </ul></nav>
+      <div class="sidebar-footer"><button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header b2c-page-header">
+        <div class="header-row1">
+          <div class="left">
+            <div class="greeting-pill"><span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub">Build and manage the B2C customer database.</div></div></div>
+          </div>
+          <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
+        </div>
+        <div class="header-row2"><div class="b2c-title-wrap"><span class="b2c-module-chip"><i data-feather="users"></i>B2C</span><h1 class="page-title">Customer Database</h1></div></div>
+      </header>
+
+      <main class="b2c-shell">
+        <section class="b2c-workspace" aria-labelledby="b2cDatabaseTitle">
+          <div class="b2c-workspace__top">
+            <div>
+              <span class="b2c-eyebrow"><i data-feather="database"></i> Dynamic customer database</span>
+              <h2 id="b2cDatabaseTitle">Customer Database</h2>
+              <p>Define your own columns, then review every B2C customer record in one organized table.</p>
+            </div>
+            <div class="b2c-top-actions">
+              <button type="button" class="b2c-secondary-btn" id="b2cRefreshBtn"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
+              <a class="b2c-secondary-btn" href="/b2c/form"><i data-feather="clipboard"></i><span>Open Form</span></a>
+              <button type="button" class="b2c-primary-btn" id="b2cConfigureBtn"><i data-feather="sliders"></i><span>Configure Database</span></button>
+            </div>
+          </div>
+
+          <div class="b2c-stat-grid" aria-label="Customer database summary">
+            <article class="b2c-stat-card"><span class="b2c-stat-card__icon"><i data-feather="users"></i></span><div><span>Total Customers</span><strong id="b2cCustomerCount">0</strong></div></article>
+            <article class="b2c-stat-card"><span class="b2c-stat-card__icon b2c-stat-card__icon--orange"><i data-feather="columns"></i></span><div><span>Database Columns</span><strong id="b2cFieldCount">0</strong></div></article>
+            <article class="b2c-stat-card"><span class="b2c-stat-card__icon b2c-stat-card__icon--green"><i data-feather="paperclip"></i></span><div><span>Photo &amp; File Fields</span><strong id="b2cFileFieldCount">0</strong></div></article>
+          </div>
+
+          <div class="b2c-table-panel">
+            <div class="b2c-table-panel__toolbar">
+              <div class="b2c-table-search"><i data-feather="search"></i><input id="b2cCustomerSearch" type="search" placeholder="Search any customer field..." autocomplete="off" /></div>
+              <div class="b2c-table-panel__note" id="b2cTableNote" aria-live="polite">Loading customer records…</div>
+            </div>
+            <div class="b2c-table-scroll" id="b2cTableScroll">
+              <table class="b2c-customer-table" id="b2cCustomerTable">
+                <thead id="b2cCustomerTableHead"></thead>
+                <tbody id="b2cCustomerTableBody"><tr><td class="b2c-table-loading" colspan="4"><span></span> Loading customer database…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="b2c-overlay" id="b2cBuilderOverlay" hidden aria-hidden="true">
+    <div class="b2c-overlay__backdrop" data-b2c-close="builder"></div>
+    <section class="b2c-dialog b2c-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="b2cBuilderTitle">
+      <button class="b2c-dialog__close" type="button" data-b2c-close="builder" aria-label="Close database builder"><i data-feather="x"></i></button>
+      <div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="sliders"></i> Database builder</span><h2 id="b2cBuilderTitle">Configure Customer Columns</h2><p>Create the fields your Customer Care team will complete from the B2C form.</p></div></div>
+      <div class="b2c-builder-guide"><i data-feather="info"></i><span>Columns are shown in this same order in both the database and customer form. Existing customer data remains safe when you rename a column.</span></div>
+      <div class="b2c-builder-list" id="b2cBuilderList"></div>
+      <button type="button" class="b2c-add-column" id="b2cAddColumnBtn"><i data-feather="plus"></i><span>Add Column</span></button>
+      <div class="b2c-dialog__error" id="b2cBuilderError" aria-live="polite" hidden></div>
+      <div class="b2c-dialog__actions"><button type="button" class="b2c-secondary-btn" data-b2c-close="builder">Cancel</button><button type="button" class="b2c-primary-btn" id="b2cSaveBuilderBtn"><i data-feather="save"></i><span>Save Database Layout</span></button></div>
+    </section>
+  </div>
+
+  <div class="b2c-overlay" id="b2cCustomerOverlay" hidden aria-hidden="true">
+    <div class="b2c-overlay__backdrop" data-b2c-close="customer"></div>
+    <form class="b2c-dialog b2c-dialog--customer" id="b2cCustomerEditForm" role="dialog" aria-modal="true" aria-labelledby="b2cCustomerEditTitle">
+      <button class="b2c-dialog__close" type="button" data-b2c-close="customer" aria-label="Close customer record"><i data-feather="x"></i></button>
+      <div class="b2c-dialog__header"><div><span class="b2c-eyebrow"><i data-feather="user"></i> Customer record</span><h2 id="b2cCustomerEditTitle">Edit Customer</h2><p id="b2cCustomerEditMeta">Review and update the customer information.</p></div></div>
+      <div class="b2c-form-grid" id="b2cCustomerEditFields"></div>
+      <div class="b2c-dialog__error" id="b2cCustomerEditError" aria-live="polite" hidden></div>
+      <div class="b2c-dialog__actions"><button type="button" class="b2c-secondary-btn" data-b2c-close="customer">Cancel</button><button type="submit" class="b2c-primary-btn" id="b2cSaveCustomerBtn"><i data-feather="save"></i><span>Save Customer</span></button></div>
+    </form>
+  </div>
+
+  <script src="/js/common-ui.js?v=b2c-customer-builder-v1"></script>
+  <script src="/js/b2c-database.js?v=b2c-customer-builder-v1"></script>
+</body>
+</html>
