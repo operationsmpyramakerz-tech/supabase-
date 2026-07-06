@@ -1,427 +1,103 @@
 (() => {
   'use strict';
 
-  const state = {
-    fields: [],
-    customers: [],
-    draft: [],
-    activeCustomer: null,
-    currentFiles: {},
-  };
-
+  const FIELD_TYPES = [
+    ['text', 'Text'], ['number', 'Number'], ['select', 'Select'], ['multi_select', 'Multi-select'],
+    ['status', 'Status'], ['date', 'Date'], ['person', 'Person'], ['files', 'Files & media'],
+    ['checkbox', 'Checkbox'], ['url', 'URL'], ['email', 'Email'], ['phone', 'Phone'],
+    ['relation', 'Relation'], ['formula', 'Formula'], ['rollup', 'Rollup'], ['id', 'ID'], ['button', 'Button'], ['place', 'Place'],
+  ];
+  const READ_ONLY_TYPES = new Set(['formula', 'rollup', 'id', 'button']);
+  const SELECT_TYPES = new Set(['select', 'multi_select', 'status']);
+  const state = { databases: [], selectedId: '', fields: [], records: [], draft: [], activeRecord: null, currentFiles: {} };
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
-  const escapeHtml = (value) => String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  const clean = (value) => String(value ?? '').trim();
 
-  function refreshIcons() {
-    try { window.feather?.replace?.(); } catch (_) {}
-  }
-
-  function message(text, kind = 'info') {
-    const safe = String(text || '').trim();
-    if (!safe) return;
-    if (window.OpsSafeMessage?.show) {
-      window.OpsSafeMessage.show(safe, kind);
-      return;
-    }
-    window.alert(safe);
-  }
-
-  async function api(url, options = {}) {
-    const response = await fetch(url, {
-      credentials: 'same-origin',
-      headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
-      ...options,
-    });
-    let payload = null;
-    try { payload = await response.json(); } catch (_) {}
-    if (!response.ok || payload?.ok === false) {
-      throw new Error(payload?.error || `Request failed (${response.status}).`);
-    }
+  function icons(){ try { window.feather?.replace?.(); } catch (_) {} }
+  function toast(text, kind='info'){ if (!clean(text)) return; if (window.OpsSafeMessage?.show) return window.OpsSafeMessage.show(text,kind); window.alert(text); }
+  async function api(url, options={}) {
+    const response = await fetch(url, { credentials:'same-origin', headers:{ ...(options.body?{'Content-Type':'application/json'}:{}), ...(options.headers||{}) }, ...options });
+    let payload={}; try { payload=await response.json(); } catch (_) {}
+    if (!response.ok || payload?.ok===false) throw new Error(payload?.error || `Request failed (${response.status}).`);
     return payload || {};
   }
-
-  function openOverlay(id) {
-    const overlay = document.getElementById(id);
-    if (!overlay) return;
-    overlay.hidden = false;
-    overlay.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    refreshIcons();
-  }
-
-  function closeOverlay(kind) {
-    const id = kind === 'builder' ? 'b2cBuilderOverlay' : 'b2cCustomerOverlay';
-    const overlay = document.getElementById(id);
-    if (!overlay) return;
-    overlay.hidden = true;
-    overlay.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  function fieldTypeLabel(type) {
-    return ({ text: 'Text', number: 'Number', phone: 'Phone', files: 'Photos & Files' })[type] || 'Text';
-  }
-
-  function setLoading(isLoading) {
-    const note = $('#b2cTableNote');
-    if (note) note.textContent = isLoading ? 'Loading customer records…' : `${state.customers.length} customer${state.customers.length === 1 ? '' : 's'} in database`;
-  }
-
-  function normalizeDraftField(field, index) {
-    return {
-      id: field.id || '',
-      key: field.key || '',
-      label: String(field.label || '').trim(),
-      type: ['text', 'number', 'phone', 'files'].includes(field.type) ? field.type : 'text',
-      required: !!field.required,
-      sortOrder: index + 1,
-      original: field.original || null,
-    };
-  }
-
-  function currentSearch() {
-    return String($('#b2cCustomerSearch')?.value || '').trim().toLowerCase();
-  }
-
-  function isImageFile(file) {
-    return /^image\//i.test(String(file?.type || '')) || /\.(png|jpe?g|gif|webp|svg)$/i.test(String(file?.name || ''));
-  }
-
-  function formatDate(value) {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '—';
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-  }
-
-  function stringifyCustomer(customer) {
-    const values = customer?.values || {};
-    return [customer?.customerCode, customer?.createdByName, ...state.fields.flatMap((field) => {
-      const value = values[field.key];
-      if (Array.isArray(value)) return value.map((file) => `${file.name || ''} ${file.url || ''}`);
-      return value == null ? '' : String(value);
-    })].join(' ').toLowerCase();
-  }
-
-  function displayValue(value, field) {
-    if (field.type === 'files') {
-      const files = Array.isArray(value) ? value : [];
-      if (!files.length) return '<span class="b2c-cell-muted">—</span>';
-      return `<div class="b2c-file-pills">${files.slice(0, 4).map((file) => `
-        <a class="b2c-file-pill" target="_blank" rel="noopener" href="${escapeHtml(file.url || '#')}">
-          <i data-feather="${isImageFile(file) ? 'image' : 'paperclip'}"></i><span>${escapeHtml(file.name || 'Attachment')}</span>
-        </a>`).join('')}${files.length > 4 ? `<span class="b2c-cell-muted">+${files.length - 4}</span>` : ''}</div>`;
-    }
-    if (value === '' || value == null) return '<span class="b2c-cell-muted">—</span>';
-    if (field.type === 'number' && Number.isFinite(Number(value))) return `<span class="b2c-cell-text">${escapeHtml(new Intl.NumberFormat().format(Number(value)))}</span>`;
-    if (field.type === 'phone') {
-      const phone = String(value);
-      return `<a class="b2c-cell-text" href="tel:${escapeHtml(phone.replace(/[^+0-9]/g, ''))}">${escapeHtml(phone)}</a>`;
-    }
+  function open(kind){ const node=$(`#b2c${kind}Overlay`); if(!node)return; node.hidden=false; node.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; icons(); }
+  function close(kind){ const node=$(`#b2c${kind}Overlay`); if(!node)return; node.hidden=true; node.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+  function selected(){ return state.databases.find((item)=>String(item.id)===String(state.selectedId)) || null; }
+  function typeLabel(type){ return FIELD_TYPES.find(([key])=>key===type)?.[1] || 'Text'; }
+  function parseOptions(value){ if (Array.isArray(value)) return value.filter(Boolean).map((x)=>String(x).trim()).filter(Boolean); return String(value||'').split(',').map((x)=>x.trim()).filter(Boolean); }
+  function formatDate(value){ if(!value) return '—'; const date=new Date(value); return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(date); }
+  function stringifyRecord(record){ const values=record?.values||{}; return [record?.customerCode,record?.createdByName,...state.fields.flatMap((field)=>{const value=values[field.key];return Array.isArray(value)?value.map((x)=>x?.name||x?.url||''):Array.isArray(value)?value: value==null?'':String(value);})].join(' ').toLowerCase(); }
+  function isImage(file){ return /^image\//i.test(String(file?.type||'')) || /\.(png|jpe?g|gif|webp|svg)$/i.test(String(file?.name||'')); }
+  function fieldOptions(field){ return field?.options && typeof field.options==='object' ? field.options : {}; }
+  function displayValue(value, field, record){
+    const type=field.type;
+    if (type==='id') return `<span class="b2c-customer-code">${escapeHtml(record?.customerCode||'—')}</span>`;
+    if (type==='files') { const files=Array.isArray(value)?value:[]; if(!files.length)return '<span class="b2c-cell-muted">—</span>'; return `<div class="b2c-file-pills">${files.slice(0,4).map((file)=>`<a class="b2c-file-pill" target="_blank" rel="noopener" href="${escapeHtml(file.url||'#')}"><i data-feather="${isImage(file)?'image':'paperclip'}"></i><span>${escapeHtml(file.name||'Attachment')}</span></a>`).join('')}${files.length>4?`<span class="b2c-cell-muted">+${files.length-4}</span>`:''}</div>`; }
+    if (type==='checkbox') return value ? '<span class="b2c-check-yes"><i data-feather="check-circle"></i> Yes</span>' : '<span class="b2c-check-no">—</span>';
+    if (type==='multi_select') { const list=Array.isArray(value)?value:[]; return list.length?`<div class="b2c-tag-list">${list.map((item)=>`<span class="b2c-tag">${escapeHtml(item)}</span>`).join('')}</div>`:'<span class="b2c-cell-muted">—</span>'; }
+    if (value==null || value==='') return '<span class="b2c-cell-muted">—</span>';
+    if (type==='number' && Number.isFinite(Number(value))) return `<span class="b2c-cell-text">${escapeHtml(new Intl.NumberFormat().format(Number(value)))}</span>`;
+    if (type==='phone') { const phone=String(value); return `<a class="b2c-cell-text" href="tel:${escapeHtml(phone.replace(/[^+0-9]/g,''))}">${escapeHtml(phone)}</a>`; }
+    if (type==='email') return `<a class="b2c-cell-text" href="mailto:${escapeHtml(value)}">${escapeHtml(value)}</a>`;
+    if (type==='url') return `<a class="b2c-cell-text" target="_blank" rel="noopener" href="${escapeHtml(value)}">${escapeHtml(value)}</a>`;
     return `<span class="b2c-cell-text" title="${escapeHtml(String(value))}">${escapeHtml(value)}</span>`;
   }
-
-  function renderTable() {
-    const head = $('#b2cCustomerTableHead');
-    const body = $('#b2cCustomerTableBody');
-    const note = $('#b2cTableNote');
-    if (!head || !body) return;
-
-    const search = currentSearch();
-    const customers = search ? state.customers.filter((customer) => stringifyCustomer(customer).includes(search)) : state.customers;
-    head.innerHTML = `<tr><th>Customer</th>${state.fields.map((field) => `<th>${escapeHtml(field.label)}</th>`).join('')}<th>Submitted by</th><th>Created</th><th aria-label="Actions"></th></tr>`;
-
-    if (!state.fields.length) {
-      body.innerHTML = '<tr><td class="b2c-table-empty" colspan="5">No database columns have been configured. Select <strong>Configure Database</strong> to build the customer table.</td></tr>';
-      if (note) note.textContent = 'Configure columns to start';
-      refreshIcons();
-      return;
-    }
-    if (!customers.length) {
-      body.innerHTML = `<tr><td class="b2c-table-empty" colspan="${state.fields.length + 4}">${search ? 'No customers match your search.' : 'No customer records yet. Customer Care can use the Customer Form to add the first record.'}</td></tr>`;
-      if (note) note.textContent = search ? '0 matching customers' : '0 customers in database';
-      refreshIcons();
-      return;
-    }
-
-    body.innerHTML = customers.map((customer) => `
-      <tr>
-        <td><span class="b2c-customer-code">${escapeHtml(customer.customerCode || `CUS-${customer.id}`)}</span></td>
-        ${state.fields.map((field) => `<td>${displayValue((customer.values || {})[field.key], field)}</td>`).join('')}
-        <td>${escapeHtml(customer.createdByName || '—')}</td>
-        <td class="b2c-cell-muted">${escapeHtml(formatDate(customer.createdAt))}</td>
-        <td><div class="b2c-table-actions">
-          <button class="b2c-icon-btn" type="button" data-customer-action="edit" data-customer-id="${escapeHtml(customer.id)}" title="Edit customer"><i data-feather="edit-2"></i></button>
-          <button class="b2c-icon-btn b2c-icon-btn--danger" type="button" data-customer-action="delete" data-customer-id="${escapeHtml(customer.id)}" title="Delete customer"><i data-feather="trash-2"></i></button>
-        </div></td>
-      </tr>`).join('');
-    if (note) note.textContent = `${customers.length}${search ? ` of ${state.customers.length}` : ''} customer${customers.length === 1 ? '' : 's'} shown`;
-    refreshIcons();
-  }
-
-  function renderStats() {
-    $('#b2cCustomerCount')?.replaceChildren(document.createTextNode(String(state.customers.length)));
+  function updateSummary(){
+    $('#b2cDatabaseCount')?.replaceChildren(document.createTextNode(String(state.databases.length)));
     $('#b2cFieldCount')?.replaceChildren(document.createTextNode(String(state.fields.length)));
-    $('#b2cFileFieldCount')?.replaceChildren(document.createTextNode(String(state.fields.filter((field) => field.type === 'files').length)));
+    $('#b2cRecordCount')?.replaceChildren(document.createTextNode(String(state.records.length)));
+    $('#b2cTableCountNote')?.replaceChildren(document.createTextNode(`${state.databases.length} table${state.databases.length===1?'':'s'}`));
   }
-
-  async function loadDatabase() {
-    let loaded = false;
-    setLoading(true);
-    try {
-      const payload = await api('/api/b2c/customers');
-      state.fields = Array.isArray(payload.fields) ? payload.fields : [];
-      state.customers = Array.isArray(payload.customers) ? payload.customers : [];
-      renderStats();
-      renderTable();
-      loaded = true;
-    } catch (error) {
-      const body = $('#b2cCustomerTableBody');
-      if (body) body.innerHTML = `<tr><td class="b2c-table-empty" colspan="4">${escapeHtml(error.message || 'Failed to load customer database.')}</td></tr>`;
-      $('#b2cTableNote')?.replaceChildren(document.createTextNode('Could not load database'));
-      message(error.message || 'Failed to load customer database.', 'error');
-    } finally {
-      if (loaded) setLoading(false);
-      refreshIcons();
-    }
+  function renderDatabases(){
+    const wrap=$('#b2cDatabaseList'); if(!wrap)return;
+    if(!state.databases.length){wrap.innerHTML='<div class="b2c-database-empty">No B2C data tables yet. Select <strong>New Table</strong> to create the first one.</div>';icons();return;}
+    wrap.innerHTML=state.databases.map((db)=>`<button type="button" class="b2c-database-card ${String(db.id)===String(state.selectedId)?'is-active':''}" data-database-id="${escapeHtml(db.id)}"><span class="b2c-database-card__top"><span class="b2c-database-card__icon"><i data-feather="database"></i></span><span class="b2c-database-card__count">${Number(db.recordCount)||0} records</span></span><strong>${escapeHtml(db.name)}</strong><p>${escapeHtml(db.description||'No description')}</p></button>`).join(''); icons();
   }
-
-  function renderBuilder() {
-    const list = $('#b2cBuilderList');
-    if (!list) return;
-    if (!state.draft.length) {
-      list.innerHTML = '<div class="b2c-builder-empty">No columns yet. Add your first customer field below.</div>';
-      refreshIcons();
-      return;
-    }
-    list.innerHTML = state.draft.map((field, index) => `
-      <article class="b2c-column-card" data-draft-index="${index}">
-        <span class="b2c-column-order">${index + 1}</span>
-        <div class="b2c-field-control"><label>Column name</label><input type="text" data-draft-label="${index}" maxlength="120" value="${escapeHtml(field.label)}" placeholder="e.g. Customer name" /></div>
-        <div class="b2c-field-control"><label>Type</label><select data-draft-type="${index}">
-          ${['text', 'number', 'phone', 'files'].map((type) => `<option value="${type}" ${field.type === type ? 'selected' : ''}>${fieldTypeLabel(type)}</option>`).join('')}
-        </select></div>
-        <label class="b2c-field-required"><input type="checkbox" data-draft-required="${index}" ${field.required ? 'checked' : ''} /> Required</label>
-        <div class="b2c-column-move"><button type="button" data-draft-move="up" data-draft-index="${index}" ${index === 0 ? 'disabled' : ''} aria-label="Move up"><i data-feather="arrow-up"></i></button><button type="button" data-draft-move="down" data-draft-index="${index}" ${index === state.draft.length - 1 ? 'disabled' : ''} aria-label="Move down"><i data-feather="arrow-down"></i></button></div>
-        <button type="button" class="b2c-column-delete" data-draft-delete="${index}" aria-label="Remove column"><i data-feather="trash-2"></i></button>
-      </article>`).join('');
-    refreshIcons();
+  function renderTable(){
+    const head=$('#b2cCustomerTableHead'), body=$('#b2cCustomerTableBody'), db=selected(); if(!head||!body)return;
+    $('#b2cSelectedTableName')?.replaceChildren(document.createTextNode(db?.name||'Select a table'));
+    $('#b2cSelectedTableMeta')?.replaceChildren(document.createTextNode(db ? `${state.fields.length} properties · ${state.records.length} records` : 'Choose or create a B2C data table.'));
+    $('#b2cConfigureTableBtn').disabled=!db; $('#b2cOpenLinkedFormBtn').disabled=!db;
+    if(!db){head.innerHTML='';body.innerHTML='<tr><td class="b2c-table-empty" colspan="5">Create or select a B2C data table to begin.</td></tr>';icons();return;}
+    const search=clean($('#b2cRecordSearch')?.value).toLowerCase(); const records=search?state.records.filter((record)=>stringifyRecord(record).includes(search)):state.records;
+    head.innerHTML=`<tr><th>Record</th>${state.fields.map((field)=>`<th>${escapeHtml(field.label)}</th>`).join('')}<th>Submitted by</th><th>Created</th><th aria-label="Actions"></th></tr>`;
+    if(!state.fields.length){body.innerHTML='<tr><td class="b2c-table-empty" colspan="5">This table has no properties yet. Select <strong>Configure Table</strong> to build its database schema.</td></tr>';icons();return;}
+    if(!records.length){body.innerHTML=`<tr><td class="b2c-table-empty" colspan="${state.fields.length+4}">${search?'No records match your search.':'No records yet. Open the linked form to add the first record.'}</td></tr>`;icons();return;}
+    body.innerHTML=records.map((record)=>`<tr><td><span class="b2c-customer-code">${escapeHtml(record.customerCode||`REC-${record.id}`)}</span></td>${state.fields.map((field)=>`<td>${displayValue((record.values||{})[field.key],field,record)}</td>`).join('')}<td>${escapeHtml(record.createdByName||'—')}</td><td class="b2c-cell-muted">${escapeHtml(formatDate(record.createdAt))}</td><td><div class="b2c-table-actions"><button type="button" class="b2c-icon-btn" data-record-action="edit" data-record-id="${escapeHtml(record.id)}" title="Edit record"><i data-feather="edit-2"></i></button><button type="button" class="b2c-icon-btn b2c-icon-btn--danger" data-record-action="delete" data-record-id="${escapeHtml(record.id)}" title="Delete record"><i data-feather="trash-2"></i></button></div></td></tr>`).join('');icons();
   }
-
-  function readBuilderControls() {
-    $$('.b2c-column-card').forEach((card) => {
-      const index = Number(card.dataset.draftIndex);
-      if (!Number.isInteger(index) || !state.draft[index]) return;
-      const label = $(`[data-draft-label="${index}"]`, card);
-      const type = $(`[data-draft-type="${index}"]`, card);
-      const required = $(`[data-draft-required="${index}"]`, card);
-      state.draft[index].label = String(label?.value || '').trim();
-      state.draft[index].type = String(type?.value || 'text');
-      state.draft[index].required = !!required?.checked;
-    });
+  async function loadTable(){ const db=selected(); if(!db){state.fields=[];state.records=[];updateSummary();renderTable();return;} $('#b2cCustomerTableBody').innerHTML='<tr><td class="b2c-table-loading" colspan="6"><span></span> Loading table records…</td></tr>'; try{const payload=await api(`/api/b2c/databases/${encodeURIComponent(db.id)}/records`);state.fields=Array.isArray(payload.fields)?payload.fields:[];state.records=Array.isArray(payload.records)?payload.records:[]; if(payload.database) Object.assign(db,payload.database);updateSummary();renderTable();renderDatabases();}catch(error){state.fields=[];state.records=[];updateSummary();$('#b2cCustomerTableBody').innerHTML=`<tr><td class="b2c-table-empty" colspan="5">${escapeHtml(error.message||'Could not load this table.')}</td></tr>`;toast(error.message||'Could not load B2C table.','error');}}
+  async function loadAll({preserve=true}={}){try{const payload=await api('/api/b2c/databases');state.databases=Array.isArray(payload.databases)?payload.databases:[];const saved=preserve?localStorage.getItem('b2c.selected.table'):'';if(!state.databases.some((db)=>String(db.id)===String(state.selectedId)))state.selectedId=state.databases.some((db)=>String(db.id)===String(saved))?saved:(state.databases[0]?.id||'');if(state.selectedId)localStorage.setItem('b2c.selected.table',String(state.selectedId));renderDatabases();await loadTable();}catch(error){toast(error.message||'Could not load B2C databases.','error');}}
+  function normalizeDraft(field,index){const options=fieldOptions(field);return {id:field.id||'',key:field.key||'',label:clean(field.label),type:FIELD_TYPES.some(([key])=>key===field.type)?field.type:'text',required:!!field.required,sortOrder:index+1,options:{options:Array.isArray(options.options)?options.options:parseOptions(options.options),relationDatabaseId:options.relationDatabaseId||'',formula:options.formula||'',buttonLabel:options.buttonLabel||'Run'},original:field.original||null};}
+  function fieldConfig(draft,index){ const type=draft.type, options=draft.options||{}; if(SELECT_TYPES.has(type))return `<div class="b2c-field-config"><label>Options</label><input data-draft-options="${index}" value="${escapeHtml((options.options||[]).join(', '))}" placeholder="e.g. New, Contacted, Converted" /><small>Separate options with commas.</small></div>`; if(type==='relation')return `<div class="b2c-field-config"><label>Related table</label><select data-draft-relation="${index}"><option value="">Choose a B2C table</option>${state.databases.filter((db)=>String(db.id)!==String(selected()?.id)).map((db)=>`<option value="${escapeHtml(db.id)}" ${String(options.relationDatabaseId)===String(db.id)?'selected':''}>${escapeHtml(db.name)}</option>`).join('')}</select></div>`; if(type==='formula')return `<div class="b2c-field-config"><label>Formula note</label><input data-draft-formula="${index}" value="${escapeHtml(options.formula||'')}" placeholder="e.g. Use Amount × Quantity" /><small>Formula properties are read-only in forms and can be documented here.</small></div>`; if(type==='button')return `<div class="b2c-field-config"><label>Button label</label><input data-draft-button="${index}" value="${escapeHtml(options.buttonLabel||'Run')}" placeholder="Run" /></div>`; return ''; }
+  function renderBuilder(){const list=$('#b2cBuilderList');if(!list)return; if(!state.draft.length){list.innerHTML='<div class="b2c-builder-empty">No properties yet. Add the first property for this table below.</div>';icons();return;}list.innerHTML=state.draft.map((field,index)=>`<article class="b2c-column-card" data-draft-index="${index}"><span class="b2c-column-order">${index+1}</span><div class="b2c-field-control"><label>Property name</label><input data-draft-label="${index}" maxlength="120" value="${escapeHtml(field.label)}" placeholder="e.g. Customer name" /></div><div class="b2c-field-control"><label>Type</label><select data-draft-type="${index}">${FIELD_TYPES.map(([key,label])=>`<option value="${key}" ${field.type===key?'selected':''}>${label}</option>`).join('')}</select></div><label class="b2c-field-required"><input type="checkbox" data-draft-required="${index}" ${field.required?'checked':''}/> Default required</label><div class="b2c-column-actions"><button type="button" data-draft-move="up" data-draft-index="${index}" ${index===0?'disabled':''} title="Move up"><i data-feather="arrow-up"></i></button><button type="button" data-draft-move="down" data-draft-index="${index}" ${index===state.draft.length-1?'disabled':''} title="Move down"><i data-feather="arrow-down"></i></button><button type="button" data-draft-delete="${index}" title="Remove property"><i data-feather="trash-2"></i></button></div>${fieldConfig(field,index)}</article>`).join('');icons();}
+  function readBuilder(){state.draft.forEach((field,index)=>{field.label=clean($(`[data-draft-label="${index}"]`)?.value);field.type=$(`[data-draft-type="${index}"]`)?.value||'text';field.required=!!$(`[data-draft-required="${index}"]`)?.checked;field.options=field.options||{};if(SELECT_TYPES.has(field.type))field.options.options=parseOptions($(`[data-draft-options="${index}"]`)?.value);if(field.type==='relation')field.options.relationDatabaseId=$(`[data-draft-relation="${index}"]`)?.value||'';if(field.type==='formula')field.options.formula=clean($(`[data-draft-formula="${index}"]`)?.value);if(field.type==='button')field.options.buttonLabel=clean($(`[data-draft-button="${index}"]`)?.value)||'Run';});}
+  function builderError(text=''){const box=$('#b2cBuilderError');if(!box)return;if(!text){box.hidden=true;box.textContent='';return;}box.hidden=false;box.textContent=text;}
+  function openBuilder(){const db=selected();if(!db)return; $('#b2cBuilderTitle').textContent=`Configure ${db.name}`;state.draft=state.fields.map((field,index)=>normalizeDraft({...field,original:{...field}},index));builderError('');renderBuilder();open('Builder');}
+  async function saveBuilder(){const db=selected();if(!db)return;readBuilder();const fields=state.draft.map((field,index)=>normalizeDraft(field,index));const labels=fields.map((field)=>field.label.toLowerCase());if(fields.some((field)=>!field.label))return builderError('Every property needs a name.');if(new Set(labels).size!==labels.length)return builderError('Property names must be unique in this table.');builderError('');const button=$('#b2cSaveBuilderBtn'), original=button?.innerHTML;if(button){button.disabled=true;button.textContent='Saving…';}try{await api(`/api/b2c/databases/${encodeURIComponent(db.id)}/fields`,{method:'PUT',body:JSON.stringify({fields})});close('Builder');await loadTable();toast('Table properties saved.','success');}catch(error){builderError(error.message||'Could not save table properties.');}finally{if(button){button.disabled=false;button.innerHTML=original;icons();}}}
+  function openTableDialog(){ $('#b2cTableForm')?.reset(); $('#b2cTableError').hidden=true;open('Table');setTimeout(()=>$('#b2cNewTableName')?.focus(),0);}
+  function tableError(text=''){const box=$('#b2cTableError');if(!box)return;if(!text){box.hidden=true;box.textContent='';return;}box.hidden=false;box.textContent=text;}
+  async function createTable(event){event.preventDefault();const name=clean($('#b2cNewTableName')?.value),description=clean($('#b2cNewTableDescription')?.value);if(!name)return tableError('Table name is required.');const button=$('#b2cTableForm button[type="submit"]'),original=button?.innerHTML;if(button){button.disabled=true;button.textContent='Creating…';}try{const payload=await api('/api/b2c/databases',{method:'POST',body:JSON.stringify({name,description})});state.selectedId=payload.database?.id||'';localStorage.setItem('b2c.selected.table',String(state.selectedId));close('Table');await loadAll({preserve:false});toast('B2C table and linked form created.','success');openBuilder();}catch(error){tableError(error.message||'Could not create B2C table.');}finally{if(button){button.disabled=false;button.innerHTML=original;icons();}}}
+  function inputForField(field,value,{prefix='record'}={}){const required=field.required?'required':'';const attr=`data-${prefix}-field="${escapeHtml(field.key)}"`;const type=field.type;const options=fieldOptions(field);if(READ_ONLY_TYPES.has(type))return `<div class="b2c-form-control"><label>${escapeHtml(field.label)}</label><div class="b2c-readonly-field">This property is managed automatically.</div></div>`;if(type==='files'){state.currentFiles[field.key]=Array.isArray(value)?value:[];return `<div class="b2c-form-control b2c-form-control--wide"><label>${escapeHtml(field.label)}${field.required?'<em>*</em>':''}</label><input ${attr} class="b2c-file-input" type="file" multiple /><small>Upload photos, PDFs, or files up to 10 MB each.</small><div class="b2c-current-files" data-existing-files="${escapeHtml(field.key)}">${state.currentFiles[field.key].map((file)=>`<a class="b2c-file-pill" target="_blank" rel="noopener" href="${escapeHtml(file.url||'#')}"><i data-feather="paperclip"></i><span>${escapeHtml(file.name||'Attachment')}</span></a>`).join('')||'<span class="b2c-cell-muted">No files</span>'}</div></div>`;}
+    if(type==='checkbox')return `<div class="b2c-form-control"><label>${escapeHtml(field.label)}${field.required?'<em>*</em>':''}</label><label class="b2c-checkbox-control"><input ${attr} type="checkbox" ${value?'checked':''}/><span>Yes</span></label></div>`;
+    if(type==='multi_select')return `<div class="b2c-form-control"><label>${escapeHtml(field.label)}${field.required?'<em>*</em>':''}</label><select ${attr} class="b2c-multi-select" multiple ${required}>${(options.options||[]).map((item)=>`<option value="${escapeHtml(item)}" ${(Array.isArray(value)?value:[]).includes(item)?'selected':''}>${escapeHtml(item)}</option>`).join('')}</select></div>`;
+    if(SELECT_TYPES.has(type))return `<div class="b2c-form-control"><label>${escapeHtml(field.label)}${field.required?'<em>*</em>':''}</label><select ${attr} ${required}><option value="">Select…</option>${(options.options||[]).map((item)=>`<option value="${escapeHtml(item)}" ${String(value||'')===String(item)?'selected':''}>${escapeHtml(item)}</option>`).join('')}</select></div>`;
+    const inputType=type==='number'?'number':type==='date'?'date':type==='email'?'email':type==='url'?'url':type==='phone'?'tel':'text';return `<div class="b2c-form-control"><label>${escapeHtml(field.label)}${field.required?'<em>*</em>':''}</label><input ${attr} type="${inputType}" value="${escapeHtml(value??'')}" ${type==='number'?'step="any" inputmode="decimal"':''} ${type==='phone'?'inputmode="tel"':''} ${required}/></div>`;
   }
-
-  function openBuilder() {
-    state.draft = state.fields.map((field, index) => normalizeDraftField({ ...field, original: { ...field } }, index));
-    $('#b2cBuilderError')?.setAttribute('hidden', '');
-    renderBuilder();
-    openOverlay('b2cBuilderOverlay');
+  function showRecord(record){state.activeRecord=record;state.currentFiles={};$('#b2cRecordEditTitle').textContent=`Edit ${record.customerCode||'Record'}`;$('#b2cRecordEditMeta').textContent=`${selected()?.name||'B2C table'} · Created ${formatDate(record.createdAt)}`;$('#b2cRecordEditFields').innerHTML=state.fields.map((field)=>inputForField(field,(record.values||{})[field.key])).join('');$('#b2cRecordEditError').hidden=true;open('Record');icons();}
+  function readFiles(input){return Array.from(input?.files||[]);} function toDataUrl(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error(`Could not read ${file.name}.`));reader.readAsDataURL(file);});}
+  async function uploadFiles(files){const out=[];for(const file of Array.from(files||[])){if(file.size>10*1024*1024)throw new Error(`${file.name} is larger than 10 MB.`);const dataUrl=await toDataUrl(file);const payload=await api('/api/b2c/upload',{method:'POST',body:JSON.stringify({dataUrl,filename:file.name,mime:file.type})});if(payload.file)out.push(payload.file);}return out;}
+  async function saveRecord(event){event.preventDefault();const db=selected(),record=state.activeRecord;if(!db||!record)return;const error=$('#b2cRecordEditError');error.hidden=true;const values={...(record.values||{})};const button=$('#b2cSaveRecordBtn'),original=button?.innerHTML;if(button){button.disabled=true;button.textContent='Saving…';}try{for(const field of state.fields){if(READ_ONLY_TYPES.has(field.type))continue;const input=$(`[data-record-field="${CSS.escape(field.key)}"]`,$('#b2cRecordEditForm'));if(field.type==='files'){const uploads=await uploadFiles(readFiles(input));values[field.key]=[...(state.currentFiles[field.key]||[]),...uploads];}else if(field.type==='checkbox')values[field.key]=!!input?.checked;else if(field.type==='multi_select')values[field.key]=Array.from(input?.selectedOptions||[]).map((option)=>option.value);else values[field.key]=input?.value??'';}await api(`/api/b2c/records/${encodeURIComponent(record.id)}`,{method:'PATCH',body:JSON.stringify({databaseId:db.id,values})});close('Record');await loadTable();toast('Record updated.','success');}catch(err){error.hidden=false;error.textContent=err.message||'Could not save record.';}finally{if(button){button.disabled=false;button.innerHTML=original;icons();}}}
+  async function deleteRecord(id){const record=state.records.find((item)=>String(item.id)===String(id));if(!record||!window.confirm(`Delete ${record.customerCode||'this record'}? This cannot be undone.`))return;try{await api(`/api/b2c/records/${encodeURIComponent(id)}?databaseId=${encodeURIComponent(state.selectedId)}`,{method:'DELETE'});await loadTable();toast('Record deleted.','success');}catch(error){toast(error.message||'Could not delete record.','error');}}
+  function bind(){
+    $('#b2cRefreshBtn')?.addEventListener('click',()=>loadAll()); $('#b2cNewTableBtn')?.addEventListener('click',openTableDialog); $('#b2cTableForm')?.addEventListener('submit',createTable); $('#b2cConfigureTableBtn')?.addEventListener('click',openBuilder); $('#b2cOpenLinkedFormBtn')?.addEventListener('click',()=>{const db=selected(); if(!db)return; const target=`/b2c/form?database=${encodeURIComponent(db.id)}${db.defaultFormId ? `&form=${encodeURIComponent(db.defaultFormId)}` : ''}`; window.location.href=target;});$('#b2cRecordSearch')?.addEventListener('input',renderTable);
+    $('#b2cDatabaseList')?.addEventListener('click',(event)=>{const card=event.target.closest('[data-database-id]');if(!card)return;state.selectedId=card.dataset.databaseId;localStorage.setItem('b2c.selected.table',state.selectedId);renderDatabases();loadTable();});
+    $('#b2cAddColumnBtn')?.addEventListener('click',()=>{readBuilder();state.draft.push(normalizeDraft({label:'',type:'text',required:false},state.draft.length));renderBuilder();setTimeout(()=>$(`[data-draft-label="${state.draft.length-1}"]`)?.focus(),0);});$('#b2cSaveBuilderBtn')?.addEventListener('click',saveBuilder);
+    $('#b2cBuilderList')?.addEventListener('change',(event)=>{if(event.target.matches('[data-draft-type]')){readBuilder();renderBuilder();}});$('#b2cBuilderList')?.addEventListener('click',(event)=>{const btn=event.target.closest('button');if(!btn)return;readBuilder();const index=Number(btn.dataset.draftIndex??btn.dataset.draftDelete);if(btn.dataset.draftDelete!==undefined){state.draft.splice(index,1);renderBuilder();return;}if(btn.dataset.draftMove==='up'&&index>0)[state.draft[index-1],state.draft[index]]=[state.draft[index],state.draft[index-1]];if(btn.dataset.draftMove==='down'&&index<state.draft.length-1)[state.draft[index+1],state.draft[index]]=[state.draft[index],state.draft[index+1]];renderBuilder();});
+    document.addEventListener('click',(event)=>{const closeBtn=event.target.closest('[data-b2c-close]');if(closeBtn)close(closeBtn.dataset.b2cClose.replace(/(^|-)([a-z])/g,(_,p,c)=>c.toUpperCase()));const action=event.target.closest('[data-record-action]');if(action){const record=state.records.find((item)=>String(item.id)===String(action.dataset.recordId));if(action.dataset.recordAction==='edit')showRecord(record);if(action.dataset.recordAction==='delete')deleteRecord(action.dataset.recordId);}});
+    $('#b2cRecordEditForm')?.addEventListener('submit',saveRecord);document.addEventListener('keydown',(event)=>{if(event.key==='Escape'){close('Table');close('Builder');close('Record');}});
   }
-
-  function builderError(text = '') {
-    const box = $('#b2cBuilderError');
-    if (!box) return;
-    if (!text) { box.hidden = true; box.textContent = ''; return; }
-    box.hidden = false;
-    box.textContent = text;
-  }
-
-  async function saveBuilder() {
-    readBuilderControls();
-    const normalized = state.draft.map((field, index) => normalizeDraftField(field, index));
-    const labels = normalized.map((field) => field.label.toLowerCase());
-    if (normalized.some((field) => !field.label)) return builderError('Every column needs a name.');
-    if (new Set(labels).size !== labels.length) return builderError('Column names must be unique.');
-    builderError('');
-
-    const button = $('#b2cSaveBuilderBtn');
-    const oldHtml = button?.innerHTML;
-    if (button) { button.disabled = true; button.textContent = 'Saving…'; }
-    try {
-      const oldById = new Map(state.fields.filter((field) => field.id).map((field) => [String(field.id), field]));
-      const draftIds = new Set(normalized.filter((field) => field.id).map((field) => String(field.id)));
-      for (const field of state.fields) {
-        if (field.id && !draftIds.has(String(field.id))) await api(`/api/b2c/fields/${encodeURIComponent(field.id)}`, { method: 'DELETE' });
-      }
-      for (const [index, field] of normalized.entries()) {
-        const payload = { label: field.label, type: field.type, required: field.required, sortOrder: index + 1 };
-        const old = oldById.get(String(field.id));
-        if (!field.id) {
-          await api('/api/b2c/fields', { method: 'POST', body: JSON.stringify(payload) });
-        } else if (!old || old.label !== field.label || old.type !== field.type || !!old.required !== !!field.required || Number(old.sortOrder) !== index + 1) {
-          await api(`/api/b2c/fields/${encodeURIComponent(field.id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        }
-      }
-      closeOverlay('builder');
-      await loadDatabase();
-      message('Customer database layout saved.', 'success');
-    } catch (error) {
-      builderError(error.message || 'Could not save customer columns.');
-    } finally {
-      if (button) { button.disabled = false; button.innerHTML = oldHtml; refreshIcons(); }
-    }
-  }
-
-  function fileEntryHtml(file) {
-    return `<a class="b2c-file-pill" target="_blank" rel="noopener" href="${escapeHtml(file.url || '#')}"><i data-feather="${isImageFile(file) ? 'image' : 'paperclip'}"></i><span>${escapeHtml(file.name || 'Attachment')}</span></a>`;
-  }
-
-  function renderCustomerEditor(customer) {
-    const container = $('#b2cCustomerEditFields');
-    const meta = $('#b2cCustomerEditMeta');
-    if (!container) return;
-    state.activeCustomer = customer;
-    state.currentFiles = {};
-    const values = customer.values || {};
-    if (meta) meta.textContent = `${customer.customerCode || 'Customer record'} · Created ${formatDate(customer.createdAt)}`;
-    container.innerHTML = state.fields.map((field) => {
-      const value = values[field.key];
-      const required = field.required ? '<em>*</em>' : '';
-      if (field.type === 'files') {
-        state.currentFiles[field.key] = Array.isArray(value) ? value : [];
-        return `<div class="b2c-form-control b2c-form-control--wide"><label>${escapeHtml(field.label)}${required}</label><input class="b2c-file-input" type="file" data-customer-field="${escapeHtml(field.key)}" data-customer-files="${escapeHtml(field.key)}" multiple /><small>Choose new photos or files to add. Existing attachments remain unless you remove them.</small><div class="b2c-current-files" data-existing-files="${escapeHtml(field.key)}">${state.currentFiles[field.key].map(fileEntryHtml).join('') || '<span class="b2c-cell-muted">No attachments</span>'}</div></div>`;
-      }
-      const type = field.type === 'number' ? 'number' : field.type === 'phone' ? 'tel' : 'text';
-      const inputMode = field.type === 'number' ? 'decimal' : field.type === 'phone' ? 'tel' : '';
-      return `<div class="b2c-form-control"><label>${escapeHtml(field.label)}${required}</label><input type="${type}" ${field.type === 'number' ? 'step="any"' : ''} inputmode="${inputMode}" data-customer-field="${escapeHtml(field.key)}" value="${escapeHtml(value ?? '')}" ${field.required ? 'required' : ''} /></div>`;
-    }).join('');
-    refreshIcons();
-  }
-
-  function showCustomer(customer) {
-    if (!customer) return;
-    $('#b2cCustomerEditError')?.setAttribute('hidden', '');
-    renderCustomerEditor(customer);
-    openOverlay('b2cCustomerOverlay');
-  }
-
-  function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function uploadFiles(files) {
-    const list = Array.from(files || []);
-    if (!list.length) return [];
-    const outputs = [];
-    for (const file of list) {
-      if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB.`);
-      const dataUrl = await fileToDataUrl(file);
-      const result = await api('/api/b2c/upload', { method: 'POST', body: JSON.stringify({ dataUrl, filename: file.name, contentType: file.type }) });
-      if (result.file) outputs.push(result.file);
-    }
-    return outputs;
-  }
-
-  async function saveCustomer(event) {
-    event.preventDefault();
-    const customer = state.activeCustomer;
-    if (!customer) return;
-    const errorBox = $('#b2cCustomerEditError');
-    if (errorBox) errorBox.hidden = true;
-    const values = { ...(customer.values || {}) };
-    const form = $('#b2cCustomerEditForm');
-    const button = $('#b2cSaveCustomerBtn');
-    const oldHtml = button?.innerHTML;
-    if (button) { button.disabled = true; button.textContent = 'Saving…'; }
-    try {
-      for (const field of state.fields) {
-        const input = $(`[data-customer-field="${CSS.escape(field.key)}"]`, form);
-        if (field.type === 'files') {
-          const uploads = await uploadFiles(input?.files);
-          values[field.key] = [...(state.currentFiles[field.key] || []), ...uploads];
-        } else {
-          values[field.key] = input?.value ?? '';
-        }
-      }
-      await api(`/api/b2c/customers/${encodeURIComponent(customer.id)}`, { method: 'PATCH', body: JSON.stringify({ values }) });
-      closeOverlay('customer');
-      await loadDatabase();
-      message('Customer record updated.', 'success');
-    } catch (error) {
-      if (errorBox) { errorBox.hidden = false; errorBox.textContent = error.message || 'Could not save customer record.'; }
-    } finally {
-      if (button) { button.disabled = false; button.innerHTML = oldHtml; refreshIcons(); }
-    }
-  }
-
-  async function deleteCustomer(id) {
-    const customer = state.customers.find((item) => String(item.id) === String(id));
-    if (!customer) return;
-    if (!window.confirm(`Delete ${customer.customerCode || 'this customer record'}? This cannot be undone.`)) return;
-    try {
-      await api(`/api/b2c/customers/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      await loadDatabase();
-      message('Customer record deleted.', 'success');
-    } catch (error) {
-      message(error.message || 'Could not delete customer record.', 'error');
-    }
-  }
-
-  function bindEvents() {
-    $('#b2cRefreshBtn')?.addEventListener('click', loadDatabase);
-    $('#b2cConfigureBtn')?.addEventListener('click', openBuilder);
-    $('#b2cCustomerSearch')?.addEventListener('input', renderTable);
-    $('#b2cAddColumnBtn')?.addEventListener('click', () => {
-      readBuilderControls();
-      state.draft.push(normalizeDraftField({ label: '', type: 'text', required: false }, state.draft.length));
-      renderBuilder();
-      setTimeout(() => $(`[data-draft-label="${state.draft.length - 1}"]`)?.focus(), 0);
-    });
-    $('#b2cSaveBuilderBtn')?.addEventListener('click', saveBuilder);
-    $('#b2cBuilderList')?.addEventListener('click', (event) => {
-      const target = event.target.closest('button');
-      if (!target) return;
-      readBuilderControls();
-      const index = Number(target.dataset.draftIndex ?? target.dataset.draftDelete);
-      if (target.dataset.draftDelete !== undefined) {
-        state.draft.splice(index, 1);
-        renderBuilder();
-        return;
-      }
-      const direction = target.dataset.draftMove;
-      if (direction === 'up' && index > 0) [state.draft[index - 1], state.draft[index]] = [state.draft[index], state.draft[index - 1]];
-      if (direction === 'down' && index < state.draft.length - 1) [state.draft[index + 1], state.draft[index]] = [state.draft[index], state.draft[index + 1]];
-      renderBuilder();
-    });
-    document.addEventListener('click', (event) => {
-      const close = event.target.closest('[data-b2c-close]');
-      if (close) closeOverlay(close.dataset.b2cClose);
-      const action = event.target.closest('[data-customer-action]');
-      if (!action) return;
-      const customer = state.customers.find((item) => String(item.id) === String(action.dataset.customerId));
-      if (action.dataset.customerAction === 'edit') showCustomer(customer);
-      if (action.dataset.customerAction === 'delete') deleteCustomer(action.dataset.customerId);
-    });
-    $('#b2cCustomerEditForm')?.addEventListener('submit', saveCustomer);
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') { closeOverlay('builder'); closeOverlay('customer'); }
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    bindEvents();
-    refreshIcons();
-    loadDatabase();
-  });
+  document.addEventListener('DOMContentLoaded',()=>{bind();icons();loadAll({preserve:true});});
 })();
