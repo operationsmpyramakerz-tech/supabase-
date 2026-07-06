@@ -37127,11 +37127,11 @@ function _b2cFormFieldsTable() {
 }
 
 const B2C_FIELD_TYPES = new Set([
-  "text", "number", "select", "multi_select", "status", "date", "person", "files",
-  "checkbox", "url", "email", "phone", "relation", "formula", "rollup", "id", "button", "place",
+  "text", "number", "select", "multi_select", "date", "files",
+  "checkbox", "url", "email", "phone", "formula", "place",
 ]);
-const B2C_READONLY_FIELD_TYPES = new Set(["formula", "rollup", "id", "button"]);
-const B2C_SELECT_FIELD_TYPES = new Set(["select", "multi_select", "status"]);
+const B2C_READONLY_FIELD_TYPES = new Set(["formula"]);
+const B2C_SELECT_FIELD_TYPES = new Set(["select", "multi_select"]);
 
 function _b2cText(value, max = 0) {
   const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
