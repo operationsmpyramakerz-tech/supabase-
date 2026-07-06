@@ -797,3 +797,234 @@ body.b2c-builder-reordering *{
     grid-template-columns:36px minmax(0,1fr);
   }
 }
+
+
+/* --------------------------------------------------------------------------
+   B2C Property choices + Formula Equation Builder
+   -------------------------------------------------------------------------- */
+.b2c-field-config--choices,
+.b2c-field-config--formula{
+  grid-column:2 / 5;
+}
+.b2c-option-builder{
+  display:grid;
+  gap:7px;
+  max-width:560px;
+}
+.b2c-option-builder__row{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.b2c-option-builder__row input{
+  flex:1;
+  min-width:0;
+  height:35px;
+  border:1px solid #dfe2ea;
+  border-radius:9px;
+  padding:0 10px;
+  background:#fff;
+  color:#303745;
+  font:inherit;
+  font-size:12px;
+  outline:none;
+}
+.b2c-option-builder__row input:focus{
+  border-color:#a795ee;
+  box-shadow:0 0 0 3px rgba(100,72,232,.10);
+}
+.b2c-option-builder__row button{
+  width:30px;
+  height:30px;
+  min-width:30px;
+  padding:0;
+  border:1px solid #e5e7ed;
+  border-radius:9px;
+  background:#fff;
+  color:#9a6d75;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+.b2c-option-builder__row button:hover{
+  background:#fafafb;
+  border-color:#dfe2e7;
+  color:#83515b;
+}
+.b2c-option-builder__row button svg{width:14px;height:14px}
+.b2c-option-builder__add{
+  width:max-content;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  margin-top:1px;
+  border:0;
+  background:transparent;
+  color:#6049d1;
+  padding:4px 0;
+  font:inherit;
+  font-size:12px;
+  font-weight:850;
+  cursor:pointer;
+}
+.b2c-option-builder__add:hover{color:#4937af;text-decoration:underline}
+.b2c-option-builder__add svg{width:14px;height:14px}
+.b2c-formula-summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  min-height:38px;
+}
+.b2c-formula-summary>div{min-width:0}
+.b2c-formula-summary label{display:block}
+.b2c-formula-summary p{
+  margin:4px 0 0;
+  color:#7d8593;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:11px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.b2c-formula-builder-trigger{
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:34px;
+  padding:0 11px;
+  border:1px solid #d9d2fb;
+  border-radius:10px;
+  background:#f8f7ff;
+  color:#5b43cb;
+  font:inherit;
+  font-size:11px;
+  font-weight:850;
+  cursor:pointer;
+}
+.b2c-formula-builder-trigger:hover{background:#f0edff;border-color:#c6bbf4}
+.b2c-formula-builder-trigger svg{width:14px;height:14px}
+.b2c-formula-cell{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+  padding:5px 8px;
+  border:1px solid #e0dafc;
+  border-radius:8px;
+  background:#faf9ff;
+  color:#5e48ca;
+  font-size:11px;
+  font-weight:800;
+}
+.b2c-formula-cell svg{width:13px;height:13px;flex:none}
+.b2c-dialog--formula{
+  width:min(980px,calc(100vw - 32px));
+  max-height:min(780px,calc(100vh - 32px));
+  overflow:auto;
+}
+.b2c-formula-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);
+  gap:17px;
+  margin-top:18px;
+}
+.b2c-formula-editor,
+.b2c-formula-library{
+  min-width:0;
+  border:1px solid #e6e8ef;
+  border-radius:14px;
+  background:#fff;
+}
+.b2c-formula-editor{padding:14px}
+.b2c-formula-editor>label{
+  display:block;
+  margin-bottom:8px;
+  color:#3f4654;
+  font-size:12px;
+  font-weight:850;
+}
+.b2c-formula-editor textarea{
+  width:100%;
+  min-height:190px;
+  resize:vertical;
+  border:1px solid #d8dbea;
+  border-radius:11px;
+  padding:12px;
+  background:#fcfcff;
+  color:#28303e;
+  font:500 13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  outline:none;
+}
+.b2c-formula-editor textarea:focus{
+  border-color:#a795ee;
+  box-shadow:0 0 0 3px rgba(100,72,232,.10);
+  background:#fff;
+}
+.b2c-formula-preview{
+  display:grid;
+  gap:6px;
+  margin-top:12px;
+  padding:10px 11px;
+  border:1px dashed #d9dcec;
+  border-radius:10px;
+  background:#fafbfe;
+}
+.b2c-formula-preview>span{
+  color:#7f8795;
+  font-size:10px;
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.b2c-formula-preview code{
+  display:block;
+  overflow:auto;
+  color:#4d5361;
+  font:500 11px/1.45 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.b2c-formula-library{padding:13px;display:grid;align-content:start;gap:15px}
+.b2c-formula-library__section+ .b2c-formula-library__section{padding-top:14px;border-top:1px solid #edf0f5}
+.b2c-formula-library__eyebrow{
+  color:#7258d9;
+  font-size:10px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.07em;
+}
+.b2c-formula-library__section p{margin:4px 0 9px;color:#88909e;font-size:11px;line-height:1.35}
+.b2c-formula-property-list,
+.b2c-formula-function-list{display:grid;gap:6px}
+.b2c-formula-insert{
+  min-width:0;
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:9px 10px;
+  border:1px solid #e5e7ee;
+  border-radius:10px;
+  background:#fff;
+  color:#4a5160;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.b2c-formula-insert:hover{border-color:#d4caf8;background:#faf9ff;color:#563fc1}
+.b2c-formula-insert svg{width:14px;height:14px;flex:none;color:#7157d6}
+.b2c-formula-property-list .b2c-formula-insert span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:800}
+.b2c-formula-function-list .b2c-formula-insert{display:grid;gap:2px}
+.b2c-formula-function-list .b2c-formula-insert strong{font-size:11px;font-weight:900}
+.b2c-formula-function-list .b2c-formula-insert span{font-size:10px;color:#8a92a0;line-height:1.3}
+.b2c-formula-empty{margin:0;color:#9299a6;font-size:11px;line-height:1.45}
+@media(max-width:820px){
+  .b2c-field-config--choices,
+  .b2c-field-config--formula{grid-column:2 / 3}
+  .b2c-formula-layout{grid-template-columns:1fr}
+  .b2c-formula-summary{align-items:flex-start;flex-direction:column}
+}
