@@ -37269,6 +37269,7 @@ function _b2cSerializeFormField(row = {}, field = {}) {
     fieldId: _b2cText(_sbGet(row, ["field_id", "fieldId"]), 60) || field.id,
     sortOrder: _b2cNumber(_sbGet(row, ["sort_order", "sortOrder"]), field.sortOrder || 1, 1, 9999),
     formRequired: typeof override === "boolean" ? override : field.required,
+    formHidden: _sbBool(condition?.hidden || condition?.isHidden || condition?.is_hidden, false),
     condition: {
       enabled: _sbBool(condition?.enabled, false),
       fieldKey: _b2cText(condition?.fieldKey || condition?.field_key, 80),
@@ -37383,7 +37384,8 @@ async function _b2cLoadFormBundle(formId) {
   const bindingRows = await _b2cSelect(_b2cFormFieldsTable(), { filters: { form_id: `eq.${form.id}` }, order: "sort_order.asc,id.asc" });
   const bindingByField = new Map((Array.isArray(bindingRows) ? bindingRows : []).map((row) => [String(_sbGet(row, ["field_id", "fieldId"])), row]));
   const formFields = fields.map((field, index) => _b2cSerializeFormField(bindingByField.get(String(field.id)) || { field_id: field.id, sort_order: index + 1 }, field))
-    .sort((a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id));
+    .sort((a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id))
+    .filter((field) => !field.formHidden);
   return { form, database, fields: formFields };
 }
 async function _b2cNextDatabaseKey(name) {
@@ -37803,15 +37805,43 @@ app.put("/api/b2c/forms/:id/builder", requireAuth, requirePage(["Customer Databa
   try {
     const bundle = await _b2cLoadFormBundle(_b2cText(req.params.id, 60)); if (!bundle) return res.status(404).json({ ok: false, error: "B2C form was not found." });
     const incoming = Array.isArray(req.body?.fields) ? req.body.fields.slice(0, 80) : [];
-    const fieldById = new Map(bundle.fields.map((field) => [String(field.id), field]));
-    if (incoming.length !== bundle.fields.length) return res.status(400).json({ ok: false, error: "The form builder must include every property from the linked data table." });
+    const tableFields = await _b2cLoadFields(bundle.database.id);
+    const fieldById = new Map(tableFields.map((field) => [String(field.id), field]));
+    const existingRows = await _b2cSelect(_b2cFormFieldsTable(), { filters: { form_id: `eq.${bundle.form.id}` }, order: "sort_order.asc,id.asc" });
+    const existingByFieldId = new Map((Array.isArray(existingRows) ? existingRows : []).map((row) => [String(_sbGet(row, ["field_id", "fieldId"])), row]));
     const received = new Set();
+
     for (const [index, item] of incoming.entries()) {
-      const fieldId = _b2cText(item?.fieldId || item?.id, 60); const field = fieldById.get(fieldId); if (!field || received.has(fieldId)) return res.status(400).json({ ok: false, error: "The form builder contains an invalid property." }); received.add(fieldId);
-      const condition = _b2cNormalizeCondition(item?.condition, bundle.fields, field.key);
-      const existingRows = await _b2cSelect(_b2cFormFieldsTable(), { filters: { form_id: `eq.${bundle.form.id}`, field_id: `eq.${field.id}` }, limit: 1 });
-      const patch = { sort_order: index + 1, is_required_override: _sbBool(item?.formRequired, field.required), visibility_condition: condition, updated_at: new Date().toISOString() };
-      if (existingRows?.[0]) await supabaseDb.updateById(_b2cFormFieldsTable(), _b2cId(existingRows[0]), patch);
+      const fieldId = _b2cText(item?.fieldId || item?.id, 60);
+      const field = fieldById.get(fieldId);
+      if (!field || received.has(fieldId)) return res.status(400).json({ ok: false, error: "The form builder contains an invalid property." });
+      received.add(fieldId);
+      const condition = _b2cNormalizeCondition(item?.condition, tableFields, field.key);
+      const existing = existingByFieldId.get(fieldId);
+      const patch = {
+        sort_order: index + 1,
+        is_required_override: _sbBool(item?.formRequired, field.required),
+        visibility_condition: { ...condition, hidden: false },
+        updated_at: new Date().toISOString(),
+      };
+      if (existing) await supabaseDb.updateById(_b2cFormFieldsTable(), _b2cId(existing), patch);
+      else await supabaseDb.insert(_b2cFormFieldsTable(), { form_id: bundle.form.id, field_id: field.id, ...patch, created_at: new Date().toISOString() });
+    }
+
+    // A deleted item in the Form Builder is hidden from this form only. The
+    // original table property remains safe in the database and can still store
+    // historical record data.
+    for (const field of tableFields) {
+      if (received.has(String(field.id))) continue;
+      const existing = existingByFieldId.get(String(field.id));
+      const existingCondition = existing ? _b2cParseJson(_sbGet(existing, ["visibility_condition", "condition", "visibilityCondition"]), {}) : {};
+      const patch = {
+        sort_order: tableFields.length + 1000 + Number(field.sortOrder || 0),
+        is_required_override: existing ? _sbGet(existing, ["is_required_override", "required_override", "isRequiredOverride"]) : null,
+        visibility_condition: { ...existingCondition, hidden: true },
+        updated_at: new Date().toISOString(),
+      };
+      if (existing) await supabaseDb.updateById(_b2cFormFieldsTable(), _b2cId(existing), patch);
       else await supabaseDb.insert(_b2cFormFieldsTable(), { form_id: bundle.form.id, field_id: field.id, ...patch, created_at: new Date().toISOString() });
     }
     return res.json({ ok: true });

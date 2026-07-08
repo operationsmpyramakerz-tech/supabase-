@@ -1071,3 +1071,123 @@ body.b2c-builder-reordering *{
 .b2c-formula-library{max-height:560px;overflow:auto}.b2c-formula-property-list .b2c-formula-insert{justify-content:flex-start}.b2c-formula-property-list .b2c-formula-insert small{margin-left:auto;color:#939aa6;font-size:9px;font-weight:800;white-space:nowrap}.b2c-formula-function-categories{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px}.b2c-formula-function-categories button{padding:5px 8px;border:1px solid #e0e3ec;border-radius:999px;background:#fff;color:#74808e;font:800 10px/1 inherit;cursor:pointer}.b2c-formula-function-categories button:hover,.b2c-formula-function-categories button.is-active{border-color:#cfc2f7;background:#f3f0ff;color:#5b42c5}
 @media(max-width:900px){.b2c-dialog--formula{padding:18px}.b2c-dialog__header--formula{padding-right:42px}.b2c-formula-layout{grid-template-columns:1fr}.b2c-formula-library{max-height:none}.b2c-formula-recipes{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.b2c-dialog--formula{width:calc(100vw - 18px);padding:15px}.b2c-dialog__header--formula{display:grid;gap:11px}.b2c-formula-test-control{min-width:0}.b2c-formula-recipe-band__head{display:grid;gap:3px}.b2c-formula-recipes{grid-template-columns:1fr}.b2c-formula-condition__grid{grid-template-columns:1fr}.b2c-formula-result{align-items:flex-start;flex-direction:column}.b2c-formula-result__hint{max-width:none;text-align:left}.b2c-formula-editor textarea{min-height:116px}}
+
+/* --------------------------------------------------------------------------
+   B2C Form Builder – match Table Builder controls and drag behavior
+   -------------------------------------------------------------------------- */
+#b2cFormBuilderList.b2c-form-builder-list{
+  position:relative;
+}
+.b2c-dialog--builder .b2c-form-builder-card{
+  grid-template-columns:42px minmax(215px,390px) auto auto;
+  justify-content:start;
+  align-items:end;
+  cursor:default;
+}
+.b2c-dialog--builder .b2c-form-builder-question{
+  align-self:stretch;
+}
+.b2c-dialog--builder .b2c-form-builder-question strong{
+  min-height:38px;
+  display:flex;
+  align-items:center;
+  padding:0 11px;
+  border:1px solid #edf0f5;
+  border-radius:10px;
+  background:#fff;
+  color:#242b38;
+  font-size:13px;
+  font-weight:850;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.b2c-dialog--builder .b2c-form-builder-question small{
+  color:#89919f;
+  font-size:10px;
+  font-weight:850;
+  margin-top:-2px;
+}
+.b2c-dialog--builder .b2c-form-builder-card .b2c-field-required{
+  align-self:end;
+  height:38px;
+}
+.b2c-dialog--builder .b2c-form-builder-card .b2c-column-actions{
+  align-self:end;
+}
+.b2c-form-builder-condition-toggle{
+  grid-column:2 / 3;
+  margin-top:2px;
+  min-height:30px;
+}
+.b2c-dialog--builder .b2c-form-builder-condition-toggle input{
+  width:16px;
+  height:16px;
+  accent-color:var(--b2c-purple);
+}
+.b2c-dialog--builder .b2c-form-builder-condition{
+  grid-column:2 / 5;
+  max-width:760px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin-top:2px;
+}
+.b2c-dialog--builder .b2c-form-builder-condition.is-disabled{
+  opacity:.55;
+}
+.b2c-dialog--builder .b2c-form-builder-condition select,
+.b2c-dialog--builder .b2c-form-builder-condition input{
+  height:36px;
+  border:1px solid #e1e4ec;
+  border-radius:10px;
+  padding:0 10px;
+  background:#fff;
+  color:#303746;
+  font:inherit;
+  font-size:12px;
+  outline:none;
+}
+.b2c-dialog--builder .b2c-form-builder-condition select:focus,
+.b2c-dialog--builder .b2c-form-builder-condition input:focus{
+  border-color:#a795ee;
+  box-shadow:0 0 0 3px rgba(100,72,232,.10);
+}
+.b2c-dialog--builder .b2c-form-builder-card.is-dragging{
+  opacity:.5 !important;
+  border-color:#a79ae9;
+  box-shadow:0 26px 55px rgba(38,31,86,.25);
+  transform:rotate(.18deg) scale(1.012);
+}
+.b2c-dialog--builder .b2c-form-builder-card .b2c-column-drag-handle{
+  display:grid;
+  place-items:center;
+  cursor:grab !important;
+  touch-action:none;
+}
+.b2c-dialog--builder .b2c-form-builder-card .b2c-column-drag-handle:active{
+  cursor:grabbing !important;
+}
+@media(max-width:920px){
+  .b2c-dialog--builder .b2c-form-builder-card{
+    grid-template-columns:38px minmax(0,1fr) auto auto;
+    justify-content:normal;
+  }
+  .b2c-dialog--builder .b2c-form-builder-condition{
+    grid-column:2 / 5;
+  }
+}
+@media(max-width:700px){
+  .b2c-dialog--builder .b2c-form-builder-card{
+    grid-template-columns:36px minmax(0,1fr);
+  }
+  .b2c-dialog--builder .b2c-form-builder-card .b2c-field-required,
+  .b2c-dialog--builder .b2c-form-builder-card .b2c-column-actions,
+  .b2c-form-builder-condition-toggle,
+  .b2c-dialog--builder .b2c-form-builder-condition{
+    grid-column:2 / 3;
+  }
+  .b2c-dialog--builder .b2c-form-builder-condition{
+    grid-template-columns:1fr;
+  }
+}
