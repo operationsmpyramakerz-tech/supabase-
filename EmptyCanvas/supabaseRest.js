@@ -12,12 +12,10 @@ function cleanBaseUrl(raw) {
 function getConfig() {
   const url = cleanBaseUrl(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '');
 
-  // Self-hosted Supabase can have two different validation layers:
-  // 1) Kong/API gateway validates the `apikey` header against the legacy API key.
-  // 2) PostgREST validates the `Authorization: Bearer ...` JWT against JWT_SECRET.
-  // In normal Supabase projects both values are usually the same. In some self-hosted
-  // migrations they can differ, so keep backward compatibility but allow overriding
-  // the gateway API key separately through SUPABASE_REST_API_KEY or SUPABASE_API_KEY.
+  // Self-hosted Supabase may validate two different headers:
+  // - Kong/API gateway checks the `apikey` header against the legacy key configured in Kong.
+  // - PostgREST checks `Authorization: Bearer ...` against JWT_SECRET.
+  // In some self-hosted migrations these are not the same value, so we keep them separate.
   const authKey = String(
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SECRET_KEY ||
@@ -39,12 +37,24 @@ function getConfig() {
   const stocktakingTable = String(process.env.SUPABASE_STOCKTAKING_TABLE || 'stocktaking').trim() || 'stocktaking';
   const b2bSchoolsTable = String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
   const tasksTable = String(process.env.SUPABASE_TASKS_TABLE || 'tasks').trim() || 'tasks';
-  return { url, key, apiKey, authKey, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable };
+  const messagesChatsTable = String(process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
+  const messagesTable = String(process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
+  const storageBucket = String(process.env.SUPABASE_STORAGE_BUCKET || process.env.SUPABASE_BUCKET || 'operations-files').trim() || 'operations-files';
+  return { url, key, apiKey, authKey, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable, messagesChatsTable, messagesTable, storageBucket };
 }
 
 function isConfigured() {
   const { url, key, apiKey } = getConfig();
   return /^https:\/\//i.test(url) && !!key && !!apiKey;
+}
+
+function authHeaders(extraHeaders = {}) {
+  const { key, apiKey } = getConfig();
+  return {
+    apikey: apiKey,
+    Authorization: `Bearer ${key}`,
+    ...extraHeaders,
+  };
 }
 
 function encodeTableName(table) {
@@ -56,18 +66,14 @@ function encodeFilterValue(value) {
 }
 
 async function request(path, options = {}) {
-  const { url, key, apiKey } = getConfig();
+  const { url } = getConfig();
   if (!isConfigured()) {
     const err = new Error('Supabase is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_REST_API_KEY.');
     err.code = 'SUPABASE_NOT_CONFIGURED';
     throw err;
   }
 
-  const headers = {
-    apikey: apiKey,
-    Authorization: `Bearer ${key}`,
-    ...options.headers,
-  };
+  const headers = authHeaders(options.headers);
 
   if (options.body !== undefined && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
@@ -154,4 +160,124 @@ async function updateByIds(table, ids = [], row = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
-module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds };
+async function deleteById(table, id) {
+  const rows = await request(`/${encodeTableName(table)}?id=eq.${encodeFilterValue(id)}`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=representation' },
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function deleteByIds(table, ids = []) {
+  const clean = (Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!clean.length) return [];
+  const inList = clean.map((id) => `"${String(id).replace(/"/g, '\"')}"`).join(',');
+  const rows = await request(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=representation' },
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function encodeStoragePath(objectPath) {
+  return String(objectPath || '')
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+}
+
+function storagePublicUrl(objectPath, bucketName = null) {
+  const { url, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const key = String(objectPath || '').replace(/^\/+/, '');
+  if (!/^https:\/\//i.test(url) || !bucket || !key) return '';
+  return `${url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodeStoragePath(key)}`;
+}
+
+async function uploadStorageObject(objectPath, buffer, { contentType = 'application/octet-stream', bucketName = null, upsert = true } = {}) {
+  const { url, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const cleanPath = String(objectPath || '').replace(/^\/+/, '');
+  if (!isConfigured() || !bucket) {
+    const err = new Error('Supabase Storage is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_STORAGE_BUCKET.');
+    err.code = 'SUPABASE_STORAGE_NOT_CONFIGURED';
+    throw err;
+  }
+  if (!cleanPath) {
+    const err = new Error('Storage object path is required.');
+    err.code = 'SUPABASE_STORAGE_PATH_REQUIRED';
+    throw err;
+  }
+
+  const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`, {
+    method: 'POST',
+    headers: authHeaders({
+      'Content-Type': contentType || 'application/octet-stream',
+      'x-upsert': upsert ? 'true' : 'false',
+    }),
+    body: buffer,
+  });
+
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+  if (!res.ok) {
+    const message = data && typeof data === 'object'
+      ? (data.message || data.error || JSON.stringify(data))
+      : (text || `Supabase Storage upload failed with status ${res.status}`);
+    const err = new Error(message);
+    err.status = res.status;
+    err.details = data;
+    throw err;
+  }
+
+  return {
+    path: cleanPath,
+    bucket,
+    data,
+    publicUrl: storagePublicUrl(cleanPath, bucket),
+  };
+}
+
+async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}) {
+  const { url, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const prefixes = (Array.isArray(objectPaths) ? objectPaths : [objectPaths])
+    .map((path) => String(path || '').replace(/^\/+/, '').trim())
+    .filter(Boolean);
+  if (!prefixes.length) return { deleted: 0, data: null };
+  if (!isConfigured() || !bucket) {
+    const err = new Error('Supabase Storage is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_STORAGE_BUCKET.');
+    err.code = 'SUPABASE_STORAGE_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
+    method: 'DELETE',
+    headers: authHeaders({
+      'Content-Type': 'application/json',
+    }),
+    body: JSON.stringify({ prefixes }),
+  });
+
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+  if (!res.ok) {
+    const message = data && typeof data === 'object'
+      ? (data.message || data.error || JSON.stringify(data))
+      : (text || `Supabase Storage delete failed with status ${res.status}`);
+    const err = new Error(message);
+    err.status = res.status;
+    err.details = data;
+    throw err;
+  }
+
+  return { deleted: prefixes.length, data };
+}
+
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, deleteById, deleteByIds, uploadStorageObject, deleteStorageObjects, storagePublicUrl };

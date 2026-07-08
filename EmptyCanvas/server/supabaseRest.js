@@ -11,13 +11,25 @@ function cleanBaseUrl(raw) {
 
 function getConfig() {
   const url = cleanBaseUrl(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '');
-  const key = String(
+
+  // Self-hosted Supabase may validate two different headers:
+  // - Kong/API gateway checks the `apikey` header against the legacy key configured in Kong.
+  // - PostgREST checks `Authorization: Bearer ...` against JWT_SECRET.
+  // In some self-hosted migrations these are not the same value, so we keep them separate.
+  const authKey = String(
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     ''
   ).trim();
+  const apiKey = String(
+    process.env.SUPABASE_REST_API_KEY ||
+    process.env.SUPABASE_API_KEY ||
+    authKey ||
+    ''
+  ).trim();
+  const key = authKey;
   const teamMembersTable = String(process.env.SUPABASE_TEAM_MEMBERS_TABLE || 'team_members').trim() || 'team_members';
   const ordersTable = String(process.env.SUPABASE_ORDERS_TABLE || 'orders').trim() || 'orders';
   const expensesTable = String(process.env.SUPABASE_EXPENSES_TABLE || 'expenses').trim() || 'expenses';
@@ -28,12 +40,21 @@ function getConfig() {
   const messagesChatsTable = String(process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
   const messagesTable = String(process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
   const storageBucket = String(process.env.SUPABASE_STORAGE_BUCKET || process.env.SUPABASE_BUCKET || 'operations-files').trim() || 'operations-files';
-  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable, messagesChatsTable, messagesTable, storageBucket };
+  return { url, key, apiKey, authKey, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable, messagesChatsTable, messagesTable, storageBucket };
 }
 
 function isConfigured() {
-  const { url, key } = getConfig();
-  return /^https:\/\//i.test(url) && !!key;
+  const { url, key, apiKey } = getConfig();
+  return /^https:\/\//i.test(url) && !!key && !!apiKey;
+}
+
+function authHeaders(extraHeaders = {}) {
+  const { key, apiKey } = getConfig();
+  return {
+    apikey: apiKey,
+    Authorization: `Bearer ${key}`,
+    ...extraHeaders,
+  };
 }
 
 function encodeTableName(table) {
@@ -45,18 +66,14 @@ function encodeFilterValue(value) {
 }
 
 async function request(path, options = {}) {
-  const { url, key } = getConfig();
+  const { url } = getConfig();
   if (!isConfigured()) {
-    const err = new Error('Supabase is not configured. Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.');
+    const err = new Error('Supabase is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_REST_API_KEY.');
     err.code = 'SUPABASE_NOT_CONFIGURED';
     throw err;
   }
 
-  const headers = {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    ...options.headers,
-  };
+  const headers = authHeaders(options.headers);
 
   if (options.body !== undefined && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
@@ -180,7 +197,7 @@ function storagePublicUrl(objectPath, bucketName = null) {
 }
 
 async function uploadStorageObject(objectPath, buffer, { contentType = 'application/octet-stream', bucketName = null, upsert = true } = {}) {
-  const { url, key, storageBucket } = getConfig();
+  const { url, storageBucket } = getConfig();
   const bucket = String(bucketName || storageBucket || '').trim();
   const cleanPath = String(objectPath || '').replace(/^\/+/, '');
   if (!isConfigured() || !bucket) {
@@ -196,12 +213,10 @@ async function uploadStorageObject(objectPath, buffer, { contentType = 'applicat
 
   const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`, {
     method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+    headers: authHeaders({
       'Content-Type': contentType || 'application/octet-stream',
       'x-upsert': upsert ? 'true' : 'false',
-    },
+    }),
     body: buffer,
   });
 
@@ -228,7 +243,7 @@ async function uploadStorageObject(objectPath, buffer, { contentType = 'applicat
 }
 
 async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}) {
-  const { url, key, storageBucket } = getConfig();
+  const { url, storageBucket } = getConfig();
   const bucket = String(bucketName || storageBucket || '').trim();
   const prefixes = (Array.isArray(objectPaths) ? objectPaths : [objectPaths])
     .map((path) => String(path || '').replace(/^\/+/, '').trim())
@@ -242,11 +257,9 @@ async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}
 
   const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
     method: 'DELETE',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+    headers: authHeaders({
       'Content-Type': 'application/json',
-    },
+    }),
     body: JSON.stringify({ prefixes }),
   });
 
