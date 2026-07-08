@@ -138,3 +138,82 @@ body.tasks-v2 .main-header .topbar-right{
     --ops-page-canvas-radius: 24px;
   }
 }
+
+/* =========================================================
+   2026-07-08: Content-only page surfaces
+   - Remove the global translucent full-page canvas from every page.
+   - Keep the system cover/photo background visible around the real content.
+   - Leave each page's own white cards/panels responsible for the content area,
+     so the white background follows the actual content height only.
+   ========================================================= */
+:root{
+  --ops-page-canvas-alpha: 0;
+  --ops-page-canvas-border: transparent;
+  --ops-page-canvas-shadow: none;
+}
+
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content,
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main,
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main:not(.ops-shell-host-main){
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main:not(.ops-shell-host-main){
+  border: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Keep only real content cards/panels white; do not paint a page-height backdrop. */
+:where(
+  body.current-orders-page,
+  body.operations-orders-page,
+  body.orders-review-page,
+  body[data-orders-view="maintenance"],
+  body.page-orders-maintenance-orders,
+  body.stocktaking-page,
+  body.page-stocktaking,
+  body.user-access-page,
+  body.page-user-access
+) :where(#current-orders.card, #sv-orders.card, .page-body > section.card, .main-content > main.container-full-width > section.card:has(.groups-grid), .ua-folders-panel, .ua-members-panel){
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  border: 1px solid rgba(229, 231, 235, 0.9) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:where(
+  body.current-orders-page,
+  body.operations-orders-page,
+  body.orders-review-page,
+  body[data-orders-view="maintenance"],
+  body.page-orders-maintenance-orders,
+  body.stocktaking-page,
+  body.page-stocktaking
+) :where(#current-orders.card, #sv-orders.card, .page-body > section.card, .main-content > main.container-full-width > section.card:has(.groups-grid)){
+  padding: 16px !important;
+}
+
+:where(body.page-orders-new, body.shell-embedded.page-orders-new) .order-type-step{
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  border: 1px solid rgba(229, 231, 235, 0.9) !important;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Lists themselves stay transparent so their cards keep the clean floating look. */
+:where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) :where(#orders-list, #requested-list, #sv-list){
+  background: transparent !important;
+}
