@@ -11,13 +11,27 @@ function cleanBaseUrl(raw) {
 
 function getConfig() {
   const url = cleanBaseUrl(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '');
-  const key = String(
+
+  // Self-hosted Supabase can have two different validation layers:
+  // 1) Kong/API gateway validates the `apikey` header against the legacy API key.
+  // 2) PostgREST validates the `Authorization: Bearer ...` JWT against JWT_SECRET.
+  // In normal Supabase projects both values are usually the same. In some self-hosted
+  // migrations they can differ, so keep backward compatibility but allow overriding
+  // the gateway API key separately through SUPABASE_REST_API_KEY or SUPABASE_API_KEY.
+  const authKey = String(
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     ''
   ).trim();
+  const apiKey = String(
+    process.env.SUPABASE_REST_API_KEY ||
+    process.env.SUPABASE_API_KEY ||
+    authKey ||
+    ''
+  ).trim();
+  const key = authKey;
   const teamMembersTable = String(process.env.SUPABASE_TEAM_MEMBERS_TABLE || 'team_members').trim() || 'team_members';
   const ordersTable = String(process.env.SUPABASE_ORDERS_TABLE || 'orders').trim() || 'orders';
   const expensesTable = String(process.env.SUPABASE_EXPENSES_TABLE || 'expenses').trim() || 'expenses';
@@ -25,12 +39,12 @@ function getConfig() {
   const stocktakingTable = String(process.env.SUPABASE_STOCKTAKING_TABLE || 'stocktaking').trim() || 'stocktaking';
   const b2bSchoolsTable = String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
   const tasksTable = String(process.env.SUPABASE_TASKS_TABLE || 'tasks').trim() || 'tasks';
-  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable };
+  return { url, key, apiKey, authKey, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable };
 }
 
 function isConfigured() {
-  const { url, key } = getConfig();
-  return /^https:\/\//i.test(url) && !!key;
+  const { url, key, apiKey } = getConfig();
+  return /^https:\/\//i.test(url) && !!key && !!apiKey;
 }
 
 function encodeTableName(table) {
@@ -42,15 +56,15 @@ function encodeFilterValue(value) {
 }
 
 async function request(path, options = {}) {
-  const { url, key } = getConfig();
+  const { url, key, apiKey } = getConfig();
   if (!isConfigured()) {
-    const err = new Error('Supabase is not configured. Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.');
+    const err = new Error('Supabase is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or SUPABASE_REST_API_KEY.');
     err.code = 'SUPABASE_NOT_CONFIGURED';
     throw err;
   }
 
   const headers = {
-    apikey: key,
+    apikey: apiKey,
     Authorization: `Bearer ${key}`,
     ...options.headers,
   };
