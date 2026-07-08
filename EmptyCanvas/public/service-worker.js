@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-b2c-form-builder-controls-v1";
+const CACHE_NAME = "ops-cache-content-only-page-surfaces-v1";
 
 const PRECACHE_URLS = [
   "/pwa-start",
