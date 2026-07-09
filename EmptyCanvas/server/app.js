@@ -9119,7 +9119,12 @@ function requirePage(pageNameOrNames) {
     // Read-only browser guards are also applied by common-ui.js, while this
     // server-side guard prevents direct API calls from changing data.
     const method = String(req.method || "GET").toUpperCase();
-    if (!adminUnlocked && accessLevel === PAGE_ACCESS_LEVELS.VIEW && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const pathName = String(req.path || "");
+    const isKpiPasswordGatedAction =
+      requiredPages.some((pageName) => _pageAccessAliases(pageName).includes("kpis")) &&
+      method === "POST" &&
+      /^\/api\/kpis\/(?:admin\/verify|standards|reviews)$/i.test(pathName);
+    if (!adminUnlocked && accessLevel === PAGE_ACCESS_LEVELS.VIEW && !["GET", "HEAD", "OPTIONS"].includes(method) && !isKpiPasswordGatedAction) {
       return _pageAccessDeniedResponse(req, res, {
         code: "VIEW_ONLY_ACCESS",
         error: "View-only access: you are not authorized to make changes on this page.",
@@ -32035,6 +32040,10 @@ function _kpiSummary(row = {}) {
     performanceRating: _kpiPerformanceRating(row.final_percentage),
     itemCount: Number(row.item_count || 0),
     completedItemCount: Number(row.completed_item_count || 0),
+    createdByTeamMemberId: String(row.created_by_team_member_id || row.createdByTeamMemberId || ""),
+    createdByName: String(row.created_by_name || row.createdByName || ""),
+    createdAt: String(row.created_at || row.createdAt || ""),
+    updatedAt: String(row.updated_at || row.updatedAt || ""),
   };
 }
 function _kpiScore(row = {}) {
@@ -32082,6 +32091,75 @@ async function _kpiVerifyAdminPasswordFromReq(req) {
   if (!password) return { ok: false, status: 403, message: "Admin password is required." };
   const ok = await _verifyPageAdminPassword(req, password, "KPIs");
   return ok ? { ok: true } : { ok: false, status: 401, message: "Invalid admin password." };
+}
+function _kpiAccessLevel(req) {
+  const raw = String(req?.opsPageAccessLevel || _sessionPageAccessLevel(req, "KPIs") || "").trim().toLowerCase();
+  if (raw === PAGE_ACCESS_LEVELS.ADMIN) return PAGE_ACCESS_LEVELS.ADMIN;
+  if (raw === PAGE_ACCESS_LEVELS.EDIT) return PAGE_ACCESS_LEVELS.EDIT;
+  if (raw === PAGE_ACCESS_LEVELS.VIEW) return PAGE_ACCESS_LEVELS.VIEW;
+  return "";
+}
+function _kpiAccessRank(level) {
+  return ({ [PAGE_ACCESS_LEVELS.VIEW]: 1, [PAGE_ACCESS_LEVELS.EDIT]: 2, [PAGE_ACCESS_LEVELS.ADMIN]: 3 })[String(level || "").toLowerCase()] || 0;
+}
+function _kpiHasAccessAtLeast(req, minimumLevel) {
+  return _kpiAccessRank(_kpiAccessLevel(req)) >= _kpiAccessRank(minimumLevel);
+}
+async function _kpiVerifyAdminPasswordOrAccess(req, minimumLevel = PAGE_ACCESS_LEVELS.ADMIN) {
+  if (_kpiHasAccessAtLeast(req, minimumLevel)) return { ok: true };
+  return _kpiVerifyAdminPasswordFromReq(req);
+}
+function _kpiSameMember(leftId, leftName, rightId, rightName) {
+  const aId = String(leftId || "").trim();
+  const bId = String(rightId || "").trim();
+  if (aId && bId && aId === bId) return true;
+  const aName = String(leftName || "").trim().toLowerCase();
+  const bName = String(rightName || "").trim().toLowerCase();
+  return Boolean(aName && bName && aName === bName);
+}
+function _kpiReviewVisibleForAccess(req, summary = {}, currentUser = {}) {
+  const level = _kpiAccessLevel(req);
+  if (level === PAGE_ACCESS_LEVELS.ADMIN) return true;
+  const isOwnReview = _kpiSameMember(currentUser.id, currentUser.name, summary.teamMemberId || summary.team_member_id, summary.teamMemberName || summary.team_member_name);
+  if (level === PAGE_ACCESS_LEVELS.VIEW) return isOwnReview;
+  if (level === PAGE_ACCESS_LEVELS.EDIT) {
+    const createdByCurrentUser = _kpiSameMember(currentUser.id, currentUser.name, summary.createdByTeamMemberId || summary.created_by_team_member_id, summary.createdByName || summary.created_by_name);
+    return isOwnReview || createdByCurrentUser;
+  }
+  return false;
+}
+function _kpiStandardVisibleForAccess(req, standard = {}, currentUser = {}) {
+  const level = _kpiAccessLevel(req);
+  if (level === PAGE_ACCESS_LEVELS.ADMIN) return true;
+  const currentDepartment = String(currentUser.department || "").trim().toLowerCase();
+  const currentPosition = String(currentUser.position || currentUser.rolePosition || "").trim().toLowerCase();
+  const standardDepartment = String(standard.department || standard.department_name || "").trim().toLowerCase();
+  const standardPosition = String(standard.rolePosition || standard.role_position || standard.position || "").trim().toLowerCase();
+  if (!currentDepartment || !standardDepartment || currentDepartment !== standardDepartment) return false;
+  if (level === PAGE_ACCESS_LEVELS.EDIT) return true;
+  if (level === PAGE_ACCESS_LEVELS.VIEW) return Boolean(currentPosition && standardPosition && currentPosition === standardPosition);
+  return false;
+}
+async function _kpiCurrentUserContext(req) {
+  const currentRow = await _sbFindSessionTeamMember(req).catch(() => null);
+  const currentMember = currentRow ? _sbSerializeTeamMemberRow(currentRow) : null;
+  return currentMember ? {
+    id: currentMember.id,
+    name: currentMember.name,
+    department: currentMember.department,
+    position: currentMember.position,
+    photoUrl: currentMember.photoUrl,
+    email: currentMember.email,
+    accessLevel: _kpiAccessLevel(req),
+  } : {
+    id: String(req.session?.userSupabaseId || "").trim(),
+    name: String(req.session?.username || "").trim(),
+    department: "",
+    position: "",
+    photoUrl: "",
+    email: "",
+    accessLevel: _kpiAccessLevel(req),
+  };
 }
 async function _kpiReviewBelongsToCurrentUser(req, summary = {}) {
   const current = await _kpiCreator(req).catch(() => null);
@@ -32136,6 +32214,7 @@ async function _kpiFindOrCreateReview({ standardId, teamMemberId, teamMemberName
 app.post("/api/kpis/admin/verify", requireAuth, requirePage("KPIs"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
+    if (_kpiHasAccessAtLeast(req, PAGE_ACCESS_LEVELS.ADMIN)) return res.json({ ok: true, bypassedByPageAdmin: true });
     const password = String(req.body?.password || req.body?.adminPassword || "").trim();
     if (!password) return res.status(400).json({ ok: false, message: "Admin password is required." });
     const ok = await _verifyPageAdminPassword(req, password, "KPIs");
@@ -32162,24 +32241,10 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
       const member = _sbSerializeTeamMemberRow(row);
       return { id: member.id, name: member.name, department: member.department, position: member.position, photoUrl: member.photoUrl, email: member.email };
     }).filter((u) => u.id || u.name);
-    const standards = (Array.isArray(standardRows) ? standardRows : []).map(_kpiStandard);
-    const currentRow = await _sbFindSessionTeamMember(req).catch(() => null);
-    const currentMember = currentRow ? _sbSerializeTeamMemberRow(currentRow) : null;
-    const currentUser = currentMember ? {
-      id: currentMember.id,
-      name: currentMember.name,
-      department: currentMember.department,
-      position: currentMember.position,
-      photoUrl: currentMember.photoUrl,
-      email: currentMember.email,
-    } : {
-      id: String(req.session?.userSupabaseId || "").trim(),
-      name: String(req.session?.username || "").trim(),
-      department: "",
-      position: "",
-      photoUrl: "",
-      email: "",
-    };
+    const currentUser = await _kpiCurrentUserContext(req);
+    const standards = (Array.isArray(standardRows) ? standardRows : [])
+      .map(_kpiStandard)
+      .filter((standard) => _kpiStandardVisibleForAccess(req, standard, currentUser));
     const departmentNamesFromTable = (Array.isArray(departmentRows) ? departmentRows : [])
       .map((row) => _sbDepartmentNameFromRow(row))
       .map((name) => String(name || "").trim())
@@ -32193,7 +32258,7 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
       : standards.map((s) => s.rolePosition);
     const departments = Array.from(new Set(departmentsSource.map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
     const positions = Array.from(new Set(positionsSource.map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
-    res.json({ ok: true, users, standards, departments, positions, currentUser });
+    res.json({ ok: true, users, standards, departments, positions, currentUser, accessLevel: currentUser.accessLevel });
   } catch (error) {
     console.error("[kpis] meta failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -32211,8 +32276,11 @@ app.get("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, res
     if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
     if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
     const rows = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?${params.join("&")}`);
-    const standards = (Array.isArray(rows) ? rows : []).map(_kpiStandard);
-    const selectedStandardId = id || standards[0]?.id || "";
+    const currentUser = await _kpiCurrentUserContext(req);
+    const standards = (Array.isArray(rows) ? rows : [])
+      .map(_kpiStandard)
+      .filter((standard) => _kpiStandardVisibleForAccess(req, standard, currentUser));
+    const selectedStandardId = id && standards.some((standard) => String(standard.id) === id) ? id : standards[0]?.id || "";
     const items = selectedStandardId ? await _kpiStandardItems(selectedStandardId) : [];
     res.json({ ok: true, standards, selectedStandardId, items, sections: _kpiSections(items) });
   } catch (error) {
@@ -32225,7 +32293,7 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
   res.set("Cache-Control", "no-store");
   try {
     const body = req.body || {};
-    const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
+    const adminCheck = await _kpiVerifyAdminPasswordOrAccess(req, PAGE_ACCESS_LEVELS.ADMIN);
     if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
     const department = _kpiText(body.department);
     const rolePosition = _kpiText(body.rolePosition || body.position);
@@ -32335,7 +32403,7 @@ app.post("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res)
   res.set("Cache-Control", "no-store");
   try {
     const body = req.body || {};
-    const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
+    const adminCheck = await _kpiVerifyAdminPasswordOrAccess(req, PAGE_ACCESS_LEVELS.EDIT);
     if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
     const standardId = String(body.standardId || body.standard_id || "").trim();
     let teamMemberId = String(body.teamMemberId || body.team_member_id || "").trim();
@@ -32378,7 +32446,11 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
     if (from) params.push(`review_month=gte.${_sbRestFilterValue(_kpiMonthStart(from))}`);
     if (to) params.push(`review_month=lte.${_sbRestFilterValue(_kpiMonthStart(to))}`);
     const rows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?${params.join("&")}`);
-    res.json({ ok: true, reviews: (Array.isArray(rows) ? rows : []).map(_kpiSummary) });
+    const currentUser = await _kpiCurrentUserContext(req);
+    const reviews = (Array.isArray(rows) ? rows : [])
+      .map(_kpiSummary)
+      .filter((summary) => _kpiReviewVisibleForAccess(req, summary, currentUser));
+    res.json({ ok: true, reviews, accessLevel: currentUser.accessLevel });
   } catch (error) {
     console.error("[kpis] list reviews failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -32391,7 +32463,8 @@ app.get("/api/kpis/reviews/:id", requireAuth, requirePage("KPIs"), async (req, r
     const id = String(req.params.id || "").trim();
     const summaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(id)}&limit=1`).catch(() => []);
     const summary = _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {});
-    if (summary.reviewId && !(await _kpiReviewBelongsToCurrentUser(req, summary))) {
+    const currentUser = await _kpiCurrentUserContext(req);
+    if (summary.reviewId && !_kpiReviewVisibleForAccess(req, summary, currentUser)) {
       const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
       if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
     }
@@ -32408,6 +32481,12 @@ app.patch("/api/kpis/reviews/:id/scores", requireAuth, requirePage("KPIs"), asyn
   try {
     const reviewId = String(req.params.id || "").trim();
     const body = req.body || {};
+    const summaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(reviewId)}&limit=1`).catch(() => []);
+    const summary = _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {});
+    const currentUser = await _kpiCurrentUserContext(req);
+    if (summary.reviewId && !_kpiReviewVisibleForAccess(req, summary, currentUser)) {
+      return res.status(403).json({ ok: false, message: "You are not authorized to update this KPI review." });
+    }
     for (const score of (Array.isArray(body.scores) ? body.scores : [])) {
       const scoreId = String(score.scoreId || score.score_id || "").trim();
       if (!scoreId) continue;
@@ -32426,9 +32505,9 @@ app.patch("/api/kpis/reviews/:id/scores", requireAuth, requirePage("KPIs"), asyn
       if (status === "approved") Object.assign(patch, { approved_at: new Date().toISOString(), approved_by_team_member_id: creator.id || null, approved_by_name: creator.name || null });
       await supabaseDb.updateById(KPI_REVIEWS_TABLE, reviewId, patch);
     }
-    const summaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(reviewId)}&limit=1`).catch(() => []);
+    const refreshedSummaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(reviewId)}&limit=1`).catch(() => []);
     const detailRows = await supabaseDb.request(`/${KPI_SCORE_DETAILS_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(reviewId)}&order=sort_order.asc&limit=1000`);
-    res.json({ ok: true, summary: _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {}), details: (Array.isArray(detailRows) ? detailRows : []).map(_kpiScore) });
+    res.json({ ok: true, summary: _kpiSummary((Array.isArray(refreshedSummaryRows) ? refreshedSummaryRows[0] : null) || {}), details: (Array.isArray(detailRows) ? detailRows : []).map(_kpiScore) });
   } catch (error) {
     console.error("[kpis] update scores failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
