@@ -31962,6 +31962,10 @@ function _kpiMissingSchema(error) {
 }
 function _kpiErrorMessage(error) {
   if (_kpiMissingSchema(error)) return "KPI tables are not installed yet. Run the KPI SQL file in Supabase first.";
+  const msg = String(error?.message || error?.details?.message || error?.details || "");
+  if (/unauthorized|permission denied|42501|row-level security|rls/i.test(msg)) {
+    return "KPI database permissions rejected this action. Run the KPI standard SQL update file in Supabase, then deploy again.";
+  }
   return error?.message || "Failed to process KPI request.";
 }
 function _kpiMonthStart(value) {
@@ -32004,6 +32008,10 @@ function _kpiStandard(row = {}) {
     yearEnd: Number(row.year_end || row.yearEnd || 0),
     description: String(row.description || ""),
     isActive: _sbBool(row.is_active ?? row.isActive, true),
+    createdByTeamMemberId: String(row.created_by_team_member_id || row.createdByTeamMemberId || ""),
+    createdByName: String(row.created_by_name || row.createdByName || ""),
+    createdAt: String(row.created_at || row.createdAt || ""),
+    updatedAt: String(row.updated_at || row.updatedAt || ""),
   };
 }
 function _kpiItem(row = {}) {
@@ -32102,11 +32110,46 @@ function _kpiAccessLevel(req) {
 function _kpiAccessRank(level) {
   return ({ [PAGE_ACCESS_LEVELS.VIEW]: 1, [PAGE_ACCESS_LEVELS.EDIT]: 2, [PAGE_ACCESS_LEVELS.ADMIN]: 3 })[String(level || "").toLowerCase()] || 0;
 }
+function _kpiBestAccessFromRows(rows = [], pageName = "KPIs") {
+  let best = "";
+  for (const row of rows || []) {
+    if (row?.isEnabled === false || row?.is_enabled === false) continue;
+    if (!_pageAccessEntryMatchesRequirement(row, pageName)) continue;
+    const level = _sbNormalizePageAccessLevel(row?.accessLevel || row?.access_level);
+    if (_kpiAccessRank(level) > _kpiAccessRank(best)) best = level;
+  }
+  return best;
+}
+async function _kpiFreshAccessLevel(req) {
+  let best = _kpiAccessLevel(req);
+  if (best === PAGE_ACCESS_LEVELS.ADMIN || !_sbTeamMembersEnabled()) return best;
+  try {
+    const currentRow = await _sbFindSessionTeamMember(req).catch(() => null);
+    const memberId = String(_sbGet(currentRow || {}, ["id", "ID"]) || req?.session?.userSupabaseId || "").trim();
+    if (!memberId) return best;
+    const accessRows = await _sbSelectPageAccessViewForMember(memberId).catch(() => []);
+    const clientRows = _sbPageAccessClientRows(accessRows);
+    const fresh = _kpiBestAccessFromRows(clientRows, "KPIs");
+    if (_kpiAccessRank(fresh) > _kpiAccessRank(best)) {
+      best = fresh;
+      req.opsPageAccessLevel = fresh;
+      req.session.pageAccess = clientRows;
+      if (req.session.accountCache) {
+        req.session.accountCache.pageAccess = { pages: clientRows };
+        req.session.accountCacheTs = Date.now();
+      }
+    }
+  } catch (error) {
+    console.warn("[kpis] fresh access lookup failed:", error?.message || error);
+  }
+  return best;
+}
 function _kpiHasAccessAtLeast(req, minimumLevel) {
   return _kpiAccessRank(_kpiAccessLevel(req)) >= _kpiAccessRank(minimumLevel);
 }
 async function _kpiVerifyAdminPasswordOrAccess(req, minimumLevel = PAGE_ACCESS_LEVELS.ADMIN) {
-  if (_kpiHasAccessAtLeast(req, minimumLevel)) return { ok: true };
+  const freshLevel = await _kpiFreshAccessLevel(req);
+  if (_kpiAccessRank(freshLevel) >= _kpiAccessRank(minimumLevel)) return { ok: true };
   return _kpiVerifyAdminPasswordFromReq(req);
 }
 function _kpiSameMember(leftId, leftName, rightId, rightName) {
@@ -32141,6 +32184,7 @@ function _kpiStandardVisibleForAccess(req, standard = {}, currentUser = {}) {
   return false;
 }
 async function _kpiCurrentUserContext(req) {
+  const accessLevel = await _kpiFreshAccessLevel(req);
   const currentRow = await _sbFindSessionTeamMember(req).catch(() => null);
   const currentMember = currentRow ? _sbSerializeTeamMemberRow(currentRow) : null;
   return currentMember ? {
@@ -32150,7 +32194,7 @@ async function _kpiCurrentUserContext(req) {
     position: currentMember.position,
     photoUrl: currentMember.photoUrl,
     email: currentMember.email,
-    accessLevel: _kpiAccessLevel(req),
+    accessLevel,
   } : {
     id: String(req.session?.userSupabaseId || "").trim(),
     name: String(req.session?.username || "").trim(),
@@ -32158,7 +32202,7 @@ async function _kpiCurrentUserContext(req) {
     position: "",
     photoUrl: "",
     email: "",
-    accessLevel: _kpiAccessLevel(req),
+    accessLevel,
   };
 }
 async function _kpiReviewBelongsToCurrentUser(req, summary = {}) {
@@ -32214,7 +32258,7 @@ async function _kpiFindOrCreateReview({ standardId, teamMemberId, teamMemberName
 app.post("/api/kpis/admin/verify", requireAuth, requirePage("KPIs"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    if (_kpiHasAccessAtLeast(req, PAGE_ACCESS_LEVELS.ADMIN)) return res.json({ ok: true, bypassedByPageAdmin: true });
+    if (_kpiAccessRank(await _kpiFreshAccessLevel(req)) >= _kpiAccessRank(PAGE_ACCESS_LEVELS.ADMIN)) return res.json({ ok: true, bypassedByPageAdmin: true });
     const password = String(req.body?.password || req.body?.adminPassword || "").trim();
     if (!password) return res.status(400).json({ ok: false, message: "Admin password is required." });
     const ok = await _verifyPageAdminPassword(req, password, "KPIs");
@@ -32232,7 +32276,7 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
     const [memberRows, departmentRows, standardRows] = await Promise.all([
       _sbSelectTeamMembersRows().catch(() => []),
       _sbSelectDepartmentRows().catch(() => []),
-      supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&order=department.asc,role_position.asc,academic_year.desc&limit=1000`).catch((error) => {
+      supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&order=department.asc,role_position.asc,title.asc&limit=1000`).catch((error) => {
         if (_kpiMissingSchema(error)) return [];
         throw error;
       }),
@@ -32249,16 +32293,33 @@ app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => 
       .map((row) => _sbDepartmentNameFromRow(row))
       .map((name) => String(name || "").trim())
       .filter(Boolean);
-    const departmentsSource = departmentNamesFromTable.length
-      ? departmentNamesFromTable
-      : [...users.map((u) => u.department), ...standards.map((s) => s.department)];
-    const positionNamesFromTeamMembers = users.map((u) => u.position);
-    const positionsSource = positionNamesFromTeamMembers.some((name) => String(name || "").trim())
-      ? positionNamesFromTeamMembers
-      : standards.map((s) => s.rolePosition);
+    const departmentsSource = [
+      ...departmentNamesFromTable,
+      ...users.map((u) => u.department),
+      ...standards.map((s) => s.department),
+    ];
+    const positionsSource = [
+      ...users.map((u) => u.position),
+      ...standards.map((s) => s.rolePosition),
+    ];
     const departments = Array.from(new Set(departmentsSource.map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
     const positions = Array.from(new Set(positionsSource.map((x) => String(x || "").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b));
-    res.json({ ok: true, users, standards, departments, positions, currentUser, accessLevel: currentUser.accessLevel });
+    const positionsByDepartmentMap = new Map();
+    const addDepartmentPosition = (department, position, { fallback = false } = {}) => {
+      const dep = String(department || "").trim();
+      const pos = String(position || "").trim();
+      if (!dep || !pos) return;
+      const key = dep.toLowerCase();
+      if (fallback && positionsByDepartmentMap.has(key) && positionsByDepartmentMap.get(key).size) return;
+      if (!positionsByDepartmentMap.has(key)) positionsByDepartmentMap.set(key, new Set());
+      positionsByDepartmentMap.get(key).add(pos);
+    };
+    users.forEach((user) => addDepartmentPosition(user.department, user.position));
+    standards.forEach((standard) => addDepartmentPosition(standard.department, standard.rolePosition, { fallback: true }));
+    const positionsByDepartment = Object.fromEntries(
+      Array.from(positionsByDepartmentMap.entries()).map(([key, set]) => [key, Array.from(set).sort((a,b) => a.localeCompare(b))]),
+    );
+    res.json({ ok: true, users, standards, departments, positions, positionsByDepartment, currentUser, accessLevel: currentUser.accessLevel });
   } catch (error) {
     console.error("[kpis] meta failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -32271,7 +32332,7 @@ app.get("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, res
     const id = String(req.query.id || "").trim();
     const department = String(req.query.department || "").trim();
     const rolePosition = String(req.query.rolePosition || req.query.position || "").trim();
-    const params = ["select=*", "order=department.asc,role_position.asc,academic_year.desc", "limit=1000"];
+    const params = ["select=*", "order=department.asc,role_position.asc,title.asc", "limit=1000"];
     if (id) params.push(`id=eq.${_sbRestFilterValue(id)}`);
     if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
     if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
@@ -32297,12 +32358,12 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
     if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message });
     const department = _kpiText(body.department);
     const rolePosition = _kpiText(body.rolePosition || body.position);
-    const academicYear = _kpiText(body.academicYear, "2025-2026") || "2025-2026";
+    const academicYear = _kpiText(body.academicYear || body.academic_year || "");
     const yearMatch = academicYear.match(/(\d{4})\D+(\d{4})/);
-    const yearStart = Math.max(2000, Math.min(2100, Math.round(_kpiNumber(body.yearStart, yearMatch ? Number(yearMatch[1]) : new Date().getFullYear()))));
-    const yearEnd = Math.max(yearStart, Math.min(2101, Math.round(_kpiNumber(body.yearEnd, yearMatch ? Number(yearMatch[2]) : yearStart + 1))));
-    const normalizedAcademicYear = `${yearStart}-${yearEnd}`;
-    const title = _kpiText(body.title) || `${department} ${rolePosition} KPIs ${normalizedAcademicYear}`;
+    const yearStart = yearMatch ? Math.max(2000, Math.min(2100, Math.round(_kpiNumber(body.yearStart, Number(yearMatch[1]))))) : null;
+    const yearEnd = yearMatch ? Math.max(yearStart || 2000, Math.min(2101, Math.round(_kpiNumber(body.yearEnd, Number(yearMatch[2]))))) : null;
+    const normalizedAcademicYear = yearMatch ? `${yearStart}-${yearEnd}` : null;
+    const title = _kpiText(body.title) || `${department} ${rolePosition} KPIs`;
     const itemsInput = Array.isArray(body.items) ? body.items : [];
     if (!department || !rolePosition) return res.status(400).json({ ok: false, message: "Department and role/position are required." });
     if (!itemsInput.length) return res.status(400).json({ ok: false, message: "Add at least one KPI subsection inside a section." });
@@ -32319,7 +32380,12 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
       created_by_team_member_id: creator.id || null,
       created_by_name: creator.name || null,
     };
-    const existing = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&year_start=eq.${_sbRestFilterValue(yearStart)}&year_end=eq.${_sbRestFilterValue(yearEnd)}&limit=1`);
+    const existing = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&order=created_at.desc.nullslast&limit=1`).catch(async (error) => {
+      if (/created_at|schema cache|column/i.test(String(error?.message || ""))) {
+        return await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&limit=1`);
+      }
+      throw error;
+    });
     let standard = Array.isArray(existing) ? existing[0] || null : null;
     standard = standard?.id ? await supabaseDb.updateById(KPI_STANDARD_TABLE, standard.id, payload) : await supabaseDb.insert(KPI_STANDARD_TABLE, payload);
     const standardId = standard.id;
