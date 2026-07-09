@@ -7,6 +7,7 @@
     reviews: [],
     departments: [],
     positions: [],
+    positionsByDepartment: {},
     selectedReviewId: '',
     selectedEmployeeId: '',
     currentUser: null,
@@ -151,6 +152,8 @@
     }));
     const selected = select.selectedOptions?.[0] || select.options[select.selectedIndex] || options[0];
     enhanced.label.textContent = selected?.textContent || selected?.label || select.getAttribute('aria-label') || 'Choose';
+    enhanced.button.disabled = Boolean(select.disabled);
+    enhanced.dropdown.classList.toggle('is-disabled', Boolean(select.disabled));
     enhanced.menu.innerHTML = options
       .map((option) => `<button class="kpis-modern-select__option${String(option.value) === String(select.value) ? ' is-selected' : ''}" type="button" data-value="${esc(option.value)}"${option.disabled ? ' disabled' : ''}>${esc(option.label)}</button>`)
       .join('');
@@ -182,6 +185,7 @@
     button.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (select.disabled) return;
       const willOpen = !dropdown.classList.contains('is-open');
       closeEnhancedSelects(dropdown);
       dropdown.classList.toggle('is-open', willOpen);
@@ -192,7 +196,7 @@
   }
 
   function enhanceStandardControls() {
-    ['standardDepartmentSelect', 'standardPositionSelect', 'academicYearFromSelect', 'academicYearToSelect'].forEach((id) => enhanceSelect($(id)));
+    ['standardDepartmentSelect', 'standardPositionSelect'].forEach((id) => enhanceSelect($(id)));
   }
 
   function enhanceReviewFilterControls() {
@@ -219,6 +223,34 @@
       select.value = currentValue;
     }
     refreshEnhancedSelect(select);
+  }
+
+  function uniqueSorted(values = []) {
+    return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  function positionsForDepartment(department) {
+    const key = norm(department);
+    if (!key) return [];
+    const direct = state.positionsByDepartment?.[key] || state.positionsByDepartment?.[String(department || '').trim()] || [];
+    if (Array.isArray(direct) && direct.length) return uniqueSorted(direct);
+    return uniqueSorted(
+      state.users
+        .filter((user) => norm(user.department) === key)
+        .map((user) => user.position),
+    );
+  }
+
+  function updateStandardPositionOptions() {
+    const departmentSelect = $('standardDepartmentSelect');
+    const positionSelect = $('standardPositionSelect');
+    if (!positionSelect) return;
+    const department = departmentSelect?.value || '';
+    const list = positionsForDepartment(department);
+    positionSelect.disabled = !department || !list.length;
+    setOptions(positionSelect, list, { allLabel: department ? (list.length ? 'Choose role / position' : 'No positions found') : 'Choose department first' });
+    refreshEnhancedSelect(positionSelect);
   }
 
   function userById(id) {
@@ -445,7 +477,7 @@
 
     box.innerHTML = state.standards
       .map(
-        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')} / ${esc(standard.academicYear || '—')}</p><div class="kpis-standard-meta"><span class="kpis-pill">${standard.isActive ? 'Active' : 'Inactive'}</span></div></button>`,
+        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')}</p><div class="kpis-standard-meta"><span class="kpis-pill">${standard.isActive ? 'Active' : 'Inactive'}</span>${standard.createdByName ? `<span>${esc(standard.createdByName)}</span>` : ''}</div></button>`,
       )
       .join('');
 
@@ -537,6 +569,7 @@
     state.standards = data.standards || [];
     state.departments = data.departments || [];
     state.positions = data.positions || [];
+    state.positionsByDepartment = data.positionsByDepartment || {};
     state.currentUser = currentUserFromMeta(data);
     state.accessLevel = String(data.accessLevel || state.currentUser?.accessLevel || 'view').toLowerCase();
     state.selectedEmployeeId = String(state.currentUser?.id || '').trim() || state.selectedEmployeeId || state.users[0]?.id || '';
@@ -546,8 +579,7 @@
     setOptions($('filterPositionSelect'), state.positions, { allLabel: 'All roles' });
     setOptions($('reviewEmployeeSelect'), state.users, { allLabel: 'Choose employee', valueKey: 'id', labelKey: 'name' });
     setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
-    setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
-    initAcademicYearPicker();
+    updateStandardPositionOptions();
     enhanceStandardControls();
     enhanceReviewFilterControls();
     enhanceReviewControls();
@@ -671,7 +703,7 @@
     const wrapper = $('kpiItemsEditor');
     if (!wrapper) return;
     if (wrapper.querySelector('.kpis-section-card')) return;
-    wrapper.innerHTML = '<div class="kpis-empty-editor"><strong>No KPI sections yet.</strong><span>Click Add section to start creating KPI sections.</span></div>';
+    wrapper.innerHTML = '<div class="kpis-empty-editor"><strong>No KPI sections yet.</strong></div>';
   }
 
   function updateSectionNumbers() {
@@ -717,6 +749,7 @@
     section.querySelector('[data-remove-section]')?.addEventListener('click', () => {
       section.remove();
       updateSectionNumbers();
+      updateTotalWeight();
     });
     wrapper.appendChild(section);
     feather();
@@ -787,13 +820,16 @@
       <label>Subsection description<textarea class="kpis-textarea" data-kpi-field="subsectionDescription" rows="2">${esc(value.subsectionDescription || '')}</textarea></label>
       <div class="kpis-row-actions"><button class="kpis-row-delete" data-remove-kpi-row type="button"><i data-feather="trash-2"></i><span>Delete subsection</span></button></div>
     `;
+    row.querySelector('[data-kpi-field="weightPercent"]')?.addEventListener('input', updateTotalWeight);
     row.querySelector('[data-remove-kpi-row]')?.addEventListener('click', () => {
       row.remove();
       updateSectionNumbers();
+      updateTotalWeight();
     });
     rows.appendChild(row);
     feather();
     updateSectionNumbers();
+    updateTotalWeight();
   }
 
   function collectKpiRows() {
@@ -819,15 +855,31 @@
     return items;
   }
 
+  function calculateTotalWeight() {
+    return [...document.querySelectorAll('#kpiItemsEditor [data-kpi-field="weightPercent"]')]
+      .reduce((sum, input) => sum + Math.max(0, num(input.value, 0)), 0);
+  }
+
+  function updateTotalWeight() {
+    const value = calculateTotalWeight();
+    const valueNode = $('kpiTotalWeightValue');
+    const card = $('kpiTotalWeightCard');
+    if (valueNode) valueNode.textContent = value.toFixed(1);
+    if (card) {
+      card.classList.toggle('is-complete', Math.abs(value - 100) < 0.01);
+      card.classList.toggle('is-over', value > 100);
+    }
+  }
+
   function openStandardModal() {
     const form = $('standardForm');
     form?.reset();
     setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
-    setOptions($('standardPositionSelect'), state.positions, { allLabel: 'Choose role / position' });
-    initAcademicYearPicker();
+    updateStandardPositionOptions();
     enhanceStandardControls();
     if ($('kpiItemsEditor')) $('kpiItemsEditor').innerHTML = '';
     renderEmptyKpiEditor();
+    updateTotalWeight();
     openModal('standard');
   }
 
@@ -840,7 +892,7 @@
     if (!content) return;
     if ($('standardDetailsTitle')) $('standardDetailsTitle').textContent = standard?.title || 'KPI standard details';
     if ($('standardDetailsSubtitle')) {
-      $('standardDetailsSubtitle').textContent = [standard?.department, standard?.rolePosition, standard?.academicYear].filter(Boolean).join(' / ') || 'Standard information and KPI sections.';
+      $('standardDetailsSubtitle').textContent = [standard?.department, standard?.rolePosition].filter(Boolean).join(' / ') || 'Standard information and KPI sections.';
     }
     const description = String(standard?.description || '').trim();
     const totalRows = sections.reduce((sum, section) => sum + (section.items || []).length, 0);
@@ -860,8 +912,9 @@
       <div class="kpis-standard-detail-grid">
         <div><span>Department</span><strong>${esc(standard?.department || '—')}</strong></div>
         <div><span>Role / Position</span><strong>${esc(standard?.rolePosition || '—')}</strong></div>
-        <div><span>Year</span><strong>${esc(standard?.academicYear || '—')}</strong></div>
         <div><span>Total weight</span><strong>${num(totalWeight, 0).toFixed(1)}</strong></div>
+        <div><span>Created by</span><strong>${esc(standard?.createdByName || '—')}</strong></div>
+        <div><span>Created time</span><strong>${esc(fmtDateTime(standard?.createdAt))}</strong></div>
       </div>
       <div class="kpis-standard-detail-sections">
         ${sections.length ? sections.map((section, sectionIndex) => `
@@ -1033,8 +1086,7 @@
     $('adminPasswordInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); closeAdminPasswordDialog(event.currentTarget.value || ''); } });
     document.querySelectorAll('[data-admin-password-cancel]').forEach((element) => element.addEventListener('click', () => closeAdminPasswordDialog(null)));
     document.addEventListener('click', () => closeEnhancedSelects());
-    $('academicYearFromSelect')?.addEventListener('change', syncAcademicYear);
-    $('academicYearToSelect')?.addEventListener('change', syncAcademicYear);
+    $('standardDepartmentSelect')?.addEventListener('change', updateStandardPositionOptions);
 
     document.querySelectorAll('[data-kpi-close]').forEach((element) => {
       element.addEventListener('click', () => closeModal(element.dataset.kpiClose));
@@ -1057,10 +1109,9 @@
       event.preventDefault();
       const form = event.currentTarget;
       const submitButton = form.querySelector('button[type="submit"]');
-      syncAcademicYear();
       const items = collectKpiRows();
       if (!document.querySelector('#kpiItemsEditor .kpis-section-card')) {
-        toast('Click Add section to start creating KPI sections.');
+        toast('Add a KPI section first.');
         return;
       }
       if (!items.length) {
@@ -1079,9 +1130,6 @@
           body: JSON.stringify({
             department: form.elements.department.value,
             rolePosition: form.elements.rolePosition.value,
-            academicYear: form.elements.academicYear.value,
-            yearStart: Number($('academicYearFromSelect')?.value || 0) || undefined,
-            yearEnd: Number($('academicYearToSelect')?.value || 0) || undefined,
             title: form.elements.title.value,
             description: form.elements.description.value,
             items,
