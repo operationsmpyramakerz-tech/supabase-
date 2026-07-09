@@ -310,3 +310,24 @@
 .kpis-toast.is-visible{opacity:1;transform:translateY(0) scale(1)}
 .kpis-toast__icon{width:42px;height:42px;border-radius:16px;display:grid;place-items:center;background:#fff7ed;color:#ea580c;border:1px solid #fed7aa}.kpis-toast__icon svg{width:20px;height:20px}.kpis-toast__body strong{display:block;font-size:14px;font-weight:950;margin-bottom:3px}.kpis-toast__body p{margin:0;color:#475569;font-weight:750;line-height:1.4}.kpis-toast__close{width:34px;height:34px;border:0;border-radius:12px;background:#f8fafc;color:#475569;display:grid;place-items:center;cursor:pointer}.kpis-toast__close svg{width:16px;height:16px}.kpis-toast--success .kpis-toast__icon{background:#ecfdf5;color:#059669;border-color:#a7f3d0}.kpis-toast--error .kpis-toast__icon{background:#fff1f2;color:#e11d48;border-color:#fecdd3}
 @media(max-width:768px){.kpis-modern-chart{min-width:620px;grid-template-columns:44px minmax(0,1fr)}.kpis-month-bars{gap:8px}.kpis-month-bar__track{max-width:44px}.kpis-toast-stack{top:14px;right:14px}}
+
+/* KPI standard fixes: no academic year, department-scoped positions, centered messages */
+.kpis-form-grid--standard{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.kpis-modern-select.is-disabled{opacity:.78}
+.kpis-modern-select.is-disabled .kpis-modern-select__button{cursor:not-allowed;background:#f8fafc!important;color:#94a3b8!important;box-shadow:none!important}
+.kpis-toast-stack{top:50%!important;left:50%!important;right:auto!important;transform:translate(-50%,-50%)!important;width:min(440px,calc(100vw - 32px))!important;place-items:center!important}
+.kpis-toast{width:100%;transform:translateY(10px) scale(.98)!important}
+.kpis-toast.is-visible{transform:translateY(0) scale(1)!important}
+.kpis-total-weight{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;padding:16px 18px;border:1px solid #e5e7eb;border-radius:22px;background:linear-gradient(135deg,#fff,#fff7ed);box-shadow:0 14px 34px rgba(15,23,42,.06);color:#0f172a}
+.kpis-total-weight span:first-child{font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.08em;color:#9a3412}
+.kpis-total-weight strong{font-size:24px;font-weight:950;color:#0f172a;line-height:1}
+.kpis-total-weight strong::after{content:' %';font-size:15px;color:#64748b;font-weight:900}
+.kpis-total-weight.is-complete{border-color:#bbf7d0;background:linear-gradient(135deg,#fff,#f0fdf4)}
+.kpis-total-weight.is-complete span:first-child{color:#047857}
+.kpis-total-weight.is-over{border-color:#fecdd3;background:linear-gradient(135deg,#fff,#fff1f2)}
+.kpis-total-weight.is-over span:first-child{color:#be123c}
+.kpis-empty-editor{min-height:150px!important}
+.kpis-empty-editor span{display:none!important}
+.kpis-standard-detail-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+@media(max-width:768px){.kpis-form-grid--standard{grid-template-columns:1fr!important}.kpis-toast-stack{top:50%!important;left:50%!important;right:auto!important}.kpis-standard-detail-grid{grid-template-columns:1fr!important}}
+.kpis-standard-detail-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))!important}
