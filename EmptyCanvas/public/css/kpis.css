@@ -259,3 +259,54 @@
   border:0!important;
   box-shadow:0 10px 20px rgba(249,115,22,.22)!important;
 }
+
+/* KPI permissions + modern graph/dropdowns/messages refinements */
+.kpis-modern-select__menu{
+  background:#fff!important;
+  border:1px solid rgba(226,232,240,.98)!important;
+  box-shadow:0 24px 60px rgba(15,23,42,.16)!important;
+}
+.kpis-modern-select__option{
+  color:#0f172a!important;
+  background:transparent!important;
+}
+.kpis-modern-select__option:hover,
+.kpis-modern-select__option.is-selected{
+  background:#fff7ed!important;
+  color:#c2410c!important;
+}
+.kpis-modern-select__option:disabled{color:#94a3b8!important;background:#f8fafc!important}
+.kpis-review-form .kpis-modern-select__menu{box-shadow:0 16px 36px rgba(15,23,42,.12)!important}
+
+.kpis-chart{min-height:300px;align-items:stretch;padding:18px;border-radius:26px;background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,250,252,.96));border:1px solid rgba(226,232,240,.9);box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.kpis-modern-chart{width:100%;display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;min-width:720px;color:#0f172a}
+.kpis-chart-y-axis{display:grid;grid-template-rows:repeat(5,1fr);height:236px;padding-top:2px;color:#94a3b8;font-size:12px;font-weight:900;text-align:right;align-self:start}
+.kpis-chart-y-axis span{transform:translateY(-2px)}
+.kpis-chart-stage{position:relative;min-height:270px;padding:0 8px 0 0}
+.kpis-chart-grid-lines{position:absolute;left:0;right:0;top:0;height:236px;display:grid;grid-template-rows:repeat(5,1fr);pointer-events:none}
+.kpis-chart-grid-lines span{border-top:1px dashed rgba(148,163,184,.28)}
+.kpis-month-bars{position:relative;z-index:1;height:270px;display:grid;grid-template-columns:repeat(12,minmax(42px,1fr));gap:12px;align-items:end}
+.kpis-month-bar{height:100%;border:0;background:transparent;display:grid;grid-template-rows:30px 206px 26px;gap:6px;align-items:end;justify-items:center;cursor:pointer;padding:0;min-width:0;color:#64748b;font:inherit;font-weight:900;outline:none}
+.kpis-month-bar__track{width:100%;max-width:54px;height:206px;border-radius:999px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;background:repeating-linear-gradient(135deg,rgba(226,232,240,.62) 0 6px,rgba(248,250,252,.82) 6px 12px);box-shadow:inset 0 0 0 1px rgba(226,232,240,.7)}
+.kpis-month-bar__fill{width:100%;height:calc(var(--value,0) * 1%);min-height:12px;border-radius:999px 999px 0 0;background:linear-gradient(180deg,rgba(203,213,225,.95),rgba(241,245,249,.72));transition:height .22s ease,background .18s ease,box-shadow .18s ease}
+.kpis-month-bar.has-data:not(.is-active) .kpis-month-bar__fill{background:repeating-linear-gradient(135deg,rgba(203,213,225,.72) 0 6px,rgba(248,250,252,.82) 6px 12px)}
+.kpis-month-bar.is-empty .kpis-month-bar__fill{opacity:.38}
+.kpis-month-bar.is-active .kpis-month-bar__track{background:linear-gradient(180deg,rgba(255,247,237,.9),rgba(255,255,255,.96));box-shadow:0 12px 28px rgba(249,115,22,.16),inset 0 0 0 1px rgba(251,146,60,.42)}
+.kpis-month-bar.is-active .kpis-month-bar__fill{background:linear-gradient(180deg,#fb923c,#f97316 48%,rgba(249,115,22,.28));box-shadow:0 -10px 24px rgba(249,115,22,.22)}
+.kpis-month-bar__bubble{min-height:28px;display:inline-flex;align-items:center;justify-content:center;padding:5px 9px;border-radius:10px;background:#0f172a;color:#fff;font-size:12px;font-weight:950;opacity:0;transform:translateY(5px);box-shadow:0 12px 24px rgba(15,23,42,.22);transition:opacity .16s ease,transform .16s ease;white-space:nowrap}
+.kpis-month-bar.is-active .kpis-month-bar__bubble,.kpis-month-bar:hover .kpis-month-bar__bubble{opacity:1;transform:translateY(0)}
+.kpis-month-bar__label{display:block;color:#64748b;font-size:13px;font-weight:950;white-space:nowrap}
+.kpis-month-bar.is-active .kpis-month-bar__label{color:#0f172a}
+.kpis-month-bar:focus-visible .kpis-month-bar__track{box-shadow:0 0 0 4px rgba(249,115,22,.16),inset 0 0 0 1px rgba(249,115,22,.45)}
+
+.kpis-review-row{cursor:pointer;transition:background .16s ease,transform .16s ease}
+.kpis-review-row:hover{background:#fff7ed;transform:translateY(-1px)}
+.kpis-review-row:focus-visible{outline:3px solid rgba(249,115,22,.22);outline-offset:-3px}
+.kpis-score-pill{display:inline-flex;align-items:center;justify-content:center;min-width:74px;border-radius:999px;padding:7px 11px;background:#f8fafc;border:1px solid #e2e8f0;color:#0f172a;font-weight:950}
+.kpis-table{min-width:680px!important}.kpis-table th:nth-child(4),.kpis-table td:nth-child(4){text-align:left!important}.kpis-table th:nth-child(5),.kpis-table td:nth-child(5),.kpis-table th:nth-child(6),.kpis-table td:nth-child(6){text-align:left!important}
+
+.kpis-toast-stack{position:fixed;top:22px;right:22px;z-index:5000;display:grid;gap:12px;width:min(420px,calc(100vw - 28px));pointer-events:none}
+.kpis-toast{pointer-events:auto;display:grid;grid-template-columns:42px minmax(0,1fr) 34px;gap:12px;align-items:start;padding:14px;border-radius:22px;background:rgba(255,255,255,.96);border:1px solid rgba(226,232,240,.95);box-shadow:0 24px 70px rgba(15,23,42,.2);backdrop-filter:blur(14px);opacity:0;transform:translateY(-10px) scale(.98);transition:opacity .2s ease,transform .2s ease;color:#0f172a}
+.kpis-toast.is-visible{opacity:1;transform:translateY(0) scale(1)}
+.kpis-toast__icon{width:42px;height:42px;border-radius:16px;display:grid;place-items:center;background:#fff7ed;color:#ea580c;border:1px solid #fed7aa}.kpis-toast__icon svg{width:20px;height:20px}.kpis-toast__body strong{display:block;font-size:14px;font-weight:950;margin-bottom:3px}.kpis-toast__body p{margin:0;color:#475569;font-weight:750;line-height:1.4}.kpis-toast__close{width:34px;height:34px;border:0;border-radius:12px;background:#f8fafc;color:#475569;display:grid;place-items:center;cursor:pointer}.kpis-toast__close svg{width:16px;height:16px}.kpis-toast--success .kpis-toast__icon{background:#ecfdf5;color:#059669;border-color:#a7f3d0}.kpis-toast--error .kpis-toast__icon{background:#fff1f2;color:#e11d48;border-color:#fecdd3}
+@media(max-width:768px){.kpis-modern-chart{min-width:620px;grid-template-columns:44px minmax(0,1fr)}.kpis-month-bars{gap:8px}.kpis-month-bar__track{max-width:44px}.kpis-toast-stack{top:14px;right:14px}}
