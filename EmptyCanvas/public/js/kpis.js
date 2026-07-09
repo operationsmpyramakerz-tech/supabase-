@@ -10,8 +10,11 @@
     selectedReviewId: '',
     selectedEmployeeId: '',
     currentUser: null,
+    accessLevel: 'view',
     standardAdminPassword: '',
     reviewAdminPassword: '',
+    graphPoints: [],
+    activeGraphMonth: '',
   };
 
   const enhancedSelects = new Map();
@@ -51,8 +54,56 @@
     });
   }
 
-  function toast(message) {
-    alert(window.OpsSafeMessage?.sanitize ? window.OpsSafeMessage.sanitize(message) : message);
+  function sanitizeMessage(message) {
+    const text = String(message || '').trim() || 'Something went wrong.';
+    return window.OpsSafeMessage?.sanitize ? window.OpsSafeMessage.sanitize(text) : text;
+  }
+
+  function toast(message, type = 'info') {
+    const clean = sanitizeMessage(message);
+    let stack = document.querySelector('.kpis-toast-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.className = 'kpis-toast-stack';
+      stack.setAttribute('aria-live', 'polite');
+      document.body.appendChild(stack);
+    }
+    const item = document.createElement('div');
+    item.className = `kpis-toast kpis-toast--${type}`;
+    item.innerHTML = `<div class="kpis-toast__icon"><i data-feather="${type === 'error' ? 'alert-triangle' : type === 'success' ? 'check-circle' : 'info'}"></i></div><div class="kpis-toast__body"><strong>${type === 'error' ? 'Action needed' : type === 'success' ? 'Done' : 'Notice'}</strong><p>${esc(clean)}</p></div><button type="button" class="kpis-toast__close" aria-label="Close message"><i data-feather="x"></i></button>`;
+    stack.appendChild(item);
+    item.querySelector('.kpis-toast__close')?.addEventListener('click', () => item.remove());
+    window.setTimeout(() => item.classList.add('is-visible'), 20);
+    window.setTimeout(() => { item.classList.remove('is-visible'); window.setTimeout(() => item.remove(), 220); }, 4200);
+    feather();
+  }
+
+  function hasAccessAtLeast(level) {
+    const rank = { view: 1, edit: 2, admin: 3 };
+    return (rank[String(state.accessLevel || 'view').toLowerCase()] || 0) >= (rank[String(level || 'view').toLowerCase()] || 0);
+  }
+
+  function normalizeMonthKey(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})/);
+    return match ? `${match[1]}-${match[2]}-01` : '';
+  }
+
+  function currentMonthKey() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  function fmtDateTime(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || '—');
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   async function api(url, options = {}) {
@@ -189,6 +240,7 @@
       position: String(raw.position || '').trim(),
       photoUrl: raw.photoUrl || '',
       email: raw.email || '',
+      accessLevel: raw.accessLevel || data?.accessLevel || 'view',
     };
   }
 
@@ -227,18 +279,56 @@
     const chart = $('kpiChart');
     if (!chart) return;
 
-    const rows = (points || []).slice(-12);
+    const rows = Array.isArray(points) ? points : [];
+    state.graphPoints = rows;
     if (!rows.length) {
       chart.innerHTML = '<div class="kpis-chart-empty">No KPI graph data yet. Create a monthly review first.</div>';
       return;
     }
 
-    chart.innerHTML = rows
-      .map((point) => {
-        const value = Math.max(0, Math.min(100, num(point.finalPercentage, 0)));
-        return `<div class="kpis-bar" title="${esc(fmtMonth(point.reviewMonth))}: ${value.toFixed(1)}%"><div class="kpis-bar__value">${value.toFixed(0)}%</div><div class="kpis-bar__track"><div class="kpis-bar__fill" style="--value:${value}"></div></div><div class="kpis-bar__label">${esc(fmtMonth(point.reviewMonth))}</div></div>`;
-      })
-      .join('');
+    const pointByMonth = new Map(rows.map((point) => [normalizeMonthKey(point.reviewMonth), point]));
+    const latestPoint = rows[rows.length - 1] || null;
+    const latestKey = normalizeMonthKey(latestPoint?.reviewMonth);
+    const currentKey = currentMonthKey();
+    const baseYear = Number((state.activeGraphMonth || currentKey || latestKey).slice(0, 4)) || new Date().getFullYear();
+    if (!state.activeGraphMonth) {
+      state.activeGraphMonth = pointByMonth.has(currentKey) ? currentKey : (currentKey.slice(0, 4) === String(baseYear) ? currentKey : latestKey);
+    }
+
+    const months = Array.from({ length: 12 }, (_, index) => {
+      const monthKey = `${baseYear}-${String(index + 1).padStart(2, '0')}-01`;
+      const point = pointByMonth.get(monthKey) || null;
+      const value = point ? Math.max(0, Math.min(100, num(point.finalPercentage, 0))) : 0;
+      const isActive = monthKey === state.activeGraphMonth;
+      return { monthKey, point, value, isActive, label: new Date(baseYear, index, 1).toLocaleDateString('en-US', { month: 'short' }) };
+    });
+
+    chart.innerHTML = `
+      <div class="kpis-modern-chart" role="group" aria-label="Monthly KPI bar chart">
+        <div class="kpis-chart-y-axis" aria-hidden="true"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
+        <div class="kpis-chart-stage">
+          <div class="kpis-chart-grid-lines" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="kpis-month-bars">
+            ${months.map((month) => `
+              <button type="button" class="kpis-month-bar${month.isActive ? ' is-active' : ''}${month.point ? ' has-data' : ' is-empty'}" data-chart-month="${esc(month.monthKey)}" title="${esc(month.label)}: ${month.point ? `${month.value.toFixed(1)}%` : 'No review'}">
+                <span class="kpis-month-bar__bubble">${month.point ? `${month.value.toFixed(1)}%` : '—'}</span>
+                <span class="kpis-month-bar__track"><span class="kpis-month-bar__fill" style="--value:${month.point ? Math.max(month.value, 4) : 10}"></span></span>
+                <span class="kpis-month-bar__label">${esc(month.label)}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    chart.querySelectorAll('[data-chart-month]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.activeGraphMonth = button.dataset.chartMonth || '';
+        renderChart(state.graphPoints);
+        const selectedPoint = pointByMonth.get(state.activeGraphMonth);
+        updateScore(selectedPoint || null);
+      });
+    });
   }
 
   function updateScore(summary) {
@@ -307,8 +397,10 @@
 
     const data = await api(`/api/kpis/graph?teamMemberId=${encodeURIComponent(currentUserId)}`);
     const points = data.points || [];
+    const activeBeforeRender = state.activeGraphMonth || currentMonthKey();
     renderChart(points);
-    updateScore(points.slice(-1)[0] || null);
+    const selectedPoint = (points || []).find((point) => normalizeMonthKey(point.reviewMonth) === (state.activeGraphMonth || activeBeforeRender));
+    updateScore(selectedPoint || points.slice(-1)[0] || null);
   }
 
   function renderReviews() {
@@ -316,18 +408,29 @@
     if (!body) return;
 
     if (!state.reviews.length) {
-      body.innerHTML = '<tr><td colspan="5">No KPI reviews found.</td></tr>';
+      body.innerHTML = '<tr><td colspan="4">No KPI reviews found.</td></tr>';
       return;
     }
 
     body.innerHTML = state.reviews
-      .map(
-        (review) => `<tr><td><strong>${esc(review.teamMemberName || '—')}</strong><div class="muted">${esc(review.standardTitle || '—')}</div></td><td>${esc(review.department || '—')}</td><td>${esc(review.rolePosition || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><div class="kpis-row-actions"><button class="kpis-btn kpis-btn--ghost" type="button" data-open-review="${esc(review.reviewId)}">Open</button></div></td></tr>`,
-      )
+      .map((review) => {
+        const score = Math.max(0, Math.min(100, num(review.finalPercentage, 0)));
+        const scoreLabel = review.reviewId ? `${score.toFixed(1)}%` : '—';
+        const createdBy = review.createdByName || '—';
+        const employeeMeta = [review.teamMemberName, review.department, review.rolePosition].filter(Boolean).join(' / ');
+        return `<tr class="kpis-review-row" data-open-review="${esc(review.reviewId)}" tabindex="0"><td><strong>${esc(fmtMonth(review.reviewMonth))}</strong><div class="muted">${esc(employeeMeta || review.standardTitle || '—')}</div></td><td><span class="kpis-score-pill">${esc(scoreLabel)}</span><div class="muted">${esc(review.performanceRating || '—')}</div></td><td>${esc(createdBy)}</td><td>${esc(fmtDateTime(review.createdAt))}</td></tr>`;
+      })
       .join('');
 
-    body.querySelectorAll('[data-open-review]').forEach((button) => {
-      button.addEventListener('click', () => handleOpenReview(button.dataset.openReview).catch((error) => toast(error.message)));
+    body.querySelectorAll('[data-open-review]').forEach((row) => {
+      const open = () => handleOpenReview(row.dataset.openReview).catch((error) => toast(error.message, 'error'));
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          open();
+        }
+      });
     });
   }
 
@@ -435,6 +538,7 @@
     state.departments = data.departments || [];
     state.positions = data.positions || [];
     state.currentUser = currentUserFromMeta(data);
+    state.accessLevel = String(data.accessLevel || state.currentUser?.accessLevel || 'view').toLowerCase();
     state.selectedEmployeeId = String(state.currentUser?.id || '').trim() || state.selectedEmployeeId || state.users[0]?.id || '';
 
     setOptions($('filterEmployeeSelect'), state.users, { allLabel: 'All employees', valueKey: 'id', labelKey: 'name' });
@@ -505,9 +609,14 @@
   }
 
   async function openStandardModalWithAdmin() {
+    if (hasAccessAtLeast('admin')) {
+      state.standardAdminPassword = '';
+      openStandardModal();
+      return;
+    }
     const password = await requestAdminPassword({
       title: 'Admin password required',
-      message: 'Enter the admin password to create a KPI standard.',
+      message: 'Only KPI admins can create KPI standards directly. Enter the admin password to continue.',
     });
     if (!password) return;
     state.standardAdminPassword = password;
@@ -515,9 +624,14 @@
   }
 
   async function openReviewModalWithAdmin() {
+    if (hasAccessAtLeast('edit')) {
+      state.reviewAdminPassword = '';
+      openReviewModal();
+      return;
+    }
     const password = await requestAdminPassword({
       title: 'Admin password required',
-      message: 'Enter the admin password to create or open an employee KPI review.',
+      message: 'Create review is available for Edit/Admin access. Enter the admin password to continue.',
     });
     if (!password) return;
     state.reviewAdminPassword = password;
@@ -525,16 +639,8 @@
   }
 
   async function handleOpenReview(id) {
-    const review = state.reviews.find((item) => String(item.reviewId) === String(id));
-    let adminPassword = '';
-    if (review && !isCurrentUserReview(review)) {
-      adminPassword = await requestAdminPassword({
-        title: 'Admin password required',
-        message: 'This KPI review belongs to another user. Enter the admin password to open it.',
-      });
-      if (!adminPassword) return;
-    }
-    await openScoreModal(id, { adminPassword, readOnly: true });
+    if (!id) return;
+    await openScoreModal(id, { readOnly: true });
   }
 
   function openModal(name) {
@@ -913,11 +1019,11 @@
   }
 
   function bind() {
-    $('openStandardBtn')?.addEventListener('click', () => openStandardModalWithAdmin().catch((error) => toast(error.message)));
-    $('openStandardBtn2')?.addEventListener('click', () => openStandardModalWithAdmin().catch((error) => toast(error.message)));
-    $('openReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message)));
-    $('openHeroReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message)));
-    $('kpiRefreshBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message)));
+    $('openStandardBtn')?.addEventListener('click', () => openStandardModalWithAdmin().catch((error) => toast(error.message, 'error')));
+    $('openStandardBtn2')?.addEventListener('click', () => openStandardModalWithAdmin().catch((error) => toast(error.message, 'error')));
+    $('openReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
+    $('openHeroReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
+    $('kpiRefreshBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
     $('openReviewFiltersBtn')?.addEventListener('click', () => { enhanceReviewFilterControls(); openModal('reviewFilters'); });
     $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
     $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog({ title: $('sectionTitleInput')?.value || '', description: $('sectionDescriptionInput')?.value || '' }));
@@ -937,13 +1043,13 @@
     $('reviewFilterForm')?.addEventListener('submit', (event) => {
       event.preventDefault();
       closeModal('reviewFilters');
-      loadReviews().catch((error) => toast(error.message));
+      loadReviews().catch((error) => toast(error.message, 'error'));
     });
     $('clearReviewFiltersBtn')?.addEventListener('click', () => {
       ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect'].forEach((id) => { if ($(id)) { $(id).value = ''; refreshEnhancedSelect($(id)); } });
       if ($('filterMonthInput')) $('filterMonthInput').value = '';
       closeModal('reviewFilters');
-      loadReviews().catch((error) => toast(error.message));
+      loadReviews().catch((error) => toast(error.message, 'error'));
     });
     $('reviewEmployeeSelect')?.addEventListener('change', updateReviewStandardOptions);
 
@@ -985,9 +1091,9 @@
         await loadMeta();
         state.standardAdminPassword = '';
         closeModal('standard');
-        toast('KPI standard saved successfully.');
+        toast('KPI standard saved successfully.', 'success');
       } catch (error) {
-        toast(error.message || 'Failed to save KPI standard.');
+        toast(error.message || 'Failed to save KPI standard.', 'error');
       } finally {
         if (submitButton) {
           submitButton.disabled = false;
@@ -1020,7 +1126,7 @@
         state.reviewAdminPassword = '';
         closeModal('review');
       } catch (error) {
-        toast(error.message || 'Failed to create KPI review.');
+        toast(error.message || 'Failed to create KPI review.', 'error');
       } finally {
         setReviewTransitionLoading(false);
         setButtonLoading(submitButton, false);
@@ -1040,7 +1146,7 @@
       closeModal('score');
       await loadReviews();
       await loadGraph();
-      toast('KPI scores saved successfully.');
+      toast('KPI scores saved successfully.', 'success');
     });
   }
 
@@ -1049,7 +1155,7 @@
     loadMeta()
       .catch((error) => {
         const message = error?.message || 'Failed to load KPIs.';
-        if ($('kpiReviewsBody')) $('kpiReviewsBody').innerHTML = `<tr><td colspan="5">${esc(message)}</td></tr>`;
+        if ($('kpiReviewsBody')) $('kpiReviewsBody').innerHTML = `<tr><td colspan="4">${esc(message)}</td></tr>`;
         if ($('kpiStandardsList')) $('kpiStandardsList').innerHTML = `<div class="kpis-chart-empty">${esc(message)}</div>`;
         renderChart([]);
       })
