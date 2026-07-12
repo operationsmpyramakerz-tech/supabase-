@@ -32088,11 +32088,18 @@ function _kpiSections(items = []) {
   return Array.from(map.values()).sort((a,b) => a.sectionOrder - b.sectionOrder);
 }
 function _kpiEvaluation(row = {}) {
+  const legacyScore = _kpiNumber(row.score_percentage ?? row.scorePercentage, 0);
+  const fromValue = row.score_from_percentage ?? row.scoreFromPercentage;
+  const toValue = row.score_to_percentage ?? row.scoreToPercentage;
+  const scoreFrom = fromValue === null || typeof fromValue === "undefined" ? legacyScore : _kpiNumber(fromValue, legacyScore);
+  const scoreTo = toValue === null || typeof toValue === "undefined" ? 100 : _kpiNumber(toValue, 100);
   return {
     id: String(row.id || ""),
     standardId: String(row.standard_id || row.standardId || ""),
     evaluationOrder: Number(row.evaluation_order || row.evaluationOrder || 0),
-    scorePercentage: _kpiNumber(row.score_percentage ?? row.scorePercentage, 0),
+    scorePercentage: legacyScore,
+    scoreFromPercentage: Math.max(0, Math.min(100, scoreFrom)),
+    scoreToPercentage: Math.max(0, Math.min(100, scoreTo)),
     grade: String(row.grade || ""),
     isActive: _sbBool(row.is_active ?? row.isActive, true),
   };
@@ -32100,8 +32107,14 @@ function _kpiEvaluation(row = {}) {
 async function _kpiStandardEvaluations(standardId) {
   const id = String(standardId || "").trim();
   if (!id) return [];
-  const rows = await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(id)}&is_active=eq.true&order=score_percentage.desc,evaluation_order.asc&limit=1000`).catch((error) => {
+  const rows = await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(id)}&is_active=eq.true&order=score_from_percentage.desc,evaluation_order.asc&limit=1000`).catch(async (error) => {
     if (_kpiMissingSchema(error)) return [];
+    if (/score_from_percentage|score_to_percentage|schema cache|column/i.test(String(error?.message || error?.details || ""))) {
+      return await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(id)}&is_active=eq.true&order=score_percentage.desc,evaluation_order.asc&limit=1000`).catch((fallbackError) => {
+        if (_kpiMissingSchema(fallbackError)) return [];
+        throw fallbackError;
+      });
+    }
     throw error;
   });
   return (Array.isArray(rows) ? rows : []).map(_kpiEvaluation).filter((row) => row.grade);
@@ -32111,9 +32124,31 @@ function _kpiGradeFromEvaluations(value, evaluations = []) {
   const rows = (Array.isArray(evaluations) ? evaluations : [])
     .map(_kpiEvaluation)
     .filter((row) => row.grade)
-    .sort((a, b) => b.scorePercentage - a.scorePercentage || a.evaluationOrder - b.evaluationOrder);
-  const matched = rows.find((row) => score >= Math.max(0, Math.min(100, _kpiNumber(row.scorePercentage, 0))));
-  return matched?.grade || rows.slice().sort((a, b) => a.scorePercentage - b.scorePercentage || a.evaluationOrder - b.evaluationOrder)[0]?.grade || _kpiPerformanceRating(score);
+    .map((row) => {
+      const from = Math.max(0, Math.min(100, _kpiNumber(row.scoreFromPercentage ?? row.scorePercentage, 0)));
+      const to = Math.max(0, Math.min(100, _kpiNumber(row.scoreToPercentage, 100)));
+      return { ...row, from: Math.min(from, to), to: Math.max(from, to) };
+    })
+    .sort((a, b) => b.from - a.from || b.to - a.to || a.evaluationOrder - b.evaluationOrder);
+  const matchedRange = rows.find((row) => score >= row.from && score <= row.to);
+  if (matchedRange?.grade) return matchedRange.grade;
+  const matchedThreshold = rows.find((row) => score >= Math.max(0, Math.min(100, _kpiNumber(row.scorePercentage, row.from))));
+  return matchedThreshold?.grade || rows.slice().sort((a, b) => a.from - b.from || a.evaluationOrder - b.evaluationOrder)[0]?.grade || _kpiPerformanceRating(score);
+}
+async function _kpiApplyEvaluationGrades(reviews = []) {
+  const cache = new Map();
+  const output = [];
+  for (const review of (Array.isArray(reviews) ? reviews : [])) {
+    const standardId = String(review?.standardId || review?.standard_id || "").trim();
+    if (!standardId) {
+      output.push(review);
+      continue;
+    }
+    if (!cache.has(standardId)) cache.set(standardId, await _kpiStandardEvaluations(standardId).catch(() => []));
+    const evaluations = cache.get(standardId) || [];
+    output.push({ ...review, performanceRating: _kpiGradeFromEvaluations(review.finalPercentage ?? review.final_percentage, evaluations) });
+  }
+  return output;
 }
 async function _kpiSectionScoreSummary(summary, { sectionOrder, section } = {}) {
   const reviewId = String(summary?.reviewId || summary?.review_id || "").trim();
@@ -32238,8 +32273,9 @@ function _kpiReviewVisibleForAccess(req, summary = {}, currentUser = {}) {
   const isOwnReview = _kpiSameMember(currentUser.id, currentUser.name, summary.teamMemberId || summary.team_member_id, summary.teamMemberName || summary.team_member_name);
   if (level === PAGE_ACCESS_LEVELS.VIEW) return isOwnReview;
   if (level === PAGE_ACCESS_LEVELS.EDIT) {
-    const createdByCurrentUser = _kpiSameMember(currentUser.id, currentUser.name, summary.createdByTeamMemberId || summary.created_by_team_member_id, summary.createdByName || summary.created_by_name);
-    return isOwnReview || createdByCurrentUser;
+    const currentDepartment = String(currentUser.department || "").trim().toLowerCase();
+    const reviewDepartment = String(summary.department || summary.department_name || "").trim().toLowerCase();
+    return Boolean(currentDepartment && reviewDepartment && currentDepartment === reviewDepartment);
   }
   return false;
 }
@@ -32566,13 +32602,19 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
     });
     const savedEvaluations = [];
     const evaluationRows = evaluationsInput
-      .map((raw, index) => ({
-        standard_id: String(standardId),
-        evaluation_order: Math.max(1, Math.round(_kpiNumber(raw.evaluationOrder || raw.evaluation_order, index + 1))),
-        score_percentage: Math.max(0, Math.min(100, _kpiNumber(raw.scorePercentage ?? raw.score_percentage, 0))),
-        grade: _kpiText(raw.grade) || `Grade ${index + 1}`,
-        is_active: true,
-      }))
+      .map((raw, index) => {
+        const from = Math.max(0, Math.min(100, _kpiNumber(raw.scoreFromPercentage ?? raw.score_from_percentage ?? raw.scorePercentage ?? raw.score_percentage, 0)));
+        const to = Math.max(0, Math.min(100, _kpiNumber(raw.scoreToPercentage ?? raw.score_to_percentage, 100)));
+        return {
+          standard_id: String(standardId),
+          evaluation_order: Math.max(1, Math.round(_kpiNumber(raw.evaluationOrder || raw.evaluation_order, index + 1))),
+          score_percentage: Math.min(from, to),
+          score_from_percentage: Math.min(from, to),
+          score_to_percentage: Math.max(from, to),
+          grade: _kpiText(raw.grade) || `Grade ${index + 1}`,
+          is_active: true,
+        };
+      })
       .filter((row) => row.grade);
     for (const evaluationPayload of evaluationRows) {
       const existingEvaluationRows = await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(String(standardId))}&evaluation_order=eq.${_sbRestFilterValue(evaluationPayload.evaluation_order)}&limit=1`);
@@ -32626,6 +32668,7 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
     const department = String(req.query.department || "").trim();
     const rolePosition = String(req.query.rolePosition || req.query.position || "").trim();
     const standardId = String(req.query.standardId || req.query.standard_id || "").trim();
+    const createdByTeamMemberId = String(req.query.createdByTeamMemberId || req.query.created_by_team_member_id || "").trim();
     const sectionOrder = String(req.query.sectionOrder || req.query.section_order || "").trim();
     const section = String(req.query.section || "").trim();
     const from = String(req.query.from || "").trim();
@@ -32636,6 +32679,7 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
     if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
     if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
     if (standardId) params.push(`standard_id=eq.${_sbRestFilterValue(standardId)}`);
+    if (createdByTeamMemberId) params.push(`created_by_team_member_id=eq.${_sbRestFilterValue(createdByTeamMemberId)}`);
     if (status) params.push(`status=eq.${_sbRestFilterValue(status)}`);
     if (from) params.push(`review_month=gte.${_sbRestFilterValue(_kpiMonthStart(from))}`);
     if (to) params.push(`review_month=lte.${_sbRestFilterValue(_kpiMonthStart(to))}`);
@@ -32645,10 +32689,219 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
       .map(_kpiSummary)
       .filter((summary) => _kpiReviewVisibleForAccess(req, summary, currentUser));
     reviews = await _kpiApplySectionScoreFilter(reviews, { sectionOrder, section });
+    reviews = await _kpiApplyEvaluationGrades(reviews);
     res.json({ ok: true, reviews, accessLevel: currentUser.accessLevel });
   } catch (error) {
     console.error("[kpis] list reviews failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
+  }
+});
+
+
+app.get("/api/kpis/reviews/report.pdf", requireAuth, requirePage("KPIs"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const params = ["select=*", "order=review_month.desc,team_member_name.asc", "limit=1000"];
+    const teamMemberId = String(req.query.teamMemberId || req.query.team_member_id || "").trim();
+    const department = String(req.query.department || "").trim();
+    const rolePosition = String(req.query.rolePosition || req.query.position || "").trim();
+    const standardId = String(req.query.standardId || req.query.standard_id || "").trim();
+    const createdByTeamMemberId = String(req.query.createdByTeamMemberId || req.query.created_by_team_member_id || "").trim();
+    const sectionOrder = String(req.query.sectionOrder || req.query.section_order || "").trim();
+    const section = String(req.query.section || "").trim();
+    const from = String(req.query.from || "").trim();
+    const to = String(req.query.to || "").trim();
+    const tab = String(req.query.tab || "all").trim().toLowerCase();
+    if (teamMemberId) params.push(`team_member_id=eq.${_sbRestFilterValue(teamMemberId)}`);
+    if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
+    if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
+    if (standardId) params.push(`standard_id=eq.${_sbRestFilterValue(standardId)}`);
+    if (createdByTeamMemberId) params.push(`created_by_team_member_id=eq.${_sbRestFilterValue(createdByTeamMemberId)}`);
+    if (from) params.push(`review_month=gte.${_sbRestFilterValue(_kpiMonthStart(from))}`);
+    if (to) params.push(`review_month=lte.${_sbRestFilterValue(_kpiMonthStart(to))}`);
+    const rows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?${params.join("&")}`);
+    const currentUser = await _kpiCurrentUserContext(req);
+    let reviews = (Array.isArray(rows) ? rows : [])
+      .map(_kpiSummary)
+      .filter((summary) => _kpiReviewVisibleForAccess(req, summary, currentUser));
+    reviews = await _kpiApplySectionScoreFilter(reviews, { sectionOrder, section });
+    reviews = await _kpiApplyEvaluationGrades(reviews);
+
+    await ensurePdfArabicSupport();
+    const createdAt = new Date();
+    const fileName = `kpi-report-${createdAt.toISOString().slice(0,10)}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+
+    const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+    enableArabicPdf(doc);
+    doc.pipe(res);
+    attachPageNumbers(doc);
+
+    const COLORS = { text: "#111827", muted: "#6B7280", border: "#E5E7EB", headerBg: "#F9FAFB", tableHeadBg: "#F3F4F6", rowAlt: "#FAFAFA", dark: "#050B18", orange: "#EA580C", orangeBg: "#FFF7ED", orangeBorder: "#FED7AA" };
+    const logoPath = path.join(__dirname, "../public/images/logo.png");
+    const mL = doc.page.margins.left;
+    const mR = doc.page.margins.right;
+    const bottom = doc.page.height - doc.page.margins.bottom;
+    const contentW = doc.page.width - mL - mR;
+    const drawHeader = (variant = "default") => drawStocktakingHeader(doc, { title: "KPI Performance Report", variant, logoPath, colors: COLORS });
+    const ensureSpace = (height = 30) => {
+      if (doc.y + height <= bottom) return;
+      doc.addPage();
+      drawHeader("compact");
+    };
+    const fmtPdfMonth = (value) => {
+      const raw = String(value || "").trim();
+      const match = raw.match(/^(\d{4})-(\d{2})/);
+      if (!match) return raw || "-";
+      return new Date(Number(match[1]), Number(match[2]) - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    };
+    const fmtPdfDateTime = (value) => {
+      if (!value) return "-";
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value || "-");
+      return d.toLocaleString("en-US", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    };
+    const drawInfoCard = (x, y, w, label, value) => {
+      doc.roundedRect(x, y, w, 44, 8).fillColor(COLORS.headerBg).fill();
+      doc.roundedRect(x, y, w, 44, 8).strokeColor(COLORS.border).stroke();
+      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(7.5).text(String(label || "").toUpperCase(), x + 9, y + 8, { width: w - 18 });
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9.5).text(String(value || "-"), x + 9, y + 22, { width: w - 18, height: 16, ellipsis: true });
+    };
+    const drawSectionTitle = (title) => {
+      ensureSpace(34);
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(14).text(title, mL, doc.y + 4, { width: contentW });
+      doc.moveDown(0.6);
+    };
+    const avgScore = reviews.length ? reviews.reduce((sum, row) => sum + Number(row.finalPercentage || 0), 0) / reviews.length : 0;
+    const bestScore = reviews.length ? Math.max(...reviews.map((row) => Number(row.finalPercentage || 0))) : 0;
+    const lowestScore = reviews.length ? Math.min(...reviews.map((row) => Number(row.finalPercentage || 0))) : 0;
+    const uniqueEmployees = new Set(reviews.map((row) => row.teamMemberId || row.teamMemberName).filter(Boolean)).size;
+
+    drawHeader("default");
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9).text(`Generated: ${fmtPdfDateTime(createdAt)} • Result count: ${reviews.length}`, mL, doc.y + 8, { width: contentW });
+    doc.moveDown(1.5);
+
+    const filterBits = [];
+    if (tab === "mine") filterBits.push("Tab: My KPIs");
+    else if (tab === "created") filterBits.push("Tab: Created by me");
+    else filterBits.push("Tab: All");
+    if (department) filterBits.push(`Department: ${department}`);
+    if (rolePosition) filterBits.push(`Role: ${rolePosition}`);
+    if (standardId) filterBits.push("KPI: Selected standard");
+    if (sectionOrder || section) filterBits.push(`Section: ${section || sectionOrder}`);
+    if (from || to) filterBits.push(`Month: ${fmtPdfMonth(from || to)}`);
+    doc.roundedRect(mL, doc.y, contentW, 48, 10).fillColor(COLORS.orangeBg).fill();
+    doc.roundedRect(mL, doc.y, contentW, 48, 10).strokeColor(COLORS.orangeBorder).stroke();
+    doc.fillColor(COLORS.orange).font("Helvetica-Bold").fontSize(9).text("Applied filters", mL + 12, doc.y + 8);
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(9.5).text(filterBits.join(" • ") || "No filters applied", mL + 12, doc.y + 23, { width: contentW - 24 });
+    doc.y += 66;
+
+    const cardGap = 10;
+    const cardW = (contentW - cardGap * 3) / 4;
+    const cardY = doc.y;
+    drawInfoCard(mL, cardY, cardW, "Reviews", reviews.length);
+    drawInfoCard(mL + (cardW + cardGap), cardY, cardW, "Employees", uniqueEmployees);
+    drawInfoCard(mL + (cardW + cardGap) * 2, cardY, cardW, "Average score", `${avgScore.toFixed(1)}%`);
+    drawInfoCard(mL + (cardW + cardGap) * 3, cardY, cardW, "Highest / Lowest", `${bestScore.toFixed(1)}% / ${lowestScore.toFixed(1)}%`);
+    doc.y = cardY + 62;
+
+    drawSectionTitle("Monthly Performance Graph");
+    const monthMap = new Map();
+    for (const row of reviews) {
+      const key = _kpiMonthStart(row.reviewMonth);
+      if (!monthMap.has(key)) monthMap.set(key, { label: fmtPdfMonth(key), sum: 0, count: 0 });
+      const entry = monthMap.get(key);
+      entry.sum += Number(row.finalPercentage || 0);
+      entry.count += 1;
+    }
+    const months = Array.from(monthMap.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-12).map(([, entry]) => ({ label: entry.label, value: entry.count ? entry.sum / entry.count : 0 }));
+    const chartX = mL;
+    const chartY = doc.y;
+    const chartH = 150;
+    const chartW = contentW;
+    doc.roundedRect(chartX, chartY, chartW, chartH + 30, 12).fillColor("#FFFFFF").fill();
+    doc.roundedRect(chartX, chartY, chartW, chartH + 30, 12).strokeColor(COLORS.border).stroke();
+    if (!months.length) {
+      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(11).text("No KPI data available for this filter.", chartX, chartY + 70, { width: chartW, align: "center" });
+    } else {
+      const barAreaX = chartX + 26;
+      const barAreaY = chartY + 18;
+      const barAreaW = chartW - 52;
+      const barMaxH = chartH - 34;
+      const gap = 10;
+      const barW = Math.max(18, Math.min(42, (barAreaW - gap * (months.length - 1)) / months.length));
+      months.forEach((month, index) => {
+        const x = barAreaX + index * (barW + gap);
+        const h = Math.max(4, Math.min(barMaxH, (Number(month.value || 0) / 100) * barMaxH));
+        const y = barAreaY + barMaxH - h;
+        doc.roundedRect(x, barAreaY, barW, barMaxH, 8).fillColor("#F1F5F9").fill();
+        doc.roundedRect(x, y, barW, h, 8).fillColor(COLORS.orange).fill();
+        doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(7.5).text(`${month.value.toFixed(0)}%`, x - 4, Math.max(barAreaY - 11, y - 12), { width: barW + 8, align: "center" });
+        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(7).text(month.label.replace(" ", "\n"), x - 8, chartY + chartH - 8, { width: barW + 16, align: "center" });
+      });
+    }
+    doc.y = chartY + chartH + 48;
+
+    drawSectionTitle("KPI Review Results");
+    const columns = [
+      { key: "employee", label: "Employee", width: 120, align: "left" },
+      { key: "department", label: "Department", width: 105, align: "left" },
+      { key: "month", label: "Month", width: 80, align: "left" },
+      { key: "score", label: "Score / Grade", width: 90, align: "center" },
+      { key: "standard", label: "KPI", width: contentW - 120 - 105 - 80 - 90, align: "left" },
+    ];
+    const tableW = columns.reduce((sum, col) => sum + col.width, 0);
+    const cellPad = 6;
+    const drawTableHeader = () => {
+      ensureSpace(26);
+      const y = doc.y;
+      doc.rect(mL, y, tableW, 24).fillColor(COLORS.tableHeadBg).fill();
+      doc.rect(mL, y, tableW, 24).strokeColor(COLORS.border).stroke();
+      let x = mL;
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8);
+      for (const col of columns) {
+        doc.text(col.label, x + cellPad, y + 8, { width: col.width - cellPad * 2, align: col.align });
+        x += col.width;
+        if (x < mL + tableW) doc.moveTo(x, y).lineTo(x, y + 24).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+      }
+      doc.y = y + 24;
+    };
+    if (!reviews.length) {
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("No KPI reviews found for the selected filters.", mL, doc.y);
+    } else {
+      drawTableHeader();
+      reviews.forEach((row, index) => {
+        const values = {
+          employee: row.teamMemberName || "-",
+          department: row.department || "-",
+          month: fmtPdfMonth(row.reviewMonth),
+          score: `${Number(row.finalPercentage || 0).toFixed(1)}%\n${row.performanceRating || "-"}`,
+          standard: row.section ? `${row.standardTitle || "-"} / ${row.section}` : (row.standardTitle || "-"),
+        };
+        doc.font("Helvetica").fontSize(8.3);
+        const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || "-"), { width: col.width - cellPad * 2, align: col.align }));
+        const rowH = Math.max(28, ...heights) + 10;
+        ensureSpace(rowH + 2);
+        if (doc.y < 80) drawTableHeader();
+        const y = doc.y;
+        if (index % 2 === 0) doc.rect(mL, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
+        doc.rect(mL, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+        let x = mL;
+        for (const col of columns) {
+          doc.fillColor(COLORS.text).font(col.key === "score" ? "Helvetica-Bold" : "Helvetica").fontSize(8.2).text(String(values[col.key] || "-"), x + cellPad, y + 7, { width: col.width - cellPad * 2, align: col.align });
+          x += col.width;
+          if (x < mL + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+        }
+        doc.y = y + rowH;
+      });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("[kpis] reviews report failed", error);
+    if (!res.headersSent) res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
+    else res.end();
   }
 });
 
@@ -32657,7 +32910,8 @@ app.get("/api/kpis/reviews/:id", requireAuth, requirePage("KPIs"), async (req, r
   try {
     const id = String(req.params.id || "").trim();
     const summaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(id)}&limit=1`).catch(() => []);
-    const summary = _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {});
+    let summary = _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {});
+    summary = (await _kpiApplyEvaluationGrades([summary]))[0] || summary;
     const currentUser = await _kpiCurrentUserContext(req);
     if (summary.reviewId && !_kpiReviewVisibleForAccess(req, summary, currentUser)) {
       const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
@@ -32702,7 +32956,9 @@ app.patch("/api/kpis/reviews/:id/scores", requireAuth, requirePage("KPIs"), asyn
     }
     const refreshedSummaryRows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(reviewId)}&limit=1`).catch(() => []);
     const detailRows = await supabaseDb.request(`/${KPI_SCORE_DETAILS_VIEW}?select=*&review_id=eq.${_sbRestFilterValue(reviewId)}&order=sort_order.asc&limit=1000`);
-    res.json({ ok: true, summary: _kpiSummary((Array.isArray(refreshedSummaryRows) ? refreshedSummaryRows[0] : null) || {}), details: (Array.isArray(detailRows) ? detailRows : []).map(_kpiScore) });
+    let refreshedSummary = _kpiSummary((Array.isArray(refreshedSummaryRows) ? refreshedSummaryRows[0] : null) || {});
+    refreshedSummary = (await _kpiApplyEvaluationGrades([refreshedSummary]))[0] || refreshedSummary;
+    res.json({ ok: true, summary: refreshedSummary, details: (Array.isArray(detailRows) ? detailRows : []).map(_kpiScore) });
   } catch (error) {
     console.error("[kpis] update scores failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -32722,7 +32978,8 @@ app.get("/api/kpis/graph", requireAuth, requirePage("KPIs"), async (req, res) =>
     if (teamMemberId) params.push(`team_member_id=eq.${_sbRestFilterValue(teamMemberId)}`);
     if (academicYear) params.push(`academic_year=eq.${_sbRestFilterValue(academicYear)}`);
     const rows = await supabaseDb.request(`/${KPI_MONTHLY_GRAPH_VIEW}?${params.join("&")}`);
-    res.json({ ok: true, points: (Array.isArray(rows) ? rows : []).map(_kpiSummary) });
+    const points = await _kpiApplyEvaluationGrades((Array.isArray(rows) ? rows : []).map(_kpiSummary));
+    res.json({ ok: true, points });
   } catch (error) {
     console.error("[kpis] graph failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
