@@ -448,9 +448,7 @@
       .map((review) => {
         const score = Math.max(0, Math.min(100, num(review.finalPercentage, 0)));
         const scoreLabel = review.reviewId ? `${score.toFixed(1)}%` : '—';
-        const createdBy = review.createdByName || '—';
-        const employeeMeta = [review.teamMemberName, review.department, review.rolePosition].filter(Boolean).join(' / ');
-        return `<tr class="kpis-review-row" data-open-review="${esc(review.reviewId)}" tabindex="0"><td><strong>${esc(fmtMonth(review.reviewMonth))}</strong><div class="muted">${esc(employeeMeta || review.standardTitle || '—')}</div></td><td><span class="kpis-score-pill">${esc(scoreLabel)}</span><div class="muted">${esc(review.performanceRating || '—')}</div></td><td>${esc(createdBy)}</td><td>${esc(fmtDateTime(review.createdAt))}</td></tr>`;
+        return `<tr class="kpis-review-row" data-open-review="${esc(review.reviewId)}" tabindex="0"><td><strong>${esc(review.teamMemberName || '—')}</strong></td><td>${esc(review.department || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><span class="kpis-score-pill">${esc(scoreLabel)}</span><div class="muted">${esc(review.performanceRating || '—')}</div></td></tr>`;
       })
       .join('');
 
@@ -477,7 +475,7 @@
 
     box.innerHTML = state.standards
       .map(
-        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')}</p><div class="kpis-standard-meta"><span class="kpis-pill">${standard.isActive ? 'Active' : 'Inactive'}</span>${standard.createdByName ? `<span>${esc(standard.createdByName)}</span>` : ''}</div></button>`,
+        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')}</p></button>`,
       )
       .join('');
 
@@ -890,9 +888,9 @@
   function renderStandardDetails(standard, sections = []) {
     const content = $('standardDetailsContent');
     if (!content) return;
-    if ($('standardDetailsTitle')) $('standardDetailsTitle').textContent = standard?.title || 'KPI standard details';
+    if ($('standardDetailsTitle')) $('standardDetailsTitle').textContent = '';
     if ($('standardDetailsSubtitle')) {
-      $('standardDetailsSubtitle').textContent = [standard?.department, standard?.rolePosition].filter(Boolean).join(' / ') || 'Standard information and KPI sections.';
+      $('standardDetailsSubtitle').textContent = '';
     }
     const description = String(standard?.description || '').trim();
     const totalRows = sections.reduce((sum, section) => sum + (section.items || []).length, 0);
@@ -994,6 +992,84 @@
     return [...map.values()];
   }
 
+  function evidenceFileName(value) {
+    const text = String(value || '').trim();
+    if (!text) return 'No evidence uploaded';
+    try {
+      const url = new URL(text);
+      const name = decodeURIComponent((url.pathname || '').split('/').filter(Boolean).pop() || 'Evidence file');
+      return name || 'Evidence file';
+    } catch {
+      return text;
+    }
+  }
+
+  function evidenceReadOnlyHtml(value) {
+    const text = String(value || '').trim();
+    if (!text) return '<div><span>Evidence</span><p>—</p></div>';
+    const label = evidenceFileName(text);
+    if (/^https?:\/\//i.test(text)) {
+      return `<div><span>Evidence</span><a class="kpis-evidence-link" href="${esc(text)}" target="_blank" rel="noopener"><i data-feather="paperclip"></i><strong>${esc(label)}</strong></a></div>`;
+    }
+    return `<div><span>Evidence</span><p>${esc(label)}</p></div>`;
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read evidence file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadEvidenceFile(file) {
+    if (!file) throw new Error('Choose an evidence file first.');
+    const maxSize = 15 * 1024 * 1024;
+    if (file.size > maxSize) throw new Error('Evidence file must be 15 MB or smaller.');
+    const dataUrl = await readFileAsDataUrl(file);
+    const data = await api('/api/kpis/evidence-upload', {
+      method: 'POST',
+      body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size, dataUrl }),
+    });
+    return data?.file?.url || '';
+  }
+
+  function bindEvidenceUploadControls(wrapper) {
+    if (!wrapper) return;
+    wrapper.querySelectorAll('[data-evidence-card]').forEach((card) => {
+      const fileInput = card.querySelector('[data-evidence-file]');
+      const hidden = card.querySelector('[data-score-field="evidenceText"]');
+      const button = card.querySelector('[data-evidence-button]');
+      const label = card.querySelector('[data-evidence-label]');
+      button?.addEventListener('click', () => fileInput?.click());
+      fileInput?.addEventListener('change', async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const originalHtml = button?.innerHTML || '';
+        try {
+          if (button) {
+            button.disabled = true;
+            button.innerHTML = '<span class="kpis-loading-dot"></span><strong>Uploading...</strong>';
+          }
+          const url = await uploadEvidenceFile(file);
+          if (!url) throw new Error('Evidence upload did not return a file URL.');
+          if (hidden) hidden.value = url;
+          if (label) label.textContent = file.name;
+          toast('Evidence uploaded successfully.', 'success');
+        } catch (error) {
+          toast(error.message || 'Failed to upload evidence.', 'error');
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+          }
+          feather();
+        }
+      });
+    });
+  }
+
   async function openScoreModal(id, options = {}) {
     const query = options.adminPassword ? `?adminPassword=${encodeURIComponent(options.adminPassword)}` : '';
     const readOnly = Boolean(options.readOnly);
@@ -1016,13 +1092,24 @@
 
     if ($('scoreModalKicker')) $('scoreModalKicker').textContent = `${fmtMonth(summary.reviewMonth)} KPI review`;
     if ($('scoreModalTitle')) $('scoreModalTitle').textContent = summary.teamMemberName || 'Employee KPI review';
-    if ($('scoreModalSub')) $('scoreModalSub').textContent = readOnly
-      ? `${summary.department || '—'} / ${summary.rolePosition || '—'} / ${summary.standardTitle || '—'} — View only`
-      : `${summary.department || '—'} / ${summary.rolePosition || '—'} / ${summary.standardTitle || '—'}`;
+    if ($('scoreModalSub')) $('scoreModalSub').textContent = '';
+
+    const score = Math.max(0, Math.min(100, num(summary.finalPercentage, 0)));
+    const reviewBlocks = `
+      <div class="kpis-review-detail-grid">
+        <div><span>Employee</span><strong>${esc(summary.teamMemberName || '—')}</strong></div>
+        <div><span>Department</span><strong>${esc(summary.department || '—')}</strong></div>
+        <div><span>Role / Position</span><strong>${esc(summary.rolePosition || '—')}</strong></div>
+        <div><span>Month</span><strong>${esc(fmtMonth(summary.reviewMonth))}</strong></div>
+        <div><span>Score</span><strong>${summary.reviewId ? `${score.toFixed(1)}%` : '—'}</strong></div>
+        <div><span>Created by</span><strong>${esc(summary.createdByName || '—')}</strong></div>
+        <div><span>Created time</span><strong>${esc(fmtDateTime(summary.createdAt))}</strong></div>
+      </div>
+    `;
 
     const wrapper = $('scoreItemsEditor');
     if (wrapper) {
-      wrapper.innerHTML = groupDetails(details)
+      const sectionsHtml = groupDetails(details)
         .map(
           (section, sectionIndex) => `<div class="kpis-score-section kpis-score-section--modern"><div class="kpis-score-section__head"><div><span class="kpis-score-section__number">${sectionIndex + 1}</span><strong>${esc(section.section || 'Section')}</strong></div>${section.sectionDescription ? `<p>${esc(section.sectionDescription)}</p>` : ''}</div><div class="kpis-score-subcards">${section.items
             .map((item) => {
@@ -1031,12 +1118,12 @@
               const scoreLabel = scoreValue === '' ? '—' : num(scoreValue, 0).toFixed(1);
               const evidence = String(item.evidenceText || '').trim();
               const managerNotes = String(item.managerNotes || '').trim();
-              const readOnlyBody = `<div class="kpis-score-readonly-grid"><div class="kpis-score-readonly-card"><span>Score</span><strong>${esc(scoreLabel)}</strong></div><div class="kpis-score-readonly-card"><span>KPI %</span><strong>${percentValue.toFixed(1)}%</strong></div></div><div class="kpis-score-readonly-notes"><div><span>Evidence</span><p>${evidence ? esc(evidence) : '—'}</p></div><div><span>Manager notes</span><p>${managerNotes ? esc(managerNotes) : '—'}</p></div></div>`;
+              const readOnlyBody = `<div class="kpis-score-readonly-grid"><div class="kpis-score-readonly-card"><span>Score</span><strong>${esc(scoreLabel)}</strong></div><div class="kpis-score-readonly-card"><span>KPI %</span><strong>${percentValue.toFixed(1)}%</strong></div></div><div class="kpis-score-readonly-notes">${evidenceReadOnlyHtml(evidence)}<div><span>Manager notes</span><p>${managerNotes ? esc(managerNotes) : '—'}</p></div></div>`;
               const editBody = `<div class="kpis-score-subcard__body">
                   <label class="kpis-score-input-card"><span>Score</span><input class="kpis-input" data-score-field="actualPercent" type="number" min="0" max="${esc(item.weightPercent || 0)}" step="0.01" value="${scoreValue === '' ? '' : esc(scoreValue)}" /></label>
                   <div class="kpis-score-percent-card"><span>KPI %</span><strong data-score-percent>${percentValue.toFixed(1)}%</strong></div>
                 </div>
-                <div class="kpis-score-notes kpis-score-notes--modern"><label>Evidence<textarea class="kpis-textarea" data-score-field="evidenceText" rows="2">${esc(item.evidenceText || '')}</textarea></label><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div>`;
+                <div class="kpis-score-notes kpis-score-notes--modern kpis-score-notes--evidence"><div class="kpis-evidence-card" data-evidence-card><span>Evidence</span><input type="hidden" data-score-field="evidenceText" value="${esc(item.evidenceText || '')}" /><input data-evidence-file type="file" hidden /><button class="kpis-evidence-upload" data-evidence-button type="button"><i data-feather="upload-cloud"></i><strong>Upload evidence</strong></button><small data-evidence-label>${esc(evidenceFileName(item.evidenceText || ''))}</small></div><label>Manager notes<textarea class="kpis-textarea" data-score-field="managerNotes" rows="2">${esc(item.managerNotes || '')}</textarea></label></div>`;
               return `<article class="kpis-score-subcard${readOnly ? ' kpis-score-subcard--readonly' : ''}" data-score-id="${esc(item.scoreId)}" data-weight="${esc(item.weightPercent)}">
                 <div class="kpis-score-subcard__head">
                   <div class="kpis-score-subcard__title"><span>${esc(String(item.subsectionOrder || '—'))}</span><div><h4>${esc(item.subsection || 'KPI subsection')}</h4>${item.subsectionDescription ? `<p>${esc(item.subsectionDescription)}</p>` : ''}</div></div>
@@ -1048,7 +1135,9 @@
             .join('')}</div></div>`,
         )
         .join('');
+      wrapper.innerHTML = reviewBlocks + sectionsHtml;
       if (!readOnly) {
+        bindEvidenceUploadControls(wrapper);
         wrapper.querySelectorAll('[data-score-field="actualPercent"]').forEach((input) => {
           input.addEventListener('input', () => {
             const card = input.closest('[data-score-id]');
