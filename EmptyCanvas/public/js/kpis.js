@@ -18,6 +18,7 @@
     activeGraphMonth: '',
     standardSectionsByStandardId: {},
     activeReviewTab: 'all',
+    standardFilters: { department: '', position: '' },
   };
 
   const enhancedSelects = new Map();
@@ -106,6 +107,17 @@
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+    });
+  }
+
+  function fmtDate(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || '—');
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
     });
   }
 
@@ -205,6 +217,10 @@
     ['filterEmployeeSelect', 'filterDepartmentSelect', 'filterPositionSelect', 'filterStandardSelect', 'filterSectionSelect'].forEach((id) => enhanceSelect($(id)));
   }
 
+  function enhanceStandardFilterControls() {
+    ['standardFilterDepartmentSelect', 'standardFilterPositionSelect'].forEach((id) => enhanceSelect($(id)));
+  }
+
   function enhanceReviewControls() {
     ['reviewEmployeeSelect', 'reviewStandardSelect'].forEach((id) => enhanceSelect($(id)));
   }
@@ -252,6 +268,25 @@
     const list = positionsForDepartment(department);
     positionSelect.disabled = !department || !list.length;
     setOptions(positionSelect, list, { allLabel: department ? (list.length ? 'Choose role / position' : 'No positions found') : 'Choose department first' });
+    refreshEnhancedSelect(positionSelect);
+  }
+
+  function updateStandardFilterPositionOptions() {
+    const departmentSelect = $('standardFilterDepartmentSelect');
+    const positionSelect = $('standardFilterPositionSelect');
+    if (!positionSelect) return;
+    const department = departmentSelect?.value || '';
+    const list = department ? positionsForDepartment(department) : uniqueSorted([
+      ...state.positions,
+      ...state.users.map((user) => user.position),
+      ...state.standards.map((standard) => standard.rolePosition),
+    ]);
+    positionSelect.disabled = false;
+    setOptions(positionSelect, list, { allLabel: department ? (list.length ? 'All positions' : 'No positions found') : 'All positions' });
+    const selectedPosition = positionSelect.value || '';
+    if (selectedPosition && ![...positionSelect.options].some((option) => option.value === selectedPosition)) {
+      positionSelect.value = '';
+    }
     refreshEnhancedSelect(positionSelect);
   }
 
@@ -526,18 +561,51 @@
     feather();
   }
 
+  function filteredStandardsForList() {
+    const department = norm(state.standardFilters?.department);
+    const position = norm(state.standardFilters?.position);
+    return (state.standards || []).filter((standard) => {
+      if (department && norm(standard.department) !== department) return false;
+      if (position && norm(standard.rolePosition) !== position) return false;
+      return true;
+    });
+  }
+
+  function renderStandardFilterSummary() {
+    const summary = $('standardFilterSummary');
+    if (!summary) return;
+    const chips = [];
+    if (state.standardFilters?.department) chips.push(`Department: ${state.standardFilters.department}`);
+    if (state.standardFilters?.position) chips.push(`Position: ${state.standardFilters.position}`);
+    summary.innerHTML = chips.length ? chips.map((chip) => `<span>${esc(chip)}</span>`).join('') : 'No filters applied';
+  }
+
+  function hasDuplicateStandardForSelection(department, rolePosition) {
+    const dep = norm(department);
+    const pos = norm(rolePosition);
+    if (!dep || !pos) return false;
+    return (state.standards || []).some((standard) => norm(standard.department) === dep && norm(standard.rolePosition) === pos);
+  }
+
   function renderStandards() {
     const box = $('kpiStandardsList');
     if (!box) return;
+    renderStandardFilterSummary();
 
     if (!state.standards.length) {
       box.innerHTML = '<div class="kpis-chart-empty">No KPI standards yet.</div>';
       return;
     }
 
-    box.innerHTML = state.standards
+    const standards = filteredStandardsForList();
+    if (!standards.length) {
+      box.innerHTML = '<div class="kpis-chart-empty">No KPI standards match these filters.</div>';
+      return;
+    }
+
+    box.innerHTML = standards
       .map(
-        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><h3>${esc(standard.title || 'Untitled standard')}</h3><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')}</p></button>`,
+        (standard) => `<button class="kpis-standard-card" type="button" data-standard-id="${esc(standard.id)}"><div class="kpis-standard-card__head"><h3>${esc(standard.title || 'Untitled standard')}</h3><span class="kpis-standard-date">${esc(fmtDate(standard.createdAt))}</span></div><p>${esc(standard.department || '—')} / ${esc(standard.rolePosition || '—')}</p></button>`,
       )
       .join('');
 
@@ -663,11 +731,17 @@
     await updateFilterSectionOptions();
     setOptions($('reviewEmployeeSelect'), state.users, { allLabel: 'Choose employee', valueKey: 'id', labelKey: 'name' });
     setOptions($('standardDepartmentSelect'), state.departments, { allLabel: 'Choose department' });
+    setOptions($('standardFilterDepartmentSelect'), state.departments, { allLabel: 'All departments' });
+    if ($('standardFilterDepartmentSelect')) $('standardFilterDepartmentSelect').value = state.standardFilters.department || '';
     updateStandardPositionOptions();
+    updateStandardFilterPositionOptions();
+    if ($('standardFilterPositionSelect')) $('standardFilterPositionSelect').value = state.standardFilters.position || '';
     enhanceStandardControls();
+    enhanceStandardFilterControls();
     enhanceReviewFilterControls();
     enhanceReviewControls();
     renderReviewFilterSummary();
+    renderStandardFilterSummary();
     setCurrentUserBadge();
     renderStandards();
     await Promise.all([loadReviews(), loadGraph()]);
@@ -1324,6 +1398,16 @@
     $('openHeroReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
     $('kpiRefreshBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
     $('openReviewFiltersBtn')?.addEventListener('click', () => { enhanceReviewFilterControls(); openModal('reviewFilters'); });
+    $('openStandardFiltersBtn')?.addEventListener('click', () => {
+      setOptions($('standardFilterDepartmentSelect'), state.departments, { allLabel: 'All departments' });
+      if ($('standardFilterDepartmentSelect')) $('standardFilterDepartmentSelect').value = state.standardFilters.department || '';
+      updateStandardFilterPositionOptions();
+      if ($('standardFilterPositionSelect')) $('standardFilterPositionSelect').value = state.standardFilters.position || '';
+      enhanceStandardFilterControls();
+      refreshEnhancedSelect($('standardFilterDepartmentSelect'));
+      refreshEnhancedSelect($('standardFilterPositionSelect'));
+      openModal('standardFilters');
+    });
     $('downloadKpiReportBtn')?.addEventListener('click', () => {
       const query = buildReviewQuery();
       window.open(`/api/kpis/reviews/report.pdf${query.toString() ? `?${query}` : ''}`, '_blank', 'noopener');
@@ -1345,10 +1429,29 @@
     document.querySelectorAll('[data-admin-password-cancel]').forEach((element) => element.addEventListener('click', () => closeAdminPasswordDialog(null)));
     document.addEventListener('click', () => closeEnhancedSelects());
     $('standardDepartmentSelect')?.addEventListener('change', updateStandardPositionOptions);
+    $('standardFilterDepartmentSelect')?.addEventListener('change', updateStandardFilterPositionOptions);
     $('filterStandardSelect')?.addEventListener('change', () => { updateFilterSectionOptions().catch((error) => toast(error.message, 'error')); });
 
     document.querySelectorAll('[data-kpi-close]').forEach((element) => {
       element.addEventListener('click', () => closeModal(element.dataset.kpiClose));
+    });
+
+    $('standardFilterForm')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      state.standardFilters.department = $('standardFilterDepartmentSelect')?.value || '';
+      state.standardFilters.position = $('standardFilterPositionSelect')?.value || '';
+      closeModal('standardFilters');
+      renderStandards();
+    });
+    $('clearStandardFiltersBtn')?.addEventListener('click', () => {
+      state.standardFilters = { department: '', position: '' };
+      if ($('standardFilterDepartmentSelect')) $('standardFilterDepartmentSelect').value = '';
+      updateStandardFilterPositionOptions();
+      if ($('standardFilterPositionSelect')) $('standardFilterPositionSelect').value = '';
+      refreshEnhancedSelect($('standardFilterDepartmentSelect'));
+      refreshEnhancedSelect($('standardFilterPositionSelect'));
+      closeModal('standardFilters');
+      renderStandards();
     });
 
     $('reviewFilterForm')?.addEventListener('submit', (event) => {
@@ -1370,6 +1473,10 @@
       const form = event.currentTarget;
       const submitButton = form.querySelector('button[type="submit"]');
       const items = collectKpiRows();
+      const duplicateStandardExists = hasDuplicateStandardForSelection(form.elements.department.value, form.elements.rolePosition.value);
+      if (duplicateStandardExists) {
+        toast('A KPI standard already exists for this department and position. The new standard will still be saved.', 'info');
+      }
       if (!document.querySelector('#kpiItemsEditor .kpis-section-card')) {
         toast('Add a KPI section first.');
         return;
@@ -1385,7 +1492,7 @@
         submitButton.innerHTML = '<span class="kpis-loading-dot"></span><span>Saving...</span>';
       }
       try {
-        await api('/api/kpis/standards', {
+        const data = await api('/api/kpis/standards', {
           method: 'POST',
           body: JSON.stringify({
             department: form.elements.department.value,
@@ -1400,6 +1507,9 @@
         await loadMeta();
         state.standardAdminPassword = '';
         closeModal('standard');
+        if (data.duplicateFound && !duplicateStandardExists) {
+          toast('A KPI standard already exists for this department and position. The new standard was saved as an additional standard.', 'info');
+        }
         toast('KPI standard saved successfully.', 'success');
       } catch (error) {
         toast(error.message || 'Failed to save KPI standard.', 'error');
