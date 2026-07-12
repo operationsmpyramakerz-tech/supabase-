@@ -445,3 +445,22 @@
   .kpis-evaluation-delete{width:100%}
   .kpis-standard-detail-evaluation-list{grid-template-columns:1fr}
 }
+
+/* KPI review tabs, created review edits, evaluation ranges and report button */
+.kpis-review-tabs{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding:6px;background:rgba(248,250,252,.84);border:1px solid #e5e7eb;border-radius:18px;width:max-content;max-width:100%}
+.kpis-review-tab{border:0;border-radius:14px;background:transparent;color:#64748b;font-weight:950;padding:10px 14px;cursor:pointer;transition:background .15s ease,color .15s ease,box-shadow .15s ease,transform .15s ease}
+.kpis-review-tab:hover{transform:translateY(-1px);color:#0f172a;background:#fff}
+.kpis-review-tab.is-active{background:#fff;color:#0f172a;box-shadow:0 10px 22px rgba(15,23,42,.08);border:1px solid #eef2f7}
+.kpis-report-btn{white-space:nowrap}
+.kpis-score-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.kpis-score-pill{gap:6px;min-width:0;padding:7px 12px}
+.kpis-score-pill strong{font:inherit;font-weight:950;color:#0f172a}
+.kpis-score-pill em{font-style:normal;color:#9a3412;font-weight:950;border-left:1px solid #e2e8f0;padding-left:7px}
+.kpis-review-edit-btn{min-height:34px;border:1px solid #fed7aa;border-radius:999px;background:#fff7ed;color:#9a3412;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 11px;font-weight:950;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+.kpis-review-edit-btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(234,88,12,.14)}
+.kpis-review-edit-btn svg{width:14px;height:14px}
+.kpis-evaluation-row{grid-template-columns:auto minmax(0,.75fr) minmax(0,.75fr) minmax(0,1.1fr) auto!important;align-items:end!important}
+.kpis-evaluation-row .kpis-row-delete.kpis-evaluation-delete{width:auto;min-width:150px;height:50px;padding:0 14px;display:inline-flex;gap:8px;align-items:center;justify-content:center;background:#fff1f2;border:1px solid #fecaca;color:#b91c1c;border-radius:16px;font-weight:950}
+.kpis-evaluation-row .kpis-row-delete.kpis-evaluation-delete svg{width:17px;height:17px}
+.kpis-standard-detail-evaluation strong{white-space:nowrap}
+@media(max-width:900px){.kpis-review-tabs{width:100%}.kpis-review-tab{flex:1}.kpis-evaluation-row{grid-template-columns:1fr!important}.kpis-evaluation-row .kpis-row-delete.kpis-evaluation-delete{width:100%}.kpis-score-actions{align-items:flex-start}}
