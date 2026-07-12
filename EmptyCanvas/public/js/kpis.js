@@ -556,8 +556,6 @@
     const sectionText = $('filterSectionSelect')?.selectedOptions?.[0]?.textContent || '';
     const month = $('filterMonthInput')?.value || '';
     const chips = [];
-    const tabLabel = state.activeReviewTab === 'mine' ? 'My KPIs' : state.activeReviewTab === 'created' ? 'Created by me' : 'All';
-    chips.push(`Tab: ${tabLabel}`);
     if ($('filterEmployeeSelect')?.value) chips.push(`Employee: ${employeeText}`);
     if ($('filterDepartmentSelect')?.value) chips.push(`Department: ${departmentText}`);
     if ($('filterPositionSelect')?.value) chips.push(`Role: ${roleText}`);
@@ -980,7 +978,7 @@
       <label>From<input class="kpis-input" data-evaluation-field="scoreFromPercentage" type="number" min="0" max="100" step="0.01" placeholder="Example: 85" value="${esc(value.scoreFromPercentage ?? value.scorePercentage ?? '')}" /></label>
       <label>To<input class="kpis-input" data-evaluation-field="scoreToPercentage" type="number" min="0" max="100" step="0.01" placeholder="Example: 100" value="${esc(value.scoreToPercentage ?? '')}" /></label>
       <label>Grade<input class="kpis-input" data-evaluation-field="grade" type="text" placeholder="Example: Excellent" value="${esc(value.grade || '')}" /></label>
-      <button class="kpis-row-delete kpis-evaluation-delete" type="button" data-remove-evaluation aria-label="Delete evaluation"><i data-feather="trash-2"></i><span>Delete evaluation</span></button>
+      <button class="kpis-section-delete kpis-evaluation-delete" type="button" data-remove-evaluation aria-label="Delete evaluation" title="Delete evaluation"><i data-feather="trash-2"></i></button>
     `;
     row.querySelector('[data-remove-evaluation]')?.addEventListener('click', () => {
       row.remove();
