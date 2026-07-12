@@ -17,6 +17,7 @@
     graphPoints: [],
     activeGraphMonth: '',
     standardSectionsByStandardId: {},
+    activeReviewTab: 'all',
   };
 
   const enhancedSelects = new Map();
@@ -491,13 +492,26 @@
       return;
     }
 
+    const canEditCreated = state.activeReviewTab === 'created' && hasAccessAtLeast('admin');
     body.innerHTML = state.reviews
       .map((review) => {
         const score = Math.max(0, Math.min(100, num(review.finalPercentage, 0)));
         const scoreLabel = review.reviewId ? `${score.toFixed(1)}%` : '—';
-        return `<tr class="kpis-review-row" data-open-review="${esc(review.reviewId)}" tabindex="0"><td><strong>${esc(review.teamMemberName || '—')}</strong></td><td>${esc(review.department || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><span class="kpis-score-pill">${esc(scoreLabel)}</span><div class="muted">${esc(review.performanceRating || '—')}</div></td></tr>`;
+        const grade = review.performanceRating || '—';
+        const editButton = canEditCreated && review.reviewId
+          ? `<button class="kpis-review-edit-btn" type="button" data-edit-review="${esc(review.reviewId)}"><i data-feather="edit-3"></i><span>Edit</span></button>`
+          : '';
+        return `<tr class="kpis-review-row" data-open-review="${esc(review.reviewId)}" tabindex="0"><td><strong>${esc(review.teamMemberName || '—')}</strong></td><td>${esc(review.department || '—')}</td><td>${esc(fmtMonth(review.reviewMonth))}</td><td><div class="kpis-score-actions"><span class="kpis-score-pill"><strong>${esc(scoreLabel)}</strong><em>${esc(grade)}</em></span>${editButton}</div></td></tr>`;
       })
       .join('');
+
+    body.querySelectorAll('[data-edit-review]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleEditReview(button.dataset.editReview).catch((error) => toast(error.message, 'error'));
+      });
+    });
 
     body.querySelectorAll('[data-open-review]').forEach((row) => {
       const open = () => handleOpenReview(row.dataset.openReview).catch((error) => toast(error.message, 'error'));
@@ -509,6 +523,7 @@
         }
       });
     });
+    feather();
   }
 
   function renderStandards() {
@@ -541,6 +556,8 @@
     const sectionText = $('filterSectionSelect')?.selectedOptions?.[0]?.textContent || '';
     const month = $('filterMonthInput')?.value || '';
     const chips = [];
+    const tabLabel = state.activeReviewTab === 'mine' ? 'My KPIs' : state.activeReviewTab === 'created' ? 'Created by me' : 'All';
+    chips.push(`Tab: ${tabLabel}`);
     if ($('filterEmployeeSelect')?.value) chips.push(`Employee: ${employeeText}`);
     if ($('filterDepartmentSelect')?.value) chips.push(`Department: ${departmentText}`);
     if ($('filterPositionSelect')?.value) chips.push(`Role: ${roleText}`);
@@ -552,7 +569,7 @@
       : 'No filters applied';
   }
 
-  async function loadReviews() {
+  function buildReviewQuery() {
     const query = new URLSearchParams();
     const teamMemberId = $('filterEmployeeSelect')?.value || '';
     const department = $('filterDepartmentSelect')?.value || '';
@@ -560,6 +577,7 @@
     const standardId = $('filterStandardSelect')?.value || '';
     const sectionOrder = $('filterSectionSelect')?.value || '';
     const month = $('filterMonthInput')?.value || '';
+    const currentUserId = String(state.currentUser?.id || '').trim();
 
     if (teamMemberId) query.set('teamMemberId', teamMemberId);
     if (department) query.set('department', department);
@@ -571,6 +589,18 @@
       query.set('to', `${month}-01`);
     }
 
+    if (state.activeReviewTab === 'mine' && currentUserId) {
+      query.set('teamMemberId', currentUserId);
+    }
+    if (state.activeReviewTab === 'created' && currentUserId) {
+      query.set('createdByTeamMemberId', currentUserId);
+    }
+    query.set('tab', state.activeReviewTab || 'all');
+    return query;
+  }
+
+  async function loadReviews() {
+    const query = buildReviewQuery();
     renderReviewFilterSummary();
     const data = await api(`/api/kpis/reviews${query.toString() ? `?${query}` : ''}`);
     state.reviews = data.reviews || [];
@@ -729,6 +759,15 @@
   async function handleOpenReview(id) {
     if (!id) return;
     await openScoreModal(id, { readOnly: true });
+  }
+
+  async function handleEditReview(id) {
+    if (!id) return;
+    if (!hasAccessAtLeast('admin')) {
+      toast('Only Admin access can edit created KPI reviews.', 'error');
+      return;
+    }
+    await openScoreModal(id, { readOnly: false });
   }
 
   function openModal(name) {
@@ -938,9 +977,10 @@
     row.dataset.evaluationOrder = String(index);
     row.innerHTML = `
       <span class="kpis-evaluation-row__number" data-evaluation-number>${index}</span>
-      <label>Score percentage<input class="kpis-input" data-evaluation-field="scorePercentage" type="number" min="0" max="100" step="0.01" placeholder="Example: 90" value="${esc(value.scorePercentage ?? '')}" /></label>
+      <label>From<input class="kpis-input" data-evaluation-field="scoreFromPercentage" type="number" min="0" max="100" step="0.01" placeholder="Example: 85" value="${esc(value.scoreFromPercentage ?? value.scorePercentage ?? '')}" /></label>
+      <label>To<input class="kpis-input" data-evaluation-field="scoreToPercentage" type="number" min="0" max="100" step="0.01" placeholder="Example: 100" value="${esc(value.scoreToPercentage ?? '')}" /></label>
       <label>Grade<input class="kpis-input" data-evaluation-field="grade" type="text" placeholder="Example: Excellent" value="${esc(value.grade || '')}" /></label>
-      <button class="kpis-evaluation-delete" type="button" data-remove-evaluation aria-label="Delete evaluation"><i data-feather="trash-2"></i></button>
+      <button class="kpis-row-delete kpis-evaluation-delete" type="button" data-remove-evaluation aria-label="Delete evaluation"><i data-feather="trash-2"></i><span>Delete evaluation</span></button>
     `;
     row.querySelector('[data-remove-evaluation]')?.addEventListener('click', () => {
       row.remove();
@@ -957,10 +997,16 @@
       row.querySelectorAll('[data-evaluation-field]').forEach((field) => {
         item[field.dataset.evaluationField] = field.value;
       });
-      item.scorePercentage = Math.max(0, Math.min(100, num(item.scorePercentage, 0)));
+      const fromRaw = String(item.scoreFromPercentage ?? '').trim();
+      const toRaw = String(item.scoreToPercentage ?? '').trim();
+      const from = Math.max(0, Math.min(100, fromRaw === '' ? 0 : num(fromRaw, 0)));
+      const to = Math.max(0, Math.min(100, toRaw === '' ? 100 : num(toRaw, 100)));
+      item.scoreFromPercentage = Math.min(from, to);
+      item.scoreToPercentage = Math.max(from, to);
+      item.scorePercentage = item.scoreFromPercentage;
       item.grade = String(item.grade || '').trim();
       return item;
-    }).filter((item) => item.grade || item.scorePercentage > 0);
+    }).filter((item) => item.grade || item.scoreFromPercentage > 0 || item.scoreToPercentage < 100);
   }
 
   function calculateTotalWeight() {
@@ -1026,7 +1072,7 @@
         <div><span>Created by</span><strong>${esc(standard?.createdByName || '—')}</strong></div>
         <div><span>Created time</span><strong>${esc(fmtDateTime(standard?.createdAt))}</strong></div>
       </div>
-      ${evaluations.length ? `<div class="kpis-standard-detail-evaluations"><div class="kpis-standard-detail-evaluations__head"><h4>Overall Evaluation</h4></div><div class="kpis-standard-detail-evaluation-list">${evaluations.map((evaluation, index) => `<div class="kpis-standard-detail-evaluation"><span>${index + 1}</span><strong>${num(evaluation.scorePercentage, 0).toFixed(1)}%</strong><em>${esc(evaluation.grade || '—')}</em></div>`).join('')}</div></div>` : ''}
+      ${evaluations.length ? `<div class="kpis-standard-detail-evaluations"><div class="kpis-standard-detail-evaluations__head"><h4>Overall Evaluation</h4></div><div class="kpis-standard-detail-evaluation-list">${evaluations.map((evaluation, index) => `<div class="kpis-standard-detail-evaluation"><span>${index + 1}</span><strong>${num(evaluation.scoreFromPercentage ?? evaluation.scorePercentage, 0).toFixed(1)}% - ${num(evaluation.scoreToPercentage, 100).toFixed(1)}%</strong><em>${esc(evaluation.grade || '—')}</em></div>`).join('')}</div></div>` : ''}
       <div class="kpis-standard-detail-sections">
         ${sections.length ? sections.map((section, sectionIndex) => `
           <section class="kpis-standard-detail-section">
@@ -1280,6 +1326,17 @@
     $('openHeroReviewBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
     $('kpiRefreshBtn')?.addEventListener('click', () => openReviewModalWithAdmin().catch((error) => toast(error.message, 'error')));
     $('openReviewFiltersBtn')?.addEventListener('click', () => { enhanceReviewFilterControls(); openModal('reviewFilters'); });
+    $('downloadKpiReportBtn')?.addEventListener('click', () => {
+      const query = buildReviewQuery();
+      window.open(`/api/kpis/reviews/report.pdf${query.toString() ? `?${query}` : ''}`, '_blank', 'noopener');
+    });
+    document.querySelectorAll('[data-review-tab]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.activeReviewTab = button.dataset.reviewTab || 'all';
+        document.querySelectorAll('[data-review-tab]').forEach((tab) => tab.classList.toggle('is-active', tab === button));
+        loadReviews().catch((error) => toast(error.message, 'error'));
+      });
+    });
     $('addKpiSectionBtn')?.addEventListener('click', promptAndAddSection);
     $('addEvaluationBtn')?.addEventListener('click', () => addEvaluationRow());
     $('confirmSectionTitleBtn')?.addEventListener('click', () => closeSectionTitleDialog({ title: $('sectionTitleInput')?.value || '', description: $('sectionDescriptionInput')?.value || '' }));
