@@ -510,3 +510,45 @@
     justify-self:end!important;
   }
 }
+
+/* Standards filter and standard card date polish */
+.kpis-filter-summary--standards{
+  margin-top:-4px;
+  margin-bottom:14px;
+}
+.kpis-standard-filters-panel .kpis-modal-head h2,
+.kpis-standard-filters-panel .kpis-modal-head p{display:none!important}
+.kpis-filter-grid--standards{grid-template-columns:1fr 1fr}
+.kpis-standard-card__head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:7px;
+}
+.kpis-standard-card__head h3{
+  margin:0!important;
+  min-width:0;
+  line-height:1.25;
+}
+.kpis-standard-date{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:30px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid #fed7aa;
+  background:linear-gradient(180deg,#fff,#fff7ed);
+  color:#9a3412;
+  font-size:11px;
+  font-weight:950;
+  white-space:nowrap;
+  box-shadow:0 8px 18px rgba(249,115,22,.08);
+}
+@media(max-width:768px){
+  .kpis-filter-grid--standards{grid-template-columns:1fr}
+  .kpis-standard-card__head{align-items:stretch;flex-direction:column}
+  .kpis-standard-date{width:max-content}
+}
