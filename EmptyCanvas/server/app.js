@@ -32513,26 +32513,16 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
       created_by_team_member_id: creator.id || null,
       created_by_name: creator.name || null,
     };
-    const existing = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&order=created_at.desc.nullslast&limit=1`).catch(async (error) => {
+    const existing = await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=id&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&order=created_at.desc.nullslast&limit=1`).catch(async (error) => {
       if (/created_at|schema cache|column/i.test(String(error?.message || ""))) {
-        return await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=*&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&limit=1`);
+        return await supabaseDb.request(`/${KPI_STANDARD_TABLE}?select=id&department=eq.${_sbRestFilterValue(department)}&role_position=eq.${_sbRestFilterValue(rolePosition)}&limit=1`);
       }
       throw error;
     });
-    let standard = Array.isArray(existing) ? existing[0] || null : null;
-    standard = standard?.id ? await supabaseDb.updateById(KPI_STANDARD_TABLE, standard.id, payload) : await supabaseDb.insert(KPI_STANDARD_TABLE, payload);
+    const duplicateFound = Array.isArray(existing) && existing.some((row) => row?.id);
+    const standard = await supabaseDb.insert(KPI_STANDARD_TABLE, payload);
     const standardId = standard.id;
 
-    await supabaseDb.request(`/${KPI_STANDARD_ITEMS_TABLE}?standard_id=eq.${_sbRestFilterValue(standardId)}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: { is_active: false },
-    }).catch(() => null);
-    await supabaseDb.request(`/${KPI_STANDARD_SECTIONS_TABLE}?standard_id=eq.${_sbRestFilterValue(standardId)}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: { is_active: false },
-    }).catch(() => null);
 
     const sections = [];
     const sectionMap = new Map();
@@ -32624,7 +32614,7 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
         : await supabaseDb.insert(KPI_STANDARD_EVALUATIONS_TABLE, evaluationPayload);
       if (savedEvaluation?.id) savedEvaluations.push(savedEvaluation);
     }
-    res.json({ ok: true, standard: _kpiStandard(standard), items: savedItems.map(_kpiItem), sections: _kpiSections(savedItems.map(_kpiItem)), evaluations: savedEvaluations.map(_kpiEvaluation) });
+    res.json({ ok: true, duplicateFound, standard: _kpiStandard(standard), items: savedItems.map(_kpiItem), sections: _kpiSections(savedItems.map(_kpiItem)), evaluations: savedEvaluations.map(_kpiEvaluation) });
   } catch (error) {
     console.error("[kpis] save standard failed", error);
     res.status(Number(error?.status || error?.statusCode) || 500).json({ ok: false, message: _kpiErrorMessage(error) });
