@@ -31949,6 +31949,7 @@ async function detectOrderIdPropName() {
 const KPI_STANDARD_TABLE = "kpi_standards";
 const KPI_STANDARD_ITEMS_TABLE = "kpi_standard_items";
 const KPI_STANDARD_SECTIONS_TABLE = "kpi_standard_sections";
+const KPI_STANDARD_EVALUATIONS_TABLE = "kpi_standard_evaluations";
 const KPI_REVIEWS_TABLE = "kpi_employee_reviews";
 const KPI_SCORES_TABLE = "kpi_employee_scores";
 const KPI_SCORE_DETAILS_VIEW = "kpi_employee_score_details_view";
@@ -32045,9 +32046,11 @@ function _kpiSummary(row = {}) {
     academicYear: String(row.academic_year || ""),
     finalPercentage: _kpiNumber(row.final_percentage, 0),
     totalWeightPercent: _kpiNumber(row.total_weight_percent, 0),
-    performanceRating: _kpiPerformanceRating(row.final_percentage),
     itemCount: Number(row.item_count || 0),
     completedItemCount: Number(row.completed_item_count || 0),
+    performanceRating: _kpiText(row.performance_rating || row.performanceRating) || _kpiPerformanceRating(row.final_percentage),
+    sectionOrder: Number(row.section_order || row.sectionOrder || 0),
+    section: String(row.section || ""),
     createdByTeamMemberId: String(row.created_by_team_member_id || row.createdByTeamMemberId || ""),
     createdByName: String(row.created_by_name || row.createdByName || ""),
     createdAt: String(row.created_at || row.createdAt || ""),
@@ -32083,6 +32086,75 @@ function _kpiSections(items = []) {
     section.items.push(item);
   }
   return Array.from(map.values()).sort((a,b) => a.sectionOrder - b.sectionOrder);
+}
+function _kpiEvaluation(row = {}) {
+  return {
+    id: String(row.id || ""),
+    standardId: String(row.standard_id || row.standardId || ""),
+    evaluationOrder: Number(row.evaluation_order || row.evaluationOrder || 0),
+    scorePercentage: _kpiNumber(row.score_percentage ?? row.scorePercentage, 0),
+    grade: String(row.grade || ""),
+    isActive: _sbBool(row.is_active ?? row.isActive, true),
+  };
+}
+async function _kpiStandardEvaluations(standardId) {
+  const id = String(standardId || "").trim();
+  if (!id) return [];
+  const rows = await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(id)}&is_active=eq.true&order=score_percentage.desc,evaluation_order.asc&limit=1000`).catch((error) => {
+    if (_kpiMissingSchema(error)) return [];
+    throw error;
+  });
+  return (Array.isArray(rows) ? rows : []).map(_kpiEvaluation).filter((row) => row.grade);
+}
+function _kpiGradeFromEvaluations(value, evaluations = []) {
+  const score = Math.max(0, Math.min(100, _kpiNumber(value, 0)));
+  const rows = (Array.isArray(evaluations) ? evaluations : [])
+    .map(_kpiEvaluation)
+    .filter((row) => row.grade)
+    .sort((a, b) => b.scorePercentage - a.scorePercentage || a.evaluationOrder - b.evaluationOrder);
+  const matched = rows.find((row) => score >= Math.max(0, Math.min(100, _kpiNumber(row.scorePercentage, 0))));
+  return matched?.grade || rows.slice().sort((a, b) => a.scorePercentage - b.scorePercentage || a.evaluationOrder - b.evaluationOrder)[0]?.grade || _kpiPerformanceRating(score);
+}
+async function _kpiSectionScoreSummary(summary, { sectionOrder, section } = {}) {
+  const reviewId = String(summary?.reviewId || summary?.review_id || "").trim();
+  if (!reviewId) return null;
+  const params = ["select=*", `review_id=eq.${_sbRestFilterValue(reviewId)}`, "order=sort_order.asc", "limit=1000"];
+  const cleanOrder = Number(sectionOrder || 0);
+  const cleanSection = _kpiText(section);
+  if (Number.isFinite(cleanOrder) && cleanOrder > 0) params.push(`section_order=eq.${_sbRestFilterValue(cleanOrder)}`);
+  if (cleanSection) params.push(`section=eq.${_sbRestFilterValue(cleanSection)}`);
+  const rows = await supabaseDb.request(`/${KPI_SCORE_DETAILS_VIEW}?${params.join("&")}`);
+  const details = (Array.isArray(rows) ? rows : []).map(_kpiScore);
+  if (!details.length) return null;
+  const totalWeight = details.reduce((sum, item) => sum + Math.max(0, _kpiNumber(item.weightPercent, 0)), 0);
+  const actual = details.reduce((sum, item) => {
+    if (item.actualPercent === null || typeof item.actualPercent === "undefined") return sum;
+    const weight = Math.max(0, _kpiNumber(item.weightPercent, 0));
+    return sum + Math.min(Math.max(_kpiNumber(item.actualPercent, 0), 0), weight);
+  }, 0);
+  const completedCount = details.filter((item) => item.actualPercent !== null && typeof item.actualPercent !== "undefined").length;
+  if (!completedCount) return null;
+  const finalPercentage = totalWeight > 0 ? Number(((actual / totalWeight) * 100).toFixed(2)) : 0;
+  const evaluations = await _kpiStandardEvaluations(summary.standardId || summary.standard_id).catch(() => []);
+  return {
+    ...summary,
+    finalPercentage,
+    totalWeightPercent: totalWeight,
+    itemCount: details.length,
+    completedItemCount: completedCount,
+    performanceRating: _kpiGradeFromEvaluations(finalPercentage, evaluations),
+    sectionOrder: details[0]?.sectionOrder || cleanOrder || 0,
+    section: details[0]?.section || cleanSection || "",
+  };
+}
+async function _kpiApplySectionScoreFilter(reviews = [], filter = {}) {
+  if (!filter?.sectionOrder && !filter?.section) return reviews;
+  const out = [];
+  for (const review of reviews || []) {
+    const sectionSummary = await _kpiSectionScoreSummary(review, filter).catch(() => null);
+    if (sectionSummary) out.push(sectionSummary);
+  }
+  return out;
 }
 async function _kpiCreator(req) {
   const row = await _sbFindSessionTeamMember(req).catch(() => null);
@@ -32366,7 +32438,8 @@ app.get("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, res
       .filter((standard) => _kpiStandardVisibleForAccess(req, standard, currentUser));
     const selectedStandardId = id && standards.some((standard) => String(standard.id) === id) ? id : standards[0]?.id || "";
     const items = selectedStandardId ? await _kpiStandardItems(selectedStandardId) : [];
-    res.json({ ok: true, standards, selectedStandardId, items, sections: _kpiSections(items) });
+    const evaluations = selectedStandardId ? await _kpiStandardEvaluations(selectedStandardId) : [];
+    res.json({ ok: true, standards, selectedStandardId, items, sections: _kpiSections(items), evaluations });
   } catch (error) {
     console.error("[kpis] standards failed", error);
     res.status(500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -32388,6 +32461,7 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
     const normalizedAcademicYear = yearMatch ? `${yearStart}-${yearEnd}` : null;
     const title = _kpiText(body.title) || `${department} ${rolePosition} KPIs`;
     const itemsInput = Array.isArray(body.items) ? body.items : [];
+    const evaluationsInput = Array.isArray(body.evaluations) ? body.evaluations : [];
     if (!department || !rolePosition) return res.status(400).json({ ok: false, message: "Department and role/position are required." });
     if (!itemsInput.length) return res.status(400).json({ ok: false, message: "Add at least one KPI subsection inside a section." });
     const creator = await _kpiCreator(req);
@@ -32481,7 +32555,34 @@ app.post("/api/kpis/standards", requireAuth, requirePage("KPIs"), async (req, re
         : await supabaseDb.insert(KPI_STANDARD_ITEMS_TABLE, itemPayload);
       if (savedItem?.id) savedItems.push(savedItem);
     }
-    res.json({ ok: true, standard: _kpiStandard(standard), items: savedItems.map(_kpiItem), sections: _kpiSections(savedItems.map(_kpiItem)) });
+
+    await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?standard_id=eq.${_sbRestFilterValue(standardId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: { is_active: false },
+    }).catch((error) => {
+      if (_kpiMissingSchema(error)) return null;
+      throw error;
+    });
+    const savedEvaluations = [];
+    const evaluationRows = evaluationsInput
+      .map((raw, index) => ({
+        standard_id: String(standardId),
+        evaluation_order: Math.max(1, Math.round(_kpiNumber(raw.evaluationOrder || raw.evaluation_order, index + 1))),
+        score_percentage: Math.max(0, Math.min(100, _kpiNumber(raw.scorePercentage ?? raw.score_percentage, 0))),
+        grade: _kpiText(raw.grade) || `Grade ${index + 1}`,
+        is_active: true,
+      }))
+      .filter((row) => row.grade);
+    for (const evaluationPayload of evaluationRows) {
+      const existingEvaluationRows = await supabaseDb.request(`/${KPI_STANDARD_EVALUATIONS_TABLE}?select=*&standard_id=eq.${_sbRestFilterValue(String(standardId))}&evaluation_order=eq.${_sbRestFilterValue(evaluationPayload.evaluation_order)}&limit=1`);
+      const existingEvaluation = Array.isArray(existingEvaluationRows) ? existingEvaluationRows[0] || null : null;
+      const savedEvaluation = existingEvaluation?.id
+        ? await supabaseDb.updateById(KPI_STANDARD_EVALUATIONS_TABLE, existingEvaluation.id, evaluationPayload)
+        : await supabaseDb.insert(KPI_STANDARD_EVALUATIONS_TABLE, evaluationPayload);
+      if (savedEvaluation?.id) savedEvaluations.push(savedEvaluation);
+    }
+    res.json({ ok: true, standard: _kpiStandard(standard), items: savedItems.map(_kpiItem), sections: _kpiSections(savedItems.map(_kpiItem)), evaluations: savedEvaluations.map(_kpiEvaluation) });
   } catch (error) {
     console.error("[kpis] save standard failed", error);
     res.status(Number(error?.status || error?.statusCode) || 500).json({ ok: false, message: _kpiErrorMessage(error) });
@@ -32524,6 +32625,9 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
     const teamMemberId = String(req.query.teamMemberId || req.query.team_member_id || "").trim();
     const department = String(req.query.department || "").trim();
     const rolePosition = String(req.query.rolePosition || req.query.position || "").trim();
+    const standardId = String(req.query.standardId || req.query.standard_id || "").trim();
+    const sectionOrder = String(req.query.sectionOrder || req.query.section_order || "").trim();
+    const section = String(req.query.section || "").trim();
     const from = String(req.query.from || "").trim();
     const to = String(req.query.to || "").trim();
     const rawStatus = String(req.query.status || "").trim().toLowerCase();
@@ -32531,14 +32635,16 @@ app.get("/api/kpis/reviews", requireAuth, requirePage("KPIs"), async (req, res) 
     if (teamMemberId) params.push(`team_member_id=eq.${_sbRestFilterValue(teamMemberId)}`);
     if (department) params.push(`department=eq.${_sbRestFilterValue(department)}`);
     if (rolePosition) params.push(`role_position=eq.${_sbRestFilterValue(rolePosition)}`);
+    if (standardId) params.push(`standard_id=eq.${_sbRestFilterValue(standardId)}`);
     if (status) params.push(`status=eq.${_sbRestFilterValue(status)}`);
     if (from) params.push(`review_month=gte.${_sbRestFilterValue(_kpiMonthStart(from))}`);
     if (to) params.push(`review_month=lte.${_sbRestFilterValue(_kpiMonthStart(to))}`);
     const rows = await supabaseDb.request(`/${KPI_REVIEW_SUMMARY_VIEW}?${params.join("&")}`);
     const currentUser = await _kpiCurrentUserContext(req);
-    const reviews = (Array.isArray(rows) ? rows : [])
+    let reviews = (Array.isArray(rows) ? rows : [])
       .map(_kpiSummary)
       .filter((summary) => _kpiReviewVisibleForAccess(req, summary, currentUser));
+    reviews = await _kpiApplySectionScoreFilter(reviews, { sectionOrder, section });
     res.json({ ok: true, reviews, accessLevel: currentUser.accessLevel });
   } catch (error) {
     console.error("[kpis] list reviews failed", error);
