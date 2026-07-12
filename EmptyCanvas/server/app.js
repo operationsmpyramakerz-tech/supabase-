@@ -32270,6 +32270,29 @@ app.post("/api/kpis/admin/verify", requireAuth, requirePage("KPIs"), async (req,
   }
 });
 
+app.post("/api/kpis/evidence-upload", requireAuth, requirePage("KPIs"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const body = req.body || {};
+    const dataUrl = String(body.dataUrl || body.data_url || "").trim();
+    const originalName = _kpiText(body.filename || body.name || "evidence-file");
+    const size = Number(body.size || 0);
+    const maxSize = 15 * 1024 * 1024;
+    if (!dataUrl) return res.status(400).json({ ok: false, message: "Evidence file is required." });
+    if (Number.isFinite(size) && size > maxSize) return res.status(400).json({ ok: false, message: "Evidence file must be 15 MB or smaller." });
+    const safeName = (originalName || "evidence-file").replace(/[^a-z0-9._-]/gi, "_").replace(/^_+|_+$/g, "") || "evidence-file";
+    const url = await uploadToBlobFromBase64(dataUrl, `kpi-evidence/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`);
+    return res.status(201).json({ ok: true, file: { name: originalName || safeName, url } });
+  } catch (error) {
+    console.error("[kpis] evidence upload failed", error?.details || error?.body || error?.message || error);
+    const raw = String(error?.message || "");
+    const message = raw.includes("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING")
+      ? "File upload is not configured yet. Add Supabase Storage bucket or Vercel Blob token."
+      : "Failed to upload evidence file.";
+    return res.status(Number(error?.status || error?.statusCode) || 500).json({ ok: false, message });
+  }
+});
+
 app.get("/api/kpis/meta", requireAuth, requirePage("KPIs"), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
