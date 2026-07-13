@@ -1743,3 +1743,68 @@ body.task-management-page{
 .task-management-page .tm-dialog--work-page .tm-work-page__form-grid{
   margin-top:20px;
 }
+
+/* My Tasks team task details v12 --------------------------------------------
+   Static ownership frames sit outside the complete card boundary. Department
+   cards are highlighted for Edit/Admin users; assigned person cards are
+   highlighted for View users. */
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine{
+  isolation:isolate;
+  overflow:visible!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine.tm-status--not_started::before{
+  content:""!important;
+  position:absolute!important;
+  inset:-5px!important;
+  width:auto!important;
+  height:auto!important;
+  z-index:0!important;
+  padding:3px!important;
+  border-radius:24px!important;
+  background:linear-gradient(135deg,#171717 0 49.5%,#ef7d16 50.5% 100%)!important;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;
+  -webkit-mask-composite:xor!important;
+  mask-composite:exclude!important;
+  filter:drop-shadow(0 4px 8px rgba(0,0,0,.13))!important;
+  animation:none!important;
+  transform:none!important;
+  pointer-events:none!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine>*{
+  position:relative;
+  z-index:2;
+}
+
+.task-management-page .tm-team-task-card.tm-team-task-card--mine{
+  isolation:isolate;
+  overflow:visible!important;
+  border-color:#c6c6c6!important;
+  box-shadow:0 18px 38px rgba(0,0,0,.15)!important;
+}
+.task-management-page .tm-team-task-card.tm-team-task-card--mine.tm-status--not_started::after{
+  content:"";
+  position:absolute;
+  inset:-5px;
+  z-index:0;
+  padding:3px;
+  border-radius:21px;
+  background:linear-gradient(135deg,#171717 0 49.5%,#ef7d16 50.5% 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  filter:drop-shadow(0 4px 8px rgba(0,0,0,.13));
+  pointer-events:none;
+}
+.task-management-page .tm-team-task-card.tm-team-task-card--mine::before{
+  z-index:3;
+}
+.task-management-page .tm-team-task-card.tm-team-task-card--mine>*{
+  position:relative;
+  z-index:2;
+}
+.task-management-page .tm-team-task-card__footer .tm-team-task-card__open{
+  color:#252525;
+}
+.task-management-page .tm-team-task-card__footer .tm-team-task-card__open:hover{
+  color:#b85a08;
+}
