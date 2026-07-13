@@ -38840,6 +38840,8 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
         return haystack.includes(query);
       });
     }
+    const canManageDepartment = req.taskManagementView === "my" && _tmCanManageDepartmentWork(req);
+    tickets = tickets.map((ticket) => _tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment));
     return res.json({ ok: true, tickets });
   } catch (error) {
     console.error("[task-management] list error:", error?.details || error?.message || error);
@@ -38856,7 +38858,8 @@ app.get("/api/task-management/:id", requireAuth, requireTaskManagementView(), as
     if (!_tmTicketBelongsToView(ticket, currentUser, req.taskManagementView)) {
       return res.status(403).json({ ok: false, error: "This ticket is not available in the selected Task Management view." });
     }
-    return res.json({ ok: true, ticket });
+    const canManageDepartment = req.taskManagementView === "my" && _tmCanManageDepartmentWork(req);
+    return res.json({ ok: true, ticket: _tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment) });
   } catch (error) {
     console.error("[task-management] detail error:", error?.details || error?.message || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load ticket." });
@@ -39114,9 +39117,8 @@ function _tmCanEditAssignmentWork(req, assignment = {}, currentUser = {}) {
   return _tmTaskAccessLevel(req) === "view" && _tmSameAssignmentMember(assignment, currentUser);
 }
 
-function _tmAssignmentForViewer(assignment = {}, currentUser = {}, revealAll = false) {
+function _tmAssignmentForViewer(assignment = {}, currentUser = {}, revealAll = false, published = false) {
   const own = _tmSameAssignmentMember(assignment, currentUser);
-  const published = _tmStatus(assignment?.status) === "completed";
   if (revealAll || own || published) return { ...assignment };
   return {
     ...assignment,
@@ -39127,11 +39129,62 @@ function _tmAssignmentForViewer(assignment = {}, currentUser = {}, revealAll = f
   };
 }
 
-function _tmWorkflowForViewer(workflow = {}, currentUser = {}, revealAll = false) {
+function _tmWorkflowForViewer(workflow = {}, currentUser = {}, options = {}) {
+  const revealAll = options === true || !!options?.revealAll;
+  const published = !!options?.published;
   return {
-    assignments: (workflow.assignments || []).map((assignment) => _tmAssignmentForViewer(assignment, currentUser, revealAll)),
+    assignments: (workflow.assignments || []).map((assignment) => _tmAssignmentForViewer(assignment, currentUser, revealAll, published)),
     edges: Array.isArray(workflow.edges) ? workflow.edges : [],
   };
+}
+
+function _tmSectionForViewer(section = {}, currentUser = {}, view = "", canManageDepartment = false) {
+  const published = _tmStatus(section?.status) === "completed";
+  const managerPreview = view === "my" && canManageDepartment && _tmSameText(section?.department || "", currentUser?.department || "");
+  if (published || managerPreview) return { ...section };
+  return {
+    ...section,
+    completionNote: "",
+    workReport: "",
+    rejectionReason: "",
+    workLink: "",
+    workFile: null,
+    completedByName: "",
+  };
+}
+
+function _tmTicketForViewer(ticket = {}, currentUser = {}, view = "", canManageDepartment = false) {
+  return {
+    ...ticket,
+    sections: (ticket.sections || []).map((section) => _tmSectionForViewer(section, currentUser, view, canManageDepartment)),
+  };
+}
+
+function _tmBuildTeamDraftReport(workflow = {}, existingReport = "") {
+  const startMarker = "--- Team member submissions (auto-synced) ---";
+  const endMarker = "--- End team member submissions ---";
+  const escapedStart = startMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedEnd = endMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const manual = String(existingReport || "")
+    .replace(new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}`, "g"), "")
+    .trim();
+  const submissions = (workflow.assignments || []).filter((assignment) =>
+    assignment?.workReport || assignment?.workLink || assignment?.workFile?.url || assignment?.rejectionReason);
+  const generated = submissions.map((assignment) => {
+    const lines = [`${assignment.assigneeName || "Team member"} — ${_tmStatusLabel(assignment.status)}`];
+    if (assignment.workReport) lines.push(assignment.workReport);
+    if (assignment.rejectionReason) lines.push(`Rejected reason: ${assignment.rejectionReason}`);
+    if (assignment.workLink) lines.push(`Work link: ${assignment.workLink}`);
+    if (assignment.workFile?.url) lines.push(`Work file: ${assignment.workFile.name || "Open work file"} — ${assignment.workFile.url}`);
+    return lines.join("\n");
+  }).join("\n\n");
+  return [manual, generated ? `${startMarker}\n${generated}\n${endMarker}` : ""].filter(Boolean).join("\n\n");
+}
+
+function _tmLatestTeamWorkAsset(workflow = {}, field = "") {
+  const sorted = (workflow.assignments || []).slice().sort((a, b) =>
+    String(b?.updatedAt || b?.createdAt || "").localeCompare(String(a?.updatedAt || a?.createdAt || "")));
+  return sorted.find((assignment) => field === "file" ? assignment?.workFile?.url : assignment?.workLink) || null;
 }
 
 function _tmAssignmentPrerequisites(workflow = {}, assignment = {}) {
@@ -39372,7 +39425,7 @@ app.get("/api/task-management/sections/:id/people-workflow", requireAuth, requir
       _tmMembersForDepartment(section.department),
       _tmLoadPeopleWorkflow(sectionId),
     ]);
-    const visibleWorkflow = _tmWorkflowForViewer(workflow, currentUser, _tmTaskAccessLevel(req) === "admin" || _taskManagementViewIsAdmin(req, "my"));
+    const visibleWorkflow = _tmWorkflowForViewer(workflow, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: _tmStatus(section?.status) === "completed" });
     return res.json({
       ok: true,
       section,
@@ -39473,7 +39526,7 @@ app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requir
     }
 
     const saved = await _tmLoadPeopleWorkflow(sectionId);
-    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, _tmTaskAccessLevel(req) === "admin" || _taskManagementViewIsAdmin(req, "my"));
+    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: _tmStatus(section?.status) === "completed" });
     return res.json({ ok: true, members, assignments: visibleWorkflow.assignments, edges: visibleWorkflow.edges });
   } catch (error) {
     console.error("[task-management] people workflow save error:", error?.details || error?.message || error);
@@ -39546,7 +39599,21 @@ app.patch("/api/task-management/assignments/:id/work", requireAuth, requireTaskM
     await supabaseDb.updateById(_tmAssignmentsTable(), assignmentId, patch);
 
     const saved = await _tmLoadPeopleWorkflow(assignment.sectionId);
-    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, _tmTaskAccessLevel(req) === "admin" || _taskManagementViewIsAdmin(req, "my"));
+    const liveSection = _tmSerializeSection(sectionRow);
+    const teamDraftReport = _tmBuildTeamDraftReport(saved, liveSection.workReport || liveSection.completionNote || "");
+    const latestLinkOwner = _tmLatestTeamWorkAsset(saved, "link");
+    const latestFileOwner = _tmLatestTeamWorkAsset(saved, "file");
+    await supabaseDb.updateById(_tmSectionsTable(), assignment.sectionId, {
+      work_report: teamDraftReport || null,
+      completion_note: teamDraftReport || null,
+      work_link: latestLinkOwner?.workLink || liveSection.workLink || null,
+      work_file_name: latestFileOwner?.workFile?.name || liveSection.workFile?.name || null,
+      work_file_url: latestFileOwner?.workFile?.url || liveSection.workFile?.url || null,
+      work_file_type: latestFileOwner?.workFile?.type || liveSection.workFile?.type || null,
+      work_file_size: latestFileOwner?.workFile?.size || liveSection.workFile?.size || null,
+      updated_at: new Date().toISOString(),
+    });
+    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: _tmStatus(section?.status) === "completed" });
     const updatedAssignment = (visibleWorkflow.assignments || []).find((item) => String(item.id) === assignmentId) || null;
     return res.json({
       ok: true,
