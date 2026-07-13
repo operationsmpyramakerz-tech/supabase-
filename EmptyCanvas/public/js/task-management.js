@@ -57,6 +57,7 @@
     query: '',
     selectedTicket: null,
     selectedSection: null,
+    readonlySection: null,
     view: TASK_VIEW,
     currentUser: {},
     editingBlockId: null,
@@ -94,6 +95,7 @@
   const metaOverlay = $('tmTicketMetaOverlay');
   const blockOverlay = $('tmBlockEditorOverlay');
   const workflowOverlay = $('tmWorkflowOverlay');
+  const sectionDetailsOverlay = $('tmSectionDetailsOverlay');
   const adminOverlay = $('tmAdminVerifyOverlay');
   const updateOverlay = $('tmUpdateSectionOverlay');
   const metaForm = $('tmTicketMetaForm');
@@ -131,7 +133,7 @@
   function isOverlayOpen(overlay) { return !!overlay && !overlay.hidden; }
 
   function syncModalState() {
-    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, adminOverlay, updateOverlay].some(isOverlayOpen);
+    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, sectionDetailsOverlay, adminOverlay, updateOverlay].some(isOverlayOpen);
     document.body.classList.toggle('tm-modal-open', modalOpen);
   }
 
@@ -646,9 +648,7 @@
     svg.setAttribute('width', String(dimensions.width));
     svg.setAttribute('height', String(dimensions.height));
     svg.setAttribute('viewBox', `0 0 ${dimensions.width} ${dimensions.height}`);
-    const markerMarkup = className === 'tm-builder-arrow'
-      ? `<marker id="${markerId}" markerWidth="6.5" markerHeight="6.5" refX="5.5" refY="2.45" orient="auto"><path d="M0,0 L0,4.9 L5.8,2.45 z" class="tm-arrow-marker" /></marker>`
-      : `<marker id="${markerId}" markerWidth="10" markerHeight="10" refX="8" refY="3.7" orient="auto"><path d="M0,0 L0,7.4 L8.8,3.7 z" class="tm-arrow-marker" /></marker>`;
+    const markerMarkup = `<marker id="${markerId}" markerWidth="6.5" markerHeight="6.5" refX="5.5" refY="2.45" orient="auto"><path d="M0,0 L0,4.9 L5.8,2.45 z" class="tm-arrow-marker" /></marker>`;
     svg.innerHTML = `<defs>${markerMarkup}</defs>${(edges || []).map((edge) => {
       const from = getNode(edge.from ?? edge.fromSectionId ?? edge.from_section_id);
       const to = getNode(edge.to ?? edge.toSectionId ?? edge.to_section_id);
@@ -1399,12 +1399,13 @@
     const unlocked = isSectionUnlocked(ticket, section);
     const canStart = unlocked && section.status === 'not_started';
     const canComplete = unlocked && (section.status === 'in_progress' || section.status === 'not_started');
+    const canManage = state.view === 'my' && allowed && unlocked;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
       : (section.completedAt ? `Completed ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
     const number = section.workflowNumber || String(nodeIndex + 1);
     return `
-      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
+      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer tm-workflow-card--interactive ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" data-tm-open-section="${escapeHtml(section.id)}" role="button" tabindex="0" aria-label="Open task details for ${escapeHtml(section.department || 'department')}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top">
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
           <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>Workflow block ${escapeHtml(number)}</small></div>
@@ -1417,8 +1418,46 @@
           ${section.details ? `<div class="tm-workflow-card__details"><span>Implementation details</span><p>${escapeHtml(section.details)}</p></div>` : ''}
           ${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}
         </div>
-        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${allowed && unlocked ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
+        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${canManage ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
       </article>`;
+  }
+
+  function openReadonlySectionDetails(sectionId) {
+    const ticket = state.selectedTicket;
+    const section = (ticket?.sections || []).find((item) => String(item.id) === String(sectionId));
+    if (!ticket || !section || !sectionDetailsOverlay) return;
+    state.readonlySection = section;
+
+    const layoutSection = graphLayout(ticket).nodes.find((item) => String(item.id) === String(section.id));
+    const number = layoutSection?.workflowNumber || '—';
+    const department = section.department || 'Department';
+    const attachment = section.attachment?.url
+      ? `<a class="tm-section-details__file" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><span class="tm-section-details__file-icon"><i data-feather="paperclip"></i></span><span><b>${escapeHtml(section.attachment.name || 'Open attachment')}</b><small>${escapeHtml(formatBytes(section.attachment.size || section.attachment.sizeBytes || 0) || 'Attached file')}</small></span><i data-feather="external-link"></i></a>`
+      : '<div class="tm-section-details__empty"><i data-feather="paperclip"></i><span>No files attached to this task.</span></div>';
+
+    const kicker = $('tmSectionDetailsKicker');
+    const title = $('tmSectionDetailsTitle');
+    const status = $('tmSectionDetailsStatus');
+    const body = $('tmSectionDetailsBody');
+    if (kicker) kicker.textContent = `Workflow block ${number}`;
+    if (title) title.textContent = department;
+    if (status) {
+      status.className = `tm-status-pill ${statusClass(section.status)}`;
+      status.innerHTML = `<i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(statusLabel(section.status))}`;
+    }
+    if (body) {
+      body.innerHTML = `
+        <div class="tm-section-details__grid">
+          <div class="tm-section-details__item"><span>Project</span><b>${escapeHtml(ticket.title || '—')}</b></div>
+          <div class="tm-section-details__item"><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Requested action</span><p>${escapeHtml(section.request || 'No requested action provided.')}</p></div>
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Implementation details</span><p>${escapeHtml(section.details || 'No implementation details provided.')}</p></div>
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Files</span>${attachment}</div>
+          ${section.completionNote ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div>` : ''}
+        </div>`;
+    }
+    hydrateIcons(sectionDetailsOverlay);
+    setOverlay(sectionDetailsOverlay, true);
   }
 
   function renderWorkflow(ticket) {
@@ -1451,6 +1490,7 @@
     state.selectedTicket = ticket;
     renderWorkflow(ticket);
     setOverlay(workflowOverlay, true);
+    window.requestAnimationFrame(() => renderWorkflow(ticket));
   }
 
   function openEditBuilder(ticket, adminPassword = '') {
@@ -1487,13 +1527,17 @@
     syncBuilderModeLabels();
     setOverlay(adminOverlay, false);
     setOverlay(workflowOverlay, false);
-    renderBuilder();
     setOverlay(builderOverlay, true);
     window.requestAnimationFrame(() => {
-      if (builderCanvasWrap) {
-        builderCanvasWrap.scrollLeft = 0;
-        builderCanvasWrap.scrollTop = 0;
-      }
+      renderBuilder();
+      window.requestAnimationFrame(() => {
+        measureBuilderNodes();
+        renderBuilderArrows();
+        if (builderCanvasWrap) {
+          builderCanvasWrap.scrollLeft = 0;
+          builderCanvasWrap.scrollTop = 0;
+        }
+      });
     });
   }
 
@@ -1721,6 +1765,7 @@
           setOverlay(blockOverlay, false);
         }
         if (which === 'workflow') setOverlay(workflowOverlay, false);
+        if (which === 'section-details') { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
         if (which === 'admin') { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         if (which === 'update') setOverlay(updateOverlay, false);
         return;
@@ -1753,6 +1798,12 @@
       const editAction = event.target.closest('[data-tm-edit-section]');
       if (editAction) { openSectionUpdate(editAction.dataset.tmEditSection); return; }
 
+      const sectionCard = event.target.closest('[data-tm-open-section]');
+      if (sectionCard && !event.target.closest('a, button')) {
+        openReadonlySectionDetails(sectionCard.dataset.tmOpenSection);
+        return;
+      }
+
       const ticketCard = event.target.closest('[data-ticket-id]');
       if (ticketCard) {
         const ticket = state.tickets.find((item) => String(item.id) === String(ticketCard.dataset.ticketId));
@@ -1765,7 +1816,8 @@
         const openSelect = [...modernSelectControllers].find((controller) => !controller.menu.hidden);
         if (openSelect) { openSelect.close({ focus: true }); return; }
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
-        if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
+        if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
+        else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
         else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
         else if (isOverlayOpen(metaOverlay)) {
@@ -1782,6 +1834,12 @@
         else if (isOverlayOpen(builderOverlay)) setOverlay(builderOverlay, false);
       }
       if (event.key === 'Enter' || event.key === ' ') {
+        const sectionCard = document.activeElement?.closest?.('[data-tm-open-section]');
+        if (sectionCard && isOverlayOpen(workflowOverlay) && !isOverlayOpen(sectionDetailsOverlay)) {
+          event.preventDefault();
+          openReadonlySectionDetails(sectionCard.dataset.tmOpenSection);
+          return;
+        }
         const card = document.activeElement?.closest?.('[data-ticket-id]');
         if (card) { event.preventDefault(); card.click(); }
       }
