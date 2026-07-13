@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/css/style.css?v=expenses-legacy-layout-v1"/>
   <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3"/>
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/expenses-redesign.css?v=expenses-dashboard-v1"/>
   <style>
     /* 🔒 Critical: prevent sidebar links flash before permissions load */
     body.permissions-loading .sidebar li { display: none !important; }
@@ -2635,56 +2636,131 @@ body.expense-shots-modal-open{
       </div>
     </header>
 
-    <main class="expenses-layout">
+    <main class="expenses-layout expenses-dashboard">
 
-      <section class="total-card" aria-label="Expenses summary">
-        <div class="total-card__grid">
+      <aside class="expenses-dashboard__sidebar" aria-label="Expense analytics">
+        <section class="total-card expenses-summary-card" aria-label="Expenses summary">
+          <div class="expenses-summary-card__head">
+            <div>
+              <span class="expenses-eyebrow">Expense summary</span>
+              <div class="total-label">Current balance</div>
+            </div>
+            <span class="expenses-summary-card__period">Since settlement</span>
+          </div>
+
           <div class="total-card__main">
-            <div class="total-label">All expenses</div>
             <div class="total-amount" id="totalAmount">£0</div>
             <div class="total-currency">EGP</div>
           </div>
+
           <div class="total-card__side" aria-label="Cash flow summary">
             <div class="summary-pill summary-pill--in">
-              <span class="summary-pill__label">Cash in</span>
-              <span class="summary-pill__value" id="cashInTotal">+£0</span>
+              <span class="summary-pill__icon" aria-hidden="true"><i data-feather="arrow-down-left"></i></span>
+              <span class="summary-pill__copy">
+                <span class="summary-pill__label">Cash in</span>
+                <span class="summary-pill__value" id="cashInTotal">+£0</span>
+              </span>
             </div>
             <div class="summary-pill summary-pill--out">
-              <span class="summary-pill__label">Cash out</span>
-              <span class="summary-pill__value" id="cashOutTotal">-£0</span>
+              <span class="summary-pill__icon" aria-hidden="true"><i data-feather="arrow-up-right"></i></span>
+              <span class="summary-pill__copy">
+                <span class="summary-pill__label">Cash out</span>
+                <span class="summary-pill__value" id="cashOutTotal">-£0</span>
+              </span>
             </div>
           </div>
-        </div>
 
-        <div class="total-card__actions">
-          <button id="settleAccountBtn" class="settle-btn" type="button">Settled my account</button>
-          <div id="lastSettledTime" class="last-settled" aria-live="polite">
-            <span class="last-settled__date">—</span>
-            <span class="last-settled__receipt"></span>
+          <div class="total-card__actions">
+            <button id="settleAccountBtn" class="settle-btn" type="button">
+              <i data-feather="check-circle"></i>
+              <span>Settled my account</span>
+            </button>
+            <div id="lastSettledTime" class="last-settled" aria-live="polite">
+              <span class="last-settled__label">Last settlement</span>
+              <span class="last-settled__date">—</span>
+              <span class="last-settled__receipt"></span>
+            </div>
           </div>
+        </section>
+
+        <section class="expenses-analytics-card expenses-monthly-card" aria-labelledby="monthlyExpenseTitle">
+          <div class="expenses-card-head">
+            <div>
+              <span class="expenses-eyebrow">Monthly overview</span>
+              <h2 id="monthlyExpenseTitle">Expenses by month</h2>
+            </div>
+            <label class="expenses-year-select" aria-label="Select chart year">
+              <i data-feather="calendar"></i>
+              <select id="expenseChartYear"></select>
+              <i data-feather="chevron-down"></i>
+            </label>
+          </div>
+          <div id="expenseMonthlyChart" class="expense-monthly-chart" aria-live="polite"></div>
+        </section>
+
+        <section class="expenses-analytics-card expenses-types-card" aria-labelledby="expenseTypesTitle">
+          <div class="expenses-card-head">
+            <div>
+              <span class="expenses-eyebrow">Selected month</span>
+              <h2 id="expenseTypesTitle">Expense types</h2>
+            </div>
+            <span id="expenseTypesMonth" class="expenses-selected-month">—</span>
+          </div>
+          <div id="expenseTypesChart" class="expense-types-chart" aria-live="polite"></div>
+        </section>
+      </aside>
+
+      <section class="expenses-dashboard__main" aria-label="Expense activity">
+        <div class="expense-action-grid" aria-label="Expense actions">
+          <button id="cashInBtn" class="cash-btn cash-in" type="button">
+            <span class="cash-btn__icon" aria-hidden="true"><i data-feather="arrow-down-left"></i></span>
+            <span class="cash-btn__copy">
+              <strong>Cash in</strong>
+              <small>Record incoming money</small>
+            </span>
+            <span class="cash-btn__arrow" aria-hidden="true"><i data-feather="arrow-right"></i></span>
+          </button>
+          <button id="cashOutBtn" class="cash-btn cash-out" type="button">
+            <span class="cash-btn__icon" aria-hidden="true"><i data-feather="arrow-up-right"></i></span>
+            <span class="cash-btn__copy">
+              <strong>Cash out</strong>
+              <small>Record outgoing money</small>
+            </span>
+            <span class="cash-btn__arrow" aria-hidden="true"><i data-feather="arrow-right"></i></span>
+          </button>
         </div>
+
+        <section class="expenses-activity-card">
+          <div class="expenses-activity-head">
+            <div>
+              <span class="expenses-eyebrow">Transactions</span>
+              <h2>Expense details</h2>
+            </div>
+            <button id="viewAllBtn" class="view-all-chip" type="button">
+              <span>View all</span>
+              <i data-feather="external-link"></i>
+            </button>
+          </div>
+
+          <div class="expenses-overview" aria-label="Expenses overview controls">
+            <div class="expenses-filters" role="tablist" aria-label="Expense filters">
+              <button type="button" class="expenses-filter is-active" data-expense-filter="recent" aria-selected="true">Recent</button>
+              <button type="button" class="expenses-filter" data-expense-filter="cash-in" aria-selected="false">Cash in</button>
+              <button type="button" class="expenses-filter" data-expense-filter="cash-out" aria-selected="false">Cash out</button>
+            </div>
+            <span class="expenses-period-note"><i data-feather="clock"></i> Last 7 days</span>
+          </div>
+
+          <div class="expenses-ledger-head" aria-hidden="true">
+            <span>Date / Reason</span>
+            <span>Type & route</span>
+            <span>Amount</span>
+            <span>Receipt</span>
+          </div>
+
+          <div id="expensesContent" class="expenses-content"></div>
+        </section>
       </section>
-
-      <section class="expenses-overview" aria-label="Expenses overview controls">
-        <div class="expenses-header">
-          <span class="expenses-title">Expenses overview</span>
-          <button id="viewAllBtn" class="view-all-chip">View all</button>
-        </div>
-
-        <div class="expense-buttons">
-          <button id="cashInBtn" class="cash-btn cash-in">+ CASH IN</button>
-          <button id="cashOutBtn" class="cash-btn cash-out">- CASH OUT</button>
-        </div>
-
-        <div class="expenses-filters" role="tablist" aria-label="Expense filters">
-          <button type="button" class="expenses-filter is-active" data-expense-filter="recent" aria-selected="true">Recent</button>
-          <button type="button" class="expenses-filter" data-expense-filter="cash-in" aria-selected="false">Cash in</button>
-          <button type="button" class="expenses-filter" data-expense-filter="cash-out" aria-selected="false">Cash out</button>
-        </div>
-      </section>
-
-      <!-- Render expenses here -->
-      <div id="expensesContent"></div>
 
     </main>
   </div>
@@ -2993,7 +3069,7 @@ body.expense-shots-modal-open{
 
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=events-sidebar-access-fix-v3"></script>
-<script src="/js/expenses.js?v=no-data-empty-v1"></script>
+<script src="/js/expenses.js?v=expenses-dashboard-v1"></script>
 
   
 </body>
