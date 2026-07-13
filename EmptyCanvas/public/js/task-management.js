@@ -59,6 +59,7 @@
     selectedTicket: null,
     selectedSection: null,
     readonlySection: null,
+    readonlyAssignment: null,
     view: TASK_VIEW,
     currentUser: {},
     editingBlockId: null,
@@ -1718,11 +1719,12 @@
 
   function renderWorkflowCard(ticket, section, nodeIndex) {
     const unlocked = isSectionUnlocked(ticket, section);
-    const mine = state.view === 'my' && isMyDepartmentSection(section);
+    const belongsToMyDepartment = state.view === 'my' && isMyDepartmentSection(section);
+    const departmentOwner = belongsToMyDepartment && canEditDepartmentWork();
     const teamWorkflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
-    const hasTeamTasks = mine && Array.isArray(teamWorkflow?.assignments) && teamWorkflow.assignments.length > 0;
+    const hasTeamTasks = belongsToMyDepartment && Array.isArray(teamWorkflow?.assignments) && teamWorkflow.assignments.length > 0;
     const teamSubmissions = hasTeamTasks ? completedTeamSubmissionMarkup(teamWorkflow) : '';
-    const interactive = state.view !== 'my' || mine;
+    const interactive = state.view !== 'my' || departmentOwner;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
       : (section.completedAt ? `Done ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
@@ -1730,13 +1732,13 @@
     const interactiveAttrs = interactive
       ? ` data-tm-open-section="${escapeHtml(section.id)}" role="button" tabindex="0" aria-label="Open task details for ${escapeHtml(section.department || 'department')}"`
       : ' role="group" tabindex="-1" aria-disabled="true"';
-    const mineClass = mine ? ' tm-workflow-card--mine' : (state.view === 'my' ? ' tm-workflow-card--other-department' : '');
+    const mineClass = departmentOwner ? ' tm-workflow-card--mine' : (state.view === 'my' ? ' tm-workflow-card--other-department' : '');
     const teamClass = hasTeamTasks ? ' tm-workflow-card--has-team' : '';
     return `
       <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer${interactive ? ' tm-workflow-card--interactive' : ''}${mineClass}${teamClass} ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}"${interactiveAttrs} style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top">
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
-          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${mine ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
+          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${departmentOwner ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
           <span class="tm-status-pill ${statusClass(section.status)}"><i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}</span>
         </div>
         <div class="tm-builder-block__body tm-workflow-card__body">
@@ -1748,7 +1750,7 @@
           ${section.status === 'rejected' && section.rejectionReason ? `<div class="tm-workflow-card__rejection"><i data-feather="alert-circle"></i><span>${escapeHtml(section.rejectionReason)}</span></div>` : ''}
           ${teamSubmissions}
         </div>
-        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${mine ? `<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>${canEditDepartmentWork() ? 'Open department task' : 'View department task'}</span>` : ''}</div>
+        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${departmentOwner ? `<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>Open department task</span>` : ''}</div>
         ${hasTeamTasks ? '<span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span><span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>' : ''}
       </article>`;
   }
@@ -1851,7 +1853,7 @@
       ? ` data-tm-open-team-task="${escapeHtml(node.assignmentId)}" data-parent-section-id="${escapeHtml(node.parentSectionId)}" role="button" tabindex="0" aria-label="${editable ? 'Open' : 'View'} work page for ${escapeHtml(node.assigneeName || 'team member')}"`
       : ' role="group" tabindex="-1" aria-disabled="true"';
     const accessClass = openable ? ' tm-team-task-card--interactive' : ' tm-team-task-card--locked';
-    const ownClass = isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
+    const ownClass = accessLevel() === 'view' && isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
     return `
       <article class="tm-team-task-card${accessClass}${ownClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
         <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
@@ -1865,13 +1867,14 @@
           <strong>${escapeHtml(node.task || 'No task details')}</strong>
           <div class="tm-team-task-card__meta"><span><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>${attachment}</div>
         </div>
-        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"><i data-feather="${editable ? 'briefcase' : 'eye'}"></i><span>${editable ? 'Open Work Page' : 'View Work Page'}</span></button><i data-feather="arrow-right"></i></div>` : ''}
+        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"><i data-feather="${editable ? 'briefcase' : 'eye'}"></i><span>View Task Details</span></button><i data-feather="arrow-right"></i></div>` : ''}
         <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
 
   function openReadonlySectionDetails(sectionId) {
     const ticket = state.selectedTicket;
+    state.readonlyAssignment = null;
     const section = (ticket?.sections || []).find((item) => String(item.id) === String(sectionId));
     if (!ticket || !section || !sectionDetailsOverlay) return;
     if (state.view === 'my' && !isMyDepartmentSection(section)) return;
@@ -1896,8 +1899,10 @@
     const title = $('tmSectionDetailsTitle');
     const status = $('tmSectionDetailsStatus');
     const body = $('tmSectionDetailsBody');
+    const subtitle = $('tmSectionDetailsSub');
     if (kicker) kicker.textContent = `Workflow block ${number}`;
     if (title) title.textContent = department;
+    if (subtitle) subtitle.textContent = 'Read-only department task information and attached files.';
     if (status) {
       status.className = `tm-status-pill ${statusClass(section.status)}`;
       status.innerHTML = `<i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}`;
@@ -1926,6 +1931,57 @@
       assignTeamButton.disabled = false;
       assignTeamButton.title = 'Assign this department section to team members';
     }
+    hydrateIcons(sectionDetailsOverlay);
+    setOverlay(sectionDetailsOverlay, true);
+  }
+
+  function openTeamTaskDetails(assignmentId, sectionId = '') {
+    const found = findPeopleAssignment(assignmentId, sectionId);
+    if (!found || !canOpenTeamTask(found.assignment) || !sectionDetailsOverlay) return;
+
+    const assignment = { ...found.assignment, sectionId: found.section.id };
+    state.readonlySection = found.section;
+    state.readonlyAssignment = assignment;
+
+    const attachment = assignment.attachment?.url
+      ? `<a class="tm-section-details__file" href="${escapeHtml(assignment.attachment.url)}" target="_blank" rel="noopener noreferrer"><span class="tm-section-details__file-icon"><i data-feather="paperclip"></i></span><span><b>${escapeHtml(assignment.attachment.name || 'Open attachment')}</b><small>${escapeHtml(formatBytes(assignment.attachment.size || assignment.attachment.sizeBytes || 0) || 'Task attachment')}</small></span><i data-feather="external-link"></i></a>`
+      : '<div class="tm-section-details__empty"><i data-feather="paperclip"></i><span>No files attached to this team-member task.</span></div>';
+
+    const kicker = $('tmSectionDetailsKicker');
+    const title = $('tmSectionDetailsTitle');
+    const subtitle = $('tmSectionDetailsSub');
+    const status = $('tmSectionDetailsStatus');
+    const body = $('tmSectionDetailsBody');
+    if (kicker) kicker.textContent = `Team task ${assignment.sortOrder || '—'}`;
+    if (title) title.textContent = assignment.assigneeName || 'Team member task';
+    if (subtitle) subtitle.textContent = 'Read the task details assigned by your department manager, then open the work page to submit your progress.';
+    if (status) {
+      status.className = `tm-status-pill ${statusClass(assignment.status)}`;
+      status.innerHTML = `<i data-feather="${statusIcon(assignment.status)}"></i>${escapeHtml(sectionStatusLabel(assignment.status))}`;
+    }
+    if (body) {
+      body.innerHTML = `
+        <div class="tm-section-details__grid">
+          <div class="tm-section-details__item"><span>Assigned to</span><b>${escapeHtml(assignment.assigneeName || '—')}</b></div>
+          <div class="tm-section-details__item"><span>Delivery date</span><b>${escapeHtml(formatDate(assignment.deliveryDate))}</b></div>
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Assigned task</span><p>${escapeHtml(assignment.task || 'No assigned task provided.')}</p></div>
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Task details</span><p>${escapeHtml(assignment.details || 'No additional task details provided.')}</p></div>
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Task files</span>${attachment}</div>
+        </div>`;
+    }
+
+    const assignTeamButton = $('tmOpenPeopleWorkflowBtn');
+    if (assignTeamButton) assignTeamButton.hidden = true;
+    const openWorkButton = $('tmOpenWorkPageBtn');
+    if (openWorkButton) {
+      const editable = canEditTeamTask(assignment);
+      openWorkButton.hidden = !editable;
+      openWorkButton.disabled = !editable;
+      openWorkButton.title = editable ? 'Open the work data-entry page for this assigned task' : '';
+      const label = openWorkButton.querySelector('span');
+      if (label) label.textContent = 'Open Work Page';
+    }
+
     hydrateIcons(sectionDetailsOverlay);
     setOverlay(sectionDetailsOverlay, true);
   }
@@ -2297,6 +2353,14 @@
     setOverlay(workPageOverlay, true);
   }
 
+  function openWorkPageFromDetails() {
+    if (state.readonlyAssignment) {
+      openTeamWorkPage(state.readonlyAssignment.id, state.readonlyAssignment.sectionId || state.readonlySection?.id || '');
+      return;
+    }
+    openWorkPage();
+  }
+
   function findPeopleAssignment(assignmentId, sectionId = '') {
     const wanted = String(assignmentId || '');
     const sections = state.selectedTicket?.sections || [];
@@ -2313,6 +2377,7 @@
     const found = findPeopleAssignment(assignmentId, sectionId);
     if (!found || !canOpenTeamTask(found.assignment)) return;
     state.readonlySection = found.section;
+    state.readonlyAssignment = { ...found.assignment, sectionId: found.section.id };
     if (!configureWorkPage({ ...found.assignment, sectionId: found.section.id }, { type: 'assignment' })) return;
     setOverlay(sectionDetailsOverlay, false);
     setOverlay(workPageOverlay, true);
@@ -2595,7 +2660,7 @@
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
     $('tmEditProjectBtn')?.addEventListener('click', requestProjectEdit);
-    $('tmOpenWorkPageBtn')?.addEventListener('click', openWorkPage);
+    $('tmOpenWorkPageBtn')?.addEventListener('click', openWorkPageFromDetails);
     $('tmOpenPeopleWorkflowBtn')?.addEventListener('click', openPeopleWorkflow);
     $('tmRejectedReasonBtn')?.addEventListener('click', openRejectedReason);
     $('tmBlockAttachmentInput')?.addEventListener('change', (event) => uploadBlockAttachment(event.target.files?.[0]));
@@ -2712,7 +2777,7 @@
           setOverlay(blockOverlay, false);
         }
         if (which === 'workflow') setOverlay(workflowOverlay, false);
-        if (which === 'section-details') { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
+        if (which === 'section-details') { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         if (which === 'work-page') { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; state.workFile = null; setOverlay(workPageOverlay, false); }
         if (which === 'reject-reason') {
           if ($('tmWorkStatusInput')?.value === 'rejected' && !String(state.rejectedReasonDraft || '').trim()) {
@@ -2762,7 +2827,7 @@
 
       const teamTaskCard = event.target.closest('[data-tm-open-team-task]');
       if (teamTaskCard && !event.target.closest('a')) {
-        openTeamWorkPage(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
+        openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
         return;
       }
 
@@ -2786,7 +2851,7 @@
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
         if (isOverlayOpen(rejectReasonOverlay)) setOverlay(rejectReasonOverlay, false);
         else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; setOverlay(workPageOverlay, false); }
-        else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
+        else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
         else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
@@ -2816,7 +2881,7 @@
         const teamTaskCard = document.activeElement?.closest?.('[data-tm-open-team-task]');
         if (teamTaskCard && isOverlayOpen(workflowOverlay) && !isOverlayOpen(workPageOverlay)) {
           event.preventDefault();
-          openTeamWorkPage(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
+          openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
           return;
         }
         const sectionCard = document.activeElement?.closest?.('[data-tm-open-section]');
