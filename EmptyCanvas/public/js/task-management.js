@@ -94,7 +94,7 @@
     teamMembers: [],
     peopleWorkflowCache: new Map(),
     peopleWorkflowLoads: new Map(),
-    viewer: { zoom: 1, pan: null, pinch: null, width: 980, height: 650 },
+    viewer: { zoom: 1, offsetX: 0, offsetY: 0, pan: null, pinch: null, width: 980, height: 650, bounds: null, manual: false },
   };
 
   const grid = $('tmTicketGrid');
@@ -947,6 +947,48 @@
     if (announce) updateBuilderStatus(`Canvas zoom ${Math.round(nextZoom * 100)}%.`);
   }
 
+  function builderContentBounds() {
+    const nodes = Array.isArray(state.builder?.nodes) ? state.builder.nodes : [];
+    if (!nodes.length) return null;
+    const padding = 34;
+    const minX = Math.min(...nodes.map((node) => safeNumber(node.x, 0))) - padding;
+    const minY = Math.min(...nodes.map((node) => safeNumber(node.y, 0))) - padding;
+    const maxX = Math.max(...nodes.map((node) => safeNumber(node.x, 0) + nodeVisualSize(node, { width: 300, height: 138 }).width)) + padding;
+    const maxY = Math.max(...nodes.map((node) => safeNumber(node.y, 0) + nodeVisualSize(node, { width: 300, height: 138 }).height)) + padding;
+    return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+  }
+
+  function fitBuilderToContent({ announce = false } = {}) {
+    if (!builderCanvasWrap || !builderBoard) return;
+    const bounds = builderContentBounds();
+    if (!bounds) {
+      state.builder.zoom = 1;
+      renderBuilderArrows();
+      builderCanvasWrap.scrollLeft = 0;
+      builderCanvasWrap.scrollTop = 0;
+      updateBuilderToolbar();
+      return;
+    }
+    const viewportWidth = Math.max(1, builderCanvasWrap.clientWidth || 1);
+    const viewportHeight = Math.max(1, builderCanvasWrap.clientHeight || 1);
+    const margin = 42;
+    const nextZoom = clamp(Math.min(
+      (viewportWidth - margin * 2) / bounds.width,
+      (viewportHeight - margin * 2) / bounds.height,
+      1
+    ), 0.4, 1.8);
+    state.builder.zoom = nextZoom;
+    renderBuilderArrows();
+    window.requestAnimationFrame(() => {
+      const centerX = ((bounds.minX + bounds.maxX) / 2) * nextZoom;
+      const centerY = ((bounds.minY + bounds.maxY) / 2) * nextZoom;
+      builderCanvasWrap.scrollLeft = Math.max(0, centerX - viewportWidth / 2);
+      builderCanvasWrap.scrollTop = Math.max(0, centerY - viewportHeight / 2);
+      updateBuilderToolbar();
+      if (announce) updateBuilderStatus(`Canvas fitted to ${Math.round(nextZoom * 100)}%.`);
+    });
+  }
+
   function selectBuilderSocket(direction, nodeId) {
     const node = findBuilderNode(nodeId);
     if (!node) return;
@@ -1055,9 +1097,12 @@
     $('tmMetaError').textContent = '';
     setOverlay(metaOverlay, false);
     if (continueToBuilder) {
-      renderBuilder();
       setOverlay(builderOverlay, true);
-      window.setTimeout(() => $('tmAddBlockBtn')?.focus(), 60);
+      window.requestAnimationFrame(() => {
+        renderBuilder();
+        fitBuilderToContent();
+        window.setTimeout(() => $('tmAddBlockBtn')?.focus(), 60);
+      });
     }
     updateBuilderStatus(`Project details saved for “${title}”.`);
   }
@@ -1592,6 +1637,7 @@
     if (state.selectedTicket && String(state.selectedTicket.id) === String(ticket.id) && isOverlayOpen(workflowOverlay)) {
       attachCachedPeopleWorkflows(state.selectedTicket);
       renderWorkflow(state.selectedTicket);
+      if (!state.viewer.manual) window.requestAnimationFrame(() => fitViewerToContent());
     }
   }
 
@@ -1724,7 +1770,7 @@
     const teamWorkflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
     const hasTeamTasks = belongsToMyDepartment && Array.isArray(teamWorkflow?.assignments) && teamWorkflow.assignments.length > 0;
     const teamSubmissions = hasTeamTasks ? completedTeamSubmissionMarkup(teamWorkflow) : '';
-    const interactive = state.view !== 'my' || departmentOwner;
+    const interactive = state.view !== 'my' || belongsToMyDepartment;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
       : (section.completedAt ? `Done ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
@@ -1738,7 +1784,7 @@
       <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer${interactive ? ' tm-workflow-card--interactive' : ''}${mineClass}${teamClass} ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}"${interactiveAttrs} style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top">
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
-          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${departmentOwner ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
+          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${belongsToMyDepartment ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
           <span class="tm-status-pill ${statusClass(section.status)}"><i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}</span>
         </div>
         <div class="tm-builder-block__body tm-workflow-card__body">
@@ -1750,7 +1796,7 @@
           ${section.status === 'rejected' && section.rejectionReason ? `<div class="tm-workflow-card__rejection"><i data-feather="alert-circle"></i><span>${escapeHtml(section.rejectionReason)}</span></div>` : ''}
           ${teamSubmissions}
         </div>
-        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${departmentOwner ? `<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>Open department task</span>` : ''}</div>
+        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${belongsToMyDepartment ? `<span class="tm-workflow-card__mine-label"><i data-feather="${departmentOwner ? 'mouse-pointer' : 'eye'}"></i>${departmentOwner ? 'Open department task' : 'View department task'}</span>` : ''}</div>
         ${hasTeamTasks ? '<span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span><span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>' : ''}
       </article>`;
   }
@@ -1987,7 +2033,7 @@
   }
 
   function viewerZoom() {
-    return clamp(safeNumber(state.viewer?.zoom, 1), 0.45, 1.8);
+    return clamp(safeNumber(state.viewer?.zoom, 1), 0.25, 1.8);
   }
 
   function updateViewerZoomControls() {
@@ -1996,38 +2042,73 @@
     if (label) label.textContent = `${Math.round(zoom * 100)}%`;
     const out = $('tmViewerZoomOutBtn');
     const inside = $('tmViewerZoomInBtn');
-    if (out) out.disabled = zoom <= 0.45;
+    if (out) out.disabled = zoom <= 0.25;
     if (inside) inside.disabled = zoom >= 1.8;
   }
 
-  function applyViewerZoom(value = state.viewer.zoom, { clientX, clientY } = {}) {
+  function applyViewerTransform() {
     if (!workflowCanvasWrap || !workflowStage) return;
     const board = $('tmWorkflowFlow');
     if (!board) return;
-    const oldZoom = viewerZoom();
-    const nextZoom = clamp(safeNumber(value, oldZoom), 0.45, 1.8);
-    const rect = workflowCanvasWrap.getBoundingClientRect();
-    const localX = clamp(safeNumber(clientX, rect.left + rect.width / 2) - rect.left, 0, rect.width);
-    const localY = clamp(safeNumber(clientY, rect.top + rect.height / 2) - rect.top, 0, rect.height);
-    const contentX = (workflowCanvasWrap.scrollLeft + localX) / oldZoom;
-    const contentY = (workflowCanvasWrap.scrollTop + localY) / oldZoom;
-    state.viewer.zoom = nextZoom;
-    board.style.transform = `scale(${nextZoom})`;
+    const zoom = viewerZoom();
+    const offsetX = safeNumber(state.viewer?.offsetX, 0);
+    const offsetY = safeNumber(state.viewer?.offsetY, 0);
+    board.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${zoom})`;
     board.style.transformOrigin = '0 0';
-    workflowStage.style.width = `${Math.ceil(safeNumber(state.viewer.width, 980) * nextZoom)}px`;
-    workflowStage.style.height = `${Math.ceil(safeNumber(state.viewer.height, 650) * nextZoom)}px`;
-    workflowCanvasWrap.scrollLeft = Math.max(0, contentX * nextZoom - localX);
-    workflowCanvasWrap.scrollTop = Math.max(0, contentY * nextZoom - localY);
+    workflowStage.style.width = '100%';
+    workflowStage.style.height = '100%';
     updateViewerZoomControls();
   }
 
+  function applyViewerZoom(value = state.viewer.zoom, { clientX, clientY, manual = true } = {}) {
+    if (!workflowCanvasWrap) return;
+    const oldZoom = viewerZoom();
+    const nextZoom = clamp(safeNumber(value, oldZoom), 0.25, 1.8);
+    const rect = workflowCanvasWrap.getBoundingClientRect();
+    const localX = clamp(safeNumber(clientX, rect.left + rect.width / 2) - rect.left, 0, rect.width);
+    const localY = clamp(safeNumber(clientY, rect.top + rect.height / 2) - rect.top, 0, rect.height);
+    const contentX = (localX - safeNumber(state.viewer.offsetX, 0)) / oldZoom;
+    const contentY = (localY - safeNumber(state.viewer.offsetY, 0)) / oldZoom;
+    state.viewer.zoom = nextZoom;
+    state.viewer.offsetX = localX - contentX * nextZoom;
+    state.viewer.offsetY = localY - contentY * nextZoom;
+    if (manual) state.viewer.manual = true;
+    applyViewerTransform();
+  }
+
+  function workflowContentBounds(nodes = []) {
+    if (!nodes.length) return { minX: 0, minY: 0, maxX: 980, maxY: 650, width: 980, height: 650 };
+    const padding = 34;
+    const minX = Math.min(...nodes.map((node) => safeNumber(node.x, 0))) - padding;
+    const minY = Math.min(...nodes.map((node) => safeNumber(node.y, 0))) - padding;
+    const maxX = Math.max(...nodes.map((node) => safeNumber(node.x, 0) + nodeVisualSize(node).width)) + padding;
+    const maxY = Math.max(...nodes.map((node) => safeNumber(node.y, 0) + nodeVisualSize(node).height)) + padding;
+    return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+  }
+
+  function fitViewerToContent({ keepManual = false } = {}) {
+    if (!workflowCanvasWrap) return;
+    const bounds = state.viewer?.bounds || workflowContentBounds([]);
+    const viewportWidth = Math.max(1, workflowCanvasWrap.clientWidth || 1);
+    const viewportHeight = Math.max(1, workflowCanvasWrap.clientHeight || 1);
+    const margin = viewportWidth < 640 ? 22 : 38;
+    const zoom = clamp(Math.min(
+      (viewportWidth - margin * 2) / Math.max(1, bounds.width),
+      (viewportHeight - margin * 2) / Math.max(1, bounds.height),
+      1
+    ), 0.25, 1.8);
+    state.viewer.zoom = zoom;
+    state.viewer.offsetX = (viewportWidth - bounds.width * zoom) / 2 - bounds.minX * zoom;
+    state.viewer.offsetY = (viewportHeight - bounds.height * zoom) / 2 - bounds.minY * zoom;
+    state.viewer.pan = null;
+    state.viewer.pinch = null;
+    if (!keepManual) state.viewer.manual = false;
+    applyViewerTransform();
+  }
+
   function resetViewerCanvas() {
-    state.viewer = { zoom: 1, pan: null, pinch: null, width: safeNumber(state.viewer?.width, 980), height: safeNumber(state.viewer?.height, 650) };
-    applyViewerZoom(1);
-    if (workflowCanvasWrap) {
-      workflowCanvasWrap.scrollLeft = 0;
-      workflowCanvasWrap.scrollTop = 0;
-    }
+    state.viewer.manual = false;
+    fitViewerToContent();
   }
 
   function startViewerPan(event) {
@@ -2038,8 +2119,8 @@
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      startScrollLeft: workflowCanvasWrap.scrollLeft,
-      startScrollTop: workflowCanvasWrap.scrollTop,
+      startOffsetX: safeNumber(state.viewer.offsetX, 0),
+      startOffsetY: safeNumber(state.viewer.offsetY, 0),
       moved: false,
     };
     workflowCanvasWrap.classList.add('is-panning');
@@ -2052,8 +2133,10 @@
     const dx = event.clientX - pan.startX;
     const dy = event.clientY - pan.startY;
     if (Math.abs(dx) + Math.abs(dy) > 5) pan.moved = true;
-    workflowCanvasWrap.scrollLeft = pan.startScrollLeft - dx;
-    workflowCanvasWrap.scrollTop = pan.startScrollTop - dy;
+    state.viewer.offsetX = pan.startOffsetX + dx;
+    state.viewer.offsetY = pan.startOffsetY + dy;
+    state.viewer.manual = true;
+    applyViewerTransform();
     if (pan.moved) event.preventDefault();
     return true;
   }
@@ -2061,6 +2144,7 @@
   function endViewerPan(event) {
     const pan = state.viewer.pan;
     if (!pan || (event?.pointerId != null && pan.pointerId != null && event.pointerId !== pan.pointerId)) return false;
+    try { workflowCanvasWrap?.releasePointerCapture?.(pan.pointerId); } catch {}
     state.viewer.pan = null;
     workflowCanvasWrap?.classList.remove('is-panning');
     return true;
@@ -2069,7 +2153,7 @@
   function handleViewerWheel(event) {
     if (!isOverlayOpen(workflowOverlay) || !(event.ctrlKey || event.metaKey)) return;
     event.preventDefault();
-    applyViewerZoom(viewerZoom() + (event.deltaY < 0 ? 0.1 : -0.1), { clientX: event.clientX, clientY: event.clientY });
+    applyViewerZoom(viewerZoom() + (event.deltaY < 0 ? 0.1 : -0.1), { clientX: event.clientX, clientY: event.clientY, manual: true });
   }
 
   function handleViewerTouchStart(event) {
@@ -2077,6 +2161,7 @@
     event.preventDefault();
     endViewerPan();
     state.viewer.pinch = { startDistance: Math.max(1, touchDistance(event.touches)), startZoom: viewerZoom() };
+    state.viewer.manual = true;
     workflowCanvasWrap?.classList.add('is-pinching');
   }
 
@@ -2085,7 +2170,7 @@
     event.preventDefault();
     const distance = touchDistance(event.touches);
     const midpoint = touchMidpoint(event.touches);
-    applyViewerZoom(state.viewer.pinch.startZoom * (distance / state.viewer.pinch.startDistance), midpoint);
+    applyViewerZoom(state.viewer.pinch.startZoom * (distance / state.viewer.pinch.startDistance), { ...midpoint, manual: true });
   }
 
   function handleViewerTouchEnd(event) {
@@ -2138,23 +2223,24 @@
     const dimensions = getBoardDimensions([...nodes, ...teamNodes], { width: 980, height: 650 });
     state.viewer.width = dimensions.width;
     state.viewer.height = dimensions.height;
+    state.viewer.bounds = workflowContentBounds([...nodes, ...teamNodes]);
     flow.style.width = `${dimensions.width}px`;
     flow.style.height = `${dimensions.height}px`;
     renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow', { markerId: 'tmWorkflowArrowHead', orientation: 'horizontal' });
     const verticalNodes = new Map([...nodes, ...teamNodes].map((node) => [String(node.id), node]));
     renderArrowLayer($('tmTeamWorkflowArrows'), teamEdges, (id) => verticalNodes.get(String(id)), dimensions, 'tm-workflow-arrow tm-workflow-arrow--team', { markerId: 'tmTeamWorkflowArrowHead', orientation: 'vertical' });
-    applyViewerZoom(viewerZoom());
+    applyViewerTransform();
+    if (!state.viewer.manual && isOverlayOpen(workflowOverlay)) window.requestAnimationFrame(() => fitViewerToContent());
     hydrateIcons(workflowOverlay);
   }
 
   function openWorkflow(ticket) {
     state.selectedTicket = attachCachedPeopleWorkflows(ticket);
-    state.viewer.zoom = 1;
-    renderWorkflow(ticket);
+    state.viewer = { zoom: 1, offsetX: 0, offsetY: 0, pan: null, pinch: null, width: 980, height: 650, bounds: null, manual: false };
     setOverlay(workflowOverlay, true);
     window.requestAnimationFrame(() => {
       renderWorkflow(ticket);
-      resetViewerCanvas();
+      window.requestAnimationFrame(() => fitViewerToContent());
     });
     hydratePeopleWorkflows(ticket);
   }
@@ -2199,10 +2285,7 @@
       window.requestAnimationFrame(() => {
         measureBuilderNodes();
         renderBuilderArrows();
-        if (builderCanvasWrap) {
-          builderCanvasWrap.scrollLeft = 0;
-          builderCanvasWrap.scrollTop = 0;
-        }
+        fitBuilderToContent();
       });
     });
   }
@@ -2552,10 +2635,7 @@
       setOverlay(builderOverlay, true);
       window.requestAnimationFrame(() => {
         renderBuilder();
-        if (builderCanvasWrap) {
-          builderCanvasWrap.scrollLeft = 0;
-          builderCanvasWrap.scrollTop = 0;
-        }
+        fitBuilderToContent();
       });
     } catch (error) {
       showToast('error', 'Could not open team workflow', error.message || 'Please try again.');
@@ -2669,7 +2749,7 @@
       if (event.target.value === 'rejected' && canEditCurrentWorkTarget()) openRejectedReason();
     });
     $('tmViewerZoomOutBtn')?.addEventListener('click', () => applyViewerZoom(viewerZoom() - 0.1));
-    $('tmViewerZoomResetBtn')?.addEventListener('click', () => applyViewerZoom(1));
+    $('tmViewerZoomResetBtn')?.addEventListener('click', () => fitViewerToContent());
     $('tmViewerZoomInBtn')?.addEventListener('click', () => applyViewerZoom(viewerZoom() + 0.1));
     searchInput?.addEventListener('input', () => { state.query = norm(searchInput.value); renderTickets(); });
     departmentFilterBtn?.addEventListener('click', (event) => {
@@ -2725,6 +2805,10 @@
     workflowCanvasWrap?.addEventListener('touchmove', handleViewerTouchMove, { passive: false });
     workflowCanvasWrap?.addEventListener('touchend', handleViewerTouchEnd, { passive: false });
     workflowCanvasWrap?.addEventListener('touchcancel', handleViewerTouchEnd, { passive: false });
+    window.addEventListener('resize', () => {
+      if (isOverlayOpen(workflowOverlay) && !state.viewer.manual) window.requestAnimationFrame(() => fitViewerToContent());
+    }, { passive: true });
+
     document.addEventListener('pointermove', (event) => {
       if (moveBlockDrag(event)) return;
       if (moveCanvasPan(event)) return;
