@@ -1481,3 +1481,102 @@ body.task-management-page{
   .task-management-page .tm-work-page__actions .tm-dialog__actions-spacer{display:none;}
   .task-management-page .tm-work-page__actions .tm-btn{flex:1 1 100%;justify-content:center;}
 }
+
+/* My Tasks team workflow nesting v10 ---------------------------------------
+   Orange/black moving ownership frame, top-most team builder, and vertical
+   person-task branches rendered below the owning department section. */
+.task-management-page .tm-overlay--builder-layer{z-index:10040;}
+.task-management-page .tm-overlay--builder-child{z-index:10050;}
+.task-management-page .tm-overlay--top{z-index:10060;}
+
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine{
+  border-color:#bfc1c5!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine.tm-status--not_started::before{
+  inset:-5px;
+  padding:3px;
+  border-radius:22px;
+  --tm-frame-angle:0deg;
+  background:conic-gradient(
+    from var(--tm-frame-angle),
+    transparent 0 55%,
+    #171717 63% 70%,
+    #ef7d16 74% 82%,
+    #ffb15f 84% 87%,
+    #171717 90% 94%,
+    transparent 98% 100%
+  );
+  filter:drop-shadow(0 0 5px rgba(239,125,22,.35)) drop-shadow(0 0 3px rgba(0,0,0,.22));
+  animation:tm-my-task-frame-flow 2.15s linear infinite;
+  transform:none;
+}
+@property --tm-frame-angle{syntax:"<angle>";initial-value:0deg;inherits:false;}
+@keyframes tm-my-task-frame-flow{to{--tm-frame-angle:360deg;}}
+@media(prefers-reduced-motion:reduce){
+  .task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine.tm-status--not_started::before{
+    animation:none;
+    --tm-frame-angle:35deg;
+  }
+}
+
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-block{width:300px;}
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-socket--top,
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-socket--bottom{
+  left:50%;right:auto;width:16px;height:16px;transform:translateX(-50%);
+}
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-socket--top{top:-9px;bottom:auto;}
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-socket--bottom{top:auto;bottom:-9px;}
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-socket--top:hover,
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-socket--bottom:hover{
+  transform:translateX(-50%) scale(1.14);
+}
+.task-management-page .tm-builder-board.is-people-mode.is-awaiting-target .tm-builder-socket--top{
+  border-color:#ef7d16;background:#fff3e5;box-shadow:0 0 0 5px rgba(239,125,22,.16);animation:tmSocketPulse 1.2s ease-in-out infinite;
+}
+.task-management-page .tm-builder-board.is-people-mode .tm-builder-block.is-connect-source .tm-builder-socket--bottom{
+  border-color:#ef7d16;background:#ef7d16;box-shadow:0 0 0 6px rgba(239,125,22,.18),0 0 16px rgba(239,125,22,.42);animation:tmSocketPulse .9s ease-in-out infinite;
+}
+
+.task-management-page .tm-team-workflow-arrows{z-index:2;}
+.task-management-page .tm-workflow-arrow--team{
+  stroke:#ef7d16!important;
+  stroke-width:1.65px!important;
+  filter:drop-shadow(0 2px 2px rgba(239,125,22,.18));
+}
+.task-management-page .tm-team-anchor{
+  position:absolute!important;z-index:7!important;left:50%!important;width:14px;height:14px;border:2px solid #ef7d16;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(239,125,22,.2);transform:translateX(-50%);pointer-events:none;
+}
+.task-management-page .tm-team-anchor--top{top:-8px!important;bottom:auto!important;}
+.task-management-page .tm-team-anchor--bottom{top:auto!important;bottom:-8px!important;}
+
+.task-management-page .tm-team-task-card{
+  position:absolute;z-index:4;width:246px;min-height:132px;overflow:visible;border:1px solid #d7d8dc;border-radius:16px;background:#fff;box-shadow:0 15px 32px rgba(0,0,0,.11);
+}
+.task-management-page .tm-team-task-card::before{
+  content:"";position:absolute;left:18px;right:18px;top:-1px;height:3px;border-radius:0 0 999px 999px;background:linear-gradient(90deg,#171717 0 68%,#ef7d16 68% 100%);
+}
+.task-management-page .tm-team-task-card__head{
+  display:flex;align-items:center;gap:8px;min-height:50px;padding:9px 10px;border-bottom:1px solid #ececee;border-radius:16px 16px 0 0;background:linear-gradient(180deg,#fff,#fafafa);
+}
+.task-management-page .tm-team-task-card__number{
+  width:29px;height:29px;display:grid;place-items:center;flex:0 0 auto;border-radius:9px;background:#171717;color:#fff;font-size:10px;font-weight:950;box-shadow:inset 0 -3px 0 #ef7d16;
+}
+.task-management-page .tm-team-task-card__head>div{min-width:0;flex:1;}
+.task-management-page .tm-team-task-card__head b{display:block;overflow:hidden;color:#202020;font-size:12px;text-overflow:ellipsis;white-space:nowrap;}
+.task-management-page .tm-team-task-card__head small{display:block;margin-top:2px;color:#929292;font-size:9px;font-weight:750;}
+.task-management-page .tm-team-task-card__head .tm-status-pill{padding:5px 7px;font-size:9px;}
+.task-management-page .tm-team-task-card__head .tm-status-pill svg{width:11px;height:11px;}
+.task-management-page .tm-team-task-card__body{padding:11px 13px 13px;}
+.task-management-page .tm-team-task-card__body>span{display:block;color:#999;font-size:9px;font-weight:950;letter-spacing:.065em;text-transform:uppercase;}
+.task-management-page .tm-team-task-card__body>strong{display:block;margin-top:6px;color:#303030;font-size:12px;line-height:1.42;white-space:pre-wrap;}
+.task-management-page .tm-team-task-card__meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:9px;}
+.task-management-page .tm-team-task-card__meta>span,
+.task-management-page .tm-team-task-card__attachment{display:inline-flex;align-items:center;gap:5px;min-width:0;padding:5px 7px;border-radius:8px;background:#fff3e5;color:#9d4a08;font-size:9px;font-weight:800;text-decoration:none;}
+.task-management-page .tm-team-task-card__meta svg{width:11px;height:11px;flex:0 0 auto;}
+.task-management-page .tm-team-task-card__attachment span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.task-management-page .tm-section-details__actions{align-items:center;flex-wrap:wrap;}
+.task-management-page .tm-section-details__actions .tm-btn[hidden]{display:none!important;}
+@media(max-width:760px){
+  .task-management-page .tm-section-details__actions .tm-btn{flex:1 1 100%;justify-content:center;}
+}
