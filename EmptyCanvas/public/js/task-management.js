@@ -85,6 +85,8 @@
     pendingEditTicket: null,
     accessLevel: 'view',
     workSection: null,
+    workAssignment: null,
+    workTargetType: 'section',
     workFile: null,
     workFileUploadPending: false,
     rejectedReasonDraft: '',
@@ -1506,8 +1508,44 @@
     return !!(myDepartment && myDepartment === norm(section?.department || ''));
   }
 
+  function accessLevel() {
+    if (window.__tmIsPageAdmin) return 'admin';
+    return norm(state.accessLevel || window.__tmAccessLevel || 'view');
+  }
+
+  function canEditDepartmentWork() {
+    return state.view === 'my' && ['edit', 'admin'].includes(accessLevel());
+  }
+
+  function isCurrentUserAssignment(assignment) {
+    const current = state.currentUser || window.__tmCurrentUser || {};
+    const currentId = String(current?.id || '').trim();
+    const assigneeId = String(assignment?.assigneeId || '').trim();
+    if (currentId && assigneeId) return currentId === assigneeId;
+    return !!(norm(current?.name || '') && norm(current?.name || '') === norm(assignment?.assigneeName || ''));
+  }
+
+  function canEditTeamTask(assignment) {
+    if (state.view !== 'my' || !assignment) return false;
+    if (accessLevel() === 'admin') return true;
+    return accessLevel() === 'view' && isCurrentUserAssignment(assignment);
+  }
+
+  function canOpenTeamTask(assignment) {
+    if (state.view !== 'my' || !assignment) return false;
+    if (['edit', 'admin'].includes(accessLevel())) return true;
+    return isCurrentUserAssignment(assignment);
+  }
+
+  function canEditCurrentWorkTarget() {
+    return state.workTargetType === 'assignment'
+      ? canEditTeamTask(state.workAssignment)
+      : canEditDepartmentWork();
+  }
+
+  // Backward-compatible alias used by the existing department workflow builder.
   function canEditMyTaskWork() {
-    return state.view === 'my' && ['edit', 'admin'].includes(norm(state.accessLevel || ''));
+    return canEditDepartmentWork();
   }
 
   function cachedPeopleWorkflow(sectionId) {
@@ -1655,11 +1693,35 @@
     return !(ticket.sections || []).some((item) => Math.max(1, safeNumber(item.executionGroup ?? item.execution_group ?? item.sortOrder, 1)) < currentGroup && item.status !== 'completed');
   }
 
+  function completedTeamSubmissionMarkup(teamWorkflow) {
+    const completed = (Array.isArray(teamWorkflow?.assignments) ? teamWorkflow.assignments : [])
+      .filter((assignment) => assignment?.status === 'completed')
+      .filter((assignment) => assignment.workReport || assignment.workLink || assignment.workFile?.url);
+    if (!completed.length) return '';
+    return `<div class="tm-team-submissions">
+      <span class="tm-team-submissions__label"><i data-feather="users"></i>Completed team work</span>
+      ${completed.map((assignment) => {
+        const file = assignment.workFile?.url
+          ? `<a href="${escapeHtml(assignment.workFile.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="file"></i><span>${escapeHtml(assignment.workFile.name || 'Work file')}</span></a>`
+          : '';
+        const link = assignment.workLink
+          ? `<a href="${escapeHtml(assignment.workLink)}" target="_blank" rel="noopener noreferrer"><i data-feather="link"></i><span>Work link</span></a>`
+          : '';
+        return `<div class="tm-team-submission">
+          <b>${escapeHtml(assignment.assigneeName || 'Team member')}</b>
+          ${assignment.workReport ? `<p>${escapeHtml(assignment.workReport)}</p>` : ''}
+          ${(file || link) ? `<div class="tm-team-submission__files">${file}${link}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
   function renderWorkflowCard(ticket, section, nodeIndex) {
     const unlocked = isSectionUnlocked(ticket, section);
     const mine = state.view === 'my' && isMyDepartmentSection(section);
     const teamWorkflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
     const hasTeamTasks = mine && Array.isArray(teamWorkflow?.assignments) && teamWorkflow.assignments.length > 0;
+    const teamSubmissions = hasTeamTasks ? completedTeamSubmissionMarkup(teamWorkflow) : '';
     const interactive = state.view !== 'my' || mine;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
@@ -1684,8 +1746,9 @@
           ${section.details ? `<div class="tm-workflow-card__details"><span>Implementation details</span><p>${escapeHtml(section.details)}</p></div>` : ''}
           ${section.workReport ? `<div class="tm-workflow-card__note"><i data-feather="file-text"></i><div><span>Work report${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.workReport)}</p></div></div>` : (section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : '')}
           ${section.status === 'rejected' && section.rejectionReason ? `<div class="tm-workflow-card__rejection"><i data-feather="alert-circle"></i><span>${escapeHtml(section.rejectionReason)}</span></div>` : ''}
+          ${teamSubmissions}
         </div>
-        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${mine ? '<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>Open your task</span>' : ''}</div>
+        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${mine ? `<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>${canEditDepartmentWork() ? 'Open department task' : 'View department task'}</span>` : ''}</div>
         ${hasTeamTasks ? '<span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span><span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>' : ''}
       </article>`;
   }
@@ -1734,7 +1797,7 @@
     });
 
     const cardWidth = 246;
-    const cardHeight = 132;
+    const cardHeight = 166;
     const horizontalGap = 34;
     const verticalGap = 78;
     const parentSize = nodeVisualSize(parentNode, { width: 300, height: 138 });
@@ -1782,8 +1845,15 @@
     const attachment = node.attachment?.url
       ? `<a class="tm-team-task-card__attachment" href="${escapeHtml(node.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(node.attachment.name || 'Attachment')}</span></a>`
       : '';
+    const openable = canOpenTeamTask(node);
+    const editable = canEditTeamTask(node);
+    const attrs = openable
+      ? ` data-tm-open-team-task="${escapeHtml(node.assignmentId)}" data-parent-section-id="${escapeHtml(node.parentSectionId)}" role="button" tabindex="0" aria-label="${editable ? 'Open' : 'View'} work page for ${escapeHtml(node.assigneeName || 'team member')}"`
+      : ' role="group" tabindex="-1" aria-disabled="true"';
+    const accessClass = openable ? ' tm-team-task-card--interactive' : ' tm-team-task-card--locked';
+    const ownClass = isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
     return `
-      <article class="tm-team-task-card ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}" style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
+      <article class="tm-team-task-card${accessClass}${ownClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
         <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
         <div class="tm-team-task-card__head">
           <span class="tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</span>
@@ -1795,6 +1865,7 @@
           <strong>${escapeHtml(node.task || 'No task details')}</strong>
           <div class="tm-team-task-card__meta"><span><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>${attachment}</div>
         </div>
+        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"><i data-feather="${editable ? 'briefcase' : 'eye'}"></i><span>${editable ? 'Open Work Page' : 'View Work Page'}</span></button><i data-feather="arrow-right"></i></div>` : ''}
         <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
@@ -1818,6 +1889,8 @@
     const workLink = section.workLink
       ? `<a class="tm-section-details__file" href="${escapeHtml(section.workLink)}" target="_blank" rel="noopener noreferrer"><span class="tm-section-details__file-icon"><i data-feather="link"></i></span><span><b>Open work link</b><small>${escapeHtml(section.workLink)}</small></span><i data-feather="external-link"></i></a>`
       : '';
+    const teamWorkflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
+    const teamWork = completedTeamSubmissionMarkup(teamWorkflow);
 
     const kicker = $('tmSectionDetailsKicker');
     const title = $('tmSectionDetailsTitle');
@@ -1840,16 +1913,18 @@
           ${(section.workReport || section.completionNote) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Work report</span><p>${escapeHtml(section.workReport || section.completionNote)}</p></div>` : ''}
           ${(workFile || workLink) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Work files and links</span><div class="tm-section-details__files">${workFile}${workLink}</div></div>` : ''}
           ${section.rejectionReason ? `<div class="tm-section-details__item tm-section-details__item--wide tm-section-details__item--rejected"><span>Rejected reason</span><p>${escapeHtml(section.rejectionReason)}</p></div>` : ''}
+          ${teamWork ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Completed team work</span>${teamWork}</div>` : ''}
         </div>`;
     }
     const isOwnMyTask = state.view === 'my' && isMyDepartmentSection(section);
+    const canManageDepartment = isOwnMyTask && canEditDepartmentWork();
     const openWorkButton = $('tmOpenWorkPageBtn');
-    if (openWorkButton) openWorkButton.hidden = !isOwnMyTask;
+    if (openWorkButton) openWorkButton.hidden = !canManageDepartment;
     const assignTeamButton = $('tmOpenPeopleWorkflowBtn');
     if (assignTeamButton) {
-      assignTeamButton.hidden = !isOwnMyTask;
-      assignTeamButton.disabled = isOwnMyTask && !canEditMyTaskWork();
-      assignTeamButton.title = assignTeamButton.disabled ? 'Edit or Admin access is required to assign team tasks.' : 'Assign this department section to team members';
+      assignTeamButton.hidden = !canManageDepartment;
+      assignTeamButton.disabled = false;
+      assignTeamButton.title = 'Assign this department section to team members';
     }
     hydrateIcons(sectionDetailsOverlay);
     setOverlay(sectionDetailsOverlay, true);
@@ -1902,7 +1977,7 @@
   function startViewerPan(event) {
     if (!workflowCanvasWrap || !isOverlayOpen(workflowOverlay)) return;
     if (event.button !== undefined && event.button !== 0) return;
-    if (event.target.closest('button, a, [data-tm-open-section]')) return;
+    if (event.target.closest('button, a, [data-tm-open-section], [data-tm-open-team-task]')) return;
     state.viewer.pan = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -2001,7 +2076,7 @@
       const card = flow.querySelector(`[data-team-task-id="${CSS.escape(String(node.assignmentId))}"]`);
       if (!card) return;
       node._visualWidth = Math.max(1, card.offsetWidth || 246);
-      node._visualHeight = Math.max(1, card.offsetHeight || 132);
+      node._visualHeight = Math.max(1, card.offsetHeight || 166);
     });
 
     const dimensions = getBoardDimensions([...nodes, ...teamNodes], { width: 980, height: 650 });
@@ -2133,7 +2208,7 @@
       <span class="tm-upload-file__icon"><i data-feather="file-text"></i></span>
       <span class="tm-upload-file__info"><b>${escapeHtml(file.name || 'Work file')}</b><small>${escapeHtml([file.type || '', formatBytes(file.size)].filter(Boolean).join(' · ') || 'Uploaded work file')}</small></span>
       <a class="tm-upload-file__open" href="${escapeHtml(file.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open work file"><i data-feather="external-link"></i></a>
-      ${canEditMyTaskWork() ? '<button class="tm-upload-file__remove" type="button" data-tm-remove-work-file aria-label="Remove work file"><i data-feather="trash-2"></i></button>' : ''}`;
+      ${canEditCurrentWorkTarget() ? '<button class="tm-upload-file__remove" type="button" data-tm-remove-work-file aria-label="Remove work file"><i data-feather="trash-2"></i></button>' : ''}`;
     hydrateIcons(preview);
   }
 
@@ -2146,44 +2221,64 @@
   }
 
   function applyWorkPagePermissions() {
-    const editable = canEditMyTaskWork();
+    const editable = canEditCurrentWorkTarget();
     ['tmWorkStatusInput', 'tmWorkReportInput', 'tmWorkFileInput', 'tmWorkLinkInput'].forEach((id) => {
       const input = $(id);
       if (input) input.disabled = !editable;
     });
     const rejectButton = $('tmRejectedReasonBtn');
     if (rejectButton) rejectButton.disabled = !editable;
-    const teamButton = $('tmOpenPeopleWorkflowBtn');
-    if (teamButton) teamButton.disabled = !editable;
     const saveButton = $('tmSaveWorkBtn');
     if (saveButton) saveButton.hidden = !editable;
     const note = $('tmWorkPermissionNote');
-    if (note) note.hidden = editable;
+    if (note) {
+      note.hidden = editable;
+      const message = note.querySelector('span');
+      if (message) {
+        message.textContent = state.workTargetType === 'assignment'
+          ? 'This team-member task is read-only for your access level.'
+          : 'Department tasks can be updated only by users with Edit or Admin access.';
+      }
+    }
     refreshModernSelect($('tmWorkStatusInput'));
   }
 
-  function openWorkPage() {
-    const section = state.readonlySection;
-    const ticket = state.selectedTicket;
-    if (!section || !ticket || state.view !== 'my' || !isMyDepartmentSection(section)) return;
-    state.workSection = section;
-    state.workFile = section.workFile ? { ...section.workFile } : null;
-    state.workFileUploadPending = false;
-    state.rejectedReasonDraft = section.rejectionReason || '';
-    state.workPreviousStatus = section.status || 'not_started';
+  function configureWorkPage(target, { type = 'section' } = {}) {
+    const isAssignment = type === 'assignment';
+    state.workTargetType = isAssignment ? 'assignment' : 'section';
+    state.workAssignment = isAssignment ? target : null;
+    state.workSection = isAssignment
+      ? (state.selectedTicket?.sections || []).find((section) => String(section.id) === String(target?.sectionId || target?.parentSectionId || '')) || null
+      : target;
+    const current = isAssignment ? state.workAssignment : state.workSection;
+    if (!current) return false;
 
-    $('tmWorkPageKicker').textContent = section.department || 'My department task';
-    $('tmWorkPageTitle').textContent = section.request || 'Task work page';
-    $('tmWorkPageSub').textContent = `${ticket.ticketCode || 'Project'} · ${ticket.title || 'Project workflow'}`;
-    $('tmWorkPageSummary').innerHTML = `
-      <div><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>
-      <div><span>Project priority</span><b>${escapeHtml(ticket.priority || 'Normal')}</b></div>
-      <div class="tm-work-page__summary-wide"><span>Requested action</span><p>${escapeHtml(section.request || '—')}</p></div>
-      <div class="tm-work-page__summary-wide"><span>Implementation details</span><p>${escapeHtml(section.details || 'No implementation details provided.')}</p></div>`;
-    $('tmWorkStatusInput').value = section.status || 'not_started';
+    state.workFile = current.workFile ? { ...current.workFile } : null;
+    state.workFileUploadPending = false;
+    state.rejectedReasonDraft = current.rejectionReason || '';
+    state.workPreviousStatus = current.status || 'not_started';
+
+    const kicker = $('tmWorkPageKicker');
+    const title = $('tmWorkPageTitle');
+    const sub = $('tmWorkPageSub');
+    if (kicker) kicker.textContent = isAssignment ? 'Team member work' : 'Department work';
+    if (title) title.textContent = 'Work Page';
+    if (sub) {
+      sub.textContent = isAssignment
+        ? 'Update the assigned work status, report, and files.'
+        : 'Update the department task status, report, and files.';
+    }
+    const summary = $('tmWorkPageSummary');
+    if (summary) {
+      summary.innerHTML = '';
+      summary.hidden = true;
+      summary.setAttribute('aria-hidden', 'true');
+    }
+
+    $('tmWorkStatusInput').value = current.status || 'not_started';
     refreshModernSelect($('tmWorkStatusInput'));
-    $('tmWorkReportInput').value = section.workReport || section.completionNote || '';
-    $('tmWorkLinkInput').value = section.workLink || '';
+    $('tmWorkReportInput').value = current.workReport || current.completionNote || '';
+    $('tmWorkLinkInput').value = current.workLink || '';
     $('tmWorkPageError').textContent = '';
     const fileInput = $('tmWorkFileInput');
     if (fileInput) fileInput.value = '';
@@ -2191,12 +2286,40 @@
     updateRejectedReasonPreview();
     applyWorkPagePermissions();
     hydrateIcons(workPageOverlay);
+    return true;
+  }
+
+  function openWorkPage() {
+    const section = state.readonlySection;
+    if (!section || !state.selectedTicket || state.view !== 'my' || !isMyDepartmentSection(section) || !canEditDepartmentWork()) return;
+    if (!configureWorkPage(section, { type: 'section' })) return;
+    setOverlay(sectionDetailsOverlay, false);
+    setOverlay(workPageOverlay, true);
+  }
+
+  function findPeopleAssignment(assignmentId, sectionId = '') {
+    const wanted = String(assignmentId || '');
+    const sections = state.selectedTicket?.sections || [];
+    for (const section of sections) {
+      if (sectionId && String(section.id) !== String(sectionId)) continue;
+      const workflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
+      const assignment = (workflow?.assignments || []).find((item) => String(item.id) === wanted);
+      if (assignment) return { section, assignment, workflow };
+    }
+    return null;
+  }
+
+  function openTeamWorkPage(assignmentId, sectionId = '') {
+    const found = findPeopleAssignment(assignmentId, sectionId);
+    if (!found || !canOpenTeamTask(found.assignment)) return;
+    state.readonlySection = found.section;
+    if (!configureWorkPage({ ...found.assignment, sectionId: found.section.id }, { type: 'assignment' })) return;
     setOverlay(sectionDetailsOverlay, false);
     setOverlay(workPageOverlay, true);
   }
 
   function openRejectedReason() {
-    if (!canEditMyTaskWork()) return;
+    if (!canEditCurrentWorkTarget()) return;
     $('tmRejectReasonInput').value = state.rejectedReasonDraft || '';
     $('tmRejectReasonError').textContent = '';
     setOverlay(rejectReasonOverlay, true);
@@ -2219,7 +2342,7 @@
     const errorEl = $('tmWorkPageError');
     const input = $('tmWorkFileInput');
     const progress = $('tmWorkFileProgress');
-    if (!file || !canEditMyTaskWork()) return;
+    if (!file || !canEditCurrentWorkTarget()) return;
     if (file.size > 10 * 1024 * 1024) {
       if (errorEl) errorEl.textContent = 'The work file must be 10 MB or less.';
       if (input) input.value = '';
@@ -2241,19 +2364,20 @@
       if (errorEl) errorEl.textContent = error.message || 'Failed to upload work file.';
     } finally {
       state.workFileUploadPending = false;
-      if (input) { input.disabled = !canEditMyTaskWork(); input.value = ''; }
+      if (input) { input.disabled = !canEditCurrentWorkTarget(); input.value = ''; }
       if (progress) progress.hidden = true;
     }
   }
 
   async function submitWorkPage(event) {
     event.preventDefault();
-    if (!canEditMyTaskWork()) {
-      showToast('info', 'View-only access', 'You can review this task, but you cannot change its work information.');
+    if (!canEditCurrentWorkTarget()) {
+      showToast('info', 'Read-only access', 'You can review this work page, but you cannot change its information.');
       return;
     }
-    const section = state.workSection;
-    if (!section) return;
+    const isAssignment = state.workTargetType === 'assignment';
+    const target = isAssignment ? state.workAssignment : state.workSection;
+    if (!target) return;
     const status = $('tmWorkStatusInput').value || 'not_started';
     const report = $('tmWorkReportInput').value.trim();
     const workLink = $('tmWorkLinkInput').value.trim();
@@ -2275,7 +2399,10 @@
     if (button) button.disabled = true;
     errorEl.textContent = '';
     try {
-      const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/work`, {
+      const endpoint = isAssignment
+        ? `/api/task-management/assignments/${encodeURIComponent(target.id)}/work`
+        : `/api/task-management/sections/${encodeURIComponent(target.id)}/work`;
+      const data = await api(endpoint, {
         method: 'PATCH',
         body: {
           view: state.view,
@@ -2286,14 +2413,33 @@
           workFile: state.workFile || null,
         },
       });
+
       setOverlay(workPageOverlay, false);
-      await loadTickets();
-      const latest = state.tickets.find((ticket) => String(ticket.id) === String(data.ticket?.id)) || data.ticket;
-      state.selectedTicket = latest;
-      state.workSection = (latest?.sections || []).find((item) => String(item.id) === String(section.id)) || data.section || null;
-      state.readonlySection = state.workSection;
-      renderWorkflow(latest);
-      showToast('success', 'Work saved', 'The task status, report, and work files were updated.');
+      if (isAssignment) {
+        const sectionId = String(data.sectionId || state.workSection?.id || target.sectionId || '');
+        const workflow = {
+          assignments: Array.isArray(data.assignments) ? data.assignments : [],
+          edges: Array.isArray(data.edges) ? data.edges : [],
+        };
+        if (sectionId) state.peopleWorkflowCache.set(sectionId, workflow);
+        const section = (state.selectedTicket?.sections || []).find((item) => String(item.id) === sectionId);
+        if (section) section.peopleWorkflow = workflow;
+        state.workAssignment = (workflow.assignments || []).find((item) => String(item.id) === String(target.id)) || data.assignment || null;
+        state.workTargetType = 'section';
+        renderWorkflow(state.selectedTicket);
+        showToast('success', 'Team work saved', status === 'completed'
+          ? 'The completed work is now visible in the department section.'
+          : 'Your team-member task was updated. Its work details stay private until it is marked Done.');
+      } else {
+        await loadTickets();
+        const latest = state.tickets.find((ticket) => String(ticket.id) === String(data.ticket?.id)) || data.ticket;
+        state.selectedTicket = latest;
+        state.workSection = (latest?.sections || []).find((item) => String(item.id) === String(target.id)) || data.section || null;
+        state.readonlySection = state.workSection;
+        state.workTargetType = 'section';
+        renderWorkflow(latest);
+        showToast('success', 'Department work saved', 'The task status, report, and work files were updated.');
+      }
     } catch (error) {
       errorEl.textContent = error.message || 'Failed to save task work.';
     } finally {
@@ -2455,7 +2601,7 @@
     $('tmBlockAttachmentInput')?.addEventListener('change', (event) => uploadBlockAttachment(event.target.files?.[0]));
     $('tmWorkFileInput')?.addEventListener('change', (event) => uploadWorkFile(event.target.files?.[0]));
     $('tmWorkStatusInput')?.addEventListener('change', (event) => {
-      if (event.target.value === 'rejected' && canEditMyTaskWork()) openRejectedReason();
+      if (event.target.value === 'rejected' && canEditCurrentWorkTarget()) openRejectedReason();
     });
     $('tmViewerZoomOutBtn')?.addEventListener('click', () => applyViewerZoom(viewerZoom() - 0.1));
     $('tmViewerZoomResetBtn')?.addEventListener('click', () => applyViewerZoom(1));
@@ -2567,7 +2713,7 @@
         }
         if (which === 'workflow') setOverlay(workflowOverlay, false);
         if (which === 'section-details') { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
-        if (which === 'work-page') { state.workSection = null; state.workFile = null; setOverlay(workPageOverlay, false); }
+        if (which === 'work-page') { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; state.workFile = null; setOverlay(workPageOverlay, false); }
         if (which === 'reject-reason') {
           if ($('tmWorkStatusInput')?.value === 'rejected' && !String(state.rejectedReasonDraft || '').trim()) {
             $('tmWorkStatusInput').value = state.workPreviousStatus || 'not_started';
@@ -2614,6 +2760,12 @@
       const editAction = event.target.closest('[data-tm-edit-section]');
       if (editAction) { openSectionUpdate(editAction.dataset.tmEditSection); return; }
 
+      const teamTaskCard = event.target.closest('[data-tm-open-team-task]');
+      if (teamTaskCard && !event.target.closest('a')) {
+        openTeamWorkPage(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
+        return;
+      }
+
       const sectionCard = event.target.closest('[data-tm-open-section]');
       if (sectionCard && !event.target.closest('a, button')) {
         openReadonlySectionDetails(sectionCard.dataset.tmOpenSection);
@@ -2633,7 +2785,7 @@
         if (openSelect) { openSelect.close({ focus: true }); return; }
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
         if (isOverlayOpen(rejectReasonOverlay)) setOverlay(rejectReasonOverlay, false);
-        else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; setOverlay(workPageOverlay, false); }
+        else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; setOverlay(workPageOverlay, false); }
         else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
         else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
         else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
@@ -2661,6 +2813,12 @@
         }
       }
       if (event.key === 'Enter' || event.key === ' ') {
+        const teamTaskCard = document.activeElement?.closest?.('[data-tm-open-team-task]');
+        if (teamTaskCard && isOverlayOpen(workflowOverlay) && !isOverlayOpen(workPageOverlay)) {
+          event.preventDefault();
+          openTeamWorkPage(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
+          return;
+        }
         const sectionCard = document.activeElement?.closest?.('[data-tm-open-section]');
         if (sectionCard && isOverlayOpen(workflowOverlay) && !isOverlayOpen(sectionDetailsOverlay)) {
           event.preventDefault();
