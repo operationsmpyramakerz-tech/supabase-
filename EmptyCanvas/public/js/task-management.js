@@ -53,6 +53,7 @@
     filtered: [],
     departments: [],
     activeStatus: 'all',
+    activeDepartment: 'all',
     query: '',
     selectedTicket: null,
     selectedSection: null,
@@ -64,6 +65,7 @@
     blockUploadPending: false,
     drag: null,
     pan: null,
+    pinch: null,
     pendingBlockPress: null,
     builder: {
       nodes: [],
@@ -80,7 +82,10 @@
   const grid = $('tmTicketGrid');
   const searchInput = $('tmSearch');
   const tabs = $('tmTabs');
-  const toolbarNote = $('tmToolbarNote');
+  const departmentFilter = $('tmDepartmentFilter');
+  const departmentFilterBtn = $('tmDepartmentFilterBtn');
+  const departmentFilterPanel = $('tmDepartmentFilterPanel');
+  const departmentFilterDot = $('tmDepartmentFilterDot');
   const builderOverlay = $('tmBuilderOverlay');
   const metaOverlay = $('tmTicketMetaOverlay');
   const blockOverlay = $('tmBlockEditorOverlay');
@@ -93,6 +98,8 @@
   const builderBoard = $('tmBuilderBoard');
   const builderArrows = $('tmBuilderArrows');
   const builderCanvasWrap = $('tmBuilderCanvasWrap');
+  const modernSelectControllers = new Set();
+  let modernSelectCounter = 0;
 
   function hydrateIcons(root = document) {
     try { if (window.feather) window.feather.replace({ width: 18, height: 18 }); } catch {}
@@ -127,7 +134,7 @@
     overlay.hidden = !open;
     overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
     syncModalState();
-    if (open) window.setTimeout(() => overlay.querySelector('input, select, textarea, button')?.focus(), 45);
+    if (open) window.setTimeout(() => overlay.querySelector('input:not(.tm-select__native), textarea, .tm-select__button, button')?.focus(), 45);
   }
 
   function renderLoading() {
@@ -141,6 +148,10 @@
 
   function ticketMatches(ticket) {
     if (state.activeStatus !== 'all' && ticket.status !== state.activeStatus) return false;
+    if (state.activeDepartment !== 'all') {
+      const matchesDepartment = (ticket.sections || []).some((section) => norm(section.department) === state.activeDepartment);
+      if (!matchesDepartment) return false;
+    }
     if (!state.query) return true;
     const haystack = [
       ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
@@ -149,11 +160,76 @@
     return haystack.includes(state.query);
   }
 
+  function availableDepartments() {
+    const names = new Map();
+    const add = (value) => {
+      const label = String(value || '').trim();
+      const key = norm(label);
+      if (key && !names.has(key)) names.set(key, label);
+    };
+    (state.departments || []).forEach(add);
+    (state.tickets || []).forEach((ticket) => (ticket.sections || []).forEach((section) => add(section.department)));
+    return [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: 'base' }));
+  }
+
+  function closeDepartmentFilter({ focus = false } = {}) {
+    if (!departmentFilter || !departmentFilterPanel || !departmentFilterBtn) return;
+    departmentFilter.classList.remove('is-open');
+    departmentFilterPanel.hidden = true;
+    departmentFilterBtn.setAttribute('aria-expanded', 'false');
+    if (focus) departmentFilterBtn.focus();
+  }
+
+  function toggleDepartmentFilter(force) {
+    if (!departmentFilter || !departmentFilterPanel || !departmentFilterBtn) return;
+    const open = typeof force === 'boolean' ? force : departmentFilterPanel.hidden;
+    if (!open) { closeDepartmentFilter(); return; }
+    renderDepartmentFilter();
+    departmentFilter.classList.add('is-open');
+    departmentFilterPanel.hidden = false;
+    departmentFilterBtn.setAttribute('aria-expanded', 'true');
+    window.requestAnimationFrame(() => departmentFilterPanel.querySelector('[data-tm-department].is-active, [data-tm-department]')?.focus());
+  }
+
+  function renderDepartmentFilter() {
+    if (!departmentFilter || !departmentFilterPanel || !departmentFilterBtn) return;
+    const departments = availableDepartments();
+    if (state.activeDepartment !== 'all' && !departments.some(([key]) => key === state.activeDepartment)) state.activeDepartment = 'all';
+    const statusTickets = (state.tickets || []).filter((ticket) => state.activeStatus === 'all' || ticket.status === state.activeStatus);
+    const countFor = (departmentKey) => statusTickets.filter((ticket) => (ticket.sections || []).some((section) => norm(section.department) === departmentKey)).length;
+    const total = statusTickets.length;
+    const active = state.activeDepartment !== 'all';
+    departmentFilter.classList.toggle('is-filtered', active);
+    if (departmentFilterDot) departmentFilterDot.hidden = !active;
+    departmentFilterBtn.setAttribute('aria-label', active ? 'Department filter is active' : 'Filter projects by department');
+    departmentFilterPanel.innerHTML = `
+      <div class="tm-department-filter__panel-head">
+        <div><div class="tm-department-filter__panel-title">Filter by department</div><div class="tm-department-filter__panel-sub">${total} project${total === 1 ? '' : 's'} in this status</div></div>
+        ${active ? '<button type="button" class="tm-department-filter__clear" data-tm-clear-department>Clear</button>' : ''}
+      </div>
+      <div class="tm-department-filter__options">
+        <button type="button" class="tm-department-filter__option${state.activeDepartment === 'all' ? ' is-active' : ''}" data-tm-department="all" role="menuitemradio" aria-checked="${state.activeDepartment === 'all'}">
+          <span class="tm-department-filter__option-icon"><i data-feather="layers"></i></span>
+          <span class="tm-department-filter__option-body"><b>All departments</b><small>${total} project${total === 1 ? '' : 's'}</small></span>
+          <span class="tm-department-filter__option-check"><i data-feather="check"></i></span>
+        </button>
+        ${departments.map(([key, label]) => {
+          const count = countFor(key);
+          const selected = state.activeDepartment === key;
+          return `<button type="button" class="tm-department-filter__option${selected ? ' is-active' : ''}" data-tm-department="${escapeHtml(key)}" role="menuitemradio" aria-checked="${selected}">
+            <span class="tm-department-filter__option-icon"><i data-feather="briefcase"></i></span>
+            <span class="tm-department-filter__option-body"><b>${escapeHtml(label)}</b><small>${count} project${count === 1 ? '' : 's'}</small></span>
+            <span class="tm-department-filter__option-check"><i data-feather="check"></i></span>
+          </button>`;
+        }).join('') || '<div class="tm-department-filter__empty">No departments are available yet.</div>'}
+      </div>`;
+    hydrateIcons(departmentFilterPanel);
+  }
+
   function renderTickets() {
     if (!grid) return;
     state.filtered = (state.tickets || []).filter(ticketMatches);
-    const noun = VIEW_CONFIG[state.view]?.toolbarNoun || 'task';
-    if (toolbarNote) toolbarNote.textContent = `${state.filtered.length} ${noun}${state.filtered.length === 1 ? '' : 's'}`;
+    renderDepartmentFilter();
 
     if (!state.filtered.length) {
       grid.innerHTML = `
@@ -202,6 +278,133 @@
     }
   }
 
+  function closeModernSelects(except = null) {
+    modernSelectControllers.forEach((controller) => {
+      if (controller !== except) controller.close();
+    });
+  }
+
+  function enhanceModernSelect(select) {
+    if (!select) return null;
+    const existing = select.__tmModernSelect;
+    if (existing) { existing.refresh(); return existing; }
+
+    modernSelectCounter += 1;
+    const listId = `tmModernSelectList-${modernSelectCounter}`;
+    const shell = document.createElement('div');
+    shell.className = 'tm-select';
+    select.parentNode.insertBefore(shell, select);
+    shell.appendChild(select);
+    select.classList.add('tm-select__native');
+    select.setAttribute('aria-hidden', 'true');
+    select.tabIndex = -1;
+
+    const trigger = document.createElement('div');
+    trigger.className = 'tm-select__button';
+    trigger.setAttribute('role', 'combobox');
+    trigger.setAttribute('tabindex', '0');
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', listId);
+    trigger.innerHTML = '<span class="tm-select__value"></span><span class="tm-select__chevron"><i data-feather="chevron-down"></i></span>';
+
+    const menu = document.createElement('div');
+    menu.className = 'tm-select__menu';
+    menu.id = listId;
+    menu.setAttribute('role', 'listbox');
+    menu.hidden = true;
+    shell.append(trigger, menu);
+
+    const controller = {
+      select, shell, trigger, menu,
+      refresh() {
+        const options = [...select.options];
+        const selected = options.find((option) => option.selected) || options[0];
+        const value = trigger.querySelector('.tm-select__value');
+        if (value) value.textContent = selected?.textContent?.trim() || 'Select';
+        trigger.classList.toggle('is-placeholder', !selected?.value);
+        trigger.setAttribute('aria-disabled', select.disabled ? 'true' : 'false');
+        trigger.tabIndex = select.disabled ? -1 : 0;
+        menu.innerHTML = options.map((option, index) => `
+          <div class="tm-select__option${option.selected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}" role="option" tabindex="-1" data-tm-select-index="${index}" aria-selected="${option.selected}" aria-disabled="${option.disabled}">
+            <span>${escapeHtml(option.textContent?.trim() || '')}</span><i data-feather="check"></i>
+          </div>`).join('');
+        hydrateIcons(shell);
+      },
+      open() {
+        if (select.disabled) return;
+        closeModernSelects(controller);
+        controller.refresh();
+        const rect = trigger.getBoundingClientRect();
+        shell.classList.toggle('is-dropup', (window.innerHeight - rect.bottom) < 250 && rect.top > 250);
+        shell.classList.add('is-open');
+        menu.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        window.requestAnimationFrame(() => menu.querySelector('.tm-select__option.is-selected, .tm-select__option:not(.is-disabled)')?.focus());
+      },
+      close({ focus = false } = {}) {
+        shell.classList.remove('is-open', 'is-dropup');
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        if (focus) trigger.focus();
+      },
+      toggle() {
+        if (menu.hidden) controller.open(); else controller.close();
+      },
+    };
+
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      controller.toggle();
+    });
+    trigger.addEventListener('keydown', (event) => {
+      if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
+        event.preventDefault();
+        controller.open();
+      }
+    });
+    menu.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const optionEl = event.target.closest('[data-tm-select-index]');
+      if (!optionEl) return;
+      const option = select.options[Number(optionEl.dataset.tmSelectIndex)];
+      if (!option || option.disabled) return;
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      controller.refresh();
+      controller.close({ focus: true });
+    });
+    menu.addEventListener('keydown', (event) => {
+      const items = [...menu.querySelectorAll('.tm-select__option:not(.is-disabled)')];
+      const index = items.indexOf(document.activeElement);
+      if (event.key === 'Escape') { event.preventDefault(); controller.close({ focus: true }); return; }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const delta = event.key === 'ArrowDown' ? 1 : -1;
+        items[(index + delta + items.length) % items.length]?.focus();
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        document.activeElement?.click?.();
+      }
+    });
+    select.addEventListener('change', () => controller.refresh());
+    select.__tmModernSelect = controller;
+    modernSelectControllers.add(controller);
+    controller.refresh();
+    return controller;
+  }
+
+  function enhanceAllModernSelects(root = document) {
+    root.querySelectorAll?.('.tm-field select').forEach((select) => enhanceModernSelect(select));
+  }
+
+  function refreshModernSelect(select) {
+    return enhanceModernSelect(select)?.refresh();
+  }
+
   // ---------------------------------------------------------------------------
   // Visual workflow builder
   // ---------------------------------------------------------------------------
@@ -222,6 +425,7 @@
     state.blockUploadPending = false;
     state.drag = null;
     state.pan = null;
+    state.pinch = null;
     clearPendingBlockPress();
   }
 
@@ -339,7 +543,7 @@
       block.innerHTML = `
         <div class="tm-builder-block__head" data-tm-drag-handle>
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
-          <div class="tm-builder-block__title"><b>${escapeHtml(node.department || 'Workflow Block')}</b><small>${node.department ? 'Department section' : 'Needs configuration'}</small></div>
+          <div class="tm-builder-block__title"><b>${escapeHtml(node.department || 'Workflow Block')}</b>${node.department ? '' : '<small>Needs configuration</small>'}</div>
           <div class="tm-builder-block__actions">
             <button type="button" class="tm-builder-icon-btn" data-tm-edit-block="${escapeHtml(node.id)}" aria-label="Edit block"><i data-feather="edit-3"></i></button>
             <button type="button" class="tm-builder-icon-btn tm-builder-icon-btn--danger" data-tm-delete-block="${escapeHtml(node.id)}" aria-label="Delete block"><i data-feather="trash-2"></i></button>
@@ -348,7 +552,6 @@
         <div class="tm-builder-block__body">
           <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(node.request || 'Click Edit to configure this block')}</strong>
-          ${node.details ? `<span class="tm-builder-block__details">${escapeHtml(node.details)}</span>` : '<span class="tm-builder-block__details tm-builder-block__details--empty">No implementation details</span>'}
           ${node.attachment?.url ? `<span class="tm-builder-block__attachment"><i data-feather="paperclip"></i>${escapeHtml(node.attachment.name || 'Attachment')}</span>` : ''}
         </div>
         <button type="button" class="tm-builder-socket tm-builder-socket--in" data-tm-socket="in" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Connect an incoming arrow to this block" title="Incoming connection"></button>
@@ -664,6 +867,7 @@
     const meta = state.builder.meta;
     $('tmMetaTitleInput').value = meta.title || '';
     $('tmMetaPriorityInput').value = meta.priority || 'Normal';
+    refreshModernSelect($('tmMetaPriorityInput'));
     $('tmMetaDueDateInput').value = meta.dueDate || '';
     $('tmMetaDescriptionInput').value = meta.description || '';
     const submitLabel = $('tmMetaSubmitLabel');
@@ -752,6 +956,7 @@
     $('tmBlockEditorKicker').textContent = `Workflow block ${workflowNumbering(state.builder.nodes, state.builder.edges).get(String(node.id)) || '—'}`;
     const select = $('tmBlockDepartmentInput');
     select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
+    refreshModernSelect(select);
     $('tmBlockRequestInput').value = node.request || '';
     $('tmBlockDetailsInput').value = node.details || '';
     const attachmentInput = $('tmBlockAttachmentInput');
@@ -871,7 +1076,7 @@
   }
 
   function queueBlockDrag(event, nodeId) {
-    if (event.button !== 0 || event.isPrimary === false || state.builder.connecting) return;
+    if (event.button !== 0 || event.isPrimary === false || state.builder.connecting || state.pinch) return;
     if (event.target.closest('[data-tm-edit-block],[data-tm-delete-block],[data-tm-socket],[data-builder-edge-delete]')) return;
     const node = findBuilderNode(nodeId);
     if (!node) return;
@@ -929,7 +1134,7 @@
   }
 
   function startCanvasPan(event) {
-    if (event.button !== 0 || event.isPrimary === false || state.builder.connecting || state.drag || state.pendingBlockPress) return;
+    if (event.button !== 0 || event.isPrimary === false || state.builder.connecting || state.drag || state.pendingBlockPress || state.pinch) return;
     if (event.target.closest('[data-builder-block],[data-builder-edge-delete],[data-tm-builder-edge]')) return;
     event.preventDefault();
     state.pan = {
@@ -970,6 +1175,48 @@
     event.preventDefault();
     const factor = Math.exp(-safeNumber(event.deltaY) * 0.0018);
     setBuilderZoom(builderZoom() * factor, { clientX: event.clientX, clientY: event.clientY, announce: false });
+  }
+
+  function touchDistance(touches) {
+    if (!touches || touches.length < 2) return 0;
+    return Math.hypot(touches[1].clientX - touches[0].clientX, touches[1].clientY - touches[0].clientY);
+  }
+
+  function touchMidpoint(touches) {
+    return {
+      clientX: (touches[0].clientX + touches[1].clientX) / 2,
+      clientY: (touches[0].clientY + touches[1].clientY) / 2,
+    };
+  }
+
+  function handleBuilderTouchStart(event) {
+    if (!isOverlayOpen(builderOverlay) || event.touches.length !== 2) return;
+    event.preventDefault();
+    clearPendingBlockPress();
+    endBlockDrag();
+    endCanvasPan();
+    state.pinch = {
+      startDistance: Math.max(1, touchDistance(event.touches)),
+      startZoom: builderZoom(),
+    };
+    builderCanvasWrap?.classList.add('is-pinching');
+  }
+
+  function handleBuilderTouchMove(event) {
+    if (!state.pinch || event.touches.length < 2) return;
+    event.preventDefault();
+    const distance = touchDistance(event.touches);
+    if (!distance) return;
+    const midpoint = touchMidpoint(event.touches);
+    const zoom = state.pinch.startZoom * (distance / state.pinch.startDistance);
+    setBuilderZoom(zoom, { ...midpoint, announce: false });
+  }
+
+  function handleBuilderTouchEnd(event) {
+    if (!state.pinch || event.touches.length >= 2) return;
+    state.pinch = null;
+    builderCanvasWrap?.classList.remove('is-pinching');
+    updateBuilderStatus(`Canvas zoom ${Math.round(builderZoom() * 100)}%.`);
   }
 
   // ---------------------------------------------------------------------------
@@ -1136,6 +1383,7 @@
     $('tmUpdateSectionTitle').textContent = 'Update workflow section';
     $('tmUpdateSectionRequest').textContent = section.request || '—';
     $('tmSectionStatusInput').value = directStatus || section.status || 'not_started';
+    refreshModernSelect($('tmSectionStatusInput'));
     $('tmCompletionNoteInput').value = section.completionNote || '';
     if (updateError) updateError.textContent = '';
     setOverlay(updateOverlay, true);
@@ -1198,11 +1446,14 @@
       state.departments = [];
       state.currentUser = {};
     }
+    renderDepartmentFilter();
     await loadTickets({ preserve: false });
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     hydrateIcons();
+    enhanceAllModernSelects();
+    renderDepartmentFilter();
     metaForm?.addEventListener('submit', saveTicketMeta);
     blockForm?.addEventListener('submit', saveBlockEditor);
     updateForm?.addEventListener('submit', submitSectionUpdate);
@@ -1214,6 +1465,21 @@
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
     $('tmBlockAttachmentInput')?.addEventListener('change', (event) => uploadBlockAttachment(event.target.files?.[0]));
     searchInput?.addEventListener('input', () => { state.query = norm(searchInput.value); renderTickets(); });
+    departmentFilterBtn?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleDepartmentFilter();
+    });
+    departmentFilterPanel?.addEventListener('click', (event) => {
+      const clear = event.target.closest('[data-tm-clear-department]');
+      const option = event.target.closest('[data-tm-department]');
+      if (!clear && !option) return;
+      event.preventDefault();
+      event.stopPropagation();
+      state.activeDepartment = clear ? 'all' : (option.dataset.tmDepartment || 'all');
+      closeDepartmentFilter();
+      renderTickets();
+    });
 
     tabs?.addEventListener('click', (event) => {
       const tab = event.target.closest('[data-status]'); if (!tab) return;
@@ -1242,6 +1508,10 @@
     });
     builderCanvasWrap?.addEventListener('pointerdown', startCanvasPan);
     builderCanvasWrap?.addEventListener('wheel', handleBuilderWheel, { passive: false });
+    builderCanvasWrap?.addEventListener('touchstart', handleBuilderTouchStart, { passive: false });
+    builderCanvasWrap?.addEventListener('touchmove', handleBuilderTouchMove, { passive: false });
+    builderCanvasWrap?.addEventListener('touchend', handleBuilderTouchEnd, { passive: false });
+    builderCanvasWrap?.addEventListener('touchcancel', handleBuilderTouchEnd, { passive: false });
     document.addEventListener('pointermove', (event) => {
       if (moveBlockDrag(event)) return;
       moveCanvasPan(event);
@@ -1256,6 +1526,8 @@
     });
 
     document.addEventListener('click', (event) => {
+      if (!event.target.closest('#tmDepartmentFilter')) closeDepartmentFilter();
+      if (!event.target.closest('.tm-select')) closeModernSelects();
       const close = event.target.closest('[data-tm-close]');
       if (close) {
         const which = close.dataset.tmClose;
@@ -1315,6 +1587,9 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
+        const openSelect = [...modernSelectControllers].find((controller) => !controller.menu.hidden);
+        if (openSelect) { openSelect.close({ focus: true }); return; }
+        if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
         if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
         else if (isOverlayOpen(metaOverlay)) {
