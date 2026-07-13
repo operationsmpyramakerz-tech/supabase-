@@ -6,8 +6,9 @@
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const norm = (value) => String(value ?? '').trim().toLowerCase();
   const statusLabel = (value) => ({ not_started: 'Not started', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' }[value] || 'Not started');
-  const statusIcon = (value) => ({ not_started: 'circle', in_progress: 'activity', completed: 'check-circle', cancelled: 'slash' }[value] || 'circle');
+  const statusIcon = (value) => ({ not_started: 'circle', in_progress: 'activity', rejected: 'x-octagon', completed: 'check-circle', cancelled: 'slash' }[value] || 'circle');
   const statusClass = (value) => `tm-status--${String(value || 'not_started').replace(/[^a-z_]/g, '')}`;
+  const sectionStatusLabel = (value) => ({ not_started: 'Not started', in_progress: 'In progress', rejected: 'Rejected', completed: 'Done', cancelled: 'Cancelled' }[value] || 'Not started');
   const toDate = (value) => { try { return value ? new Date(value) : null; } catch { return null; } };
   const formatDate = (value) => { const date = toDate(value); return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'; };
   const formatDateTime = (value) => { const date = toDate(value); return date && !Number.isNaN(date.getTime()) ? date.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
@@ -82,6 +83,13 @@
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     },
     pendingEditTicket: null,
+    accessLevel: 'view',
+    workSection: null,
+    workFile: null,
+    workFileUploadPending: false,
+    rejectedReasonDraft: '',
+    teamMembers: [],
+    viewer: { zoom: 1, pan: null, pinch: null, width: 980, height: 650 },
   };
 
   const grid = $('tmTicketGrid');
@@ -98,14 +106,20 @@
   const sectionDetailsOverlay = $('tmSectionDetailsOverlay');
   const adminOverlay = $('tmAdminVerifyOverlay');
   const updateOverlay = $('tmUpdateSectionOverlay');
+  const workPageOverlay = $('tmWorkPageOverlay');
+  const rejectReasonOverlay = $('tmRejectReasonOverlay');
   const metaForm = $('tmTicketMetaForm');
   const blockForm = $('tmBlockEditorForm');
   const adminForm = $('tmAdminVerifyForm');
   const updateForm = $('tmUpdateSectionForm');
+  const workPageForm = $('tmWorkPageForm');
+  const rejectReasonForm = $('tmRejectReasonForm');
   const updateError = $('tmUpdateSectionError');
   const builderBoard = $('tmBuilderBoard');
   const builderArrows = $('tmBuilderArrows');
   const builderCanvasWrap = $('tmBuilderCanvasWrap');
+  const workflowCanvasWrap = $('tmWorkflowCanvasWrap');
+  const workflowStage = $('tmWorkflowStage');
   const modernSelectControllers = new Set();
   let modernSelectCounter = 0;
 
@@ -133,7 +147,7 @@
   function isOverlayOpen(overlay) { return !!overlay && !overlay.hidden; }
 
   function syncModalState() {
-    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, sectionDetailsOverlay, adminOverlay, updateOverlay].some(isOverlayOpen);
+    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, sectionDetailsOverlay, adminOverlay, updateOverlay, workPageOverlay, rejectReasonOverlay].some(isOverlayOpen);
     document.body.classList.toggle('tm-modal-open', modalOpen);
   }
 
@@ -429,6 +443,8 @@
       zoom: 1,
       canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
+      contextSectionId: '',
+      returnToWorkPage: false,
     };
     state.pendingEditTicket = null;
     state.editingBlockId = null;
@@ -443,11 +459,20 @@
   }
 
   function syncBuilderModeLabels() {
+    const peopleMode = state.builder?.mode === 'people';
     const editing = state.builder?.mode === 'edit';
     const title = $('tmBuilderTitle');
     const saveLabel = $('tmSaveWorkflowLabel');
-    if (title) title.textContent = editing ? 'Edit Project Workflow' : 'Create Project Workflow';
-    if (saveLabel) saveLabel.textContent = editing ? 'Save Changes' : 'Create Project';
+    const addLabel = $('tmAddBlockBtn')?.querySelector('span');
+    const detailsButton = $('tmTaskDetailsBtn');
+    const ownerLabel = $('tmBlockOwnerLabel');
+    const requestLabel = $('tmBlockRequestLabel');
+    if (title) title.textContent = peopleMode ? 'Team Task Workflow' : (editing ? 'Edit Project Workflow' : 'Create Project Workflow');
+    if (saveLabel) saveLabel.textContent = peopleMode ? 'Save Team Workflow' : (editing ? 'Save Changes' : 'Create Project');
+    if (addLabel) addLabel.textContent = peopleMode ? 'Add Person Task' : 'Add Block';
+    if (detailsButton) detailsButton.hidden = peopleMode;
+    if (ownerLabel) ownerLabel.innerHTML = peopleMode ? 'Responsible team member <b>*</b>' : 'Responsible department <b>*</b>';
+    if (requestLabel) requestLabel.innerHTML = peopleMode ? 'Assigned task <b>*</b>' : 'Requested action <b>*</b>';
   }
 
   function builderZoom() {
@@ -469,9 +494,11 @@
 
   function addBuilderNode() {
     const position = nextBlockPosition();
-    state.builder.nodes.push({ id: newClientId(), department: '', request: '', details: '', deliveryDate: '', attachment: null, x: position.x, y: position.y });
+    state.builder.nodes.push({ id: newClientId(), department: '', assigneeId: '', request: '', details: '', deliveryDate: '', attachment: null, x: position.x, y: position.y });
     renderBuilder();
-    updateBuilderStatus('New block added. Use Edit to set its department and requested action.');
+    updateBuilderStatus(state.builder.mode === 'people'
+      ? 'New person task added. Use Edit to choose the team member and assigned task.'
+      : 'New block added. Use Edit to set its department and requested action.');
   }
 
   function findBuilderNode(id) {
@@ -582,14 +609,14 @@
       block.innerHTML = `
         <div class="tm-builder-block__head" data-tm-drag-handle>
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
-          <div class="tm-builder-block__title"><b>${escapeHtml(node.department || 'Workflow Block')}</b>${node.department ? '' : '<small>Needs configuration</small>'}</div>
+          <div class="tm-builder-block__title"><b>${escapeHtml(node.department || (state.builder.mode === 'people' ? 'Person Task' : 'Workflow Block'))}</b>${node.department ? '' : '<small>Needs configuration</small>'}</div>
           <div class="tm-builder-block__actions">
             <button type="button" class="tm-builder-icon-btn" data-tm-edit-block="${escapeHtml(node.id)}" aria-label="Edit block"><i data-feather="edit-3"></i></button>
             <button type="button" class="tm-builder-icon-btn tm-builder-icon-btn--danger" data-tm-delete-block="${escapeHtml(node.id)}" aria-label="Delete block"><i data-feather="trash-2"></i></button>
           </div>
         </div>
         <div class="tm-builder-block__body">
-          <span class="tm-builder-block__label">Requested action</span>
+          <span class="tm-builder-block__label">${state.builder.mode === 'people' ? 'Assigned task' : 'Requested action'}</span>
           <strong>${escapeHtml(node.request || 'Click Edit to configure this block')}</strong>
           ${(node.deliveryDate || node.attachment?.url) ? `<div class="tm-builder-block__meta">${node.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>` : ''}${node.attachment?.url ? `<span class="tm-builder-block__attachment"><i data-feather="paperclip"></i>${escapeHtml(node.attachment.name || 'Attachment')}</span>` : ''}</div>` : ''}
         </div>
@@ -979,7 +1006,7 @@
     if (progress) progress.hidden = false;
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const result = await api('/api/task-management/upload', {
+      const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
         method: 'POST',
         body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size },
       });
@@ -1000,12 +1027,26 @@
     state.editingBlockId = node.id;
     state.blockDraftAttachment = node.attachment ? { ...node.attachment } : null;
     state.blockUploadPending = false;
-    $('tmBlockEditorKicker').textContent = `Workflow block ${workflowNumbering(state.builder.nodes, state.builder.edges).get(String(node.id)) || '—'}`;
+    const peopleMode = state.builder.mode === 'people';
+    $('tmBlockEditorKicker').textContent = peopleMode
+      ? `Team task ${workflowNumbering(state.builder.nodes, state.builder.edges).get(String(node.id)) || '—'}`
+      : `Workflow block ${workflowNumbering(state.builder.nodes, state.builder.edges).get(String(node.id)) || '—'}`;
+    $('tmBlockEditorTitle').textContent = peopleMode ? 'Edit Person Task' : 'Edit Block';
+    syncBuilderModeLabels();
     const select = $('tmBlockDepartmentInput');
-    select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
+    if (peopleMode) {
+      select.innerHTML = `<option value="">Select team member</option>${state.teamMembers.map((member) => {
+        const id = String(member.id || member.name || '');
+        const selected = id && id === String(node.assigneeId || '');
+        return `<option value="${escapeHtml(id)}" ${selected ? 'selected' : ''}>${escapeHtml(member.name || 'Team member')}${member.position ? ` · ${escapeHtml(member.position)}` : ''}</option>`;
+      }).join('')}`;
+    } else {
+      select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
+    }
     refreshModernSelect(select);
     $('tmBlockDeliveryDateInput').value = node.deliveryDate || '';
     $('tmBlockRequestInput').value = node.request || '';
+    $('tmBlockRequestInput').placeholder = peopleMode ? 'What should this team member deliver?' : 'What should this department deliver?';
     $('tmBlockDetailsInput').value = node.details || '';
     const attachmentInput = $('tmBlockAttachmentInput');
     if (attachmentInput) attachmentInput.value = '';
@@ -1019,11 +1060,24 @@
     const node = findBuilderNode(state.editingBlockId);
     if (!node) return;
     if (state.blockUploadPending) { $('tmBlockEditorError').textContent = 'Wait until the attachment finishes uploading.'; return; }
-    const department = $('tmBlockDepartmentInput').value.trim();
+    const ownerValue = $('tmBlockDepartmentInput').value.trim();
     const request = $('tmBlockRequestInput').value.trim();
     const deliveryDate = $('tmBlockDeliveryDateInput').value || '';
-    if (!department || !request || !deliveryDate) { $('tmBlockEditorError').textContent = 'Responsible department, requested action, and delivery date are required.'; return; }
-    node.department = department;
+    const peopleMode = state.builder.mode === 'people';
+    if (!ownerValue || !request || !deliveryDate) {
+      $('tmBlockEditorError').textContent = peopleMode
+        ? 'Responsible team member, assigned task, and delivery date are required.'
+        : 'Responsible department, requested action, and delivery date are required.';
+      return;
+    }
+    if (peopleMode) {
+      const member = state.teamMembers.find((item) => String(item.id || item.name || '') === ownerValue);
+      node.assigneeId = ownerValue;
+      node.department = member?.name || ownerValue;
+    } else {
+      node.department = ownerValue;
+      node.assigneeId = '';
+    }
     node.request = request;
     node.details = $('tmBlockDetailsInput').value.trim();
     node.deliveryDate = deliveryDate;
@@ -1031,7 +1085,7 @@
     $('tmBlockEditorError').textContent = '';
     setOverlay(blockOverlay, false);
     renderBuilder();
-    updateBuilderStatus('Block details saved.');
+    updateBuilderStatus(peopleMode ? 'Person task details saved.' : 'Block details saved.');
   }
 
   function workflowHasCycle(nodes, edges) {
@@ -1059,20 +1113,71 @@
   }
 
   function saveWorkflowBuilder() {
-    if (state.view !== 'delegated' && state.builder.mode !== 'edit') return;
-    if (!state.builder.nodes.length) { showToast('info', 'Add a block', 'Create at least one workflow block before saving the project.'); return; }
-    if (!state.builder.meta.title.trim() || !state.builder.meta.priority || !state.builder.meta.dueDate) {
+    const peopleMode = state.builder.mode === 'people';
+    if (!peopleMode && state.view !== 'delegated' && state.builder.mode !== 'edit') return;
+    if (!state.builder.nodes.length) {
+      showToast('info', peopleMode ? 'Add a person task' : 'Add a block', peopleMode
+        ? 'Create at least one person task before saving the team workflow.'
+        : 'Create at least one workflow block before saving the project.');
+      return;
+    }
+    if (!peopleMode && (!state.builder.meta.title.trim() || !state.builder.meta.priority || !state.builder.meta.dueDate)) {
       openTicketMeta();
       $('tmMetaError').textContent = 'Project title, priority, and target date are required.';
       return;
     }
-    const invalid = state.builder.nodes.find((node) => !String(node.department || '').trim() || !String(node.request || '').trim() || !String(node.deliveryDate || '').trim());
-    if (invalid) { openBlockEditor(invalid.id); $('tmBlockEditorError').textContent = 'Responsible department, requested action, and delivery date are required for every block.'; return; }
-    if (workflowHasCycle(state.builder.nodes, state.builder.edges)) { showToast('error', 'Circular workflow not allowed', 'Remove a circular arrow before saving the project.'); return; }
+    const invalid = state.builder.nodes.find((node) => {
+      const owner = peopleMode ? String(node.assigneeId || '').trim() : String(node.department || '').trim();
+      return !owner || !String(node.request || '').trim() || !String(node.deliveryDate || '').trim();
+    });
+    if (invalid) {
+      openBlockEditor(invalid.id);
+      $('tmBlockEditorError').textContent = peopleMode
+        ? 'Responsible team member, assigned task, and delivery date are required for every block.'
+        : 'Responsible department, requested action, and delivery date are required for every block.';
+      return;
+    }
+    if (workflowHasCycle(state.builder.nodes, state.builder.edges)) {
+      showToast('error', 'Circular workflow not allowed', 'Remove a circular arrow before saving the workflow.');
+      return;
+    }
 
     const editing = state.builder.mode === 'edit' && !!state.builder.ticketId;
     const button = $('tmSaveWorkflowBtn');
     if (button) { button.disabled = true; button.classList.add('is-loading'); }
+
+    if (peopleMode) {
+      const sectionId = state.builder.contextSectionId;
+      const payload = {
+        view: state.view,
+        assignments: orderedBuilderNodes().map((node, index) => ({
+          clientId: node.id,
+          assigneeId: node.assigneeId,
+          assigneeName: node.department,
+          task: node.request,
+          details: node.details || '',
+          deliveryDate: node.deliveryDate,
+          attachment: node.attachment || null,
+          sortOrder: index + 1,
+          canvasX: Math.round(safeNumber(node.x, 60)),
+          canvasY: Math.round(safeNumber(node.y, 80)),
+        })),
+        edges: state.builder.edges.map((edge) => ({ from: edge.from, to: edge.to })),
+      };
+      api(`/api/task-management/sections/${encodeURIComponent(sectionId)}/people-workflow`, { method: 'PUT', body: payload })
+        .then((data) => {
+          setOverlay(builderOverlay, false);
+          if (state.workSection) state.workSection.peopleWorkflowCount = Array.isArray(data.assignments) ? data.assignments.length : state.builder.nodes.length;
+          showToast('success', 'Team workflow saved', 'The section work was distributed to people inside your department.');
+          const reopenWork = state.builder.returnToWorkPage;
+          resetBuilder();
+          if (reopenWork && state.workSection) setOverlay(workPageOverlay, true);
+        })
+        .catch((error) => showToast('error', 'Could not save team workflow', error.message || 'Please try again.'))
+        .finally(() => { if (button) { button.disabled = false; button.classList.remove('is-loading'); } });
+      return;
+    }
+
     const payload = {
       view: state.view,
       adminPassword: editing ? (state.builder.adminPassword || '') : undefined,
@@ -1295,6 +1400,15 @@
     return !!isDepartment;
   }
 
+  function isMyDepartmentSection(section) {
+    const myDepartment = norm((state.currentUser || window.__tmCurrentUser || {}).department || '');
+    return !!(myDepartment && myDepartment === norm(section?.department || ''));
+  }
+
+  function canEditMyTaskWork() {
+    return state.view === 'my' && ['edit', 'admin'].includes(norm(state.accessLevel || ''));
+  }
+
   function deriveLegacyEdges(sections = []) {
     const groups = new Map();
     (sections || []).forEach((section, index) => {
@@ -1395,30 +1509,33 @@
   }
 
   function renderWorkflowCard(ticket, section, nodeIndex) {
-    const allowed = sectionActionAllowed(ticket, section);
     const unlocked = isSectionUnlocked(ticket, section);
-    const canStart = unlocked && section.status === 'not_started';
-    const canComplete = unlocked && (section.status === 'in_progress' || section.status === 'not_started');
-    const canManage = state.view === 'my' && allowed && unlocked;
+    const mine = state.view === 'my' && isMyDepartmentSection(section);
+    const interactive = state.view !== 'my' || mine;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
-      : (section.completedAt ? `Completed ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
+      : (section.completedAt ? `Done ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
     const number = section.workflowNumber || String(nodeIndex + 1);
+    const interactiveAttrs = interactive
+      ? ` data-tm-open-section="${escapeHtml(section.id)}" role="button" tabindex="0" aria-label="Open task details for ${escapeHtml(section.department || 'department')}"`
+      : ' role="group" tabindex="-1" aria-disabled="true"';
+    const mineClass = mine ? ' tm-workflow-card--mine' : (state.view === 'my' ? ' tm-workflow-card--other-department' : '');
     return `
-      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer tm-workflow-card--interactive ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" data-tm-open-section="${escapeHtml(section.id)}" role="button" tabindex="0" aria-label="Open task details for ${escapeHtml(section.department || 'department')}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
+      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer${interactive ? ' tm-workflow-card--interactive' : ''}${mineClass} ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}"${interactiveAttrs} style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top">
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
-          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>Workflow block ${escapeHtml(number)}</small></div>
-          ${statusPill(section.status)}
+          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${mine ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
+          <span class="tm-status-pill ${statusClass(section.status)}"><i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}</span>
         </div>
         <div class="tm-builder-block__body tm-workflow-card__body">
           <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(section.request || '—')}</strong>
           ${(section.deliveryDate || section.attachment?.url) ? `<div class="tm-builder-block__meta">${section.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(section.deliveryDate))}</span>` : ''}${section.attachment?.url ? `<a class="tm-builder-block__attachment tm-workflow-card__attachment" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(section.attachment.name || 'Open attachment')}</span><i data-feather="external-link"></i></a>` : ''}</div>` : ''}
           ${section.details ? `<div class="tm-workflow-card__details"><span>Implementation details</span><p>${escapeHtml(section.details)}</p></div>` : ''}
-          ${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}
+          ${section.workReport ? `<div class="tm-workflow-card__note"><i data-feather="file-text"></i><div><span>Work report${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.workReport)}</p></div></div>` : (section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : '')}
+          ${section.status === 'rejected' && section.rejectionReason ? `<div class="tm-workflow-card__rejection"><i data-feather="alert-circle"></i><span>${escapeHtml(section.rejectionReason)}</span></div>` : ''}
         </div>
-        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${canManage ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
+        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${mine ? '<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>Open your task</span>' : ''}</div>
       </article>`;
   }
 
@@ -1426,6 +1543,7 @@
     const ticket = state.selectedTicket;
     const section = (ticket?.sections || []).find((item) => String(item.id) === String(sectionId));
     if (!ticket || !section || !sectionDetailsOverlay) return;
+    if (state.view === 'my' && !isMyDepartmentSection(section)) return;
     state.readonlySection = section;
 
     const layoutSection = graphLayout(ticket).nodes.find((item) => String(item.id) === String(section.id));
@@ -1433,7 +1551,13 @@
     const department = section.department || 'Department';
     const attachment = section.attachment?.url
       ? `<a class="tm-section-details__file" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><span class="tm-section-details__file-icon"><i data-feather="paperclip"></i></span><span><b>${escapeHtml(section.attachment.name || 'Open attachment')}</b><small>${escapeHtml(formatBytes(section.attachment.size || section.attachment.sizeBytes || 0) || 'Attached file')}</small></span><i data-feather="external-link"></i></a>`
-      : '<div class="tm-section-details__empty"><i data-feather="paperclip"></i><span>No files attached to this task.</span></div>';
+      : '<div class="tm-section-details__empty"><i data-feather="paperclip"></i><span>No project files attached to this task.</span></div>';
+    const workFile = section.workFile?.url
+      ? `<a class="tm-section-details__file" href="${escapeHtml(section.workFile.url)}" target="_blank" rel="noopener noreferrer"><span class="tm-section-details__file-icon"><i data-feather="file"></i></span><span><b>${escapeHtml(section.workFile.name || 'Open work file')}</b><small>${escapeHtml(formatBytes(section.workFile.size || 0) || 'Work file')}</small></span><i data-feather="external-link"></i></a>`
+      : '';
+    const workLink = section.workLink
+      ? `<a class="tm-section-details__file" href="${escapeHtml(section.workLink)}" target="_blank" rel="noopener noreferrer"><span class="tm-section-details__file-icon"><i data-feather="link"></i></span><span><b>Open work link</b><small>${escapeHtml(section.workLink)}</small></span><i data-feather="external-link"></i></a>`
+      : '';
 
     const kicker = $('tmSectionDetailsKicker');
     const title = $('tmSectionDetailsTitle');
@@ -1443,7 +1567,7 @@
     if (title) title.textContent = department;
     if (status) {
       status.className = `tm-status-pill ${statusClass(section.status)}`;
-      status.innerHTML = `<i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(statusLabel(section.status))}`;
+      status.innerHTML = `<i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}`;
     }
     if (body) {
       body.innerHTML = `
@@ -1452,12 +1576,124 @@
           <div class="tm-section-details__item"><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>
           <div class="tm-section-details__item tm-section-details__item--wide"><span>Requested action</span><p>${escapeHtml(section.request || 'No requested action provided.')}</p></div>
           <div class="tm-section-details__item tm-section-details__item--wide"><span>Implementation details</span><p>${escapeHtml(section.details || 'No implementation details provided.')}</p></div>
-          <div class="tm-section-details__item tm-section-details__item--wide"><span>Files</span>${attachment}</div>
-          ${section.completionNote ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div>` : ''}
+          <div class="tm-section-details__item tm-section-details__item--wide"><span>Project files</span>${attachment}</div>
+          ${(section.workReport || section.completionNote) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Work report</span><p>${escapeHtml(section.workReport || section.completionNote)}</p></div>` : ''}
+          ${(workFile || workLink) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Work files and links</span><div class="tm-section-details__files">${workFile}${workLink}</div></div>` : ''}
+          ${section.rejectionReason ? `<div class="tm-section-details__item tm-section-details__item--wide tm-section-details__item--rejected"><span>Rejected reason</span><p>${escapeHtml(section.rejectionReason)}</p></div>` : ''}
         </div>`;
     }
+    const openWorkButton = $('tmOpenWorkPageBtn');
+    if (openWorkButton) openWorkButton.hidden = !(state.view === 'my' && isMyDepartmentSection(section));
     hydrateIcons(sectionDetailsOverlay);
     setOverlay(sectionDetailsOverlay, true);
+  }
+
+  function viewerZoom() {
+    return clamp(safeNumber(state.viewer?.zoom, 1), 0.45, 1.8);
+  }
+
+  function updateViewerZoomControls() {
+    const zoom = viewerZoom();
+    const label = $('tmViewerZoomLabel');
+    if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+    const out = $('tmViewerZoomOutBtn');
+    const inside = $('tmViewerZoomInBtn');
+    if (out) out.disabled = zoom <= 0.45;
+    if (inside) inside.disabled = zoom >= 1.8;
+  }
+
+  function applyViewerZoom(value = state.viewer.zoom, { clientX, clientY } = {}) {
+    if (!workflowCanvasWrap || !workflowStage) return;
+    const board = $('tmWorkflowFlow');
+    if (!board) return;
+    const oldZoom = viewerZoom();
+    const nextZoom = clamp(safeNumber(value, oldZoom), 0.45, 1.8);
+    const rect = workflowCanvasWrap.getBoundingClientRect();
+    const localX = clamp(safeNumber(clientX, rect.left + rect.width / 2) - rect.left, 0, rect.width);
+    const localY = clamp(safeNumber(clientY, rect.top + rect.height / 2) - rect.top, 0, rect.height);
+    const contentX = (workflowCanvasWrap.scrollLeft + localX) / oldZoom;
+    const contentY = (workflowCanvasWrap.scrollTop + localY) / oldZoom;
+    state.viewer.zoom = nextZoom;
+    board.style.transform = `scale(${nextZoom})`;
+    board.style.transformOrigin = '0 0';
+    workflowStage.style.width = `${Math.ceil(safeNumber(state.viewer.width, 980) * nextZoom)}px`;
+    workflowStage.style.height = `${Math.ceil(safeNumber(state.viewer.height, 650) * nextZoom)}px`;
+    workflowCanvasWrap.scrollLeft = Math.max(0, contentX * nextZoom - localX);
+    workflowCanvasWrap.scrollTop = Math.max(0, contentY * nextZoom - localY);
+    updateViewerZoomControls();
+  }
+
+  function resetViewerCanvas() {
+    state.viewer = { zoom: 1, pan: null, pinch: null, width: safeNumber(state.viewer?.width, 980), height: safeNumber(state.viewer?.height, 650) };
+    applyViewerZoom(1);
+    if (workflowCanvasWrap) {
+      workflowCanvasWrap.scrollLeft = 0;
+      workflowCanvasWrap.scrollTop = 0;
+    }
+  }
+
+  function startViewerPan(event) {
+    if (!workflowCanvasWrap || !isOverlayOpen(workflowOverlay)) return;
+    if (event.button !== undefined && event.button !== 0) return;
+    if (event.target.closest('button, a, [data-tm-open-section]')) return;
+    state.viewer.pan = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: workflowCanvasWrap.scrollLeft,
+      startScrollTop: workflowCanvasWrap.scrollTop,
+      moved: false,
+    };
+    workflowCanvasWrap.classList.add('is-panning');
+    try { workflowCanvasWrap.setPointerCapture(event.pointerId); } catch {}
+  }
+
+  function moveViewerPan(event) {
+    const pan = state.viewer.pan;
+    if (!pan || (pan.pointerId != null && event.pointerId !== pan.pointerId) || !workflowCanvasWrap) return false;
+    const dx = event.clientX - pan.startX;
+    const dy = event.clientY - pan.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 5) pan.moved = true;
+    workflowCanvasWrap.scrollLeft = pan.startScrollLeft - dx;
+    workflowCanvasWrap.scrollTop = pan.startScrollTop - dy;
+    if (pan.moved) event.preventDefault();
+    return true;
+  }
+
+  function endViewerPan(event) {
+    const pan = state.viewer.pan;
+    if (!pan || (event?.pointerId != null && pan.pointerId != null && event.pointerId !== pan.pointerId)) return false;
+    state.viewer.pan = null;
+    workflowCanvasWrap?.classList.remove('is-panning');
+    return true;
+  }
+
+  function handleViewerWheel(event) {
+    if (!isOverlayOpen(workflowOverlay) || !(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    applyViewerZoom(viewerZoom() + (event.deltaY < 0 ? 0.1 : -0.1), { clientX: event.clientX, clientY: event.clientY });
+  }
+
+  function handleViewerTouchStart(event) {
+    if (!isOverlayOpen(workflowOverlay) || event.touches.length !== 2) return;
+    event.preventDefault();
+    endViewerPan();
+    state.viewer.pinch = { startDistance: Math.max(1, touchDistance(event.touches)), startZoom: viewerZoom() };
+    workflowCanvasWrap?.classList.add('is-pinching');
+  }
+
+  function handleViewerTouchMove(event) {
+    if (!state.viewer.pinch || event.touches.length < 2) return;
+    event.preventDefault();
+    const distance = touchDistance(event.touches);
+    const midpoint = touchMidpoint(event.touches);
+    applyViewerZoom(state.viewer.pinch.startZoom * (distance / state.viewer.pinch.startDistance), midpoint);
+  }
+
+  function handleViewerTouchEnd(event) {
+    if (!state.viewer.pinch || event.touches.length >= 2) return;
+    state.viewer.pinch = null;
+    workflowCanvasWrap?.classList.remove('is-pinching');
   }
 
   function renderWorkflow(ticket) {
@@ -1468,6 +1704,8 @@
     const statusEl = $('tmWorkflowStatus');
     statusEl.className = `tm-status-pill ${statusClass(ticket.status)}`;
     statusEl.innerHTML = `<i data-feather="${statusIcon(ticket.status)}"></i>${escapeHtml(statusLabel(ticket.status))}`;
+    const editButton = $('tmEditProjectBtn');
+    if (editButton) editButton.hidden = state.view === 'my';
     $('tmWorkflowSummary').innerHTML = `<div><span>Objective</span><p>${escapeHtml(ticket.description || 'No additional context provided.')}</p></div><div><span>Priority</span><b class="tm-priority tm-priority--${escapeHtml(norm(ticket.priority || 'normal'))}">${escapeHtml(ticket.priority || 'Normal')}</b></div><div><span>Target date</span><b>${escapeHtml(formatDate(ticket.dueDate))}</b></div><div><span>Progress</span><b>${ticket.completedCount || 0}/${ticket.sectionsCount || 0} complete</b></div>`;
 
     const flow = $('tmWorkflowFlow');
@@ -1480,17 +1718,24 @@
       node._visualHeight = Math.max(1, card.offsetHeight || 172);
     });
     const dimensions = getBoardDimensions(nodes);
+    state.viewer.width = dimensions.width;
+    state.viewer.height = dimensions.height;
     flow.style.width = `${dimensions.width}px`;
     flow.style.height = `${dimensions.height}px`;
     renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow', { markerId: 'tmWorkflowArrowHead' });
+    applyViewerZoom(viewerZoom());
     hydrateIcons(workflowOverlay);
   }
 
   function openWorkflow(ticket) {
     state.selectedTicket = ticket;
+    state.viewer.zoom = 1;
     renderWorkflow(ticket);
     setOverlay(workflowOverlay, true);
-    window.requestAnimationFrame(() => renderWorkflow(ticket));
+    window.requestAnimationFrame(() => {
+      renderWorkflow(ticket);
+      resetViewerCanvas();
+    });
   }
 
   function openEditBuilder(ticket, adminPassword = '') {
@@ -1583,6 +1828,236 @@
     }
   }
 
+
+  function renderWorkFilePreview() {
+    const preview = $('tmWorkFilePreview');
+    if (!preview) return;
+    const file = state.workFile;
+    if (!file?.url) {
+      preview.hidden = true;
+      preview.innerHTML = '';
+      return;
+    }
+    preview.hidden = false;
+    preview.innerHTML = `
+      <span class="tm-upload-file__icon"><i data-feather="file-text"></i></span>
+      <span class="tm-upload-file__info"><b>${escapeHtml(file.name || 'Work file')}</b><small>${escapeHtml([file.type || '', formatBytes(file.size)].filter(Boolean).join(' · ') || 'Uploaded work file')}</small></span>
+      <a class="tm-upload-file__open" href="${escapeHtml(file.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open work file"><i data-feather="external-link"></i></a>
+      ${canEditMyTaskWork() ? '<button class="tm-upload-file__remove" type="button" data-tm-remove-work-file aria-label="Remove work file"><i data-feather="trash-2"></i></button>' : ''}`;
+    hydrateIcons(preview);
+  }
+
+  function updateRejectedReasonPreview() {
+    const preview = $('tmRejectedReasonPreview');
+    const button = $('tmRejectedReasonBtn');
+    const reason = String(state.rejectedReasonDraft || '').trim();
+    if (preview) preview.textContent = reason || 'No rejected reason';
+    if (button) button.classList.toggle('has-value', !!reason);
+  }
+
+  function applyWorkPagePermissions() {
+    const editable = canEditMyTaskWork();
+    ['tmWorkStatusInput', 'tmWorkReportInput', 'tmWorkFileInput', 'tmWorkLinkInput'].forEach((id) => {
+      const input = $(id);
+      if (input) input.disabled = !editable;
+    });
+    const rejectButton = $('tmRejectedReasonBtn');
+    if (rejectButton) rejectButton.disabled = !editable;
+    const teamButton = $('tmOpenPeopleWorkflowBtn');
+    if (teamButton) teamButton.disabled = !editable;
+    const saveButton = $('tmSaveWorkBtn');
+    if (saveButton) saveButton.hidden = !editable;
+    const note = $('tmWorkPermissionNote');
+    if (note) note.hidden = editable;
+    refreshModernSelect($('tmWorkStatusInput'));
+  }
+
+  function openWorkPage() {
+    const section = state.readonlySection;
+    const ticket = state.selectedTicket;
+    if (!section || !ticket || state.view !== 'my' || !isMyDepartmentSection(section)) return;
+    state.workSection = section;
+    state.workFile = section.workFile ? { ...section.workFile } : null;
+    state.workFileUploadPending = false;
+    state.rejectedReasonDraft = section.rejectionReason || '';
+    state.workPreviousStatus = section.status || 'not_started';
+
+    $('tmWorkPageKicker').textContent = section.department || 'My department task';
+    $('tmWorkPageTitle').textContent = section.request || 'Task work page';
+    $('tmWorkPageSub').textContent = `${ticket.ticketCode || 'Project'} · ${ticket.title || 'Project workflow'}`;
+    $('tmWorkPageSummary').innerHTML = `
+      <div><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>
+      <div><span>Project priority</span><b>${escapeHtml(ticket.priority || 'Normal')}</b></div>
+      <div class="tm-work-page__summary-wide"><span>Requested action</span><p>${escapeHtml(section.request || '—')}</p></div>
+      <div class="tm-work-page__summary-wide"><span>Implementation details</span><p>${escapeHtml(section.details || 'No implementation details provided.')}</p></div>`;
+    $('tmWorkStatusInput').value = section.status || 'not_started';
+    refreshModernSelect($('tmWorkStatusInput'));
+    $('tmWorkReportInput').value = section.workReport || section.completionNote || '';
+    $('tmWorkLinkInput').value = section.workLink || '';
+    $('tmWorkPageError').textContent = '';
+    const fileInput = $('tmWorkFileInput');
+    if (fileInput) fileInput.value = '';
+    renderWorkFilePreview();
+    updateRejectedReasonPreview();
+    applyWorkPagePermissions();
+    hydrateIcons(workPageOverlay);
+    setOverlay(sectionDetailsOverlay, false);
+    setOverlay(workPageOverlay, true);
+  }
+
+  function openRejectedReason() {
+    if (!canEditMyTaskWork()) return;
+    $('tmRejectReasonInput').value = state.rejectedReasonDraft || '';
+    $('tmRejectReasonError').textContent = '';
+    setOverlay(rejectReasonOverlay, true);
+  }
+
+  function saveRejectedReason(event) {
+    event.preventDefault();
+    const reason = $('tmRejectReasonInput').value.trim();
+    if (!reason) {
+      $('tmRejectReasonError').textContent = 'Rejected reason is required.';
+      return;
+    }
+    state.rejectedReasonDraft = reason;
+    $('tmRejectReasonError').textContent = '';
+    updateRejectedReasonPreview();
+    setOverlay(rejectReasonOverlay, false);
+  }
+
+  async function uploadWorkFile(file) {
+    const errorEl = $('tmWorkPageError');
+    const input = $('tmWorkFileInput');
+    const progress = $('tmWorkFileProgress');
+    if (!file || !canEditMyTaskWork()) return;
+    if (file.size > 10 * 1024 * 1024) {
+      if (errorEl) errorEl.textContent = 'The work file must be 10 MB or less.';
+      if (input) input.value = '';
+      return;
+    }
+    state.workFileUploadPending = true;
+    if (errorEl) errorEl.textContent = '';
+    if (input) input.disabled = true;
+    if (progress) progress.hidden = false;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
+        method: 'POST',
+        body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size },
+      });
+      state.workFile = result.file || null;
+      renderWorkFilePreview();
+    } catch (error) {
+      if (errorEl) errorEl.textContent = error.message || 'Failed to upload work file.';
+    } finally {
+      state.workFileUploadPending = false;
+      if (input) { input.disabled = !canEditMyTaskWork(); input.value = ''; }
+      if (progress) progress.hidden = true;
+    }
+  }
+
+  async function submitWorkPage(event) {
+    event.preventDefault();
+    if (!canEditMyTaskWork()) {
+      showToast('info', 'View-only access', 'You can review this task, but you cannot change its work information.');
+      return;
+    }
+    const section = state.workSection;
+    if (!section) return;
+    const status = $('tmWorkStatusInput').value || 'not_started';
+    const report = $('tmWorkReportInput').value.trim();
+    const workLink = $('tmWorkLinkInput').value.trim();
+    const errorEl = $('tmWorkPageError');
+    if (state.workFileUploadPending) {
+      errorEl.textContent = 'Wait until the work file finishes uploading.';
+      return;
+    }
+    if (status === 'rejected' && !String(state.rejectedReasonDraft || '').trim()) {
+      errorEl.textContent = 'Enter the rejected reason before saving.';
+      openRejectedReason();
+      return;
+    }
+    if (workLink && !/^https?:\/\//i.test(workLink)) {
+      errorEl.textContent = 'Work link must start with http:// or https://.';
+      return;
+    }
+    const button = $('tmSaveWorkBtn');
+    if (button) button.disabled = true;
+    errorEl.textContent = '';
+    try {
+      const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/work`, {
+        method: 'PATCH',
+        body: {
+          view: state.view,
+          status,
+          workReport: report,
+          rejectionReason: status === 'rejected' ? state.rejectedReasonDraft : '',
+          workLink,
+          workFile: state.workFile || null,
+        },
+      });
+      setOverlay(workPageOverlay, false);
+      await loadTickets();
+      const latest = state.tickets.find((ticket) => String(ticket.id) === String(data.ticket?.id)) || data.ticket;
+      state.selectedTicket = latest;
+      state.workSection = (latest?.sections || []).find((item) => String(item.id) === String(section.id)) || data.section || null;
+      state.readonlySection = state.workSection;
+      renderWorkflow(latest);
+      showToast('success', 'Work saved', 'The task status, report, and work files were updated.');
+    } catch (error) {
+      errorEl.textContent = error.message || 'Failed to save task work.';
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function openPeopleWorkflow() {
+    const section = state.workSection || state.readonlySection;
+    if (!section || state.view !== 'my') return;
+    if (!canEditMyTaskWork()) {
+      showToast('info', 'View-only access', 'Edit or Admin access is required to assign work to team members.');
+      return;
+    }
+    const button = $('tmOpenPeopleWorkflowBtn');
+    if (button) button.disabled = true;
+    try {
+      const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow?view=${encodeURIComponent(state.view)}`);
+      resetBuilder();
+      state.builder.mode = 'people';
+      state.builder.contextSectionId = String(section.id);
+      state.builder.returnToWorkPage = true;
+      state.teamMembers = Array.isArray(data.members) ? data.members : [];
+      state.builder.nodes = (data.assignments || []).map((assignment) => ({
+        id: String(assignment.id),
+        assigneeId: String(assignment.assigneeId || ''),
+        department: assignment.assigneeName || '',
+        request: assignment.task || '',
+        details: assignment.details || '',
+        deliveryDate: assignment.deliveryDate || '',
+        attachment: assignment.attachment ? { ...assignment.attachment } : null,
+        x: safeNumber(assignment.canvasX, 80),
+        y: safeNumber(assignment.canvasY, 80),
+      }));
+      state.builder.edges = (data.edges || []).map((edge) => ({ from: String(edge.from), to: String(edge.to) }));
+      const dimensions = getBoardDimensions(state.builder.nodes, { width: 1280, height: 900 });
+      state.builder.canvas = { width: dimensions.width, height: dimensions.height };
+      syncBuilderModeLabels();
+      setOverlay(workPageOverlay, false);
+      setOverlay(builderOverlay, true);
+      window.requestAnimationFrame(() => {
+        renderBuilder();
+        if (builderCanvasWrap) {
+          builderCanvasWrap.scrollLeft = 0;
+          builderCanvasWrap.scrollTop = 0;
+        }
+      });
+    } catch (error) {
+      showToast('error', 'Could not open team workflow', error.message || 'Please try again.');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
   function openSectionUpdate(sectionId, directStatus = '') {
     const ticket = state.selectedTicket;
     const section = (ticket?.sections || []).find((item) => String(item.id) === String(sectionId));
@@ -1649,11 +2124,14 @@
       const meta = await api(`/api/task-management/meta?view=${encodeURIComponent(state.view)}`);
       state.departments = Array.isArray(meta.departments) ? meta.departments : [];
       state.currentUser = meta.currentUser || {};
+      state.accessLevel = String(meta.accessLevel || (meta.isPageAdmin ? 'admin' : 'view')).toLowerCase();
       window.__tmCurrentUser = state.currentUser;
       window.__tmIsPageAdmin = !!meta.isPageAdmin;
+      window.__tmAccessLevel = state.accessLevel;
     } catch {
       state.departments = [];
       state.currentUser = {};
+      state.accessLevel = 'view';
     }
     renderDepartmentFilter();
     await loadTickets({ preserve: false });
@@ -1667,6 +2145,8 @@
     blockForm?.addEventListener('submit', saveBlockEditor);
     adminForm?.addEventListener('submit', verifyProjectEditAccess);
     updateForm?.addEventListener('submit', submitSectionUpdate);
+    workPageForm?.addEventListener('submit', submitWorkPage);
+    rejectReasonForm?.addEventListener('submit', saveRejectedReason);
     $('tmAddBlockBtn')?.addEventListener('click', addBuilderNode);
     $('tmZoomOutBtn')?.addEventListener('click', () => setBuilderZoom(builderZoom() - 0.1));
     $('tmZoomResetBtn')?.addEventListener('click', () => setBuilderZoom(1));
@@ -1674,7 +2154,17 @@
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
     $('tmEditProjectBtn')?.addEventListener('click', requestProjectEdit);
+    $('tmOpenWorkPageBtn')?.addEventListener('click', openWorkPage);
+    $('tmOpenPeopleWorkflowBtn')?.addEventListener('click', openPeopleWorkflow);
+    $('tmRejectedReasonBtn')?.addEventListener('click', openRejectedReason);
     $('tmBlockAttachmentInput')?.addEventListener('change', (event) => uploadBlockAttachment(event.target.files?.[0]));
+    $('tmWorkFileInput')?.addEventListener('change', (event) => uploadWorkFile(event.target.files?.[0]));
+    $('tmWorkStatusInput')?.addEventListener('change', (event) => {
+      if (event.target.value === 'rejected' && canEditMyTaskWork()) openRejectedReason();
+    });
+    $('tmViewerZoomOutBtn')?.addEventListener('click', () => applyViewerZoom(viewerZoom() - 0.1));
+    $('tmViewerZoomResetBtn')?.addEventListener('click', () => applyViewerZoom(1));
+    $('tmViewerZoomInBtn')?.addEventListener('click', () => applyViewerZoom(viewerZoom() + 0.1));
     searchInput?.addEventListener('input', () => { state.query = norm(searchInput.value); renderTickets(); });
     departmentFilterBtn?.addEventListener('click', (event) => {
       event.preventDefault();
@@ -1723,17 +2213,26 @@
     builderCanvasWrap?.addEventListener('touchmove', handleBuilderTouchMove, { passive: false });
     builderCanvasWrap?.addEventListener('touchend', handleBuilderTouchEnd, { passive: false });
     builderCanvasWrap?.addEventListener('touchcancel', handleBuilderTouchEnd, { passive: false });
+    workflowCanvasWrap?.addEventListener('pointerdown', startViewerPan);
+    workflowCanvasWrap?.addEventListener('wheel', handleViewerWheel, { passive: false });
+    workflowCanvasWrap?.addEventListener('touchstart', handleViewerTouchStart, { passive: false });
+    workflowCanvasWrap?.addEventListener('touchmove', handleViewerTouchMove, { passive: false });
+    workflowCanvasWrap?.addEventListener('touchend', handleViewerTouchEnd, { passive: false });
+    workflowCanvasWrap?.addEventListener('touchcancel', handleViewerTouchEnd, { passive: false });
     document.addEventListener('pointermove', (event) => {
       if (moveBlockDrag(event)) return;
-      moveCanvasPan(event);
+      if (moveCanvasPan(event)) return;
+      moveViewerPan(event);
     });
     document.addEventListener('pointerup', (event) => {
       if (endBlockDrag(event)) return;
-      endCanvasPan(event);
+      if (endCanvasPan(event)) return;
+      endViewerPan(event);
     });
     document.addEventListener('pointercancel', (event) => {
       if (endBlockDrag(event)) return;
-      endCanvasPan(event);
+      if (endCanvasPan(event)) return;
+      endViewerPan(event);
     });
 
     document.addEventListener('click', (event) => {
@@ -1750,10 +2249,13 @@
       if (close) {
         const which = close.dataset.tmClose;
         if (which === 'builder') {
+          const returnToWork = state.builder?.mode === 'people' && state.builder?.returnToWorkPage && !!state.workSection;
           clearPendingBlockPress();
           endBlockDrag();
           endCanvasPan();
           setOverlay(builderOverlay, false);
+          if (returnToWork) setOverlay(workPageOverlay, true);
+          if (state.builder?.mode === 'people') resetBuilder();
         }
         if (which === 'meta') {
           setOverlay(metaOverlay, false);
@@ -1766,6 +2268,14 @@
         }
         if (which === 'workflow') setOverlay(workflowOverlay, false);
         if (which === 'section-details') { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
+        if (which === 'work-page') { state.workSection = null; state.workFile = null; setOverlay(workPageOverlay, false); }
+        if (which === 'reject-reason') {
+          if ($('tmWorkStatusInput')?.value === 'rejected' && !String(state.rejectedReasonDraft || '').trim()) {
+            $('tmWorkStatusInput').value = state.workPreviousStatus || 'not_started';
+            refreshModernSelect($('tmWorkStatusInput'));
+          }
+          setOverlay(rejectReasonOverlay, false);
+        }
         if (which === 'admin') { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         if (which === 'update') setOverlay(updateOverlay, false);
         return;
@@ -1777,6 +2287,13 @@
       if (removeAttachment) {
         state.blockDraftAttachment = null;
         renderBlockAttachmentPreview();
+        return;
+      }
+
+      const removeWorkFile = event.target.closest('[data-tm-remove-work-file]');
+      if (removeWorkFile) {
+        state.workFile = null;
+        renderWorkFilePreview();
         return;
       }
 
@@ -1816,7 +2333,9 @@
         const openSelect = [...modernSelectControllers].find((controller) => !controller.menu.hidden);
         if (openSelect) { openSelect.close({ focus: true }); return; }
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
-        if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
+        if (isOverlayOpen(rejectReasonOverlay)) setOverlay(rejectReasonOverlay, false);
+        else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; setOverlay(workPageOverlay, false); }
+        else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; setOverlay(sectionDetailsOverlay, false); }
         else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
         else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
@@ -1831,7 +2350,12 @@
           renderBuilder();
           updateBuilderStatus('Connection cancelled.');
         }
-        else if (isOverlayOpen(builderOverlay)) setOverlay(builderOverlay, false);
+        else if (isOverlayOpen(builderOverlay)) {
+          const returnToWork = state.builder?.mode === 'people' && state.builder?.returnToWorkPage && !!state.workSection;
+          setOverlay(builderOverlay, false);
+          if (returnToWork) setOverlay(workPageOverlay, true);
+          if (state.builder?.mode === 'people') resetBuilder();
+        }
       }
       if (event.key === 'Enter' || event.key === ' ') {
         const sectionCard = document.activeElement?.closest?.('[data-tm-open-section]');
