@@ -13,10 +13,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Task Management</title>
   <style>body.permissions-loading .sidebar li { display:none !important; }</style>
-  <link href="/css/style.css?v=task-management-projects-v4" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=task-management-projects-v4" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=task-management-projects-v4" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-projects-v4" rel="stylesheet" />
+  <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-projects-v5" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -60,17 +60,25 @@
       </header>
 
       <main class="container-full-width tm-main">
-        <div class="tm-toolbar tm-orders-toolbar" role="toolbar" aria-label="Task Management status filters">
-          <div class="tm-tabs tm-tabs--orders" id="tmTabs" role="tablist">
-            <button class="tm-tab is-active" type="button" data-status="all" role="tab" aria-selected="true"><span class="tm-tab__icon"><i data-feather="layers"></i></span><span class="tm-tab__label">All</span></button>
-            <button class="tm-tab" type="button" data-status="not_started" role="tab" aria-selected="false"><span class="tm-tab__icon"><i data-feather="circle"></i></span><span class="tm-tab__label">Not started</span></button>
-            <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false"><span class="tm-tab__icon"><i data-feather="activity"></i></span><span class="tm-tab__label">In progress</span></button>
-            <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false"><span class="tm-tab__icon"><i data-feather="check-circle"></i></span><span class="tm-tab__label">Completed</span></button>
+        <div class="tm-toolbar tm-orders-toolbar" role="toolbar" aria-label="Task Management status and department filters">
+          <div class="tm-toolbar__scroll">
+            <div class="tm-tabs tm-tabs--orders" id="tmTabs" role="tablist" aria-label="Project status">
+              <button class="tm-tab is-active" type="button" data-status="all" role="tab" aria-selected="true" title="All"><span class="tm-tab__icon"><i data-feather="layers"></i></span><span class="tm-tab__label">All</span></button>
+              <button class="tm-tab" type="button" data-status="not_started" role="tab" aria-selected="false" title="Not started"><span class="tm-tab__icon"><i data-feather="circle"></i></span><span class="tm-tab__label">Not started</span></button>
+              <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false" title="In progress"><span class="tm-tab__icon"><i data-feather="activity"></i></span><span class="tm-tab__label">In progress</span></button>
+              <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false" title="Completed"><span class="tm-tab__icon"><i data-feather="check-circle"></i></span><span class="tm-tab__label">Completed</span></button>
+            </div>
           </div>
-          <div class="tm-toolbar-actions">
-            <div class="tm-toolbar-note" id="tmToolbarNote" aria-live="polite">Loading tickets…</div>
-            <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
+          <div class="tm-toolbar__divider" aria-hidden="true"></div>
+          <div class="tm-department-filter" id="tmDepartmentFilter">
+            <button type="button" class="tm-department-filter__button" id="tmDepartmentFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tmDepartmentFilterPanel" aria-label="Filter projects by department" title="Filter by department">
+              <span class="tm-department-filter__button-icon"><i data-feather="filter"></i></span>
+              <span class="tm-department-filter__button-label">Filter by department</span>
+              <span class="tm-department-filter__button-dot" id="tmDepartmentFilterDot" hidden></span>
+            </button>
+            <div class="tm-department-filter__panel" id="tmDepartmentFilterPanel" role="menu" aria-label="Filter projects by department" hidden></div>
           </div>
+          <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
         </div>
 
         <section class="tm-ticket-grid" id="tmTicketGrid" aria-live="polite">
@@ -110,7 +118,7 @@
           <div class="tm-builder-empty" id="tmBuilderEmpty"><i data-feather="git-branch"></i><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span></div>
         </div>
       </div>
-      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block is one department section</span><span><i class="tm-legend-arrow">→</i>Click an output point, then an input point to create an arrow</span><span><i class="tm-legend-handle"></i>Press and drag any empty part of a block to move it</span><span><i class="tm-legend-handle"></i>Drag the empty grid to pan · Ctrl + wheel or the zoom controls to zoom</span></div>
+      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block is one department section</span><span><i class="tm-legend-arrow">→</i>Click an output point, then an input point to create an arrow</span><span><i class="tm-legend-handle"></i>Press and drag any empty part of a block to move it</span><span><i class="tm-legend-handle"></i>Drag the empty grid to pan · pinch with two fingers, Ctrl + wheel, or use the zoom controls</span></div>
     </section>
   </div>
 
@@ -189,7 +197,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=task-management-projects-v4"></script>
-  <script src="/js/task-management.js?v=task-management-projects-v4"></script>
+  <script src="/js/common-ui.js?v=task-management-projects-v5"></script>
+  <script src="/js/task-management.js?v=task-management-projects-v5"></script>
 </body>
 </html>
