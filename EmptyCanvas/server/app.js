@@ -657,6 +657,7 @@ function _historyShouldSkipRequest(req) {
     /^\/api\/account\/verify-password$/i,
     /^\/api\/b2b\/admin\/verify$/i,
     /^\/api\/kpis\/admin\/verify$/i,
+    /^\/api\/task-management\/admin\/verify$/i,
     /^\/api\/notifications\/read/i,
     /^\/api\/messages\/presence/i,
     /^\/api\/push\//i,
@@ -673,6 +674,7 @@ function _historyShouldExposeRow(row = {}) {
   if (/^\/api\/account\/verify-password$/i.test(path)) return false;
   if (/^\/api\/b2b\/admin\/verify$/i.test(path)) return false;
   if (/^\/api\/kpis\/admin\/verify$/i.test(path)) return false;
+  if (/^\/api\/task-management\/admin\/verify$/i.test(path)) return false;
   if (/^\/api\/notifications\/read/i.test(path)) return false;
   if (/^\/api\/messages\/presence/i.test(path)) return false;
   return true;
@@ -38730,6 +38732,19 @@ app.get("/api/task-management/meta", requireAuth, requireTaskManagementView(), a
   }
 });
 
+app.post("/api/task-management/admin/verify", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
+    const ok = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
+    if (!ok) return res.status(401).json({ ok: false, error: "Invalid admin password." });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[task-management] admin verify error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to verify admin password." });
+  }
+});
+
 function _tmSameMember(ticket = {}, currentMember = {}) {
   const currentId = _tmText(currentMember?.id || "", 120);
   const ticketCreatorId = _tmText(ticket?.createdById || "", 120);
@@ -38894,16 +38909,19 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
 
     const title = _tmText(req.body?.title, 500);
     const description = _tmText(req.body?.description, 8000);
-    const priority = _tmPriority(req.body?.priority);
+    const rawPriority = _tmText(req.body?.priority, 30);
+    const priority = _tmPriority(rawPriority);
     const dueDate = _tmDate(req.body?.dueDate);
     const plan = _tmBuildWorkflowPlan(req.body?.sections, req.body?.edges);
     const sections = plan.sections;
     const edges = plan.edges;
 
     if (!title) return res.status(400).json({ ok: false, error: "Project title is required." });
+    if (!["urgent", "high", "normal", "low"].includes(rawPriority.toLowerCase())) return res.status(400).json({ ok: false, error: "Project priority is required." });
+    if (!dueDate) return res.status(400).json({ ok: false, error: "Project target date is required." });
     if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
-    const invalid = sections.find((section) => !section.department || !section.request);
-    if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department and a requested action." });
+    const invalid = sections.find((section) => !section.department || !section.request || !section.deliveryDate);
+    if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department, requested action, and delivery date." });
 
     const currentUser = await _tmCurrentMember(req);
     const created = await supabaseDb.insert(_tmTicketsTable(), {
@@ -38972,6 +38990,124 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
         : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
           ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
           : (error?.message || "Failed to create project.")));
+    return res.status(error?.status || 500).json({ ok: false, error: message });
+  }
+});
+
+app.put("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
+
+    const ticketId = String(req.params.id || "").trim();
+    if (!ticketId) return res.status(400).json({ ok: false, error: "Missing project ID." });
+
+    const existingTicket = await _tmLoadTicketById(ticketId);
+    if (!existingTicket) return res.status(404).json({ ok: false, error: "Project not found." });
+
+    const currentUser = await _tmCurrentMember(req);
+    if (!_tmTicketBelongsToView(existingTicket, currentUser, req.taskManagementView)) {
+      return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
+    }
+
+    const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
+    const authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
+    if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
+
+    const title = _tmText(req.body?.title, 500);
+    const description = _tmText(req.body?.description, 8000);
+    const rawPriority = _tmText(req.body?.priority, 30);
+    const priority = _tmPriority(rawPriority);
+    const dueDate = _tmDate(req.body?.dueDate);
+    const plan = _tmBuildWorkflowPlan(req.body?.sections, req.body?.edges);
+    const sections = plan.sections;
+    const edges = plan.edges;
+
+    if (!title) return res.status(400).json({ ok: false, error: "Project title is required." });
+    if (!["urgent", "high", "normal", "low"].includes(rawPriority.toLowerCase())) return res.status(400).json({ ok: false, error: "Project priority is required." });
+    if (!dueDate) return res.status(400).json({ ok: false, error: "Project target date is required." });
+    if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
+    const invalid = sections.find((section) => !section.department || !section.request || !section.deliveryDate);
+    if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department, requested action, and delivery date." });
+
+    const now = new Date().toISOString();
+    await supabaseDb.updateById(_tmTicketsTable(), ticketId, {
+      title,
+      description: description || null,
+      priority,
+      due_date: dueDate,
+      updated_at: now,
+    });
+
+    const existingSectionsById = new Map((existingTicket.sections || []).map((section) => [String(section.id), section]));
+    const resolvedSectionIds = new Map();
+    const retainedSectionIds = new Set();
+
+    for (const section of sections) {
+      const sectionPayload = {
+        ticket_id: ticketId,
+        department: section.department,
+        request_text: section.request,
+        details: section.details || null,
+        delivery_date: section.deliveryDate,
+        sort_order: section.sortOrder,
+        execution_group: section.executionGroup,
+        canvas_x: section.canvasX || null,
+        canvas_y: section.canvasY || null,
+        attachment_name: section.attachment?.name || null,
+        attachment_url: section.attachment?.url || null,
+        attachment_type: section.attachment?.type || null,
+        attachment_size: section.attachment?.size || null,
+        updated_at: now,
+      };
+
+      const existingSection = existingSectionsById.get(String(section.clientId));
+      if (existingSection) {
+        await supabaseDb.updateById(_tmSectionsTable(), existingSection.id, sectionPayload);
+        resolvedSectionIds.set(section.clientId, String(existingSection.id));
+        retainedSectionIds.add(String(existingSection.id));
+      } else {
+        const createdSection = await supabaseDb.insert(_tmSectionsTable(), {
+          ...sectionPayload,
+          status: "not_started",
+          created_at: now,
+        });
+        const createdId = _tmId(createdSection);
+        if (!createdId) throw new Error("Workflow block was created without an ID.");
+        resolvedSectionIds.set(section.clientId, createdId);
+        retainedSectionIds.add(createdId);
+      }
+    }
+
+    const edgeIds = (existingTicket.edges || []).map((edge) => String(edge.id || "")).filter(Boolean);
+    if (edgeIds.length) await supabaseDb.deleteByIds(_tmEdgesTable(), edgeIds);
+
+    const removedSectionIds = (existingTicket.sections || [])
+      .map((section) => String(section.id || ""))
+      .filter((id) => id && !retainedSectionIds.has(id));
+    if (removedSectionIds.length) await supabaseDb.deleteByIds(_tmSectionsTable(), removedSectionIds);
+
+    for (const edge of edges) {
+      const fromSectionId = resolvedSectionIds.get(edge.from);
+      const toSectionId = resolvedSectionIds.get(edge.to);
+      if (!fromSectionId || !toSectionId) throw new Error("Workflow arrow could not be linked to its blocks.");
+      await supabaseDb.insert(_tmEdgesTable(), {
+        ticket_id: ticketId,
+        from_section_id: fromSectionId,
+        to_section_id: toSectionId,
+      });
+    }
+
+    const ticket = await _tmSyncTicketStatus(ticketId) || await _tmLoadTicketById(ticketId);
+    return res.json({ ok: true, ticket });
+  } catch (error) {
+    console.error("[task-management] update project error:", error?.details || error?.message || error);
+    const detail = String(error?.message || "");
+    const message = /delivery_date.*schema cache|Could not find the .*delivery_date/i.test(detail)
+      ? "The workflow block delivery-date column is not installed. Run the supplied delivery-date SQL migration, then refresh this page."
+      : (/attachment_(name|url|type|size).*schema cache|Could not find the .*attachment_/i.test(detail)
+        ? "Task Management attachment columns are not installed. Run the supplied attachment SQL migration, then refresh this page."
+        : (error?.message || "Failed to update project."));
     return res.status(error?.status || 500).json({ ok: false, error: message });
   }
 });
