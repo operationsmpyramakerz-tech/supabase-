@@ -38445,6 +38445,18 @@ function _tmDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
+function _tmAttachment(value = {}) {
+  if (!value || typeof value !== "object") return null;
+  const url = _tmText(value.url || value.attachmentUrl || value.attachment_url, 4000);
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  return {
+    name: _tmText(value.name || value.filename || value.attachmentName || value.attachment_name, 500) || "Attachment",
+    url,
+    type: _tmText(value.type || value.mime || value.attachmentType || value.attachment_type, 180),
+    size: Math.max(0, Math.min(100 * 1024 * 1024, Number(value.size || value.attachmentSize || value.attachment_size) || 0)),
+  };
+}
+
 function _tmStatus(value, fallback = "not_started") {
   const raw = _tmText(value, 40).toLowerCase().replace(/[\s-]+/g, "_");
   const aliases = {
@@ -38520,12 +38532,19 @@ async function _tmDepartmentOptions() {
 
 function _tmSerializeSection(row = {}) {
   const status = _tmStatus(_sbGet(row, ["status", "Status"]));
+  const attachment = _tmAttachment({
+    name: _sbGet(row, ["attachment_name", "attachmentName"]),
+    url: _sbGet(row, ["attachment_url", "attachmentUrl"]),
+    type: _sbGet(row, ["attachment_type", "attachmentType"]),
+    size: _sbGet(row, ["attachment_size", "attachmentSize"]),
+  });
   return {
     id: _tmId(row),
     ticketId: String(_sbGet(row, ["ticket_id", "ticketId"]) ?? "").trim(),
     department: _tmText(_sbGet(row, ["department", "Department"]), 120),
     request: _tmText(_sbGet(row, ["request_text", "request", "Request", "title", "Title"]), 4000),
     details: _tmText(_sbGet(row, ["details", "description", "Description"]), 8000),
+    attachment,
     sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
     executionGroup: Math.max(1, Number(_sbGet(row, ["execution_group", "executionGroup", "stage", "stage_number"]) || _sbGet(row, ["sort_order", "sortOrder"]) || 1)),
     canvasX: Number(_sbGet(row, ["canvas_x", "canvasX", "node_x", "nodeX"]) || 0),
@@ -38665,6 +38684,34 @@ async function _tmSyncTicketStatus(ticketId) {
   return ticket;
 }
 
+app.post("/api/task-management/upload", requireAuth, requirePage("Delegated Tasks"), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const dataUrl = String(req.body?.dataUrl || req.body?.data || "").trim();
+    const filename = _tmText(req.body?.filename || req.body?.name, 500) || "attachment";
+    const mimeHint = _tmText(req.body?.mime || req.body?.type, 180);
+    const match = dataUrl.match(/^data:([^;,]+)?;base64,([\s\S]+)$/i);
+    if (!match) return res.status(400).json({ ok: false, error: "Choose a valid attachment first." });
+    const bytes = Buffer.from(match[2], "base64");
+    if (!bytes.length) return res.status(400).json({ ok: false, error: "The selected attachment is empty." });
+    if (bytes.length > 10 * 1024 * 1024) return res.status(413).json({ ok: false, error: "The attachment must be 10 MB or less." });
+    const cleanName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || `attachment-${Date.now()}`;
+    const objectPath = `task-management/attachments/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
+    return res.status(201).json({
+      ok: true,
+      file: { name: filename, url, type: mimeHint || match[1] || "application/octet-stream", size: bytes.length },
+    });
+  } catch (error) {
+    console.error("[task-management] attachment upload error:", error?.details || error?.message || error);
+    const raw = String(error?.message || "");
+    const message = raw.includes("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING")
+      ? "File storage is not configured. Add a Supabase Storage bucket or Vercel Blob token."
+      : (error?.message || "Failed to upload attachment.");
+    return res.status(error?.status || 500).json({ ok: false, error: message });
+  }
+});
+
 app.get("/api/task-management/meta", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
@@ -38726,7 +38773,7 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
       tickets = tickets.filter((ticket) => {
         const haystack = [
           ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
-          ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details]),
+          ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.attachment?.name]),
         ].map(norm).join(" ");
         return haystack.includes(query);
       });
@@ -38768,6 +38815,12 @@ function _tmBuildWorkflowPlan(rawSections = [], rawEdges) {
     department: _tmText(item?.department, 120),
     request: _tmText(item?.request || item?.requestText || item?.title, 4000),
     details: _tmText(item?.details || item?.description, 8000),
+    attachment: _tmAttachment(item?.attachment || {
+      name: item?.attachmentName || item?.attachment_name,
+      url: item?.attachmentUrl || item?.attachment_url,
+      type: item?.attachmentType || item?.attachment_type,
+      size: item?.attachmentSize || item?.attachment_size,
+    }),
     sortOrder: index + 1,
     canvasX: _tmCanvasNumber(item?.canvasX ?? item?.canvas_x ?? item?.nodeX ?? item?.node_x, 0),
     canvasY: _tmCanvasNumber(item?.canvasY ?? item?.canvas_y ?? item?.nodeY ?? item?.node_y, 0),
@@ -38845,7 +38898,7 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     const sections = plan.sections;
     const edges = plan.edges;
 
-    if (!title) return res.status(400).json({ ok: false, error: "Ticket title is required." });
+    if (!title) return res.status(400).json({ ok: false, error: "Project title is required." });
     if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
     const invalid = sections.find((section) => !section.department || !section.request);
     if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department and a requested action." });
@@ -38861,12 +38914,12 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
       created_by_name: currentUser.name || null,
     });
     const ticketId = _tmId(created);
-    if (!ticketId) throw new Error("Ticket was created without an ID.");
+    if (!ticketId) throw new Error("Project was created without an ID.");
 
     try {
       const createdSectionIds = new Map();
       for (const section of sections) {
-        const createdSection = await supabaseDb.insert(_tmSectionsTable(), {
+        const sectionPayload = {
           ticket_id: ticketId,
           department: section.department,
           request_text: section.request,
@@ -38876,7 +38929,14 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
           canvas_x: section.canvasX || null,
           canvas_y: section.canvasY || null,
           status: "not_started",
-        });
+        };
+        if (section.attachment) {
+          sectionPayload.attachment_name = section.attachment.name || null;
+          sectionPayload.attachment_url = section.attachment.url || null;
+          sectionPayload.attachment_type = section.attachment.type || null;
+          sectionPayload.attachment_size = section.attachment.size || null;
+        }
+        const createdSection = await supabaseDb.insert(_tmSectionsTable(), sectionPayload);
         const createdId = _tmId(createdSection);
         if (!createdId) throw new Error("Workflow block was created without an ID.");
         createdSectionIds.set(section.clientId, createdId);
@@ -38902,9 +38962,11 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
   } catch (error) {
     console.error("[task-management] create error:", error?.details || error?.message || error);
     const detail = String(error?.message || "");
-    const message = /relation .* does not exist|Could not find the table|schema cache/i.test(detail)
-      ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
-      : (error?.message || "Failed to create ticket.");
+    const message = /attachment_(name|url|type|size).*schema cache|Could not find the .*attachment_/i.test(detail)
+      ? "Task Management attachment columns are not installed. Run the supplied attachment SQL migration, then refresh this page."
+      : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
+        ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
+        : (error?.message || "Failed to create project."));
     return res.status(error?.status || 500).json({ ok: false, error: message });
   }
 });
