@@ -278,6 +278,9 @@ let VIEW_ALL_LAST_SETTLED_AT = null;
 let EXPENSES_ALL_ITEMS = [];
 let EXPENSES_WEEKLY_ITEMS = [];
 let ACTIVE_EXPENSES_FILTER = "recent";
+let EXPENSES_SELECTED_MONTH = "";
+let EXPENSES_SELECTED_YEAR = new Date().getFullYear();
+const EXPENSE_TYPE_COLORS = ["#172d59", "#f97316", "#3978c9", "#45a56e", "#8b5bb8", "#aab3c1"];
 
 function normalizeFundsType(s) {
   return String(s || "").trim().toLowerCase();
@@ -725,6 +728,89 @@ function buildExpenseTicketRowHtml(item) {
 }
 
 
+
+function getExpenseLedgerCategoryMeta(item) {
+  const label = getExpenseRowTypeLabel(item);
+  const key = normalizeFundsTypeKey(label);
+
+  if (Number(item?.cashIn || 0) > 0) {
+    return { icon: "credit-card", bg: "#edf9f2", fg: "#24935d" };
+  }
+  if (/(uber|indrive|didi|taxi|bus|train|metro|swvl|transport|car)/.test(key)) {
+    return { icon: "truck", bg: "#eef5ff", fg: "#3978c9" };
+  }
+  if (/(meal|food|allowance)/.test(key)) {
+    return { icon: "coffee", bg: "#fff4e9", fg: "#dd6b17" };
+  }
+  if (/(online|transfer|cashpayment|payment)/.test(key)) {
+    return { icon: "credit-card", bg: "#edf9f2", fg: "#24935d" };
+  }
+  if (/(software|subscription|internet)/.test(key)) {
+    return { icon: "monitor", bg: "#f5effb", fg: "#8555ad" };
+  }
+  return { icon: "more-horizontal", bg: "#f1f4f8", fg: "#64748b" };
+}
+
+function buildExpenseLedgerRowHtml(item, group) {
+  const endpoints = getExpenseRouteEndpoints(item);
+  const typeLabel = getExpenseRowTypeLabel(item);
+  const amountLabel = formatExpenseAmountLabel(item);
+  const amountToneClass = getExpenseAmountToneClass(item);
+  const meta = getExpenseLedgerCategoryMeta(item);
+  const kindLabel = Number(item?.cashIn || 0) > 0 ? "Cash in" : "Cash out";
+  const routeMain = String(group?.reason || getExpenseDisplayReason(item) || "Expense").trim();
+
+  return `
+    <div class="expense-ledger-row">
+      <div class="expense-ledger-row__context">
+        <span class="expense-ledger-row__category-icon" style="--category-bg:${meta.bg};--category-fg:${meta.fg}" aria-hidden="true">${featherIconMarkup(meta.icon, { width: 14, height: 14 })}</span>
+        <span class="expense-ledger-row__context-copy">
+          <span class="expense-ledger-row__type" dir="auto" title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel)}</span>
+          <span class="expense-ledger-row__kind">${escapeHtml(kindLabel)}</span>
+        </span>
+      </div>
+      <div class="expense-ledger-row__route">
+        <span class="expense-ledger-row__route-main" dir="auto" title="${escapeHtml(routeMain)}">${escapeHtml(routeMain)}</span>
+        <span class="expense-ledger-row__route-sub">
+          <span dir="auto" title="${escapeHtml(endpoints.from)}">${escapeHtml(endpoints.from)}</span>
+          ${featherIconMarkup("arrow-right", { width: 10, height: 10 })}
+          <span dir="auto" title="${escapeHtml(endpoints.to)}">${escapeHtml(endpoints.to)}</span>
+        </span>
+      </div>
+      <div class="expense-ledger-row__amount ${amountToneClass}" title="${escapeHtml(amountLabel)}">${escapeHtml(amountLabel)}</div>
+      <div class="expense-ledger-row__shot">${buildExpenseScreenshotButtonHtml(item)}</div>
+    </div>
+  `;
+}
+
+function buildExpenseLedgerGroupHtml(group) {
+  const total = getExpenseGroupTotalDisplay(group);
+  const rows = [...(Array.isArray(group?.items) ? group.items : [])].sort(
+    (a, b) => getExpenseTimeValue(a) - getExpenseTimeValue(b),
+  );
+  const ordersHtml = Array.isArray(group?.orders) && group.orders.length
+    ? `<div class="expense-ticket__order-actions">${group.orders.map(buildExpenseOrderActionHtml).join("")}</div>`
+    : "";
+  const receiptCount = rows.reduce((count, item) => count + getReceiptImages(item).length, 0);
+
+  return `
+    <article class="expense-ledger-group">
+      <div class="expense-ledger-group__summary">
+        <div class="expense-ledger-group__identity">
+          <span class="expense-ledger-group__date">${escapeHtml(formatExpenseGroupDateLabel(group?.date))}</span>
+          <span class="expense-ledger-group__reason" dir="auto" title="${escapeHtml(group?.reason || "No reason")}">${escapeHtml(group?.reason || "No reason")}</span>
+        </div>
+        <div class="expense-ledger-group__orders">${ordersHtml}</div>
+        <div class="expense-ledger-group__total ${total.className}">${escapeHtml(total.text)}</div>
+        <div class="expense-ledger-group__receipt-label">${receiptCount ? `${receiptCount} file${receiptCount === 1 ? "" : "s"}` : "—"}</div>
+      </div>
+      <div class="expense-ledger-group__rows">
+        ${rows.map((item) => buildExpenseLedgerRowHtml(item, group)).join("")}
+      </div>
+    </article>
+  `;
+}
+
 function buildExpenseTicketHtml(group, { compact = false } = {}) {
   const total = getExpenseGroupTotalDisplay(group);
   const rows = [...(Array.isArray(group?.items) ? group.items : [])].sort(
@@ -770,6 +856,9 @@ function buildExpensesTicketsHtml(items, { emptyMessage = "No expenses yet.", co
   const groups = buildGroupedExpenseCollections(items);
   if (!groups.length) {
     return window.OpsNoData?.html({ compact }) || `<div class="expenses-empty">Sorry, No data available</div>`;
+  }
+  if (!compact) {
+    return groups.map((group) => buildExpenseLedgerGroupHtml(group)).join("");
   }
   return groups.map((group) => buildExpenseTicketHtml(group, { compact })).join("");
 }
@@ -1750,6 +1839,251 @@ function formatHeroMoney(value, { sign = "", absolute = false } = {}) {
   const raw = Number(value || 0);
   const safe = absolute ? Math.abs(raw) : raw;
   return `${sign}£${formatExpenseNumber(safe)}`;
+}
+
+
+function getExpenseMonthKey(item) {
+  const rawDate = String(item?.date || "").trim();
+  const directMatch = rawDate.match(/^(\d{4})-(\d{2})/);
+  if (directMatch) return `${directMatch[1]}-${directMatch[2]}`;
+
+  const rawTime = String(item?.createdTime || item?.created_time || "").trim();
+  const parsed = rawTime ? new Date(rawTime) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isMonetaryExpenseItem(item) {
+  return Number(item?.cashOut || 0) > 0 && !isSettledMyAccountItem(item);
+}
+
+function getExpenseTypeLabel(item) {
+  const fundsType = String(item?.fundsType || "").trim();
+  if (fundsType) return fundsType;
+  const reason = String(item?.reason || "").trim();
+  return reason || "Other";
+}
+
+function compactExpenseMoney(value) {
+  const num = Math.max(0, Number(value || 0));
+  if (num >= 1_000_000) return `£${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`;
+  if (num >= 1_000) return `£${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}K`;
+  return `£${formatExpenseNumber(num)}`;
+}
+
+function getNiceExpenseChartMax(value) {
+  const safe = Math.max(0, Number(value || 0));
+  if (!safe) return 100;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(safe)));
+  const normalized = safe / magnitude;
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return niceNormalized * magnitude;
+}
+
+function collectExpenseYears(items) {
+  const years = new Set();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!isMonetaryExpenseItem(item)) return;
+    const key = getExpenseMonthKey(item);
+    if (key) years.add(Number(key.slice(0, 4)));
+  });
+  years.add(new Date().getFullYear());
+  return Array.from(years).filter(Number.isFinite).sort((a, b) => b - a);
+}
+
+function syncExpenseYearSelect(items) {
+  const select = document.getElementById("expenseChartYear");
+  if (!select) return;
+
+  const years = collectExpenseYears(items);
+  if (!years.includes(Number(EXPENSES_SELECTED_YEAR))) {
+    EXPENSES_SELECTED_YEAR = years[0] || new Date().getFullYear();
+  }
+
+  select.innerHTML = years
+    .map((year) => `<option value="${year}"${year === Number(EXPENSES_SELECTED_YEAR) ? " selected" : ""}>${year}</option>`)
+    .join("");
+}
+
+function getExpenseMonthlyTotals(items, year) {
+  const totals = Array.from({ length: 12 }, () => 0);
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!isMonetaryExpenseItem(item)) return;
+    const key = getExpenseMonthKey(item);
+    if (!key || Number(key.slice(0, 4)) !== Number(year)) return;
+    const monthIndex = Number(key.slice(5, 7)) - 1;
+    if (monthIndex < 0 || monthIndex > 11) return;
+    totals[monthIndex] += Number(item?.cashOut || 0);
+  });
+  return totals;
+}
+
+function chooseExpenseSelectedMonth(monthlyTotals) {
+  const selectedYear = Number(EXPENSES_SELECTED_YEAR);
+  const current = new Date();
+  const currentKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
+  const currentSelectedYear = String(EXPENSES_SELECTED_MONTH || "").startsWith(`${selectedYear}-`);
+
+  if (currentSelectedYear) return;
+
+  if (selectedYear === current.getFullYear() && Number(monthlyTotals[current.getMonth()] || 0) > 0) {
+    EXPENSES_SELECTED_MONTH = currentKey;
+    return;
+  }
+
+  let latestMonthIndex = -1;
+  monthlyTotals.forEach((total, index) => {
+    if (Number(total || 0) > 0) latestMonthIndex = index;
+  });
+  const monthIndex = latestMonthIndex >= 0 ? latestMonthIndex : 11;
+  EXPENSES_SELECTED_MONTH = `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}`;
+}
+
+function renderExpenseMonthlyChart(items) {
+  const chart = document.getElementById("expenseMonthlyChart");
+  if (!chart) return;
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const totals = getExpenseMonthlyTotals(items, EXPENSES_SELECTED_YEAR);
+  chooseExpenseSelectedMonth(totals);
+
+  const maxValue = Math.max(...totals, 0);
+  const chartMax = getNiceExpenseChartMax(maxValue);
+  const axisValues = [chartMax, chartMax * 0.75, chartMax * 0.5, chartMax * 0.25, 0];
+
+  chart.innerHTML = `
+    <div class="expense-chart-shell" role="group" aria-label="Monthly expense bar chart for ${escapeHtml(EXPENSES_SELECTED_YEAR)}">
+      <div class="expense-chart-y-axis" aria-hidden="true">
+        ${axisValues.map((value) => `<span>${escapeHtml(compactExpenseMoney(value))}</span>`).join("")}
+      </div>
+      <div class="expense-chart-stage">
+        <div class="expense-chart-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="expense-month-bars">
+          ${totals.map((total, index) => {
+            const monthKey = `${EXPENSES_SELECTED_YEAR}-${String(index + 1).padStart(2, "0")}`;
+            const value = chartMax ? Math.max(0, Math.min(100, (Number(total || 0) / chartMax) * 100)) : 0;
+            const isActive = monthKey === EXPENSES_SELECTED_MONTH;
+            const hasData = Number(total || 0) > 0;
+            return `
+              <button type="button" class="expense-month-bar${isActive ? " is-active" : ""}${hasData ? " has-data" : " is-empty"}" data-expense-month="${monthKey}" aria-pressed="${isActive ? "true" : "false"}" title="${monthNames[index]} ${EXPENSES_SELECTED_YEAR}: ${compactExpenseMoney(total)}">
+                <span class="expense-month-bar__bubble">${escapeHtml(compactExpenseMoney(total))}</span>
+                <span class="expense-month-bar__track"><span class="expense-month-bar__fill" style="--value:${value.toFixed(2)}"></span></span>
+                <span class="expense-month-bar__label">${monthNames[index]}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+
+  chart.querySelectorAll("[data-expense-month]").forEach((button) => {
+    button.addEventListener("click", () => {
+      EXPENSES_SELECTED_MONTH = String(button.getAttribute("data-expense-month") || "");
+      renderExpenseMonthlyChart(EXPENSES_ALL_ITEMS);
+      renderExpenseTypesChart(EXPENSES_ALL_ITEMS);
+    });
+  });
+}
+
+function buildExpenseTypeBreakdown(items, selectedMonth) {
+  const totals = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!isMonetaryExpenseItem(item) || getExpenseMonthKey(item) !== selectedMonth) return;
+    const label = getExpenseTypeLabel(item);
+    totals.set(label, Number(totals.get(label) || 0) + Number(item?.cashOut || 0));
+  });
+
+  const sorted = Array.from(totals.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+
+  if (sorted.length <= 5) return sorted;
+  const top = sorted.slice(0, 5);
+  const otherValue = sorted.slice(5).reduce((sum, item) => sum + Number(item.value || 0), 0);
+  if (otherValue > 0) top.push({ label: "Other", value: otherValue });
+  return top;
+}
+
+function formatExpenseSelectedMonth(monthKey) {
+  const match = String(monthKey || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) return "—";
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return date.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+}
+
+function buildExpenseDonutGradient(rows, total) {
+  if (!rows.length || total <= 0) return "#edf1f6";
+  let cursor = 0;
+  const stops = rows.map((row, index) => {
+    const start = cursor;
+    cursor += (Number(row.value || 0) / total) * 100;
+    const color = EXPENSE_TYPE_COLORS[index % EXPENSE_TYPE_COLORS.length];
+    return `${color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+  });
+  return `conic-gradient(${stops.join(",")})`;
+}
+
+function renderExpenseTypesChart(items) {
+  const chart = document.getElementById("expenseTypesChart");
+  const label = document.getElementById("expenseTypesMonth");
+  if (!chart) return;
+
+  if (label) label.textContent = formatExpenseSelectedMonth(EXPENSES_SELECTED_MONTH);
+  const rows = buildExpenseTypeBreakdown(items, EXPENSES_SELECTED_MONTH);
+  const total = rows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+
+  if (!rows.length || total <= 0) {
+    chart.innerHTML = `
+      <div class="expense-chart-empty">
+        ${featherIconMarkup("pie-chart", { width: 20, height: 20 })}
+        <span>No cash-out expenses in this month.</span>
+      </div>
+    `;
+    return;
+  }
+
+  const gradient = buildExpenseDonutGradient(rows, total);
+  chart.innerHTML = `
+    <div class="expense-types-layout">
+      <div class="expense-donut" style="--donut-gradient:${gradient}" role="img" aria-label="Expense type distribution for ${escapeHtml(formatExpenseSelectedMonth(EXPENSES_SELECTED_MONTH))}">
+        <div class="expense-donut__center"><span>Total</span><strong>${escapeHtml(compactExpenseMoney(total))}</strong></div>
+      </div>
+      <div class="expense-types-legend">
+        ${rows.map((row, index) => {
+          const percent = total ? (Number(row.value || 0) / total) * 100 : 0;
+          const color = EXPENSE_TYPE_COLORS[index % EXPENSE_TYPE_COLORS.length];
+          return `
+            <div class="expense-type-legend-row" title="${escapeHtml(row.label)}: ${escapeHtml(compactExpenseMoney(row.value))}">
+              <span class="expense-type-legend-row__dot" style="--legend-color:${color}"></span>
+              <span class="expense-type-legend-row__name">${escapeHtml(row.label)}</span>
+              <span class="expense-type-legend-row__value">${percent.toFixed(percent >= 10 ? 0 : 1)}%</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderExpenseAnalytics(items) {
+  syncExpenseYearSelect(items);
+  const totals = getExpenseMonthlyTotals(items, EXPENSES_SELECTED_YEAR);
+  chooseExpenseSelectedMonth(totals);
+  renderExpenseMonthlyChart(items);
+  renderExpenseTypesChart(items);
+}
+
+function bindExpenseAnalyticsControls() {
+  const yearSelect = document.getElementById("expenseChartYear");
+  if (!yearSelect) return;
+  yearSelect.addEventListener("change", () => {
+    const nextYear = Number(yearSelect.value);
+    if (!Number.isFinite(nextYear)) return;
+    EXPENSES_SELECTED_YEAR = nextYear;
+    EXPENSES_SELECTED_MONTH = "";
+    renderExpenseAnalytics(EXPENSES_ALL_ITEMS);
+  });
 }
 
 function isSettledMyAccountItem(item) {
@@ -3077,6 +3411,7 @@ async function loadExpenses() {
         const items = Array.isArray(data.items) ? data.items : [];
         EXPENSES_ALL_ITEMS = items;
         updateExpensesHeroSummary(items, data.lastSettledAt, data.lastSettledDate);
+        renderExpenseAnalytics(items);
 
         const now = new Date();
         const oneWeekAgo = new Date(now);
@@ -3108,6 +3443,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderPendingCashOutDrafts();
     setupExpenseShotsViewer();
     bindExpenseFilterControls();
+    bindExpenseAnalyticsControls();
 
     const cashInBtn  = document.getElementById("cashInBtn");
     const cashOutBtn = document.getElementById("cashOutBtn");
