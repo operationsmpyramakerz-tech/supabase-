@@ -1818,12 +1818,13 @@ body.task-management-page{
   cursor:grab;
 }
 .task-management-page .tm-workflow-stage{
-  position:relative!important;
-  width:100%!important;
-  height:100%!important;
-  min-width:100%!important;
-  min-height:100%!important;
-  overflow:hidden;
+  position:absolute!important;
+  inset:0!important;
+  width:auto!important;
+  height:auto!important;
+  min-width:0!important;
+  min-height:0!important;
+  overflow:visible!important;
 }
 .task-management-page .tm-workflow-board{
   position:absolute!important;
@@ -1877,3 +1878,9 @@ body.task-management-page{
     --tm-frame-angle:38deg;
   }
 }
+
+
+/* Workflow visibility hotfix v14: the stage must fill the viewport without clipping its absolutely positioned board. */
+.task-management-page #tmWorkflowCanvasWrap{position:relative;overflow:hidden!important;}
+.task-management-page #tmWorkflowStage{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;overflow:visible!important;}
+.task-management-page #tmWorkflowFlow{visibility:visible!important;opacity:1!important;}
