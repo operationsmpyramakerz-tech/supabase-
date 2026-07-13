@@ -155,7 +155,7 @@
     if (!state.query) return true;
     const haystack = [
       ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
-      ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.attachment?.name]),
+      ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.deliveryDate, section.attachment?.name]),
     ].map(norm).join(' ');
     return haystack.includes(state.query);
   }
@@ -448,7 +448,7 @@
 
   function addBuilderNode() {
     const position = nextBlockPosition();
-    state.builder.nodes.push({ id: newClientId(), department: '', request: '', details: '', attachment: null, x: position.x, y: position.y });
+    state.builder.nodes.push({ id: newClientId(), department: '', request: '', details: '', deliveryDate: '', attachment: null, x: position.x, y: position.y });
     renderBuilder();
     updateBuilderStatus('New block added. Use Edit to set its department and requested action.');
   }
@@ -524,6 +524,24 @@
     });
   }
 
+  function nodeVisualSize(node, defaults = {}) {
+    return {
+      width: Math.max(1, safeNumber(node?._visualWidth, safeNumber(defaults.width, 300))),
+      height: Math.max(1, safeNumber(node?._visualHeight, safeNumber(defaults.height, 138))),
+    };
+  }
+
+  function measureBuilderNodes() {
+    if (!builderBoard) return;
+    state.builder.nodes.forEach((node) => {
+      const element = [...builderBoard.querySelectorAll('[data-builder-block]')]
+        .find((item) => String(item.dataset.builderBlock) === String(node.id));
+      if (!element) return;
+      node._visualWidth = Math.max(1, element.offsetWidth || 300);
+      node._visualHeight = Math.max(1, element.offsetHeight || 138);
+    });
+  }
+
   function renderBuilder() {
     if (!builderBoard) return;
     const empty = $('tmBuilderEmpty');
@@ -552,12 +570,13 @@
         <div class="tm-builder-block__body">
           <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(node.request || 'Click Edit to configure this block')}</strong>
-          ${node.attachment?.url ? `<span class="tm-builder-block__attachment"><i data-feather="paperclip"></i>${escapeHtml(node.attachment.name || 'Attachment')}</span>` : ''}
+          ${(node.deliveryDate || node.attachment?.url) ? `<div class="tm-builder-block__meta">${node.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>` : ''}${node.attachment?.url ? `<span class="tm-builder-block__attachment"><i data-feather="paperclip"></i>${escapeHtml(node.attachment.name || 'Attachment')}</span>` : ''}</div>` : ''}
         </div>
         <button type="button" class="tm-builder-socket tm-builder-socket--in" data-tm-socket="in" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Connect an incoming arrow to this block" title="Incoming connection"></button>
         <button type="button" class="tm-builder-socket tm-builder-socket--out" data-tm-socket="out" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Start an arrow from this block" title="Start connection"></button>`;
       builderBoard.appendChild(block);
     });
+    measureBuilderNodes();
     renderBuilderArrows();
     hydrateIcons(builderBoard);
     updateBuilderToolbar();
@@ -566,16 +585,18 @@
   function getBoardDimensions(nodes = [], minimum = {}) {
     const minWidth = Math.max(980, safeNumber(minimum.width, 980));
     const minHeight = Math.max(650, safeNumber(minimum.height, 650));
-    const maxX = Math.max(minWidth, ...nodes.map((node) => safeNumber(node.x, 0) + 390));
-    const maxY = Math.max(minHeight, ...nodes.map((node) => safeNumber(node.y, 0) + 300));
+    const maxX = Math.max(minWidth, ...nodes.map((node) => safeNumber(node.x, 0) + nodeVisualSize(node).width + 90));
+    const maxY = Math.max(minHeight, ...nodes.map((node) => safeNumber(node.y, 0) + nodeVisualSize(node).height + 110));
     return { width: Math.ceil(maxX), height: Math.ceil(maxY) };
   }
 
-  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 190 } = {}) {
-    const sx = safeNumber(from.x) + blockWidth;
-    const sy = safeNumber(from.y) + (blockHeight / 2);
+  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 138 } = {}) {
+    const fromSize = nodeVisualSize(from, { width: blockWidth, height: blockHeight });
+    const toSize = nodeVisualSize(to, { width: blockWidth, height: blockHeight });
+    const sx = safeNumber(from.x) + fromSize.width;
+    const sy = safeNumber(from.y) + (fromSize.height / 2);
     const tx = safeNumber(to.x);
-    const ty = safeNumber(to.y) + (blockHeight / 2);
+    const ty = safeNumber(to.y) + (toSize.height / 2);
     const horizontalDistance = Math.max(95, Math.abs(tx - sx) * 0.48);
     const direction = tx >= sx ? 1 : -1;
     const c1x = sx + (horizontalDistance * direction);
@@ -707,8 +728,9 @@
   function ensureBuilderRoomForNode(node) {
     if (!node) return;
     const margin = 180;
-    const blockWidth = 300;
-    const blockHeight = 190;
+    const blockSize = nodeVisualSize(node, { width: 300, height: 138 });
+    const blockWidth = blockSize.width;
+    const blockHeight = blockSize.height;
     const canvas = state.builder.canvas || { width: 1280, height: 900 };
     const left = safeNumber(node.x) < margin ? (margin - safeNumber(node.x) + 560) : 0;
     const top = safeNumber(node.y) < margin ? (margin - safeNumber(node.y) + 420) : 0;
@@ -957,6 +979,7 @@
     const select = $('tmBlockDepartmentInput');
     select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
     refreshModernSelect(select);
+    $('tmBlockDeliveryDateInput').value = node.deliveryDate || '';
     $('tmBlockRequestInput').value = node.request || '';
     $('tmBlockDetailsInput').value = node.details || '';
     const attachmentInput = $('tmBlockAttachmentInput');
@@ -977,6 +1000,7 @@
     node.department = department;
     node.request = request;
     node.details = $('tmBlockDetailsInput').value.trim();
+    node.deliveryDate = $('tmBlockDeliveryDateInput').value || '';
     node.attachment = state.blockDraftAttachment ? { ...state.blockDraftAttachment } : null;
     $('tmBlockEditorError').textContent = '';
     setOverlay(blockOverlay, false);
@@ -1028,6 +1052,7 @@
         department: node.department,
         request: node.request,
         details: node.details || '',
+        deliveryDate: node.deliveryDate || '',
         attachment: node.attachment || null,
         sortOrder: index + 1,
         canvasX: Math.round(safeNumber(node.x, 60)),
@@ -1343,7 +1368,7 @@
     return `
       <article class="tm-workflow-card ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-workflow-card__top"><div class="tm-department-mark"><i data-feather="briefcase"></i></div><div class="tm-workflow-card__main"><span class="tm-workflow-card__kicker">Workflow block ${escapeHtml(section.workflowNumber || String(nodeIndex + 1))}</span><h3>${escapeHtml(section.department || 'Department')}</h3></div>${statusPill(section.status)}</div>
-        <div class="tm-workflow-card__body"><span class="tm-workflow-card__label">Requested action</span><p>${escapeHtml(section.request || '—')}</p>${section.details ? `<div class="tm-workflow-card__details"><span>Details</span><p>${escapeHtml(section.details)}</p></div>` : ''}${section.attachment?.url ? `<a class="tm-workflow-card__attachment" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(section.attachment.name || 'Open attachment')}</span><i data-feather="external-link"></i></a>` : ''}${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}</div>
+        <div class="tm-workflow-card__body"><span class="tm-workflow-card__label">Requested action</span><p>${escapeHtml(section.request || '—')}</p>${section.deliveryDate ? `<div class="tm-workflow-card__delivery"><i data-feather="calendar"></i><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>` : ''}${section.details ? `<div class="tm-workflow-card__details"><span>Details</span><p>${escapeHtml(section.details)}</p></div>` : ''}${section.attachment?.url ? `<a class="tm-workflow-card__attachment" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(section.attachment.name || 'Open attachment')}</span><i data-feather="external-link"></i></a>` : ''}${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}</div>
         <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${allowed && unlocked ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
       </article>`;
   }
@@ -1360,10 +1385,16 @@
 
     const flow = $('tmWorkflowFlow');
     const { nodes, edges } = graphLayout(ticket);
+    flow.innerHTML = `<svg class="tm-connection-layer tm-workflow-arrows" id="tmWorkflowArrows" aria-hidden="true"></svg>${nodes.map((section, index) => renderWorkflowCard(ticket, section, index)).join('') || '<div class="tm-empty-state"><h2>No workflow sections</h2><p>This task has no configured department sections.</p></div>'}`;
+    nodes.forEach((node) => {
+      const card = flow.querySelector(`[data-section-id="${CSS.escape(String(node.id))}"]`);
+      if (!card) return;
+      node._visualWidth = Math.max(1, card.offsetWidth || 300);
+      node._visualHeight = Math.max(1, card.offsetHeight || 172);
+    });
     const dimensions = getBoardDimensions(nodes);
     flow.style.width = `${dimensions.width}px`;
     flow.style.height = `${dimensions.height}px`;
-    flow.innerHTML = `<svg class="tm-connection-layer tm-workflow-arrows" id="tmWorkflowArrows" aria-hidden="true"></svg>${nodes.map((section, index) => renderWorkflowCard(ticket, section, index)).join('') || '<div class="tm-empty-state"><h2>No workflow sections</h2><p>This task has no configured department sections.</p></div>'}`;
     renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow', { markerId: 'tmWorkflowArrowHead' });
     hydrateIcons(workflowOverlay);
   }
@@ -1526,6 +1557,13 @@
     });
 
     document.addEventListener('click', (event) => {
+      const datePickerButton = event.target.closest('[data-tm-date-picker]');
+      if (datePickerButton) {
+        event.preventDefault();
+        const input = $(datePickerButton.dataset.tmDatePicker);
+        try { if (typeof input?.showPicker === 'function') input.showPicker(); else input?.focus(); } catch { input?.focus(); }
+        return;
+      }
       if (!event.target.closest('#tmDepartmentFilter')) closeDepartmentFilter();
       if (!event.target.closest('.tm-select')) closeModernSelects();
       const close = event.target.closest('[data-tm-close]');
