@@ -2055,8 +2055,14 @@
     const offsetY = safeNumber(state.viewer?.offsetY, 0);
     board.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${zoom})`;
     board.style.transformOrigin = '0 0';
-    workflowStage.style.width = '100%';
-    workflowStage.style.height = '100%';
+    // The workflow board is absolutely positioned. Keep the stage as a full-size
+    // viewport layer and never clip the board; otherwise some browsers resolve the
+    // old 100% stage height to zero and the complete workflow disappears.
+    workflowStage.style.position = 'absolute';
+    workflowStage.style.inset = '0';
+    workflowStage.style.overflow = 'visible';
+    board.style.visibility = 'visible';
+    board.style.opacity = '1';
     updateViewerZoomControls();
   }
 
@@ -2089,8 +2095,16 @@
   function fitViewerToContent({ keepManual = false } = {}) {
     if (!workflowCanvasWrap) return;
     const bounds = state.viewer?.bounds || workflowContentBounds([]);
-    const viewportWidth = Math.max(1, workflowCanvasWrap.clientWidth || 1);
-    const viewportHeight = Math.max(1, workflowCanvasWrap.clientHeight || 1);
+    const measuredWidth = workflowCanvasWrap.clientWidth || 0;
+    const measuredHeight = workflowCanvasWrap.clientHeight || 0;
+    // Wait until the overlay has a real layout box before calculating Zoom Fit.
+    // A zero-size measurement can translate the board completely outside view.
+    if (measuredWidth < 2 || measuredHeight < 2) {
+      window.requestAnimationFrame(() => fitViewerToContent({ keepManual }));
+      return;
+    }
+    const viewportWidth = measuredWidth;
+    const viewportHeight = measuredHeight;
     const margin = viewportWidth < 640 ? 22 : 38;
     const zoom = clamp(Math.min(
       (viewportWidth - margin * 2) / Math.max(1, bounds.width),
