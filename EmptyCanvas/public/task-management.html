@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-projects-v9" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-team-nested-v10" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -89,7 +89,7 @@
   </div>
 
   <!-- New Ticket: visual workflow builder -->
-  <div class="tm-overlay" id="tmBuilderOverlay" hidden aria-hidden="true">
+  <div class="tm-overlay tm-overlay--builder-layer" id="tmBuilderOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="builder"></div>
     <section class="tm-dialog tm-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="tmBuilderTitle">
       <div class="tm-builder-header">
@@ -123,7 +123,7 @@
   </div>
 
   <!-- Ticket details entered separately to keep the canvas clear -->
-  <div class="tm-overlay tm-overlay--above" id="tmTicketMetaOverlay" hidden aria-hidden="true">
+  <div class="tm-overlay tm-overlay--above tm-overlay--builder-child" id="tmTicketMetaOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="meta"></div>
     <section class="tm-dialog tm-dialog--meta" role="dialog" aria-modal="true" aria-labelledby="tmTicketMetaTitle">
       <div class="tm-dialog__top"><div><span class="tm-eyebrow">Project details</span><h2 id="tmTicketMetaTitle">Project information</h2></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="meta"><i data-feather="x"></i></button></div>
@@ -141,7 +141,7 @@
   </div>
 
   <!-- Per-block editor -->
-  <div class="tm-overlay tm-overlay--above" id="tmBlockEditorOverlay" hidden aria-hidden="true">
+  <div class="tm-overlay tm-overlay--above tm-overlay--builder-child" id="tmBlockEditorOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="block"></div>
     <section class="tm-dialog tm-dialog--block" role="dialog" aria-modal="true" aria-labelledby="tmBlockEditorTitle">
       <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmBlockEditorKicker">Workflow block</span><h2 id="tmBlockEditorTitle">Edit Block</h2></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="block"><i data-feather="x"></i></button></div>
@@ -203,8 +203,9 @@
         <div class="tm-section-details__header-actions"><span class="tm-status-pill" id="tmSectionDetailsStatus">Not started</span><button type="button" class="tm-icon-btn" aria-label="Close task details" data-tm-close="section-details"><i data-feather="x"></i></button></div>
       </div>
       <div class="tm-section-details__body" id="tmSectionDetailsBody"></div>
-      <div class="tm-dialog__actions">
+      <div class="tm-dialog__actions tm-section-details__actions">
         <button type="button" class="tm-btn tm-btn--secondary" data-tm-close="section-details">Close</button>
+        <button type="button" class="tm-btn tm-btn--secondary" id="tmOpenPeopleWorkflowBtn" hidden><i data-feather="users"></i><span>Assign Tasks to Team</span></button>
         <button type="button" class="tm-btn tm-btn--primary" id="tmOpenWorkPageBtn" hidden><i data-feather="briefcase"></i><span>Open Work Page</span></button>
       </div>
     </section>
@@ -248,7 +249,6 @@
         <div class="tm-work-page__permission" id="tmWorkPermissionNote" hidden><i data-feather="eye"></i><span>You have view-only access. The work information can be reviewed but not changed.</span></div>
         <div class="tm-form-error" id="tmWorkPageError" role="alert" aria-live="polite"></div>
         <div class="tm-dialog__actions tm-work-page__actions">
-          <button type="button" class="tm-btn tm-btn--secondary" id="tmOpenPeopleWorkflowBtn"><i data-feather="users"></i><span>Assign Tasks to Team</span></button>
           <span class="tm-dialog__actions-spacer"></span>
           <button type="button" class="tm-btn tm-btn--secondary" data-tm-close="work-page">Close</button>
           <button type="submit" class="tm-btn tm-btn--primary" id="tmSaveWorkBtn"><i data-feather="save"></i><span>Save Work</span></button>
@@ -304,6 +304,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=task-management-projects-v5"></script>
-  <script src="/js/task-management.js?v=task-management-projects-v9"></script>
+  <script src="/js/task-management.js?v=task-management-team-nested-v10"></script>
 </body>
 </html>
