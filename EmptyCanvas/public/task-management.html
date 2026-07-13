@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-projects-v6" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-projects-v7" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -109,7 +109,7 @@
         
         <div class="tm-builder-toolbar__actions">
           <button type="button" class="tm-btn tm-btn--secondary" data-tm-close="builder">Cancel</button>
-          <button type="button" class="tm-btn tm-btn--primary" id="tmSaveWorkflowBtn"><i data-feather="save"></i><span>Create Project</span></button>
+          <button type="button" class="tm-btn tm-btn--primary" id="tmSaveWorkflowBtn"><i data-feather="save"></i><span id="tmSaveWorkflowLabel">Create Project</span></button>
         </div>
       </div>
       <div class="tm-builder-canvas-wrap" id="tmBuilderCanvasWrap">
@@ -130,8 +130,8 @@
       <form id="tmTicketMetaForm" novalidate>
         <div class="tm-form-grid">
           <label class="tm-field tm-field--wide"><span>Project title <b>*</b></span><input id="tmMetaTitleInput" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
-          <label class="tm-field"><span>Priority</span><select id="tmMetaPriorityInput"><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
-          <label class="tm-field"><span>Target date</span><div class="tm-date-control"><input id="tmMetaDueDateInput" type="date" /><button type="button" class="tm-date-control__chevron" data-tm-date-picker="tmMetaDueDateInput" aria-label="Open target date picker"><i data-feather="chevron-down"></i></button></div></label>
+          <label class="tm-field"><span>Priority <b>*</b></span><select id="tmMetaPriorityInput" required><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
+          <label class="tm-field"><span>Target date <b>*</b></span><div class="tm-date-control"><input id="tmMetaDueDateInput" type="date" required /><button type="button" class="tm-date-control__chevron" data-tm-date-picker="tmMetaDueDateInput" aria-label="Open target date picker"><i data-feather="chevron-down"></i></button></div></label>
           <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmMetaDescriptionInput" rows="4" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
         </div>
         <div class="tm-form-error" id="tmMetaError" role="alert" aria-live="polite"></div>
@@ -148,7 +148,7 @@
       <form id="tmBlockEditorForm" novalidate>
         <div class="tm-form-grid tm-form-grid--block">
           <label class="tm-field"><span>Responsible department <b>*</b></span><select id="tmBlockDepartmentInput" required><option value="">Select department</option></select></label>
-          <label class="tm-field"><span>Delivery date</span><div class="tm-date-control"><input id="tmBlockDeliveryDateInput" type="date" /><button type="button" class="tm-date-control__chevron" data-tm-date-picker="tmBlockDeliveryDateInput" aria-label="Open delivery date picker"><i data-feather="chevron-down"></i></button></div></label>
+          <label class="tm-field"><span>Delivery date <b>*</b></span><div class="tm-date-control"><input id="tmBlockDeliveryDateInput" type="date" required /><button type="button" class="tm-date-control__chevron" data-tm-date-picker="tmBlockDeliveryDateInput" aria-label="Open delivery date picker"><i data-feather="chevron-down"></i></button></div></label>
           <label class="tm-field tm-field--wide"><span>Requested action <b>*</b></span><input id="tmBlockRequestInput" maxlength="4000" required placeholder="What should this department deliver?" /></label>
           <label class="tm-field tm-field--wide"><span>Implementation details</span><textarea id="tmBlockDetailsInput" rows="4" maxlength="8000" placeholder="Optional notes, dependencies, or handover criteria."></textarea></label>
           <div class="tm-field tm-field--wide">
@@ -177,10 +177,26 @@
     <section class="tm-dialog tm-dialog--workflow" role="dialog" aria-modal="true" aria-labelledby="tmWorkflowTitle">
       <div class="tm-workflow-header">
         <div class="tm-workflow-header__title"><span class="tm-ticket-code" id="tmWorkflowCode">TKT-00000</span><h2 id="tmWorkflowTitle">Project workflow</h2><p id="tmWorkflowSub">—</p></div>
-        <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
+        <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn tm-icon-btn--edit" id="tmEditProjectBtn" aria-label="Edit project" title="Edit project"><i data-feather="edit-3"></i></button><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
       </div>
       <div class="tm-workflow-summary" id="tmWorkflowSummary"></div>
       <div class="tm-workflow-canvas-wrap" id="tmWorkflowCanvasWrap"><div class="tm-workflow-board" id="tmWorkflowFlow"></div></div>
+    </section>
+  </div>
+
+  <!-- Admin verification before editing a saved project -->
+  <div class="tm-overlay tm-overlay--above" id="tmAdminVerifyOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="admin"></div>
+    <section class="tm-dialog tm-dialog--admin" role="dialog" aria-modal="true" aria-labelledby="tmAdminVerifyTitle">
+      <div class="tm-dialog__top">
+        <div><span class="tm-eyebrow">Admin verification</span><h2 id="tmAdminVerifyTitle">Edit project workflow</h2><p>Enter the admin password to continue editing this project.</p></div>
+        <button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="admin"><i data-feather="x"></i></button>
+      </div>
+      <form id="tmAdminVerifyForm" novalidate>
+        <label class="tm-field tm-field--wide"><span>Admin password <b>*</b></span><input id="tmAdminPasswordInput" type="password" autocomplete="current-password" required placeholder="Enter admin password" /></label>
+        <div class="tm-form-error" id="tmAdminVerifyError" role="alert" aria-live="polite"></div>
+        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="admin">Cancel</button><button type="submit" class="tm-btn tm-btn--primary" id="tmAdminVerifySubmit"><i data-feather="shield"></i><span>Verify &amp; Edit</span></button></div>
+      </form>
     </section>
   </div>
 
@@ -199,6 +215,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=task-management-projects-v5"></script>
-  <script src="/js/task-management.js?v=task-management-projects-v6"></script>
+  <script src="/js/task-management.js?v=task-management-projects-v7"></script>
 </body>
 </html>
