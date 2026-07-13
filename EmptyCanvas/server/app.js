@@ -38544,6 +38544,7 @@ function _tmSerializeSection(row = {}) {
     department: _tmText(_sbGet(row, ["department", "Department"]), 120),
     request: _tmText(_sbGet(row, ["request_text", "request", "Request", "title", "Title"]), 4000),
     details: _tmText(_sbGet(row, ["details", "description", "Description"]), 8000),
+    deliveryDate: _tmDate(_sbGet(row, ["delivery_date", "deliveryDate"])),
     attachment,
     sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
     executionGroup: Math.max(1, Number(_sbGet(row, ["execution_group", "executionGroup", "stage", "stage_number"]) || _sbGet(row, ["sort_order", "sortOrder"]) || 1)),
@@ -38773,7 +38774,7 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
       tickets = tickets.filter((ticket) => {
         const haystack = [
           ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
-          ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.attachment?.name]),
+          ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.deliveryDate, section.attachment?.name]),
         ].map(norm).join(" ");
         return haystack.includes(query);
       });
@@ -38815,6 +38816,7 @@ function _tmBuildWorkflowPlan(rawSections = [], rawEdges) {
     department: _tmText(item?.department, 120),
     request: _tmText(item?.request || item?.requestText || item?.title, 4000),
     details: _tmText(item?.details || item?.description, 8000),
+    deliveryDate: _tmDate(item?.deliveryDate || item?.delivery_date),
     attachment: _tmAttachment(item?.attachment || {
       name: item?.attachmentName || item?.attachment_name,
       url: item?.attachmentUrl || item?.attachment_url,
@@ -38924,6 +38926,7 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
           department: section.department,
           request_text: section.request,
           details: section.details || null,
+          delivery_date: section.deliveryDate || null,
           sort_order: section.sortOrder,
           execution_group: section.executionGroup,
           canvas_x: section.canvasX || null,
@@ -38962,11 +38965,13 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
   } catch (error) {
     console.error("[task-management] create error:", error?.details || error?.message || error);
     const detail = String(error?.message || "");
-    const message = /attachment_(name|url|type|size).*schema cache|Could not find the .*attachment_/i.test(detail)
-      ? "Task Management attachment columns are not installed. Run the supplied attachment SQL migration, then refresh this page."
-      : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
-        ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
-        : (error?.message || "Failed to create project."));
+    const message = /delivery_date.*schema cache|Could not find the .*delivery_date/i.test(detail)
+      ? "The workflow block delivery-date column is not installed. Run the supplied delivery-date SQL migration, then refresh this page."
+      : (/attachment_(name|url|type|size).*schema cache|Could not find the .*attachment_/i.test(detail)
+        ? "Task Management attachment columns are not installed. Run the supplied attachment SQL migration, then refresh this page."
+        : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
+          ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
+          : (error?.message || "Failed to create project.")));
     return res.status(error?.status || 500).json({ ok: false, error: message });
   }
 });
