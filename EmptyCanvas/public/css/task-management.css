@@ -870,3 +870,164 @@ body.task-management-page{
   .task-management-page .tm-builder-canvas-wrap{height:520px;min-height:520px!important;}
   .task-management-page .tm-icon-btn{width:32px!important;min-width:32px!important;height:32px!important;min-height:32px!important;border-radius:10px!important;}
 }
+
+
+/* Delegated Tasks refinement v6 -------------------------------------------------
+   Compact dynamic workflow blocks, orange arrows, modern date controls, and a
+   clean Current Orders-style filter icon. */
+.task-management-page .tm-department-filter__button-icon,
+.task-management-page .tm-department-filter.is-filtered .tm-department-filter__button-icon{
+  width:46px;
+  height:46px;
+  border-radius:0;
+  background:transparent!important;
+  color:#0b0c10!important;
+  box-shadow:none!important;
+}
+.task-management-page .tm-department-filter__button-icon svg{width:25px;height:25px;stroke-width:2.35;}
+.task-management-page .tm-department-filter__button:hover .tm-department-filter__button-icon,
+.task-management-page .tm-department-filter.is-open .tm-department-filter__button-icon{color:#ef7d16!important;}
+
+.task-management-page .tm-date-control{position:relative;display:block;width:100%;}
+.task-management-page .tm-date-control input[type="date"]{padding-right:58px!important;min-height:52px;cursor:pointer;}
+.task-management-page .tm-date-control input[type="date"]::-webkit-calendar-picker-indicator{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  margin:0;
+  padding:0;
+  opacity:0;
+  cursor:pointer;
+}
+.task-management-page .tm-date-control__chevron{
+  position:absolute;
+  z-index:2;
+  top:50%;
+  right:10px;
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:0;
+  border-radius:10px;
+  background:#f0f1f3;
+  color:#24272d;
+  transform:translateY(-50%);
+  cursor:pointer;
+  transition:background .18s ease,color .18s ease,transform .18s ease;
+}
+.task-management-page .tm-date-control__chevron:hover{background:#fff0e1;color:#b65b08;transform:translateY(-50%) scale(1.03);}
+.task-management-page .tm-date-control__chevron svg{width:16px;height:16px;stroke-width:2.4;}
+.task-management-page .tm-form-grid--block{grid-template-columns:minmax(0,1.35fr) minmax(190px,.65fr);}
+
+.task-management-page .tm-builder-block{
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  border-radius:17px;
+}
+.task-management-page .tm-builder-block__head{
+  min-height:48px!important;
+  padding:9px 10px 8px!important;
+  border-radius:17px 17px 0 0;
+}
+.task-management-page .tm-builder-block__body{
+  min-height:0!important;
+  height:auto!important;
+  flex:0 0 auto!important;
+  gap:5px!important;
+  padding:10px 14px 12px!important;
+  border-radius:0 0 17px 17px;
+}
+.task-management-page .tm-builder-block__body strong{
+  display:block!important;
+  overflow:visible!important;
+  -webkit-line-clamp:unset!important;
+  -webkit-box-orient:initial!important;
+  width:100%;
+  line-height:1.42;
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
+.task-management-page .tm-builder-block__meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%;margin-top:3px;}
+.task-management-page .tm-builder-block__delivery,
+.task-management-page .tm-builder-block__attachment{
+  max-width:100%;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin:0!important;
+  padding:5px 8px;
+  border:1px solid #f2c79f;
+  border-radius:9px;
+  background:#fff5eb;
+  color:#a95000;
+  font-size:10px;
+  font-weight:850;
+  line-height:1.2;
+}
+.task-management-page .tm-builder-block__delivery svg,
+.task-management-page .tm-builder-block__attachment svg{width:12px;height:12px;flex:0 0 auto;}
+.task-management-page .tm-builder-block__attachment{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.task-management-page .tm-builder-board .tm-arrow-marker{fill:#ef7d16!important;}
+.task-management-page .tm-builder-arrow,
+.task-management-page .tm-builder-arrow:hover,
+.task-management-page .tm-builder-arrow.is-selected{
+  stroke:#ef7d16!important;
+  stroke-opacity:1!important;
+  stroke-width:1.85px!important;
+  filter:drop-shadow(0 1px 1px rgba(239,125,22,.2))!important;
+}
+.task-management-page .tm-builder-arrow:hover,
+.task-management-page .tm-builder-arrow.is-selected{stroke:#d96708!important;stroke-width:2.25px!important;}
+.task-management-page .tm-builder-edge-delete{
+  width:12px!important;
+  min-width:12px!important;
+  height:12px!important;
+  min-height:12px!important;
+  padding:0!important;
+  border:1.5px solid #fff!important;
+  border-radius:50%!important;
+  background:#111318!important;
+  color:#fff!important;
+  box-shadow:0 0 0 2px rgba(239,125,22,.18),0 2px 5px rgba(17,19,24,.28)!important;
+}
+.task-management-page .tm-builder-edge-delete:hover{
+  background:#ef7d16!important;
+  box-shadow:0 0 0 3px rgba(239,125,22,.18),0 3px 7px rgba(17,19,24,.24)!important;
+  transform:translate(-50%,-50%) scale(1.08)!important;
+}
+.task-management-page .tm-builder-edge-delete svg{width:6px!important;height:6px!important;stroke-width:3!important;}
+
+.task-management-page .tm-workflow-board .tm-workflow-card{
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card__body{overflow:visible!important;}
+.task-management-page .tm-workflow-card__delivery{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-top:8px;
+  padding:7px 8px;
+  border:1px solid #efc69f;
+  border-radius:10px;
+  background:#fff5eb;
+  color:#a85000;
+  font-size:10px;
+}
+.task-management-page .tm-workflow-card__delivery svg{width:12px;height:12px;flex:0 0 auto;}
+.task-management-page .tm-workflow-card__delivery span{font-weight:750;}
+.task-management-page .tm-workflow-card__delivery b{margin-left:auto;color:#7e3b00;font-size:10px;}
+
+@media(max-width:640px){
+  .task-management-page .tm-form-grid--block{grid-template-columns:1fr;}
+  .task-management-page .tm-department-filter__button-icon,
+  .task-management-page .tm-department-filter.is-filtered .tm-department-filter__button-icon{width:38px;height:38px;}
+  .task-management-page .tm-department-filter__button-icon svg{width:22px;height:22px;}
+}
