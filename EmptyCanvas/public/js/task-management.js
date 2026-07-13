@@ -14,6 +14,19 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const safeNumber = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
   const newClientId = () => `block-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const formatBytes = (value) => {
+    const bytes = Math.max(0, Number(value) || 0);
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read the selected file.'));
+    reader.readAsDataURL(file);
+  });
 
   const pathname = String(window.location?.pathname || '');
   const TASK_VIEW = /^\/task-management\/delegated-tasks(?:\/|$)/.test(pathname)
@@ -31,7 +44,7 @@
     },
     delegated: {
       label: 'Delegated Tasks', header: 'Delegated Tasks', subtitle: 'Tickets you created and delegated to other departments.',
-      emptyTitle: 'No delegated tasks found', emptyText: 'Create a task to start a workflow between departments.', toolbarNoun: 'delegated task',
+      emptyTitle: 'No delegated tasks found', emptyText: 'Create a project to start a workflow between departments.', toolbarNoun: 'delegated task',
     },
   };
 
@@ -46,6 +59,9 @@
     view: TASK_VIEW,
     currentUser: {},
     editingBlockId: null,
+    startingProject: false,
+    blockDraftAttachment: null,
+    blockUploadPending: false,
     drag: null,
     pan: null,
     pendingBlockPress: null,
@@ -116,7 +132,7 @@
 
   function renderLoading() {
     if (!grid) return;
-    grid.innerHTML = '<div class="modern-loading" role="status"><div class="modern-loading__spinner" aria-hidden="true"></div><div class="modern-loading__text">Loading tasks <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div></div>';
+    grid.innerHTML = '<div class="modern-loading" role="status"><div class="modern-loading__spinner" aria-hidden="true"></div><div class="modern-loading__text">Loading projects <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div></div>';
   }
 
   function statusPill(status) {
@@ -128,7 +144,7 @@
     if (!state.query) return true;
     const haystack = [
       ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
-      ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details]),
+      ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.attachment?.name]),
     ].map(norm).join(' ');
     return haystack.includes(state.query);
   }
@@ -145,7 +161,7 @@
           <div class="tm-empty-state__icon"><i data-feather="git-branch"></i></div>
           <h2>${escapeHtml(VIEW_CONFIG[state.view].emptyTitle)}</h2>
           <p>${escapeHtml(VIEW_CONFIG[state.view].emptyText)}</p>
-          ${state.view === 'delegated' ? '<button class="tm-btn tm-btn--primary" type="button" data-tm-new-ticket><i data-feather="plus"></i>Add Task</button>' : ''}
+          ${state.view === 'delegated' ? '<button class="tm-btn tm-btn--primary" type="button" data-tm-new-ticket><i data-feather="plus"></i>Add Project</button>' : ''}
         </div>`;
       hydrateIcons(grid);
       return;
@@ -181,7 +197,7 @@
         if (selected) { state.selectedTicket = selected; renderWorkflow(selected); }
       }
     } catch (error) {
-      grid.innerHTML = `<div class="tm-empty-state tm-empty-state--error"><div class="tm-empty-state__icon"><i data-feather="alert-circle"></i></div><h2>Could not load tasks</h2><p>${escapeHtml(error.message || 'Please try again.')}</p><button class="tm-btn tm-btn--secondary" type="button" data-tm-retry>Retry</button></div>`;
+      grid.innerHTML = `<div class="tm-empty-state tm-empty-state--error"><div class="tm-empty-state__icon"><i data-feather="alert-circle"></i></div><h2>Could not load projects</h2><p>${escapeHtml(error.message || 'Please try again.')}</p><button class="tm-btn tm-btn--secondary" type="button" data-tm-retry>Retry</button></div>`;
       hydrateIcons(grid);
     }
   }
@@ -201,6 +217,9 @@
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     };
     state.editingBlockId = null;
+    state.startingProject = false;
+    state.blockDraftAttachment = null;
+    state.blockUploadPending = false;
     state.drag = null;
     state.pan = null;
     clearPendingBlockPress();
@@ -225,7 +244,7 @@
 
   function addBuilderNode() {
     const position = nextBlockPosition();
-    state.builder.nodes.push({ id: newClientId(), department: '', request: '', details: '', x: position.x, y: position.y });
+    state.builder.nodes.push({ id: newClientId(), department: '', request: '', details: '', attachment: null, x: position.x, y: position.y });
     renderBuilder();
     updateBuilderStatus('New block added. Use Edit to set its department and requested action.');
   }
@@ -330,6 +349,7 @@
           <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(node.request || 'Click Edit to configure this block')}</strong>
           ${node.details ? `<span class="tm-builder-block__details">${escapeHtml(node.details)}</span>` : '<span class="tm-builder-block__details tm-builder-block__details--empty">No implementation details</span>'}
+          ${node.attachment?.url ? `<span class="tm-builder-block__attachment"><i data-feather="paperclip"></i>${escapeHtml(node.attachment.name || 'Attachment')}</span>` : ''}
         </div>
         <button type="button" class="tm-builder-socket tm-builder-socket--in" data-tm-socket="in" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Connect an incoming arrow to this block" title="Incoming connection"></button>
         <button type="button" class="tm-builder-socket tm-builder-socket--out" data-tm-socket="out" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Start an arrow from this block" title="Start connection"></button>`;
@@ -348,7 +368,7 @@
     return { width: Math.ceil(maxX), height: Math.ceil(maxY) };
   }
 
-  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 172 } = {}) {
+  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 190 } = {}) {
     const sx = safeNumber(from.x) + blockWidth;
     const sy = safeNumber(from.y) + (blockHeight / 2);
     const tx = safeNumber(to.x);
@@ -485,7 +505,7 @@
     if (!node) return;
     const margin = 180;
     const blockWidth = 300;
-    const blockHeight = 172;
+    const blockHeight = 190;
     const canvas = state.builder.canvas || { width: 1280, height: 900 };
     const left = safeNumber(node.x) < margin ? (margin - safeNumber(node.x) + 560) : 0;
     const top = safeNumber(node.y) < margin ? (margin - safeNumber(node.y) + 420) : 0;
@@ -537,12 +557,11 @@
   }
 
   function openCreateBuilder() {
-    if (state.view !== 'delegated') { showToast('info', 'Delegated Tasks only', 'Create new tasks from the Delegated Tasks page.'); return; }
+    if (state.view !== 'delegated') { showToast('info', 'Delegated Tasks only', 'Create new projects from the Delegated Tasks page.'); return; }
     if (window.OpsPageAccess?.isViewOnly?.()) { window.OpsPageAccess.showViewOnlyNotice(); return; }
     resetBuilder();
-    renderBuilder();
-    updateBuilderStatus();
-    setOverlay(builderOverlay, true);
+    state.startingProject = true;
+    openTicketMeta({ initial: true });
   }
 
   function setBuilderZoom(value, { clientX, clientY, announce = true } = {}) {
@@ -639,12 +658,16 @@
     updateBuilderStatus('Block removed together with any connected arrows.');
   }
 
-  function openTicketMeta() {
+  function openTicketMeta(options = {}) {
+    const initial = !!options?.initial;
+    if (initial) state.startingProject = true;
     const meta = state.builder.meta;
     $('tmMetaTitleInput').value = meta.title || '';
     $('tmMetaPriorityInput').value = meta.priority || 'Normal';
     $('tmMetaDueDateInput').value = meta.dueDate || '';
     $('tmMetaDescriptionInput').value = meta.description || '';
+    const submitLabel = $('tmMetaSubmitLabel');
+    if (submitLabel) submitLabel.textContent = state.startingProject ? 'Continue to Workflow' : 'Save Project Details';
     $('tmMetaError').textContent = '';
     setOverlay(metaOverlay, true);
   }
@@ -652,27 +675,88 @@
   function saveTicketMeta(event) {
     event.preventDefault();
     const title = $('tmMetaTitleInput').value.trim();
-    if (!title) { $('tmMetaError').textContent = 'Enter a task title.'; return; }
+    if (!title) { $('tmMetaError').textContent = 'Enter a project title.'; return; }
     state.builder.meta = {
       title,
       priority: $('tmMetaPriorityInput').value || 'Normal',
       dueDate: $('tmMetaDueDateInput').value || '',
       description: $('tmMetaDescriptionInput').value.trim(),
     };
+    const continueToBuilder = state.startingProject;
+    state.startingProject = false;
     $('tmMetaError').textContent = '';
     setOverlay(metaOverlay, false);
-    updateBuilderStatus(`Task details saved for “${title}”.`);
+    if (continueToBuilder) {
+      renderBuilder();
+      setOverlay(builderOverlay, true);
+      window.setTimeout(() => $('tmAddBlockBtn')?.focus(), 60);
+    }
+    updateBuilderStatus(`Project details saved for “${title}”.`);
+  }
+
+  function renderBlockAttachmentPreview() {
+    const preview = $('tmBlockAttachmentPreview');
+    const attachment = state.blockDraftAttachment;
+    if (!preview) return;
+    if (!attachment?.url) {
+      preview.hidden = true;
+      preview.innerHTML = '';
+      return;
+    }
+    preview.hidden = false;
+    preview.innerHTML = `
+      <span class="tm-upload-file__icon"><i data-feather="file-text"></i></span>
+      <span class="tm-upload-file__info"><b>${escapeHtml(attachment.name || 'Attachment')}</b><small>${escapeHtml([attachment.type || '', formatBytes(attachment.size)].filter(Boolean).join(' · ') || 'Uploaded file')}</small></span>
+      <a class="tm-upload-file__open" href="${escapeHtml(attachment.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open attachment"><i data-feather="external-link"></i></a>
+      <button class="tm-upload-file__remove" type="button" data-tm-remove-attachment aria-label="Remove attachment"><i data-feather="trash-2"></i></button>`;
+    hydrateIcons(preview);
+  }
+
+  async function uploadBlockAttachment(file) {
+    const errorEl = $('tmBlockEditorError');
+    const input = $('tmBlockAttachmentInput');
+    const progress = $('tmBlockAttachmentProgress');
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      if (errorEl) errorEl.textContent = 'The attachment must be 10 MB or less.';
+      if (input) input.value = '';
+      return;
+    }
+    state.blockUploadPending = true;
+    if (errorEl) errorEl.textContent = '';
+    if (input) input.disabled = true;
+    if (progress) progress.hidden = false;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await api('/api/task-management/upload', {
+        method: 'POST',
+        body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size },
+      });
+      state.blockDraftAttachment = result.file || null;
+      renderBlockAttachmentPreview();
+    } catch (error) {
+      if (errorEl) errorEl.textContent = error.message || 'Failed to upload attachment.';
+    } finally {
+      state.blockUploadPending = false;
+      if (input) { input.disabled = false; input.value = ''; }
+      if (progress) progress.hidden = true;
+    }
   }
 
   function openBlockEditor(nodeId) {
     const node = findBuilderNode(nodeId);
     if (!node) return;
     state.editingBlockId = node.id;
+    state.blockDraftAttachment = node.attachment ? { ...node.attachment } : null;
+    state.blockUploadPending = false;
     $('tmBlockEditorKicker').textContent = `Workflow block ${workflowNumbering(state.builder.nodes, state.builder.edges).get(String(node.id)) || '—'}`;
     const select = $('tmBlockDepartmentInput');
     select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
     $('tmBlockRequestInput').value = node.request || '';
     $('tmBlockDetailsInput').value = node.details || '';
+    const attachmentInput = $('tmBlockAttachmentInput');
+    if (attachmentInput) attachmentInput.value = '';
+    renderBlockAttachmentPreview();
     $('tmBlockEditorError').textContent = '';
     setOverlay(blockOverlay, true);
   }
@@ -681,12 +765,14 @@
     event.preventDefault();
     const node = findBuilderNode(state.editingBlockId);
     if (!node) return;
+    if (state.blockUploadPending) { $('tmBlockEditorError').textContent = 'Wait until the attachment finishes uploading.'; return; }
     const department = $('tmBlockDepartmentInput').value.trim();
     const request = $('tmBlockRequestInput').value.trim();
     if (!department || !request) { $('tmBlockEditorError').textContent = 'Responsible department and requested action are required.'; return; }
     node.department = department;
     node.request = request;
     node.details = $('tmBlockDetailsInput').value.trim();
+    node.attachment = state.blockDraftAttachment ? { ...state.blockDraftAttachment } : null;
     $('tmBlockEditorError').textContent = '';
     setOverlay(blockOverlay, false);
     renderBuilder();
@@ -719,8 +805,8 @@
 
   function saveWorkflowBuilder() {
     if (state.view !== 'delegated') return;
-    if (!state.builder.nodes.length) { showToast('info', 'Add a block', 'Create at least one workflow block before saving the task.'); return; }
-    if (!state.builder.meta.title.trim()) { openTicketMeta(); $('tmMetaError').textContent = 'Add task details before creating the workflow.'; return; }
+    if (!state.builder.nodes.length) { showToast('info', 'Add a block', 'Create at least one workflow block before saving the project.'); return; }
+    if (!state.builder.meta.title.trim()) { openTicketMeta(); $('tmMetaError').textContent = 'Add project details before creating the workflow.'; return; }
     const invalid = state.builder.nodes.find((node) => !String(node.department || '').trim() || !String(node.request || '').trim());
     if (invalid) { openBlockEditor(invalid.id); $('tmBlockEditorError').textContent = 'Configure this block before creating the task.'; return; }
     if (workflowHasCycle(state.builder.nodes, state.builder.edges)) { showToast('error', 'Circular workflow not allowed', 'Remove a circular arrow before saving the task.'); return; }
@@ -737,6 +823,7 @@
         department: node.department,
         request: node.request,
         details: node.details || '',
+        attachment: node.attachment || null,
         sortOrder: index + 1,
         canvasX: Math.round(safeNumber(node.x, 60)),
         canvasY: Math.round(safeNumber(node.y, 80)),
@@ -751,9 +838,9 @@
         await loadTickets();
         const created = state.tickets.find((ticket) => String(ticket.id) === String(data.ticket?.id)) || data.ticket;
         if (created) openWorkflow(created);
-        showToast('success', 'Task created', 'The block workflow is ready and arrows now control the execution sequence.');
+        showToast('success', 'Project created', 'The project workflow is ready and arrows now control the execution sequence.');
       })
-      .catch((error) => showToast('error', 'Could not create task', error.message || 'Please try again.'))
+      .catch((error) => showToast('error', 'Could not create project', error.message || 'Please try again.'))
       .finally(() => { if (button) { button.disabled = false; button.classList.remove('is-loading'); } });
   }
 
@@ -1009,7 +1096,7 @@
     return `
       <article class="tm-workflow-card ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-workflow-card__top"><div class="tm-department-mark"><i data-feather="briefcase"></i></div><div class="tm-workflow-card__main"><span class="tm-workflow-card__kicker">Workflow block ${escapeHtml(section.workflowNumber || String(nodeIndex + 1))}</span><h3>${escapeHtml(section.department || 'Department')}</h3></div>${statusPill(section.status)}</div>
-        <div class="tm-workflow-card__body"><span class="tm-workflow-card__label">Requested action</span><p>${escapeHtml(section.request || '—')}</p>${section.details ? `<div class="tm-workflow-card__details"><span>Details</span><p>${escapeHtml(section.details)}</p></div>` : ''}${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}</div>
+        <div class="tm-workflow-card__body"><span class="tm-workflow-card__label">Requested action</span><p>${escapeHtml(section.request || '—')}</p>${section.details ? `<div class="tm-workflow-card__details"><span>Details</span><p>${escapeHtml(section.details)}</p></div>` : ''}${section.attachment?.url ? `<a class="tm-workflow-card__attachment" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(section.attachment.name || 'Open attachment')}</span><i data-feather="external-link"></i></a>` : ''}${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}</div>
         <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${allowed && unlocked ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
       </article>`;
   }
@@ -1017,7 +1104,7 @@
   function renderWorkflow(ticket) {
     if (!ticket) return;
     $('tmWorkflowCode').textContent = ticket.ticketCode || 'TKT';
-    $('tmWorkflowTitle').textContent = ticket.title || 'Task workflow';
+    $('tmWorkflowTitle').textContent = ticket.title || 'Project workflow';
     $('tmWorkflowSub').textContent = `${ticket.createdByName || '—'} · Created ${formatDate(ticket.createdAt)}`;
     const statusEl = $('tmWorkflowStatus');
     statusEl.className = `tm-status-pill ${statusClass(ticket.status)}`;
@@ -1125,6 +1212,7 @@
     $('tmZoomInBtn')?.addEventListener('click', () => setBuilderZoom(builderZoom() + 0.1));
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
+    $('tmBlockAttachmentInput')?.addEventListener('change', (event) => uploadBlockAttachment(event.target.files?.[0]));
     searchInput?.addEventListener('input', () => { state.query = norm(searchInput.value); renderTickets(); });
 
     tabs?.addEventListener('click', (event) => {
@@ -1177,14 +1265,28 @@
           endCanvasPan();
           setOverlay(builderOverlay, false);
         }
-        if (which === 'meta') setOverlay(metaOverlay, false);
-        if (which === 'block') setOverlay(blockOverlay, false);
+        if (which === 'meta') {
+          setOverlay(metaOverlay, false);
+          if (state.startingProject) { state.startingProject = false; resetBuilder(); }
+        }
+        if (which === 'block') {
+          state.blockDraftAttachment = null;
+          state.blockUploadPending = false;
+          setOverlay(blockOverlay, false);
+        }
         if (which === 'workflow') setOverlay(workflowOverlay, false);
         if (which === 'update') setOverlay(updateOverlay, false);
         return;
       }
       if (event.target.closest('[data-tm-new-ticket]')) { openCreateBuilder(); return; }
       if (event.target.closest('[data-tm-retry]')) { loadTickets({ preserve: false }); return; }
+
+      const removeAttachment = event.target.closest('[data-tm-remove-attachment]');
+      if (removeAttachment) {
+        state.blockDraftAttachment = null;
+        renderBlockAttachmentPreview();
+        return;
+      }
 
       const editBlock = event.target.closest('[data-tm-edit-block]');
       if (editBlock) { openBlockEditor(editBlock.dataset.tmEditBlock); return; }
@@ -1215,7 +1317,10 @@
       if (event.key === 'Escape') {
         if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
-        else if (isOverlayOpen(metaOverlay)) setOverlay(metaOverlay, false);
+        else if (isOverlayOpen(metaOverlay)) {
+          setOverlay(metaOverlay, false);
+          if (state.startingProject) { state.startingProject = false; resetBuilder(); }
+        }
         else if (isOverlayOpen(workflowOverlay)) setOverlay(workflowOverlay, false);
         else if (isOverlayOpen(builderOverlay) && state.builder.connecting) {
           state.builder.connecting = false;
