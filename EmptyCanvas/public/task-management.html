@@ -13,10 +13,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Task Management</title>
   <style>body.permissions-loading .sidebar li { display:none !important; }</style>
-  <link href="/css/style.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-socket-zoom-v3" rel="stylesheet" />
+  <link href="/css/style.css?v=task-management-projects-v4" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=task-management-projects-v4" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=task-management-projects-v4" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-projects-v4" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -50,13 +50,12 @@
               <span class="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span>
               <div class="greet-text"><div class="greet-title">Hi, <span data-username>...</span> 👋</div><div class="greet-sub" id="tmViewSubtitle">Tickets with workflow work assigned to your department.</div></div>
             </div>
-            <label class="tm-search" for="tmSearch"><i data-feather="search"></i><input id="tmSearch" type="search" placeholder="Search tickets, departments, or requests..." autocomplete="off" /></label>
           </div>
           <div class="right topbar-right"><a aria-label="My account" class="account-mini" href="/account" title="My account"><span class="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span class="label">My account</span></a></div>
         </div>
         <div class="header-row2 tm-header-row2">
           <div class="tm-page-title-wrap"><span class="tm-page-module">Task Management</span><h1 class="page-title" id="tmViewTitle">My Tasks</h1></div>
-          <button type="button" class="tm-new-ticket tm-new-ticket--header" id="tmNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Task</span></button>
+          <button type="button" class="tm-new-ticket tm-new-ticket--header" id="tmNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
         </div>
       </header>
 
@@ -70,7 +69,7 @@
           </div>
           <div class="tm-toolbar-actions">
             <div class="tm-toolbar-note" id="tmToolbarNote" aria-live="polite">Loading tickets…</div>
-            <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Task</span></button>
+            <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
           </div>
         </div>
 
@@ -86,7 +85,7 @@
     <div class="tm-overlay__backdrop" data-tm-close="builder"></div>
     <section class="tm-dialog tm-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="tmBuilderTitle">
       <div class="tm-builder-header">
-        <div><span class="tm-eyebrow">Workflow builder</span><h2 id="tmBuilderTitle">Create Task Workflow</h2><p>Create blocks, connect them with arrows, then save the complete task.</p></div>
+        <div><span class="tm-eyebrow">Workflow builder</span><h2 id="tmBuilderTitle">Create Project Workflow</h2></div>
         <button type="button" class="tm-icon-btn" aria-label="Close workflow builder" data-tm-close="builder"><i data-feather="x"></i></button>
       </div>
       <div class="tm-builder-toolbar" role="toolbar" aria-label="Workflow builder tools">
@@ -97,12 +96,12 @@
             <button type="button" class="tm-builder-zoom__label" id="tmZoomResetBtn" title="Reset canvas zoom to 100%"><span id="tmZoomLabel">100%</span></button>
             <button type="button" class="tm-builder-tool tm-builder-tool--icon" id="tmZoomInBtn" aria-label="Zoom in" title="Zoom in"><i data-feather="plus"></i></button>
           </div>
-          <button type="button" class="tm-builder-tool" id="tmTaskDetailsBtn"><i data-feather="file-text"></i><span>Task Details</span></button>
+          <button type="button" class="tm-builder-tool" id="tmTaskDetailsBtn"><i data-feather="file-text"></i><span>Project Details</span></button>
         </div>
-        <div class="tm-builder-toolbar__status" id="tmBuilderStatus" aria-live="polite">Add a block to begin designing the workflow.</div>
+        
         <div class="tm-builder-toolbar__actions">
           <button type="button" class="tm-btn tm-btn--secondary" data-tm-close="builder">Cancel</button>
-          <button type="button" class="tm-btn tm-btn--primary" id="tmSaveWorkflowBtn"><i data-feather="save"></i><span>Create Task</span></button>
+          <button type="button" class="tm-btn tm-btn--primary" id="tmSaveWorkflowBtn"><i data-feather="save"></i><span>Create Project</span></button>
         </div>
       </div>
       <div class="tm-builder-canvas-wrap" id="tmBuilderCanvasWrap">
@@ -119,16 +118,16 @@
   <div class="tm-overlay tm-overlay--above" id="tmTicketMetaOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="meta"></div>
     <section class="tm-dialog tm-dialog--meta" role="dialog" aria-modal="true" aria-labelledby="tmTicketMetaTitle">
-      <div class="tm-dialog__top"><div><span class="tm-eyebrow">Ticket details</span><h2 id="tmTicketMetaTitle">Task information</h2><p>This information is shown on the task card and workflow header.</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="meta"><i data-feather="x"></i></button></div>
+      <div class="tm-dialog__top"><div><span class="tm-eyebrow">Project details</span><h2 id="tmTicketMetaTitle">Project information</h2></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="meta"><i data-feather="x"></i></button></div>
       <form id="tmTicketMetaForm" novalidate>
         <div class="tm-form-grid">
-          <label class="tm-field tm-field--wide"><span>Task title <b>*</b></span><input id="tmMetaTitleInput" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
+          <label class="tm-field tm-field--wide"><span>Project title <b>*</b></span><input id="tmMetaTitleInput" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
           <label class="tm-field"><span>Priority</span><select id="tmMetaPriorityInput"><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
           <label class="tm-field"><span>Target date</span><input id="tmMetaDueDateInput" type="date" /></label>
           <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmMetaDescriptionInput" rows="4" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
         </div>
         <div class="tm-form-error" id="tmMetaError" role="alert" aria-live="polite"></div>
-        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="meta">Cancel</button><button type="submit" class="tm-btn tm-btn--primary"><i data-feather="check"></i><span>Save Details</span></button></div>
+        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="meta">Cancel</button><button type="submit" class="tm-btn tm-btn--primary"><i data-feather="arrow-right"></i><span id="tmMetaSubmitLabel">Continue to Workflow</span></button></div>
       </form>
     </section>
   </div>
@@ -137,12 +136,25 @@
   <div class="tm-overlay tm-overlay--above" id="tmBlockEditorOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="block"></div>
     <section class="tm-dialog tm-dialog--block" role="dialog" aria-modal="true" aria-labelledby="tmBlockEditorTitle">
-      <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmBlockEditorKicker">Workflow block</span><h2 id="tmBlockEditorTitle">Edit Block</h2><p>Set the department and work required for this section.</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="block"><i data-feather="x"></i></button></div>
+      <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmBlockEditorKicker">Workflow block</span><h2 id="tmBlockEditorTitle">Edit Block</h2></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="block"><i data-feather="x"></i></button></div>
       <form id="tmBlockEditorForm" novalidate>
         <div class="tm-form-grid tm-form-grid--single">
           <label class="tm-field"><span>Responsible department <b>*</b></span><select id="tmBlockDepartmentInput" required><option value="">Select department</option></select></label>
           <label class="tm-field tm-field--wide"><span>Requested action <b>*</b></span><input id="tmBlockRequestInput" maxlength="4000" required placeholder="What should this department deliver?" /></label>
           <label class="tm-field tm-field--wide"><span>Implementation details</span><textarea id="tmBlockDetailsInput" rows="4" maxlength="8000" placeholder="Optional notes, dependencies, or handover criteria."></textarea></label>
+          <div class="tm-field tm-field--wide">
+            <span>Attachment</span>
+            <div class="tm-upload-field">
+              <input id="tmBlockAttachmentInput" class="tm-upload-field__input" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
+              <label class="tm-upload-field__picker" for="tmBlockAttachmentInput">
+                <span class="tm-upload-field__icon"><i data-feather="paperclip"></i></span>
+                <span class="tm-upload-field__copy"><b>Upload attachment</b><small>Images, PDF, Office files, text, CSV, or ZIP · maximum 10 MB</small></span>
+                <span class="tm-upload-field__action">Choose file</span>
+              </label>
+              <div class="tm-upload-file" id="tmBlockAttachmentPreview" hidden></div>
+              <div class="tm-upload-progress" id="tmBlockAttachmentProgress" hidden><span></span><b>Uploading attachment…</b></div>
+            </div>
+          </div>
         </div>
         <div class="tm-form-error" id="tmBlockEditorError" role="alert" aria-live="polite"></div>
         <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="block">Cancel</button><button type="submit" class="tm-btn tm-btn--primary"><i data-feather="save"></i><span>Save Block</span></button></div>
@@ -155,7 +167,7 @@
     <div class="tm-overlay__backdrop" data-tm-close="workflow"></div>
     <section class="tm-dialog tm-dialog--workflow" role="dialog" aria-modal="true" aria-labelledby="tmWorkflowTitle">
       <div class="tm-workflow-header">
-        <div class="tm-workflow-header__title"><span class="tm-ticket-code" id="tmWorkflowCode">TKT-00000</span><h2 id="tmWorkflowTitle">Ticket workflow</h2><p id="tmWorkflowSub">—</p></div>
+        <div class="tm-workflow-header__title"><span class="tm-ticket-code" id="tmWorkflowCode">TKT-00000</span><h2 id="tmWorkflowTitle">Project workflow</h2><p id="tmWorkflowSub">—</p></div>
         <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
       </div>
       <div class="tm-workflow-summary" id="tmWorkflowSummary"></div>
@@ -177,7 +189,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=task-management-socket-zoom-v3"></script>
-  <script src="/js/task-management.js?v=task-management-socket-zoom-v3"></script>
+  <script src="/js/common-ui.js?v=task-management-projects-v4"></script>
+  <script src="/js/task-management.js?v=task-management-projects-v4"></script>
 </body>
 </html>
