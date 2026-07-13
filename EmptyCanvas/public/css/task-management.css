@@ -1580,3 +1580,166 @@ body.task-management-page{
 @media(max-width:760px){
   .task-management-page .tm-section-details__actions .tm-btn{flex:1 1 100%;justify-content:center;}
 }
+
+
+/* My Tasks permissions and team work v11 ----------------------------------
+   Ownership frame follows the exact card boundary; team-member work pages
+   are interactive only for the permitted user and publish completed work. */
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine.tm-status--not_started{
+  border-color:#c7c8cb!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine.tm-status--not_started::before{
+  inset:0!important;
+  z-index:5!important;
+  padding:2.5px!important;
+  border-radius:inherit!important;
+  background:conic-gradient(
+    from var(--tm-frame-angle),
+    transparent 0 55%,
+    #171717 63% 70%,
+    #ef7d16 74% 82%,
+    #ffb15f 84% 87%,
+    #171717 90% 94%,
+    transparent 98% 100%
+  )!important;
+  filter:drop-shadow(0 0 3px rgba(239,125,22,.30))!important;
+  pointer-events:none!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--mine>*{
+  position:relative;
+  z-index:2;
+}
+
+.task-management-page .tm-team-task-card--interactive{
+  cursor:pointer;
+  user-select:none;
+  transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease;
+}
+.task-management-page .tm-team-task-card--interactive:hover{
+  transform:translateY(-2px);
+  border-color:#ef9a4d;
+  box-shadow:0 19px 38px rgba(0,0,0,.14);
+}
+.task-management-page .tm-team-task-card--interactive:focus-visible{
+  outline:3px solid rgba(239,125,22,.22);
+  outline-offset:4px;
+}
+.task-management-page .tm-team-task-card--mine{
+  border-color:#b9b9b9;
+  box-shadow:0 16px 34px rgba(0,0,0,.13);
+}
+.task-management-page .tm-team-task-card--locked{
+  opacity:.62;
+  filter:saturate(.65);
+  cursor:default;
+}
+.task-management-page .tm-team-task-card__footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-height:34px;
+  padding:7px 11px;
+  border-top:1px solid #ececee;
+  border-radius:0 0 16px 16px;
+  background:#fafafa;
+  color:#353535;
+  font-size:9px;
+  font-weight:900;
+}
+.task-management-page .tm-team-task-card__open{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  cursor:pointer;
+}
+.task-management-page .tm-team-task-card__footer svg{
+  width:12px;
+  height:12px;
+  color:#ef7d16;
+}
+
+.task-management-page .tm-team-submissions{
+  display:grid;
+  gap:7px;
+  width:100%;
+  margin-top:5px;
+  padding:8px;
+  border:1px solid #ead6c2;
+  border-radius:11px;
+  background:#fffaf5;
+}
+.task-management-page .tm-team-submissions__label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#8a4308;
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.task-management-page .tm-team-submissions__label svg{
+  width:12px;
+  height:12px;
+}
+.task-management-page .tm-team-submission{
+  padding:7px 8px;
+  border:1px solid #eee2d7;
+  border-radius:9px;
+  background:#fff;
+}
+.task-management-page .tm-team-submission>b{
+  display:block;
+  color:#242424;
+  font-size:10px;
+}
+.task-management-page .tm-team-submission>p{
+  margin:4px 0 0;
+  color:#555;
+  font-size:10px;
+  line-height:1.4;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.task-management-page .tm-team-submission__files{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:6px;
+}
+.task-management-page .tm-team-submission__files a{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-width:0;
+  padding:5px 7px;
+  border-radius:8px;
+  background:#fff1e2;
+  color:#944708;
+  font-size:9px;
+  font-weight:850;
+  text-decoration:none;
+}
+.task-management-page .tm-team-submission__files a:hover{
+  background:#ffe5c9;
+}
+.task-management-page .tm-team-submission__files svg{
+  width:11px;
+  height:11px;
+  flex:0 0 auto;
+}
+.task-management-page .tm-section-details__item>.tm-team-submissions{
+  margin-top:8px;
+}
+.task-management-page .tm-work-page__summary[hidden]{
+  display:none!important;
+}
+.task-management-page .tm-dialog--work-page .tm-work-page__form-grid{
+  margin-top:20px;
+}
