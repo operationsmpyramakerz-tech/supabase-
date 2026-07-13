@@ -68,6 +68,9 @@
     pinch: null,
     pendingBlockPress: null,
     builder: {
+      mode: 'create',
+      ticketId: '',
+      adminPassword: '',
       nodes: [],
       edges: [],
       connecting: false,
@@ -77,6 +80,7 @@
       canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     },
+    pendingEditTicket: null,
   };
 
   const grid = $('tmTicketGrid');
@@ -90,9 +94,11 @@
   const metaOverlay = $('tmTicketMetaOverlay');
   const blockOverlay = $('tmBlockEditorOverlay');
   const workflowOverlay = $('tmWorkflowOverlay');
+  const adminOverlay = $('tmAdminVerifyOverlay');
   const updateOverlay = $('tmUpdateSectionOverlay');
   const metaForm = $('tmTicketMetaForm');
   const blockForm = $('tmBlockEditorForm');
+  const adminForm = $('tmAdminVerifyForm');
   const updateForm = $('tmUpdateSectionForm');
   const updateError = $('tmUpdateSectionError');
   const builderBoard = $('tmBuilderBoard');
@@ -125,7 +131,7 @@
   function isOverlayOpen(overlay) { return !!overlay && !overlay.hidden; }
 
   function syncModalState() {
-    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, updateOverlay].some(isOverlayOpen);
+    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, adminOverlay, updateOverlay].some(isOverlayOpen);
     document.body.classList.toggle('tm-modal-open', modalOpen);
   }
 
@@ -410,6 +416,9 @@
   // ---------------------------------------------------------------------------
   function resetBuilder() {
     state.builder = {
+      mode: 'create',
+      ticketId: '',
+      adminPassword: '',
       nodes: [],
       edges: [],
       connecting: false,
@@ -419,6 +428,7 @@
       canvas: { width: 1280, height: 900 },
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     };
+    state.pendingEditTicket = null;
     state.editingBlockId = null;
     state.startingProject = false;
     state.blockDraftAttachment = null;
@@ -427,6 +437,15 @@
     state.pan = null;
     state.pinch = null;
     clearPendingBlockPress();
+    syncBuilderModeLabels();
+  }
+
+  function syncBuilderModeLabels() {
+    const editing = state.builder?.mode === 'edit';
+    const title = $('tmBuilderTitle');
+    const saveLabel = $('tmSaveWorkflowLabel');
+    if (title) title.textContent = editing ? 'Edit Project Workflow' : 'Create Project Workflow';
+    if (saveLabel) saveLabel.textContent = editing ? 'Save Changes' : 'Create Project';
   }
 
   function builderZoom() {
@@ -785,6 +804,8 @@
     if (state.view !== 'delegated') { showToast('info', 'Delegated Tasks only', 'Create new projects from the Delegated Tasks page.'); return; }
     if (window.OpsPageAccess?.isViewOnly?.()) { window.OpsPageAccess.showViewOnlyNotice(); return; }
     resetBuilder();
+    state.builder.mode = 'create';
+    syncBuilderModeLabels();
     state.startingProject = true;
     openTicketMeta({ initial: true });
   }
@@ -901,11 +922,15 @@
   function saveTicketMeta(event) {
     event.preventDefault();
     const title = $('tmMetaTitleInput').value.trim();
+    const priority = $('tmMetaPriorityInput').value.trim();
+    const dueDate = $('tmMetaDueDateInput').value || '';
     if (!title) { $('tmMetaError').textContent = 'Enter a project title.'; return; }
+    if (!priority) { $('tmMetaError').textContent = 'Select a project priority.'; return; }
+    if (!dueDate) { $('tmMetaError').textContent = 'Select a target date.'; return; }
     state.builder.meta = {
       title,
-      priority: $('tmMetaPriorityInput').value || 'Normal',
-      dueDate: $('tmMetaDueDateInput').value || '',
+      priority,
+      dueDate,
       description: $('tmMetaDescriptionInput').value.trim(),
     };
     const continueToBuilder = state.startingProject;
@@ -996,11 +1021,12 @@
     if (state.blockUploadPending) { $('tmBlockEditorError').textContent = 'Wait until the attachment finishes uploading.'; return; }
     const department = $('tmBlockDepartmentInput').value.trim();
     const request = $('tmBlockRequestInput').value.trim();
-    if (!department || !request) { $('tmBlockEditorError').textContent = 'Responsible department and requested action are required.'; return; }
+    const deliveryDate = $('tmBlockDeliveryDateInput').value || '';
+    if (!department || !request || !deliveryDate) { $('tmBlockEditorError').textContent = 'Responsible department, requested action, and delivery date are required.'; return; }
     node.department = department;
     node.request = request;
     node.details = $('tmBlockDetailsInput').value.trim();
-    node.deliveryDate = $('tmBlockDeliveryDateInput').value || '';
+    node.deliveryDate = deliveryDate;
     node.attachment = state.blockDraftAttachment ? { ...state.blockDraftAttachment } : null;
     $('tmBlockEditorError').textContent = '';
     setOverlay(blockOverlay, false);
@@ -1033,26 +1059,33 @@
   }
 
   function saveWorkflowBuilder() {
-    if (state.view !== 'delegated') return;
+    if (state.view !== 'delegated' && state.builder.mode !== 'edit') return;
     if (!state.builder.nodes.length) { showToast('info', 'Add a block', 'Create at least one workflow block before saving the project.'); return; }
-    if (!state.builder.meta.title.trim()) { openTicketMeta(); $('tmMetaError').textContent = 'Add project details before creating the workflow.'; return; }
-    const invalid = state.builder.nodes.find((node) => !String(node.department || '').trim() || !String(node.request || '').trim());
-    if (invalid) { openBlockEditor(invalid.id); $('tmBlockEditorError').textContent = 'Configure this block before creating the task.'; return; }
-    if (workflowHasCycle(state.builder.nodes, state.builder.edges)) { showToast('error', 'Circular workflow not allowed', 'Remove a circular arrow before saving the task.'); return; }
+    if (!state.builder.meta.title.trim() || !state.builder.meta.priority || !state.builder.meta.dueDate) {
+      openTicketMeta();
+      $('tmMetaError').textContent = 'Project title, priority, and target date are required.';
+      return;
+    }
+    const invalid = state.builder.nodes.find((node) => !String(node.department || '').trim() || !String(node.request || '').trim() || !String(node.deliveryDate || '').trim());
+    if (invalid) { openBlockEditor(invalid.id); $('tmBlockEditorError').textContent = 'Responsible department, requested action, and delivery date are required for every block.'; return; }
+    if (workflowHasCycle(state.builder.nodes, state.builder.edges)) { showToast('error', 'Circular workflow not allowed', 'Remove a circular arrow before saving the project.'); return; }
 
+    const editing = state.builder.mode === 'edit' && !!state.builder.ticketId;
     const button = $('tmSaveWorkflowBtn');
     if (button) { button.disabled = true; button.classList.add('is-loading'); }
     const payload = {
+      view: state.view,
+      adminPassword: editing ? (state.builder.adminPassword || '') : undefined,
       title: state.builder.meta.title,
-      priority: state.builder.meta.priority || 'Normal',
-      dueDate: state.builder.meta.dueDate || '',
+      priority: state.builder.meta.priority,
+      dueDate: state.builder.meta.dueDate,
       description: state.builder.meta.description || '',
       sections: orderedBuilderNodes().map((node, index) => ({
         clientId: node.id,
         department: node.department,
         request: node.request,
         details: node.details || '',
-        deliveryDate: node.deliveryDate || '',
+        deliveryDate: node.deliveryDate,
         attachment: node.attachment || null,
         sortOrder: index + 1,
         canvasX: Math.round(safeNumber(node.x, 60)),
@@ -1061,16 +1094,20 @@
       edges: state.builder.edges.map((edge) => ({ from: edge.from, to: edge.to })),
     };
 
-    api('/api/task-management', { method: 'POST', body: payload })
+    const url = editing
+      ? `/api/task-management/${encodeURIComponent(state.builder.ticketId)}`
+      : '/api/task-management';
+    api(url, { method: editing ? 'PUT' : 'POST', body: payload })
       .then(async (data) => {
         setOverlay(builderOverlay, false);
         state.selectedTicket = data.ticket || null;
         await loadTickets();
-        const created = state.tickets.find((ticket) => String(ticket.id) === String(data.ticket?.id)) || data.ticket;
-        if (created) openWorkflow(created);
-        showToast('success', 'Project created', 'The project workflow is ready and arrows now control the execution sequence.');
+        const saved = state.tickets.find((ticket) => String(ticket.id) === String(data.ticket?.id)) || data.ticket;
+        if (saved) openWorkflow(saved);
+        showToast('success', editing ? 'Project updated' : 'Project created', editing ? 'The project workflow changes were saved.' : 'The project workflow is ready and arrows now control the execution sequence.');
+        resetBuilder();
       })
-      .catch((error) => showToast('error', 'Could not create project', error.message || 'Please try again.'))
+      .catch((error) => showToast('error', editing ? 'Could not update project' : 'Could not create project', error.message || 'Please try again.'))
       .finally(() => { if (button) { button.disabled = false; button.classList.remove('is-loading'); } });
   }
 
@@ -1365,10 +1402,21 @@
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
       : (section.completedAt ? `Completed ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
+    const number = section.workflowNumber || String(nodeIndex + 1);
     return `
-      <article class="tm-workflow-card ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
-        <div class="tm-workflow-card__top"><div class="tm-department-mark"><i data-feather="briefcase"></i></div><div class="tm-workflow-card__main"><span class="tm-workflow-card__kicker">Workflow block ${escapeHtml(section.workflowNumber || String(nodeIndex + 1))}</span><h3>${escapeHtml(section.department || 'Department')}</h3></div>${statusPill(section.status)}</div>
-        <div class="tm-workflow-card__body"><span class="tm-workflow-card__label">Requested action</span><p>${escapeHtml(section.request || '—')}</p>${section.deliveryDate ? `<div class="tm-workflow-card__delivery"><i data-feather="calendar"></i><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>` : ''}${section.details ? `<div class="tm-workflow-card__details"><span>Details</span><p>${escapeHtml(section.details)}</p></div>` : ''}${section.attachment?.url ? `<a class="tm-workflow-card__attachment" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(section.attachment.name || 'Open attachment')}</span><i data-feather="external-link"></i></a>` : ''}${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}</div>
+      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}" style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
+        <div class="tm-builder-block__head tm-workflow-card__top">
+          <div class="tm-builder-block__number">${escapeHtml(number)}</div>
+          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>Workflow block ${escapeHtml(number)}</small></div>
+          ${statusPill(section.status)}
+        </div>
+        <div class="tm-builder-block__body tm-workflow-card__body">
+          <span class="tm-builder-block__label">Requested action</span>
+          <strong>${escapeHtml(section.request || '—')}</strong>
+          ${(section.deliveryDate || section.attachment?.url) ? `<div class="tm-builder-block__meta">${section.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(section.deliveryDate))}</span>` : ''}${section.attachment?.url ? `<a class="tm-builder-block__attachment tm-workflow-card__attachment" href="${escapeHtml(section.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(section.attachment.name || 'Open attachment')}</span><i data-feather="external-link"></i></a>` : ''}</div>` : ''}
+          ${section.details ? `<div class="tm-workflow-card__details"><span>Implementation details</span><p>${escapeHtml(section.details)}</p></div>` : ''}
+          ${section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : ''}
+        </div>
         <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${allowed && unlocked ? `<div class="tm-workflow-card__actions">${canStart ? `<button type="button" class="tm-action-link" data-tm-section-status="in_progress" data-section-id="${escapeHtml(section.id)}"><i data-feather="play"></i>Start</button>` : ''}${canComplete ? `<button type="button" class="tm-action-link tm-action-link--complete" data-tm-section-status="completed" data-section-id="${escapeHtml(section.id)}"><i data-feather="check"></i>Complete</button>` : ''}<button type="button" class="tm-action-link" data-tm-edit-section="${escapeHtml(section.id)}"><i data-feather="edit-3"></i>Update</button></div>` : ''}</div>
       </article>`;
   }
@@ -1403,6 +1451,92 @@
     state.selectedTicket = ticket;
     renderWorkflow(ticket);
     setOverlay(workflowOverlay, true);
+  }
+
+  function openEditBuilder(ticket, adminPassword = '') {
+    if (!ticket) return;
+    const fallbackNodes = graphLayout(ticket).nodes || [];
+    const fallbackById = new Map(fallbackNodes.map((node) => [String(node.id), node]));
+    resetBuilder();
+    state.builder.mode = 'edit';
+    state.builder.ticketId = String(ticket.id || '');
+    state.builder.adminPassword = adminPassword || '';
+    state.builder.meta = {
+      title: ticket.title || '',
+      priority: ticket.priority || '',
+      dueDate: ticket.dueDate || '',
+      description: ticket.description || '',
+    };
+    state.builder.nodes = (ticket.sections || []).map((section) => {
+      const fallback = fallbackById.get(String(section.id)) || { x: 64, y: 64 };
+      const hasPosition = Number(section.canvasX) > 0 && Number(section.canvasY) > 0;
+      return {
+        id: String(section.id),
+        department: section.department || '',
+        request: section.request || '',
+        details: section.details || '',
+        deliveryDate: section.deliveryDate || '',
+        attachment: section.attachment ? { ...section.attachment } : null,
+        x: hasPosition ? safeNumber(section.canvasX, fallback.x) : safeNumber(fallback.x, 64),
+        y: hasPosition ? safeNumber(section.canvasY, fallback.y) : safeNumber(fallback.y, 64),
+      };
+    });
+    state.builder.edges = ticketEdges(ticket).map((edge) => ({ from: String(edge.from), to: String(edge.to) }));
+    const dimensions = getBoardDimensions(state.builder.nodes, { width: 1280, height: 900 });
+    state.builder.canvas = { width: dimensions.width, height: dimensions.height };
+    syncBuilderModeLabels();
+    setOverlay(adminOverlay, false);
+    setOverlay(workflowOverlay, false);
+    renderBuilder();
+    setOverlay(builderOverlay, true);
+    window.requestAnimationFrame(() => {
+      if (builderCanvasWrap) {
+        builderCanvasWrap.scrollLeft = 0;
+        builderCanvasWrap.scrollTop = 0;
+      }
+    });
+  }
+
+  function requestProjectEdit() {
+    const ticket = state.selectedTicket;
+    if (!ticket) return;
+    if (window.__tmIsPageAdmin) {
+      openEditBuilder(ticket, '');
+      return;
+    }
+    state.pendingEditTicket = ticket;
+    const input = $('tmAdminPasswordInput');
+    const error = $('tmAdminVerifyError');
+    if (input) input.value = '';
+    if (error) error.textContent = '';
+    setOverlay(adminOverlay, true);
+  }
+
+  async function verifyProjectEditAccess(event) {
+    event.preventDefault();
+    const ticket = state.pendingEditTicket || state.selectedTicket;
+    if (!ticket) return;
+    const password = $('tmAdminPasswordInput')?.value || '';
+    const error = $('tmAdminVerifyError');
+    const submit = $('tmAdminVerifySubmit');
+    if (!password.trim()) {
+      if (error) error.textContent = 'Enter the admin password.';
+      return;
+    }
+    if (submit) submit.disabled = true;
+    if (error) error.textContent = '';
+    try {
+      await api('/api/task-management/admin/verify', {
+        method: 'POST',
+        body: { view: state.view, adminPassword: password },
+      });
+      state.pendingEditTicket = null;
+      openEditBuilder(ticket, password);
+    } catch (err) {
+      if (error) error.textContent = err.message || 'Invalid admin password.';
+    } finally {
+      if (submit) submit.disabled = false;
+    }
   }
 
   function openSectionUpdate(sectionId, directStatus = '') {
@@ -1487,6 +1621,7 @@
     renderDepartmentFilter();
     metaForm?.addEventListener('submit', saveTicketMeta);
     blockForm?.addEventListener('submit', saveBlockEditor);
+    adminForm?.addEventListener('submit', verifyProjectEditAccess);
     updateForm?.addEventListener('submit', submitSectionUpdate);
     $('tmAddBlockBtn')?.addEventListener('click', addBuilderNode);
     $('tmZoomOutBtn')?.addEventListener('click', () => setBuilderZoom(builderZoom() - 0.1));
@@ -1494,6 +1629,7 @@
     $('tmZoomInBtn')?.addEventListener('click', () => setBuilderZoom(builderZoom() + 0.1));
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
+    $('tmEditProjectBtn')?.addEventListener('click', requestProjectEdit);
     $('tmBlockAttachmentInput')?.addEventListener('change', (event) => uploadBlockAttachment(event.target.files?.[0]));
     searchInput?.addEventListener('input', () => { state.query = norm(searchInput.value); renderTickets(); });
     departmentFilterBtn?.addEventListener('click', (event) => {
@@ -1585,6 +1721,7 @@
           setOverlay(blockOverlay, false);
         }
         if (which === 'workflow') setOverlay(workflowOverlay, false);
+        if (which === 'admin') { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         if (which === 'update') setOverlay(updateOverlay, false);
         return;
       }
@@ -1629,6 +1766,7 @@
         if (openSelect) { openSelect.close({ focus: true }); return; }
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
         if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
+        else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
         else if (isOverlayOpen(metaOverlay)) {
           setOverlay(metaOverlay, false);
