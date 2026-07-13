@@ -1280,3 +1280,190 @@ main.expenses-layout.expenses-dashboard {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   EXPENSES DASHBOARD V2 REFINEMENTS
+   - Prevent cross-column overlap at desktop/tablet widths
+   - Use a true black summary card
+   - Match the KPI page striped pill-bar visual language
+   - Present every ledger item as an independent card
+   ========================================================= */
+
+/* Keep each dashboard column and every direct card inside its own grid track. */
+.expenses-dashboard,
+.expenses-dashboard *,
+.expenses-dashboard *::before,
+.expenses-dashboard *::after {
+  box-sizing: border-box;
+}
+
+.expenses-dashboard__sidebar,
+.expenses-dashboard__main,
+.expenses-dashboard__sidebar > *,
+.expenses-dashboard__main > *,
+.expense-action-grid,
+.expense-action-grid > *,
+.expenses-activity-card,
+.expenses-analytics-card,
+.expenses-summary-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 901px) {
+  main.expenses-layout.expenses-dashboard {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) !important;
+  }
+}
+
+.expenses-summary-card__head > div,
+.expenses-summary-card .total-card__main,
+.expenses-summary-card .total-card__side,
+.expenses-summary-card .total-card__actions,
+.expenses-dashboard .summary-pill,
+.expenses-dashboard .settle-btn,
+.expenses-dashboard .last-settled {
+  min-width: 0;
+}
+
+.expenses-summary-card__period {
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Main summary card: neutral black instead of blue. */
+.expenses-dashboard .total-card.expenses-summary-card {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(249, 115, 22, 0.13), transparent 29%),
+    radial-gradient(circle at 8% 112%, rgba(255, 255, 255, 0.07), transparent 35%),
+    linear-gradient(145deg, #050505 0%, #111111 52%, #020202 100%) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.25) !important;
+}
+
+.expenses-summary-card::after {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Monthly chart: same rounded, striped bar treatment used on the KPIs page. */
+.expense-month-bar__track {
+  border-radius: 999px;
+  justify-content: center;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(226, 232, 240, 0.62) 0 6px,
+    rgba(248, 250, 252, 0.88) 6px 12px
+  );
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.78);
+}
+
+.expense-month-bar__fill {
+  min-height: 10px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, rgba(203, 213, 225, 0.95), rgba(241, 245, 249, 0.75));
+  box-shadow: 0 -7px 16px rgba(148, 163, 184, 0.12);
+}
+
+.expense-month-bar.has-data:not(.is-active) .expense-month-bar__track {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(255, 237, 213, 0.8) 0 6px,
+    rgba(255, 247, 237, 0.94) 6px 12px
+  );
+  box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.26);
+}
+
+.expense-month-bar.has-data:not(.is-active) .expense-month-bar__fill {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(251, 146, 60, 0.36) 0 6px,
+    rgba(255, 237, 213, 0.86) 6px 12px
+  );
+  box-shadow: none;
+}
+
+.expense-month-bar.has-data:not(.is-active) .expense-month-bar__label {
+  color: #9a3412;
+}
+
+.expense-month-bar.is-empty .expense-month-bar__fill {
+  min-height: 0;
+  opacity: 0;
+}
+
+.expense-month-bar.is-active .expense-month-bar__track {
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.92), rgba(255, 255, 255, 0.98));
+  box-shadow:
+    0 12px 26px rgba(249, 115, 22, 0.16),
+    inset 0 0 0 1px rgba(251, 146, 60, 0.44);
+}
+
+.expense-month-bar.is-active .expense-month-bar__fill {
+  background: linear-gradient(180deg, #fb923c 0%, #f97316 50%, rgba(249, 115, 22, 0.3) 100%);
+  box-shadow: 0 -9px 22px rgba(249, 115, 22, 0.22);
+}
+
+.expense-month-bar__bubble {
+  background: #0f172a;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.2);
+}
+
+/* Each expense is a visually independent card rather than a flat table row. */
+.expense-ledger-group {
+  padding: 9px 0 12px;
+  border-bottom: 0;
+}
+
+.expense-ledger-group + .expense-ledger-group {
+  border-top: 1px solid #eef2f6;
+}
+
+.expense-ledger-group__summary {
+  min-height: 42px;
+  padding: 0 3px 8px;
+}
+
+.expense-ledger-group__rows {
+  gap: 10px;
+}
+
+.expense-ledger-row {
+  min-height: 68px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow:
+    0 3px 10px rgba(15, 23, 42, 0.045),
+    0 10px 24px rgba(15, 23, 42, 0.035);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.expense-ledger-row:hover {
+  transform: translateY(-1px);
+  border-color: #dce3ed;
+  background: #ffffff;
+  box-shadow:
+    0 5px 14px rgba(15, 23, 42, 0.065),
+    0 14px 30px rgba(15, 23, 42, 0.05);
+}
+
+@media (max-width: 768px) {
+  .expense-ledger-group {
+    padding: 7px 0 10px;
+  }
+
+  .expense-ledger-group__summary {
+    padding: 7px 4px 8px;
+  }
+
+  .expense-ledger-row {
+    margin: 0;
+    padding: 10px;
+    border-radius: 14px;
+  }
+}
