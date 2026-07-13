@@ -89,6 +89,8 @@
     workFileUploadPending: false,
     rejectedReasonDraft: '',
     teamMembers: [],
+    peopleWorkflowCache: new Map(),
+    peopleWorkflowLoads: new Map(),
     viewer: { zoom: 1, pan: null, pinch: null, width: 980, height: 650 },
   };
 
@@ -289,6 +291,7 @@
     try {
       const data = await api(`/api/task-management?view=${encodeURIComponent(state.view)}`);
       state.tickets = Array.isArray(data.tickets) ? data.tickets : [];
+      state.tickets.forEach(attachCachedPeopleWorkflows);
       renderTickets();
       if (state.selectedTicket?.id && isOverlayOpen(workflowOverlay)) {
         const selected = state.tickets.find((ticket) => String(ticket.id) === String(state.selectedTicket.id));
@@ -445,6 +448,7 @@
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
       contextSectionId: '',
       returnToWorkPage: false,
+      returnToSectionDetails: false,
     };
     state.pendingEditTicket = null;
     state.editingBlockId = null;
@@ -473,6 +477,12 @@
     if (detailsButton) detailsButton.hidden = peopleMode;
     if (ownerLabel) ownerLabel.innerHTML = peopleMode ? 'Responsible team member <b>*</b>' : 'Responsible department <b>*</b>';
     if (requestLabel) requestLabel.innerHTML = peopleMode ? 'Assigned task <b>*</b>' : 'Requested action <b>*</b>';
+    builderBoard?.classList.toggle('is-people-mode', peopleMode);
+    builderOverlay?.classList.toggle('is-people-mode', peopleMode);
+    const empty = $('tmBuilderEmpty');
+    if (empty && peopleMode) empty.innerHTML = '<i data-feather="git-branch"></i><b>Your team workflow canvas is ready</b><span>Add person tasks vertically, then connect each card from its bottom point to the next card’s top point.</span>';
+    else if (empty) empty.innerHTML = '<i data-feather="git-branch"></i><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span>';
+    hydrateIcons(empty || document);
   }
 
   function builderZoom() {
@@ -481,15 +491,68 @@
 
   function nextBlockPosition() {
     const count = state.builder.nodes.length;
-    const column = count % 3;
-    const row = Math.floor(count / 3);
     const zoom = builderZoom();
     const visibleCenterX = (safeNumber(builderCanvasWrap?.scrollLeft) + Math.max(620, safeNumber(builderCanvasWrap?.clientWidth, 920)) / 2) / zoom;
     const visibleCenterY = (safeNumber(builderCanvasWrap?.scrollTop) + Math.max(360, safeNumber(builderCanvasWrap?.clientHeight, 560)) / 2) / zoom;
+    if (state.builder.mode === 'people') {
+      return {
+        x: Math.max(70, Math.round(visibleCenterX - 150)),
+        y: Math.max(80, Math.round(visibleCenterY - 86 + count * 190)),
+      };
+    }
+    const column = count % 3;
+    const row = Math.floor(count / 3);
     return {
       x: Math.max(70, Math.round(visibleCenterX - 150 + (column - 1) * 330)),
       y: Math.max(80, Math.round(visibleCenterY - 86 + row * 230)),
     };
+  }
+
+  function arrangePeopleNodesVertically(nodes = [], edges = []) {
+    if (!nodes.length) return nodes;
+    const ids = new Set(nodes.map((node) => String(node.id)));
+    const incoming = new Map([...ids].map((id) => [id, 0]));
+    const outgoing = new Map([...ids].map((id) => [id, []]));
+    (edges || []).forEach((edge) => {
+      const from = String(edge.from || '');
+      const to = String(edge.to || '');
+      if (!ids.has(from) || !ids.has(to) || from === to) return;
+      outgoing.get(from).push(to);
+      incoming.set(to, (incoming.get(to) || 0) + 1);
+    });
+    const rank = new Map([...ids].map((id) => [id, 0]));
+    const queue = [...ids].filter((id) => incoming.get(id) === 0);
+    let processed = 0;
+    while (queue.length) {
+      const id = queue.shift();
+      processed += 1;
+      (outgoing.get(id) || []).forEach((to) => {
+        rank.set(to, Math.max(rank.get(to) || 0, (rank.get(id) || 0) + 1));
+        incoming.set(to, incoming.get(to) - 1);
+        if (incoming.get(to) === 0) queue.push(to);
+      });
+    }
+    if (processed !== nodes.length) nodes.forEach((node, index) => rank.set(String(node.id), index));
+    const layers = new Map();
+    nodes.forEach((node) => {
+      const level = rank.get(String(node.id)) || 0;
+      if (!layers.has(level)) layers.set(level, []);
+      layers.get(level).push(node);
+    });
+    const centerX = 640;
+    const cardWidth = 300;
+    const gapX = 40;
+    const gapY = 205;
+    [...layers.entries()].sort((a, b) => a[0] - b[0]).forEach(([level, layer]) => {
+      const ordered = layer.slice().sort((a, b) => (safeNumber(a.y) - safeNumber(b.y)) || (safeNumber(a.x) - safeNumber(b.x)));
+      const totalWidth = ordered.length * cardWidth + Math.max(0, ordered.length - 1) * gapX;
+      const startX = Math.max(70, centerX - totalWidth / 2);
+      ordered.forEach((node, index) => {
+        node.x = startX + index * (cardWidth + gapX);
+        node.y = 80 + level * gapY;
+      });
+    });
+    return nodes;
   }
 
   function addBuilderNode() {
@@ -598,10 +661,12 @@
 
     builderBoard.querySelectorAll('[data-builder-block]').forEach((node) => node.remove());
     const labels = workflowNumbering(state.builder.nodes, state.builder.edges);
+    const peopleMode = state.builder.mode === 'people';
+    builderBoard.classList.toggle('is-people-mode', peopleMode);
     state.builder.nodes.forEach((node) => {
       const block = document.createElement('article');
       const isSource = state.builder.connecting && state.builder.connectFrom === node.id;
-      block.className = `tm-builder-block${isSource ? ' is-connect-source' : ''}`;
+      block.className = `tm-builder-block${peopleMode ? ' tm-builder-block--people' : ''}${isSource ? ' is-connect-source' : ''}`;
       block.dataset.builderBlock = node.id;
       block.style.left = `${Math.max(16, safeNumber(node.x, 60))}px`;
       block.style.top = `${Math.max(16, safeNumber(node.y, 80))}px`;
@@ -620,8 +685,8 @@
           <strong>${escapeHtml(node.request || 'Click Edit to configure this block')}</strong>
           ${(node.deliveryDate || node.attachment?.url) ? `<div class="tm-builder-block__meta">${node.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>` : ''}${node.attachment?.url ? `<span class="tm-builder-block__attachment"><i data-feather="paperclip"></i>${escapeHtml(node.attachment.name || 'Attachment')}</span>` : ''}</div>` : ''}
         </div>
-        <button type="button" class="tm-builder-socket tm-builder-socket--in" data-tm-socket="in" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Connect an incoming arrow to this block" title="Incoming connection"></button>
-        <button type="button" class="tm-builder-socket tm-builder-socket--out" data-tm-socket="out" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Start an arrow from this block" title="Start connection"></button>`;
+        <button type="button" class="tm-builder-socket ${peopleMode ? 'tm-builder-socket--top' : 'tm-builder-socket--in'}" data-tm-socket="in" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Connect an incoming arrow to this block" title="Incoming connection"></button>
+        <button type="button" class="tm-builder-socket ${peopleMode ? 'tm-builder-socket--bottom' : 'tm-builder-socket--out'}" data-tm-socket="out" data-tm-socket-node="${escapeHtml(node.id)}" aria-label="Start an arrow from this block" title="Start connection"></button>`;
       builderBoard.appendChild(block);
     });
     measureBuilderNodes();
@@ -638,32 +703,53 @@
     return { width: Math.ceil(maxX), height: Math.ceil(maxY) };
   }
 
-  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 138 } = {}) {
+  function pathGeometry(from, to, { blockWidth = 300, blockHeight = 138, orientation = 'horizontal' } = {}) {
     const fromSize = nodeVisualSize(from, { width: blockWidth, height: blockHeight });
     const toSize = nodeVisualSize(to, { width: blockWidth, height: blockHeight });
+    if (orientation === 'vertical') {
+      const sx = safeNumber(from.x) + (fromSize.width / 2);
+      const sy = safeNumber(from.y) + fromSize.height;
+      const tx = safeNumber(to.x) + (toSize.width / 2);
+      const ty = safeNumber(to.y);
+      const verticalDistance = Math.max(78, Math.abs(ty - sy) * 0.48);
+      const direction = ty >= sy ? 1 : -1;
+      return {
+        sx, sy, tx, ty,
+        c1x: sx,
+        c1y: sy + (verticalDistance * direction),
+        c2x: tx,
+        c2y: ty - (verticalDistance * direction),
+        orientation,
+      };
+    }
     const sx = safeNumber(from.x) + fromSize.width;
     const sy = safeNumber(from.y) + (fromSize.height / 2);
     const tx = safeNumber(to.x);
     const ty = safeNumber(to.y) + (toSize.height / 2);
     const horizontalDistance = Math.max(95, Math.abs(tx - sx) * 0.48);
     const direction = tx >= sx ? 1 : -1;
-    const c1x = sx + (horizontalDistance * direction);
-    const c2x = tx - (horizontalDistance * direction);
-    return { sx, sy, tx, ty, c1x, c2x };
+    return {
+      sx, sy, tx, ty,
+      c1x: sx + (horizontalDistance * direction),
+      c1y: sy,
+      c2x: tx - (horizontalDistance * direction),
+      c2y: ty,
+      orientation,
+    };
   }
 
   function pathBetween(from, to, options = {}) {
-    const { sx, sy, tx, ty, c1x, c2x } = pathGeometry(from, to, options);
-    return `M ${sx} ${sy} C ${c1x} ${sy}, ${c2x} ${ty}, ${tx} ${ty}`;
+    const geometry = pathGeometry(from, to, options);
+    return `M ${geometry.sx} ${geometry.sy} C ${geometry.c1x} ${geometry.c1y}, ${geometry.c2x} ${geometry.c2y}, ${geometry.tx} ${geometry.ty}`;
   }
 
-  function cubicPointAtMidpoint(from, to) {
-    const { sx, sy, tx, ty, c1x, c2x } = pathGeometry(from, to);
+  function cubicPointAtMidpoint(from, to, options = {}) {
+    const { sx, sy, tx, ty, c1x, c1y, c2x, c2y } = pathGeometry(from, to, options);
     const t = 0.5;
     const mt = 1 - t;
     return {
       x: (mt ** 3 * sx) + (3 * mt ** 2 * t * c1x) + (3 * mt * t ** 2 * c2x) + (t ** 3 * tx),
-      y: (mt ** 3 * sy) + (3 * mt ** 2 * t * sy) + (3 * mt * t ** 2 * ty) + (t ** 3 * ty),
+      y: (mt ** 3 * sy) + (3 * mt ** 2 * t * c1y) + (3 * mt * t ** 2 * c2y) + (t ** 3 * ty),
     };
   }
 
@@ -683,7 +769,7 @@
       const key = edgeKey({ from: edge.from ?? edge.fromSectionId ?? edge.from_section_id, to: edge.to ?? edge.toSectionId ?? edge.to_section_id });
       const selectedClass = selectedEdgeKey && selectedEdgeKey === key ? ' is-selected' : '';
       const interactiveAttr = interactive ? ` data-tm-builder-edge="${escapeHtml(key)}"` : '';
-      return `<path class="${className}${selectedClass}" d="${pathBetween(from, to)}" marker-end="url(#${markerId})"${interactiveAttr}></path>`;
+      return `<path class="${className}${selectedClass}" d="${pathBetween(from, to, options)}" marker-end="url(#${markerId})"${interactiveAttr}></path>`;
     }).join('')}`;
   }
 
@@ -699,6 +785,7 @@
       interactive: true,
       selectedEdgeKey: state.builder.selectedEdgeKey,
       markerId: 'tmBuilderArrowHead',
+      orientation: state.builder.mode === 'people' ? 'vertical' : 'horizontal',
     });
     renderBuilderEdgeDeleteControl();
   }
@@ -715,7 +802,7 @@
       state.builder.selectedEdgeKey = '';
       return;
     }
-    const midpoint = cubicPointAtMidpoint(from, to);
+    const midpoint = cubicPointAtMidpoint(from, to, { orientation: state.builder.mode === 'people' ? 'vertical' : 'horizontal' });
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'tm-builder-edge-delete';
@@ -1165,13 +1252,27 @@
         edges: state.builder.edges.map((edge) => ({ from: edge.from, to: edge.to })),
       };
       api(`/api/task-management/sections/${encodeURIComponent(sectionId)}/people-workflow`, { method: 'PUT', body: payload })
-        .then((data) => {
+        .then(async (data) => {
+          const reopenWork = !!state.builder.returnToWorkPage;
+          const reopenDetails = !!state.builder.returnToSectionDetails;
+          const workflow = { assignments: Array.isArray(data.assignments) ? data.assignments : [], edges: Array.isArray(data.edges) ? data.edges : [] };
+          state.peopleWorkflowCache.set(String(sectionId), workflow);
           setOverlay(builderOverlay, false);
-          if (state.workSection) state.workSection.peopleWorkflowCount = Array.isArray(data.assignments) ? data.assignments.length : state.builder.nodes.length;
+          if (state.workSection) state.workSection.peopleWorkflowCount = workflow.assignments.length;
+          if (state.readonlySection) state.readonlySection.peopleWorkflow = workflow;
+          await loadTickets();
+          const latestTicket = state.tickets.find((ticket) => String(ticket.id) === String(state.selectedTicket?.id)) || state.selectedTicket;
+          if (latestTicket) {
+            attachCachedPeopleWorkflows(latestTicket);
+            state.selectedTicket = latestTicket;
+            state.readonlySection = (latestTicket.sections || []).find((item) => String(item.id) === String(sectionId)) || state.readonlySection;
+            state.workSection = state.readonlySection;
+            renderWorkflow(latestTicket);
+          }
           showToast('success', 'Team workflow saved', 'The section work was distributed to people inside your department.');
-          const reopenWork = state.builder.returnToWorkPage;
           resetBuilder();
-          if (reopenWork && state.workSection) setOverlay(workPageOverlay, true);
+          if (reopenDetails && state.readonlySection) openReadonlySectionDetails(sectionId);
+          else if (reopenWork && state.readonlySection) openWorkPage();
         })
         .catch((error) => showToast('error', 'Could not save team workflow', error.message || 'Please try again.'))
         .finally(() => { if (button) { button.disabled = false; button.classList.remove('is-loading'); } });
@@ -1409,6 +1510,52 @@
     return state.view === 'my' && ['edit', 'admin'].includes(norm(state.accessLevel || ''));
   }
 
+  function cachedPeopleWorkflow(sectionId) {
+    return state.peopleWorkflowCache.get(String(sectionId || '')) || null;
+  }
+
+  function attachCachedPeopleWorkflows(ticket) {
+    if (!ticket || state.view !== 'my') return ticket;
+    (ticket.sections || []).forEach((section) => {
+      const cached = cachedPeopleWorkflow(section.id);
+      if (cached) section.peopleWorkflow = cached;
+    });
+    return ticket;
+  }
+
+  async function hydratePeopleWorkflows(ticket) {
+    if (!ticket || state.view !== 'my') return;
+    const ownedSections = (ticket.sections || []).filter(isMyDepartmentSection);
+    await Promise.all(ownedSections.map(async (section) => {
+      const sectionId = String(section.id || '');
+      if (!sectionId) return;
+      const cached = cachedPeopleWorkflow(sectionId);
+      if (cached) {
+        section.peopleWorkflow = cached;
+        return;
+      }
+      let request = state.peopleWorkflowLoads.get(sectionId);
+      if (!request) {
+        request = api(`/api/task-management/sections/${encodeURIComponent(sectionId)}/people-workflow?view=${encodeURIComponent(state.view)}`)
+          .then((data) => ({ assignments: Array.isArray(data.assignments) ? data.assignments : [], edges: Array.isArray(data.edges) ? data.edges : [] }))
+          .catch((error) => {
+            console.warn('[task-management] team workflow preview unavailable:', error?.message || error);
+            return null;
+          })
+          .finally(() => state.peopleWorkflowLoads.delete(sectionId));
+        state.peopleWorkflowLoads.set(sectionId, request);
+      }
+      const workflow = await request;
+      if (!workflow) return;
+      state.peopleWorkflowCache.set(sectionId, workflow);
+      section.peopleWorkflow = workflow;
+    }));
+    if (state.selectedTicket && String(state.selectedTicket.id) === String(ticket.id) && isOverlayOpen(workflowOverlay)) {
+      attachCachedPeopleWorkflows(state.selectedTicket);
+      renderWorkflow(state.selectedTicket);
+    }
+  }
+
   function deriveLegacyEdges(sections = []) {
     const groups = new Map();
     (sections || []).forEach((section, index) => {
@@ -1511,6 +1658,8 @@
   function renderWorkflowCard(ticket, section, nodeIndex) {
     const unlocked = isSectionUnlocked(ticket, section);
     const mine = state.view === 'my' && isMyDepartmentSection(section);
+    const teamWorkflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
+    const hasTeamTasks = mine && Array.isArray(teamWorkflow?.assignments) && teamWorkflow.assignments.length > 0;
     const interactive = state.view !== 'my' || mine;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
@@ -1520,8 +1669,9 @@
       ? ` data-tm-open-section="${escapeHtml(section.id)}" role="button" tabindex="0" aria-label="Open task details for ${escapeHtml(section.department || 'department')}"`
       : ' role="group" tabindex="-1" aria-disabled="true"';
     const mineClass = mine ? ' tm-workflow-card--mine' : (state.view === 'my' ? ' tm-workflow-card--other-department' : '');
+    const teamClass = hasTeamTasks ? ' tm-workflow-card--has-team' : '';
     return `
-      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer${interactive ? ' tm-workflow-card--interactive' : ''}${mineClass} ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}"${interactiveAttrs} style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
+      <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer${interactive ? ' tm-workflow-card--interactive' : ''}${mineClass}${teamClass} ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}"${interactiveAttrs} style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top">
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
           <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${mine ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
@@ -1536,6 +1686,116 @@
           ${section.status === 'rejected' && section.rejectionReason ? `<div class="tm-workflow-card__rejection"><i data-feather="alert-circle"></i><span>${escapeHtml(section.rejectionReason)}</span></div>` : ''}
         </div>
         <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${mine ? '<span class="tm-workflow-card__mine-label"><i data-feather="mouse-pointer"></i>Open your task</span>' : ''}</div>
+        ${hasTeamTasks ? '<span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span><span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>' : ''}
+      </article>`;
+  }
+
+  function buildTeamViewerLayout(section, parentNode) {
+    const workflow = section?.peopleWorkflow || cachedPeopleWorkflow(section?.id);
+    const assignments = Array.isArray(workflow?.assignments) ? workflow.assignments : [];
+    if (!assignments.length || !parentNode) return { nodes: [], edges: [] };
+
+    const sourceEdges = Array.isArray(workflow?.edges) ? workflow.edges : [];
+    const assignmentById = new Map(assignments.map((assignment) => [String(assignment.id), assignment]));
+    const incoming = new Map(assignments.map((assignment) => [String(assignment.id), 0]));
+    const outgoing = new Map(assignments.map((assignment) => [String(assignment.id), []]));
+    sourceEdges.forEach((edge) => {
+      const from = String(edge.from || '');
+      const to = String(edge.to || '');
+      if (!assignmentById.has(from) || !assignmentById.has(to) || from === to) return;
+      outgoing.get(from).push(to);
+      incoming.set(to, (incoming.get(to) || 0) + 1);
+    });
+    const initialIncoming = new Map(incoming);
+    const rank = new Map(assignments.map((assignment) => [String(assignment.id), 0]));
+    const queue = assignments
+      .filter((assignment) => (incoming.get(String(assignment.id)) || 0) === 0)
+      .sort((a, b) => safeNumber(a.sortOrder, 0) - safeNumber(b.sortOrder, 0))
+      .map((assignment) => String(assignment.id));
+    let processed = 0;
+    while (queue.length) {
+      const id = queue.shift();
+      processed += 1;
+      (outgoing.get(id) || []).forEach((nextId) => {
+        rank.set(nextId, Math.max(rank.get(nextId) || 0, (rank.get(id) || 0) + 1));
+        incoming.set(nextId, (incoming.get(nextId) || 0) - 1);
+        if (incoming.get(nextId) === 0) queue.push(nextId);
+      });
+    }
+    if (processed !== assignments.length) {
+      assignments.forEach((assignment, index) => rank.set(String(assignment.id), Math.max(0, safeNumber(assignment.executionGroup, index + 1) - 1)));
+    }
+
+    const layers = new Map();
+    assignments.forEach((assignment) => {
+      const level = rank.get(String(assignment.id)) || 0;
+      if (!layers.has(level)) layers.set(level, []);
+      layers.get(level).push(assignment);
+    });
+
+    const cardWidth = 246;
+    const cardHeight = 132;
+    const horizontalGap = 34;
+    const verticalGap = 78;
+    const parentSize = nodeVisualSize(parentNode, { width: 300, height: 138 });
+    const parentCenter = safeNumber(parentNode.x) + (parentSize.width / 2);
+    const startY = safeNumber(parentNode.y) + parentSize.height + 92;
+    const nodes = [];
+    const viewerIdByAssignmentId = new Map();
+
+    [...layers.entries()].sort((a, b) => a[0] - b[0]).forEach(([level, layer]) => {
+      const ordered = layer.slice().sort((a, b) => (safeNumber(a.sortOrder, 0) - safeNumber(b.sortOrder, 0)) || String(a.assigneeName || '').localeCompare(String(b.assigneeName || '')));
+      const layerWidth = (ordered.length * cardWidth) + (Math.max(0, ordered.length - 1) * horizontalGap);
+      const startX = Math.max(28, parentCenter - (layerWidth / 2));
+      ordered.forEach((assignment, index) => {
+        const viewerId = `team-${section.id}-${assignment.id}`;
+        viewerIdByAssignmentId.set(String(assignment.id), viewerId);
+        nodes.push({
+          ...assignment,
+          id: viewerId,
+          assignmentId: String(assignment.id),
+          parentSectionId: String(section.id),
+          x: startX + index * (cardWidth + horizontalGap),
+          y: startY + level * (cardHeight + verticalGap),
+          _visualWidth: cardWidth,
+          _visualHeight: cardHeight,
+          workflowNumber: `${section.workflowNumber || ''}${section.workflowNumber ? '.' : ''}${safeNumber(assignment.sortOrder, index + 1) || index + 1}`,
+        });
+      });
+    });
+
+    const edges = [];
+    const roots = assignments.filter((assignment) => (initialIncoming.get(String(assignment.id)) || 0) === 0);
+    (roots.length ? roots : assignments.slice(0, 1)).forEach((assignment) => {
+      const to = viewerIdByAssignmentId.get(String(assignment.id));
+      if (to) edges.push({ from: String(section.id), to, kind: 'parent' });
+    });
+    sourceEdges.forEach((edge) => {
+      const from = viewerIdByAssignmentId.get(String(edge.from || ''));
+      const to = viewerIdByAssignmentId.get(String(edge.to || ''));
+      if (from && to) edges.push({ from, to, kind: 'team' });
+    });
+    return { nodes, edges };
+  }
+
+  function renderTeamTaskCard(node) {
+    const attachment = node.attachment?.url
+      ? `<a class="tm-team-task-card__attachment" href="${escapeHtml(node.attachment.url)}" target="_blank" rel="noopener noreferrer"><i data-feather="paperclip"></i><span>${escapeHtml(node.attachment.name || 'Attachment')}</span></a>`
+      : '';
+    return `
+      <article class="tm-team-task-card ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}" style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
+        <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
+        <div class="tm-team-task-card__head">
+          <span class="tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</span>
+          <div><b>${escapeHtml(node.assigneeName || 'Team member')}</b><small>Assigned person task</small></div>
+          <span class="tm-status-pill ${statusClass(node.status)}"><i data-feather="${statusIcon(node.status)}"></i>${escapeHtml(sectionStatusLabel(node.status))}</span>
+        </div>
+        <div class="tm-team-task-card__body">
+          <span>Assigned task</span>
+          <strong>${escapeHtml(node.task || 'No task details')}</strong>
+          <div class="tm-team-task-card__meta"><span><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>${attachment}</div>
+        </div>
+        <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
 
@@ -1582,8 +1842,15 @@
           ${section.rejectionReason ? `<div class="tm-section-details__item tm-section-details__item--wide tm-section-details__item--rejected"><span>Rejected reason</span><p>${escapeHtml(section.rejectionReason)}</p></div>` : ''}
         </div>`;
     }
+    const isOwnMyTask = state.view === 'my' && isMyDepartmentSection(section);
     const openWorkButton = $('tmOpenWorkPageBtn');
-    if (openWorkButton) openWorkButton.hidden = !(state.view === 'my' && isMyDepartmentSection(section));
+    if (openWorkButton) openWorkButton.hidden = !isOwnMyTask;
+    const assignTeamButton = $('tmOpenPeopleWorkflowBtn');
+    if (assignTeamButton) {
+      assignTeamButton.hidden = !isOwnMyTask;
+      assignTeamButton.disabled = isOwnMyTask && !canEditMyTaskWork();
+      assignTeamButton.title = assignTeamButton.disabled ? 'Edit or Admin access is required to assign team tasks.' : 'Assign this department section to team members';
+    }
     hydrateIcons(sectionDetailsOverlay);
     setOverlay(sectionDetailsOverlay, true);
   }
@@ -1698,6 +1965,7 @@
 
   function renderWorkflow(ticket) {
     if (!ticket) return;
+    attachCachedPeopleWorkflows(ticket);
     $('tmWorkflowCode').textContent = ticket.ticketCode || 'TKT';
     $('tmWorkflowTitle').textContent = ticket.title || 'Project workflow';
     $('tmWorkflowSub').textContent = `${ticket.createdByName || '—'} · Created ${formatDate(ticket.createdAt)}`;
@@ -1710,25 +1978,46 @@
 
     const flow = $('tmWorkflowFlow');
     const { nodes, edges } = graphLayout(ticket);
-    flow.innerHTML = `<svg class="tm-connection-layer tm-workflow-arrows" id="tmWorkflowArrows" aria-hidden="true"></svg>${nodes.map((section, index) => renderWorkflowCard(ticket, section, index)).join('') || '<div class="tm-empty-state"><h2>No workflow sections</h2><p>This task has no configured department sections.</p></div>'}`;
+    flow.innerHTML = `<svg class="tm-connection-layer tm-workflow-arrows" id="tmWorkflowArrows" aria-hidden="true"></svg><svg class="tm-connection-layer tm-team-workflow-arrows" id="tmTeamWorkflowArrows" aria-hidden="true"></svg>${nodes.map((section, index) => renderWorkflowCard(ticket, section, index)).join('') || '<div class="tm-empty-state"><h2>No workflow sections</h2><p>This task has no configured department sections.</p></div>'}`;
+
     nodes.forEach((node) => {
       const card = flow.querySelector(`[data-section-id="${CSS.escape(String(node.id))}"]`);
       if (!card) return;
       node._visualWidth = Math.max(1, card.offsetWidth || 300);
-      node._visualHeight = Math.max(1, card.offsetHeight || 172);
+      node._visualHeight = Math.max(1, card.offsetHeight || 138);
     });
-    const dimensions = getBoardDimensions(nodes);
+
+    const teamNodes = [];
+    const teamEdges = [];
+    if (state.view === 'my') {
+      nodes.filter(isMyDepartmentSection).forEach((section) => {
+        const layout = buildTeamViewerLayout(section, section);
+        teamNodes.push(...layout.nodes);
+        teamEdges.push(...layout.edges);
+      });
+    }
+    if (teamNodes.length) flow.insertAdjacentHTML('beforeend', teamNodes.map(renderTeamTaskCard).join(''));
+    teamNodes.forEach((node) => {
+      const card = flow.querySelector(`[data-team-task-id="${CSS.escape(String(node.assignmentId))}"]`);
+      if (!card) return;
+      node._visualWidth = Math.max(1, card.offsetWidth || 246);
+      node._visualHeight = Math.max(1, card.offsetHeight || 132);
+    });
+
+    const dimensions = getBoardDimensions([...nodes, ...teamNodes], { width: 980, height: 650 });
     state.viewer.width = dimensions.width;
     state.viewer.height = dimensions.height;
     flow.style.width = `${dimensions.width}px`;
     flow.style.height = `${dimensions.height}px`;
-    renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow', { markerId: 'tmWorkflowArrowHead' });
+    renderArrowLayer($('tmWorkflowArrows'), edges, (id) => nodes.find((node) => String(node.id) === String(id)), dimensions, 'tm-workflow-arrow', { markerId: 'tmWorkflowArrowHead', orientation: 'horizontal' });
+    const verticalNodes = new Map([...nodes, ...teamNodes].map((node) => [String(node.id), node]));
+    renderArrowLayer($('tmTeamWorkflowArrows'), teamEdges, (id) => verticalNodes.get(String(id)), dimensions, 'tm-workflow-arrow tm-workflow-arrow--team', { markerId: 'tmTeamWorkflowArrowHead', orientation: 'vertical' });
     applyViewerZoom(viewerZoom());
     hydrateIcons(workflowOverlay);
   }
 
   function openWorkflow(ticket) {
-    state.selectedTicket = ticket;
+    state.selectedTicket = attachCachedPeopleWorkflows(ticket);
     state.viewer.zoom = 1;
     renderWorkflow(ticket);
     setOverlay(workflowOverlay, true);
@@ -1736,6 +2025,7 @@
       renderWorkflow(ticket);
       resetViewerCanvas();
     });
+    hydratePeopleWorkflows(ticket);
   }
 
   function openEditBuilder(ticket, adminPassword = '') {
@@ -2012,7 +2302,7 @@
   }
 
   async function openPeopleWorkflow() {
-    const section = state.workSection || state.readonlySection;
+    const section = state.readonlySection || state.workSection;
     if (!section || state.view !== 'my') return;
     if (!canEditMyTaskWork()) {
       showToast('info', 'View-only access', 'Edit or Admin access is required to assign work to team members.');
@@ -2022,10 +2312,13 @@
     if (button) button.disabled = true;
     try {
       const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow?view=${encodeURIComponent(state.view)}`);
+      const returnToSectionDetails = isOverlayOpen(sectionDetailsOverlay);
+      const returnToWorkPage = isOverlayOpen(workPageOverlay);
       resetBuilder();
       state.builder.mode = 'people';
       state.builder.contextSectionId = String(section.id);
-      state.builder.returnToWorkPage = true;
+      state.builder.returnToWorkPage = returnToWorkPage;
+      state.builder.returnToSectionDetails = returnToSectionDetails;
       state.teamMembers = Array.isArray(data.members) ? data.members : [];
       state.builder.nodes = (data.assignments || []).map((assignment) => ({
         id: String(assignment.id),
@@ -2039,9 +2332,11 @@
         y: safeNumber(assignment.canvasY, 80),
       }));
       state.builder.edges = (data.edges || []).map((edge) => ({ from: String(edge.from), to: String(edge.to) }));
+      arrangePeopleNodesVertically(state.builder.nodes, state.builder.edges);
       const dimensions = getBoardDimensions(state.builder.nodes, { width: 1280, height: 900 });
       state.builder.canvas = { width: dimensions.width, height: dimensions.height };
       syncBuilderModeLabels();
+      setOverlay(sectionDetailsOverlay, false);
       setOverlay(workPageOverlay, false);
       setOverlay(builderOverlay, true);
       window.requestAnimationFrame(() => {
@@ -2054,7 +2349,7 @@
     } catch (error) {
       showToast('error', 'Could not open team workflow', error.message || 'Please try again.');
     } finally {
-      if (button) button.disabled = false;
+      if (button) button.disabled = !canEditMyTaskWork();
     }
   }
 
@@ -2249,13 +2544,17 @@
       if (close) {
         const which = close.dataset.tmClose;
         if (which === 'builder') {
-          const returnToWork = state.builder?.mode === 'people' && state.builder?.returnToWorkPage && !!state.workSection;
+          const peopleMode = state.builder?.mode === 'people';
+          const returnToWork = peopleMode && state.builder?.returnToWorkPage && !!(state.workSection || state.readonlySection);
+          const returnToDetails = peopleMode && state.builder?.returnToSectionDetails && !!state.readonlySection;
+          const sectionId = state.readonlySection?.id || state.workSection?.id || '';
           clearPendingBlockPress();
           endBlockDrag();
           endCanvasPan();
           setOverlay(builderOverlay, false);
-          if (returnToWork) setOverlay(workPageOverlay, true);
-          if (state.builder?.mode === 'people') resetBuilder();
+          if (peopleMode) resetBuilder();
+          if (returnToDetails && sectionId) openReadonlySectionDetails(sectionId);
+          else if (returnToWork && state.readonlySection) openWorkPage();
         }
         if (which === 'meta') {
           setOverlay(metaOverlay, false);
@@ -2351,10 +2650,14 @@
           updateBuilderStatus('Connection cancelled.');
         }
         else if (isOverlayOpen(builderOverlay)) {
-          const returnToWork = state.builder?.mode === 'people' && state.builder?.returnToWorkPage && !!state.workSection;
+          const peopleMode = state.builder?.mode === 'people';
+          const returnToWork = peopleMode && state.builder?.returnToWorkPage && !!(state.workSection || state.readonlySection);
+          const returnToDetails = peopleMode && state.builder?.returnToSectionDetails && !!state.readonlySection;
+          const sectionId = state.readonlySection?.id || state.workSection?.id || '';
           setOverlay(builderOverlay, false);
-          if (returnToWork) setOverlay(workPageOverlay, true);
-          if (state.builder?.mode === 'people') resetBuilder();
+          if (peopleMode) resetBuilder();
+          if (returnToDetails && sectionId) openReadonlySectionDetails(sectionId);
+          else if (returnToWork && state.readonlySection) openWorkPage();
         }
       }
       if (event.key === 'Enter' || event.key === ' ') {
