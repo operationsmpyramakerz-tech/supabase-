@@ -1400,6 +1400,18 @@
     return deleteBtn;
   }
 
+  async function confirmCartItemDelete(item, component) {
+    const itemName = String(component?.name || component?.title || item?.name || 'this cart item').trim();
+    return window.OpsDeleteConfirm
+      ? window.OpsDeleteConfirm.confirm({
+          title: 'Delete cart item?',
+          itemType: 'cart item',
+          itemName,
+          message: `You’re going to remove “${itemName}” from this order. This action cannot be undone.`,
+        })
+      : Promise.resolve(window.confirm(`Delete “${itemName}” from this order?`));
+  }
+
   function makeCardEditorTrigger(el, onOpen, label) {
     if (!el || typeof onOpen !== 'function') return;
     el.style.cursor = 'pointer';
@@ -1522,7 +1534,7 @@
 
         const openEditor = () => openModalForEdit(p.id);
 
-        deleteBtn.addEventListener('click', () => removeItem(p.id));
+        deleteBtn.addEventListener('click', async () => { if (await confirmCartItemDelete(p, c)) removeItem(p.id); });
         makeCardEditorTrigger(productCell, openEditor, `Edit ${name}`);
         makeCardEditorTrigger(issueCard, openEditor, `Edit issue description for ${name}`);
 
@@ -1603,7 +1615,7 @@
 
         incBtn.addEventListener('click', () => changeQty(p.id, +1));
         decBtn.addEventListener('click', () => changeQty(p.id, -1));
-        deleteBtn.addEventListener('click', () => removeItem(p.id));
+        deleteBtn.addEventListener('click', async () => { if (await confirmCartItemDelete(p, c)) removeItem(p.id); });
         makeCardEditorTrigger(productCell, openEditor, `Edit ${name}`);
 
         row.appendChild(productCell);
@@ -1682,7 +1694,7 @@
       // bind events
       incBtn.addEventListener('click', () => changeQty(p.id, +1));
       decBtn.addEventListener('click', () => changeQty(p.id, -1));
-      trashBtn.addEventListener('click', () => removeItem(p.id));
+      trashBtn.addEventListener('click', async () => { if (await confirmCartItemDelete(p, c)) removeItem(p.id); });
 
       // click product to edit
       productCell.style.cursor = 'pointer';

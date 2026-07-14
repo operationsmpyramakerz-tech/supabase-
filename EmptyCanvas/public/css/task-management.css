@@ -1884,3 +1884,21 @@ body.task-management-page{
 .task-management-page #tmWorkflowCanvasWrap{position:relative;overflow:hidden!important;}
 .task-management-page #tmWorkflowStage{position:absolute!important;inset:0!important;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;overflow:visible!important;}
 .task-management-page #tmWorkflowFlow{visibility:visible!important;opacity:1!important;}
+
+
+/* Delegated Tasks project deletion ------------------------------------------------ */
+.task-management-page .tm-icon-btn--delete{
+  border-color:#ffd0cc!important;
+  background:#fff2f1!important;
+  color:#d92d27!important;
+}
+.task-management-page .tm-icon-btn--delete:hover{
+  border-color:#ef3d35!important;
+  background:#ef3d35!important;
+  color:#fff!important;
+}
+.task-management-page .tm-btn--danger{
+  background:linear-gradient(180deg,#ff3a31,#ef2119)!important;
+  color:#fff!important;
+  box-shadow:0 10px 22px rgba(239,33,25,.25)!important;
+}

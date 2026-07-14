@@ -505,7 +505,7 @@
   async function remove(id) {
     if (!isAdmin() || !id) return;
     const component = state.components.find((row) => row.id === id);
-    if (!window.confirm(`Delete “${component?.name || 'this component'}”? Existing event requests will keep their saved snapshot.`)) return;
+    const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:'Delete component?', itemType:'component', itemName:component?.name || 'this component', message:`You’re going to permanently delete “${component?.name || 'this component'}”. Existing event requests will keep their saved snapshot, but this action cannot be undone.` }) : window.confirm(`Delete “${component?.name || 'this component'}”?`); if (!confirmed) return;
     try {
       const response = await fetch(`/api/events/components/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' });
       const data = await response.json().catch(() => ({}));

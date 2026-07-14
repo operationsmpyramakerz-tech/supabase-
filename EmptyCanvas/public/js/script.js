@@ -1025,6 +1025,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      if (action === 'delete') {
+        const label = orderIds.length === 1 ? 'order' : 'orders';
+        const confirmed = window.OpsDeleteConfirm
+          ? await window.OpsDeleteConfirm.confirm({
+              title: orderIds.length === 1 ? 'Delete order?' : 'Delete orders?',
+              itemType: label,
+              message: orderIds.length === 1
+                ? 'You’re going to permanently delete this order and its saved order data. This action cannot be undone.'
+                : `You’re going to permanently delete ${orderIds.length} orders and their saved order data. This action cannot be undone.`,
+            })
+          : window.confirm(`Delete ${orderIds.length} order${orderIds.length === 1 ? '' : 's'}?`);
+        if (!confirmed) {
+          closeEditPasswordModal({ restoreFocus: true });
+          return;
+        }
+      }
       await runCurrentOrderStatusAction(action, orderIds, pwd);
       clearOrdersUiCache();
       closeEditPasswordModal({ restoreFocus: false });

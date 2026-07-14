@@ -84,6 +84,8 @@
       meta: { title: '', priority: 'Normal', dueDate: '', description: '' },
     },
     pendingEditTicket: null,
+    pendingDeleteTicket: null,
+    pendingAdminAction: 'edit',
     accessLevel: 'view',
     workSection: null,
     workAssignment: null,
@@ -2204,6 +2206,8 @@
     statusEl.innerHTML = `<i data-feather="${statusIcon(ticket.status)}"></i>${escapeHtml(statusLabel(ticket.status))}`;
     const editButton = $('tmEditProjectBtn');
     if (editButton) editButton.hidden = state.view === 'my';
+    const deleteButton = $('tmDeleteProjectBtn');
+    if (deleteButton) deleteButton.hidden = state.view !== 'delegated';
     $('tmWorkflowSummary').innerHTML = `<div><span>Objective</span><p>${escapeHtml(ticket.description || 'No additional context provided.')}</p></div><div><span>Priority</span><b class="tm-priority tm-priority--${escapeHtml(norm(ticket.priority || 'normal'))}">${escapeHtml(ticket.priority || 'Normal')}</b></div><div><span>Target date</span><b>${escapeHtml(formatDate(ticket.dueDate))}</b></div><div><span>Progress</span><b>${ticket.completedCount || 0}/${ticket.sectionsCount || 0} complete</b></div>`;
 
     const flow = $('tmWorkflowFlow');
@@ -2304,6 +2308,35 @@
     });
   }
 
+  function setAdminVerifyMode(action = 'edit') {
+    const isDelete = action === 'delete';
+    state.pendingAdminAction = isDelete ? 'delete' : 'edit';
+    const title = $('tmAdminVerifyTitle');
+    const description = $('tmAdminVerifyDescription');
+    const label = $('tmAdminVerifySubmitLabel');
+    const submit = $('tmAdminVerifySubmit');
+    if (title) title.textContent = isDelete ? 'Delete project' : 'Edit project workflow';
+    if (description) description.textContent = isDelete
+      ? 'Enter the admin password before opening the final delete confirmation.'
+      : 'Enter the admin password to continue editing this project.';
+    if (label) label.textContent = isDelete ? 'Verify & Delete' : 'Verify & Edit';
+    submit?.classList.toggle('tm-btn--danger', isDelete);
+    hydrateIcons(adminOverlay);
+  }
+
+  function openAdminVerification(ticket, action = 'edit') {
+    if (!ticket) return;
+    state.pendingEditTicket = action === 'edit' ? ticket : null;
+    state.pendingDeleteTicket = action === 'delete' ? ticket : null;
+    setAdminVerifyMode(action);
+    const input = $('tmAdminPasswordInput');
+    const error = $('tmAdminVerifyError');
+    if (input) input.value = '';
+    if (error) error.textContent = '';
+    setOverlay(adminOverlay, true);
+    window.requestAnimationFrame(() => input?.focus());
+  }
+
   function requestProjectEdit() {
     const ticket = state.selectedTicket;
     if (!ticket) return;
@@ -2311,17 +2344,61 @@
       openEditBuilder(ticket, '');
       return;
     }
-    state.pendingEditTicket = ticket;
-    const input = $('tmAdminPasswordInput');
-    const error = $('tmAdminVerifyError');
-    if (input) input.value = '';
-    if (error) error.textContent = '';
-    setOverlay(adminOverlay, true);
+    openAdminVerification(ticket, 'edit');
+  }
+
+  async function confirmAndDeleteProject(ticket, adminPassword = '') {
+    if (!ticket || state.view !== 'delegated') return;
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Delete project?',
+          itemType: 'project',
+          itemName: ticket.title || ticket.ticketCode || 'this project',
+          message: `You’re going to permanently delete “${ticket.title || ticket.ticketCode || 'this project'}”, including its workflow blocks, arrows, team assignments, reports, and files. This action cannot be undone.`,
+          cancelLabel: 'No, keep it.',
+          confirmLabel: 'Yes, Delete!',
+        })
+      : window.confirm(`Delete ${ticket.title || ticket.ticketCode || 'this project'} permanently?`);
+    if (!confirmed) return;
+
+    const button = $('tmDeleteProjectBtn');
+    if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
+    try {
+      await api(`/api/task-management/${encodeURIComponent(ticket.id)}`, {
+        method: 'DELETE',
+        body: { view: state.view, adminPassword },
+      });
+      setOverlay(adminOverlay, false);
+      setOverlay(workflowOverlay, false);
+      state.pendingDeleteTicket = null;
+      state.pendingEditTicket = null;
+      state.selectedTicket = null;
+      state.tickets = (state.tickets || []).filter((item) => String(item.id) !== String(ticket.id));
+      renderTickets();
+      showToast('success', 'Project deleted', 'The project and its workflow were deleted successfully.');
+    } catch (err) {
+      showToast('error', 'Delete failed', err.message || 'Failed to delete the project.');
+    } finally {
+      if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
+    }
+  }
+
+  function requestProjectDelete() {
+    const ticket = state.selectedTicket;
+    if (!ticket || state.view !== 'delegated') return;
+    if (window.__tmIsPageAdmin) {
+      confirmAndDeleteProject(ticket, '');
+      return;
+    }
+    openAdminVerification(ticket, 'delete');
   }
 
   async function verifyProjectEditAccess(event) {
     event.preventDefault();
-    const ticket = state.pendingEditTicket || state.selectedTicket;
+    const action = state.pendingAdminAction === 'delete' ? 'delete' : 'edit';
+    const ticket = action === 'delete'
+      ? (state.pendingDeleteTicket || state.selectedTicket)
+      : (state.pendingEditTicket || state.selectedTicket);
     if (!ticket) return;
     const password = $('tmAdminPasswordInput')?.value || '';
     const error = $('tmAdminVerifyError');
@@ -2337,8 +2414,14 @@
         method: 'POST',
         body: { view: state.view, adminPassword: password },
       });
-      state.pendingEditTicket = null;
-      openEditBuilder(ticket, password);
+      setOverlay(adminOverlay, false);
+      if (action === 'delete') {
+        state.pendingDeleteTicket = null;
+        await confirmAndDeleteProject(ticket, password);
+      } else {
+        state.pendingEditTicket = null;
+        openEditBuilder(ticket, password);
+      }
     } catch (err) {
       if (error) error.textContent = err.message || 'Invalid admin password.';
     } finally {
@@ -2754,6 +2837,7 @@
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
     $('tmEditProjectBtn')?.addEventListener('click', requestProjectEdit);
+    $('tmDeleteProjectBtn')?.addEventListener('click', requestProjectDelete);
     $('tmOpenWorkPageBtn')?.addEventListener('click', openWorkPageFromDetails);
     $('tmOpenPeopleWorkflowBtn')?.addEventListener('click', openPeopleWorkflow);
     $('tmRejectedReasonBtn')?.addEventListener('click', openRejectedReason);
@@ -2839,7 +2923,7 @@
       endViewerPan(event);
     });
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', async (event) => {
       const datePickerButton = event.target.closest('[data-tm-date-picker]');
       if (datePickerButton) {
         event.preventDefault();
@@ -2884,7 +2968,7 @@
           }
           setOverlay(rejectReasonOverlay, false);
         }
-        if (which === 'admin') { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
+        if (which === 'admin') { state.pendingEditTicket = null; state.pendingDeleteTicket = null; setAdminVerifyMode('edit'); setOverlay(adminOverlay, false); }
         if (which === 'update') setOverlay(updateOverlay, false);
         return;
       }
@@ -2893,6 +2977,11 @@
 
       const removeAttachment = event.target.closest('[data-tm-remove-attachment]');
       if (removeAttachment) {
+        const attachmentName = state.blockDraftAttachment?.name || 'this attachment';
+        const confirmed = window.OpsDeleteConfirm
+          ? await window.OpsDeleteConfirm.confirm({ title: 'Delete attachment?', itemType: 'attachment', itemName: attachmentName, message: `You’re going to remove “${attachmentName}” from this workflow block. This action cannot be undone after saving.` })
+          : window.confirm(`Delete “${attachmentName}”?`);
+        if (!confirmed) return;
         state.blockDraftAttachment = null;
         renderBlockAttachmentPreview();
         return;
@@ -2900,6 +2989,11 @@
 
       const removeWorkFile = event.target.closest('[data-tm-remove-work-file]');
       if (removeWorkFile) {
+        const fileName = state.workFile?.name || 'this work file';
+        const confirmed = window.OpsDeleteConfirm
+          ? await window.OpsDeleteConfirm.confirm({ title: 'Delete work file?', itemType: 'work file', itemName: fileName, message: `You’re going to remove “${fileName}” from this work report. This action cannot be undone after saving.` })
+          : window.confirm(`Delete “${fileName}”?`);
+        if (!confirmed) return;
         state.workFile = null;
         renderWorkFilePreview();
         return;
@@ -2908,7 +3002,12 @@
       const editBlock = event.target.closest('[data-tm-edit-block]');
       if (editBlock) { openBlockEditor(editBlock.dataset.tmEditBlock); return; }
       const deleteBlock = event.target.closest('[data-tm-delete-block]');
-      if (deleteBlock) { deleteBuilderNode(deleteBlock.dataset.tmDeleteBlock); return; }
+      if (deleteBlock) {
+        const node = state.builder.nodes.find((item) => String(item.id) === String(deleteBlock.dataset.tmDeleteBlock));
+        const ok = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title: 'Delete workflow block?', itemType: 'workflow block', itemName: node?.department || `Block ${state.builder.nodes.indexOf(node) + 1}`, message: 'You’re going to remove this workflow block and every arrow connected to it. This action cannot be undone after the project is saved.' }) : window.confirm('Delete this workflow block?');
+        if (ok) deleteBuilderNode(deleteBlock.dataset.tmDeleteBlock);
+        return;
+      }
       const socket = event.target.closest('[data-tm-socket]');
       if (socket) {
         event.preventDefault();
@@ -2916,7 +3015,11 @@
         return;
       }
       const deleteEdge = event.target.closest('[data-builder-edge-delete]');
-      if (deleteEdge) { deleteBuilderEdge(deleteEdge.dataset.builderEdgeDelete); return; }
+      if (deleteEdge) {
+        const ok = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title: 'Delete workflow arrow?', itemType: 'workflow arrow', message: 'You’re going to remove this connection between the two workflow blocks. This action cannot be undone after the project is saved.' }) : window.confirm('Delete this workflow arrow?');
+        if (ok) deleteBuilderEdge(deleteEdge.dataset.builderEdgeDelete);
+        return;
+      }
 
       const statusAction = event.target.closest('[data-tm-section-status]');
       if (statusAction) { openSectionUpdate(statusAction.dataset.sectionId, statusAction.dataset.tmSectionStatus); return; }
@@ -2951,7 +3054,7 @@
         else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; setOverlay(workPageOverlay, false); }
         else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
-        else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; setOverlay(adminOverlay, false); }
+        else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; state.pendingDeleteTicket = null; setAdminVerifyMode('edit'); setOverlay(adminOverlay, false); }
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
         else if (isOverlayOpen(metaOverlay)) {
           setOverlay(metaOverlay, false);

@@ -343,21 +343,25 @@
     if (!finalModal || finalModal.hidden) document.body.classList.remove('history-modal-open');
   }
 
-  function openFinalDeleteModal(){
-    const cleanPassword = String($('historyClearPassword')?.value || '').trim();
-    if (!cleanPassword) {
+  async function openFinalDeleteModal(){
+    const password = String($('historyClearPassword')?.value || '').trim();
+    if (!password) {
       setClearHistoryError('Admin password is required.');
       return;
     }
-    state.pendingClearHistoryPassword = cleanPassword;
+    state.pendingClearHistoryPassword = password;
     setClearHistoryError('');
-    const firstModal = $('historyClearModal');
-    if (firstModal) firstModal.hidden = true;
-    const finalModal = $('historyFinalDeleteModal');
-    if (finalModal) finalModal.hidden = false;
-    document.body.classList.add('history-modal-open');
-    setFinalDeleteSubmitting(false);
-    try { if (window.feather) window.feather.replace(); } catch {}
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Delete history?',
+          itemType: 'history records',
+          itemName: 'all history records',
+          message: 'You’re going to permanently delete all system history records. This action cannot be undone.',
+        })
+      : window.confirm('Delete all history records?');
+    if (!confirmed) return;
+    closeClearHistoryModal();
+    await clearAllHistory();
   }
 
   function closeFinalDeleteModal(){

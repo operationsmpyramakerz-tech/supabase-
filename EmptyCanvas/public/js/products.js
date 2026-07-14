@@ -873,6 +873,9 @@
   async function deleteProposalItem(itemId) {
     const proposalId = String(state.activeProposal?.id || '').trim();
     if (!proposalId || !itemId) return;
+    const item = (state.proposalItems || []).find((row) => String(row.id) === String(itemId));
+    const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:'Remove component?', itemType:'proposal component', itemName:item?.componentName || item?.name || 'this component', message:`You’re going to permanently remove “${item?.componentName || item?.name || 'this component'}” from this proposal. This action cannot be undone.` }) : window.confirm('Remove this component from the proposal?');
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/products/proposals/${encodeURIComponent(proposalId)}/items/${encodeURIComponent(itemId)}`, {
         method: 'DELETE',

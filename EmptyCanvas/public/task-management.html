@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-workflow-visible-v14" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-delete-project-v15" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -177,7 +177,7 @@
     <section class="tm-dialog tm-dialog--workflow" role="dialog" aria-modal="true" aria-labelledby="tmWorkflowTitle">
       <div class="tm-workflow-header">
         <div class="tm-workflow-header__title"><span class="tm-ticket-code" id="tmWorkflowCode">TKT-00000</span><h2 id="tmWorkflowTitle">Project workflow</h2><p id="tmWorkflowSub">—</p></div>
-        <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn tm-icon-btn--edit" id="tmEditProjectBtn" aria-label="Edit project" title="Edit project"><i data-feather="edit-3"></i></button><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
+        <div class="tm-workflow-header__actions"><span class="tm-status-pill" id="tmWorkflowStatus">Not started</span><button type="button" class="tm-icon-btn tm-icon-btn--edit" id="tmEditProjectBtn" aria-label="Edit project" title="Edit project"><i data-feather="edit-3"></i></button><button type="button" class="tm-icon-btn tm-icon-btn--delete" id="tmDeleteProjectBtn" aria-label="Delete project" title="Delete project" hidden><i data-feather="trash-2"></i></button><button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button></div>
       </div>
       <div class="tm-workflow-summary" id="tmWorkflowSummary"></div>
       <div class="tm-viewer-toolbar" role="toolbar" aria-label="Workflow viewer controls">
@@ -278,13 +278,13 @@
     <div class="tm-overlay__backdrop" data-tm-close="admin"></div>
     <section class="tm-dialog tm-dialog--admin" role="dialog" aria-modal="true" aria-labelledby="tmAdminVerifyTitle">
       <div class="tm-dialog__top">
-        <div><span class="tm-eyebrow">Admin verification</span><h2 id="tmAdminVerifyTitle">Edit project workflow</h2><p>Enter the admin password to continue editing this project.</p></div>
+        <div><span class="tm-eyebrow">Admin verification</span><h2 id="tmAdminVerifyTitle">Edit project workflow</h2><p id="tmAdminVerifyDescription">Enter the admin password to continue editing this project.</p></div>
         <button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="admin"><i data-feather="x"></i></button>
       </div>
       <form id="tmAdminVerifyForm" novalidate>
         <label class="tm-field tm-field--wide"><span>Admin password <b>*</b></span><input id="tmAdminPasswordInput" type="password" autocomplete="current-password" required placeholder="Enter admin password" /></label>
         <div class="tm-form-error" id="tmAdminVerifyError" role="alert" aria-live="polite"></div>
-        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="admin">Cancel</button><button type="submit" class="tm-btn tm-btn--primary" id="tmAdminVerifySubmit"><i data-feather="shield"></i><span>Verify &amp; Edit</span></button></div>
+        <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--secondary" data-tm-close="admin">Cancel</button><button type="submit" class="tm-btn tm-btn--primary" id="tmAdminVerifySubmit"><i data-feather="shield"></i><span id="tmAdminVerifySubmitLabel">Verify &amp; Edit</span></button></div>
       </form>
     </section>
   </div>
@@ -303,7 +303,7 @@
   </div>
 
   <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=task-management-projects-v5"></script>
-  <script src="/js/task-management.js?v=task-management-workflow-visible-v14"></script>
+  <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
+  <script src="/js/task-management.js?v=task-management-delete-project-v16"></script>
 </body>
 </html>

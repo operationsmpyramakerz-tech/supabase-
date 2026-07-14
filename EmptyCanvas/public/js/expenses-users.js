@@ -1458,7 +1458,7 @@ async function handleExpenseDeleteAction(ids) {
     danger: true,
   });
   if (!adminPassword) return;
-  if (!confirm(cleanIds.length > 1 ? "Delete this full expense card?" : "Delete this expense?")) return;
+  const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:cleanIds.length > 1 ? 'Delete expense card?' : 'Delete expense?', itemType:cleanIds.length > 1 ? 'expense card' : 'expense', message:cleanIds.length > 1 ? `You’re going to permanently delete ${cleanIds.length} expense rows and all uploaded receipts. This action cannot be undone.` : 'You’re going to permanently delete this expense and its uploaded receipts. This action cannot be undone.' }) : window.confirm(cleanIds.length > 1 ? 'Delete this full expense card?' : 'Delete this expense?'); if (!confirmed) return;
   try {
     for (const id of cleanIds) {
       const res = await fetch(`/api/expenses/user-expense/${encodeURIComponent(id)}`, {

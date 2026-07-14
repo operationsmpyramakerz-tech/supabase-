@@ -415,7 +415,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentUrl) return;
 
     const label = isCover ? 'cover photo' : 'profile picture';
-    const confirmed = window.confirm(`Remove ${label} and restore the default image?`);
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({ title: `Remove ${label}?`, itemType: label, itemName: label, message: `You’re going to remove the current ${label} and restore the default image. This action cannot be undone.` })
+      : window.confirm(`Remove ${label} and restore the default image?`);
     if (!confirmed) return;
 
     if (buttonEl) {

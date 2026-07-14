@@ -371,10 +371,23 @@
   }
 
   function wireRepeatHandlers(root) {
-    root?.addEventListener('click', (event) => {
+    root?.addEventListener('click', async (event) => {
       const remove = event.target.closest('[data-remove-row]');
       if (remove) {
-        remove.closest('.events-repeat-row')?.remove();
+        event.preventDefault();
+        const row = remove.closest('.events-repeat-row');
+        if (!row) return;
+        const label = remove.getAttribute('aria-label') || 'event item';
+        const itemType = /project/i.test(label) ? 'event project' : 'event component';
+        const confirmed = window.OpsDeleteConfirm
+          ? await window.OpsDeleteConfirm.confirm({
+              title: `Delete ${itemType}?`,
+              itemType,
+              message: `You’re going to remove this ${itemType} from the event request. This action cannot be undone after submitting the request.`,
+            })
+          : window.confirm(`Delete this ${itemType}?`);
+        if (!confirmed) return;
+        row.remove();
         refreshEmptyStates();
         renderCostSummary();
       }

@@ -331,42 +331,16 @@
   }
 
   function requestProposalDeleteConfirmation({ kind = 'proposal', name = '' } = {}) {
-    const modal = ensureProposalDeleteConfirmModal();
     const label = kind === 'kit' ? 'kit' : 'proposal';
-    const title = modal.querySelector('[data-delete-title]');
-    const message = modal.querySelector('[data-delete-message]');
-    const confirm = modal.querySelector('[data-delete-confirm]');
-    if (title) title.textContent = `Delete ${label}?`;
-    if (message) message.textContent = `Delete ${name || `this ${label}`}? This action cannot be undone.`;
-    if (confirm) {
-      const span = confirm.querySelector('span');
-      if (span) span.textContent = `Delete ${label}`;
+    if (window.OpsDeleteConfirm) {
+      return window.OpsDeleteConfirm.confirm({
+        title: `Delete ${label}?`,
+        itemType: label,
+        itemName: name || `this ${label}`,
+        message: `You’re going to permanently delete “${name || `this ${label}`}” and all saved components inside it. This action cannot be undone.`,
+      });
     }
-    modal.hidden = false;
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('products-modal-open');
-    setTimeout(() => confirm && confirm.focus(), 40);
-
-    return new Promise((resolve) => {
-      const cleanup = (value) => {
-        modal.hidden = true;
-        modal.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('products-modal-open');
-        modal.querySelectorAll('[data-delete-cancel]').forEach((node) => node.removeEventListener('click', onCancel));
-        confirm?.removeEventListener('click', onConfirm);
-        modal.removeEventListener('click', onBackdrop);
-        document.removeEventListener('keydown', onKeydown);
-        resolve(value);
-      };
-      const onCancel = (event) => { event.preventDefault(); cleanup(false); };
-      const onConfirm = (event) => { event.preventDefault(); cleanup(true); };
-      const onBackdrop = (event) => { if (event.target === modal) cleanup(false); };
-      const onKeydown = (event) => { if (event.key === 'Escape') cleanup(false); };
-      modal.querySelectorAll('[data-delete-cancel]').forEach((node) => node.addEventListener('click', onCancel));
-      confirm?.addEventListener('click', onConfirm);
-      modal.addEventListener('click', onBackdrop);
-      document.addEventListener('keydown', onKeydown);
-    });
+    return Promise.resolve(window.confirm(`Delete ${name || `this ${label}`}?`));
   }
 
   async function api(path, options = {}) {
@@ -1510,6 +1484,17 @@
 
   async function deleteItem(kind, itemId) {
     const isKit = kind === 'kit';
+    const list = isKit ? state.kitItems : state.proposalItems;
+    const item = (list || []).find((entry) => String(entry?.id || '').trim() === String(itemId || '').trim());
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Remove component?',
+          itemType: 'component',
+          itemName: item?.componentName || item?.name || 'this component',
+          message: `You’re going to remove “${item?.componentName || item?.name || 'this component'}” from this ${isKit ? 'kit' : 'proposal'}. This action cannot be undone after saving.`,
+        })
+      : window.confirm('Remove this component?');
+    if (!confirmed) return;
     const parentId = String(isKit ? state.activeKit?.id : state.activeProposal?.id || '').trim();
     if (isKit && state.kitCreateMode) {
       syncDraftKitNameFromInput();

@@ -913,7 +913,17 @@
       <div class="kpis-section-card__footer"><button class="kpis-btn kpis-btn--ghost" type="button" data-add-row-to-section><i data-feather="plus"></i><span>Add subsection</span></button></div>
     `;
     section.querySelector('[data-add-row-to-section]')?.addEventListener('click', () => addKpiRow({ sectionElement: section }));
-    section.querySelector('[data-remove-section]')?.addEventListener('click', () => {
+    section.querySelector('[data-remove-section]')?.addEventListener('click', async () => {
+      const sectionName = section.querySelector('[data-section-title]')?.textContent?.trim() || 'this KPI section';
+      const confirmed = window.OpsDeleteConfirm
+        ? await window.OpsDeleteConfirm.confirm({
+            title: 'Delete KPI section?',
+            itemType: 'KPI section',
+            itemName: sectionName,
+            message: `You’re going to delete “${sectionName}” and every subsection inside it. This action cannot be undone after saving.`,
+          })
+        : window.confirm(`Delete “${sectionName}” and all of its subsections?`);
+      if (!confirmed) return;
       section.remove();
       updateSectionNumbers();
       updateTotalWeight();
@@ -988,7 +998,17 @@
       <div class="kpis-row-actions"><button class="kpis-row-delete" data-remove-kpi-row type="button"><i data-feather="trash-2"></i><span>Delete subsection</span></button></div>
     `;
     row.querySelector('[data-kpi-field="weightPercent"]')?.addEventListener('input', updateTotalWeight);
-    row.querySelector('[data-remove-kpi-row]')?.addEventListener('click', () => {
+    row.querySelector('[data-remove-kpi-row]')?.addEventListener('click', async () => {
+      const subsectionName = row.querySelector('[data-kpi-field="subsection"]')?.value?.trim() || 'this KPI subsection';
+      const confirmed = window.OpsDeleteConfirm
+        ? await window.OpsDeleteConfirm.confirm({
+            title: 'Delete KPI subsection?',
+            itemType: 'KPI subsection',
+            itemName: subsectionName,
+            message: `You’re going to delete “${subsectionName}”. This action cannot be undone after saving.`,
+          })
+        : window.confirm(`Delete “${subsectionName}”?`);
+      if (!confirmed) return;
       row.remove();
       updateSectionNumbers();
       updateTotalWeight();
@@ -1054,7 +1074,17 @@
       <label>Grade<input class="kpis-input" data-evaluation-field="grade" type="text" placeholder="Example: Excellent" value="${esc(value.grade || '')}" /></label>
       <button class="kpis-section-delete kpis-evaluation-delete" type="button" data-remove-evaluation aria-label="Delete evaluation" title="Delete evaluation"><i data-feather="trash-2"></i></button>
     `;
-    row.querySelector('[data-remove-evaluation]')?.addEventListener('click', () => {
+    row.querySelector('[data-remove-evaluation]')?.addEventListener('click', async () => {
+      const grade = row.querySelector('[data-evaluation-field="grade"]')?.value?.trim() || `Evaluation ${row.dataset.evaluationOrder || ''}`.trim();
+      const confirmed = window.OpsDeleteConfirm
+        ? await window.OpsDeleteConfirm.confirm({
+            title: 'Delete evaluation?',
+            itemType: 'evaluation',
+            itemName: grade,
+            message: `You’re going to delete “${grade}”. This action cannot be undone after saving.`,
+          })
+        : window.confirm(`Delete “${grade}”?`);
+      if (!confirmed) return;
       row.remove();
       updateEvaluationNumbers();
     });

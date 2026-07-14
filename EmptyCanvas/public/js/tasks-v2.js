@@ -3898,12 +3898,15 @@ const toolbarHTML = `
       });
 
       tv2ChecklistList.querySelectorAll("[data-checkpoint-delete]").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
+        btn.addEventListener("click", async (e) => {
           e.preventDefault();
           e.stopPropagation();
           const id = btn.getAttribute("data-checkpoint-delete") || "";
           if (!id) return;
           tv2CloseCheckpointMenus();
+          const item = tv2CheckpointDrafts.find((row) => row && row.id === id);
+          const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:'Delete checkpoint?', itemType:'checkpoint', itemName:item?.title || item?.name || 'this checkpoint', message:'You’re going to remove this checkpoint from the task. This action cannot be undone after saving.' }) : window.confirm('Delete this checkpoint?');
+          if (!confirmed) return;
           tv2CheckpointDrafts = tv2CheckpointDrafts.filter((item) => item && item.id !== id);
           tv2RenderChecklist();
         });

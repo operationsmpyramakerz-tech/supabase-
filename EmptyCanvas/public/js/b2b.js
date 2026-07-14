@@ -1284,38 +1284,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function requestDeleteConfirmation(schoolName = '') {
-    const modal = ensureDeleteConfirmModal();
-    const message = modal.querySelector('[data-delete-message]');
-    if (message) {
-      message.textContent = `Delete ${schoolName || 'this school'}? This action cannot be undone.`;
-    }
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-
-    return new Promise((resolve) => {
-      const cleanup = (answer) => {
-        modal.classList.remove('is-open');
-        modal.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('modal-open');
-        modal.querySelectorAll('[data-delete-cancel], [data-delete-confirm]').forEach((node) => {
-          node.removeEventListener('click', onClick);
-        });
-        document.removeEventListener('keydown', onKeydown);
-        resolve(answer);
-      };
-      const onClick = (event) => {
-        if (event.currentTarget.hasAttribute('data-delete-confirm')) cleanup(true);
-        else cleanup(false);
-      };
-      const onKeydown = (event) => {
-        if (event.key === 'Escape') cleanup(false);
-      };
-      modal.querySelectorAll('[data-delete-cancel], [data-delete-confirm]').forEach((node) => {
-        node.addEventListener('click', onClick);
+    if (window.OpsDeleteConfirm) {
+      return window.OpsDeleteConfirm.confirm({
+        title: 'Delete school?',
+        itemType: 'school',
+        itemName: schoolName || 'this school',
+        message: `You’re going to permanently delete “${schoolName || 'this school'}” and its saved B2B information. This action cannot be undone.`,
       });
-      document.addEventListener('keydown', onKeydown);
-    });
+    }
+    return Promise.resolve(window.confirm(`Delete ${schoolName || 'this school'}?`));
   }
 
   async function deleteSchool(id, schoolName = '', adminPassword = '') {

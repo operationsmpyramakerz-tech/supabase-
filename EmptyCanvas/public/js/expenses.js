@@ -3628,11 +3628,23 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
     if (cashOutPendingList) {
-        cashOutPendingList.addEventListener("click", (e) => {
+        cashOutPendingList.addEventListener("click", async (e) => {
             const removeBtn = e.target?.closest ? e.target.closest(".expense-draft-card__remove") : null;
             if (!removeBtn) return;
+            e.preventDefault();
             const draftId = String(removeBtn.getAttribute("data-draft-id") || "").trim();
             if (!draftId) return;
+            const draft = PENDING_CASH_OUT_ITEMS.find((item) => String(item?.id || "") === draftId);
+            const draftName = String(draft?.description || draft?.expenseType || draft?.type || "this expense draft").trim();
+            const confirmed = window.OpsDeleteConfirm
+                ? await window.OpsDeleteConfirm.confirm({
+                    title: "Delete expense draft?",
+                    itemType: "expense draft",
+                    itemName: draftName,
+                    message: `You’re going to remove “${draftName}” from this cash-out order. This action cannot be undone.`,
+                })
+                : window.confirm(`Delete “${draftName}”?`);
+            if (!confirmed) return;
             PENDING_CASH_OUT_ITEMS = PENDING_CASH_OUT_ITEMS.filter((item) => String(item?.id || "") !== draftId);
             renderPendingCashOutDrafts();
         });

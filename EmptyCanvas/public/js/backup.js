@@ -192,7 +192,7 @@
     if ((!finalModal || finalModal.hidden) && (!importModal || importModal.hidden)) document.body.classList.remove('backup-modal-open');
   }
 
-  function openFinalModal(){
+  async function openFinalModal(){
     const password = String($('backupDeletePassword')?.value || '').trim();
     if (!password) {
       setDeleteError('Admin password is required.');
@@ -200,23 +200,21 @@
     }
     state.pendingPassword = password;
     setDeleteError('');
-    const deleteModal = $('backupDeleteModal');
-    if (deleteModal) deleteModal.hidden = true;
     const item = state.selected || {};
-    const title = $('backupFinalTitle');
-    const copy = $('backupFinalCopy');
-    if (item.isAll || state.deleteMode === 'all') {
-      if (title) title.textContent = 'Confirm delete all data?';
-      if (copy) copy.textContent = 'The system will download a full ZIP export first. After that, all rows from all database tables will be deleted.';
-    } else {
-      if (title) title.textContent = `Confirm delete ${item.pageName || 'table data'}?`;
-      if (copy) copy.textContent = `The system will download a CSV backup first. After that, all rows from "${item.tableName || 'this table'}" will be deleted.`;
-    }
-    const finalModal = $('backupFinalModal');
-    if (finalModal) finalModal.hidden = false;
-    document.body.classList.add('backup-modal-open');
-    setDeleting(false);
-    try { if (window.feather) window.feather.replace(); } catch {}
+    const isAll = !!item.isAll || state.deleteMode === 'all';
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: isAll ? 'Delete all system data?' : `Delete ${item.pageName || 'table data'}?`,
+          itemType: isAll ? 'system data' : 'table data',
+          itemName: isAll ? 'all system data' : (item.pageName || item.tableName || 'this table'),
+          message: isAll
+            ? 'You’re going to download a complete ZIP backup and then permanently delete all rows from all database tables. This action cannot be undone.'
+            : `You’re going to download a CSV backup and then permanently delete every row from “${item.tableName || 'this table'}”. This action cannot be undone.`,
+        })
+      : window.confirm(isAll ? 'Delete all system data?' : `Delete ${item.pageName || 'table data'}?`);
+    if (!confirmed) return;
+    closeDeleteModal();
+    await confirmDelete();
   }
 
   function closeFinalModal(){

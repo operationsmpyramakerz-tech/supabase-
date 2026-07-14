@@ -1407,6 +1407,17 @@
   }
 
   function openConfirmDialog(options = {}) {
+    const isDelete = /delete/i.test(String(options.title || '')) || /delete/i.test(String(options.confirmLabel || ''));
+    if (isDelete && window.OpsDeleteConfirm) {
+      return window.OpsDeleteConfirm.confirm({
+        title: options.title || 'Delete item?',
+        itemType: options.itemType || 'item',
+        itemName: options.itemName || '',
+        message: options.message || 'You’re going to permanently delete this item. This action cannot be undone.',
+        confirmLabel: 'Yes, Delete!',
+        cancelLabel: 'No, keep it.',
+      });
+    }
     return new Promise((resolve) => {
       const overlay = els.confirmModal;
       if (!overlay) {

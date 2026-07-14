@@ -39290,6 +39290,43 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
   }
 });
 
+
+app.delete("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
+    if (req.taskManagementView !== "delegated") {
+      return res.status(403).json({ ok: false, error: "Projects can be deleted from Delegated Tasks only." });
+    }
+
+    const ticketId = String(req.params.id || "").trim();
+    if (!ticketId) return res.status(400).json({ ok: false, error: "Missing project ID." });
+    const ticket = await _tmLoadTicketById(ticketId);
+    if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
+
+    const currentUser = await _tmCurrentMember(req);
+    if (!_tmTicketBelongsToView(ticket, currentUser, "delegated")) {
+      return res.status(403).json({ ok: false, error: "This project is not available in Delegated Tasks." });
+    }
+
+    let authorized = _taskManagementViewIsAdmin(req, "delegated");
+    if (!authorized) {
+      const adminPages = [_taskManagementViewAccessPage("delegated"), "Task Management"].filter(Boolean);
+      authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
+    }
+    if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
+
+    // The Task Management foreign keys use cascading deletion. Removing the
+    // project therefore removes its department blocks, arrows, team tasks, and
+    // team-task arrows in one atomic database operation.
+    await supabaseDb.deleteById(_tmTicketsTable(), ticketId);
+    return res.json({ ok: true, deletedId: ticketId });
+  } catch (error) {
+    console.error("[task-management] delete project error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete project." });
+  }
+});
+
 app.put("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {

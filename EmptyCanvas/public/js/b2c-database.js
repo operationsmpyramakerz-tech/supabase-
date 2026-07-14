@@ -59,7 +59,7 @@
         const id=remove.dataset.b2cDeleteDatabase||'';
         const db=state.databases.find((item)=>String(item.id)===String(id));
         if(!id||!db)return;
-        if(!window.confirm(`Delete “${db.name}” and all of its properties, forms, and records? This cannot be undone.`))return;
+        const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:'Delete database?', itemType:'database', itemName:db.name, message:`You’re going to permanently delete “${db.name}”, including all properties, forms, and records. This action cannot be undone.` }) : window.confirm(`Delete “${db.name}”?`); if(!confirmed)return;
         const original=remove.innerHTML;
         try{
           remove.disabled=true; remove.textContent='Deleting…';

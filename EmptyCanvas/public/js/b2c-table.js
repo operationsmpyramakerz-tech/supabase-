@@ -568,7 +568,7 @@
   }
   async function deleteRecord(id) {
     const record = state.records.find((row) => String(row.id) === String(id)); if (!record) return;
-    if (!window.confirm(`Delete ${record.customerCode || 'this record'}? This cannot be undone.`)) return;
+    const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:'Delete record?', itemType:'record', itemName:record.customerCode || 'this record', message:`You’re going to permanently delete “${record.customerCode || 'this record'}”. This action cannot be undone.` }) : window.confirm(`Delete ${record.customerCode || 'this record'}?`); if (!confirmed) return;
     try { await api(`/api/b2c/records/${encodeURIComponent(id)}?databaseId=${encodeURIComponent(state.databaseId)}`, { method: 'DELETE' }); await load(); toast('Record deleted.', 'success'); }
     catch (error) { toast(error.message || 'Could not delete record.', 'error'); }
   }
@@ -585,7 +585,7 @@
     $('#b2cFormulaToolbar')?.addEventListener('click', (event) => { const button = event.target.closest('[data-formula-token]'); if (button) insertFormulaText(button.dataset.formulaToken || ''); });
     bindBuilderDrag();
 
-    $('#b2cBuilderList')?.addEventListener('click', (event) => {
+    $('#b2cBuilderList')?.addEventListener('click', async (event) => {
       const choice = event.target.closest('[data-type-choice]');
       if (choice) { event.preventDefault(); setTypePicker(Number(choice.dataset.draftIndex), choice.dataset.typeChoice || 'text'); return; }
       const trigger = event.target.closest('[data-type-picker-trigger]');
@@ -595,9 +595,9 @@
       const addOption = event.target.closest('[data-draft-option-add]');
       if (addOption) { event.preventDefault(); readBuilder(); const index = Number(addOption.dataset.draftOptionAdd); if (state.draft[index]) { const options = Array.isArray(state.draft[index].options?.options) ? state.draft[index].options.options : []; state.draft[index].options = { ...(state.draft[index].options || {}), options: [...options, ''] }; renderBuilder(); } return; }
       const removeOption = event.target.closest('[data-draft-option-remove]');
-      if (removeOption) { event.preventDefault(); readBuilder(); const index = Number(removeOption.dataset.draftOptionRemove); const position = Number(removeOption.dataset.draftOptionPosition); if (state.draft[index]) { const options = [...(state.draft[index].options?.options || [])]; options.splice(position, 1); state.draft[index].options = { ...(state.draft[index].options || {}), options }; renderBuilder(); } return; }
+      if (removeOption) { event.preventDefault(); readBuilder(); const index = Number(removeOption.dataset.draftOptionRemove); const position = Number(removeOption.dataset.draftOptionPosition); if (state.draft[index]) { const options = [...(state.draft[index].options?.options || [])]; const optionName = options[position] || `Option ${position + 1}`; const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title:'Delete option?', itemType:'field option', itemName:optionName, message:`You’re going to remove “${optionName}” from this property. This action cannot be undone after saving.` }) : window.confirm(`Delete “${optionName}”?`); if(!confirmed)return; options.splice(position, 1); state.draft[index].options = { ...(state.draft[index].options || {}), options }; renderBuilder(); } return; }
       const button = event.target.closest('button');
-      if (button?.dataset.draftDelete !== undefined) { readBuilder(); state.draft.splice(Number(button.dataset.draftDelete), 1); renderBuilder(); }
+      if (button?.dataset.draftDelete !== undefined) { readBuilder(); const index=Number(button.dataset.draftDelete); const item=state.draft[index]; if(!item)return; const confirmed=window.OpsDeleteConfirm?await window.OpsDeleteConfirm.confirm({title:'Delete property?',itemType:'database property',itemName:item.label||'this property',message:`You’re going to remove “${item.label||'this property'}” from this table. Existing values may be removed when you save. This action cannot be undone.`}):window.confirm('Delete this property?'); if(!confirmed)return; state.draft.splice(index, 1); renderBuilder(); }
     });
 
     $('#b2cFormulaOverlay')?.addEventListener('click', (event) => {

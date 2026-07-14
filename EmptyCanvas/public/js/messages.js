@@ -712,6 +712,8 @@
   async function deleteSelectedChats() {
     const ids = selectedChatIds();
     if (!ids.length) return;
+    const confirmed = window.OpsDeleteConfirm ? await window.OpsDeleteConfirm.confirm({ title: ids.length === 1 ? 'Delete email?' : 'Delete emails?', itemType: ids.length === 1 ? 'email' : 'emails', message: ids.length === 1 ? 'You’re going to permanently delete the selected email. This action cannot be undone.' : `You’re going to permanently delete ${ids.length} selected emails. This action cannot be undone.` }) : window.confirm(`Delete ${ids.length} selected email${ids.length === 1 ? '' : 's'}?`);
+    if (!confirmed) return;
     try {
       await runBulkChatAction('delete', ids);
       const set = new Set(ids);
