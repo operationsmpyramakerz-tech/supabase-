@@ -2128,3 +2128,287 @@ body.task-management-page{
   .task-management-page .tm-calendar-day{font-size:11px;}
   .task-management-page .tm-agenda-task__progress{display:none;}
 }
+
+/* Compact agenda, responsive containment and semantic work status v19 ------- */
+html:has(body.task-management-page),
+body.task-management-page{
+  max-width:100%;
+  overflow-x:hidden!important;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(92,98,108,.28) transparent;
+}
+body.task-management-page *,
+body.task-management-page *::before,
+body.task-management-page *::after{box-sizing:border-box;}
+body.task-management-page *{scrollbar-width:thin;scrollbar-color:rgba(92,98,108,.24) transparent;}
+body.task-management-page::-webkit-scrollbar,
+body.task-management-page *::-webkit-scrollbar{width:5px;height:5px;}
+body.task-management-page::-webkit-scrollbar-track,
+body.task-management-page *::-webkit-scrollbar-track{background:transparent;}
+body.task-management-page::-webkit-scrollbar-thumb,
+body.task-management-page *::-webkit-scrollbar-thumb{background:rgba(92,98,108,.22);border-radius:999px;}
+body.task-management-page::-webkit-scrollbar-thumb:hover,
+body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98,108,.38);}
+
+.task-management-page .main-content,
+.task-management-page .container-full-width,
+.task-management-page .tm-main,
+.task-management-page .tm-agenda-layout,
+.task-management-page .tm-agenda-column,
+.task-management-page .tm-tasks-column,
+.task-management-page .tm-toolbar.tm-orders-toolbar,
+.task-management-page .tm-ticket-grid,
+.task-management-page .tm-ticket-card{
+  min-width:0!important;
+  max-width:100%!important;
+}
+.task-management-page .main-content,
+.task-management-page .tm-main,
+.task-management-page .tm-tasks-column{overflow-x:hidden!important;}
+.task-management-page .tm-main{padding-top:10px!important;font-size:13px;}
+.task-management-page .tm-agenda-layout{
+  width:100%;
+  grid-template-columns:minmax(330px,.84fr) minmax(0,1.16fr);
+  gap:14px;
+}
+.task-management-page .tm-agenda-column,
+.task-management-page .tm-tasks-column{gap:12px;}
+.task-management-page .tm-agenda-card{
+  border-radius:20px;
+  padding:14px;
+  box-shadow:0 13px 30px rgba(15,23,42,.075);
+}
+.task-management-page .tm-calendar-head h2{margin-top:6px;font-size:20px;}
+.task-management-page .tm-agenda-eyebrow{font-size:10px;gap:6px;}
+.task-management-page .tm-agenda-eyebrow svg{width:14px;height:14px;}
+.task-management-page .tm-calendar-nav,
+.task-management-page .tm-calendar-today{min-height:32px;border-radius:10px;font-size:11px;}
+.task-management-page .tm-calendar-nav{width:32px;}
+.task-management-page .tm-calendar-today{padding:0 10px;}
+.task-management-page .tm-calendar-weekdays{margin:15px 0 7px;}
+.task-management-page .tm-calendar-weekdays,
+.task-management-page .tm-calendar-grid{gap:5px;}
+.task-management-page .tm-calendar-weekdays span{font-size:9px;}
+.task-management-page .tm-calendar-day{
+  aspect-ratio:1/1;
+  min-height:0;
+  padding:0;
+  border-radius:11px;
+  font-size:11px;
+  line-height:1;
+  align-items:center;
+  justify-items:center;
+}
+.task-management-page .tm-calendar-day.has-tasks{
+  background:#f0f1f3;
+  color:#30353d;
+  border-color:#e3e5e8;
+  box-shadow:0 5px 12px rgba(15,23,42,.05);
+}
+.task-management-page .tm-calendar-day.has-tasks:hover{background:#e8eaed;border-color:#d9dce1;}
+.task-management-page .tm-calendar-day.is-selected,
+.task-management-page .tm-calendar-day.has-tasks.is-selected{
+  background:#ed7b17;
+  color:#fff;
+  border-color:#ed7b17;
+  box-shadow:0 8px 17px rgba(237,123,23,.24);
+}
+.task-management-page .tm-calendar-day b{
+  right:3px;
+  top:3px;
+  min-width:13px;
+  height:13px;
+  padding:0 3px;
+  background:#d9dde2;
+  color:#353a42;
+  font-size:7px;
+}
+.task-management-page .tm-calendar-day.is-selected b{background:rgba(255,255,255,.24);color:#fff;}
+.task-management-page .tm-calendar-legend{margin-top:10px;padding-top:10px;gap:12px;font-size:9px;}
+.task-management-page .tm-calendar-legend .tm-calendar-legend__busy{background:#f0f1f3;border-color:#dfe2e6;}
+.task-management-page .tm-day-date-block{width:49px;height:51px;}
+.task-management-page .tm-day-date-block b{font-size:23px;}
+.task-management-page .tm-day-date-block span{font-size:9px;margin-top:4px;}
+.task-management-page .tm-day-tasks-title h2{font-size:16px;}
+.task-management-page .tm-day-tasks-title span{font-size:9px;}
+.task-management-page .tm-day-tasks-count{min-width:28px;height:28px;border-radius:9px;font-size:11px;}
+.task-management-page .tm-day-task-list{gap:7px;margin-top:10px;max-height:250px;}
+.task-management-page .tm-agenda-task{padding:9px;border-radius:13px;gap:8px;}
+.task-management-page .tm-agenda-task__priority{height:36px;}
+.task-management-page .tm-agenda-empty{min-height:110px;padding:14px;border-radius:14px;}
+
+/* Keep the toolbar and cards inside their right-hand column. */
+.task-management-page .tm-toolbar.tm-orders-toolbar{
+  width:100%!important;
+  gap:8px!important;
+  min-height:64px!important;
+  margin:0 0 12px!important;
+  overflow:visible!important;
+}
+.task-management-page .tm-toolbar__scroll{
+  flex:1 1 0!important;
+  width:0;
+  min-width:0!important;
+  height:64px;
+  padding:0 7px;
+  border-radius:24px;
+}
+.task-management-page .tm-tabs.tm-tabs--orders{gap:6px!important;}
+.task-management-page .tm-tab{
+  width:43px!important;
+  min-width:43px!important;
+  height:43px!important;
+  min-height:43px!important;
+  border-radius:15px!important;
+}
+.task-management-page .tm-tab.is-active{min-width:88px!important;padding:0 12px!important;gap:7px!important;}
+.task-management-page .tm-tab__icon{width:20px;height:20px;flex-basis:20px;}
+.task-management-page .tm-tab__icon svg{width:19px!important;height:19px!important;}
+.task-management-page .tm-tab__label{font-size:11px;}
+.task-management-page .tm-toolbar__divider{flex:0 0 6px;width:6px;height:22px;}
+.task-management-page .tm-department-filter,
+.task-management-page .tm-department-filter__button{
+  flex-basis:64px;
+  width:64px;
+  min-width:64px;
+  height:64px;
+  min-height:64px;
+  border-radius:24px;
+}
+.task-management-page .tm-department-filter__button-icon{width:38px;height:38px;}
+.task-management-page .tm-department-filter__button-icon svg{width:20px;height:20px;}
+.task-management-page .tm-new-ticket--toolbar{
+  height:64px!important;
+  min-height:64px!important;
+  padding:0 16px!important;
+  border-radius:24px!important;
+  font-size:12px;
+}
+.task-management-page .tm-new-ticket--toolbar svg{width:17px;height:17px;}
+
+/* Task cards should always fit their content instead of stretching to the grid height. */
+.task-management-page .tm-ticket-grid,
+.task-management-page .tm-tasks-column .tm-ticket-grid{
+  min-height:0!important;
+  align-content:start!important;
+  align-items:start!important;
+  grid-auto-rows:max-content!important;
+}
+.task-management-page .tm-ticket-card{
+  align-self:start!important;
+  height:auto!important;
+  min-height:0!important;
+  padding:13px!important;
+  border-radius:20px;
+}
+.task-management-page .tm-ticket-card__top{gap:10px;align-items:center;}
+.task-management-page .tm-ticket-thumb{width:50px;height:50px;border-radius:15px;}
+.task-management-page .tm-ticket-thumb svg{width:24px;height:24px;}
+.task-management-page .tm-ticket-main h2{font-size:15px;}
+.task-management-page .tm-ticket-code{font-size:9px;}
+.task-management-page .tm-ticket-main p{font-size:10px;}
+.task-management-page .tm-ticket-card__top .tm-status-pill{padding:6px 8px;font-size:10px;}
+.task-management-page .tm-ticket-card__divider{margin:10px 0;}
+.task-management-page .tm-ticket-route{gap:9px;}
+.task-management-page .tm-ticket-route__label{font-size:10px;padding-top:3px;}
+.task-management-page .tm-department-chips{gap:5px;}
+.task-management-page .tm-department-chips span{padding:5px 8px;font-size:9px;}
+.task-management-page .tm-ticket-card__bottom{margin-top:10px;gap:10px;}
+.task-management-page .tm-progress__head{font-size:10px;}
+.task-management-page .tm-progress__rail{height:5px;margin-top:5px;}
+.task-management-page .tm-ticket-card__go{width:28px;height:28px;}
+.task-management-page .tm-ticket-card__go svg{width:15px;height:15px;}
+
+/* Semantic Work Page status selector, matching the colored priority control. */
+.task-management-page .tm-select--status .tm-select__value,
+.task-management-page .tm-select__option--status .tm-select__option-main{display:inline-flex;align-items:center;gap:10px;}
+.task-management-page .tm-work-status-marker{
+  --status-color:#707984;
+  --status-fill:0deg;
+  position:relative;
+  width:20px;
+  height:20px;
+  flex:0 0 20px;
+  border-radius:50%;
+  background:conic-gradient(var(--status-color) 0 var(--status-fill),color-mix(in srgb,var(--status-color) 15%,transparent) var(--status-fill) 360deg);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--status-color) 10%,transparent);
+}
+.task-management-page .tm-work-status-marker::after{content:"";position:absolute;inset:4px;border-radius:50%;background:#fff;}
+.task-management-page .tm-work-status-marker--not_started{background:transparent;border:2px dashed #707984;box-shadow:0 0 0 4px rgba(112,121,132,.09);}
+.task-management-page .tm-work-status-marker--not_started::after{display:none;}
+.task-management-page .tm-work-status-marker--in_progress{--status-color:#e9841c;--status-fill:180deg;}
+.task-management-page .tm-work-status-marker--rejected{--status-color:#de3b35;--status-fill:360deg;}
+.task-management-page .tm-work-status-marker--completed{--status-color:#15945b;--status-fill:360deg;}
+.task-management-page .tm-work-status-marker--cancelled{--status-color:#59616c;--status-fill:360deg;}
+.task-management-page .tm-select--status .tm-select__button[data-status="not_started"]{background:#fafbfc!important;border-color:#dfe3e7!important;}
+.task-management-page .tm-select--status .tm-select__button[data-status="in_progress"]{background:#fff8ef!important;border-color:#f2c28f!important;color:#a65308!important;}
+.task-management-page .tm-select--status .tm-select__button[data-status="rejected"]{background:#fff5f4!important;border-color:#efaaa6!important;color:#b72f2a!important;}
+.task-management-page .tm-select--status .tm-select__button[data-status="completed"]{background:#f1fbf6!important;border-color:#a9dfc5!important;color:#117247!important;}
+.task-management-page .tm-select--status .tm-select__button[data-status="cancelled"]{background:#f3f4f6!important;border-color:#d3d7dc!important;color:#474f59!important;}
+.task-management-page .tm-select__option--status-not_started.is-selected{background:#f1f3f5!important;color:#4e5864!important;}
+.task-management-page .tm-select__option--status-in_progress.is-selected{background:#fff1df!important;color:#a65308!important;}
+.task-management-page .tm-select__option--status-rejected.is-selected{background:#fff0ef!important;color:#b72f2a!important;}
+.task-management-page .tm-select__option--status-completed.is-selected{background:#eaf8f1!important;color:#117247!important;}
+.task-management-page .tm-select__option--status-cancelled.is-selected{background:#eceef1!important;color:#474f59!important;}
+
+@media(max-width:1180px){
+  .task-management-page .tm-agenda-layout{grid-template-columns:minmax(300px,.78fr) minmax(0,1.22fr);gap:12px;}
+}
+@media(max-width:980px){
+  .task-management-page .tm-agenda-layout{grid-template-columns:1fr;}
+  .task-management-page .tm-agenda-column{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);}
+}
+@media(max-width:700px){
+  .task-management-page .tm-main{padding-top:8px!important;font-size:12px;}
+  .task-management-page .tm-agenda-column{grid-template-columns:1fr;}
+  .task-management-page .tm-agenda-card{padding:12px;border-radius:19px;}
+  .task-management-page .tm-calendar-head h2{font-size:18px;}
+  .task-management-page .tm-calendar-weekdays,
+  .task-management-page .tm-calendar-grid{gap:5px;}
+  .task-management-page .tm-calendar-day{
+    border-radius:10px!important;
+    aspect-ratio:1/1;
+    font-size:11px;
+    line-height:1;
+    display:grid;
+    place-items:center;
+  }
+  .task-management-page .tm-toolbar.tm-orders-toolbar{gap:6px!important;width:100%!important;}
+  .task-management-page .tm-toolbar__scroll{flex:1 1 0!important;width:0!important;min-width:0!important;height:56px;border-radius:21px;padding:0 6px;}
+  .task-management-page .tm-tab{width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;border-radius:14px!important;}
+  .task-management-page .tm-tab.is-active{min-width:76px!important;padding:0 10px!important;}
+  .task-management-page .tm-toolbar__divider{display:none!important;}
+  .task-management-page .tm-department-filter,
+  .task-management-page .tm-department-filter__button{flex-basis:56px;width:56px;min-width:56px;height:56px;min-height:56px;border-radius:21px;}
+  .task-management-page .tm-department-filter__button-icon{width:34px;height:34px;}
+  .task-management-page .tm-new-ticket--toolbar{flex:0 0 56px!important;width:56px!important;min-width:56px!important;height:56px!important;min-height:56px!important;padding:0!important;border-radius:21px!important;}
+  .task-management-page .tm-new-ticket--toolbar span{display:none!important;}
+  .task-management-page .tm-ticket-card{padding:12px!important;border-radius:18px;}
+  .task-management-page .tm-ticket-thumb{width:46px;height:46px;}
+  .task-management-page .tm-ticket-main h2{font-size:14px;}
+}
+@media(max-width:430px){
+  .task-management-page .tm-calendar-weekdays,
+  .task-management-page .tm-calendar-grid{gap:4px;}
+  .task-management-page .tm-calendar-day{border-radius:9px!important;font-size:10px;}
+  .task-management-page .tm-toolbar.tm-orders-toolbar{gap:5px!important;}
+  .task-management-page .tm-toolbar__scroll{height:52px;border-radius:19px;}
+  .task-management-page .tm-department-filter,
+  .task-management-page .tm-department-filter__button,
+  .task-management-page .tm-new-ticket--toolbar{flex-basis:52px!important;width:52px!important;min-width:52px!important;height:52px!important;min-height:52px!important;border-radius:19px!important;}
+}
+
+/* Slightly denser dialogs and fields to match the compact page scale. */
+.task-management-page .tm-dialog--work-page{width:min(820px,100%);padding:22px;}
+.task-management-page .tm-dialog--work-page .tm-dialog__top h2{font-size:21px;}
+.task-management-page .tm-dialog--work-page .tm-dialog__top p{font-size:11px;}
+.task-management-page .tm-dialog--work-page .tm-work-page__form-grid{margin-top:15px;gap:11px;}
+.task-management-page .tm-dialog--work-page .tm-field>span{font-size:11px;}
+.task-management-page .tm-dialog--work-page .tm-select__button{min-height:46px;border-radius:14px;}
+.task-management-page .tm-dialog--work-page .tm-select__chevron{width:27px;height:27px;flex-basis:27px;border-radius:9px;}
+.task-management-page .tm-dialog--work-page .tm-rejection-preview{min-height:46px;border-radius:14px;}
+.task-management-page .tm-dialog--work-page .tm-field textarea{min-height:108px;}
+.task-management-page .tm-dialog--work-page .tm-upload-field__picker{min-height:68px;}
+@media(max-width:760px){
+  .task-management-page .tm-dialog--work-page{padding:16px;}
+}

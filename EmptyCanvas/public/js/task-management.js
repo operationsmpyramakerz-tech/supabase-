@@ -44,6 +44,11 @@
     if (key === 'low') return 'low';
     return 'normal';
   };
+  const workStatusKey = (value) => {
+    const key = norm(value).replace(/[\s-]+/g, '_');
+    if (key === 'done') return 'completed';
+    return ['not_started', 'in_progress', 'rejected', 'completed', 'cancelled'].includes(key) ? key : 'not_started';
+  };
   const attachmentList = (value) => {
     const source = Array.isArray(value?.attachments)
       ? value.attachments
@@ -486,22 +491,29 @@
         const selected = options.find((option) => option.selected) || options[0];
         const value = trigger.querySelector('.tm-select__value');
         const isPriority = select.dataset.tmPrioritySelect === 'true' || select.id === 'tmMetaPriorityInput';
+        const isWorkStatus = select.dataset.tmStatusSelect === 'true' || select.id === 'tmWorkStatusInput';
         shell.classList.toggle('tm-select--priority', isPriority);
+        shell.classList.toggle('tm-select--status', isWorkStatus);
         const selectedPriority = priorityKey(selected?.value || selected?.textContent || 'normal');
+        const selectedStatus = workStatusKey(selected?.value || selected?.textContent || 'not_started');
         if (value) {
           value.innerHTML = isPriority
             ? `<span class="tm-priority-marker tm-priority-marker--${selectedPriority}" aria-hidden="true"></span><span>${escapeHtml(selected?.textContent?.trim() || 'Select')}</span>`
-            : escapeHtml(selected?.textContent?.trim() || 'Select');
+            : isWorkStatus
+              ? `<span class="tm-work-status-marker tm-work-status-marker--${selectedStatus}" aria-hidden="true"></span><span>${escapeHtml(selected?.textContent?.trim() || 'Select')}</span>`
+              : escapeHtml(selected?.textContent?.trim() || 'Select');
         }
         trigger.dataset.priority = isPriority ? selectedPriority : '';
+        trigger.dataset.status = isWorkStatus ? selectedStatus : '';
         trigger.classList.toggle('is-placeholder', !selected?.value);
         trigger.setAttribute('aria-disabled', select.disabled ? 'true' : 'false');
         trigger.tabIndex = select.disabled ? -1 : 0;
         menu.innerHTML = options.map((option, index) => {
           const optionPriority = priorityKey(option.value || option.textContent || 'normal');
+          const optionStatus = workStatusKey(option.value || option.textContent || 'not_started');
           return `
-          <div class="tm-select__option${option.selected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}${isPriority ? ` tm-select__option--priority tm-select__option--${optionPriority}` : ''}" role="option" tabindex="-1" data-tm-select-index="${index}" aria-selected="${option.selected}" aria-disabled="${option.disabled}">
-            <span class="tm-select__option-main">${isPriority ? `<span class="tm-priority-marker tm-priority-marker--${optionPriority}" aria-hidden="true"></span>` : ''}<span>${escapeHtml(option.textContent?.trim() || '')}</span></span><i data-feather="check"></i>
+          <div class="tm-select__option${option.selected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}${isPriority ? ` tm-select__option--priority tm-select__option--${optionPriority}` : ''}${isWorkStatus ? ` tm-select__option--status tm-select__option--status-${optionStatus}` : ''}" role="option" tabindex="-1" data-tm-select-index="${index}" aria-selected="${option.selected}" aria-disabled="${option.disabled}">
+            <span class="tm-select__option-main">${isPriority ? `<span class="tm-priority-marker tm-priority-marker--${optionPriority}" aria-hidden="true"></span>` : isWorkStatus ? `<span class="tm-work-status-marker tm-work-status-marker--${optionStatus}" aria-hidden="true"></span>` : ''}<span>${escapeHtml(option.textContent?.trim() || '')}</span></span><i data-feather="check"></i>
           </div>`;
         }).join('');
         hydrateIcons(shell);
