@@ -12,6 +12,21 @@
   const toDate = (value) => { try { return value ? new Date(value) : null; } catch { return null; } };
   const formatDate = (value) => { const date = toDate(value); return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'; };
   const formatDateTime = (value) => { const date = toDate(value); return date && !Number.isNaN(date.getTime()) ? date.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
+  const pad2 = (value) => String(value).padStart(2, '0');
+  const localDateKey = (value) => {
+    if (!value) return '';
+    const raw = String(value).trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+    const date = toDate(value);
+    return date && !Number.isNaN(date.getTime()) ? `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` : '';
+  };
+  const dateFromKey = (key) => {
+    const match = String(key || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  };
+  const todayKey = () => localDateKey(new Date());
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const safeNumber = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
   const newClientId = () => `block-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -142,9 +157,13 @@
     peopleWorkflowCache: new Map(),
     peopleWorkflowLoads: new Map(),
     viewer: { zoom: 1, offsetX: 0, offsetY: 0, pan: null, pinch: null, width: 980, height: 650, bounds: null, manual: false },
+    calendar: { month: new Date(new Date().getFullYear(), new Date().getMonth(), 1), selectedDate: todayKey() },
   };
 
   const grid = $('tmTicketGrid');
+  const calendarGrid = $('tmCalendarGrid');
+  const calendarMonth = $('tmCalendarMonth');
+  const agendaDayTasks = $('tmAgendaDayTasks');
   const searchInput = $('tmSearch');
   const tabs = $('tmTabs');
   const departmentFilter = $('tmDepartmentFilter');
@@ -300,8 +319,78 @@
     hydrateIcons(departmentFilterPanel);
   }
 
+  function ticketsOnDate(dateKey) {
+    return (state.tickets || []).filter((ticket) => localDateKey(ticket.dueDate) === dateKey);
+  }
+
+  function renderAgendaTask(ticket) {
+    const progress = Math.max(0, Math.min(100, Number(ticket.progress) || 0));
+    return `<button type="button" class="tm-agenda-task" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
+      <span class="tm-agenda-task__priority tm-agenda-task__priority--${escapeHtml(priorityKey(ticket.priority))}"></span>
+      <span class="tm-agenda-task__body"><small>${escapeHtml(ticket.ticketCode)}</small><b>${escapeHtml(ticket.title)}</b><span>${escapeHtml(statusLabel(ticket.status))} · ${ticket.completedCount || 0}/${ticket.sectionsCount || 0} complete</span></span>
+      <span class="tm-agenda-task__progress"><i style="--tm-agenda-progress:${progress}%"></i><b>${progress}%</b></span>
+      <i data-feather="chevron-right"></i>
+    </button>`;
+  }
+
+  function renderAgenda() {
+    if (!calendarGrid || !agendaDayTasks) return;
+    const monthDate = state.calendar.month instanceof Date && !Number.isNaN(state.calendar.month.getTime())
+      ? state.calendar.month : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    if (calendarMonth) calendarMonth.textContent = monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+    const counts = new Map();
+    (state.tickets || []).forEach((ticket) => {
+      const key = localDateKey(ticket.dueDate);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const firstDayMondayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
+    const gridStart = new Date(year, month, 1 - firstDayMondayIndex);
+    const today = todayKey();
+    const cells = [];
+    for (let index = 0; index < 42; index += 1) {
+      const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
+      const key = localDateKey(date);
+      const count = counts.get(key) || 0;
+      const otherMonth = date.getMonth() !== month;
+      const selected = key === state.calendar.selectedDate;
+      const classes = ['tm-calendar-day'];
+      if (otherMonth) classes.push('is-outside');
+      if (count) classes.push('has-tasks');
+      if (selected) classes.push('is-selected');
+      if (key === today) classes.push('is-today');
+      cells.push(`<button type="button" class="${classes.join(' ')}" data-tm-calendar-day="${key}" aria-label="${escapeHtml(date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}${count ? `, ${count} task${count === 1 ? '' : 's'}` : ', no tasks'}" aria-selected="${selected ? 'true' : 'false'}">
+        <span>${date.getDate()}</span>${count ? `<b>${count}</b>` : ''}
+      </button>`);
+    }
+    calendarGrid.innerHTML = cells.join('');
+
+    const selectedKey = state.calendar.selectedDate || today;
+    const selectedDate = dateFromKey(selectedKey) || new Date();
+    const dayTickets = ticketsOnDate(selectedKey);
+    const isToday = selectedKey === today;
+    const dayNumber = $('tmAgendaDayNumber');
+    const dayName = $('tmAgendaDayName');
+    const dayKicker = $('tmAgendaDayKicker');
+    const dayTitle = $('tmAgendaDayTitle');
+    const dayCount = $('tmAgendaDayCount');
+    if (dayNumber) dayNumber.textContent = String(selectedDate.getDate());
+    if (dayName) dayName.textContent = selectedDate.toLocaleDateString(undefined, { weekday: 'long' });
+    if (dayKicker) dayKicker.textContent = isToday ? 'Today' : selectedDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    if (dayTitle) dayTitle.textContent = isToday ? 'Today tasks' : `Tasks on ${selectedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+    if (dayCount) dayCount.textContent = String(dayTickets.length);
+    agendaDayTasks.innerHTML = dayTickets.length
+      ? dayTickets.map(renderAgendaTask).join('')
+      : `<div class="tm-agenda-empty"><i data-feather="calendar"></i><b>No tasks on this date</b><span>Select a dark calendar day to view its scheduled tasks.</span></div>`;
+    hydrateIcons(calendarGrid);
+    hydrateIcons(agendaDayTasks);
+  }
+
   function renderTickets() {
     if (!grid) return;
+    renderAgenda();
     state.filtered = (state.tickets || []).filter(ticketMatches);
     renderDepartmentFilter();
 
@@ -3000,6 +3089,31 @@
     });
 
     document.addEventListener('click', async (event) => {
+      const calendarToday = event.target.closest('[data-tm-calendar-today]');
+      if (calendarToday) {
+        const now = new Date();
+        state.calendar.month = new Date(now.getFullYear(), now.getMonth(), 1);
+        state.calendar.selectedDate = todayKey();
+        renderAgenda();
+        return;
+      }
+      const calendarNav = event.target.closest('[data-tm-calendar-nav]');
+      if (calendarNav) {
+        const direction = calendarNav.dataset.tmCalendarNav === 'prev' ? -1 : 1;
+        const current = state.calendar.month;
+        state.calendar.month = new Date(current.getFullYear(), current.getMonth() + direction, 1);
+        renderAgenda();
+        return;
+      }
+      const calendarDay = event.target.closest('[data-tm-calendar-day]');
+      if (calendarDay) {
+        const key = calendarDay.dataset.tmCalendarDay || todayKey();
+        const date = dateFromKey(key);
+        state.calendar.selectedDate = key;
+        if (date) state.calendar.month = new Date(date.getFullYear(), date.getMonth(), 1);
+        renderAgenda();
+        return;
+      }
       const datePickerButton = event.target.closest('[data-tm-date-picker]');
       if (datePickerButton) {
         event.preventDefault();

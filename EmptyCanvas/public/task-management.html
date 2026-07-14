@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-multi-attachments-priority-v17" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-agenda-v18" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -59,30 +59,62 @@
       </header>
 
       <main class="container-full-width tm-main">
-        <div class="tm-toolbar tm-orders-toolbar" role="toolbar" aria-label="Task Management status and department filters">
-          <div class="tm-toolbar__scroll">
-            <div class="tm-tabs tm-tabs--orders" id="tmTabs" role="tablist" aria-label="Project status">
-              <button class="tm-tab is-active" type="button" data-status="all" role="tab" aria-selected="true" title="All"><span class="tm-tab__icon"><i data-feather="layers"></i></span><span class="tm-tab__label">All</span></button>
-              <button class="tm-tab" type="button" data-status="not_started" role="tab" aria-selected="false" title="Not started"><span class="tm-tab__icon"><i data-feather="circle"></i></span><span class="tm-tab__label">Not started</span></button>
-              <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false" title="In progress"><span class="tm-tab__icon"><i data-feather="activity"></i></span><span class="tm-tab__label">In progress</span></button>
-              <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false" title="Completed"><span class="tm-tab__icon"><i data-feather="check-circle"></i></span><span class="tm-tab__label">Completed</span></button>
-            </div>
-          </div>
-          <div class="tm-toolbar__divider" aria-hidden="true"></div>
-          <div class="tm-department-filter" id="tmDepartmentFilter">
-            <button type="button" class="tm-department-filter__button" id="tmDepartmentFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tmDepartmentFilterPanel" aria-label="Filter projects by department" title="Filter by department">
-              <span class="tm-department-filter__button-icon"><i data-feather="filter"></i></span>
-              <span class="tm-department-filter__button-label">Filter by department</span>
-              <span class="tm-department-filter__button-dot" id="tmDepartmentFilterDot" hidden></span>
-            </button>
-            <div class="tm-department-filter__panel" id="tmDepartmentFilterPanel" role="menu" aria-label="Filter projects by department" hidden></div>
-          </div>
-          <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
-        </div>
+        <div class="tm-agenda-layout">
+          <aside class="tm-agenda-column" aria-label="Task agenda">
+            <section class="tm-agenda-card tm-calendar-card">
+              <div class="tm-calendar-head">
+                <div>
+                  <span class="tm-agenda-eyebrow"><i data-feather="calendar"></i> Task agenda</span>
+                  <h2 id="tmCalendarMonth">Month</h2>
+                </div>
+                <div class="tm-calendar-actions">
+                  <button type="button" class="tm-calendar-today" data-tm-calendar-today>Today</button>
+                  <button type="button" class="tm-calendar-nav" data-tm-calendar-nav="prev" aria-label="Previous month"><i data-feather="chevron-left"></i></button>
+                  <button type="button" class="tm-calendar-nav" data-tm-calendar-nav="next" aria-label="Next month"><i data-feather="chevron-right"></i></button>
+                </div>
+              </div>
+              <div class="tm-calendar-weekdays" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+              <div class="tm-calendar-grid" id="tmCalendarGrid" role="grid" aria-label="Task calendar"></div>
+              <div class="tm-calendar-legend"><span><i class="tm-calendar-legend__empty"></i>Empty day</span><span><i class="tm-calendar-legend__busy"></i>Has tasks</span></div>
+            </section>
 
-        <section class="tm-ticket-grid" id="tmTicketGrid" aria-live="polite">
-          <div class="modern-loading" role="status"><div class="modern-loading__spinner" aria-hidden="true"></div><div class="modern-loading__text">Loading tickets <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div></div>
-        </section>
+            <section class="tm-agenda-card tm-day-tasks-card">
+              <div class="tm-day-tasks-head">
+                <div class="tm-day-date-block"><b id="tmAgendaDayNumber">--</b><span id="tmAgendaDayName">Today</span></div>
+                <div class="tm-day-tasks-title"><span id="tmAgendaDayKicker">Today</span><h2 id="tmAgendaDayTitle">Today tasks</h2></div>
+                <span class="tm-day-tasks-count" id="tmAgendaDayCount">0</span>
+              </div>
+              <div class="tm-day-task-list" id="tmAgendaDayTasks" aria-live="polite"></div>
+            </section>
+          </aside>
+
+          <section class="tm-tasks-column" aria-label="Task list">
+            <div class="tm-toolbar tm-orders-toolbar" role="toolbar" aria-label="Task Management status and department filters">
+              <div class="tm-toolbar__scroll">
+                <div class="tm-tabs tm-tabs--orders" id="tmTabs" role="tablist" aria-label="Project status">
+                  <button class="tm-tab is-active" type="button" data-status="all" role="tab" aria-selected="true" title="All"><span class="tm-tab__icon"><i data-feather="layers"></i></span><span class="tm-tab__label">All</span></button>
+                  <button class="tm-tab" type="button" data-status="not_started" role="tab" aria-selected="false" title="Not started"><span class="tm-tab__icon"><i data-feather="circle"></i></span><span class="tm-tab__label">Not started</span></button>
+                  <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false" title="In progress"><span class="tm-tab__icon"><i data-feather="activity"></i></span><span class="tm-tab__label">In progress</span></button>
+                  <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false" title="Completed"><span class="tm-tab__icon"><i data-feather="check-circle"></i></span><span class="tm-tab__label">Completed</span></button>
+                </div>
+              </div>
+              <div class="tm-toolbar__divider" aria-hidden="true"></div>
+              <div class="tm-department-filter" id="tmDepartmentFilter">
+                <button type="button" class="tm-department-filter__button" id="tmDepartmentFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tmDepartmentFilterPanel" aria-label="Filter projects by department" title="Filter by department">
+                  <span class="tm-department-filter__button-icon"><i data-feather="filter"></i></span>
+                  <span class="tm-department-filter__button-label">Filter by department</span>
+                  <span class="tm-department-filter__button-dot" id="tmDepartmentFilterDot" hidden></span>
+                </button>
+                <div class="tm-department-filter__panel" id="tmDepartmentFilterPanel" role="menu" aria-label="Filter projects by department" hidden></div>
+              </div>
+              <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
+            </div>
+
+            <section class="tm-ticket-grid" id="tmTicketGrid" aria-live="polite">
+              <div class="modern-loading" role="status"><div class="modern-loading__spinner" aria-hidden="true"></div><div class="modern-loading__text">Loading tickets <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div></div>
+            </section>
+          </section>
+        </div>
       </main>
     </div>
   </div>
@@ -303,6 +335,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/task-management.js?v=task-management-multi-attachments-priority-v17"></script>
+  <script src="/js/task-management.js?v=task-management-agenda-v18"></script>
 </body>
 </html>
