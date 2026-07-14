@@ -13,10 +13,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Task Management</title>
   <style>body.permissions-loading .sidebar li { display:none !important; }</style>
-  <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
+  <link href="/css/style.css?v=created-by-compact-v22" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-status-filters-v21" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-status-frames-v22" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -346,6 +346,20 @@
     </section>
   </div>
 
+  <!-- Modern archive / restore confirmation -->
+  <div class="tm-overlay tm-overlay--top" id="tmArchiveConfirmOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop"></div>
+    <section class="tm-dialog tm-dialog--archive-confirm" role="dialog" aria-modal="true" aria-labelledby="tmArchiveConfirmTitle">
+      <div class="tm-archive-confirm__icon"><i id="tmArchiveConfirmIcon" data-feather="archive"></i></div>
+      <h2 id="tmArchiveConfirmTitle">Archive project?</h2>
+      <p id="tmArchiveConfirmMessage">The project will remain saved and available in the All and Archive tabs.</p>
+      <div class="tm-archive-confirm__actions">
+        <button type="button" class="tm-btn tm-btn--secondary" id="tmArchiveConfirmCancel">No, keep it</button>
+        <button type="button" class="tm-btn tm-btn--archive" id="tmArchiveConfirmAccept"><i data-feather="archive"></i><span id="tmArchiveConfirmLabel">Yes, Archive</span></button>
+      </div>
+    </section>
+  </div>
+
   <div class="tm-overlay tm-overlay--above" id="tmUpdateSectionOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="update"></div>
     <section class="tm-dialog tm-dialog--update" role="dialog" aria-modal="true" aria-labelledby="tmUpdateSectionTitle">
@@ -361,6 +375,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/task-management.js?v=task-management-status-filters-v21"></script>
+  <script src="/js/task-management.js?v=task-management-status-frames-v22"></script>
 </body>
 </html>
