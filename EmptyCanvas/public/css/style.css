@@ -10731,3 +10731,29 @@ body.orders-review-page #sv-list{
 .b2c-subpage-flyout__link.is-active{background:linear-gradient(135deg,#7c2d12,#ea580c);color:#fff;box-shadow:0 7px 16px rgba(194,65,12,.20);}
 .b2c-subpage-flyout__link.is-active svg{color:currentColor;}
 @media(max-width:768px){.b2c-subpage-flyout{width:min(230px,calc(100vw - 24px));border-radius:16px;}}
+
+
+/* Compact Created By profile card used by Operations Orders, Orders Review, and Task Management. */
+.creator-profile-popover{width:min(315px,calc(100vw - 24px));}
+.creator-profile-window{padding:13px;border-radius:21px;}
+.creator-profile-window::before{top:-105px;right:-90px;width:165px;height:165px;}
+.creator-profile-close{top:9px;right:9px;width:30px;height:30px;border-radius:10px;}
+.creator-profile-close-x{font-size:20px;}
+.creator-profile-head{gap:9px;padding-right:32px;}
+.creator-profile-avatar{width:52px;height:52px;flex-basis:52px;border-radius:17px;font-size:16px;box-shadow:0 10px 20px rgba(249,115,22,.18);}
+.creator-profile-kicker{font-size:9px;margin-bottom:4px;}
+.creator-profile-name{font-size:16px;}
+.creator-profile-subtitle{margin-top:3px;font-size:10px;line-height:1.35;}
+.creator-profile-section-title{margin-top:11px;margin-bottom:6px;font-size:9px;}
+.creator-profile-section-title--files{margin-top:10px;}
+.creator-profile-fields{gap:6px;}
+.creator-profile-field{padding:7px 8px;border-radius:12px;}
+.creator-profile-field span{font-size:8px;margin-bottom:3px;}
+.creator-profile-field strong{font-size:10px;line-height:1.22;}
+.creator-profile-files{gap:6px;max-height:118px;}
+.creator-profile-file{min-height:44px;gap:7px;padding:7px;border-radius:12px;}
+.creator-profile-file-icon,.creator-profile-file-open{width:27px;height:27px;border-radius:9px;}
+.creator-profile-file-name{font-size:10px;}
+.creator-profile-file-host{font-size:8px;}
+.creator-profile-empty,.creator-profile-state{min-height:50px;border-radius:13px;font-size:10px;}
+@media(max-width:520px){.creator-profile-popover{width:min(300px,calc(100vw - 20px));}.creator-profile-fields{grid-template-columns:1fr 1fr;}}
