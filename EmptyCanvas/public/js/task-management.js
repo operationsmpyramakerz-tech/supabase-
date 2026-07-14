@@ -152,6 +152,9 @@
     },
     pendingEditTicket: null,
     pendingDeleteTicket: null,
+    pendingArchiveTicket: null,
+    pendingArchiveDesired: false,
+    archiveConfirmResolve: null,
     pendingAdminAction: 'edit',
     projectMenuOpen: false,
     accessLevel: 'view',
@@ -188,6 +191,7 @@
   const workPageOverlay = $('tmWorkPageOverlay');
   const rejectReasonOverlay = $('tmRejectReasonOverlay');
   const rejectedInfoOverlay = $('tmRejectedInfoOverlay');
+  const archiveConfirmOverlay = $('tmArchiveConfirmOverlay');
   const metaForm = $('tmTicketMetaForm');
   const blockForm = $('tmBlockEditorForm');
   const adminForm = $('tmAdminVerifyForm');
@@ -230,7 +234,7 @@
   function isOverlayOpen(overlay) { return !!overlay && !overlay.hidden; }
 
   function syncModalState() {
-    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, sectionDetailsOverlay, adminOverlay, updateOverlay, workPageOverlay, rejectReasonOverlay].some(isOverlayOpen);
+    const modalOpen = [builderOverlay, metaOverlay, blockOverlay, workflowOverlay, sectionDetailsOverlay, adminOverlay, updateOverlay, workPageOverlay, rejectReasonOverlay, rejectedInfoOverlay, archiveConfirmOverlay].some(isOverlayOpen);
     document.body.classList.toggle('tm-modal-open', modalOpen);
   }
 
@@ -397,9 +401,10 @@
   function ticketMatches(ticket) {
     if (state.activeStatus === 'archived') {
       if (!ticket.isArchived) return false;
-    } else {
-      if (ticket.isArchived) return false;
-      if (state.activeStatus !== 'all' && ticket.status !== state.activeStatus) return false;
+    } else if (state.activeStatus !== 'all') {
+      // Archived projects remain visible in the All tab, but status-specific
+      // tabs continue to show active projects only.
+      if (ticket.isArchived || ticket.status !== state.activeStatus) return false;
     }
     if (state.activeFilterStatus !== 'all' && ticket.status !== state.activeFilterStatus) return false;
     if (state.activePriority !== 'all' && priorityKey(ticket.priority) !== state.activePriority) return false;
@@ -496,7 +501,11 @@
   }
 
   function agendaTickets() {
-    return (state.tickets || []).filter((ticket) => state.activeStatus === 'archived' ? !!ticket.isArchived : !ticket.isArchived);
+    return (state.tickets || []).filter((ticket) => {
+      if (state.activeStatus === 'archived') return !!ticket.isArchived;
+      if (state.activeStatus === 'all') return true;
+      return !ticket.isArchived;
+    });
   }
 
   function ticketsOnDate(dateKey) {
@@ -2557,7 +2566,7 @@
     const currentUser = state.currentUser || window.__tmCurrentUser || {};
     const isProjectCreator = (currentUser?.id && String(ticket.createdById || '') === String(currentUser.id))
       || (!!norm(currentUser?.name || '') && norm(currentUser.name) === norm(ticket.createdByName || ''));
-    const canManageProjectArchive = !!window.__tmIsPageAdmin || isProjectCreator;
+    const canManageProjectArchive = true;
     const editMenuItem = $('tmProjectEditMenuItem');
     if (editMenuItem) editMenuItem.hidden = !!ticket.isArchived && state.view !== 'delegated';
     const archiveMenuItem = $('tmProjectArchiveMenuItem');
@@ -2700,21 +2709,45 @@
     }
   }
 
-  async function archiveSelectedProject() {
-    const ticket = state.selectedTicket;
+  function closeArchiveConfirm(result = false) {
+    if (!archiveConfirmOverlay) return;
+    setOverlay(archiveConfirmOverlay, false);
+    const resolve = state.archiveConfirmResolve;
+    state.archiveConfirmResolve = null;
+    if (typeof resolve === 'function') resolve(!!result);
+  }
+
+  function confirmArchiveAction(ticket, archived) {
+    if (!archiveConfirmOverlay) {
+      return Promise.resolve(window.confirm(archived
+        ? `Archive ${ticket.title || ticket.ticketCode || 'this project'}?`
+        : `Unarchive ${ticket.title || ticket.ticketCode || 'this project'}?`));
+    }
+    const title = $('tmArchiveConfirmTitle');
+    const message = $('tmArchiveConfirmMessage');
+    const confirmLabel = $('tmArchiveConfirmLabel');
+    const icon = $('tmArchiveConfirmIcon');
+    if (title) title.textContent = archived ? 'Archive project?' : 'Restore project?';
+    if (message) message.textContent = archived
+      ? `“${ticket.title || ticket.ticketCode || 'This project'}” will stay saved and will also remain visible in the All tab and Archive tab.`
+      : `“${ticket.title || ticket.ticketCode || 'This project'}” will be restored as an active project.`;
+    if (confirmLabel) confirmLabel.textContent = archived ? 'Yes, Archive' : 'Yes, Restore';
+    if (icon) icon.setAttribute('data-feather', archived ? 'archive' : 'rotate-ccw');
+    hydrateIcons(archiveConfirmOverlay);
+    setOverlay(archiveConfirmOverlay, true);
+    return new Promise((resolve) => { state.archiveConfirmResolve = resolve; });
+  }
+
+  async function performArchiveProject(ticket, archived, adminPassword = '') {
     if (!ticket) return;
-    closeProjectMenu();
-    const archived = !ticket.isArchived;
-    const message = archived
-      ? 'Archive this project? It will remain saved in Delegated Tasks but will no longer be visible in All Tasks or My Tasks.'
-      : 'Unarchive this project and make it visible again to assigned users?';
-    if (!window.confirm(message)) return;
+    const confirmed = await confirmArchiveAction(ticket, archived);
+    if (!confirmed) return;
     const button = $('tmProjectArchiveMenuItem');
-    if (button) button.disabled = true;
+    if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
     try {
       const data = await api(`/api/task-management/${encodeURIComponent(ticket.id)}/archive`, {
         method: 'PATCH',
-        body: { view: state.view, archived },
+        body: { view: state.view, archived, adminPassword },
       });
       const updated = data.ticket || { ...ticket, isArchived: archived };
       state.selectedTicket = updated;
@@ -2722,13 +2755,27 @@
       renderTickets();
       renderWorkflow(updated);
       showToast('success', archived ? 'Project archived' : 'Project restored', archived
-        ? 'The project is saved and hidden from other users.'
-        : 'The project is visible to assigned users again.');
+        ? 'The project is saved and remains available in All and Archive.'
+        : 'The project is active again.');
     } catch (error) {
       showToast('error', archived ? 'Archive failed' : 'Restore failed', error.message || 'Could not update the project archive state.');
     } finally {
-      if (button) button.disabled = false;
+      if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
     }
+  }
+
+  function archiveSelectedProject() {
+    const ticket = state.selectedTicket;
+    if (!ticket) return;
+    closeProjectMenu();
+    const archived = !ticket.isArchived;
+    if (window.__tmIsPageAdmin) {
+      performArchiveProject(ticket, archived, '');
+      return;
+    }
+    state.pendingArchiveTicket = ticket;
+    state.pendingArchiveDesired = archived;
+    openAdminVerification(ticket, 'archive');
   }
 
   async function markSelectedProjectDelivered() {
@@ -2759,18 +2806,22 @@
   }
 
   function setAdminVerifyMode(action = 'edit') {
-    const isDelete = action === 'delete';
-    state.pendingAdminAction = isDelete ? 'delete' : 'edit';
+    const mode = ['edit', 'delete', 'archive'].includes(action) ? action : 'edit';
+    state.pendingAdminAction = mode;
     const title = $('tmAdminVerifyTitle');
     const description = $('tmAdminVerifyDescription');
     const label = $('tmAdminVerifySubmitLabel');
     const submit = $('tmAdminVerifySubmit');
-    if (title) title.textContent = isDelete ? 'Delete project' : 'Edit project workflow';
-    if (description) description.textContent = isDelete
-      ? 'Enter the admin password before opening the final delete confirmation.'
-      : 'Enter the admin password to continue editing this project.';
-    if (label) label.textContent = isDelete ? 'Verify & Delete' : 'Verify & Edit';
-    submit?.classList.toggle('tm-btn--danger', isDelete);
+    const copy = {
+      edit: ['Edit project workflow', 'Enter the admin password to continue editing this project.', 'Verify & Edit'],
+      delete: ['Delete project', 'Enter the admin password before opening the final delete confirmation.', 'Verify & Delete'],
+      archive: ['Archive project', 'Enter the admin password before opening the archive confirmation.', 'Verify & Archive'],
+    }[mode];
+    if (title) title.textContent = copy[0];
+    if (description) description.textContent = copy[1];
+    if (label) label.textContent = copy[2];
+    submit?.classList.toggle('tm-btn--danger', mode === 'delete');
+    submit?.classList.toggle('tm-btn--archive', mode === 'archive');
     hydrateIcons(adminOverlay);
   }
 
@@ -2778,6 +2829,8 @@
     if (!ticket) return;
     state.pendingEditTicket = action === 'edit' ? ticket : null;
     state.pendingDeleteTicket = action === 'delete' ? ticket : null;
+    state.pendingArchiveTicket = action === 'archive' ? ticket : null;
+    if (action !== 'archive') state.pendingArchiveDesired = false;
     setAdminVerifyMode(action);
     const input = $('tmAdminPasswordInput');
     const error = $('tmAdminVerifyError');
@@ -2845,10 +2898,12 @@
 
   async function verifyProjectEditAccess(event) {
     event.preventDefault();
-    const action = state.pendingAdminAction === 'delete' ? 'delete' : 'edit';
+    const action = ['delete', 'archive'].includes(state.pendingAdminAction) ? state.pendingAdminAction : 'edit';
     const ticket = action === 'delete'
       ? (state.pendingDeleteTicket || state.selectedTicket)
-      : (state.pendingEditTicket || state.selectedTicket);
+      : (action === 'archive'
+        ? (state.pendingArchiveTicket || state.selectedTicket)
+        : (state.pendingEditTicket || state.selectedTicket));
     if (!ticket) return;
     const password = $('tmAdminPasswordInput')?.value || '';
     const error = $('tmAdminVerifyError');
@@ -2868,6 +2923,11 @@
       if (action === 'delete') {
         state.pendingDeleteTicket = null;
         await confirmAndDeleteProject(ticket, password);
+      } else if (action === 'archive') {
+        const archived = !!state.pendingArchiveDesired;
+        state.pendingArchiveTicket = null;
+        state.pendingArchiveDesired = false;
+        await performArchiveProject(ticket, archived, password);
       } else {
         state.pendingEditTicket = null;
         openEditBuilder(ticket, password);
@@ -3299,6 +3359,9 @@
     $('tmProjectMoreBtn')?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); toggleProjectMenu(); });
     $('tmProjectEditMenuItem')?.addEventListener('click', () => { closeProjectMenu(); requestProjectEdit(); });
     $('tmProjectArchiveMenuItem')?.addEventListener('click', archiveSelectedProject);
+    $('tmArchiveConfirmCancel')?.addEventListener('click', () => closeArchiveConfirm(false));
+    $('tmArchiveConfirmAccept')?.addEventListener('click', () => closeArchiveConfirm(true));
+    archiveConfirmOverlay?.querySelector('.tm-overlay__backdrop')?.addEventListener('click', () => closeArchiveConfirm(false));
     $('tmProjectDeleteMenuItem')?.addEventListener('click', () => { closeProjectMenu(); requestProjectDelete(); });
     $('tmMarkDeliveredBtn')?.addEventListener('click', markSelectedProjectDelivered);
     $('tmOpenWorkPageBtn')?.addEventListener('click', openWorkPageFromDetails);
@@ -3464,7 +3527,7 @@
           }
           setOverlay(rejectReasonOverlay, false);
         }
-        if (which === 'admin') { state.pendingEditTicket = null; state.pendingDeleteTicket = null; setAdminVerifyMode('edit'); setOverlay(adminOverlay, false); }
+        if (which === 'admin') { state.pendingEditTicket = null; state.pendingDeleteTicket = null; state.pendingArchiveTicket = null; state.pendingArchiveDesired = false; setAdminVerifyMode('edit'); setOverlay(adminOverlay, false); }
         if (which === 'update') setOverlay(updateOverlay, false);
         return;
       }
@@ -3577,7 +3640,8 @@
         else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; setOverlay(workPageOverlay, false); }
         else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
-        else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; state.pendingDeleteTicket = null; setAdminVerifyMode('edit'); setOverlay(adminOverlay, false); }
+        else if (isOverlayOpen(archiveConfirmOverlay)) closeArchiveConfirm(false);
+        else if (isOverlayOpen(adminOverlay)) { state.pendingEditTicket = null; state.pendingDeleteTicket = null; state.pendingArchiveTicket = null; state.pendingArchiveDesired = false; setAdminVerifyMode('edit'); setOverlay(adminOverlay, false); }
         else if (isOverlayOpen(blockOverlay)) setOverlay(blockOverlay, false);
         else if (isOverlayOpen(metaOverlay)) {
           setOverlay(metaOverlay, false);
