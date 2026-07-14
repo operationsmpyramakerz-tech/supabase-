@@ -38467,6 +38467,38 @@ function _tmAttachment(value = {}) {
   };
 }
 
+function _tmAttachments(value, legacyValue = null) {
+  let source = value;
+  if (typeof source === "string") {
+    try { source = JSON.parse(source); } catch { source = []; }
+  }
+  if (source && !Array.isArray(source) && Array.isArray(source.files)) source = source.files;
+  else if (source && !Array.isArray(source) && typeof source === "object" && (source.url || source.attachmentUrl || source.attachment_url)) source = [source];
+  const attachments = (Array.isArray(source) ? source : [])
+    .map((item) => _tmAttachment(item))
+    .filter(Boolean);
+  const legacy = _tmAttachment(legacyValue);
+  if (legacy && !attachments.some((item) => item.url === legacy.url)) attachments.unshift(legacy);
+  const seen = new Set();
+  return attachments.filter((item) => {
+    if (!item?.url || seen.has(item.url)) return false;
+    seen.add(item.url);
+    return true;
+  }).slice(0, 20);
+}
+
+function _tmAttachmentColumns(attachments = []) {
+  const files = _tmAttachments(attachments);
+  const first = files[0] || null;
+  return {
+    attachments: files,
+    attachment_name: first?.name || null,
+    attachment_url: first?.url || null,
+    attachment_type: first?.type || null,
+    attachment_size: first?.size || null,
+  };
+}
+
 function _tmStatus(value, fallback = "not_started") {
   const raw = _tmText(value, 40).toLowerCase().replace(/[\s-]+/g, "_");
   const aliases = {
@@ -38545,12 +38577,14 @@ async function _tmDepartmentOptions() {
 
 function _tmSerializeSection(row = {}) {
   const status = _tmStatus(_sbGet(row, ["status", "Status"]));
-  const attachment = _tmAttachment({
+  const legacyAttachment = _tmAttachment({
     name: _sbGet(row, ["attachment_name", "attachmentName"]),
     url: _sbGet(row, ["attachment_url", "attachmentUrl"]),
     type: _sbGet(row, ["attachment_type", "attachmentType"]),
     size: _sbGet(row, ["attachment_size", "attachmentSize"]),
   });
+  const attachments = _tmAttachments(_sbGet(row, ["attachments", "attachment_files", "attachmentFiles"]), legacyAttachment);
+  const attachment = attachments[0] || null;
   return {
     id: _tmId(row),
     ticketId: String(_sbGet(row, ["ticket_id", "ticketId"]) ?? "").trim(),
@@ -38558,6 +38592,7 @@ function _tmSerializeSection(row = {}) {
     request: _tmText(_sbGet(row, ["request_text", "request", "Request", "title", "Title"]), 4000),
     details: _tmText(_sbGet(row, ["details", "description", "Description"]), 8000),
     deliveryDate: _tmDate(_sbGet(row, ["delivery_date", "deliveryDate"])),
+    attachments,
     attachment,
     sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
     executionGroup: Math.max(1, Number(_sbGet(row, ["execution_group", "executionGroup", "stage", "stage_number"]) || _sbGet(row, ["sort_order", "sortOrder"]) || 1)),
@@ -38881,7 +38916,7 @@ function _tmBuildWorkflowPlan(rawSections = [], rawEdges) {
     request: _tmText(item?.request || item?.requestText || item?.title, 4000),
     details: _tmText(item?.details || item?.description, 8000),
     deliveryDate: _tmDate(item?.deliveryDate || item?.delivery_date),
-    attachment: _tmAttachment(item?.attachment || {
+    attachments: _tmAttachments(item?.attachments || item?.attachment_files, item?.attachment || {
       name: item?.attachmentName || item?.attachment_name,
       url: item?.attachmentUrl || item?.attachment_url,
       type: item?.attachmentType || item?.attachment_type,
@@ -38892,6 +38927,7 @@ function _tmBuildWorkflowPlan(rawSections = [], rawEdges) {
     canvasY: _tmCanvasNumber(item?.canvasY ?? item?.canvas_y ?? item?.nodeY ?? item?.node_y, 0),
     executionGroup: Math.max(1, Math.min(40, Number(item?.executionGroup ?? item?.execution_group ?? item?.stage ?? index + 1) || index + 1)),
   }));
+  prepared.forEach((section) => { section.attachment = section.attachments[0] || null; });
   const ids = new Set();
   for (const section of prepared) {
     if (ids.has(section.clientId)) throw new Error("Workflow blocks must have unique IDs.");
@@ -38968,12 +39004,14 @@ async function _tmMembersForDepartment(department) {
 }
 
 function _tmSerializeAssignment(row = {}) {
-  const attachment = _tmAttachment({
+  const legacyAttachment = _tmAttachment({
     name: _sbGet(row, ["attachment_name", "attachmentName"]),
     url: _sbGet(row, ["attachment_url", "attachmentUrl"]),
     type: _sbGet(row, ["attachment_type", "attachmentType"]),
     size: _sbGet(row, ["attachment_size", "attachmentSize"]),
   });
+  const attachments = _tmAttachments(_sbGet(row, ["attachments", "attachment_files", "attachmentFiles"]), legacyAttachment);
+  const attachment = attachments[0] || null;
   return {
     id: _tmId(row),
     sectionId: String(_sbGet(row, ["section_id", "sectionId"]) ?? "").trim(),
@@ -38982,6 +39020,7 @@ function _tmSerializeAssignment(row = {}) {
     task: _tmText(_sbGet(row, ["task_text", "task", "request_text", "request"]), 4000),
     details: _tmText(_sbGet(row, ["details", "description"]), 8000),
     deliveryDate: _tmDate(_sbGet(row, ["delivery_date", "deliveryDate"])),
+    attachments,
     attachment,
     sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 0),
     executionGroup: Math.max(1, Number(_sbGet(row, ["execution_group", "executionGroup"]) || _sbGet(row, ["sort_order", "sortOrder"]) || 1)),
@@ -39059,6 +39098,7 @@ function _tmBuildPeopleWorkflowPlan(rawAssignments = [], rawEdges) {
       request: _tmText(item?.task || item?.taskText || item?.task_text || item?.request, 4000),
       details: _tmText(item?.details || item?.description, 8000),
       deliveryDate: _tmDate(item?.deliveryDate || item?.delivery_date),
+      attachments: item?.attachments || null,
       attachment: item?.attachment || null,
       canvasX: item?.canvasX ?? item?.canvas_x,
       canvasY: item?.canvasY ?? item?.canvas_y,
@@ -39247,12 +39287,7 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
           canvas_y: section.canvasY || null,
           status: "not_started",
         };
-        if (section.attachment) {
-          sectionPayload.attachment_name = section.attachment.name || null;
-          sectionPayload.attachment_url = section.attachment.url || null;
-          sectionPayload.attachment_type = section.attachment.type || null;
-          sectionPayload.attachment_size = section.attachment.size || null;
-        }
+        Object.assign(sectionPayload, _tmAttachmentColumns(section.attachments || section.attachment));
         const createdSection = await supabaseDb.insert(_tmSectionsTable(), sectionPayload);
         const createdId = _tmId(createdSection);
         if (!createdId) throw new Error("Workflow block was created without an ID.");
@@ -39281,8 +39316,8 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     const detail = String(error?.message || "");
     const message = /delivery_date.*schema cache|Could not find the .*delivery_date/i.test(detail)
       ? "The workflow block delivery-date column is not installed. Run the supplied delivery-date SQL migration, then refresh this page."
-      : (/attachment_(name|url|type|size).*schema cache|Could not find the .*attachment_/i.test(detail)
-        ? "Task Management attachment columns are not installed. Run the supplied attachment SQL migration, then refresh this page."
+      : (/(attachments|attachment_(name|url|type|size)).*schema cache|Could not find the .*(attachments|attachment_)/i.test(detail)
+        ? "Task Management multi-attachment columns are not installed. Run the supplied multi-attachments SQL migration, then refresh this page."
         : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
           ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
           : (error?.message || "Failed to create project.")));
@@ -39387,10 +39422,7 @@ app.put("/api/task-management/:id", requireAuth, requireTaskManagementView(), as
         execution_group: section.executionGroup,
         canvas_x: section.canvasX || null,
         canvas_y: section.canvasY || null,
-        attachment_name: section.attachment?.name || null,
-        attachment_url: section.attachment?.url || null,
-        attachment_type: section.attachment?.type || null,
-        attachment_size: section.attachment?.size || null,
+        ..._tmAttachmentColumns(section.attachments || section.attachment),
         updated_at: now,
       };
 
@@ -39438,8 +39470,8 @@ app.put("/api/task-management/:id", requireAuth, requireTaskManagementView(), as
     const detail = String(error?.message || "");
     const message = /delivery_date.*schema cache|Could not find the .*delivery_date/i.test(detail)
       ? "The workflow block delivery-date column is not installed. Run the supplied delivery-date SQL migration, then refresh this page."
-      : (/attachment_(name|url|type|size).*schema cache|Could not find the .*attachment_/i.test(detail)
-        ? "Task Management attachment columns are not installed. Run the supplied attachment SQL migration, then refresh this page."
+      : (/(attachments|attachment_(name|url|type|size)).*schema cache|Could not find the .*(attachments|attachment_)/i.test(detail)
+        ? "Task Management multi-attachment columns are not installed. Run the supplied multi-attachments SQL migration, then refresh this page."
         : (error?.message || "Failed to update project."));
     return res.status(error?.status || 500).json({ ok: false, error: message });
   }
@@ -39521,10 +39553,7 @@ app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requir
         execution_group: assignment.executionGroup,
         canvas_x: assignment.canvasX || null,
         canvas_y: assignment.canvasY || null,
-        attachment_name: assignment.attachment?.name || null,
-        attachment_url: assignment.attachment?.url || null,
-        attachment_type: assignment.attachment?.type || null,
-        attachment_size: assignment.attachment?.size || null,
+        ..._tmAttachmentColumns(assignment.attachments || assignment.attachment),
         updated_at: now,
       };
       const previous = existingById.get(String(assignment.clientId));
@@ -39568,9 +39597,11 @@ app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requir
   } catch (error) {
     console.error("[task-management] people workflow save error:", error?.details || error?.message || error);
     const detail = String(error?.message || "");
-    const message = /relation .* does not exist|Could not find the table|schema cache/i.test(detail)
-      ? "The My Tasks team-workflow tables are not installed. Run the supplied My Tasks SQL migration, then refresh this page."
-      : (error?.message || "Failed to save the team workflow.");
+    const message = /(attachments).*schema cache|Could not find the .*attachments/i.test(detail)
+      ? "The team-task multi-attachment column is not installed. Run the supplied multi-attachments SQL migration, then refresh this page."
+      : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
+        ? "The My Tasks team-workflow tables are not installed. Run the supplied My Tasks SQL migration, then refresh this page."
+        : (error?.message || "Failed to save the team workflow."));
     return res.status(error?.status || 500).json({ ok: false, error: message });
   }
 });

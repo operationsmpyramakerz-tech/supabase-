@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-delete-project-v15" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-multi-attachments-priority-v17" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -130,7 +130,7 @@
       <form id="tmTicketMetaForm" novalidate>
         <div class="tm-form-grid">
           <label class="tm-field tm-field--wide"><span>Project title <b>*</b></span><input id="tmMetaTitleInput" maxlength="500" placeholder="Example: Prepare STEM Lab Launch" required /></label>
-          <label class="tm-field"><span>Priority <b>*</b></span><select id="tmMetaPriorityInput" required><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
+          <label class="tm-field"><span>Priority <b>*</b></span><select id="tmMetaPriorityInput" data-tm-priority-select="true" required><option value="Normal">Normal</option><option value="Low">Low</option><option value="High">High</option><option value="Urgent">Urgent</option></select></label>
           <label class="tm-field"><span>Target date <b>*</b></span><div class="tm-date-control"><input id="tmMetaDueDateInput" type="date" required /><button type="button" class="tm-date-control__chevron" data-tm-date-picker="tmMetaDueDateInput" aria-label="Open target date picker"><i data-feather="chevron-down"></i></button></div></label>
           <label class="tm-field tm-field--wide"><span>Context / objective</span><textarea id="tmMetaDescriptionInput" rows="4" maxlength="8000" placeholder="Explain the overall work needed and the expected result."></textarea></label>
         </div>
@@ -154,14 +154,14 @@
           <div class="tm-field tm-field--wide">
             <span>Attachment</span>
             <div class="tm-upload-field">
-              <input id="tmBlockAttachmentInput" class="tm-upload-field__input" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
+              <input id="tmBlockAttachmentInput" class="tm-upload-field__input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
               <label class="tm-upload-field__picker" for="tmBlockAttachmentInput">
                 <span class="tm-upload-field__icon"><i data-feather="paperclip"></i></span>
-                <span class="tm-upload-field__copy"><b>Upload attachment</b><small>Images, PDF, Office files, text, CSV, or ZIP · maximum 10 MB</small></span>
-                <span class="tm-upload-field__action">Choose file</span>
+                <span class="tm-upload-field__copy"><b>Upload attachments</b><small>Select multiple images, PDF, Office files, text, CSV, or ZIP · maximum 10 MB per file</small></span>
+                <span class="tm-upload-field__action">Choose files</span>
               </label>
-              <div class="tm-upload-file" id="tmBlockAttachmentPreview" hidden></div>
-              <div class="tm-upload-progress" id="tmBlockAttachmentProgress" hidden><span></span><b>Uploading attachment…</b></div>
+              <div class="tm-upload-files" id="tmBlockAttachmentPreview" hidden></div>
+              <div class="tm-upload-progress" id="tmBlockAttachmentProgress" hidden><span></span><b>Uploading attachments…</b></div>
             </div>
           </div>
         </div>
@@ -304,6 +304,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/task-management.js?v=task-management-delete-project-v16"></script>
+  <script src="/js/task-management.js?v=task-management-multi-attachments-priority-v17"></script>
 </body>
 </html>
