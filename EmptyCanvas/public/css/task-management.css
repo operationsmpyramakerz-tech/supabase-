@@ -2518,3 +2518,103 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   .task-management-page .tm-workflow-delivery-actions{padding-bottom:4px;}
   .task-management-page .tm-btn--delivered{width:100%;}
 }
+
+
+/* Task filters, archive tab, status bars, and rejected reason viewer v21 */
+.task-management-page .tm-task-filter-grid{
+  display:grid;
+  gap:11px;
+  padding:2px 3px 5px;
+}
+.task-management-page .tm-task-filter-grid .tm-field>span{
+  margin-bottom:6px;
+  color:#616975;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.task-management-page .tm-task-filter-grid .tm-select__button{
+  min-height:44px;
+  border-radius:13px;
+  background:#fff;
+}
+.task-management-page .tm-task-filter-grid .tm-select__menu{z-index:10030;}
+.task-management-page .tm-department-filter__panel{
+  width:min(350px,calc(100vw - 24px));
+  overflow:visible;
+}
+.task-management-page .tm-tab[data-status="archived"] .tm-tab__icon{color:#5b626d;}
+.task-management-page .tm-ticket-card{gap:10px!important;}
+.task-management-page .tm-ticket-card__top{margin-bottom:0!important;}
+.task-management-page .tm-ticket-card__bottom{
+  padding-top:8px!important;
+  border-top:1px solid #edf0f2;
+}
+.task-management-page .tm-status-pill--clickable{
+  appearance:none;
+  font:inherit;
+  cursor:pointer;
+}
+.task-management-page .tm-status-pill--clickable:hover,
+.task-management-page .tm-status-pill--clickable:focus-visible{
+  outline:0;
+  transform:translateY(-1px);
+  box-shadow:0 7px 16px rgba(187,47,42,.16);
+}
+.task-management-page .tm-dialog--rejected-info{
+  width:min(470px,100%);
+  padding:22px;
+}
+.task-management-page .tm-rejected-info__message{
+  margin-top:15px;
+  padding:16px;
+  border:1px solid #f0b0ac;
+  border-radius:16px;
+  background:#fff5f4;
+  color:#842621;
+  font-size:13px;
+  font-weight:750;
+  line-height:1.6;
+  white-space:pre-wrap;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card:not(.tm-workflow-card--mine)::before{display:none!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card .tm-workflow-card__top{position:relative;}
+.task-management-page .tm-workflow-board .tm-workflow-card .tm-workflow-card__top::after{
+  content:"";
+  position:absolute;
+  z-index:5;
+  top:-1px;
+  left:18px;
+  right:18px;
+  height:3px;
+  border-radius:0 0 999px 999px;
+  background:#b8bec7;
+  pointer-events:none;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--not_started .tm-workflow-card__top::after,
+.task-management-page .tm-team-task-card.tm-status--not_started::before{background:#b8bec7!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--in_progress .tm-workflow-card__top::after,
+.task-management-page .tm-team-task-card.tm-status--in_progress::before{background:#ef7d16!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--rejected .tm-workflow-card__top::after,
+.task-management-page .tm-team-task-card.tm-status--rejected::before{background:#df3d36!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--completed .tm-workflow-card__top::after,
+.task-management-page .tm-team-task-card.tm-status--completed::before{background:#15945b!important;}
+.task-management-page .tm-progress.tm-status--not_started .tm-progress__rail span{background:#b8bec7!important;}
+.task-management-page .tm-progress.tm-status--in_progress .tm-progress__rail span{background:#ef7d16!important;}
+.task-management-page .tm-progress.tm-status--rejected .tm-progress__rail span{background:#df3d36!important;}
+.task-management-page .tm-progress.tm-status--completed .tm-progress__rail span{background:#15945b!important;}
+.task-management-page .tm-progress.tm-status--cancelled .tm-progress__rail span{background:#69717c!important;}
+.task-management-page .tm-dialog--work-page .tm-work-page__form-grid{grid-template-columns:1fr 1fr;}
+.task-management-page .tm-dialog--work-page .tm-field--wide{grid-column:1/-1;}
+@media(max-width:700px){
+  .task-management-page .tm-department-filter__panel{
+    position:fixed;
+    top:auto;
+    right:12px;
+    bottom:84px;
+    width:calc(100vw - 24px);
+    max-height:min(72dvh,560px);
+    overflow:auto;
+  }
+}

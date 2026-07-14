@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-project-actions-v20" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-status-filters-v21" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -96,16 +96,17 @@
                   <button class="tm-tab" type="button" data-status="not_started" role="tab" aria-selected="false" title="Not started"><span class="tm-tab__icon"><i data-feather="circle"></i></span><span class="tm-tab__label">Not started</span></button>
                   <button class="tm-tab" type="button" data-status="in_progress" role="tab" aria-selected="false" title="In progress"><span class="tm-tab__icon"><i data-feather="activity"></i></span><span class="tm-tab__label">In progress</span></button>
                   <button class="tm-tab" type="button" data-status="completed" role="tab" aria-selected="false" title="Completed"><span class="tm-tab__icon"><i data-feather="check-circle"></i></span><span class="tm-tab__label">Completed</span></button>
+                  <button class="tm-tab" type="button" data-status="archived" role="tab" aria-selected="false" title="Archive"><span class="tm-tab__icon"><i data-feather="archive"></i></span><span class="tm-tab__label">Archive</span></button>
                 </div>
               </div>
               <div class="tm-toolbar__divider" aria-hidden="true"></div>
               <div class="tm-department-filter" id="tmDepartmentFilter">
-                <button type="button" class="tm-department-filter__button" id="tmDepartmentFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tmDepartmentFilterPanel" aria-label="Filter projects by department" title="Filter by department">
+                <button type="button" class="tm-department-filter__button" id="tmDepartmentFilterBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tmDepartmentFilterPanel" aria-label="Filter tasks" title="Filter tasks">
                   <span class="tm-department-filter__button-icon"><i data-feather="filter"></i></span>
-                  <span class="tm-department-filter__button-label">Filter by department</span>
+                  <span class="tm-department-filter__button-label">Filter tasks</span>
                   <span class="tm-department-filter__button-dot" id="tmDepartmentFilterDot" hidden></span>
                 </button>
-                <div class="tm-department-filter__panel" id="tmDepartmentFilterPanel" role="menu" aria-label="Filter projects by department" hidden></div>
+                <div class="tm-department-filter__panel" id="tmDepartmentFilterPanel" role="menu" aria-label="Filter tasks" hidden></div>
               </div>
               <button type="button" class="tm-new-ticket tm-new-ticket--toolbar" id="tmToolbarNewTicketBtn" data-tm-new-ticket hidden aria-hidden="true"><i data-feather="plus"></i><span>Add Project</span></button>
             </div>
@@ -267,14 +268,12 @@
       <div class="tm-work-page__summary" id="tmWorkPageSummary" hidden aria-hidden="true"></div>
       <form id="tmWorkPageForm" novalidate>
         <div class="tm-form-grid tm-work-page__form-grid">
-          <label class="tm-field"><span>Status <b>*</b></span><select id="tmWorkStatusInput" required>
+          <label class="tm-field tm-field--wide"><span>Status <b>*</b></span><select id="tmWorkStatusInput" required>
             <option value="not_started">Not started</option>
             <option value="in_progress">In progress</option>
             <option value="rejected">Rejected</option>
             <option value="completed">Done</option>
-            <option value="cancelled">Cancelled</option>
           </select></label>
-          <div class="tm-field"><span>Rejected reason</span><button type="button" class="tm-rejection-preview" id="tmRejectedReasonBtn"><span id="tmRejectedReasonPreview">No rejected reason</span><i data-feather="edit-3"></i></button></div>
           <label class="tm-field tm-field--wide"><span>Work report</span><textarea id="tmWorkReportInput" rows="5" maxlength="12000" placeholder="Write the work completed, progress, blockers, or handover details."></textarea></label>
           <div class="tm-field tm-field--wide">
             <span>Work file</span>
@@ -318,6 +317,19 @@
     </section>
   </div>
 
+  <!-- Read-only rejected reason from a task card -->
+  <div class="tm-overlay tm-overlay--top" id="tmRejectedInfoOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-tm-close="rejected-info"></div>
+    <section class="tm-dialog tm-dialog--rejected-info" role="dialog" aria-modal="true" aria-labelledby="tmRejectedInfoTitle">
+      <div class="tm-dialog__top">
+        <div><span class="tm-eyebrow">Rejected task</span><h2 id="tmRejectedInfoTitle">Rejected reason</h2><p>Review the reason entered for this rejected task.</p></div>
+        <button type="button" class="tm-icon-btn" aria-label="Close rejected reason" data-tm-close="rejected-info"><i data-feather="x"></i></button>
+      </div>
+      <div class="tm-rejected-info__message" id="tmRejectedInfoMessage">No rejected reason was provided.</div>
+      <div class="tm-dialog__actions"><button type="button" class="tm-btn tm-btn--primary" data-tm-close="rejected-info">Close</button></div>
+    </section>
+  </div>
+
   <!-- Admin verification before editing a saved project -->
   <div class="tm-overlay tm-overlay--above" id="tmAdminVerifyOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-tm-close="admin"></div>
@@ -339,7 +351,7 @@
     <section class="tm-dialog tm-dialog--update" role="dialog" aria-modal="true" aria-labelledby="tmUpdateSectionTitle">
       <div class="tm-dialog__top"><div><span class="tm-eyebrow" id="tmUpdateSectionDepartment">Department</span><h2 id="tmUpdateSectionTitle">Update workflow section</h2><p id="tmUpdateSectionRequest">—</p></div><button type="button" class="tm-icon-btn" aria-label="Close" data-tm-close="update"><i data-feather="x"></i></button></div>
       <form id="tmUpdateSectionForm">
-        <label class="tm-field"><span>Status</span><select id="tmSectionStatusInput"><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+        <label class="tm-field"><span>Status</span><select id="tmSectionStatusInput"><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="rejected">Rejected</option><option value="completed">Completed</option></select></label>
         <label class="tm-field tm-field--wide"><span>Execution note</span><textarea id="tmCompletionNoteInput" rows="4" maxlength="8000" placeholder="Add a short progress note or completion handover."></textarea></label>
         <div class="tm-form-error" id="tmUpdateSectionError" role="alert" aria-live="polite"></div>
         <div class="tm-dialog__actions"><button class="tm-btn tm-btn--secondary" type="button" data-tm-close="update">Cancel</button><button class="tm-btn tm-btn--primary" type="submit" id="tmUpdateSectionSubmit">Save update</button></div>
@@ -349,6 +361,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/task-management.js?v=task-management-project-actions-v20"></script>
+  <script src="/js/task-management.js?v=task-management-status-filters-v21"></script>
 </body>
 </html>

@@ -38626,8 +38626,9 @@ function _tmTicketStatusFromSections(sections = []) {
   const statuses = (sections || []).map((section) => _tmStatus(section?.status)).filter(Boolean);
   if (!statuses.length) return "not_started";
   if (statuses.every((status) => status === "completed")) return "completed";
+  if (statuses.some((status) => status === "rejected")) return "rejected";
   if (statuses.every((status) => status === "cancelled")) return "cancelled";
-  if (statuses.some((status) => status === "in_progress" || status === "rejected" || status === "completed" || status === "cancelled")) return "in_progress";
+  if (statuses.some((status) => status === "in_progress" || status === "completed" || status === "cancelled")) return "in_progress";
   return "not_started";
 }
 
@@ -38644,8 +38645,8 @@ function _tmSerializeTicket(row = {}, sectionRows = [], edgeRows = []) {
     description: _tmText(_sbGet(row, ["description", "details", "Description"]), 8000),
     priority: _tmPriority(_sbGet(row, ["priority", "Priority"])),
     dueDate: _tmDate(_sbGet(row, ["due_date", "dueDate", "deadline", "Deadline"])),
-    status: _tmStatus(_sbGet(row, ["status", "Status"]), calculatedStatus),
-    statusLabel: _tmStatusLabel(_tmStatus(_sbGet(row, ["status", "Status"]), calculatedStatus)),
+    status: calculatedStatus,
+    statusLabel: _tmStatusLabel(calculatedStatus),
     createdAt: _sbGet(row, ["created_at", "createdAt"]) || null,
     updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
     createdById: _tmText(_sbGet(row, ["created_by_id", "createdById"]), 120),
@@ -38895,7 +38896,11 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
     const query = norm(_tmText(req.query?.q || "", 200));
     const currentUser = await _tmCurrentMember(req);
     let tickets = await _tmLoadAllTickets();
-    tickets = tickets.filter((ticket) => _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView));
+    const canReviewArchived = _taskManagementViewIsAdmin(req, req.taskManagementView);
+    tickets = tickets.filter((ticket) => {
+      if (ticket?.isArchived) return _tmSameMember(ticket, currentUser) || canReviewArchived;
+      return _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
+    });
 
     // Edit/Admin users manage every department section. View users receive only
     // projects that contain a person task assigned directly to them.
@@ -39439,14 +39444,18 @@ app.post("/api/task-management/:id/mark-delivered", requireAuth, requireTaskMana
 app.patch("/api/task-management/:id/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    if (req.taskManagementView !== "delegated") {
-      return res.status(403).json({ ok: false, error: "Projects can be archived from Delegated Tasks only." });
-    }
     const ticketId = String(req.params.id || "").trim();
     const ticket = await _tmLoadTicketById(ticketId);
     if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
     const currentUser = await _tmCurrentMember(req);
-    if (!_tmSameMember(ticket, currentUser) && !_taskManagementViewIsAdmin(req, "delegated")) {
+    const isCurrentViewAdmin = _taskManagementViewIsAdmin(req, req.taskManagementView);
+    const isAvailable = ticket.isArchived
+      ? (_tmSameMember(ticket, currentUser) || isCurrentViewAdmin)
+      : _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
+    if (!isAvailable) {
+      return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
+    }
+    if (!_tmSameMember(ticket, currentUser) && !isCurrentViewAdmin) {
       return res.status(403).json({ ok: false, error: "Only the project creator or an admin can archive it." });
     }
 
@@ -39481,23 +39490,23 @@ app.delete("/api/task-management/:id", requireAuth, requireTaskManagementView(),
   res.set("Cache-Control", "no-store");
   try {
     if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
-    if (req.taskManagementView !== "delegated") {
-      return res.status(403).json({ ok: false, error: "Projects can be deleted from Delegated Tasks only." });
-    }
-
     const ticketId = String(req.params.id || "").trim();
     if (!ticketId) return res.status(400).json({ ok: false, error: "Missing project ID." });
     const ticket = await _tmLoadTicketById(ticketId);
     if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
 
     const currentUser = await _tmCurrentMember(req);
-    if (!_tmTicketBelongsToView(ticket, currentUser, "delegated")) {
-      return res.status(403).json({ ok: false, error: "This project is not available in Delegated Tasks." });
+    const isCurrentViewAdmin = _taskManagementViewIsAdmin(req, req.taskManagementView);
+    const isAvailable = ticket.isArchived
+      ? (_tmSameMember(ticket, currentUser) || isCurrentViewAdmin)
+      : _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
+    if (!isAvailable) {
+      return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
     }
 
-    let authorized = _taskManagementViewIsAdmin(req, "delegated");
+    let authorized = isCurrentViewAdmin;
     if (!authorized) {
-      const adminPages = [_taskManagementViewAccessPage("delegated"), "Task Management"].filter(Boolean);
+      const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
       authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
     }
     if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
@@ -39782,7 +39791,7 @@ app.patch("/api/task-management/assignments/:id/work", requireAuth, requireTaskM
     }
 
     const status = _tmStatus(req.body?.status, "");
-    if (!["not_started", "in_progress", "rejected", "completed", "cancelled"].includes(status)) {
+    if (!["not_started", "in_progress", "rejected", "completed"].includes(status)) {
       return res.status(400).json({ ok: false, error: "A valid task status is required." });
     }
     const rejectionReason = _tmText(req.body?.rejectionReason, 4000);
@@ -39868,7 +39877,7 @@ app.patch("/api/task-management/sections/:id/work", requireAuth, requireTaskMana
     }
 
     const status = _tmStatus(req.body?.status, "");
-    if (!["not_started", "in_progress", "rejected", "completed", "cancelled"].includes(status)) {
+    if (!["not_started", "in_progress", "rejected", "completed"].includes(status)) {
       return res.status(400).json({ ok: false, error: "A valid task status is required." });
     }
     const rejectionReason = _tmText(req.body?.rejectionReason, 4000);
@@ -39945,7 +39954,9 @@ app.patch("/api/task-management/sections/:id", requireAuth, requireTaskManagemen
     const requestedStatus = req.body && Object.prototype.hasOwnProperty.call(req.body, "status")
       ? _tmStatus(req.body.status, "")
       : "";
-    if (!requestedStatus) return res.status(400).json({ ok: false, error: "A valid section status is required." });
+    if (!["not_started", "in_progress", "rejected", "completed"].includes(requestedStatus)) {
+      return res.status(400).json({ ok: false, error: "A valid section status is required." });
+    }
 
     // A block can start only after the blocks directly connected to it are
     // completed. Older tickets without saved arrows still fall back to their

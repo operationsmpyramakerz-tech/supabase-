@@ -5,7 +5,7 @@
   const escapeHtml = (value) => String(value ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const norm = (value) => String(value ?? '').trim().toLowerCase();
-  const statusLabel = (value) => ({ not_started: 'Not started', in_progress: 'In progress', completed: 'Completed', cancelled: 'Cancelled' }[value] || 'Not started');
+  const statusLabel = (value) => ({ not_started: 'Not started', in_progress: 'In progress', rejected: 'Rejected', completed: 'Completed', cancelled: 'Cancelled' }[value] || 'Not started');
   const statusIcon = (value) => ({ not_started: 'circle', in_progress: 'activity', rejected: 'x-octagon', completed: 'check-circle', cancelled: 'slash' }[value] || 'circle');
   const statusClass = (value) => `tm-status--${String(value || 'not_started').replace(/[^a-z_]/g, '')}`;
   const sectionStatusLabel = (value) => ({ not_started: 'Not started', in_progress: 'In progress', rejected: 'Rejected', completed: 'Done', cancelled: 'Cancelled' }[value] || 'Not started');
@@ -120,6 +120,8 @@
     departments: [],
     activeStatus: 'all',
     activeDepartment: 'all',
+    activeFilterStatus: 'all',
+    activePriority: 'all',
     query: '',
     selectedTicket: null,
     selectedSection: null,
@@ -185,6 +187,7 @@
   const updateOverlay = $('tmUpdateSectionOverlay');
   const workPageOverlay = $('tmWorkPageOverlay');
   const rejectReasonOverlay = $('tmRejectReasonOverlay');
+  const rejectedInfoOverlay = $('tmRejectedInfoOverlay');
   const metaForm = $('tmTicketMetaForm');
   const blockForm = $('tmBlockEditorForm');
   const adminForm = $('tmAdminVerifyForm');
@@ -379,12 +382,27 @@
     grid.innerHTML = '<div class="modern-loading" role="status"><div class="modern-loading__spinner" aria-hidden="true"></div><div class="modern-loading__text">Loading projects <span class="modern-loading__dots" aria-hidden="true"><span></span><span></span><span></span></span></div></div>';
   }
 
-  function statusPill(status) {
+  function ticketRejectedReason(ticket = {}) {
+    const rejected = (ticket.sections || []).find((section) => section.status === 'rejected' && String(section.rejectionReason || '').trim());
+    return String(rejected?.rejectionReason || '').trim();
+  }
+
+  function statusPill(status, ticket = null) {
+    if (ticket && status === 'rejected') {
+      return `<button type="button" class="tm-status-pill tm-status-pill--clickable ${statusClass(status)}" data-tm-rejected-ticket="${escapeHtml(ticket.id)}" aria-label="View rejected reason"><i data-feather="${statusIcon(status)}"></i>${escapeHtml(statusLabel(status))}</button>`;
+    }
     return `<span class="tm-status-pill ${statusClass(status)}"><i data-feather="${statusIcon(status)}"></i>${escapeHtml(statusLabel(status))}</span>`;
   }
 
   function ticketMatches(ticket) {
-    if (state.activeStatus !== 'all' && ticket.status !== state.activeStatus) return false;
+    if (state.activeStatus === 'archived') {
+      if (!ticket.isArchived) return false;
+    } else {
+      if (ticket.isArchived) return false;
+      if (state.activeStatus !== 'all' && ticket.status !== state.activeStatus) return false;
+    }
+    if (state.activeFilterStatus !== 'all' && ticket.status !== state.activeFilterStatus) return false;
+    if (state.activePriority !== 'all' && priorityKey(ticket.priority) !== state.activePriority) return false;
     if (state.activeDepartment !== 'all') {
       const matchesDepartment = (ticket.sections || []).some((section) => norm(section.department) === state.activeDepartment);
       if (!matchesDepartment) return false;
@@ -430,41 +448,59 @@
 
   function renderDepartmentFilter() {
     if (!departmentFilter || !departmentFilterPanel || !departmentFilterBtn) return;
+    modernSelectControllers.forEach((controller) => {
+      if (!controller?.shell?.isConnected || departmentFilterPanel.contains(controller.shell)) modernSelectControllers.delete(controller);
+    });
     const departments = availableDepartments();
     if (state.activeDepartment !== 'all' && !departments.some(([key]) => key === state.activeDepartment)) state.activeDepartment = 'all';
-    const statusTickets = (state.tickets || []).filter((ticket) => state.activeStatus === 'all' || ticket.status === state.activeStatus);
-    const countFor = (departmentKey) => statusTickets.filter((ticket) => (ticket.sections || []).some((section) => norm(section.department) === departmentKey)).length;
-    const total = statusTickets.length;
-    const active = state.activeDepartment !== 'all';
+    const active = state.activeDepartment !== 'all' || state.activeFilterStatus !== 'all' || state.activePriority !== 'all';
     departmentFilter.classList.toggle('is-filtered', active);
     if (departmentFilterDot) departmentFilterDot.hidden = !active;
-    departmentFilterBtn.setAttribute('aria-label', active ? 'Department filter is active' : 'Filter projects by department');
+    departmentFilterBtn.setAttribute('aria-label', active ? 'Task filters are active' : 'Filter tasks');
     departmentFilterPanel.innerHTML = `
       <div class="tm-department-filter__panel-head">
-        <div><div class="tm-department-filter__panel-title">Filter by department</div><div class="tm-department-filter__panel-sub">${total} project${total === 1 ? '' : 's'} in this status</div></div>
-        ${active ? '<button type="button" class="tm-department-filter__clear" data-tm-clear-department>Clear</button>' : ''}
+        <div><div class="tm-department-filter__panel-title">Filter tasks</div><div class="tm-department-filter__panel-sub">Combine department, status, and priority filters.</div></div>
+        ${active ? '<button type="button" class="tm-department-filter__clear" data-tm-clear-filters>Clear all</button>' : ''}
       </div>
-      <div class="tm-department-filter__options">
-        <button type="button" class="tm-department-filter__option${state.activeDepartment === 'all' ? ' is-active' : ''}" data-tm-department="all" role="menuitemradio" aria-checked="${state.activeDepartment === 'all'}">
-          <span class="tm-department-filter__option-icon"><i data-feather="layers"></i></span>
-          <span class="tm-department-filter__option-body"><b>All departments</b><small>${total} project${total === 1 ? '' : 's'}</small></span>
-          <span class="tm-department-filter__option-check"><i data-feather="check"></i></span>
-        </button>
-        ${departments.map(([key, label]) => {
-          const count = countFor(key);
-          const selected = state.activeDepartment === key;
-          return `<button type="button" class="tm-department-filter__option${selected ? ' is-active' : ''}" data-tm-department="${escapeHtml(key)}" role="menuitemradio" aria-checked="${selected}">
-            <span class="tm-department-filter__option-icon"><i data-feather="briefcase"></i></span>
-            <span class="tm-department-filter__option-body"><b>${escapeHtml(label)}</b><small>${count} project${count === 1 ? '' : 's'}</small></span>
-            <span class="tm-department-filter__option-check"><i data-feather="check"></i></span>
-          </button>`;
-        }).join('') || '<div class="tm-department-filter__empty">No departments are available yet.</div>'}
+      <div class="tm-task-filter-grid">
+        <label class="tm-field">
+          <span>By department</span>
+          <select id="tmFilterDepartmentSelect">
+            <option value="all">All departments</option>
+            ${departments.map(([key, label]) => `<option value="${escapeHtml(key)}"${state.activeDepartment === key ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="tm-field">
+          <span>By status</span>
+          <select id="tmFilterStatusSelect" data-tm-status-select="true">
+            <option value="all">All statuses</option>
+            <option value="not_started"${state.activeFilterStatus === 'not_started' ? ' selected' : ''}>Not started</option>
+            <option value="in_progress"${state.activeFilterStatus === 'in_progress' ? ' selected' : ''}>In progress</option>
+            <option value="rejected"${state.activeFilterStatus === 'rejected' ? ' selected' : ''}>Rejected</option>
+            <option value="completed"${state.activeFilterStatus === 'completed' ? ' selected' : ''}>Done</option>
+          </select>
+        </label>
+        <label class="tm-field">
+          <span>By priority</span>
+          <select id="tmFilterPrioritySelect" data-tm-priority-select="true">
+            <option value="all">All priorities</option>
+            <option value="low"${state.activePriority === 'low' ? ' selected' : ''}>Low</option>
+            <option value="normal"${state.activePriority === 'normal' ? ' selected' : ''}>Normal</option>
+            <option value="high"${state.activePriority === 'high' ? ' selected' : ''}>High</option>
+            <option value="urgent"${state.activePriority === 'urgent' ? ' selected' : ''}>Urgent</option>
+          </select>
+        </label>
       </div>`;
+    enhanceAllModernSelects(departmentFilterPanel);
     hydrateIcons(departmentFilterPanel);
   }
 
+  function agendaTickets() {
+    return (state.tickets || []).filter((ticket) => state.activeStatus === 'archived' ? !!ticket.isArchived : !ticket.isArchived);
+  }
+
   function ticketsOnDate(dateKey) {
-    return (state.tickets || []).filter((ticket) => localDateKey(ticket.dueDate) === dateKey);
+    return agendaTickets().filter((ticket) => localDateKey(ticket.dueDate) === dateKey);
   }
 
   function renderAgendaTask(ticket) {
@@ -486,7 +522,7 @@
     if (calendarMonth) calendarMonth.textContent = monthDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
     const counts = new Map();
-    (state.tickets || []).forEach((ticket) => {
+    agendaTickets().forEach((ticket) => {
       const key = localDateKey(ticket.dueDate);
       if (key) counts.set(key, (counts.get(key) || 0) + 1);
     });
@@ -506,7 +542,7 @@
       if (selected) classes.push('is-selected');
       if (key === today) classes.push('is-today');
       cells.push(`<button type="button" class="${classes.join(' ')}" data-tm-calendar-day="${key}" aria-label="${escapeHtml(date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}${count ? `, ${count} task${count === 1 ? '' : 's'}` : ', no tasks'}" aria-selected="${selected ? 'true' : 'false'}">
-        <span>${date.getDate()}</span>${count ? `<b>${count}</b>` : ''}
+        <span>${date.getDate()}</span>
       </button>`);
     }
     calendarGrid.innerHTML = cells.join('');
@@ -551,19 +587,15 @@
     }
 
     grid.innerHTML = state.filtered.map((ticket) => {
-      const departments = [...new Set((ticket.sections || []).map((section) => section.department).filter(Boolean))].slice(0, 3);
-      const extra = Math.max(0, (ticket.sections || []).length - departments.length);
       const stats = ticketViewerStats(ticket);
       return `
-        <article class="tm-ticket-card${ticket.isArchived ? ' tm-ticket-card--archived' : ''}" role="button" tabindex="0" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
+        <article class="tm-ticket-card ${statusClass(ticket.status)}${ticket.isArchived ? ' tm-ticket-card--archived' : ''}" role="button" tabindex="0" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
           <div class="tm-ticket-card__top">
             <div class="tm-ticket-thumb tm-ticket-thumb--${escapeHtml(priorityKey(ticket.priority))}" title="${escapeHtml(ticket.priority || 'Normal')} priority"><i data-feather="git-branch"></i></div>
-            <div class="tm-ticket-main"><div class="tm-ticket-code">${escapeHtml(ticket.ticketCode)}</div><h2>${escapeHtml(ticket.title)}</h2><p>${escapeHtml(ticket.createdByName || '—')} · ${escapeHtml(formatDate(ticket.createdAt))}</p></div>
-            <div class="tm-ticket-card__state">${ticket.isArchived ? '<span class="tm-archive-pill"><i data-feather="archive"></i>Archived</span>' : statusPill(ticket.status)}</div>
+            <div class="tm-ticket-main"><div class="tm-ticket-code">${escapeHtml(ticket.ticketCode)}</div><h2>${escapeHtml(ticket.title)}</h2></div>
+            <div class="tm-ticket-card__state">${ticket.isArchived ? '<span class="tm-archive-pill"><i data-feather="archive"></i>Archived</span>' : statusPill(ticket.status, ticket)}</div>
           </div>
-          <div class="tm-ticket-card__divider"></div>
-          <div class="tm-ticket-route"><span class="tm-ticket-route__label">Execution route</span><div class="tm-department-chips">${departments.map((department) => `<span>${escapeHtml(department)}</span>`).join('')}${extra ? `<span class="tm-department-chips__more">+${extra}</span>` : ''}</div></div>
-          <div class="tm-ticket-card__bottom"><div class="tm-progress"><div class="tm-progress__head"><span>${stats.completed}/${stats.total} ${state.view === 'my' ? 'tasks' : 'sections'} completed</span><b>${stats.progress}%</b></div><div class="tm-progress__rail"><span style="width:${stats.progress}%"></span></div></div>${creatorButtonMarkup(ticket)}</div>
+          <div class="tm-ticket-card__bottom"><div class="tm-progress ${statusClass(ticket.status)}" data-status="${escapeHtml(ticket.status)}"><div class="tm-progress__head"><span>${stats.completed}/${stats.total} ${state.view === 'my' ? 'tasks' : 'sections'} completed</span><b>${stats.progress}%</b></div><div class="tm-progress__rail"><span style="width:${stats.progress}%"></span></div></div>${creatorButtonMarkup(ticket)}</div>
         </article>`;
     }).join('');
     hydrateIcons(grid);
@@ -635,24 +667,26 @@
         shell.classList.toggle('tm-select--status', isWorkStatus);
         const selectedPriority = priorityKey(selected?.value || selected?.textContent || 'normal');
         const selectedStatus = workStatusKey(selected?.value || selected?.textContent || 'not_started');
+        const selectedIsAll = String(selected?.value || '').toLowerCase() === 'all';
         if (value) {
-          value.innerHTML = isPriority
+          value.innerHTML = isPriority && !selectedIsAll
             ? `<span class="tm-priority-marker tm-priority-marker--${selectedPriority}" aria-hidden="true"></span><span>${escapeHtml(selected?.textContent?.trim() || 'Select')}</span>`
-            : isWorkStatus
+            : isWorkStatus && !selectedIsAll
               ? `<span class="tm-work-status-marker tm-work-status-marker--${selectedStatus}" aria-hidden="true"></span><span>${escapeHtml(selected?.textContent?.trim() || 'Select')}</span>`
               : escapeHtml(selected?.textContent?.trim() || 'Select');
         }
-        trigger.dataset.priority = isPriority ? selectedPriority : '';
-        trigger.dataset.status = isWorkStatus ? selectedStatus : '';
+        trigger.dataset.priority = isPriority && !selectedIsAll ? selectedPriority : '';
+        trigger.dataset.status = isWorkStatus && !selectedIsAll ? selectedStatus : '';
         trigger.classList.toggle('is-placeholder', !selected?.value);
         trigger.setAttribute('aria-disabled', select.disabled ? 'true' : 'false');
         trigger.tabIndex = select.disabled ? -1 : 0;
         menu.innerHTML = options.map((option, index) => {
           const optionPriority = priorityKey(option.value || option.textContent || 'normal');
           const optionStatus = workStatusKey(option.value || option.textContent || 'not_started');
+          const optionIsAll = String(option.value || '').toLowerCase() === 'all';
           return `
-          <div class="tm-select__option${option.selected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}${isPriority ? ` tm-select__option--priority tm-select__option--${optionPriority}` : ''}${isWorkStatus ? ` tm-select__option--status tm-select__option--status-${optionStatus}` : ''}" role="option" tabindex="-1" data-tm-select-index="${index}" aria-selected="${option.selected}" aria-disabled="${option.disabled}">
-            <span class="tm-select__option-main">${isPriority ? `<span class="tm-priority-marker tm-priority-marker--${optionPriority}" aria-hidden="true"></span>` : isWorkStatus ? `<span class="tm-work-status-marker tm-work-status-marker--${optionStatus}" aria-hidden="true"></span>` : ''}<span>${escapeHtml(option.textContent?.trim() || '')}</span></span><i data-feather="check"></i>
+          <div class="tm-select__option${option.selected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}${isPriority && !optionIsAll ? ` tm-select__option--priority tm-select__option--${optionPriority}` : ''}${isWorkStatus && !optionIsAll ? ` tm-select__option--status tm-select__option--status-${optionStatus}` : ''}" role="option" tabindex="-1" data-tm-select-index="${index}" aria-selected="${option.selected}" aria-disabled="${option.disabled}">
+            <span class="tm-select__option-main">${isPriority && !optionIsAll ? `<span class="tm-priority-marker tm-priority-marker--${optionPriority}" aria-hidden="true"></span>` : isWorkStatus && !optionIsAll ? `<span class="tm-work-status-marker tm-work-status-marker--${optionStatus}" aria-hidden="true"></span>` : ''}<span>${escapeHtml(option.textContent?.trim() || '')}</span></span><i data-feather="check"></i>
           </div>`;
         }).join('');
         hydrateIcons(shell);
@@ -2516,12 +2550,19 @@
     $('tmWorkflowTitle').textContent = ticket.title || 'Project workflow';
     $('tmWorkflowSub').textContent = `${ticket.createdByName || '—'} · Created ${formatDate(ticket.createdAt)}`;
     const editButton = $('tmEditProjectBtn');
-    if (editButton) editButton.hidden = state.view === 'my' || state.view === 'delegated';
+    if (editButton) editButton.hidden = true;
     const projectMore = $('tmProjectMore');
-    if (projectMore) projectMore.hidden = state.view !== 'delegated';
+    if (projectMore) projectMore.hidden = false;
     closeProjectMenu();
+    const currentUser = state.currentUser || window.__tmCurrentUser || {};
+    const isProjectCreator = (currentUser?.id && String(ticket.createdById || '') === String(currentUser.id))
+      || (!!norm(currentUser?.name || '') && norm(currentUser.name) === norm(ticket.createdByName || ''));
+    const canManageProjectArchive = !!window.__tmIsPageAdmin || isProjectCreator;
+    const editMenuItem = $('tmProjectEditMenuItem');
+    if (editMenuItem) editMenuItem.hidden = !!ticket.isArchived && state.view !== 'delegated';
     const archiveMenuItem = $('tmProjectArchiveMenuItem');
     if (archiveMenuItem) {
+      archiveMenuItem.hidden = !canManageProjectArchive;
       archiveMenuItem.querySelector('span').textContent = ticket.isArchived ? 'Unarchive' : 'Archive';
       const icon = archiveMenuItem.querySelector('i');
       if (icon) icon.setAttribute('data-feather', ticket.isArchived ? 'rotate-ccw' : 'archive');
@@ -2661,7 +2702,7 @@
 
   async function archiveSelectedProject() {
     const ticket = state.selectedTicket;
-    if (!ticket || state.view !== 'delegated') return;
+    if (!ticket) return;
     closeProjectMenu();
     const archived = !ticket.isArchived;
     const message = archived
@@ -2757,7 +2798,7 @@
   }
 
   async function confirmAndDeleteProject(ticket, adminPassword = '') {
-    if (!ticket || state.view !== 'delegated') return;
+    if (!ticket) return;
     const confirmed = window.OpsDeleteConfirm
       ? await window.OpsDeleteConfirm.confirm({
           title: 'Delete project?',
@@ -2794,7 +2835,7 @@
 
   function requestProjectDelete() {
     const ticket = state.selectedTicket;
-    if (!ticket || state.view !== 'delegated') return;
+    if (!ticket) return;
     if (window.__tmIsPageAdmin) {
       confirmAndDeleteProject(ticket, '');
       return;
@@ -2838,6 +2879,14 @@
     }
   }
 
+
+  function openRejectedInfo(ticket) {
+    if (!ticket || ticket.status !== 'rejected') return;
+    const message = $('tmRejectedInfoMessage');
+    if (message) message.textContent = ticketRejectedReason(ticket) || 'No rejected reason was provided.';
+    setOverlay(rejectedInfoOverlay, true);
+    hydrateIcons(rejectedInfoOverlay);
+  }
 
   function renderWorkFilePreview() {
     const preview = $('tmWorkFilePreview');
@@ -3270,13 +3319,20 @@
       toggleDepartmentFilter();
     });
     departmentFilterPanel?.addEventListener('click', (event) => {
-      const clear = event.target.closest('[data-tm-clear-department]');
-      const option = event.target.closest('[data-tm-department]');
-      if (!clear && !option) return;
+      const clear = event.target.closest('[data-tm-clear-filters]');
+      if (!clear) return;
       event.preventDefault();
       event.stopPropagation();
-      state.activeDepartment = clear ? 'all' : (option.dataset.tmDepartment || 'all');
+      state.activeDepartment = 'all';
+      state.activeFilterStatus = 'all';
+      state.activePriority = 'all';
       closeDepartmentFilter();
+      renderTickets();
+    });
+    departmentFilterPanel?.addEventListener('change', (event) => {
+      if (event.target.id === 'tmFilterDepartmentSelect') state.activeDepartment = event.target.value || 'all';
+      if (event.target.id === 'tmFilterStatusSelect') state.activeFilterStatus = event.target.value || 'all';
+      if (event.target.id === 'tmFilterPrioritySelect') state.activePriority = event.target.value || 'all';
       renderTickets();
     });
 
@@ -3400,6 +3456,7 @@
         if (which === 'workflow') { closeProjectMenu(); setOverlay(workflowOverlay, false); }
         if (which === 'section-details') { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         if (which === 'work-page') { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; state.workFile = null; setOverlay(workPageOverlay, false); }
+        if (which === 'rejected-info') setOverlay(rejectedInfoOverlay, false);
         if (which === 'reject-reason') {
           if ($('tmWorkStatusInput')?.value === 'rejected' && !String(state.rejectedReasonDraft || '').trim()) {
             $('tmWorkStatusInput').value = state.workPreviousStatus || 'not_started';
@@ -3482,6 +3539,15 @@
         return;
       }
 
+      const rejectedStatus = event.target.closest('[data-tm-rejected-ticket]');
+      if (rejectedStatus) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ticket = state.tickets.find((item) => String(item.id) === String(rejectedStatus.dataset.tmRejectedTicket));
+        if (ticket) openRejectedInfo(ticket);
+        return;
+      }
+
       const creatorButton = event.target.closest('[data-tm-creator-id]');
       if (creatorButton) {
         event.preventDefault();
@@ -3506,7 +3572,8 @@
         const openSelect = [...modernSelectControllers].find((controller) => !controller.menu.hidden);
         if (openSelect) { openSelect.close({ focus: true }); return; }
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }
-        if (isOverlayOpen(rejectReasonOverlay)) setOverlay(rejectReasonOverlay, false);
+        if (isOverlayOpen(rejectedInfoOverlay)) setOverlay(rejectedInfoOverlay, false);
+        else if (isOverlayOpen(rejectReasonOverlay)) setOverlay(rejectReasonOverlay, false);
         else if (isOverlayOpen(workPageOverlay)) { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; setOverlay(workPageOverlay, false); }
         else if (isOverlayOpen(sectionDetailsOverlay)) { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         else if (isOverlayOpen(updateOverlay)) setOverlay(updateOverlay, false);
