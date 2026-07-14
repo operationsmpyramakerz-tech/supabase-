@@ -7840,10 +7840,7 @@ function expandAllowedForUI(list = []) {
   }
   if (set.has("Expenses Users")) {
     set.add("Expenses Users");
-  }  if (set.has("Tasks")) {
-    set.add("Tasks");
-  }
-  // Task Management follows the same parent-shell model as Events. The old
+  }  // Task Management follows the same parent-shell model as Events. The old
   // broad parent remains compatible, while each new child stays independent.
   if (set.has("Task Management")) {
     ["All Tasks", "My Tasks", "Delegated Tasks", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"].forEach((value) => set.add(value));
@@ -7950,7 +7947,6 @@ function firstAllowedPath(allowed = []) {
   if (list.includes("Products")) return "/products";
   if (list.includes("Proposals")) return "/proposals";
   if (list.includes("Kits")) return "/kits";
-  if (list.includes("Tasks")) return "/tasks";
   if (list.includes("History")) return "/history";
   if (list.includes("Backup")) return "/backup";
   if (list.includes("Mail") || list.includes("Messages") || list.includes("Emails")) return "/messages";
@@ -9397,8 +9393,8 @@ app.get("/kits", requireAuth, requirePage(["Kits", "Products"]), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "kits.html"));
 });
 
-app.get("/tasks", requireAuth, requirePage("Tasks"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "tasks.html"));
+app.get("/tasks", requireAuth, (req, res) => {
+  res.redirect(302, "/task-management");
 });
 
 // Department task management — cross-department tickets and ordered workflow sections.
@@ -37444,7 +37440,7 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
               type: "task",
               title: "Task updated",
               body: title,
-              url: "/tasks",
+              url: "/task-management",
               ts,
               read: false,
             });

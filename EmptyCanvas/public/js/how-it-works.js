@@ -1300,9 +1300,9 @@
       id: 'tasks',
       type: 'page',
       icon: 'check-square',
-      access: ['Tasks', '/tasks'],
+      access: ['Task Management', 'All Tasks', 'My Tasks', 'Delegated Tasks', '/task-management'],
       title: 'Tasks',
-      route: '/tasks',
+      route: '/task-management',
       eyebrow: 'Execution follow-up',
       overview:
         'Tasks manages personal work and delegated follow-up with statuses, due dates, priority, media, and checklist points.',

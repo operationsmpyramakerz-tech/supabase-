@@ -409,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const row = document.createElement('a');
       row.className = 'home-item home-item--task';
-      row.href = '/tasks';
+      row.href = '/task-management';
       row.innerHTML = `
         <div class="home-item__main">
           <div class="home-item__eyebrow">Task</div>
@@ -706,9 +706,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasAccess('Stocktaking') || hasAccess('/stocktaking')) {
       actions.push(buildAction('/stocktaking', 'archive', 'Stocktaking', 'View your school inventory'));
     }
-    if (hasAccess('Tasks') || hasAccess('/tasks')) {
-      actions.push(buildAction('/tasks', 'check-square', 'Tasks', 'Your department task board'));
-    }
     if (hasAccess('Expenses') || hasAccess('/expenses')) {
       actions.push(buildAction('/expenses', 'dollar-sign', 'Expenses', 'Your cash in/out records'));
     }
@@ -778,7 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderScopeChips(allowed);
 
     // Decide what blocks to show
-    const canTasks = hasAccess('Tasks') || hasAccess('/tasks');
+    const canTasks = false; // Legacy Tasks page was retired in favor of Task Management.
     const canOrders = hasAccess('Current Orders') || hasAccess('/orders');
     const canRequested = hasAccess('Requested Orders') || hasAccess('/orders/requested');
     const canStock = hasAccess('Stocktaking') || hasAccess('/stocktaking');

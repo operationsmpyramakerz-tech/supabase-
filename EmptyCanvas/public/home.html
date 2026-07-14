@@ -61,8 +61,7 @@
           <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
           <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses Users</span></a></li>
           <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
-          <li><a class="nav-link" href="/tasks"><i data-feather="check-square"></i><span class="nav-label">Tasks</span></a></li>
-        </ul>
+          </ul>
       </nav>
 
       <div class="sidebar-footer">
@@ -114,13 +113,7 @@
           </div>
 
           <div class="stats home-kpis" id="homeKpis">
-            <a class="stat home-kpi" href="/tasks" data-block="tasks">
-              <div class="stat__label">My tasks</div>
-              <div class="stat__value" id="kpiTasksMain">—</div>
-              <div class="home-kpi-sub" id="kpiTasksSub">—</div>
-            </a>
-
-            <a class="stat home-kpi" href="/orders" data-block="orders">
+<a class="stat home-kpi" href="/orders" data-block="orders">
               <div class="stat__label">Current orders</div>
               <div class="stat__value" id="kpiOrdersMain">—</div>
               <div class="home-kpi-sub" id="kpiOrdersSub">—</div>
@@ -147,18 +140,7 @@
         </section>
 
         <section class="home-analytics" aria-label="Analytics">
-          <section class="card home-analytics-card home-analytics-card--dark" data-block="tasks" aria-label="Tasks analytics">
-            <div class="card-header home-card-header home-card-header--light">
-              <div>
-                <h2>Tasks analytics</h2>
-                <div class="card-subtitle" id="tasksChartSubtitle">Completion, overdue and workload</div>
-              </div>
-              <span class="home-card-chip home-card-chip--light">Focus</span>
-            </div>
-            <div class="home-chart home-chart--donut" id="homeTasksChart"></div>
-          </section>
-
-          <section class="card home-analytics-card home-analytics-card--orange" data-block="orders" aria-label="Orders flow">
+<section class="card home-analytics-card home-analytics-card--orange" data-block="orders" aria-label="Orders flow">
             <div class="card-header home-card-header">
               <div>
                 <h2>Orders flow</h2>
@@ -183,20 +165,7 @@
 
         <!-- Grid -->
         <section class="home-grid" aria-label="Details">
-
-          <!-- Tasks list -->
-          <section class="card home-list-card home-list-card--tasks" data-block="tasks" aria-label="Next tasks">
-            <div class="card-header">
-              <div>
-                <h2>Next tasks</h2>
-                <div class="card-subtitle" id="tasksSubtitle">—</div>
-              </div>
-              <a class="btn btn-primary btn-sm" href="/tasks">Open</a>
-            </div>
-            <div class="home-list" id="homeTasksList"></div>
-          </section>
-
-          <!-- Orders list -->
+<!-- Orders list -->
           <section class="card home-list-card home-list-card--orders" data-block="orders" aria-label="Recent orders">
             <div class="card-header">
               <div>

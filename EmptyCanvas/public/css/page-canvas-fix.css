@@ -109,36 +109,6 @@ main.expenses-layout > :is(#userTabs,#usersInfo){
   box-shadow: none !important;
 }
 
-/* Tasks contains legacy full-screen white wrappers. Keep only the shared page canvas. */
-body.tasks-v2 .main-content,
-body.tasks-v2 .tasks-v2-panel,
-body.tasks-v2 .tasks-v2-panel--list{
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-body.tasks-v2 .tasks-v2-panel,
-body.tasks-v2 .tasks-v2-panel--list{
-  min-height: 0 !important;
-}
-
-body.tasks-v2 .main-header,
-body.tasks-v2 .main-header .header-row1,
-body.tasks-v2 .main-header .header-row1 .left,
-body.tasks-v2 .main-header .header-row1 .right,
-body.tasks-v2 .main-header .topbar-right{
-  background: transparent !important;
-  border-bottom-color: transparent !important;
-  box-shadow: none !important;
-}
-
-@media (max-width:900px){
-  :root{
-    --ops-page-canvas-gap: 10px;
-    --ops-page-canvas-radius: 24px;
-  }
-}
-
 /* =========================================================
    2026-07-08: Content-only page surfaces
    - Remove the global translucent full-page canvas from every page.

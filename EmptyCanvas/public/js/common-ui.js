@@ -837,8 +837,6 @@ document.addEventListener('DOMContentLoaded', () => {
     { name: 'product-kits', test: (url) => url.pathname === '/api/products/kits', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-current', test: (url) => url.pathname === '/api/orders', ttlMs: 2 * 60 * 1000 },
     { name: 'orders-requested', test: (url) => url.pathname === '/api/orders/requested', ttlMs: 2 * 60 * 1000 },
-    { name: 'tasks-users', test: (url) => url.pathname === '/api/tasks/users', ttlMs: 10 * 60 * 1000 },
-    { name: 'tasks-list', test: (url) => url.pathname === '/api/tasks', ttlMs: 90 * 1000 },
     { name: 'task-detail', test: (url) => /^\/api\/tasks\/[^/]+$/.test(url.pathname), ttlMs: 90 * 1000 },
     { name: 'stock', test: (url) => url.pathname === '/api/stock', ttlMs: 2 * 60 * 1000 },
     { name: 'expenses-main', test: (url) => url.pathname === '/api/expenses', ttlMs: 2 * 60 * 1000 },
@@ -1123,9 +1121,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (hasAllowedPage(allowedPages, ['Events', 'Event Requests', 'Event Components', '/events', '/events/requests', '/events/components'])) {
       urls.push('/api/events/components?activeOnly=1');
-    }
-    if (hasAllowedPage(allowedPages, ['Tasks', '/tasks'])) {
-      urls.push('/api/tasks?scope=mine', '/api/tasks/users');
     }
     if (hasAllowedPage(allowedPages, ['Task Management', 'All Tasks', 'My Tasks', 'Delegated Tasks', '/task-management', '/task-management/all-tasks', '/task-management/my-tasks', '/task-management/delegated-tasks'])) {
       const taskManagementView = hasAllowedPage(allowedPages, ['All Tasks', '/task-management/all-tasks'])
@@ -2338,7 +2333,6 @@ if (document.querySelector('.sidebar')) {
     'product kits': 'a[href="/kits"]',
     'saved kits': 'a[href="/kits"]',
     'saved quotations': 'a[href="/proposals"]',
-    'tasks': 'a[href="/tasks"]',
     'task management': 'a[href="/task-management"]',
     'task-management': 'a[href="/task-management"]',
     'taskmanagement': 'a[href="/task-management"]',
@@ -3289,7 +3283,6 @@ if (document.querySelector('.sidebar')) {
     { href: '/proposals', label: 'Proposals', icon: 'file-text' },
     { href: '/expenses', label: 'Expenses', icon: 'dollar-sign' },
     { href: '/expenses/users', label: 'Expenses by Users', icon: 'credit-card' },
-    { href: '/tasks', label: 'Tasks', icon: 'check-square' },
     { href: '/task-management', label: 'Task Management', icon: 'git-branch' },
     { href: '/kpis', label: 'KPIs', icon: 'bar-chart-2' },
     { href: '/user-access', label: 'Users Center', icon: 'shield' },
@@ -6406,7 +6399,6 @@ function deriveOpsShellTitle(path) {
   })();
   const map = [
     ['/home', 'Home'],
-    ['/tasks', 'Tasks'],
     ['/orders/new', 'Create New Order'],
     ['/orders/requested', 'Operations Orders'],
     ['/orders/maintenance-orders', 'Maintenance Orders'],
