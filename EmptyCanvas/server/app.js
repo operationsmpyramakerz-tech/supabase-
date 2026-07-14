@@ -38650,6 +38650,10 @@ function _tmSerializeTicket(row = {}, sectionRows = [], edgeRows = []) {
     updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
     createdById: _tmText(_sbGet(row, ["created_by_id", "createdById"]), 120),
     createdByName: _tmText(_sbGet(row, ["created_by_name", "createdByName"]), 180) || "—",
+    isArchived: !!_sbGet(row, ["is_archived", "isArchived"]),
+    archivedAt: _sbGet(row, ["archived_at", "archivedAt"]) || null,
+    archivedById: _tmText(_sbGet(row, ["archived_by_id", "archivedById"]), 120),
+    archivedByName: _tmText(_sbGet(row, ["archived_by_name", "archivedByName"]), 180),
     sections,
     edges,
     sectionsCount: sections.length,
@@ -38807,6 +38811,9 @@ function _tmSameMember(ticket = {}, currentMember = {}) {
 }
 
 function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
+  // Archived projects stay available to their creator in Delegated Tasks, but
+  // disappear from company-wide and assignee views without deleting any data.
+  if (ticket?.isArchived && view !== "delegated") return false;
   if (view === "all") return true;
   if (view === "delegated") return _tmSameMember(ticket, currentMember);
   if (view === "my") {
@@ -38814,6 +38821,59 @@ function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
     return !!(department && (ticket.sections || []).some((section) => _tmSameText(section?.department || "", department)));
   }
   return false;
+}
+
+async function _tmAssignmentsForCurrentMember(currentMember = {}) {
+  const currentId = _tmText(currentMember?.id, 120);
+  if (currentId) {
+    return await supabaseDb.select(_tmAssignmentsTable(), {
+      select: "id,section_id,assignee_id,assignee_name,status",
+      assignee_id: `eq.${_sbRestFilterValue(currentId)}`,
+      limit: 5000,
+      order: "id.asc",
+    });
+  }
+  const rows = await supabaseDb.selectAll(_tmAssignmentsTable(), { limit: 20000, order: "id.asc" });
+  return (rows || []).filter((row) =>
+    _tmSameText(_sbGet(row, ["assignee_name", "assigneeName"]), currentMember?.name || ""));
+}
+
+function _tmTicketViewerProgress(ticket = {}, currentMember = {}, view = "", canManageDepartment = false, assignmentRows = []) {
+  if (view !== "my") {
+    return {
+      viewerSectionsCount: Number(ticket.sectionsCount || 0),
+      viewerCompletedCount: Number(ticket.completedCount || 0),
+      viewerProgress: Number(ticket.progress || 0),
+    };
+  }
+
+  if (canManageDepartment) {
+    const department = _tmText(currentMember?.department || "", 120);
+    const relevant = (ticket.sections || []).filter((section) =>
+      department && _tmSameText(section?.department || "", department));
+    const completed = relevant.filter((section) => _tmStatus(section?.status) === "completed").length;
+    return {
+      viewerSectionsCount: relevant.length,
+      viewerCompletedCount: completed,
+      viewerProgress: relevant.length ? Math.round((completed / relevant.length) * 100) : 0,
+    };
+  }
+
+  const sectionIds = new Set((ticket.sections || []).map((section) => String(section?.id || "")).filter(Boolean));
+  const seen = new Set();
+  const relevant = (assignmentRows || []).filter((row) => {
+    const sectionId = String(_sbGet(row, ["section_id", "sectionId"]) || "").trim();
+    const id = String(_sbGet(row, ["id", "ID"]) || `${sectionId}:${_sbGet(row, ["assignee_id", "assigneeId", "assignee_name", "assigneeName"]) || ""}`).trim();
+    if (!sectionIds.has(sectionId) || !id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  const completed = relevant.filter((row) => _tmStatus(_sbGet(row, ["status", "Status"])) === "completed").length;
+  return {
+    viewerSectionsCount: relevant.length,
+    viewerCompletedCount: completed,
+    viewerProgress: relevant.length ? Math.round((completed / relevant.length) * 100) : 0,
+  };
 }
 
 function _tmCanUpdateSectionInView(req, ticket = {}, section = {}, currentMember = {}, view = "") {
@@ -38839,22 +38899,10 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
 
     // Edit/Admin users manage every department section. View users receive only
     // projects that contain a person task assigned directly to them.
+    let viewerAssignmentRows = [];
     if (req.taskManagementView === "my" && _tmTaskAccessLevel(req) === "view" && !_taskManagementViewIsAdmin(req, "my")) {
-      let assignmentRows = [];
-      const currentId = _tmText(currentUser?.id, 120);
-      if (currentId) {
-        assignmentRows = await supabaseDb.select(_tmAssignmentsTable(), {
-          select: "section_id,assignee_id,assignee_name",
-          assignee_id: `eq.${_sbRestFilterValue(currentId)}`,
-          limit: 5000,
-          order: "id.asc",
-        });
-      } else {
-        assignmentRows = await supabaseDb.selectAll(_tmAssignmentsTable(), { limit: 20000, order: "id.asc" });
-        assignmentRows = (assignmentRows || []).filter((row) =>
-          _tmSameText(_sbGet(row, ["assignee_name", "assigneeName"]), currentUser?.name || ""));
-      }
-      const assignedSectionIds = new Set((assignmentRows || [])
+      viewerAssignmentRows = await _tmAssignmentsForCurrentMember(currentUser);
+      const assignedSectionIds = new Set((viewerAssignmentRows || [])
         .map((row) => String(_sbGet(row, ["section_id", "sectionId"]) || "").trim())
         .filter(Boolean));
       tickets = tickets.filter((ticket) =>
@@ -38872,7 +38920,10 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
       });
     }
     const canManageDepartment = req.taskManagementView === "my" && _tmCanManageDepartmentWork(req);
-    tickets = tickets.map((ticket) => _tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment));
+    tickets = tickets.map((ticket) => ({
+      ..._tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment),
+      ..._tmTicketViewerProgress(ticket, currentUser, req.taskManagementView, canManageDepartment, viewerAssignmentRows),
+    }));
     return res.json({ ok: true, tickets });
   } catch (error) {
     console.error("[task-management] list error:", error?.details || error?.message || error);
@@ -38890,7 +38941,16 @@ app.get("/api/task-management/:id", requireAuth, requireTaskManagementView(), as
       return res.status(403).json({ ok: false, error: "This ticket is not available in the selected Task Management view." });
     }
     const canManageDepartment = req.taskManagementView === "my" && _tmCanManageDepartmentWork(req);
-    return res.json({ ok: true, ticket: _tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment) });
+    const viewerAssignmentRows = req.taskManagementView === "my" && !canManageDepartment
+      ? await _tmAssignmentsForCurrentMember(currentUser)
+      : [];
+    return res.json({
+      ok: true,
+      ticket: {
+        ..._tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment),
+        ..._tmTicketViewerProgress(ticket, currentUser, req.taskManagementView, canManageDepartment, viewerAssignmentRows),
+      },
+    });
   } catch (error) {
     console.error("[task-management] detail error:", error?.details || error?.message || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load ticket." });
@@ -39321,6 +39381,101 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
   }
 });
 
+
+
+app.post("/api/task-management/:id/mark-delivered", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (req.taskManagementView !== "delegated") {
+      return res.status(403).json({ ok: false, error: "Projects can be marked as delivered from Delegated Tasks only." });
+    }
+    const ticketId = String(req.params.id || "").trim();
+    const ticket = await _tmLoadTicketById(ticketId);
+    if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
+    const currentUser = await _tmCurrentMember(req);
+    if (!_tmSameMember(ticket, currentUser) && !_taskManagementViewIsAdmin(req, "delegated")) {
+      return res.status(403).json({ ok: false, error: "Only the project creator or an admin can mark it as delivered." });
+    }
+    if (ticket.isArchived) {
+      return res.status(409).json({ ok: false, error: "Unarchive this project before marking it as delivered." });
+    }
+
+    const now = new Date().toISOString();
+    const sectionIds = (ticket.sections || []).map((section) => String(section.id || "")).filter(Boolean);
+    if (sectionIds.length) {
+      await supabaseDb.updateByIds(_tmSectionsTable(), sectionIds, {
+        status: "completed",
+        completed_at: now,
+        completed_by_id: currentUser.id || null,
+        completed_by_name: currentUser.name || null,
+        updated_at: now,
+      });
+
+      const assignmentGroups = await Promise.all(sectionIds.map((sectionId) => supabaseDb.select(_tmAssignmentsTable(), {
+        select: "id,section_id,status",
+        section_id: `eq.${_sbRestFilterValue(sectionId)}`,
+        limit: 1000,
+        order: "id.asc",
+      })));
+      const assignmentIds = assignmentGroups.flat()
+        .map((row) => String(_sbGet(row, ["id", "ID"]) || ""))
+        .filter(Boolean);
+      if (assignmentIds.length) {
+        await supabaseDb.updateByIds(_tmAssignmentsTable(), assignmentIds, {
+          status: "completed",
+          updated_at: now,
+        });
+      }
+    }
+    await supabaseDb.updateById(_tmTicketsTable(), ticketId, { status: "completed", updated_at: now });
+    const updated = await _tmLoadTicketById(ticketId);
+    return res.json({ ok: true, ticket: updated });
+  } catch (error) {
+    console.error("[task-management] mark delivered error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to mark the project as delivered." });
+  }
+});
+
+app.patch("/api/task-management/:id/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (req.taskManagementView !== "delegated") {
+      return res.status(403).json({ ok: false, error: "Projects can be archived from Delegated Tasks only." });
+    }
+    const ticketId = String(req.params.id || "").trim();
+    const ticket = await _tmLoadTicketById(ticketId);
+    if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
+    const currentUser = await _tmCurrentMember(req);
+    if (!_tmSameMember(ticket, currentUser) && !_taskManagementViewIsAdmin(req, "delegated")) {
+      return res.status(403).json({ ok: false, error: "Only the project creator or an admin can archive it." });
+    }
+
+    const archived = req.body?.archived !== false;
+    const now = new Date().toISOString();
+    try {
+      await supabaseDb.updateById(_tmTicketsTable(), ticketId, {
+        is_archived: archived,
+        archived_at: archived ? now : null,
+        archived_by_id: archived ? (currentUser.id || null) : null,
+        archived_by_name: archived ? (currentUser.name || null) : null,
+        updated_at: now,
+      });
+    } catch (error) {
+      const detail = String(error?.message || "");
+      if (/is_archived|archived_at|archived_by_/i.test(detail)) {
+        const missing = new Error("The project archive fields are not installed. Run the supplied Task Management archive SQL migration, then refresh the page.");
+        missing.status = 503;
+        throw missing;
+      }
+      throw error;
+    }
+    const updated = await _tmLoadTicketById(ticketId);
+    return res.json({ ok: true, ticket: updated });
+  } catch (error) {
+    console.error("[task-management] archive project error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to archive the project." });
+  }
+});
 
 app.delete("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");

@@ -151,6 +151,7 @@
     pendingEditTicket: null,
     pendingDeleteTicket: null,
     pendingAdminAction: 'edit',
+    projectMenuOpen: false,
     accessLevel: 'view',
     workSection: null,
     workAssignment: null,
@@ -198,6 +199,9 @@
   const workflowStage = $('tmWorkflowStage');
   const modernSelectControllers = new Set();
   let modernSelectCounter = 0;
+  const creatorProfileCache = new Map();
+  let creatorProfilePopover = null;
+  let creatorProfileListenersBound = false;
 
   function hydrateIcons(root = document) {
     try { if (window.feather) window.feather.replace({ width: 18, height: 18 }); } catch {}
@@ -233,6 +237,141 @@
     overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
     syncModalState();
     if (open) window.setTimeout(() => overlay.querySelector('input:not(.tm-select__native), textarea, .tm-select__button, button')?.focus(), 45);
+  }
+
+
+  function creatorInitials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'U';
+    return `${parts[0]?.[0] || ''}${parts.length > 1 ? parts[parts.length - 1]?.[0] || '' : ''}`.toUpperCase() || 'U';
+  }
+
+  function creatorSafeUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw, window.location.origin);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch { return ''; }
+  }
+
+  function creatorButtonMarkup(ticket) {
+    const userId = String(ticket?.createdById || ticket?.createdByName || '').trim();
+    const name = String(ticket?.createdByName || 'Creator').trim() || 'Creator';
+    return `<button class="co-right-ico co-creator-btn tm-ticket-creator-btn" type="button" data-tm-creator-id="${escapeHtml(userId)}" data-tm-creator-name="${escapeHtml(name)}" aria-label="Created by ${escapeHtml(name)}" title="Created by ${escapeHtml(name)}"><i data-feather="user"></i></button>`;
+  }
+
+  function creatorProfileFields(profile = {}) {
+    const values = [
+      ['Name', profile.name || profile.username],
+      ['Department', profile.department],
+      ['Position', profile.position],
+      ['Phone', profile.phone],
+      ['Email', profile.email],
+      ['Employee Code', profile.employeeCode],
+    ].filter(([, value]) => String(value || '').trim());
+    if (!values.length) return '<div class="creator-profile-empty creator-profile-empty--fields"><i data-feather="info"></i><span>No profile details available.</span></div>';
+    return values.map(([label, value]) => `<div class="creator-profile-field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+  }
+
+  function creatorProfileFiles(profile = {}) {
+    const files = (Array.isArray(profile.filesMedia) ? profile.filesMedia : [])
+      .map((file, index) => ({ name: String(file?.name || `File ${index + 1}`), url: creatorSafeUrl(file?.url) }))
+      .filter((file) => file.name || file.url);
+    if (!files.length) return '<div class="creator-profile-empty"><i data-feather="folder"></i><span>No files or media.</span></div>';
+    return files.map((file) => file.url
+      ? `<a class="creator-profile-file" href="${escapeHtml(file.url)}" target="_blank" rel="noopener noreferrer"><span class="creator-profile-file-icon"><i data-feather="paperclip"></i></span><span class="creator-profile-file-body"><span class="creator-profile-file-name">${escapeHtml(file.name)}</span></span><span class="creator-profile-file-open"><i data-feather="external-link"></i></span></a>`
+      : `<div class="creator-profile-file creator-profile-file--disabled"><span class="creator-profile-file-icon"><i data-feather="paperclip"></i></span><span class="creator-profile-file-body"><span class="creator-profile-file-name">${escapeHtml(file.name)}</span></span></div>`).join('');
+  }
+
+  function renderCreatorProfile(profile = {}, fallbackName = '', mode = 'ready') {
+    const name = String(profile.name || fallbackName || 'Creator').trim() || 'Creator';
+    const department = String(profile.department || '').trim();
+    const position = String(profile.position || '').trim();
+    const subtitle = [position, department].filter(Boolean).join(' • ') || 'Team member';
+    const photo = creatorSafeUrl(profile.photoUrl);
+    const avatar = photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(name)}" decoding="async" />` : `<span>${escapeHtml(creatorInitials(name))}</span>`;
+    const content = mode === 'loading'
+      ? '<div class="creator-profile-state"><i class="loading-icon" data-feather="loader"></i><span>Loading user details...</span></div>'
+      : mode === 'error'
+        ? '<div class="creator-profile-state creator-profile-state--error"><i data-feather="alert-circle"></i><span>Could not load this user details.</span></div>'
+        : `<div class="creator-profile-section-title">Profile details</div><div class="creator-profile-fields">${creatorProfileFields(profile)}</div><div class="creator-profile-section-title creator-profile-section-title--files">Files &amp; media</div><div class="creator-profile-files">${creatorProfileFiles(profile)}</div>`;
+    return `<div class="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile"><button type="button" class="creator-profile-close" aria-label="Close"><span class="creator-profile-close-x" aria-hidden="true">&times;</span></button><div class="creator-profile-head"><div class="creator-profile-avatar ${photo ? 'has-image' : ''}">${avatar}</div><div class="creator-profile-title-wrap"><div class="creator-profile-kicker">Created by</div><div class="creator-profile-name">${escapeHtml(name)}</div><div class="creator-profile-subtitle">${escapeHtml(subtitle)}</div></div></div>${content}</div>`;
+  }
+
+  function closeCreatorProfile() {
+    if (!creatorProfilePopover) return;
+    creatorProfilePopover.classList.remove('is-open');
+    creatorProfilePopover.setAttribute('aria-hidden', 'true');
+  }
+
+  function ensureCreatorProfile() {
+    if (creatorProfilePopover) return creatorProfilePopover;
+    creatorProfilePopover = document.createElement('div');
+    creatorProfilePopover.className = 'creator-profile-popover tm-creator-profile-popover';
+    creatorProfilePopover.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(creatorProfilePopover);
+    creatorProfilePopover.addEventListener('click', (event) => { if (event.target.closest('.creator-profile-close')) closeCreatorProfile(); });
+    if (!creatorProfileListenersBound) {
+      creatorProfileListenersBound = true;
+      document.addEventListener('pointerdown', (event) => {
+        if (!creatorProfilePopover?.classList.contains('is-open')) return;
+        if (creatorProfilePopover.contains(event.target) || event.target.closest?.('[data-tm-creator-id]')) return;
+        closeCreatorProfile();
+      }, true);
+      window.addEventListener('resize', closeCreatorProfile);
+    }
+    return creatorProfilePopover;
+  }
+
+  function positionCreatorProfile(anchor) {
+    const pop = ensureCreatorProfile();
+    const rect = anchor.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    const margin = 12;
+    const width = popRect.width || 360;
+    const height = popRect.height || 430;
+    let left = Math.min(Math.max(margin, rect.right - width), Math.max(margin, window.innerWidth - width - margin));
+    let top = rect.bottom + 10;
+    if (top + height > window.innerHeight - margin) top = rect.top - height - 10;
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(Math.max(margin, top))}px`;
+  }
+
+  async function openCreatorProfile(anchor, userId, fallbackName = '') {
+    const pop = ensureCreatorProfile();
+    const key = String(userId || fallbackName || '').trim();
+    const name = String(fallbackName || 'Creator').trim() || 'Creator';
+    pop.innerHTML = renderCreatorProfile({ name }, name, 'loading');
+    pop.classList.add('is-open');
+    pop.setAttribute('aria-hidden', 'false');
+    hydrateIcons(pop);
+    requestAnimationFrame(() => positionCreatorProfile(anchor));
+    try {
+      let profile = creatorProfileCache.get(key);
+      if (!profile) {
+        const response = await fetch(`/api/team-members/${encodeURIComponent(key)}/public`, { credentials: 'same-origin', cache: 'no-store' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || 'Profile request failed.');
+        profile = payload;
+        creatorProfileCache.set(key, profile);
+      }
+      pop.innerHTML = renderCreatorProfile(profile, name, 'ready');
+    } catch {
+      pop.innerHTML = renderCreatorProfile({ name }, name, 'error');
+    }
+    hydrateIcons(pop);
+    requestAnimationFrame(() => positionCreatorProfile(anchor));
+  }
+
+  function ticketViewerStats(ticket = {}) {
+    const scoped = state.view === 'my';
+    const total = scoped && Number.isFinite(Number(ticket.viewerSectionsCount)) ? Number(ticket.viewerSectionsCount) : Number(ticket.sectionsCount || 0);
+    const completed = scoped && Number.isFinite(Number(ticket.viewerCompletedCount)) ? Number(ticket.viewerCompletedCount) : Number(ticket.completedCount || 0);
+    const progress = scoped && Number.isFinite(Number(ticket.viewerProgress))
+      ? Number(ticket.viewerProgress)
+      : (total ? Math.round((completed / total) * 100) : 0);
+    return { total: Math.max(0, total), completed: Math.max(0, completed), progress: clamp(progress, 0, 100) };
   }
 
   function renderLoading() {
@@ -414,17 +553,17 @@
     grid.innerHTML = state.filtered.map((ticket) => {
       const departments = [...new Set((ticket.sections || []).map((section) => section.department).filter(Boolean))].slice(0, 3);
       const extra = Math.max(0, (ticket.sections || []).length - departments.length);
-      const progress = Math.max(0, Math.min(100, Number(ticket.progress) || 0));
+      const stats = ticketViewerStats(ticket);
       return `
-        <article class="tm-ticket-card" role="button" tabindex="0" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
+        <article class="tm-ticket-card${ticket.isArchived ? ' tm-ticket-card--archived' : ''}" role="button" tabindex="0" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
           <div class="tm-ticket-card__top">
             <div class="tm-ticket-thumb tm-ticket-thumb--${escapeHtml(priorityKey(ticket.priority))}" title="${escapeHtml(ticket.priority || 'Normal')} priority"><i data-feather="git-branch"></i></div>
             <div class="tm-ticket-main"><div class="tm-ticket-code">${escapeHtml(ticket.ticketCode)}</div><h2>${escapeHtml(ticket.title)}</h2><p>${escapeHtml(ticket.createdByName || '—')} · ${escapeHtml(formatDate(ticket.createdAt))}</p></div>
-            ${statusPill(ticket.status)}
+            <div class="tm-ticket-card__state">${ticket.isArchived ? '<span class="tm-archive-pill"><i data-feather="archive"></i>Archived</span>' : statusPill(ticket.status)}</div>
           </div>
           <div class="tm-ticket-card__divider"></div>
           <div class="tm-ticket-route"><span class="tm-ticket-route__label">Execution route</span><div class="tm-department-chips">${departments.map((department) => `<span>${escapeHtml(department)}</span>`).join('')}${extra ? `<span class="tm-department-chips__more">+${extra}</span>` : ''}</div></div>
-          <div class="tm-ticket-card__bottom"><div class="tm-progress"><div class="tm-progress__head"><span>${ticket.completedCount || 0}/${ticket.sectionsCount || 0} sections completed</span><b>${progress}%</b></div><div class="tm-progress__rail"><span style="width:${progress}%"></span></div></div><div class="tm-ticket-card__go"><i data-feather="arrow-right"></i></div></div>
+          <div class="tm-ticket-card__bottom"><div class="tm-progress"><div class="tm-progress__head"><span>${stats.completed}/${stats.total} ${state.view === 'my' ? 'tasks' : 'sections'} completed</span><b>${stats.progress}%</b></div><div class="tm-progress__rail"><span style="width:${stats.progress}%"></span></div></div>${creatorButtonMarkup(ticket)}</div>
         </article>`;
     }).join('');
     hydrateIcons(grid);
@@ -1965,7 +2104,7 @@
       <article class="tm-workflow-card tm-builder-block tm-builder-block--viewer${interactive ? ' tm-workflow-card--interactive' : ''}${mineClass}${teamClass} ${statusClass(section.status)}" data-section-id="${escapeHtml(section.id)}"${interactiveAttrs} style="left:${Math.round(section.x)}px;top:${Math.round(section.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top">
           <div class="tm-builder-block__number">${escapeHtml(number)}</div>
-          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>${belongsToMyDepartment ? 'Your department section' : `Workflow block ${escapeHtml(number)}`}</small></div>
+          <div class="tm-builder-block__title"><b>${escapeHtml(section.department || 'Department')}</b><small>Workflow block ${escapeHtml(number)}</small></div>
           <span class="tm-status-pill ${statusClass(section.status)}"><i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}</span>
         </div>
         <div class="tm-builder-block__body tm-workflow-card__body">
@@ -2376,14 +2515,26 @@
     $('tmWorkflowCode').textContent = ticket.ticketCode || 'TKT';
     $('tmWorkflowTitle').textContent = ticket.title || 'Project workflow';
     $('tmWorkflowSub').textContent = `${ticket.createdByName || '—'} · Created ${formatDate(ticket.createdAt)}`;
-    const statusEl = $('tmWorkflowStatus');
-    statusEl.className = `tm-status-pill ${statusClass(ticket.status)}`;
-    statusEl.innerHTML = `<i data-feather="${statusIcon(ticket.status)}"></i>${escapeHtml(statusLabel(ticket.status))}`;
     const editButton = $('tmEditProjectBtn');
-    if (editButton) editButton.hidden = state.view === 'my';
-    const deleteButton = $('tmDeleteProjectBtn');
-    if (deleteButton) deleteButton.hidden = state.view !== 'delegated';
-    $('tmWorkflowSummary').innerHTML = `<div><span>Objective</span><p>${escapeHtml(ticket.description || 'No additional context provided.')}</p></div><div><span>Priority</span><b class="tm-priority tm-priority--${escapeHtml(norm(ticket.priority || 'normal'))}">${escapeHtml(ticket.priority || 'Normal')}</b></div><div><span>Target date</span><b>${escapeHtml(formatDate(ticket.dueDate))}</b></div><div><span>Progress</span><b>${ticket.completedCount || 0}/${ticket.sectionsCount || 0} complete</b></div>`;
+    if (editButton) editButton.hidden = state.view === 'my' || state.view === 'delegated';
+    const projectMore = $('tmProjectMore');
+    if (projectMore) projectMore.hidden = state.view !== 'delegated';
+    closeProjectMenu();
+    const archiveMenuItem = $('tmProjectArchiveMenuItem');
+    if (archiveMenuItem) {
+      archiveMenuItem.querySelector('span').textContent = ticket.isArchived ? 'Unarchive' : 'Archive';
+      const icon = archiveMenuItem.querySelector('i');
+      if (icon) icon.setAttribute('data-feather', ticket.isArchived ? 'rotate-ccw' : 'archive');
+    }
+    const deliveryActions = $('tmWorkflowDeliveryActions');
+    const markDeliveredButton = $('tmMarkDeliveredBtn');
+    if (deliveryActions) deliveryActions.hidden = state.view !== 'delegated';
+    if (markDeliveredButton) {
+      markDeliveredButton.disabled = !!ticket.isArchived || ticket.status === 'completed';
+      markDeliveredButton.querySelector('span').textContent = ticket.status === 'completed' ? 'Delivered' : 'Mark as delivered';
+    }
+    const stats = ticketViewerStats(ticket);
+    $('tmWorkflowSummary').innerHTML = `<div><span>Objective</span><p>${escapeHtml(ticket.description || 'No additional context provided.')}</p></div><div><span>Priority</span><b class="tm-priority tm-priority--${escapeHtml(norm(ticket.priority || 'normal'))}">${escapeHtml(ticket.priority || 'Normal')}</b></div><div><span>Target date</span><b>${escapeHtml(formatDate(ticket.dueDate))}</b></div><div><span>Progress</span><b>${stats.completed}/${stats.total} complete</b></div>`;
 
     const flow = $('tmWorkflowFlow');
     const { nodes, edges } = graphLayout(ticket);
@@ -2484,6 +2635,88 @@
     });
   }
 
+
+  function closeProjectMenu({ focus = false } = {}) {
+    const menu = $('tmProjectMoreMenu');
+    const trigger = $('tmProjectMoreBtn');
+    if (menu) menu.hidden = true;
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    state.projectMenuOpen = false;
+    if (focus) trigger?.focus();
+  }
+
+  function toggleProjectMenu() {
+    const menu = $('tmProjectMoreMenu');
+    const trigger = $('tmProjectMoreBtn');
+    if (!menu || !trigger || trigger.closest('[hidden]')) return;
+    const open = menu.hidden;
+    closeProjectMenu();
+    if (open) {
+      menu.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      state.projectMenuOpen = true;
+      window.requestAnimationFrame(() => menu.querySelector('button')?.focus());
+    }
+  }
+
+  async function archiveSelectedProject() {
+    const ticket = state.selectedTicket;
+    if (!ticket || state.view !== 'delegated') return;
+    closeProjectMenu();
+    const archived = !ticket.isArchived;
+    const message = archived
+      ? 'Archive this project? It will remain saved in Delegated Tasks but will no longer be visible in All Tasks or My Tasks.'
+      : 'Unarchive this project and make it visible again to assigned users?';
+    if (!window.confirm(message)) return;
+    const button = $('tmProjectArchiveMenuItem');
+    if (button) button.disabled = true;
+    try {
+      const data = await api(`/api/task-management/${encodeURIComponent(ticket.id)}/archive`, {
+        method: 'PATCH',
+        body: { view: state.view, archived },
+      });
+      const updated = data.ticket || { ...ticket, isArchived: archived };
+      state.selectedTicket = updated;
+      state.tickets = (state.tickets || []).map((item) => String(item.id) === String(updated.id) ? updated : item);
+      renderTickets();
+      renderWorkflow(updated);
+      showToast('success', archived ? 'Project archived' : 'Project restored', archived
+        ? 'The project is saved and hidden from other users.'
+        : 'The project is visible to assigned users again.');
+    } catch (error) {
+      showToast('error', archived ? 'Archive failed' : 'Restore failed', error.message || 'Could not update the project archive state.');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function markSelectedProjectDelivered() {
+    const ticket = state.selectedTicket;
+    if (!ticket || state.view !== 'delegated' || ticket.isArchived || ticket.status === 'completed') return;
+    const confirmed = window.confirm('Mark this project as delivered? Every department section and team-member task will be changed to Done.');
+    if (!confirmed) return;
+    const button = $('tmMarkDeliveredBtn');
+    if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
+    try {
+      const data = await api(`/api/task-management/${encodeURIComponent(ticket.id)}/mark-delivered`, {
+        method: 'POST',
+        body: { view: state.view },
+      });
+      const updated = data.ticket || ticket;
+      state.selectedTicket = updated;
+      state.tickets = (state.tickets || []).map((item) => String(item.id) === String(updated.id) ? updated : item);
+      state.peopleWorkflowCache.clear();
+      renderTickets();
+      renderWorkflow(updated);
+      showToast('success', 'Project delivered', 'All project sections and assigned team tasks are now Done.');
+    } catch (error) {
+      showToast('error', 'Could not mark as delivered', error.message || 'Please try again.');
+      if (button) button.disabled = false;
+    } finally {
+      if (button) button.removeAttribute('aria-busy');
+    }
+  }
+
   function setAdminVerifyMode(action = 'edit') {
     const isDelete = action === 'delete';
     state.pendingAdminAction = isDelete ? 'delete' : 'edit';
@@ -2537,7 +2770,7 @@
       : window.confirm(`Delete ${ticket.title || ticket.ticketCode || 'this project'} permanently?`);
     if (!confirmed) return;
 
-    const button = $('tmDeleteProjectBtn');
+    const button = $('tmProjectDeleteMenuItem');
     if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
     try {
       await api(`/api/task-management/${encodeURIComponent(ticket.id)}`, {
@@ -3014,7 +3247,11 @@
     $('tmTaskDetailsBtn')?.addEventListener('click', openTicketMeta);
     $('tmSaveWorkflowBtn')?.addEventListener('click', saveWorkflowBuilder);
     $('tmEditProjectBtn')?.addEventListener('click', requestProjectEdit);
-    $('tmDeleteProjectBtn')?.addEventListener('click', requestProjectDelete);
+    $('tmProjectMoreBtn')?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); toggleProjectMenu(); });
+    $('tmProjectEditMenuItem')?.addEventListener('click', () => { closeProjectMenu(); requestProjectEdit(); });
+    $('tmProjectArchiveMenuItem')?.addEventListener('click', archiveSelectedProject);
+    $('tmProjectDeleteMenuItem')?.addEventListener('click', () => { closeProjectMenu(); requestProjectDelete(); });
+    $('tmMarkDeliveredBtn')?.addEventListener('click', markSelectedProjectDelivered);
     $('tmOpenWorkPageBtn')?.addEventListener('click', openWorkPageFromDetails);
     $('tmOpenPeopleWorkflowBtn')?.addEventListener('click', openPeopleWorkflow);
     $('tmRejectedReasonBtn')?.addEventListener('click', openRejectedReason);
@@ -3160,7 +3397,7 @@
           state.blockUploadPending = false;
           setOverlay(blockOverlay, false);
         }
-        if (which === 'workflow') setOverlay(workflowOverlay, false);
+        if (which === 'workflow') { closeProjectMenu(); setOverlay(workflowOverlay, false); }
         if (which === 'section-details') { state.readonlySection = null; state.readonlyAssignment = null; setOverlay(sectionDetailsOverlay, false); }
         if (which === 'work-page') { state.workSection = null; state.workAssignment = null; state.workTargetType = 'section'; state.workFile = null; setOverlay(workPageOverlay, false); }
         if (which === 'reject-reason') {
@@ -3245,6 +3482,16 @@
         return;
       }
 
+      const creatorButton = event.target.closest('[data-tm-creator-id]');
+      if (creatorButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        openCreatorProfile(creatorButton, creatorButton.dataset.tmCreatorId, creatorButton.dataset.tmCreatorName || 'Creator');
+        return;
+      }
+
+      if (state.projectMenuOpen && !event.target.closest('#tmProjectMore')) closeProjectMenu();
+
       const ticketCard = event.target.closest('[data-ticket-id]');
       if (ticketCard) {
         const ticket = state.tickets.find((item) => String(item.id) === String(ticketCard.dataset.ticketId));
@@ -3254,6 +3501,8 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
+        if (state.projectMenuOpen) { closeProjectMenu({ focus: true }); return; }
+        if (creatorProfilePopover?.classList.contains('is-open')) { closeCreatorProfile(); return; }
         const openSelect = [...modernSelectControllers].find((controller) => !controller.menu.hidden);
         if (openSelect) { openSelect.close({ focus: true }); return; }
         if (departmentFilterPanel && !departmentFilterPanel.hidden) { closeDepartmentFilter({ focus: true }); return; }

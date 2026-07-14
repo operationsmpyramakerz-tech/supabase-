@@ -2412,3 +2412,109 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
 @media(max-width:760px){
   .task-management-page .tm-dialog--work-page{padding:16px;}
 }
+
+/* Project actions, creator profile button, archive and delivery controls v20 */
+.task-management-page .tm-ticket-card__state{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  flex:0 0 auto;
+}
+.task-management-page .tm-ticket-creator-btn{
+  box-sizing:border-box!important;
+  flex:0 0 30px!important;
+  width:30px!important;
+  min-width:30px!important;
+  height:30px!important;
+  min-height:30px!important;
+  padding:0!important;
+  margin:0!important;
+  border:1px solid #171717!important;
+  border-radius:50%!important;
+  background:#171717!important;
+  color:#fff!important;
+  display:grid!important;
+  place-items:center!important;
+  box-shadow:0 6px 14px rgba(0,0,0,.16)!important;
+  cursor:pointer;
+}
+.task-management-page .tm-ticket-creator-btn:hover{
+  border-color:#ef7d16!important;
+  background:#ef7d16!important;
+  transform:translateY(-1px);
+}
+.task-management-page .tm-ticket-creator-btn svg{width:14px!important;height:14px!important;stroke-width:2.2!important;}
+.task-management-page .tm-ticket-card--archived{opacity:.82;border-style:dashed;}
+.task-management-page .tm-archive-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:6px 8px;
+  border:1px solid #d7dadd;
+  border-radius:999px;
+  background:#f2f3f4;
+  color:#545b64;
+  font-size:10px;
+  font-weight:900;
+  white-space:nowrap;
+}
+.task-management-page .tm-archive-pill svg{width:12px;height:12px;}
+.task-management-page .tm-project-more{position:relative;flex:0 0 auto;}
+.task-management-page .tm-project-more[hidden]{display:none!important;}
+.task-management-page .tm-project-more__trigger{border-color:#dedede!important;background:#fff!important;color:#171717!important;}
+.task-management-page .tm-project-more__menu{
+  position:absolute;
+  z-index:20;
+  top:calc(100% + 8px);
+  right:0;
+  width:174px;
+  padding:7px;
+  border:1px solid #e4e4e4;
+  border-radius:15px;
+  background:#fff;
+  box-shadow:0 18px 42px rgba(0,0,0,.18);
+}
+.task-management-page .tm-project-more__menu[hidden]{display:none!important;}
+.task-management-page .tm-project-more__menu button{
+  width:100%;
+  min-height:38px;
+  padding:8px 10px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#252525;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  font:inherit;
+  font-size:12px;
+  font-weight:800;
+  text-align:left;
+  cursor:pointer;
+}
+.task-management-page .tm-project-more__menu button:hover,
+.task-management-page .tm-project-more__menu button:focus-visible{outline:0;background:#f4f4f4;}
+.task-management-page .tm-project-more__menu button svg{width:15px;height:15px;}
+.task-management-page .tm-project-more__menu .tm-project-more__danger{color:#d92d27;}
+.task-management-page .tm-project-more__menu .tm-project-more__danger:hover{background:#fff0ef;}
+.task-management-page .tm-workflow-delivery-actions{
+  display:flex;
+  justify-content:flex-end;
+  padding-top:12px;
+}
+.task-management-page .tm-workflow-delivery-actions[hidden]{display:none!important;}
+.task-management-page .tm-btn--delivered{
+  background:#171717;
+  color:#fff;
+  min-width:170px;
+  box-shadow:0 9px 20px rgba(0,0,0,.14);
+}
+.task-management-page .tm-btn--delivered:hover{background:#ef7d16;box-shadow:0 11px 24px rgba(239,125,22,.23);}
+.task-management-page .tm-btn--delivered:disabled{background:#e5e7e9!important;color:#747b84!important;}
+.task-management-page .tm-creator-profile-popover{z-index:12050;}
+@media(max-width:700px){
+  .task-management-page .tm-ticket-creator-btn{width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;}
+  .task-management-page .tm-project-more__menu{position:fixed;top:auto;right:14px;bottom:18px;width:min(260px,calc(100vw - 28px));}
+  .task-management-page .tm-workflow-delivery-actions{padding-bottom:4px;}
+  .task-management-page .tm-btn--delivered{width:100%;}
+}
