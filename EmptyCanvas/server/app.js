@@ -38812,9 +38812,8 @@ function _tmSameMember(ticket = {}, currentMember = {}) {
 }
 
 function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
-  // Archived projects stay available to their creator in Delegated Tasks, but
-  // disappear from company-wide and assignee views without deleting any data.
-  if (ticket?.isArchived && view !== "delegated") return false;
+  // Archived projects remain queryable in their normal views so the All and
+  // Archive tabs can both show them without deleting or duplicating data.
   if (view === "all") return true;
   if (view === "delegated") return _tmSameMember(ticket, currentMember);
   if (view === "my") {
@@ -38896,11 +38895,8 @@ app.get("/api/task-management", requireAuth, requireTaskManagementView(), async 
     const query = norm(_tmText(req.query?.q || "", 200));
     const currentUser = await _tmCurrentMember(req);
     let tickets = await _tmLoadAllTickets();
-    const canReviewArchived = _taskManagementViewIsAdmin(req, req.taskManagementView);
-    tickets = tickets.filter((ticket) => {
-      if (ticket?.isArchived) return _tmSameMember(ticket, currentUser) || canReviewArchived;
-      return _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
-    });
+    tickets = tickets.filter((ticket) =>
+      _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView));
 
     // Edit/Admin users manage every department section. View users receive only
     // projects that contain a person task assigned directly to them.
@@ -39449,15 +39445,16 @@ app.patch("/api/task-management/:id/archive", requireAuth, requireTaskManagement
     if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
     const currentUser = await _tmCurrentMember(req);
     const isCurrentViewAdmin = _taskManagementViewIsAdmin(req, req.taskManagementView);
-    const isAvailable = ticket.isArchived
-      ? (_tmSameMember(ticket, currentUser) || isCurrentViewAdmin)
-      : _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
+    const isAvailable = _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
     if (!isAvailable) {
       return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
     }
-    if (!_tmSameMember(ticket, currentUser) && !isCurrentViewAdmin) {
-      return res.status(403).json({ ok: false, error: "Only the project creator or an admin can archive it." });
+    let authorized = isCurrentViewAdmin;
+    if (!authorized) {
+      const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
+      authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
     }
+    if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
 
     const archived = req.body?.archived !== false;
     const now = new Date().toISOString();
