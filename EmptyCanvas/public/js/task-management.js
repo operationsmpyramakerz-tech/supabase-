@@ -2285,9 +2285,10 @@
       ? ` data-tm-open-team-task="${escapeHtml(node.assignmentId)}" data-parent-section-id="${escapeHtml(node.parentSectionId)}" role="button" tabindex="0" aria-label="${editable ? 'Open' : 'View'} work page for ${escapeHtml(node.assigneeName || 'team member')}"`
       : ' role="group" tabindex="-1" aria-disabled="true"';
     const accessClass = openable ? ' tm-team-task-card--interactive' : ' tm-team-task-card--locked';
-    const ownClass = accessLevel() === 'view' && isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
+    const ownClass = isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
+    const creatorClass = managesWorkflow ? ' tm-team-task-card--creator' : '';
     return `
-      <article class="tm-team-task-card${accessClass}${ownClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
+      <article class="tm-team-task-card${accessClass}${ownClass}${creatorClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
         <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
         <div class="tm-team-task-card__head">
           <span class="tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</span>
@@ -2299,7 +2300,7 @@
           <strong>${escapeHtml(node.task || 'No task details')}</strong>
           <div class="tm-team-task-card__meta"><span><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>${attachment}</div>
         </div>
-        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"><i data-feather="${editable ? 'edit-3' : 'eye'}"></i><span>${managesWorkflow ? 'Edit Team Task' : 'View Task Details'}</span></button><i data-feather="arrow-right"></i></div>` : ''}
+        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"${managesWorkflow ? ` data-tm-edit-team-workflow="${escapeHtml(node.parentSectionId)}"` : ''}><i data-feather="${managesWorkflow ? 'edit-3' : 'eye'}"></i><span>${managesWorkflow ? 'Edit Team Task' : 'View Task Details'}</span></button><i data-feather="arrow-right"></i></div>` : ''}
         <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
@@ -3613,12 +3614,18 @@
       const editAction = event.target.closest('[data-tm-edit-section]');
       if (editAction) { openSectionUpdate(editAction.dataset.tmEditSection); return; }
 
+      const editTeamWorkflow = event.target.closest('[data-tm-edit-team-workflow]');
+      if (editTeamWorkflow) {
+        event.preventDefault();
+        event.stopPropagation();
+        openTeamWorkflowEditor(editTeamWorkflow.dataset.tmEditTeamWorkflow || '');
+        return;
+      }
+
       const teamTaskCard = event.target.closest('[data-tm-open-team-task]');
       if (teamTaskCard && !event.target.closest('a')) {
         const parentSectionId = teamTaskCard.dataset.parentSectionId || '';
-        if (!openTeamWorkflowEditor(parentSectionId)) {
-          openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, parentSectionId);
-        }
+        openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, parentSectionId);
         return;
       }
 
