@@ -40015,6 +40015,29 @@ app.patch("/api/task-management/sections/:id/work", requireAuth, requireTaskMana
     }
 
     await supabaseDb.updateById(_tmSectionsTable(), sectionId, patch);
+
+    // The department manager is the owner of the parent block. Whenever they
+    // change its status, keep every visible team-member card under that block
+    // on the same status. Archived team cards use `cancelled`, so they are
+    // intentionally excluded and remain archived/hidden for their assignees.
+    const teamAssignmentRows = await supabaseDb.select(_tmAssignmentsTable(), {
+      select: "id,status",
+      section_id: `eq.${_sbRestFilterValue(sectionId)}`,
+      limit: 1000,
+      order: "id.asc",
+    });
+    const activeTeamAssignmentIds = (teamAssignmentRows || [])
+      .filter((row) => _tmStatus(_sbGet(row, ["status", "Status"])) !== "cancelled")
+      .map((row) => String(_sbGet(row, ["id", "ID"]) || ""))
+      .filter(Boolean);
+    if (activeTeamAssignmentIds.length) {
+      await supabaseDb.updateByIds(_tmAssignmentsTable(), activeTeamAssignmentIds, {
+        status,
+        rejection_reason: status === "rejected" ? rejectionReason : null,
+        updated_at: now,
+      });
+    }
+
     const updatedTicket = await _tmSyncTicketStatus(ticket.id) || await _tmLoadTicketById(ticket.id);
     const updatedSection = (updatedTicket?.sections || []).find((item) => String(item.id) === sectionId) || null;
     return res.json({ ok: true, ticket: updatedTicket, section: updatedSection });

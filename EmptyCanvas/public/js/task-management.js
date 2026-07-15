@@ -2362,7 +2362,15 @@
     const isOwnMyTask = state.view === 'my' && isMyDepartmentSection(section);
     const canManageDepartment = isOwnMyTask && canEditDepartmentWork();
     const openWorkButton = $('tmOpenWorkPageBtn');
-    if (openWorkButton) openWorkButton.hidden = !canManageDepartment;
+    if (openWorkButton) {
+      // Opening a team-member task can leave this shared modal button disabled.
+      // Always restore the department manager action when department details open.
+      openWorkButton.hidden = !canManageDepartment;
+      openWorkButton.disabled = !canManageDepartment;
+      openWorkButton.title = canManageDepartment ? 'Open the department work page' : '';
+      const label = openWorkButton.querySelector('span');
+      if (label) label.textContent = 'Open Work Page';
+    }
     const assignTeamButton = $('tmOpenPeopleWorkflowBtn');
     if (assignTeamButton) {
       assignTeamButton.hidden = !canManageDepartment;
