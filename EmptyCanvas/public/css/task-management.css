@@ -3004,3 +3004,44 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
     animation:none!important;
   }
 }
+
+/* Task Management card perimeter frame hotfix v26 --------------------------
+   Older status-strip rules leave an explicit 3px height on the same pseudo
+   element. `inset` alone does not cancel that height, so completed/in-progress
+   states collapse to a line above the card. Reset every sizing/mask property
+   explicitly so the status layer always occupies the complete perimeter. */
+.task-management-page .tm-workflow-board .tm-workflow-card::before,
+.task-management-page .tm-team-task-card::before{
+  top:-2px!important;
+  right:-2px!important;
+  bottom:-2px!important;
+  left:-2px!important;
+  width:auto!important;
+  height:auto!important;
+  min-width:0!important;
+  min-height:0!important;
+  max-width:none!important;
+  max-height:none!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+  border:0!important;
+  border-radius:18px!important;
+  -webkit-mask:none!important;
+  mask:none!important;
+  clip-path:none!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card::after,
+.task-management-page .tm-team-task-card::after{
+  top:0!important;
+  right:0!important;
+  bottom:0!important;
+  left:0!important;
+  width:auto!important;
+  height:auto!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+  border-radius:16px!important;
+  -webkit-mask:none!important;
+  mask:none!important;
+  clip-path:none!important;
+}
