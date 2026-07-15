@@ -3216,3 +3216,17 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
 }
 .task-management-page .tm-team-task-card__open{margin-left:auto;color:#5f5f5f!important;font-size:10px!important;font-weight:850!important;}
 .task-management-page .tm-team-task-card--interactive:hover{transform:translateY(-2px);border-color:#ef9a4d!important;box-shadow:0 19px 38px rgba(0,0,0,.14)!important;}
+
+/* My Tasks: keep blurred/other-department cards' black-orange frame static. */
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--other-department.tm-status--not_started::before{
+  --tm-frame-angle:38deg!important;
+  animation:none!important;
+  background:conic-gradient(
+    from var(--tm-frame-angle),
+    #171717 0deg 58deg,
+    #ef7d16 76deg 136deg,
+    #171717 154deg 238deg,
+    #ef7d16 256deg 316deg,
+    #171717 334deg 360deg
+  )!important;
+}
