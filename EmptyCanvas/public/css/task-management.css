@@ -2929,3 +2929,78 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   content:none!important;
   display:none!important;
 }
+
+/* Task Management card perimeter frame hotfix v25 --------------------------
+   Render the frame on dedicated layers instead of relying on a transparent
+   CSS border/background-clip combination. This keeps the rounded perimeter
+   visible in every browser and preserves the exact card geometry. */
+.task-management-page .tm-workflow-board .tm-workflow-card,
+.task-management-page .tm-team-task-card{
+  --tm-card-frame:#aeb4bd;
+  position:absolute;
+  border:0!important;
+  background:transparent!important;
+  overflow:visible!important;
+  isolation:isolate!important;
+  animation:none!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card::before,
+.task-management-page .tm-team-task-card::before{
+  content:""!important;
+  display:block!important;
+  position:absolute!important;
+  z-index:0!important;
+  inset:-2px!important;
+  border-radius:calc(16px + 2px)!important;
+  background:var(--tm-card-frame)!important;
+  pointer-events:none!important;
+  animation:none!important;
+  transform:none!important;
+  filter:drop-shadow(0 4px 8px rgba(15,23,42,.10))!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card::after,
+.task-management-page .tm-team-task-card::after{
+  content:""!important;
+  display:block!important;
+  position:absolute!important;
+  z-index:1!important;
+  inset:0!important;
+  border-radius:inherit!important;
+  background:#fff!important;
+  pointer-events:none!important;
+  animation:none!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card>*,
+.task-management-page .tm-team-task-card>*{
+  position:relative;
+  z-index:2;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--not_started::before,
+.task-management-page .tm-team-task-card.tm-status--not_started::before{
+  --tm-frame-angle:0deg;
+  background:conic-gradient(
+    from var(--tm-frame-angle),
+    #171717 0deg 58deg,
+    #ef7d16 76deg 136deg,
+    #171717 154deg 238deg,
+    #ef7d16 256deg 316deg,
+    #171717 334deg 360deg
+  )!important;
+  animation:tm-card-border-loading 2.2s linear infinite!important;
+  filter:drop-shadow(0 0 4px rgba(239,125,22,.22)) drop-shadow(0 3px 7px rgba(0,0,0,.10))!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--in_progress::before,
+.task-management-page .tm-team-task-card.tm-status--in_progress::before{background:#ef7d16!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--rejected::before,
+.task-management-page .tm-team-task-card.tm-status--rejected::before{background:#df3d36!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--completed::before,
+.task-management-page .tm-team-task-card.tm-status--completed::before{background:#15945b!important;}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--cancelled::before,
+.task-management-page .tm-team-task-card.tm-status--cancelled::before{background:#69717c!important;}
+@media(prefers-reduced-motion:reduce){
+  .task-management-page .tm-workflow-board .tm-workflow-card.tm-status--not_started::before,
+  .task-management-page .tm-team-task-card.tm-status--not_started::before{
+    --tm-frame-angle:38deg;
+    animation:none!important;
+  }
+}
