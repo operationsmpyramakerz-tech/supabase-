@@ -39775,9 +39775,22 @@ app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requir
       });
     }
 
+    // Creating or saving at least one team-member subtask means the department
+    // has started working on this section. Move the parent section to In progress
+    // automatically, while preserving terminal/review statuses.
+    let sectionStatus = _tmStatus(section?.status);
+    if (plan.assignments.length && sectionStatus === "not_started") {
+      sectionStatus = "in_progress";
+      await supabaseDb.updateById(_tmSectionsTable(), sectionId, {
+        status: sectionStatus,
+        updated_at: now,
+      });
+      await _tmSyncTicketStatus(ticket.id);
+    }
+
     const saved = await _tmLoadPeopleWorkflow(sectionId);
-    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: _tmStatus(section?.status) === "completed" });
-    return res.json({ ok: true, members, assignments: visibleWorkflow.assignments, edges: visibleWorkflow.edges });
+    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: sectionStatus === "completed" });
+    return res.json({ ok: true, members, sectionStatus, assignments: visibleWorkflow.assignments, edges: visibleWorkflow.edges });
   } catch (error) {
     console.error("[task-management] people workflow save error:", error?.details || error?.message || error);
     const detail = String(error?.message || "");

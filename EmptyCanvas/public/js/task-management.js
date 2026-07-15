@@ -1953,6 +1953,21 @@
     return isCurrentUserAssignment(assignment);
   }
 
+  function canManageTeamWorkflow(sectionId = '') {
+    if (state.view !== 'my' || !canEditDepartmentWork()) return false;
+    const section = (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(sectionId));
+    return !!(section && isMyDepartmentSection(section));
+  }
+
+  function openTeamWorkflowEditor(sectionId = '') {
+    const section = (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(sectionId));
+    if (!section || !canManageTeamWorkflow(section.id)) return false;
+    state.readonlySection = section;
+    state.readonlyAssignment = null;
+    openPeopleWorkflow();
+    return true;
+  }
+
   function canEditCurrentWorkTarget() {
     return state.workTargetType === 'assignment'
       ? canEditTeamTask(state.workAssignment)
@@ -2264,7 +2279,8 @@
       ? `<span class="tm-team-task-card__attachment"><i data-feather="paperclip"></i><span>${escapeHtml(attachmentCountLabel(node))}</span></span>`
       : '';
     const openable = canOpenTeamTask(node);
-    const editable = canEditTeamTask(node);
+    const managesWorkflow = canManageTeamWorkflow(node.parentSectionId);
+    const editable = managesWorkflow || canEditTeamTask(node);
     const attrs = openable
       ? ` data-tm-open-team-task="${escapeHtml(node.assignmentId)}" data-parent-section-id="${escapeHtml(node.parentSectionId)}" role="button" tabindex="0" aria-label="${editable ? 'Open' : 'View'} work page for ${escapeHtml(node.assigneeName || 'team member')}"`
       : ' role="group" tabindex="-1" aria-disabled="true"';
@@ -2283,7 +2299,7 @@
           <strong>${escapeHtml(node.task || 'No task details')}</strong>
           <div class="tm-team-task-card__meta"><span><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>${attachment}</div>
         </div>
-        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"><i data-feather="${editable ? 'briefcase' : 'eye'}"></i><span>View Task Details</span></button><i data-feather="arrow-right"></i></div>` : ''}
+        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"><i data-feather="${editable ? 'edit-3' : 'eye'}"></i><span>${managesWorkflow ? 'Edit Team Task' : 'View Task Details'}</span></button><i data-feather="arrow-right"></i></div>` : ''}
         <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
@@ -3599,7 +3615,10 @@
 
       const teamTaskCard = event.target.closest('[data-tm-open-team-task]');
       if (teamTaskCard && !event.target.closest('a')) {
-        openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, teamTaskCard.dataset.parentSectionId || '');
+        const parentSectionId = teamTaskCard.dataset.parentSectionId || '';
+        if (!openTeamWorkflowEditor(parentSectionId)) {
+          openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, parentSectionId);
+        }
         return;
       }
 

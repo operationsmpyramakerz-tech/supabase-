@@ -3045,3 +3045,40 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   mask:none!important;
   clip-path:none!important;
 }
+
+/* Team-task ownership and perimeter polish v27 ------------------------------
+   Keep every status frame completely behind the card surface, remove the old
+   not-started pseudo-layer that leaked into the subtask body, and slightly
+   increase the visible perimeter thickness on all workflow cards. */
+.task-management-page .tm-workflow-board .tm-workflow-card,
+.task-management-page .tm-team-task-card{
+  --tm-frame-width:4px;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card::before,
+.task-management-page .tm-team-task-card::before{
+  top:calc(-1 * var(--tm-frame-width))!important;
+  right:calc(-1 * var(--tm-frame-width))!important;
+  bottom:calc(-1 * var(--tm-frame-width))!important;
+  left:calc(-1 * var(--tm-frame-width))!important;
+  z-index:-1!important;
+  border-radius:20px!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card::after,
+.task-management-page .tm-team-task-card::after,
+.task-management-page .tm-team-task-card.tm-team-task-card--mine.tm-status--not_started::after{
+  inset:0!important;
+  z-index:0!important;
+  background:#fff!important;
+  animation:none!important;
+  transform:none!important;
+  filter:none!important;
+  -webkit-mask:none!important;
+  mask:none!important;
+  clip-path:none!important;
+  border-radius:16px!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card>*,
+.task-management-page .tm-team-task-card>*{
+  position:relative!important;
+  z-index:2!important;
+}
