@@ -2188,7 +2188,12 @@
 
   function buildTeamViewerLayout(section, parentNode) {
     const workflow = section?.peopleWorkflow || cachedPeopleWorkflow(section?.id);
-    const assignments = (Array.isArray(workflow?.assignments) ? workflow.assignments : []).filter((assignment) => _tmTeamAssignmentIsActive(assignment));
+    const assignments = (Array.isArray(workflow?.assignments) ? workflow.assignments : []).filter((assignment) => {
+      if (_tmTeamAssignmentIsActive(assignment)) return true;
+      // Archived team cards stay visible only to the department workflow manager.
+      // The assigned team member does not receive/render the archived card.
+      return canManageTeamWorkflow(section?.id);
+    });
     if (!assignments.length || !parentNode) return { nodes: [], edges: [] };
 
     const sourceEdges = Array.isArray(workflow?.edges) ? workflow.edges : [];
@@ -2278,7 +2283,8 @@
     const attachment = attachmentList(node).length
       ? `<span class="tm-team-task-card__attachment"><i data-feather="paperclip"></i><span>${escapeHtml(attachmentCountLabel(node))}</span></span>`
       : '';
-    const openable = canOpenTeamTask(node);
+    const archived = !_tmTeamAssignmentIsActive(node);
+    const openable = !archived && canOpenTeamTask(node);
     const managesWorkflow = canManageTeamWorkflow(node.parentSectionId);
     const editable = managesWorkflow || canEditTeamTask(node);
     const attrs = openable
@@ -2287,8 +2293,9 @@
     const accessClass = openable ? ' tm-team-task-card--interactive' : ' tm-team-task-card--locked';
     const ownClass = isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
     const creatorClass = managesWorkflow ? ' tm-team-task-card--creator' : '';
+    const archivedClass = archived ? ' tm-team-task-card--archived' : '';
     return `
-      <article class="tm-team-task-card tm-builder-block tm-builder-block--viewer${accessClass}${ownClass}${creatorClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
+      <article class="tm-team-task-card tm-builder-block tm-builder-block--viewer${accessClass}${ownClass}${creatorClass}${archivedClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
         <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
         <div class="tm-builder-block__head tm-workflow-card__top tm-team-task-card__head">
           <div class="tm-builder-block__number tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</div>
