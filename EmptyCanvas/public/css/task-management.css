@@ -3161,3 +3161,58 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
     animation:none!important;
   }
 }
+
+/* My Tasks team cards: match the department-section card visual system v29. */
+.task-management-page .tm-team-task-card{
+  width:300px!important;
+  min-height:190px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:visible!important;
+  isolation:auto!important;
+  border:1px solid #d7d8dc!important;
+  border-radius:20px!important;
+  background:#fff!important;
+  box-shadow:0 16px 34px rgba(0,0,0,.10)!important;
+}
+.task-management-page .tm-team-task-card::before,
+.task-management-page .tm-team-task-card::after{content:none!important;display:none!important;animation:none!important;}
+.task-management-page .tm-team-task-card.tm-status--not_started,
+.task-management-page .tm-team-task-card.tm-status--in_progress{border-color:#ef9a4d!important;}
+.task-management-page .tm-team-task-card.tm-status--completed{border-color:#78c89d!important;}
+.task-management-page .tm-team-task-card.tm-status--rejected{border-color:#d76565!important;}
+.task-management-page .tm-team-task-card.tm-status--cancelled{border-color:#a9a9a9!important;}
+.task-management-page .tm-team-task-card>.tm-team-task-card__head{
+  min-height:0!important;
+  padding:11px 12px 9px!important;
+  gap:10px!important;
+  border-bottom:1px solid #ececee!important;
+  border-radius:20px 20px 0 0!important;
+  background:#fff!important;
+  overflow:visible!important;
+}
+.task-management-page .tm-team-task-card.tm-status--not_started>.tm-team-task-card__head,
+.task-management-page .tm-team-task-card.tm-status--in_progress>.tm-team-task-card__head{background:linear-gradient(180deg,#fff8f1 0%,#fff 100%)!important;}
+.task-management-page .tm-team-task-card.tm-status--completed>.tm-team-task-card__head{background:linear-gradient(180deg,#f2fff7 0%,#fff 100%)!important;}
+.task-management-page .tm-team-task-card__number{
+  width:34px!important;height:34px!important;flex:0 0 34px!important;
+  border-radius:10px!important;background:#171717!important;color:#fff!important;
+  box-shadow:none!important;font-size:10px!important;
+}
+.task-management-page .tm-team-task-card__title{min-width:0;flex:1;display:block!important;}
+.task-management-page .tm-team-task-card__title b{display:block;overflow:hidden;color:#202020;font-size:12px;text-overflow:ellipsis;white-space:nowrap;}
+.task-management-page .tm-team-task-card__title small{display:block;margin-top:2px;color:#929292;font-size:9px;font-weight:750;}
+.task-management-page .tm-team-task-card__body{
+  flex:1!important;display:block!important;padding:12px 13px 13px!important;background:#fff!important;
+}
+.task-management-page .tm-team-task-card__body>.tm-builder-block__label{display:block;color:#8b92a1;font-size:9px;font-weight:950;letter-spacing:.065em;text-transform:uppercase;}
+.task-management-page .tm-team-task-card__body>strong{display:block;margin-top:6px;color:#303030;font-size:12px;line-height:1.42;white-space:pre-wrap;}
+.task-management-page .tm-team-task-card__meta{display:flex!important;align-items:center;gap:7px;flex-wrap:wrap;margin-top:9px!important;}
+.task-management-page .tm-team-task-card__meta .tm-builder-block__delivery,
+.task-management-page .tm-team-task-card__attachment{display:inline-flex;align-items:center;gap:5px;padding:5px 7px;border:0;border-radius:8px;background:#fff3e5;color:#9d4a08;font-size:9px;font-weight:800;text-decoration:none;}
+.task-management-page .tm-team-task-card>.tm-team-task-card__footer{
+  min-height:38px!important;padding:8px 10px!important;border-top:1px solid #eef0f3!important;
+  border-radius:0 0 20px 20px!important;background:#fff!important;color:#8a93a3!important;font-size:10px!important;overflow:visible!important;
+}
+.task-management-page .tm-team-task-card__open{margin-left:auto;color:#5f5f5f!important;font-size:10px!important;font-weight:850!important;}
+.task-management-page .tm-team-task-card--interactive:hover{transform:translateY(-2px);border-color:#ef9a4d!important;box-shadow:0 19px 38px rgba(0,0,0,.14)!important;}

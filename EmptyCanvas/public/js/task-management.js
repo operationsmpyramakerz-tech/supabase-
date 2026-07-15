@@ -2229,8 +2229,8 @@
       layers.get(level).push(assignment);
     });
 
-    const cardWidth = 246;
-    const cardHeight = 166;
+    const cardWidth = 300;
+    const cardHeight = 190;
     const horizontalGap = 34;
     const verticalGap = 78;
     const parentSize = nodeVisualSize(parentNode, { width: 300, height: 138 });
@@ -2288,19 +2288,19 @@
     const ownClass = isCurrentUserAssignment(node) ? ' tm-team-task-card--mine' : '';
     const creatorClass = managesWorkflow ? ' tm-team-task-card--creator' : '';
     return `
-      <article class="tm-team-task-card${accessClass}${ownClass}${creatorClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
+      <article class="tm-team-task-card tm-builder-block tm-builder-block--viewer${accessClass}${ownClass}${creatorClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
         <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
-        <div class="tm-team-task-card__head">
-          <span class="tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</span>
-          <div><b>${escapeHtml(node.assigneeName || 'Team member')}</b><small>Assigned person task</small></div>
+        <div class="tm-builder-block__head tm-workflow-card__top tm-team-task-card__head">
+          <div class="tm-builder-block__number tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</div>
+          <div class="tm-builder-block__title tm-team-task-card__title"><b>${escapeHtml(node.assigneeName || 'Team member')}</b><small>Workflow block ${escapeHtml(node.workflowNumber || '•')}</small></div>
           <span class="tm-status-pill ${statusClass(node.status)}"><i data-feather="${statusIcon(node.status)}"></i>${escapeHtml(sectionStatusLabel(node.status))}</span>
         </div>
-        <div class="tm-team-task-card__body">
-          <span>Assigned task</span>
+        <div class="tm-builder-block__body tm-workflow-card__body tm-team-task-card__body">
+          <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(node.task || 'No task details')}</strong>
-          <div class="tm-team-task-card__meta"><span><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>${attachment}</div>
+          ${(node.deliveryDate || attachment) ? `<div class="tm-builder-block__meta tm-team-task-card__meta">${node.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>` : ''}${attachment}</div>` : ''}
         </div>
-        ${openable ? `<div class="tm-team-task-card__footer"><button type="button" class="tm-team-task-card__open"${managesWorkflow ? ` data-tm-edit-team-workflow="${escapeHtml(node.parentSectionId)}"` : ''}><i data-feather="${managesWorkflow ? 'edit-3' : 'eye'}"></i><span>${managesWorkflow ? 'Edit Team Task' : 'View Task Details'}</span></button><i data-feather="arrow-right"></i></div>` : ''}
+        ${openable ? `<div class="tm-workflow-card__footer tm-team-task-card__footer"><span>${node.status === 'completed' ? 'Task completed' : (node.status === 'in_progress' ? 'Work in progress' : 'Waiting to start')}</span><button type="button" class="tm-team-task-card__open"${managesWorkflow ? ` data-tm-edit-team-workflow="${escapeHtml(node.parentSectionId)}"` : ''}><i data-feather="${managesWorkflow ? 'edit-3' : 'eye'}"></i><span>${managesWorkflow ? 'Edit Team Task' : 'View Task Details'}</span></button></div>` : ''}
         <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
