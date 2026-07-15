@@ -2842,3 +2842,90 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   .task-management-page .tm-agenda-task__progress-ring::after{inset:5px;}
   .task-management-page .tm-agenda-task__creator{width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;flex-basis:28px!important;}
 }
+
+/* Stable full-card workflow status frames v24 ---------------------------------
+   Keep the section/team-card frame geometry identical in All Tasks, My Tasks,
+   and Delegated Tasks. Only the frame color changes with the current status. */
+.task-management-page .tm-workflow-board .tm-workflow-card,
+.task-management-page .tm-team-task-card{
+  --tm-section-frame-bg:linear-gradient(#aeb4bd,#aeb4bd);
+  box-sizing:border-box!important;
+  border:2px solid transparent!important;
+  background:
+    linear-gradient(#fff,#fff) padding-box,
+    var(--tm-section-frame-bg) border-box!important;
+  background-origin:border-box!important;
+  background-clip:padding-box,border-box!important;
+  isolation:isolate!important;
+  animation:none!important;
+}
+
+/* Remove every older top-strip / masked pseudo frame so it cannot replace the
+   full rounded frame after a status change. Connection anchors are real child
+   elements and are not affected by this reset. */
+.task-management-page .tm-workflow-board .tm-workflow-card::before,
+.task-management-page .tm-workflow-board .tm-workflow-card::after,
+.task-management-page .tm-team-task-card::before,
+.task-management-page .tm-team-task-card::after{
+  content:none!important;
+  display:none!important;
+  animation:none!important;
+}
+
+/* Not started keeps the black/orange loading treatment around the complete
+   outside edge without changing the card shape. */
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--not_started,
+.task-management-page .tm-team-task-card.tm-status--not_started{
+  --tm-frame-angle:0deg;
+  --tm-section-frame-bg:conic-gradient(
+    from var(--tm-frame-angle),
+    #171717 0deg 58deg,
+    #ef7d16 76deg 136deg,
+    #171717 154deg 238deg,
+    #ef7d16 256deg 316deg,
+    #171717 334deg 360deg
+  );
+  animation:tm-card-border-loading 2.2s linear infinite!important;
+}
+
+/* Status changes alter only the full frame color. */
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--in_progress,
+.task-management-page .tm-team-task-card.tm-status--in_progress{
+  --tm-section-frame-bg:linear-gradient(#ef7d16,#ef7d16);
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--rejected,
+.task-management-page .tm-team-task-card.tm-status--rejected{
+  --tm-section-frame-bg:linear-gradient(#df3d36,#df3d36);
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--completed,
+.task-management-page .tm-team-task-card.tm-status--completed{
+  --tm-section-frame-bg:linear-gradient(#15945b,#15945b);
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-status--cancelled,
+.task-management-page .tm-team-task-card.tm-status--cancelled{
+  --tm-section-frame-bg:linear-gradient(#69717c,#69717c);
+}
+
+/* Keep every internal surface clipped to the same rounded geometry while the
+   sockets/anchors remain free to sit outside the card boundary. */
+.task-management-page .tm-workflow-board .tm-workflow-card>.tm-workflow-card__top,
+.task-management-page .tm-workflow-board .tm-workflow-card>.tm-workflow-card__body,
+.task-management-page .tm-workflow-board .tm-workflow-card>.tm-workflow-card__footer,
+.task-management-page .tm-team-task-card>.tm-team-task-card__head,
+.task-management-page .tm-team-task-card>.tm-team-task-card__body,
+.task-management-page .tm-team-task-card>.tm-team-task-card__footer{
+  position:relative;
+  z-index:2;
+}
+
+@media(prefers-reduced-motion:reduce){
+  .task-management-page .tm-workflow-board .tm-workflow-card.tm-status--not_started,
+  .task-management-page .tm-team-task-card.tm-status--not_started{
+    --tm-frame-angle:38deg;
+    animation:none!important;
+  }
+}
+.task-management-page .tm-workflow-board .tm-workflow-card .tm-workflow-card__top::after{
+  content:none!important;
+  display:none!important;
+}
