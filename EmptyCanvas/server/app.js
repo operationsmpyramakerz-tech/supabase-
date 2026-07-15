@@ -38655,6 +38655,7 @@ function _tmSerializeTicket(row = {}, sectionRows = [], edgeRows = []) {
     archivedAt: _sbGet(row, ["archived_at", "archivedAt"]) || null,
     archivedById: _tmText(_sbGet(row, ["archived_by_id", "archivedById"]), 120),
     archivedByName: _tmText(_sbGet(row, ["archived_by_name", "archivedByName"]), 180),
+    archivedFromView: _tmText(_sbGet(row, ["archived_from_view", "archivedFromView"]), 30),
     sections,
     edges,
     sectionsCount: sections.length,
@@ -38811,9 +38812,30 @@ function _tmSameMember(ticket = {}, currentMember = {}) {
   return !!(currentName && ticketCreatorName && _tmSameText(currentName, ticketCreatorName));
 }
 
+function _tmArchivedByMember(ticket = {}, currentMember = {}) {
+  const archivedById = _tmText(ticket?.archivedById || "", 120);
+  const currentId = _tmText(currentMember?.id || "", 120);
+  if (archivedById && currentId) return archivedById === currentId;
+  const archivedByName = _tmText(ticket?.archivedByName || "", 180);
+  const currentName = _tmText(currentMember?.name || "", 180);
+  return !!(archivedByName && currentName && _tmSameText(archivedByName, currentName));
+}
+
+function _tmArchiveView(ticket = {}) {
+  const view = _tmText(ticket?.archivedFromView || "", 30).toLowerCase();
+  if (["all", "my", "delegated"].includes(view)) return view;
+  // Existing archived rows created before the per-page archive migration are
+  // treated as Delegated Tasks archives, which matches the original archive
+  // workflow where the project creator managed the record.
+  return "delegated";
+}
+
 function _tmTicketBelongsToView(ticket = {}, currentMember = {}, view = "") {
-  // Archived projects remain queryable in their normal views so the All and
-  // Archive tabs can both show them without deleting or duplicating data.
+  if (ticket?.isArchived) {
+    // An archived task is globally hidden. It is returned only to the person
+    // who archived it and only in the Task Management page where they did it.
+    return _tmArchivedByMember(ticket, currentMember) && _tmArchiveView(ticket) === view;
+  }
   if (view === "all") return true;
   if (view === "delegated") return _tmSameMember(ticket, currentMember);
   if (view === "my") {
@@ -39236,14 +39258,18 @@ function _tmWorkflowForViewer(workflow = {}, currentUser = {}, options = {}) {
 }
 
 function _tmSectionForViewer(section = {}, currentUser = {}, view = "", canManageDepartment = false) {
-  const published = _tmStatus(section?.status) === "completed";
+  const status = _tmStatus(section?.status);
+  const published = status === "completed";
   const managerPreview = view === "my" && canManageDepartment && _tmSameText(section?.department || "", currentUser?.department || "");
   if (published || managerPreview) return { ...section };
   return {
     ...section,
     completionNote: "",
     workReport: "",
-    rejectionReason: "",
+    // Rejection is a task-state explanation, not private work content. Keep it
+    // available in All Tasks, My Tasks, and Delegated Tasks so the Rejected
+    // status chip opens the same reason from every page.
+    rejectionReason: status === "rejected" ? _tmText(section?.rejectionReason || "", 4000) : "",
     workLink: "",
     workFile: null,
     completedByName: "",
@@ -39464,12 +39490,13 @@ app.patch("/api/task-management/:id/archive", requireAuth, requireTaskManagement
         archived_at: archived ? now : null,
         archived_by_id: archived ? (currentUser.id || null) : null,
         archived_by_name: archived ? (currentUser.name || null) : null,
+        archived_from_view: archived ? req.taskManagementView : null,
         updated_at: now,
       });
     } catch (error) {
       const detail = String(error?.message || "");
-      if (/is_archived|archived_at|archived_by_/i.test(detail)) {
-        const missing = new Error("The project archive fields are not installed. Run the supplied Task Management archive SQL migration, then refresh the page.");
+      if (/is_archived|archived_at|archived_by_|archived_from_view/i.test(detail)) {
+        const missing = new Error("The per-user project archive fields are not installed. Run the supplied Task Management personal-archive SQL migration, then refresh the page.");
         missing.status = 503;
         throw missing;
       }
@@ -39495,7 +39522,7 @@ app.delete("/api/task-management/:id", requireAuth, requireTaskManagementView(),
     const currentUser = await _tmCurrentMember(req);
     const isCurrentViewAdmin = _taskManagementViewIsAdmin(req, req.taskManagementView);
     const isAvailable = ticket.isArchived
-      ? (_tmSameMember(ticket, currentUser) || isCurrentViewAdmin)
+      ? ((_tmArchivedByMember(ticket, currentUser) && _tmArchiveView(ticket) === req.taskManagementView) || isCurrentViewAdmin)
       : _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
     if (!isAvailable) {
       return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });

@@ -262,10 +262,11 @@
     } catch { return ''; }
   }
 
-  function creatorButtonMarkup(ticket) {
+  function creatorButtonMarkup(ticket, extraClass = '') {
     const userId = String(ticket?.createdById || ticket?.createdByName || '').trim();
     const name = String(ticket?.createdByName || 'Creator').trim() || 'Creator';
-    return `<button class="co-right-ico co-creator-btn tm-ticket-creator-btn" type="button" data-tm-creator-id="${escapeHtml(userId)}" data-tm-creator-name="${escapeHtml(name)}" aria-label="Created by ${escapeHtml(name)}" title="Created by ${escapeHtml(name)}"><i data-feather="user"></i></button>`;
+    const classes = ['co-right-ico', 'co-creator-btn', 'tm-ticket-creator-btn', String(extraClass || '').trim()].filter(Boolean).join(' ');
+    return `<button class="${escapeHtml(classes)}" type="button" data-tm-creator-id="${escapeHtml(userId)}" data-tm-creator-name="${escapeHtml(name)}" aria-label="Created by ${escapeHtml(name)}" title="Created by ${escapeHtml(name)}"><i data-feather="user"></i></button>`;
   }
 
   function creatorProfileFields(profile = {}) {
@@ -401,10 +402,12 @@
   function ticketMatches(ticket) {
     if (state.activeStatus === 'archived') {
       if (!ticket.isArchived) return false;
-    } else if (state.activeStatus !== 'all') {
-      // Archived projects remain visible in the All tab, but status-specific
-      // tabs continue to show active projects only.
-      if (ticket.isArchived || ticket.status !== state.activeStatus) return false;
+    } else {
+      // An archived project disappears from every normal tab. The server only
+      // returns it to the person who archived it, and only in the page where
+      // the archive action was performed.
+      if (ticket.isArchived) return false;
+      if (state.activeStatus !== 'all' && ticket.status !== state.activeStatus) return false;
     }
     if (state.activeFilterStatus !== 'all' && ticket.status !== state.activeFilterStatus) return false;
     if (state.activePriority !== 'all' && priorityKey(ticket.priority) !== state.activePriority) return false;
@@ -464,7 +467,7 @@
     departmentFilterBtn.setAttribute('aria-label', active ? 'Task filters are active' : 'Filter tasks');
     departmentFilterPanel.innerHTML = `
       <div class="tm-department-filter__panel-head">
-        <div><div class="tm-department-filter__panel-title">Filter tasks</div><div class="tm-department-filter__panel-sub">Combine department, status, and priority filters.</div></div>
+        <div class="tm-department-filter__panel-title">Filter tasks</div>
         ${active ? '<button type="button" class="tm-department-filter__clear" data-tm-clear-filters>Clear all</button>' : ''}
       </div>
       <div class="tm-task-filter-grid">
@@ -503,8 +506,9 @@
   function agendaTickets() {
     return (state.tickets || []).filter((ticket) => {
       if (state.activeStatus === 'archived') return !!ticket.isArchived;
+      if (ticket.isArchived) return false;
       if (state.activeStatus === 'all') return true;
-      return !ticket.isArchived;
+      return ticket.status === state.activeStatus;
     });
   }
 
@@ -513,13 +517,16 @@
   }
 
   function renderAgendaTask(ticket) {
-    const progress = Math.max(0, Math.min(100, Number(ticket.progress) || 0));
-    return `<button type="button" class="tm-agenda-task" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
+    const stats = ticketViewerStats(ticket);
+    const progress = Math.max(0, Math.min(100, Number(stats.progress) || 0));
+    return `<article class="tm-agenda-task" role="button" tabindex="0" data-ticket-id="${escapeHtml(ticket.id)}" aria-label="Open ${escapeHtml(ticket.ticketCode)}">
       <span class="tm-agenda-task__priority tm-agenda-task__priority--${escapeHtml(priorityKey(ticket.priority))}"></span>
-      <span class="tm-agenda-task__body"><small>${escapeHtml(ticket.ticketCode)}</small><b>${escapeHtml(ticket.title)}</b><span>${escapeHtml(statusLabel(ticket.status))} · ${ticket.completedCount || 0}/${ticket.sectionsCount || 0} complete</span></span>
-      <span class="tm-agenda-task__progress"><i style="--tm-agenda-progress:${progress}%"></i><b>${progress}%</b></span>
-      <i data-feather="chevron-right"></i>
-    </button>`;
+      <span class="tm-agenda-task__body"><small>${escapeHtml(ticket.ticketCode)}</small><b>${escapeHtml(ticket.title)}</b><span>${escapeHtml(statusLabel(ticket.status))} · ${stats.completed}/${stats.total} complete</span></span>
+      <span class="tm-agenda-task__actions">
+        <span class="tm-agenda-task__progress-ring ${statusClass(ticket.status)}" style="--tm-agenda-progress:${progress}%" aria-label="${progress}% complete"><b>${progress}%</b></span>
+        ${creatorButtonMarkup(ticket, 'tm-agenda-task__creator')}
+      </span>
+    </article>`;
   }
 
   function renderAgenda() {
@@ -2729,8 +2736,8 @@
     const icon = $('tmArchiveConfirmIcon');
     if (title) title.textContent = archived ? 'Archive project?' : 'Restore project?';
     if (message) message.textContent = archived
-      ? `“${ticket.title || ticket.ticketCode || 'This project'}” will stay saved and will also remain visible in the All tab and Archive tab.`
-      : `“${ticket.title || ticket.ticketCode || 'This project'}” will be restored as an active project.`;
+      ? `“${ticket.title || ticket.ticketCode || 'This project'}” will be hidden from everyone and kept only in your Archive tab on this ${VIEW_CONFIG[state.view]?.label || 'Task Management'} page.`
+      : `“${ticket.title || ticket.ticketCode || 'This project'}” will be restored and visible again to the users who normally have access to it.`;
     if (confirmLabel) confirmLabel.textContent = archived ? 'Yes, Archive' : 'Yes, Restore';
     if (icon) icon.setAttribute('data-feather', archived ? 'archive' : 'rotate-ccw');
     hydrateIcons(archiveConfirmOverlay);
@@ -2749,14 +2756,14 @@
         method: 'PATCH',
         body: { view: state.view, archived, adminPassword },
       });
-      const updated = data.ticket || { ...ticket, isArchived: archived };
+      const updated = data.ticket || { ...ticket, isArchived: archived, archivedFromView: archived ? state.view : '' };
       state.selectedTicket = updated;
       state.tickets = (state.tickets || []).map((item) => String(item.id) === String(updated.id) ? updated : item);
       renderTickets();
-      renderWorkflow(updated);
+      setOverlay(workflowOverlay, false);
       showToast('success', archived ? 'Project archived' : 'Project restored', archived
-        ? 'The project is saved and remains available in All and Archive.'
-        : 'The project is active again.');
+        ? `The project is hidden from everyone and is available only in your Archive tab on ${VIEW_CONFIG[state.view]?.label || 'this page'}.`
+        : 'The project is active and visible again to its permitted users.');
     } catch (error) {
       showToast('error', archived ? 'Archive failed' : 'Restore failed', error.message || 'Could not update the project archive state.');
     } finally {
@@ -3678,6 +3685,7 @@
           openReadonlySectionDetails(sectionCard.dataset.tmOpenSection);
           return;
         }
+        if (document.activeElement?.closest?.('[data-tm-creator-id]')) return;
         const card = document.activeElement?.closest?.('[data-ticket-id]');
         if (card) { event.preventDefault(); card.click(); }
       }

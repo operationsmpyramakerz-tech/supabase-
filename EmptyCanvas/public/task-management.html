@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=created-by-compact-v22" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=task-management-projects-v5" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=task-management-projects-v5" rel="stylesheet" />
-  <link href="/css/task-management.css?v=task-management-status-frames-v22" rel="stylesheet" />
+  <link href="/css/task-management.css?v=task-management-personal-archive-v23" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading task-management-page">
@@ -322,7 +322,7 @@
     <div class="tm-overlay__backdrop" data-tm-close="rejected-info"></div>
     <section class="tm-dialog tm-dialog--rejected-info" role="dialog" aria-modal="true" aria-labelledby="tmRejectedInfoTitle">
       <div class="tm-dialog__top">
-        <div><span class="tm-eyebrow">Rejected task</span><h2 id="tmRejectedInfoTitle">Rejected reason</h2><p>Review the reason entered for this rejected task.</p></div>
+        <div><span class="tm-eyebrow">Rejected task</span><h2 id="tmRejectedInfoTitle">Rejected reason</h2></div>
         <button type="button" class="tm-icon-btn" aria-label="Close rejected reason" data-tm-close="rejected-info"><i data-feather="x"></i></button>
       </div>
       <div class="tm-rejected-info__message" id="tmRejectedInfoMessage">No rejected reason was provided.</div>
@@ -352,7 +352,7 @@
     <section class="tm-dialog tm-dialog--archive-confirm" role="dialog" aria-modal="true" aria-labelledby="tmArchiveConfirmTitle">
       <div class="tm-archive-confirm__icon"><i id="tmArchiveConfirmIcon" data-feather="archive"></i></div>
       <h2 id="tmArchiveConfirmTitle">Archive project?</h2>
-      <p id="tmArchiveConfirmMessage">The project will remain saved and available in the All and Archive tabs.</p>
+      <p id="tmArchiveConfirmMessage">The project will be hidden from everyone and kept only in your Archive tab on this page.</p>
       <div class="tm-archive-confirm__actions">
         <button type="button" class="tm-btn tm-btn--secondary" id="tmArchiveConfirmCancel">No, keep it</button>
         <button type="button" class="tm-btn tm-btn--archive" id="tmArchiveConfirmAccept"><i data-feather="archive"></i><span id="tmArchiveConfirmLabel">Yes, Archive</span></button>
@@ -375,6 +375,6 @@
 
   <script>if (window.feather) feather.replace();</script>
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/task-management.js?v=task-management-status-frames-v22"></script>
+  <script src="/js/task-management.js?v=task-management-personal-archive-v23"></script>
 </body>
 </html>
