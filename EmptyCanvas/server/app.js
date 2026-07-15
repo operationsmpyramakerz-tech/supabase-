@@ -39803,6 +39803,64 @@ app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requir
   }
 });
 
+
+app.delete("/api/task-management/sections/:id/people-workflow", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team assignment workflows are available from My Tasks only." });
+    const sectionId = String(req.params.id || "").trim();
+    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
+    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
+    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
+    const currentUser = await _tmCurrentMember(req);
+    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
+    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
+    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
+    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to delete team tasks." });
+
+    const existing = await _tmLoadPeopleWorkflow(sectionId);
+    const edgeIds = (existing.edges || []).map((edge) => String(edge.id || "")).filter(Boolean);
+    const assignmentIds = (existing.assignments || []).map((assignment) => String(assignment.id || "")).filter(Boolean);
+    if (edgeIds.length) await supabaseDb.deleteByIds(_tmAssignmentEdgesTable(), edgeIds);
+    if (assignmentIds.length) await supabaseDb.deleteByIds(_tmAssignmentsTable(), assignmentIds);
+    return res.json({ ok: true, sectionId, assignments: [], edges: [] });
+  } catch (error) {
+    console.error("[task-management] people workflow delete error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete the team workflow." });
+  }
+});
+
+app.patch("/api/task-management/sections/:id/people-workflow/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team assignment workflows are available from My Tasks only." });
+    const sectionId = String(req.params.id || "").trim();
+    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
+    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
+    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
+    const currentUser = await _tmCurrentMember(req);
+    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
+    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
+    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
+    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to archive team tasks." });
+
+    const archived = !!req.body?.archived;
+    const existing = await _tmLoadPeopleWorkflow(sectionId);
+    const now = new Date().toISOString();
+    for (const assignment of existing.assignments || []) {
+      const patch = archived
+        ? { status: "cancelled", updated_at: now }
+        : { status: "not_started", rejection_reason: null, updated_at: now };
+      await supabaseDb.updateById(_tmAssignmentsTable(), assignment.id, patch);
+    }
+    const saved = await _tmLoadPeopleWorkflow(sectionId);
+    return res.json({ ok: true, sectionId, archived, assignments: saved.assignments, edges: saved.edges });
+  } catch (error) {
+    console.error("[task-management] people workflow archive error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update the team workflow archive state." });
+  }
+});
+
 app.patch("/api/task-management/assignments/:id/work", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {

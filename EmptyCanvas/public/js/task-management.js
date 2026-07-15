@@ -2188,7 +2188,7 @@
 
   function buildTeamViewerLayout(section, parentNode) {
     const workflow = section?.peopleWorkflow || cachedPeopleWorkflow(section?.id);
-    const assignments = Array.isArray(workflow?.assignments) ? workflow.assignments : [];
+    const assignments = (Array.isArray(workflow?.assignments) ? workflow.assignments : []).filter((assignment) => _tmTeamAssignmentIsActive(assignment));
     if (!assignments.length || !parentNode) return { nodes: [], edges: [] };
 
     const sourceEdges = Array.isArray(workflow?.edges) ? workflow.edges : [];
@@ -2577,6 +2577,11 @@
   }
 
   function renderWorkflow(ticket) {
+    if (state.view === 'my') {
+      const section = myTeamWorkflowSection(ticket);
+      const archiveLabel = $('tmProjectArchiveMenuItem')?.querySelector('span');
+      if (archiveLabel) archiveLabel.textContent = teamWorkflowIsArchived(section) ? 'Restore' : 'Archive';
+    }
     if (!ticket) return;
     attachCachedPeopleWorkflows(ticket);
     $('tmWorkflowCode').textContent = ticket.ticketCode || 'TKT';
@@ -2733,6 +2738,84 @@
     }
   }
 
+  function myTeamWorkflowSection(ticket = state.selectedTicket) {
+    if (state.view !== 'my' || !ticket) return null;
+    return (ticket.sections || []).find((section) => isMyDepartmentSection(section)) || null;
+  }
+
+  function _tmTeamAssignmentIsActive(assignment) {
+    return norm(assignment?.status || '') !== 'cancelled';
+  }
+
+  function teamWorkflowIsArchived(section) {
+    const workflow = section?.peopleWorkflow || cachedPeopleWorkflow(section?.id);
+    const assignments = Array.isArray(workflow?.assignments) ? workflow.assignments : [];
+    return assignments.length > 0 && assignments.every((assignment) => !_tmTeamAssignmentIsActive(assignment));
+  }
+
+  async function deleteMyTeamWorkflow() {
+    const section = myTeamWorkflowSection();
+    if (!section || !canManageTeamWorkflow(section.id)) {
+      showToast('info', 'No team workflow', 'There is no editable team workflow for your department in this project.');
+      return;
+    }
+    const workflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
+    if (!Array.isArray(workflow?.assignments) || !workflow.assignments.length) {
+      showToast('info', 'No team workflow', 'There are no assigned team cards to delete.');
+      return;
+    }
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Delete team workflow?', itemType: 'team workflow', itemName: section.department || 'this team workflow',
+          message: 'This will permanently delete the person-assigned cards and their arrows only. The department section and the main project will stay unchanged.',
+          cancelLabel: 'No, keep it.', confirmLabel: 'Yes, Delete!'
+        })
+      : window.confirm('Delete the assigned team cards only? The department section will remain.');
+    if (!confirmed) return;
+    try {
+      await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow`, { method: 'DELETE', body: { view: state.view } });
+      const empty = { assignments: [], edges: [] };
+      state.peopleWorkflowCache.set(String(section.id), empty);
+      section.peopleWorkflow = empty;
+      renderWorkflow(state.selectedTicket);
+      showToast('success', 'Team workflow deleted', 'Only the assigned team cards were deleted. The department section was not changed.');
+    } catch (error) {
+      showToast('error', 'Delete failed', error.message || 'Could not delete the team workflow.');
+    }
+  }
+
+  async function archiveMyTeamWorkflow() {
+    const section = myTeamWorkflowSection();
+    if (!section || !canManageTeamWorkflow(section.id)) {
+      showToast('info', 'No team workflow', 'There is no editable team workflow for your department in this project.');
+      return;
+    }
+    const workflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
+    if (!Array.isArray(workflow?.assignments) || !workflow.assignments.length) {
+      showToast('info', 'No team workflow', 'There are no assigned team cards to archive.');
+      return;
+    }
+    const archived = !teamWorkflowIsArchived(section);
+    const confirmed = window.confirm(archived
+      ? 'Archive the assigned team cards only? The department section and project will remain active.'
+      : 'Restore the archived team cards?');
+    if (!confirmed) return;
+    try {
+      const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow/archive`, {
+        method: 'PATCH', body: { view: state.view, archived }
+      });
+      const saved = { assignments: Array.isArray(data.assignments) ? data.assignments : [], edges: Array.isArray(data.edges) ? data.edges : [] };
+      state.peopleWorkflowCache.set(String(section.id), saved);
+      section.peopleWorkflow = saved;
+      renderWorkflow(state.selectedTicket);
+      showToast('success', archived ? 'Team workflow archived' : 'Team workflow restored', archived
+        ? 'Only the assigned team cards were archived. The department section was not changed.'
+        : 'The assigned team cards are visible again.');
+    } catch (error) {
+      showToast('error', archived ? 'Archive failed' : 'Restore failed', error.message || 'Could not update the team workflow.');
+    }
+  }
+
   function closeArchiveConfirm(result = false) {
     if (!archiveConfirmOverlay) return;
     setOverlay(archiveConfirmOverlay, false);
@@ -2789,6 +2872,7 @@
   }
 
   function archiveSelectedProject() {
+    if (state.view === 'my') { closeProjectMenu(); archiveMyTeamWorkflow(); return; }
     const ticket = state.selectedTicket;
     if (!ticket) return;
     closeProjectMenu();
@@ -2865,6 +2949,12 @@
   }
 
   function requestProjectEdit() {
+    if (state.view === 'my') {
+      const section = myTeamWorkflowSection();
+      closeProjectMenu();
+      if (!section || !openTeamWorkflowEditor(section.id)) showToast('info', 'No team workflow', 'There is no editable team workflow for your department in this project.');
+      return;
+    }
     const ticket = state.selectedTicket;
     if (!ticket) return;
     if (window.__tmIsPageAdmin) {
@@ -2911,6 +3001,7 @@
   }
 
   function requestProjectDelete() {
+    if (state.view === 'my') { closeProjectMenu(); deleteMyTeamWorkflow(); return; }
     const ticket = state.selectedTicket;
     if (!ticket) return;
     if (window.__tmIsPageAdmin) {
