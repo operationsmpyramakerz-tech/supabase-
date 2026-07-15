@@ -3347,3 +3347,11 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
     animation:none!important;
   }
 }
+
+/* My Tasks v32: keep the team-card perimeter animated for the creator/manager,
+   exactly like the assigned team member. This intentionally overrides the
+   older creator-only rule that disabled the not-started animation. */
+.task-management-page .tm-team-task-card.tm-team-task-card--creator.tm-status--not_started::before,
+.task-management-page .tm-team-task-card.tm-team-task-card--creator.tm-team-task-card--mine.tm-status--not_started::before{
+  animation:tm-card-border-loading 2.2s linear infinite!important;
+}
