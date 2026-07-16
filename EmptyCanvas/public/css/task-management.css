@@ -3355,3 +3355,30 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
 .task-management-page .tm-team-task-card.tm-team-task-card--creator.tm-team-task-card--mine.tm-status--not_started::before{
   animation:tm-card-border-loading 2.2s linear infinite!important;
 }
+
+/* Team-member task actions menu positioning fix v22 */
+.task-management-page .tm-team-task-more{
+  position:relative;
+  display:flex;
+  align-items:center;
+  flex:0 0 auto;
+}
+.task-management-page .tm-team-task-more[hidden]{display:none!important;}
+.task-management-page .tm-team-task-more > .tm-project-more__menu{
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  bottom:auto;
+  left:auto;
+  z-index:12080;
+}
+@media(max-width:700px){
+  .task-management-page .tm-team-task-more > .tm-project-more__menu{
+    position:absolute;
+    top:calc(100% + 8px);
+    right:0;
+    bottom:auto;
+    left:auto;
+    width:174px;
+  }
+}
