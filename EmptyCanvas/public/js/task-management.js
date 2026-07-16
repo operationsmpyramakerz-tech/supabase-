@@ -2284,7 +2284,9 @@
       ? `<span class="tm-team-task-card__attachment"><i data-feather="paperclip"></i><span>${escapeHtml(attachmentCountLabel(node))}</span></span>`
       : '';
     const archived = !_tmTeamAssignmentIsActive(node);
-    const openable = !archived && canOpenTeamTask(node);
+    // Archived cards remain openable for users who are allowed to view/manage them.
+    // Archiving only changes visibility for other users and keeps the manager preview blurred.
+    const openable = canOpenTeamTask(node);
     const managesWorkflow = canManageTeamWorkflow(node.parentSectionId);
     const editable = managesWorkflow || canEditTeamTask(node);
     const attrs = openable

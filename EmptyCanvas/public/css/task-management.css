@@ -3269,8 +3269,9 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
 .task-management-page .tm-team-task-card--archived{
   opacity:.48!important;
   filter:blur(2px) grayscale(.25)!important;
-  pointer-events:none!important;
+  pointer-events:auto!important;
   user-select:none!important;
+  cursor:pointer!important;
 }
 .task-management-page .tm-team-task-card--archived::before{
   animation:none!important;
