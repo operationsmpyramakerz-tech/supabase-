@@ -2371,8 +2371,6 @@
       const label = openWorkButton.querySelector('span');
       if (label) label.textContent = 'Open Work Page';
     }
-    setupTeamTaskActions(assignment);
-
     const teamMenu = $('tmTeamTaskMore');
     if (teamMenu) teamMenu.hidden = true;
     const assignTeamButton = $('tmOpenPeopleWorkflowBtn');
@@ -2386,15 +2384,81 @@
   }
 
   
+  function updateCachedTeamAssignment(sectionId, assignment, { remove = false } = {}) {
+    const section = (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(sectionId));
+    const current = section?.peopleWorkflow || cachedPeopleWorkflow(sectionId) || { assignments: [], edges: [] };
+    const assignmentId = String(assignment?.id || assignment?.assignmentId || '');
+    const assignments = remove
+      ? (current.assignments || []).filter((item) => String(item.id || item.assignmentId) !== assignmentId)
+      : (current.assignments || []).map((item) => String(item.id || item.assignmentId) === assignmentId ? { ...item, ...assignment } : item);
+    const edges = remove
+      ? (current.edges || []).filter((edge) => String(edge.from || edge.fromAssignmentId) !== assignmentId && String(edge.to || edge.toAssignmentId) !== assignmentId)
+      : (current.edges || []);
+    const saved = { assignments, edges };
+    state.peopleWorkflowCache.set(String(sectionId), saved);
+    if (section) section.peopleWorkflow = saved;
+  }
+
+  async function archiveTeamAssignment(assignment) {
+    const sectionId = assignment.sectionId || assignment.parentSectionId;
+    const archived = _tmTeamAssignmentIsActive(assignment);
+    const confirmed = window.confirm(archived
+      ? `Archive the team task assigned to ${assignment.assigneeName || 'this team member'}?`
+      : `Restore the team task assigned to ${assignment.assigneeName || 'this team member'}?`);
+    if (!confirmed) return;
+    try {
+      const data = await api(`/api/task-management/assignments/${encodeURIComponent(assignment.id || assignment.assignmentId)}/archive`, {
+        method: 'PATCH', body: { archived }
+      });
+      updateCachedTeamAssignment(sectionId, data.assignment || { ...assignment, status: archived ? 'cancelled' : 'not_started' });
+      setOverlay(sectionDetailsOverlay, false);
+      renderWorkflow(state.selectedTicket);
+      showToast('success', archived ? 'Team task archived' : 'Team task restored', archived
+        ? 'Only this team-member card was archived.'
+        : 'This team-member card is active again.');
+    } catch (error) {
+      showToast('error', archived ? 'Archive failed' : 'Restore failed', error.message || 'Could not update this team task.');
+    }
+  }
+
+  async function deleteTeamAssignment(assignment) {
+    const sectionId = assignment.sectionId || assignment.parentSectionId;
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Delete team task?', itemType: 'team-member task', itemName: assignment.assigneeName || 'this team task',
+          message: 'This deletes only the selected team-member card and its connected arrows. The department task and other team cards will remain.',
+          cancelLabel: 'No, keep it.', confirmLabel: 'Yes, Delete!'
+        })
+      : window.confirm(`Delete only the team task assigned to ${assignment.assigneeName || 'this team member'}?`);
+    if (!confirmed) return;
+    try {
+      await api(`/api/task-management/assignments/${encodeURIComponent(assignment.id || assignment.assignmentId)}`, { method: 'DELETE' });
+      updateCachedTeamAssignment(sectionId, assignment, { remove: true });
+      setOverlay(sectionDetailsOverlay, false);
+      renderWorkflow(state.selectedTicket);
+      showToast('success', 'Team task deleted', 'Only the selected team-member card was deleted.');
+    } catch (error) {
+      showToast('error', 'Delete failed', error.message || 'Could not delete this team task.');
+    }
+  }
+
   function setupTeamTaskActions(assignment) {
     const wrap = $('tmTeamTaskMore');
     const menu = $('tmTeamTaskMoreMenu');
     const btn = $('tmTeamTaskMoreBtn');
     if (!wrap || !menu || !btn) return;
-    const canManage = canEditTeamTask(assignment);
+    const sectionId = assignment?.sectionId || assignment?.parentSectionId || '';
+    const canManage = canManageTeamWorkflow(sectionId);
     wrap.hidden = !canManage;
     menu.hidden = true;
     btn.setAttribute('aria-expanded', 'false');
+    if (!canManage) return;
+    const archiveItem = $('tmTeamTaskArchiveMenuItem');
+    const archiveLabel = archiveItem?.querySelector('span');
+    const archiveIcon = archiveItem?.querySelector('i');
+    const archived = !_tmTeamAssignmentIsActive(assignment);
+    if (archiveLabel) archiveLabel.textContent = archived ? 'Restore' : 'Archive';
+    if (archiveIcon) archiveIcon.setAttribute('data-feather', archived ? 'rotate-ccw' : 'archive');
     btn.onclick = (event) => {
       event.stopPropagation();
       const open = menu.hidden;
@@ -2404,15 +2468,18 @@
     $('tmTeamTaskEditMenuItem').onclick = () => {
       menu.hidden = true;
       btn.setAttribute('aria-expanded','false');
-      openTeamWorkflowEditor(assignment.sectionId || assignment.parentSectionId);
+      setOverlay(sectionDetailsOverlay, false);
+      openTeamWorkflowEditor(sectionId);
     };
     $('tmTeamTaskArchiveMenuItem').onclick = () => {
       menu.hidden = true;
-      if (typeof openArchiveConfirm === 'function') openArchiveConfirm(assignment);
+      btn.setAttribute('aria-expanded','false');
+      archiveTeamAssignment(assignment);
     };
     $('tmTeamTaskDeleteMenuItem').onclick = () => {
       menu.hidden = true;
-      if (typeof openDeleteConfirm === 'function') openDeleteConfirm(assignment);
+      btn.setAttribute('aria-expanded','false');
+      deleteTeamAssignment(assignment);
     };
   }
 
@@ -2460,6 +2527,7 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
       const label = openWorkButton.querySelector('span');
       if (label) label.textContent = 'Open Work Page';
     }
+    setupTeamTaskActions(assignment);
 
     hydrateIcons(sectionDetailsOverlay);
     setOverlay(sectionDetailsOverlay, true);
@@ -2640,7 +2708,7 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     const editButton = $('tmEditProjectBtn');
     if (editButton) editButton.hidden = true;
     const projectMore = $('tmProjectMore');
-    if (projectMore) projectMore.hidden = false;
+    if (projectMore) projectMore.hidden = true;
     closeProjectMenu();
     const currentUser = state.currentUser || window.__tmCurrentUser || {};
     const isProjectCreator = (currentUser?.id && String(ticket.createdById || '') === String(currentUser.id))

@@ -39861,6 +39861,68 @@ app.patch("/api/task-management/sections/:id/people-workflow/archive", requireAu
   }
 });
 
+
+app.patch("/api/task-management/assignments/:id/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team-member tasks can be managed from My Tasks only." });
+    const assignmentId = String(req.params.id || "").trim();
+    const assignmentRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
+    if (!assignmentRow) return res.status(404).json({ ok: false, error: "Team-member task not found." });
+    const assignment = _tmSerializeAssignment(assignmentRow);
+    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), assignment.sectionId);
+    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
+    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
+    const currentUser = await _tmCurrentMember(req);
+    const section = (ticket?.sections || []).find((item) => String(item.id) === String(assignment.sectionId));
+    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
+    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
+    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to archive team tasks." });
+
+    const archived = !!req.body?.archived;
+    const now = new Date().toISOString();
+    await supabaseDb.updateById(_tmAssignmentsTable(), assignmentId, archived
+      ? { status: "cancelled", updated_at: now }
+      : { status: "not_started", rejection_reason: null, updated_at: now });
+    const updatedRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
+    return res.json({ ok: true, archived, assignment: _tmSerializeAssignment(updatedRow) });
+  } catch (error) {
+    console.error("[task-management] assignment archive error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update the team-member task archive state." });
+  }
+});
+
+app.delete("/api/task-management/assignments/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team-member tasks can be managed from My Tasks only." });
+    const assignmentId = String(req.params.id || "").trim();
+    const assignmentRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
+    if (!assignmentRow) return res.status(404).json({ ok: false, error: "Team-member task not found." });
+    const assignment = _tmSerializeAssignment(assignmentRow);
+    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), assignment.sectionId);
+    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
+    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
+    const currentUser = await _tmCurrentMember(req);
+    const section = (ticket?.sections || []).find((item) => String(item.id) === String(assignment.sectionId));
+    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
+    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
+    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to delete team tasks." });
+
+    const workflow = await _tmLoadPeopleWorkflow(assignment.sectionId);
+    const connectedEdgeIds = (workflow.edges || [])
+      .filter((edge) => String(edge.from || edge.fromAssignmentId || "") === assignmentId || String(edge.to || edge.toAssignmentId || "") === assignmentId)
+      .map((edge) => String(edge.id || ""))
+      .filter(Boolean);
+    if (connectedEdgeIds.length) await supabaseDb.deleteByIds(_tmAssignmentEdgesTable(), connectedEdgeIds);
+    await supabaseDb.deleteByIds(_tmAssignmentsTable(), [assignmentId]);
+    return res.json({ ok: true, assignmentId, sectionId: assignment.sectionId });
+  } catch (error) {
+    console.error("[task-management] assignment delete error:", error?.details || error?.message || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete the team-member task." });
+  }
+});
+
 app.patch("/api/task-management/assignments/:id/work", requireAuth, requireTaskManagementView(), async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
