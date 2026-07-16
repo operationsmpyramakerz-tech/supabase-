@@ -246,7 +246,16 @@
     <section class="tm-dialog tm-dialog--section-details" role="dialog" aria-modal="true" aria-labelledby="tmSectionDetailsTitle">
       <div class="tm-dialog__top tm-section-details__header">
         <div><span class="tm-eyebrow" id="tmSectionDetailsKicker">Workflow block</span><h2 id="tmSectionDetailsTitle">Task details</h2><p id="tmSectionDetailsSub">Read-only task information and attached files.</p></div>
-        <div class="tm-section-details__header-actions"><span class="tm-status-pill" id="tmSectionDetailsStatus">Not started</span><button type="button" class="tm-icon-btn" aria-label="Close task details" data-tm-close="section-details"><i data-feather="x"></i></button></div>
+        <div class="tm-section-details__header-actions"><span class="tm-status-pill" id="tmSectionDetailsStatus">Not started</span>
+          <div class="tm-team-task-more" id="tmTeamTaskMore" hidden>
+            <button type="button" class="tm-icon-btn tm-team-task-more__trigger" id="tmTeamTaskMoreBtn" aria-label="Task actions" title="Task actions" aria-haspopup="menu" aria-expanded="false"><i data-feather="more-vertical"></i></button>
+            <div class="tm-project-more__menu" id="tmTeamTaskMoreMenu" role="menu" hidden>
+              <button type="button" role="menuitem" id="tmTeamTaskEditMenuItem"><i data-feather="edit-3"></i><span>Edit</span></button>
+              <button type="button" role="menuitem" id="tmTeamTaskArchiveMenuItem"><i data-feather="archive"></i><span>Archive</span></button>
+              <button type="button" role="menuitem" class="tm-project-more__danger" id="tmTeamTaskDeleteMenuItem"><i data-feather="trash-2"></i><span>Delete</span></button>
+            </div>
+          </div>
+          <button type="button" class="tm-icon-btn" aria-label="Close task details" data-tm-close="section-details"><i data-feather="x"></i></button></div>
       </div>
       <div class="tm-section-details__body" id="tmSectionDetailsBody"></div>
       <div class="tm-dialog__actions tm-section-details__actions">

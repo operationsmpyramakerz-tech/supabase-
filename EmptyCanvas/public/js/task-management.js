@@ -2371,6 +2371,10 @@
       const label = openWorkButton.querySelector('span');
       if (label) label.textContent = 'Open Work Page';
     }
+    setupTeamTaskActions(assignment);
+
+    const teamMenu = $('tmTeamTaskMore');
+    if (teamMenu) teamMenu.hidden = true;
     const assignTeamButton = $('tmOpenPeopleWorkflowBtn');
     if (assignTeamButton) {
       assignTeamButton.hidden = !canManageDepartment;
@@ -2381,7 +2385,38 @@
     setOverlay(sectionDetailsOverlay, true);
   }
 
-  function openTeamTaskDetails(assignmentId, sectionId = '') {
+  
+  function setupTeamTaskActions(assignment) {
+    const wrap = $('tmTeamTaskMore');
+    const menu = $('tmTeamTaskMoreMenu');
+    const btn = $('tmTeamTaskMoreBtn');
+    if (!wrap || !menu || !btn) return;
+    const canManage = canEditTeamTask(assignment);
+    wrap.hidden = !canManage;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    btn.onclick = (event) => {
+      event.stopPropagation();
+      const open = menu.hidden;
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    };
+    $('tmTeamTaskEditMenuItem').onclick = () => {
+      menu.hidden = true;
+      btn.setAttribute('aria-expanded','false');
+      openTeamWorkflowEditor(assignment.sectionId || assignment.parentSectionId);
+    };
+    $('tmTeamTaskArchiveMenuItem').onclick = () => {
+      menu.hidden = true;
+      if (typeof openArchiveConfirm === 'function') openArchiveConfirm(assignment);
+    };
+    $('tmTeamTaskDeleteMenuItem').onclick = () => {
+      menu.hidden = true;
+      if (typeof openDeleteConfirm === 'function') openDeleteConfirm(assignment);
+    };
+  }
+
+function openTeamTaskDetails(assignmentId, sectionId = '') {
     const found = findPeopleAssignment(assignmentId, sectionId);
     if (!found || !canOpenTeamTask(found.assignment) || !sectionDetailsOverlay) return;
 
