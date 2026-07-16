@@ -91,6 +91,8 @@
       .ops-delete-confirm__card{position:relative;z-index:1;width:min(460px,100%);padding:32px 30px 28px;border:1px solid rgba(15,23,42,.08);border-radius:26px;background:#fff;box-shadow:0 34px 100px rgba(0,0,0,.28);text-align:center;animation:opsDeleteConfirmIn .2s ease-out}
       .ops-delete-confirm__icon{width:62px;height:62px;margin:0 auto 17px;display:grid;place-items:center;border-radius:20px;background:#fff2f1;color:#e32d26;box-shadow:inset 0 0 0 1px #ffd5d1}
       .ops-delete-confirm__icon svg{width:34px;height:34px;fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}
+      .ops-delete-confirm[data-variant=archive] .ops-delete-confirm__icon{background:#fff7ed;color:#d97706;box-shadow:inset 0 0 0 1px #fed7aa}
+      .ops-delete-confirm[data-variant=restore] .ops-delete-confirm__icon{background:#ecfdf5;color:#059669;box-shadow:inset 0 0 0 1px #a7f3d0}
       .ops-delete-confirm__card h2{margin:0;color:#17191e;font-size:25px;line-height:1.2;letter-spacing:-.025em;font-weight:900}
       .ops-delete-confirm__card p{max-width:370px;margin:12px auto 0;color:#626a76;font-size:14px;line-height:1.62;font-weight:550}
       .ops-delete-confirm__actions{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:25px}
@@ -100,6 +102,10 @@
       .ops-delete-confirm__button--cancel:hover{background:#e6e8eb;transform:translateY(-1px)}
       .ops-delete-confirm__button--delete{background:linear-gradient(180deg,#ff3a31,#ef2119);color:#fff;box-shadow:0 10px 22px rgba(239,33,25,.3),inset 0 1px 0 rgba(255,255,255,.28)}
       .ops-delete-confirm__button--delete:hover{transform:translateY(-1px);box-shadow:0 14px 28px rgba(239,33,25,.38),inset 0 1px 0 rgba(255,255,255,.28)}
+      .ops-delete-confirm[data-variant=archive] .ops-delete-confirm__button--delete{background:linear-gradient(180deg,#f59e0b,#d97706);box-shadow:0 10px 22px rgba(217,119,6,.28),inset 0 1px 0 rgba(255,255,255,.28)}
+      .ops-delete-confirm[data-variant=archive] .ops-delete-confirm__button--delete:hover{box-shadow:0 14px 28px rgba(217,119,6,.35),inset 0 1px 0 rgba(255,255,255,.28)}
+      .ops-delete-confirm[data-variant=restore] .ops-delete-confirm__button--delete{background:linear-gradient(180deg,#10b981,#059669);box-shadow:0 10px 22px rgba(5,150,105,.28),inset 0 1px 0 rgba(255,255,255,.28)}
+      .ops-delete-confirm[data-variant=restore] .ops-delete-confirm__button--delete:hover{box-shadow:0 14px 28px rgba(5,150,105,.35),inset 0 1px 0 rgba(255,255,255,.28)}
       .ops-delete-confirm__button:disabled{opacity:.62;cursor:not-allowed;transform:none!important}
       body.ops-delete-confirm-open{overflow:hidden!important}
       @keyframes opsDeleteConfirmIn{from{opacity:0;transform:translateY(12px) scale(.975)}to{opacity:1;transform:none}}
@@ -165,6 +171,18 @@
       ? `You’re going to permanently delete “${itemName}”. This action cannot be undone.`
       : `You’re going to permanently delete this ${itemType}. This action cannot be undone.`;
 
+    const variant = ['delete', 'archive', 'restore'].includes(String(options.variant || '').toLowerCase())
+      ? String(options.variant).toLowerCase()
+      : 'delete';
+    modal.dataset.variant = variant;
+    const icon = modal.querySelector('.ops-delete-confirm__icon');
+    if (icon) {
+      icon.innerHTML = variant === 'archive'
+        ? '<svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M5 7l1 13h12l1-13"></path><path d="M9 11h6"></path><path d="M8 4h8l1 3H7l1-3Z"></path></svg>'
+        : variant === 'restore'
+          ? '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l3 2"></path></svg>'
+          : '<svg viewBox="0 0 24 24"><path d="M10.3 3.7 2.7 17a2 2 0 0 0 1.74 3h15.12A2 2 0 0 0 21.3 17L13.7 3.7a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>';
+    }
     modal.querySelector('#opsDeleteConfirmTitle').textContent = String(options.title || defaultTitle);
     modal.querySelector('#opsDeleteConfirmMessage').textContent = String(options.message || defaultMessage);
     modal.querySelector('button[data-ops-delete-cancel]').textContent = String(options.cancelLabel || 'No, keep it.');

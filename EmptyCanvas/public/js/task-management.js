@@ -2404,9 +2404,22 @@
   async function archiveTeamAssignment(assignment) {
     const sectionId = assignment.sectionId || assignment.parentSectionId;
     const archived = _tmTeamAssignmentIsActive(assignment);
-    const confirmed = window.confirm(archived
-      ? `Archive the team task assigned to ${assignment.assigneeName || 'this team member'}?`
-      : `Restore the team task assigned to ${assignment.assigneeName || 'this team member'}?`);
+    const assigneeName = assignment.assigneeName || 'this team member';
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          variant: archived ? 'archive' : 'restore',
+          title: archived ? 'Archive team task?' : 'Restore team task?',
+          itemType: 'team task',
+          itemName: assigneeName,
+          message: archived
+            ? `The task assigned to ${assigneeName} will be archived, blurred in your workflow, and hidden from other users until it is restored.`
+            : `The task assigned to ${assigneeName} will become active again and visible to the assigned user.`,
+          cancelLabel: 'Cancel',
+          confirmLabel: archived ? 'Archive Task' : 'Restore Task'
+        })
+      : window.confirm(archived
+          ? `Archive the team task assigned to ${assigneeName}?`
+          : `Restore the team task assigned to ${assigneeName}?`);
     if (!confirmed) return;
     try {
       const assignmentId = assignment.assignmentId || assignment.id;
