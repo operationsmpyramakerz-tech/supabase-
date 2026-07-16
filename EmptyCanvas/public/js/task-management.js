@@ -2387,7 +2387,7 @@
   function updateCachedTeamAssignment(sectionId, assignment, { remove = false } = {}) {
     const section = (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(sectionId));
     const current = section?.peopleWorkflow || cachedPeopleWorkflow(sectionId) || { assignments: [], edges: [] };
-    const assignmentId = String(assignment?.id || assignment?.assignmentId || '');
+    const assignmentId = String(assignment?.assignmentId || assignment?.id || '');
     const assignments = remove
       ? (current.assignments || []).filter((item) => String(item.id || item.assignmentId) !== assignmentId)
       : (current.assignments || []).map((item) => String(item.id || item.assignmentId) === assignmentId ? { ...item, ...assignment } : item);
@@ -2407,8 +2407,9 @@
       : `Restore the team task assigned to ${assignment.assigneeName || 'this team member'}?`);
     if (!confirmed) return;
     try {
-      const data = await api(`/api/task-management/assignments/${encodeURIComponent(assignment.id || assignment.assignmentId)}/archive`, {
-        method: 'PATCH', body: { archived }
+      const assignmentId = assignment.assignmentId || assignment.id;
+      const data = await api(`/api/task-management/assignments/${encodeURIComponent(assignmentId)}/archive`, {
+        method: 'PATCH', body: { view: state.view, archived }
       });
       updateCachedTeamAssignment(sectionId, data.assignment || { ...assignment, status: archived ? 'cancelled' : 'not_started' });
       setOverlay(sectionDetailsOverlay, false);
@@ -2432,7 +2433,11 @@
       : window.confirm(`Delete only the team task assigned to ${assignment.assigneeName || 'this team member'}?`);
     if (!confirmed) return;
     try {
-      await api(`/api/task-management/assignments/${encodeURIComponent(assignment.id || assignment.assignmentId)}`, { method: 'DELETE' });
+      const assignmentId = assignment.assignmentId || assignment.id;
+      await api(`/api/task-management/assignments/${encodeURIComponent(assignmentId)}`, {
+        method: 'DELETE',
+        body: { view: state.view }
+      });
       updateCachedTeamAssignment(sectionId, assignment, { remove: true });
       setOverlay(sectionDetailsOverlay, false);
       renderWorkflow(state.selectedTicket);
