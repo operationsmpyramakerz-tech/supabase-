@@ -2155,7 +2155,9 @@
     const teamWorkflow = section.peopleWorkflow || cachedPeopleWorkflow(section.id);
     const hasTeamTasks = belongsToMyDepartment && Array.isArray(teamWorkflow?.assignments) && teamWorkflow.assignments.length > 0;
     const teamSubmissions = hasTeamTasks ? completedTeamSubmissionMarkup(teamWorkflow) : '';
-    const interactive = state.view !== 'my' || belongsToMyDepartment;
+    // Every department card in My Tasks remains openable. Cards outside the
+    // current user's department are read-only inside the details modal.
+    const interactive = true;
     const footerText = !unlocked
       ? 'Waiting for connected prerequisite blocks'
       : (section.completedAt ? `Done ${formatDateTime(section.completedAt)}` : (section.startedAt ? `Started ${formatDateTime(section.startedAt)}` : 'Waiting to start'));
@@ -2176,12 +2178,10 @@
           <span class="tm-builder-block__label">Requested action</span>
           <strong>${escapeHtml(section.request || '—')}</strong>
           ${(section.deliveryDate || attachmentList(section).length) ? `<div class="tm-builder-block__meta">${section.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(section.deliveryDate))}</span>` : ''}${attachmentList(section).length ? `<span class="tm-builder-block__attachment tm-workflow-card__attachment"><i data-feather="paperclip"></i><span>${escapeHtml(attachmentCountLabel(section))}</span></span>` : ''}</div>` : ''}
-          ${state.view !== 'delegated' && section.details ? `<div class="tm-workflow-card__details"><span>Implementation details</span><p>${escapeHtml(section.details)}</p></div>` : ''}
-          ${state.view !== 'delegated' ? (section.workReport ? `<div class="tm-workflow-card__note"><i data-feather="file-text"></i><div><span>Work report${section.completedByName ? ` · ${escapeHtml(section.completedByName)}` : ''}</span><p>${escapeHtml(section.workReport)}</p></div></div>` : (section.completionNote ? `<div class="tm-workflow-card__note"><i data-feather="message-square"></i><div><span>Execution note</span><p>${escapeHtml(section.completionNote)}</p></div></div>` : '')) : ''}
           ${section.status === 'rejected' && section.rejectionReason ? `<div class="tm-workflow-card__rejection"><i data-feather="alert-circle"></i><span>${escapeHtml(section.rejectionReason)}</span></div>` : ''}
           ${teamSubmissions}
         </div>
-        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${belongsToMyDepartment ? `<span class="tm-workflow-card__mine-label"><i data-feather="${departmentOwner ? 'mouse-pointer' : 'eye'}"></i>${departmentOwner ? 'Open department task' : 'View department task'}</span>` : ''}</div>
+        <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${state.view === 'my' ? `<span class="tm-workflow-card__mine-label"><i data-feather="${departmentOwner ? 'mouse-pointer' : 'eye'}"></i>${departmentOwner ? 'Open department task' : 'View task details'}</span>` : ''}</div>
         ${hasTeamTasks ? '<span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span><span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>' : ''}
       </article>`;
   }
@@ -2489,8 +2489,9 @@
     state.readonlyAssignment = null;
     const section = (ticket?.sections || []).find((item) => String(item.id) === String(sectionId));
     if (!ticket || !section || !sectionDetailsOverlay) return;
-    if (state.view === 'my' && !isMyDepartmentSection(section)) return;
     state.readonlySection = section;
+    const isOwnMyTask = state.view === 'my' && isMyDepartmentSection(section);
+    const canManageDepartment = isOwnMyTask && canEditDepartmentWork();
 
     const layoutSection = graphLayout(ticket).nodes.find((item) => String(item.id) === String(section.id));
     const number = layoutSection?.workflowNumber || '—';
@@ -2540,7 +2541,11 @@
         : `<div class="tm-section-response-empty"><span class="tm-section-response-empty__icon"><i data-feather="clock"></i></span><div><b>No response submitted yet</b><p>The response, execution report, files, and links submitted by the responsible person will appear here.</p></div></div>`;
 
       if (state.view === 'delegated' || state.view === 'my') {
-        const responseContent = state.view === 'my' ? myTaskResponseEditorMarkup(section) : executionMarkup;
+        // Only the responsible department can submit or change a response.
+        // Other department tasks remain fully viewable, but read-only.
+        const responseContent = state.view === 'my' && canManageDepartment
+          ? myTaskResponseEditorMarkup(section)
+          : executionMarkup;
         body.innerHTML = `
           <div class="tm-section-details-tabs" role="tablist" aria-label="Department task details">
             <button type="button" class="tm-section-details-tab is-active" role="tab" aria-selected="true" aria-controls="tmSectionTaskPanel" id="tmSectionTaskTab" data-tm-section-tab="task"><i data-feather="clipboard"></i><span>Task Details</span></button>
@@ -2567,13 +2572,12 @@
             }
           });
         });
-        if (state.view === 'my') bindMyTaskResponseEditor(body, section);
+        if (state.view === 'my' && canManageDepartment) bindMyTaskResponseEditor(body, section);
       } else {
         body.innerHTML = `${taskDetailsMarkup}${hasExecutionResponse ? `<div class="tm-section-details__response-block">${executionMarkup}</div>` : ''}`;
       }
     }
-    const isOwnMyTask = state.view === 'my' && isMyDepartmentSection(section);
-    const canManageDepartment = isOwnMyTask && canEditDepartmentWork();
+
     const openWorkButton = $('tmOpenWorkPageBtn');
     if (openWorkButton) {
       // Opening a team-member task can leave this shared modal button disabled.
