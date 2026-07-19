@@ -2947,7 +2947,10 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     const dx = (event.clientX - drag.startClientX) / zoom;
     const dy = (event.clientY - drag.startClientY) / zoom;
     if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-    drag.node.x = Math.max(0, drag.startX + dx);
+    // Team-member cards may be dragged into the free space to the left of
+    // the original workflow origin. Keeping X clamped to zero made the card
+    // stop around the centre of the visible canvas after Zoom Fit.
+    drag.node.x = drag.startX + dx;
     drag.node.y = Math.max(0, drag.startY + dy);
     drag.card.style.left = `${Math.round(drag.node.x)}px`;
     drag.card.style.top = `${Math.round(drag.node.y)}px`;
