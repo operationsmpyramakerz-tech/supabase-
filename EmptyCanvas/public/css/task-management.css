@@ -3467,3 +3467,91 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   .task-management-page .tm-section-details-tab{padding:9px 8px;font-size:11px;line-height:1.25;}
   .task-management-page .tm-section-response-empty{min-height:160px;align-items:flex-start;padding:22px;}
 }
+
+/* My Tasks: inline response / execution editor inside task details */
+.tm-inline-response {
+  display: grid;
+  gap: 18px;
+}
+
+.tm-inline-response__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(217, 119, 6, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 247, 237, 0.72);
+}
+
+.tm-inline-response__intro p {
+  margin: 4px 0 0;
+  color: var(--tm-muted, #6b7280);
+  line-height: 1.55;
+}
+
+.tm-inline-response__icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.tm-inline-response__icon svg {
+  width: 18px;
+  height: 18px;
+  color: #d97706;
+}
+
+.tm-inline-response__current-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 11px 13px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  background: #fff;
+  color: #111827;
+}
+
+.tm-inline-response__current-file svg {
+  width: 17px;
+  height: 17px;
+  color: #d97706;
+}
+
+.tm-inline-response__current-file a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tm-inline-response__current-file a:hover {
+  text-decoration: underline;
+}
+
+.tm-inline-response__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.tm-inline-response__rejection[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 700px) {
+  .tm-inline-response__intro {
+    padding: 14px;
+  }
+
+  .tm-inline-response__actions .tm-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
