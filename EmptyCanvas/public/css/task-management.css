@@ -3605,3 +3605,9 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   background-color:transparent!important;
   background-image:none!important;
 }
+
+/* Keep personal-task connectors visible when a card is moved left of the
+   workflow's original coordinate origin. */
+.task-management-page .tm-team-workflow-arrows{
+  overflow:visible!important;
+}
