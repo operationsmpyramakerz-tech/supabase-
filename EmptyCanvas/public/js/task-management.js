@@ -2728,7 +2728,9 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     const editButton = $('tmEditProjectBtn');
     if (editButton) editButton.hidden = true;
     const projectMore = $('tmProjectMore');
-    if (projectMore) projectMore.hidden = true;
+    // Project-level actions are available in Delegated Tasks only.
+    // They manage the complete project, including every department section task.
+    if (projectMore) projectMore.hidden = state.view !== 'delegated';
     closeProjectMenu();
     const currentUser = state.currentUser || window.__tmCurrentUser || {};
     const isProjectCreator = (currentUser?.id && String(ticket.createdById || '') === String(currentUser.id))
