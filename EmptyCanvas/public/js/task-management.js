@@ -1434,6 +1434,11 @@
     if (!title) { $('tmMetaError').textContent = 'Enter a project title.'; return; }
     if (!priority) { $('tmMetaError').textContent = 'Select a project priority.'; return; }
     if (!dueDate) { $('tmMetaError').textContent = 'Select a target date.'; return; }
+    const lateBlock = state.builder.nodes.find((node) => String(node.deliveryDate || '') > dueDate);
+    if (lateBlock) {
+      $('tmMetaError').textContent = 'The project target date cannot be earlier than any workflow block delivery date.';
+      return;
+    }
     state.builder.meta = {
       title,
       priority,
@@ -1547,7 +1552,9 @@
       select.innerHTML = `<option value="">Select department</option>${state.departments.map((department) => `<option value="${escapeHtml(department)}" ${department === node.department ? 'selected' : ''}>${escapeHtml(department)}</option>`).join('')}`;
     }
     refreshModernSelect(select);
-    $('tmBlockDeliveryDateInput').value = node.deliveryDate || '';
+    const blockDeliveryInput = $('tmBlockDeliveryDateInput');
+    blockDeliveryInput.value = node.deliveryDate || '';
+    blockDeliveryInput.max = peopleMode ? '' : (state.builder.meta.dueDate || '');
     $('tmBlockRequestInput').value = node.request || '';
     $('tmBlockRequestInput').placeholder = peopleMode ? 'What should this team member deliver?' : 'What should this department deliver?';
     $('tmBlockDetailsInput').value = node.details || '';
@@ -1571,6 +1578,10 @@
       $('tmBlockEditorError').textContent = peopleMode
         ? 'Responsible team member, assigned task, and delivery date are required.'
         : 'Responsible department, requested action, and delivery date are required.';
+      return;
+    }
+    if (!peopleMode && state.builder.meta.dueDate && deliveryDate > state.builder.meta.dueDate) {
+      $('tmBlockEditorError').textContent = 'Delivery date cannot be after the project target date.';
       return;
     }
     if (peopleMode) {
@@ -1639,6 +1650,14 @@
         ? 'Responsible team member, assigned task, and delivery date are required for every block.'
         : 'Responsible department, requested action, and delivery date are required for every block.';
       return;
+    }
+    if (!peopleMode) {
+      const lateBlock = state.builder.nodes.find((node) => String(node.deliveryDate || '') > String(state.builder.meta.dueDate || ''));
+      if (lateBlock) {
+        openBlockEditor(lateBlock.id);
+        $('tmBlockEditorError').textContent = 'Delivery date cannot be after the project target date.';
+        return;
+      }
     }
     if (workflowHasCycle(state.builder.nodes, state.builder.edges)) {
       showToast('error', 'Circular workflow not allowed', 'Remove a circular arrow before saving the workflow.');
