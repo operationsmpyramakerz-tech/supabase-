@@ -39363,6 +39363,8 @@ app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), as
     if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
     const invalid = sections.find((section) => !section.department || !section.request || !section.deliveryDate);
     if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department, requested action, and delivery date." });
+    const lateSection = sections.find((section) => section.deliveryDate > dueDate);
+    if (lateSection) return res.status(400).json({ ok: false, error: "A workflow block delivery date cannot be after the project target date." });
 
     const currentUser = await _tmCurrentMember(req);
     const created = await supabaseDb.insert(_tmTicketsTable(), {
@@ -39603,6 +39605,8 @@ app.put("/api/task-management/:id", requireAuth, requireTaskManagementView(), as
     if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
     const invalid = sections.find((section) => !section.department || !section.request || !section.deliveryDate);
     if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department, requested action, and delivery date." });
+    const lateSection = sections.find((section) => section.deliveryDate > dueDate);
+    if (lateSection) return res.status(400).json({ ok: false, error: "A workflow block delivery date cannot be after the project target date." });
 
     const now = new Date().toISOString();
     await supabaseDb.updateById(_tmTicketsTable(), ticketId, {
