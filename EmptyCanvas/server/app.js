@@ -39743,6 +39743,13 @@ app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requir
     if (invalid) return res.status(400).json({ ok: false, error: "Every person task requires a team member, assigned task, and delivery date." });
     const outsideDepartment = plan.assignments.find((assignment) => !membersById.has(String(assignment.assigneeId)));
     if (outsideDepartment) return res.status(400).json({ ok: false, error: "Every selected person must belong to your department." });
+    const departmentDeliveryDate = String(section?.deliveryDate || "").trim();
+    const latePersonTask = departmentDeliveryDate
+      ? plan.assignments.find((assignment) => String(assignment.deliveryDate || "").trim() > departmentDeliveryDate)
+      : null;
+    if (latePersonTask) {
+      return res.status(400).json({ ok: false, error: "A personal task delivery date cannot be after its department task delivery date." });
+    }
 
     const existing = await _tmLoadPeopleWorkflow(sectionId);
     const existingById = new Map((existing.assignments || []).map((assignment) => [String(assignment.id), assignment]));
