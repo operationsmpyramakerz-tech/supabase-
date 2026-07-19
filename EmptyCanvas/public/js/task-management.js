@@ -2570,6 +2570,10 @@
             if (assignTeamButton && state.view === 'my') {
               assignTeamButton.hidden = target === 'response' || !canManageDepartment;
             }
+            const sectionCloseButton = $('tmSectionDetailsCloseBtn');
+            if (sectionCloseButton && state.view === 'my') {
+              sectionCloseButton.hidden = target === 'response';
+            }
           });
         });
         if (state.view === 'my' && canManageDepartment) bindMyTaskResponseEditor(body, section);
@@ -2578,6 +2582,8 @@
       }
     }
 
+    const sectionCloseButton = $('tmSectionDetailsCloseBtn');
+    if (sectionCloseButton) sectionCloseButton.hidden = false;
     const openWorkButton = $('tmOpenWorkPageBtn');
     if (openWorkButton) {
       // Opening a team-member task can leave this shared modal button disabled.
