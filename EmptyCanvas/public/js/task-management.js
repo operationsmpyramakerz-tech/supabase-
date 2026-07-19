@@ -1554,7 +1554,12 @@
     refreshModernSelect(select);
     const blockDeliveryInput = $('tmBlockDeliveryDateInput');
     blockDeliveryInput.value = node.deliveryDate || '';
-    blockDeliveryInput.max = peopleMode ? '' : (state.builder.meta.dueDate || '');
+    const parentDepartmentSection = peopleMode
+      ? (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(state.builder.contextSectionId || ''))
+      : null;
+    blockDeliveryInput.max = peopleMode
+      ? (parentDepartmentSection?.deliveryDate || '')
+      : (state.builder.meta.dueDate || '');
     $('tmBlockRequestInput').value = node.request || '';
     $('tmBlockRequestInput').placeholder = peopleMode ? 'What should this team member deliver?' : 'What should this department deliver?';
     $('tmBlockDetailsInput').value = node.details || '';
@@ -1583,6 +1588,13 @@
     if (!peopleMode && state.builder.meta.dueDate && deliveryDate > state.builder.meta.dueDate) {
       $('tmBlockEditorError').textContent = 'Delivery date cannot be after the project target date.';
       return;
+    }
+    if (peopleMode) {
+      const parentSection = (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(state.builder.contextSectionId || ''));
+      if (parentSection?.deliveryDate && deliveryDate > parentSection.deliveryDate) {
+        $('tmBlockEditorError').textContent = 'Personal task delivery date cannot be after the department task delivery date.';
+        return;
+      }
     }
     if (peopleMode) {
       const member = state.teamMembers.find((item) => String(item.id || item.name || '') === ownerValue);
@@ -1656,6 +1668,17 @@
       if (lateBlock) {
         openBlockEditor(lateBlock.id);
         $('tmBlockEditorError').textContent = 'Delivery date cannot be after the project target date.';
+        return;
+      }
+    }
+    if (peopleMode) {
+      const parentSection = (state.selectedTicket?.sections || []).find((item) => String(item.id) === String(state.builder.contextSectionId || ''));
+      const latePersonTask = parentSection?.deliveryDate
+        ? state.builder.nodes.find((node) => String(node.deliveryDate || '') > String(parentSection.deliveryDate || ''))
+        : null;
+      if (latePersonTask) {
+        openBlockEditor(latePersonTask.id);
+        $('tmBlockEditorError').textContent = 'Personal task delivery date cannot be after the department task delivery date.';
         return;
       }
     }
@@ -2201,7 +2224,6 @@
           ${teamSubmissions}
         </div>
         <div class="tm-workflow-card__footer"><span>${escapeHtml(footerText)}</span>${state.view === 'my' ? `<span class="tm-workflow-card__mine-label"><i data-feather="${departmentOwner ? 'mouse-pointer' : 'eye'}"></i>${departmentOwner ? 'Open department task' : 'View task details'}</span>` : ''}</div>
-        ${hasTeamTasks ? '<span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span><span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>' : ''}
       </article>`;
   }
 
@@ -2270,13 +2292,14 @@
       ordered.forEach((assignment, index) => {
         const viewerId = `team-${section.id}-${assignment.id}`;
         viewerIdByAssignmentId.set(String(assignment.id), viewerId);
+        const savedViewerPosition = state.viewer?.teamPositions?.[String(assignment.id)] || null;
         nodes.push({
           ...assignment,
           id: viewerId,
           assignmentId: String(assignment.id),
           parentSectionId: String(section.id),
-          x: startX + index * (cardWidth + horizontalGap),
-          y: startY + level * (cardHeight + verticalGap),
+          x: Number.isFinite(Number(savedViewerPosition?.x)) ? Number(savedViewerPosition.x) : startX + index * (cardWidth + horizontalGap),
+          y: Number.isFinite(Number(savedViewerPosition?.y)) ? Number(savedViewerPosition.y) : startY + level * (cardHeight + verticalGap),
           _visualWidth: cardWidth,
           _visualHeight: cardHeight,
           workflowNumber: `${section.workflowNumber || ''}${section.workflowNumber ? '.' : ''}${safeNumber(assignment.sortOrder, index + 1) || index + 1}`,
@@ -2316,8 +2339,7 @@
     const creatorClass = managesWorkflow ? ' tm-team-task-card--creator' : '';
     const archivedClass = archived ? ' tm-team-task-card--archived' : '';
     return `
-      <article class="tm-team-task-card tm-builder-block tm-builder-block--viewer${accessClass}${ownClass}${creatorClass}${archivedClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
-        <span class="tm-team-anchor tm-team-anchor--top" aria-hidden="true"></span>
+      <article class="tm-team-task-card tm-builder-block tm-builder-block--viewer tm-team-task-card--draggable${accessClass}${ownClass}${creatorClass}${archivedClass} ${statusClass(node.status)}" data-team-task-id="${escapeHtml(node.assignmentId)}" data-tm-draggable-team-task="${escapeHtml(node.assignmentId)}"${attrs} style="left:${Math.round(node.x)}px;top:${Math.round(node.y)}px;">
         <div class="tm-builder-block__head tm-workflow-card__top tm-team-task-card__head">
           <div class="tm-builder-block__number tm-team-task-card__number">${escapeHtml(node.workflowNumber || '•')}</div>
           <div class="tm-builder-block__title tm-team-task-card__title"><b>${escapeHtml(node.assigneeName || 'Team member')}</b><small>Workflow block ${escapeHtml(node.workflowNumber || '•')}</small></div>
@@ -2329,7 +2351,6 @@
           ${(node.deliveryDate || attachment) ? `<div class="tm-builder-block__meta tm-team-task-card__meta">${node.deliveryDate ? `<span class="tm-builder-block__delivery"><i data-feather="calendar"></i>${escapeHtml(formatDate(node.deliveryDate))}</span>` : ''}${attachment}</div>` : ''}
         </div>
         ${openable ? `<div class="tm-workflow-card__footer tm-team-task-card__footer"><span>${node.status === 'completed' ? 'Task completed' : (node.status === 'in_progress' ? 'Work in progress' : 'Waiting to start')}</span><button type="button" class="tm-team-task-card__open"${managesWorkflow ? ` data-tm-edit-team-workflow="${escapeHtml(node.parentSectionId)}"` : ''}><i data-feather="${managesWorkflow ? 'edit-3' : 'eye'}"></i><span>${managesWorkflow ? 'Edit Team Task' : 'View Task Details'}</span></button></div>` : ''}
-        <span class="tm-team-anchor tm-team-anchor--bottom" aria-hidden="true"></span>
       </article>`;
   }
 
@@ -2886,6 +2907,70 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     fitViewerToContent();
   }
 
+  function redrawViewerTeamArrows() {
+    const allNodes = [...(state.viewer?.departmentNodes || []), ...(state.viewer?.teamNodes || [])];
+    const byId = new Map(allNodes.map((node) => [String(node.id), node]));
+    const dimensions = { width: state.viewer?.width || 980, height: state.viewer?.height || 650 };
+    renderArrowLayer($('tmTeamWorkflowArrows'), state.viewer?.teamEdges || [], (id) => byId.get(String(id)), dimensions, 'tm-workflow-arrow tm-workflow-arrow--team', { markerId: 'tmTeamWorkflowArrowHead', orientation: 'vertical' });
+  }
+
+  function startViewerTeamDrag(event) {
+    if (state.view !== 'my' || !workflowCanvasWrap || !isOverlayOpen(workflowOverlay)) return false;
+    if (event.button !== undefined && event.button !== 0) return false;
+    const card = event.target.closest('[data-tm-draggable-team-task]');
+    if (!card || event.target.closest('button, a')) return false;
+    const assignmentId = String(card.dataset.tmDraggableTeamTask || '');
+    const node = (state.viewer?.teamNodes || []).find((item) => String(item.assignmentId) === assignmentId);
+    if (!node) return false;
+    state.viewer.teamDrag = {
+      pointerId: event.pointerId,
+      assignmentId,
+      card,
+      node,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: safeNumber(node.x, 0),
+      startY: safeNumber(node.y, 0),
+      moved: false,
+    };
+    card.classList.add('is-dragging');
+    try { card.setPointerCapture(event.pointerId); } catch {}
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  }
+
+  function moveViewerTeamDrag(event) {
+    const drag = state.viewer?.teamDrag;
+    if (!drag || (drag.pointerId != null && event.pointerId !== drag.pointerId)) return false;
+    const zoom = Math.max(.05, viewerZoom());
+    const dx = (event.clientX - drag.startClientX) / zoom;
+    const dy = (event.clientY - drag.startClientY) / zoom;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    drag.node.x = Math.max(0, drag.startX + dx);
+    drag.node.y = Math.max(0, drag.startY + dy);
+    drag.card.style.left = `${Math.round(drag.node.x)}px`;
+    drag.card.style.top = `${Math.round(drag.node.y)}px`;
+    redrawViewerTeamArrows();
+    event.preventDefault();
+    return true;
+  }
+
+  function endViewerTeamDrag(event) {
+    const drag = state.viewer?.teamDrag;
+    if (!drag || (event?.pointerId != null && drag.pointerId != null && event.pointerId !== drag.pointerId)) return false;
+    try { drag.card?.releasePointerCapture?.(drag.pointerId); } catch {}
+    drag.card?.classList.remove('is-dragging');
+    if (drag.moved) {
+      state.viewer.teamPositions[String(drag.assignmentId)] = { x: Math.round(drag.node.x), y: Math.round(drag.node.y) };
+      saveViewerTeamPositions();
+      state.viewer.suppressTeamClick = true;
+      setTimeout(() => { if (state.viewer) state.viewer.suppressTeamClick = false; }, 80);
+    }
+    state.viewer.teamDrag = null;
+    return true;
+  }
+
   function startViewerPan(event) {
     if (!workflowCanvasWrap || !isOverlayOpen(workflowOverlay)) return;
     if (event.button !== undefined && event.button !== 0) return;
@@ -3023,6 +3108,9 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
       node._visualHeight = Math.max(1, card.offsetHeight || 166);
     });
 
+    state.viewer.departmentNodes = nodes;
+    state.viewer.teamNodes = teamNodes;
+    state.viewer.teamEdges = teamEdges;
     const dimensions = getBoardDimensions([...nodes, ...teamNodes], { width: 980, height: 650 });
     state.viewer.width = dimensions.width;
     state.viewer.height = dimensions.height;
@@ -3037,9 +3125,26 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     hydrateIcons(workflowOverlay);
   }
 
+  function viewerTeamPositionStorageKey(ticketId) {
+    return `tm-team-viewer-positions:${String(ticketId || 'unknown')}`;
+  }
+
+  function loadViewerTeamPositions(ticketId) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(viewerTeamPositionStorageKey(ticketId)) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch { return {}; }
+  }
+
+  function saveViewerTeamPositions() {
+    try {
+      localStorage.setItem(viewerTeamPositionStorageKey(state.selectedTicket?.id), JSON.stringify(state.viewer?.teamPositions || {}));
+    } catch {}
+  }
+
   function openWorkflow(ticket) {
     state.selectedTicket = attachCachedPeopleWorkflows(ticket);
-    state.viewer = { zoom: 1, offsetX: 0, offsetY: 0, pan: null, pinch: null, width: 980, height: 650, bounds: null, manual: false };
+    state.viewer = { zoom: 1, offsetX: 0, offsetY: 0, pan: null, pinch: null, teamDrag: null, suppressTeamClick: false, teamPositions: loadViewerTeamPositions(ticket?.id), teamNodes: [], teamEdges: [], departmentNodes: [], width: 980, height: 650, bounds: null, manual: false };
     setOverlay(workflowOverlay, true);
     window.requestAnimationFrame(() => {
       renderWorkflow(ticket);
@@ -3925,7 +4030,10 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     builderCanvasWrap?.addEventListener('touchmove', handleBuilderTouchMove, { passive: false });
     builderCanvasWrap?.addEventListener('touchend', handleBuilderTouchEnd, { passive: false });
     builderCanvasWrap?.addEventListener('touchcancel', handleBuilderTouchEnd, { passive: false });
-    workflowCanvasWrap?.addEventListener('pointerdown', startViewerPan);
+    workflowCanvasWrap?.addEventListener('pointerdown', (event) => {
+      if (startViewerTeamDrag(event)) return;
+      startViewerPan(event);
+    });
     workflowCanvasWrap?.addEventListener('wheel', handleViewerWheel, { passive: false });
     workflowCanvasWrap?.addEventListener('touchstart', handleViewerTouchStart, { passive: false });
     workflowCanvasWrap?.addEventListener('touchmove', handleViewerTouchMove, { passive: false });
@@ -3938,11 +4046,13 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     document.addEventListener('pointermove', (event) => {
       if (moveBlockDrag(event)) return;
       if (moveCanvasPan(event)) return;
+      if (moveViewerTeamDrag(event)) return;
       moveViewerPan(event);
     });
     document.addEventListener('pointerup', (event) => {
       if (endBlockDrag(event)) return;
       if (endCanvasPan(event)) return;
+      if (endViewerTeamDrag(event)) return;
       endViewerPan(event);
     });
     document.addEventListener('pointercancel', (event) => {
@@ -4094,6 +4204,11 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
       }
 
       const teamTaskCard = event.target.closest('[data-tm-open-team-task]');
+      if (teamTaskCard && state.viewer?.suppressTeamClick) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (teamTaskCard && !event.target.closest('a')) {
         const parentSectionId = teamTaskCard.dataset.parentSectionId || '';
         openTeamTaskDetails(teamTaskCard.dataset.tmOpenTeamTask, parentSectionId);
