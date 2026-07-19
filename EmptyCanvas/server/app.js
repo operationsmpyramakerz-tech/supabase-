@@ -38463,6 +38463,36 @@ function _tmAttachment(value = {}) {
   };
 }
 
+function _tmDecodeWorkFiles(row = {}) {
+  const rawUrl = _sbGet(row, ["work_file_url", "workFileUrl"]);
+  if (typeof rawUrl === "string" && rawUrl.startsWith("__TM_WORK_FILES_JSON__:")) {
+    try {
+      const decoded = JSON.parse(rawUrl.slice("__TM_WORK_FILES_JSON__:".length));
+      return _tmAttachments(decoded);
+    } catch {}
+  }
+  const legacy = _tmAttachment({
+    name: _sbGet(row, ["work_file_name", "workFileName"]),
+    url: rawUrl,
+    type: _sbGet(row, ["work_file_type", "workFileType"]),
+    size: _sbGet(row, ["work_file_size", "workFileSize"]),
+  });
+  return legacy ? [legacy] : [];
+}
+
+function _tmWorkFileColumns(value) {
+  const files = _tmAttachments(value).slice(0, 20);
+  const first = files[0] || null;
+  return {
+    work_file_name: files.length > 1 ? `${files.length} work files` : (first?.name || null),
+    work_file_url: files.length > 1
+      ? `__TM_WORK_FILES_JSON__:${JSON.stringify(files)}`
+      : (first?.url || null),
+    work_file_type: first?.type || null,
+    work_file_size: first?.size || null,
+  };
+}
+
 function _tmAttachments(value, legacyValue = null) {
   let source = value;
   if (typeof source === "string") {
@@ -38600,12 +38630,8 @@ function _tmSerializeSection(row = {}) {
     workReport: _tmText(_sbGet(row, ["work_report", "workReport", "completion_note", "completionNote"]), 12000),
     rejectionReason: _tmText(_sbGet(row, ["rejection_reason", "rejectionReason"]), 4000),
     workLink: _tmText(_sbGet(row, ["work_link", "workLink"]), 4000),
-    workFile: _tmAttachment({
-      name: _sbGet(row, ["work_file_name", "workFileName"]),
-      url: _sbGet(row, ["work_file_url", "workFileUrl"]),
-      type: _sbGet(row, ["work_file_type", "workFileType"]),
-      size: _sbGet(row, ["work_file_size", "workFileSize"]),
-    }),
+    workFiles: _tmDecodeWorkFiles(row),
+    workFile: _tmDecodeWorkFiles(row)[0] || null,
     startedAt: _sbGet(row, ["started_at", "startedAt"]) || null,
     completedAt: _sbGet(row, ["completed_at", "completedAt"]) || null,
     completedByName: _tmText(_sbGet(row, ["completed_by_name", "completedByName"]), 180),
@@ -39109,12 +39135,8 @@ function _tmSerializeAssignment(row = {}) {
     workReport: _tmText(_sbGet(row, ["work_report", "workReport"]), 12000),
     rejectionReason: _tmText(_sbGet(row, ["rejection_reason", "rejectionReason"]), 4000),
     workLink: _tmText(_sbGet(row, ["work_link", "workLink"]), 4000),
-    workFile: _tmAttachment({
-      name: _sbGet(row, ["work_file_name", "workFileName"]),
-      url: _sbGet(row, ["work_file_url", "workFileUrl"]),
-      type: _sbGet(row, ["work_file_type", "workFileType"]),
-      size: _sbGet(row, ["work_file_size", "workFileSize"]),
-    }),
+    workFiles: _tmDecodeWorkFiles(row),
+    workFile: _tmDecodeWorkFiles(row)[0] || null,
     createdAt: _sbGet(row, ["created_at", "createdAt"]) || null,
     updatedAt: _sbGet(row, ["updated_at", "updatedAt"]) || null,
   };
@@ -39969,16 +39991,13 @@ app.patch("/api/task-management/assignments/:id/work", requireAuth, requireTaskM
     if (workLink && !/^https?:\/\//i.test(workLink)) {
       return res.status(400).json({ ok: false, error: "Work link must start with http:// or https://." });
     }
-    const workFile = _tmAttachment(req.body?.workFile);
+    const workFiles = _tmAttachments(req.body?.workFiles || req.body?.workFile || []);
     const patch = {
       status,
       work_report: workReport || null,
       rejection_reason: status === "rejected" ? rejectionReason : null,
       work_link: workLink || null,
-      work_file_name: workFile?.name || null,
-      work_file_url: workFile?.url || null,
-      work_file_type: workFile?.type || null,
-      work_file_size: workFile?.size || null,
+      ..._tmWorkFileColumns(workFiles),
       updated_at: new Date().toISOString(),
     };
     await supabaseDb.updateById(_tmAssignmentsTable(), assignmentId, patch);
@@ -40051,7 +40070,7 @@ app.patch("/api/task-management/sections/:id/work", requireAuth, requireTaskMana
     const workReport = _tmText(req.body?.workReport, 12000);
     const workLink = _tmText(req.body?.workLink, 4000);
     if (workLink && !/^https?:\/\//i.test(workLink)) return res.status(400).json({ ok: false, error: "Work link must start with http:// or https://." });
-    const workFile = _tmAttachment(req.body?.workFile);
+    const workFiles = _tmAttachments(req.body?.workFiles || req.body?.workFile || []);
     const now = new Date().toISOString();
     const patch = {
       status,
@@ -40059,10 +40078,7 @@ app.patch("/api/task-management/sections/:id/work", requireAuth, requireTaskMana
       completion_note: workReport || null,
       rejection_reason: status === "rejected" ? rejectionReason : null,
       work_link: workLink || null,
-      work_file_name: workFile?.name || null,
-      work_file_url: workFile?.url || null,
-      work_file_type: workFile?.type || null,
-      work_file_size: workFile?.size || null,
+      ..._tmWorkFileColumns(workFiles),
       updated_at: now,
     };
     if (status === "in_progress" && !section?.startedAt) patch.started_at = now;
