@@ -211,6 +211,14 @@
         <div class="tm-workflow-header__title"><span class="tm-ticket-code" id="tmWorkflowCode">TKT-00000</span><h2 id="tmWorkflowTitle">Project workflow</h2><p id="tmWorkflowSub">—</p></div>
         <div class="tm-workflow-header__actions">
           <button type="button" class="tm-icon-btn tm-icon-btn--edit" id="tmEditProjectBtn" aria-label="Edit project" title="Edit project"><i data-feather="edit-3"></i></button>
+          <div class="tm-project-more" id="tmProjectMore" hidden>
+            <button type="button" class="tm-icon-btn tm-project-more__trigger" id="tmProjectMoreBtn" aria-label="Project actions" title="Project actions" aria-haspopup="menu" aria-expanded="false"><i data-feather="more-vertical"></i></button>
+            <div class="tm-project-more__menu" id="tmProjectMoreMenu" role="menu" hidden>
+              <button type="button" role="menuitem" id="tmProjectEditMenuItem"><i data-feather="edit-3"></i><span>Edit</span></button>
+              <button type="button" role="menuitem" id="tmProjectArchiveMenuItem"><i data-feather="archive"></i><span>Archive</span></button>
+              <button type="button" role="menuitem" class="tm-project-more__danger" id="tmProjectDeleteMenuItem"><i data-feather="trash-2"></i><span>Delete</span></button>
+            </div>
+          </div>
           <button type="button" class="tm-icon-btn" aria-label="Close workflow" data-tm-close="workflow"><i data-feather="x"></i></button>
         </div>
       </div>
