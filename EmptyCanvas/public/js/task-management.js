@@ -2314,6 +2314,125 @@
       </article>`;
   }
 
+  function myTaskResponseEditorMarkup(section) {
+    const currentFile = section.workFile?.url
+      ? `<div class="tm-inline-response__current-file"><i data-feather="file"></i><a href="${escapeHtml(section.workFile.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(section.workFile.name || 'Open submitted file')}</a></div>`
+      : '';
+    return `
+      <form class="tm-inline-response" id="tmInlineResponseForm" novalidate>
+        <div class="tm-inline-response__intro">
+          <span class="tm-inline-response__icon"><i data-feather="message-square"></i></span>
+          <div><b>Submit your response and execution</b><p>Update the status, describe the completed work or progress, and attach the related file or link.</p></div>
+        </div>
+        <div class="tm-form-grid tm-work-page__form-grid">
+          <label class="tm-field tm-field--wide"><span>Status <b>*</b></span><select id="tmInlineWorkStatus" required>
+            <option value="not_started"${section.status === 'not_started' ? ' selected' : ''}>Not started</option>
+            <option value="in_progress"${section.status === 'in_progress' ? ' selected' : ''}>In progress</option>
+            <option value="rejected"${section.status === 'rejected' ? ' selected' : ''}>Rejected</option>
+            <option value="completed"${section.status === 'completed' ? ' selected' : ''}>Done</option>
+          </select></label>
+          <label class="tm-field tm-field--wide"><span>Response / work report</span><textarea id="tmInlineWorkReport" rows="6" maxlength="12000" placeholder="Write the work completed, progress, blockers, or handover details.">${escapeHtml(section.workReport || section.completionNote || '')}</textarea></label>
+          <label class="tm-field tm-field--wide tm-inline-response__rejection" id="tmInlineRejectionField"${section.status === 'rejected' ? '' : ' hidden'}><span>Rejected reason <b>*</b></span><textarea id="tmInlineRejectionReason" rows="3" maxlength="4000" placeholder="Explain clearly why this task is rejected.">${escapeHtml(section.rejectionReason || '')}</textarea></label>
+          <div class="tm-field tm-field--wide"><span>Work file</span>
+            <div class="tm-upload-field">
+              <input id="tmInlineWorkFile" class="tm-upload-field__input" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
+              <label class="tm-upload-field__picker" for="tmInlineWorkFile">
+                <span class="tm-upload-field__icon"><i data-feather="upload-cloud"></i></span>
+                <span class="tm-upload-field__copy"><b>Upload work file</b><small>Images, PDF, Office files, text, CSV, or ZIP · maximum 10 MB</small></span>
+                <span class="tm-upload-field__action">Choose file</span>
+              </label>
+              ${currentFile}
+              <div class="tm-upload-progress" id="tmInlineUploadProgress" hidden><span></span><b>Uploading work file…</b></div>
+            </div>
+          </div>
+          <label class="tm-field tm-field--wide"><span>Work link</span><div class="tm-link-control"><i data-feather="link"></i><input id="tmInlineWorkLink" type="url" maxlength="4000" value="${escapeHtml(section.workLink || '')}" placeholder="https://drive.google.com/... or another work link" /></div></label>
+        </div>
+        <div class="tm-form-error" id="tmInlineResponseError" role="alert" aria-live="polite"></div>
+        <div class="tm-inline-response__actions"><button type="submit" class="tm-btn tm-btn--primary" id="tmInlineSaveResponse"><i data-feather="save"></i><span>Save Response</span></button></div>
+      </form>`;
+  }
+
+  function bindMyTaskResponseEditor(body, section) {
+    const form = body.querySelector('#tmInlineResponseForm');
+    if (!form) return;
+    const statusInput = body.querySelector('#tmInlineWorkStatus');
+    const rejectionField = body.querySelector('#tmInlineRejectionField');
+    const fileInput = body.querySelector('#tmInlineWorkFile');
+    const progress = body.querySelector('#tmInlineUploadProgress');
+    const errorEl = body.querySelector('#tmInlineResponseError');
+    let uploadedFile = section.workFile || null;
+    let uploadPending = false;
+
+    statusInput?.addEventListener('change', () => {
+      if (rejectionField) rejectionField.hidden = statusInput.value !== 'rejected';
+    });
+
+    fileInput?.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        errorEl.textContent = 'The work file must be 10 MB or less.';
+        fileInput.value = '';
+        return;
+      }
+      uploadPending = true;
+      fileInput.disabled = true;
+      if (progress) progress.hidden = false;
+      errorEl.textContent = '';
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
+          method: 'POST', body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size }
+        });
+        uploadedFile = result.file || null;
+        const current = form.querySelector('.tm-inline-response__current-file');
+        if (current) current.remove();
+        const picker = form.querySelector('.tm-upload-field__picker');
+        picker?.insertAdjacentHTML('afterend', `<div class="tm-inline-response__current-file"><i data-feather="file-check"></i><span>${escapeHtml(uploadedFile?.name || file.name)}</span></div>`);
+        hydrateIcons(form);
+      } catch (error) {
+        errorEl.textContent = error.message || 'Failed to upload work file.';
+      } finally {
+        uploadPending = false;
+        fileInput.disabled = false;
+        fileInput.value = '';
+        if (progress) progress.hidden = true;
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = statusInput?.value || 'not_started';
+      const report = body.querySelector('#tmInlineWorkReport')?.value.trim() || '';
+      const workLink = body.querySelector('#tmInlineWorkLink')?.value.trim() || '';
+      const rejectionReason = body.querySelector('#tmInlineRejectionReason')?.value.trim() || '';
+      if (uploadPending) { errorEl.textContent = 'Wait until the work file finishes uploading.'; return; }
+      if (status === 'rejected' && !rejectionReason) { errorEl.textContent = 'Rejected reason is required.'; return; }
+      if (workLink && !/^https?:\/\//i.test(workLink)) { errorEl.textContent = 'Work link must start with http:// or https://.'; return; }
+      const button = body.querySelector('#tmInlineSaveResponse');
+      if (button) button.disabled = true;
+      errorEl.textContent = '';
+      try {
+        const data = await api(`/api/task-management/sections/${encodeURIComponent(section.id)}/work`, {
+          method: 'PATCH',
+          body: { view: state.view, status, workReport: report, rejectionReason: status === 'rejected' ? rejectionReason : '', workLink, workFile: uploadedFile }
+        });
+        const updated = data.section || { ...section, status, workReport: report, rejectionReason: status === 'rejected' ? rejectionReason : '', workLink, workFile: uploadedFile };
+        Object.assign(section, updated);
+        state.readonlySection = section;
+        renderWorkflow(state.selectedTicket);
+        openReadonlySectionDetails(section.id);
+        const responseTab = $('tmSectionDetailsBody')?.querySelector('[data-tm-section-tab="response"]');
+        responseTab?.click();
+        showToast('success', 'Response saved', 'Your task response and execution details were updated.');
+      } catch (error) {
+        errorEl.textContent = error.message || 'Failed to save the task response.';
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+
   function openReadonlySectionDetails(sectionId) {
     const ticket = state.selectedTicket;
     state.readonlyAssignment = null;
@@ -2366,14 +2485,15 @@
           </div>`
         : `<div class="tm-section-response-empty"><span class="tm-section-response-empty__icon"><i data-feather="clock"></i></span><div><b>No response submitted yet</b><p>The response, execution report, files, and links submitted by the responsible person will appear here.</p></div></div>`;
 
-      if (state.view === 'delegated') {
+      if (state.view === 'delegated' || state.view === 'my') {
+        const responseContent = state.view === 'my' ? myTaskResponseEditorMarkup(section) : executionMarkup;
         body.innerHTML = `
           <div class="tm-section-details-tabs" role="tablist" aria-label="Department task details">
             <button type="button" class="tm-section-details-tab is-active" role="tab" aria-selected="true" aria-controls="tmSectionTaskPanel" id="tmSectionTaskTab" data-tm-section-tab="task"><i data-feather="clipboard"></i><span>Task Details</span></button>
             <button type="button" class="tm-section-details-tab" role="tab" aria-selected="false" aria-controls="tmSectionResponsePanel" id="tmSectionResponseTab" data-tm-section-tab="response"><i data-feather="message-square"></i><span>Response / Execution</span>${hasExecutionResponse ? '<span class="tm-section-details-tab__dot" aria-hidden="true"></span>' : ''}</button>
           </div>
           <div class="tm-section-details-panel is-active" id="tmSectionTaskPanel" role="tabpanel" aria-labelledby="tmSectionTaskTab" data-tm-section-panel="task">${taskDetailsMarkup}</div>
-          <div class="tm-section-details-panel" id="tmSectionResponsePanel" role="tabpanel" aria-labelledby="tmSectionResponseTab" data-tm-section-panel="response" hidden>${executionMarkup}</div>`;
+          <div class="tm-section-details-panel" id="tmSectionResponsePanel" role="tabpanel" aria-labelledby="tmSectionResponseTab" data-tm-section-panel="response" hidden>${responseContent}</div>`;
         body.querySelectorAll('[data-tm-section-tab]').forEach((tab) => {
           tab.addEventListener('click', () => {
             const target = tab.dataset.tmSectionTab;
@@ -2389,6 +2509,7 @@
             });
           });
         });
+        if (state.view === 'my') bindMyTaskResponseEditor(body, section);
       } else {
         body.innerHTML = `${taskDetailsMarkup}${hasExecutionResponse ? `<div class="tm-section-details__response-block">${executionMarkup}</div>` : ''}`;
       }
@@ -2399,9 +2520,9 @@
     if (openWorkButton) {
       // Opening a team-member task can leave this shared modal button disabled.
       // Always restore the department manager action when department details open.
-      openWorkButton.hidden = !canManageDepartment;
-      openWorkButton.disabled = !canManageDepartment;
-      openWorkButton.title = canManageDepartment ? 'Open the department work page' : '';
+      openWorkButton.hidden = true;
+      openWorkButton.disabled = true;
+      openWorkButton.title = '';
       const label = openWorkButton.querySelector('span');
       if (label) label.textContent = 'Open Work Page';
     }
