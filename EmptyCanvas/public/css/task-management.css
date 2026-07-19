@@ -3589,3 +3589,19 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
 }
 /* Connection handles are calculated by the SVG layer; hide duplicate visual dots. */
 .task-management-page .tm-team-anchor{display:none!important;}
+
+/* Full workflow viewport grid + centered content v14 -----------------------
+   Keep the dotted workspace attached to the visible canvas rather than the
+   transformed workflow board. This makes the complete left/right viewport
+   available while the existing fit-to-content logic keeps the cards centred. */
+.task-management-page .tm-workflow-canvas-wrap{
+  background-color:#fafbfe!important;
+  background-image:radial-gradient(circle,rgba(103,111,129,.22) 1.2px,transparent 1.35px)!important;
+  background-size:20px 20px!important;
+  background-position:0 0!important;
+}
+.task-management-page .tm-workflow-stage,
+.task-management-page .tm-workflow-board{
+  background-color:transparent!important;
+  background-image:none!important;
+}
