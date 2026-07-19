@@ -3555,3 +3555,18 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
     justify-content: center;
   }
 }
+
+/* My Tasks response tab: preserve the original modern controls and file cards. */
+.task-management-page .tm-inline-response__files{
+  display:grid;
+  gap:9px;
+  margin-top:2px;
+}
+.task-management-page .tm-inline-response__actions{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:10px;
+  margin-top:18px;
+}
+.task-management-page .tm-inline-response__intro>div p{display:none!important;}
