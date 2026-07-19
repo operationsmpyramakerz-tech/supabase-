@@ -2348,18 +2348,50 @@
       status.innerHTML = `<i data-feather="${statusIcon(section.status)}"></i>${escapeHtml(sectionStatusLabel(section.status))}`;
     }
     if (body) {
-      body.innerHTML = `
+      const taskDetailsMarkup = `
         <div class="tm-section-details__grid">
           <div class="tm-section-details__item"><span>Project</span><b>${escapeHtml(ticket.title || '—')}</b></div>
           <div class="tm-section-details__item"><span>Delivery date</span><b>${escapeHtml(formatDate(section.deliveryDate))}</b></div>
           <div class="tm-section-details__item tm-section-details__item--wide"><span>Requested action</span><p>${escapeHtml(section.request || 'No requested action provided.')}</p></div>
           <div class="tm-section-details__item tm-section-details__item--wide"><span>Implementation details</span><p>${escapeHtml(section.details || 'No implementation details provided.')}</p></div>
           <div class="tm-section-details__item tm-section-details__item--wide"><span>Project files</span>${attachment}</div>
-          ${(section.workReport || section.completionNote) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Work report</span><p>${escapeHtml(section.workReport || section.completionNote)}</p></div>` : ''}
-          ${(workFile || workLink) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Work files and links</span><div class="tm-section-details__files">${workFile}${workLink}</div></div>` : ''}
-          ${section.rejectionReason ? `<div class="tm-section-details__item tm-section-details__item--wide tm-section-details__item--rejected"><span>Rejected reason</span><p>${escapeHtml(section.rejectionReason)}</p></div>` : ''}
-          ${teamWork ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Completed team work</span>${teamWork}</div>` : ''}
         </div>`;
+      const hasExecutionResponse = !!(section.workReport || section.completionNote || workFile || workLink || section.rejectionReason || teamWork);
+      const executionMarkup = hasExecutionResponse
+        ? `<div class="tm-section-details__grid">
+            ${(section.workReport || section.completionNote) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Response / work report</span><p>${escapeHtml(section.workReport || section.completionNote)}</p></div>` : ''}
+            ${(workFile || workLink) ? `<div class="tm-section-details__item tm-section-details__item--wide"><span>Submitted files and links</span><div class="tm-section-details__files">${workFile}${workLink}</div></div>` : ''}
+            ${section.rejectionReason ? `<div class="tm-section-details__item tm-section-details__item--wide tm-section-details__item--rejected"><span>Rejected reason</span><p>${escapeHtml(section.rejectionReason)}</p></div>` : ''}
+            ${teamWork ? `<div class="tm-section-details__item tm-section-details__item--wide">${teamWork}</div>` : ''}
+          </div>`
+        : `<div class="tm-section-response-empty"><span class="tm-section-response-empty__icon"><i data-feather="clock"></i></span><div><b>No response submitted yet</b><p>The response, execution report, files, and links submitted by the responsible person will appear here.</p></div></div>`;
+
+      if (state.view === 'delegated') {
+        body.innerHTML = `
+          <div class="tm-section-details-tabs" role="tablist" aria-label="Department task details">
+            <button type="button" class="tm-section-details-tab is-active" role="tab" aria-selected="true" aria-controls="tmSectionTaskPanel" id="tmSectionTaskTab" data-tm-section-tab="task"><i data-feather="clipboard"></i><span>Task Details</span></button>
+            <button type="button" class="tm-section-details-tab" role="tab" aria-selected="false" aria-controls="tmSectionResponsePanel" id="tmSectionResponseTab" data-tm-section-tab="response"><i data-feather="message-square"></i><span>Response / Execution</span>${hasExecutionResponse ? '<span class="tm-section-details-tab__dot" aria-hidden="true"></span>' : ''}</button>
+          </div>
+          <div class="tm-section-details-panel is-active" id="tmSectionTaskPanel" role="tabpanel" aria-labelledby="tmSectionTaskTab" data-tm-section-panel="task">${taskDetailsMarkup}</div>
+          <div class="tm-section-details-panel" id="tmSectionResponsePanel" role="tabpanel" aria-labelledby="tmSectionResponseTab" data-tm-section-panel="response" hidden>${executionMarkup}</div>`;
+        body.querySelectorAll('[data-tm-section-tab]').forEach((tab) => {
+          tab.addEventListener('click', () => {
+            const target = tab.dataset.tmSectionTab;
+            body.querySelectorAll('[data-tm-section-tab]').forEach((item) => {
+              const active = item === tab;
+              item.classList.toggle('is-active', active);
+              item.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            body.querySelectorAll('[data-tm-section-panel]').forEach((panel) => {
+              const active = panel.dataset.tmSectionPanel === target;
+              panel.classList.toggle('is-active', active);
+              panel.hidden = !active;
+            });
+          });
+        });
+      } else {
+        body.innerHTML = `${taskDetailsMarkup}${hasExecutionResponse ? `<div class="tm-section-details__response-block">${executionMarkup}</div>` : ''}`;
+      }
     }
     const isOwnMyTask = state.view === 'my' && isMyDepartmentSection(section);
     const canManageDepartment = isOwnMyTask && canEditDepartmentWork();
