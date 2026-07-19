@@ -2580,7 +2580,7 @@
           </div>`
         : `<div class="tm-section-response-empty"><span class="tm-section-response-empty__icon"><i data-feather="clock"></i></span><div><b>No response submitted yet</b><p>The response, execution report, files, and links submitted by the responsible person will appear here.</p></div></div>`;
 
-      if (state.view === 'delegated' || state.view === 'my') {
+      if (state.view === 'delegated' || state.view === 'my' || state.view === 'all') {
         // Only the responsible department can submit or change a response.
         // Other department tasks remain fully viewable, but read-only.
         const responseContent = state.view === 'my' && canManageDepartment
