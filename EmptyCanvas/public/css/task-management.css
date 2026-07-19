@@ -3570,3 +3570,22 @@ body.task-management-page *::-webkit-scrollbar-thumb:hover{background:rgba(92,98
   margin-top:18px;
 }
 .task-management-page .tm-inline-response__intro>div p{display:none!important;}
+
+/* My Tasks refinements: stronger read-only blur and movable personal-task cards. */
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--other-department{
+  opacity:.46!important;
+  filter:blur(1.15px) saturate(.45)!important;
+}
+.task-management-page .tm-workflow-board .tm-workflow-card.tm-workflow-card--other-department:hover{
+  opacity:.54!important;
+  filter:blur(.85px) saturate(.52)!important;
+}
+.task-management-page .tm-team-task-card--draggable{touch-action:none;cursor:grab!important;}
+.task-management-page .tm-team-task-card--draggable.is-dragging{
+  cursor:grabbing!important;
+  z-index:20!important;
+  user-select:none!important;
+  box-shadow:0 24px 48px rgba(0,0,0,.20)!important;
+}
+/* Connection handles are calculated by the SVG layer; hide duplicate visual dots. */
+.task-management-page .tm-team-anchor{display:none!important;}
