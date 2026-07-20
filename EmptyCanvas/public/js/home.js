@@ -298,21 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sorted = (list || []).slice().sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
 
     for (const o of sorted) {
-      // Keep each real order separate. Maintenance, withdrawal, and product
-      // orders can be created within the same minute, so grouping only by the
-      // timestamp can merge different ORD cards and make the Home analysis
-      // count smaller than Current Orders.
-      const explicitOrderKey =
-        o?.orderGroupId ??
-        o?.order_group_id ??
-        o?.orderIdNumber ??
-        o?.order_id_number ??
-        o?.orderId ??
-        o?.order_id ??
-        null;
-      const key = explicitOrderKey !== null && String(explicitOrderKey).trim()
-        ? `order:${String(explicitOrderKey).trim()}`
-        : `minute:${keyOf(o.createdTime)}`;
+      const key = keyOf(o.createdTime);
       let g = map.get(key);
       if (!g) {
         g = {
@@ -483,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const values = config.map((item) => summary.values[item.key]);
 
     values.forEach((value, index) => {
-      if (countEls[index]) countEls[index].textContent = String(value.count);
+      if (countEls[index]) countEls[index].textContent = `${value.count}/${summary.totalCount}`;
       if (costEls[index]) costEls[index].textContent = fmtMoney(value.cost);
       if (circles[index]) circles[index].style.stroke = config[index].color;
     });
@@ -707,7 +693,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const sorted = (list || []).slice().sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
 
     for (const it of sorted) {
-      const key = it?.orderGroupId ? String(it.orderGroupId) : minuteKey(it.createdTime);
+      // Keep every real order separate, even when several orders are created in
+      // the same minute. The Orders Review API exposes the visible order code as
+      // orderId/orderIdNumber, while some older records expose orderGroupId.
+      // Falling back to the minute bucket is only for legacy rows that have no
+      // order identifier at all.
+      const rawOrderKey =
+        it?.orderGroupId ??
+        it?.orderIdNumber ??
+        it?.orderNumber ??
+        it?.order_number ??
+        it?.orderId ??
+        it?.order_id;
+      const key = rawOrderKey !== undefined && rawOrderKey !== null && String(rawOrderKey).trim()
+        ? `order:${String(rawOrderKey).trim()}`
+        : `minute:${minuteKey(it.createdTime)}`;
       let g = map.get(key);
       if (!g) {
         g = {
@@ -1344,7 +1344,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let offset = 0;
     config.buckets.forEach((bucket) => {
       const value = totals[bucket.key];
-      if (bucket.countEl) bucket.countEl.textContent = String(value.count);
+      if (bucket.countEl) bucket.countEl.textContent = `${value.count}/${groups.length}`;
       if (bucket.costEl) bucket.costEl.textContent = fmtMoney(value.cost);
       offset = setRingSegment(bucket.circleEl, value.count, groups.length, offset, gap);
     });
