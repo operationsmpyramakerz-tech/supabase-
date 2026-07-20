@@ -117,9 +117,41 @@
               <div class="home-orders-performance__head">
                 <div>
                   <div class="stat__label">Current orders</div>
-                  <div class="home-orders-performance__subtitle">Performance overview</div>
                 </div>
-                <span class="home-orders-performance__period">All orders</span>
+                <div class="home-orders-analysis" id="ordersAnalysisControl">
+                  <button class="home-orders-analysis__trigger" id="ordersAnalysisTrigger" type="button" aria-haspopup="true" aria-expanded="false">
+                    <span class="home-orders-analysis__icon"><i data-feather="activity"></i></span>
+                    <span class="home-orders-analysis__trigger-copy">
+                      <small>Order analysis</small>
+                      <strong id="ordersAnalysisLabel">All time · Status</strong>
+                    </span>
+                    <i class="home-orders-analysis__chevron" data-feather="chevron-down"></i>
+                  </button>
+                  <div class="home-orders-analysis__menu" id="ordersAnalysisMenu" hidden>
+                    <div class="home-orders-analysis__field">
+                      <label for="ordersAnalysisTime">Time</label>
+                      <div class="home-orders-analysis__select-wrap">
+                        <select id="ordersAnalysisTime">
+                          <option value="week">Last week</option>
+                          <option value="month">Last month</option>
+                          <option value="year">Last year</option>
+                          <option value="all" selected>All time</option>
+                        </select>
+                        <i data-feather="chevron-down"></i>
+                      </div>
+                    </div>
+                    <div class="home-orders-analysis__field">
+                      <label for="ordersAnalysisBy">Analysis by</label>
+                      <div class="home-orders-analysis__select-wrap">
+                        <select id="ordersAnalysisBy">
+                          <option value="status" selected>Status</option>
+                          <option value="type">Type</option>
+                        </select>
+                        <i data-feather="chevron-down"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div class="home-orders-performance__body">
