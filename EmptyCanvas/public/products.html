@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
-  <link href="/css/products.css?v=products-section-cards-egp-tag-select-v1" rel="stylesheet" />
+  <link href="/css/products.css?v=products-tag-filter-compact-cards-v2" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page">
@@ -107,20 +107,19 @@
           </div>
         </section>
 
-        <section class="products-filter-panel" aria-labelledby="productsTagsTitle">
-          <div class="products-section-head">
-            <div>
-              <h3 id="productsTagsTitle">Tags</h3>
-              <p>Switch between product groups quickly.</p>
-            </div>
-            <div class="products-tags-actions">
-              <button type="button" class="products-add-tag-btn" id="productsAddTagBtn">
-                <i data-feather="plus-circle"></i>
-                <span>Add Tag</span>
-              </button>
-            </div>
+        <section class="products-filter-panel" aria-label="Product tag filter">
+          <div class="products-tag-filter-wrap">
+            <button type="button" class="products-tag-filter-btn" id="productsTagFilterBtn" aria-expanded="false" aria-controls="productsTags">
+              <span class="products-tag-filter-btn__icon"><i data-feather="filter"></i></span>
+              <span class="products-tag-filter-btn__copy">
+                <small>Filter by tag</small>
+                <strong id="productsTagFilterLabel">All Products</strong>
+              </span>
+              <span class="products-tag-filter-btn__count" id="productsTagFilterCount">0</span>
+              <i class="products-tag-filter-btn__chevron" data-feather="chevron-down"></i>
+            </button>
+            <div class="products-tags" id="productsTags" aria-live="polite" hidden></div>
           </div>
-          <div class="products-tags" id="productsTags" aria-live="polite"></div>
         </section>
 
         <section class="products-results" id="productsResults" aria-live="polite">
@@ -225,6 +224,6 @@
 
 
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/products.js?v=products-section-cards-egp-tag-select-v1"></script>
+  <script src="/js/products.js?v=products-tag-filter-compact-cards-v2"></script>
 </body>
 </html>
