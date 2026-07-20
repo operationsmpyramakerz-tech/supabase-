@@ -6,6 +6,7 @@
     products: [],
     loading: true,
     saving: false,
+    productImage: { dataUrl: '', name: '', type: '', size: 0, existingUrl: '', removed: false },
     search: '',
     activeTag: '__all__',
     modalMode: 'create',
@@ -218,7 +219,7 @@
     const price = formatPrice(product?.unitPrice);
     const url = String(product?.url || '').trim();
     const imageUrl = String(product?.imageUrl || '').trim();
-    const imageSrc = imageUrl || (url ? `/api/products/${encodeURIComponent(id)}/image` : '');
+    const imageSrc = imageUrl;
     const searchText = [name, tag, code, price, url].join(' ');
 
     const image = imageSrc
@@ -406,6 +407,57 @@
     setInputValue(els.priceInput, '');
     setInputValue(els.tagsInput, '');
     setInputValue(els.urlInput, '');
+    resetProductImage();
+  }
+
+  function formatFileSize(bytes) {
+    const size = Number(bytes || 0);
+    if (!size) return '';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+
+  function resetProductImage() {
+    state.productImage = { dataUrl: '', name: '', type: '', size: 0, existingUrl: '', removed: false };
+    if (els.imageInput) els.imageInput.value = '';
+    renderProductImagePreview();
+  }
+
+  function renderProductImagePreview() {
+    if (!els.imagePreview) return;
+    const image = state.productImage || {};
+    const src = image.dataUrl || image.existingUrl || '';
+    els.imagePreview.hidden = !src;
+    if (els.imagePreviewImg) els.imagePreviewImg.src = src || '';
+    if (els.imageName) els.imageName.textContent = image.name || (image.existingUrl ? 'Current product image' : 'Product image');
+    if (els.imageMeta) els.imageMeta.textContent = [image.type, formatFileSize(image.size)].filter(Boolean).join(' · ') || (image.existingUrl ? 'Saved image' : '');
+    if (els.imageOpen) els.imageOpen.disabled = !src;
+    hydrateIcons(els.imagePreview);
+  }
+
+  function loadProductImageFile(file) {
+    if (!file) return;
+    if (!/^image\//i.test(String(file.type || ''))) {
+      toast('error', 'Products', 'Please choose an image file.');
+      if (els.imageInput) els.imageInput.value = '';
+      return;
+    }
+    if (Number(file.size || 0) > 10 * 1024 * 1024) {
+      toast('error', 'Products', 'Product image must not exceed 10 MB.');
+      if (els.imageInput) els.imageInput.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.productImage = {
+        dataUrl: String(reader.result || ''), name: file.name || 'product-image', type: file.type || 'image',
+        size: Number(file.size || 0), existingUrl: '', removed: false,
+      };
+      renderProductImagePreview();
+    };
+    reader.onerror = () => toast('error', 'Products', 'Failed to read the selected image.');
+    reader.readAsDataURL(file);
   }
 
   function openModal(mode = 'create', product = null, createTag = '') {
@@ -430,6 +482,8 @@
       setInputValue(els.priceInput, product.unitPrice ?? '');
       setInputValue(els.tagsInput, firstTag(product) === 'Uncategorized' ? '' : firstTag(product));
       setInputValue(els.urlInput, product.url || '');
+      state.productImage = { dataUrl: '', name: 'Current product image', type: '', size: 0, existingUrl: product.imageUrl || '', removed: false };
+      renderProductImagePreview();
     }
 
     if (els.modal) {
@@ -543,6 +597,10 @@
       unitPrice: inputNumberValue(els.priceInput),
       tags: (state.modalMode === 'create' ? String(state.creatingTag || '').trim() : String(els.tagsInput?.value || '').trim()) || null,
       url: String(els.urlInput?.value || '').trim() || null,
+      imageData: state.productImage?.dataUrl || null,
+      imageName: state.productImage?.name || null,
+      imageType: state.productImage?.type || null,
+      removeImage: !!state.productImage?.removed,
     };
   }
 
@@ -1107,6 +1165,17 @@
       });
     }
 
+    if (els.imageInput) els.imageInput.addEventListener('change', () => loadProductImageFile(els.imageInput.files?.[0] || null));
+    if (els.imageOpen) els.imageOpen.addEventListener('click', () => {
+      const src = state.productImage?.dataUrl || state.productImage?.existingUrl || '';
+      if (src) window.open(src, '_blank', 'noopener,noreferrer');
+    });
+    if (els.imageRemove) els.imageRemove.addEventListener('click', () => {
+      state.productImage = { dataUrl: '', name: '', type: '', size: 0, existingUrl: '', removed: true };
+      if (els.imageInput) els.imageInput.value = '';
+      renderProductImagePreview();
+    });
+
     if (els.form) els.form.addEventListener('submit', saveProduct);
     if (els.tagForm) els.tagForm.addEventListener('submit', saveTag);
     if (els.proposalForm) els.proposalForm.addEventListener('submit', createProposal);
@@ -1187,6 +1256,13 @@
     els.tagsInput = $('productTagsInput');
     els.tagField = $('productTagField');
     els.urlInput = $('productUrlInput');
+    els.imageInput = $('productImageInput');
+    els.imagePreview = $('productImagePreview');
+    els.imagePreviewImg = $('productImagePreviewImg');
+    els.imageName = $('productImageName');
+    els.imageMeta = $('productImageMeta');
+    els.imageOpen = $('productImageOpen');
+    els.imageRemove = $('productImageRemove');
 
     els.editSelectedTagBtn = $('productsEditSelectedTagBtn');
     els.tagModal = $('productTagModal');
