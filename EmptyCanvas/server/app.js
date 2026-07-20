@@ -5947,9 +5947,70 @@ async function _sbProductById(productId) {
   return row ? _sbSerializeProductRow(row) : null;
 }
 
+function _sbIsProductsPrimaryKeyDuplicate(error) {
+  const text = [
+    error?.message,
+    error?.details?.message,
+    error?.details?.details,
+    error?.details?.hint,
+    error?.details?.code,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("products_pkey") ||
+    (text.includes("duplicate key value") && text.includes("primary key")) ||
+    text.includes("23505")
+  );
+}
+
+async function _sbNextNumericProductId() {
+  const rows = await _sbSelectProductsRows();
+  let maxId = 0;
+  let foundNumericId = false;
+
+  for (const product of rows) {
+    const rawId = _sbProductGet(product, ["id", "ID"]);
+    const numericId = Number(rawId);
+    if (!Number.isSafeInteger(numericId) || numericId < 0) continue;
+    foundNumericId = true;
+    if (numericId > maxId) maxId = numericId;
+  }
+
+  return foundNumericId ? maxId + 1 : 1;
+}
+
 async function _sbCreateProduct(body = {}) {
   const row = _sbNormalizeProductPayload(body, { partial: false });
-  const created = await supabaseDb.insert(_sbProductsTable(), row);
+  let created;
+
+  try {
+    created = await supabaseDb.insert(_sbProductsTable(), row);
+  } catch (error) {
+    // Imported product tables can have an integer primary-key sequence that is
+    // still behind the existing rows. In that case Supabase tries to reuse an
+    // old ID and returns products_pkey. Allocate the next available ID and retry.
+    if (!_sbIsProductsPrimaryKeyDuplicate(error)) throw error;
+
+    let nextId = await _sbNextNumericProductId();
+    let lastError = error;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        created = await supabaseDb.insert(_sbProductsTable(), { ...row, id: nextId + attempt });
+        lastError = null;
+        break;
+      } catch (retryError) {
+        lastError = retryError;
+        if (!_sbIsProductsPrimaryKeyDuplicate(retryError)) throw retryError;
+      }
+    }
+
+    if (lastError) throw lastError;
+  }
+
   await _sbInvalidateProductsCaches();
   return _sbSerializeProductRow(created || row);
 }
