@@ -134,6 +134,16 @@
 
   function groupProducts(list) {
     const map = new Map();
+    const includeCatalogTags = !normalizeText(state.search) && state.activeTag === '__all__';
+    if (includeCatalogTags) {
+      for (const tag of state.tagCatalog || []) {
+        const clean = String(tag || '').trim();
+        if (clean && !map.has(clean)) map.set(clean, []);
+      }
+    }
+    if (state.activeTag && state.activeTag !== '__all__' && !map.has(state.activeTag)) {
+      map.set(state.activeTag, []);
+    }
     for (const product of list || []) {
       const tag = firstTag(product);
       if (!map.has(tag)) map.set(tag, []);
@@ -297,8 +307,8 @@
             </div>
           </div>
         </header>
-        <div class="products-grid">
-          ${group.products.map(productCardHTML).join('')}
+        <div class="products-grid ${count ? '' : 'is-empty'}">
+          ${count ? group.products.map(productCardHTML).join('') : `<div class="products-group-empty"><span class="products-group-empty__icon"><i data-feather="package"></i></span><div><strong>No products in this tag yet</strong><small>Use Add Product to create the first product in this group.</small></div></div>`}
         </div>
       </section>
     `;
@@ -323,13 +333,13 @@
     renderTagOptions();
     renderProductSelect();
 
-    if (!filtered.length) {
+    const groups = groupProducts(filtered);
+    if (!groups.length) {
       els.results.innerHTML = window.OpsNoData?.html() || `<div class="products-empty">Sorry, No data available</div>`;
       hydrateIcons(els.results);
       return;
     }
 
-    const groups = groupProducts(filtered);
     els.results.innerHTML = groups.map(groupHTML).join('');
     hydrateIcons(els.results);
   }
@@ -707,7 +717,15 @@
   async function deleteTag(tag) {
     const cleanTag = String(tag || '').trim();
     if (!cleanTag) return;
-    const confirmed = window.confirm(`Delete the tag "${cleanTag}"? Products in this tag will be moved to Uncategorized.`);
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Delete tag?',
+          itemType: 'product tag',
+          itemName: cleanTag,
+          message: `Products currently assigned to “${cleanTag}” will be moved to Uncategorized. The products themselves will not be deleted.`,
+          confirmText: 'Delete Tag',
+        })
+      : window.confirm(`Delete the tag "${cleanTag}"? Products in this tag will be moved to Uncategorized.`);
     if (!confirmed) return;
     try {
       const res = await fetch('/api/products/tags', {
@@ -1026,7 +1044,16 @@
     const id = String(product?.id || '').trim();
     if (!id) return;
     const name = String(product?.name || 'this product');
-    if (!window.confirm(`Delete ${name}? This action cannot be undone.`)) return;
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: 'Delete product?',
+          itemType: 'product',
+          itemName: name,
+          message: `You’re going to permanently delete “${name}”. This action cannot be undone.`,
+          confirmText: 'Delete Product',
+        })
+      : window.confirm(`Delete ${name}? This action cannot be undone.`);
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
         method: 'DELETE',
