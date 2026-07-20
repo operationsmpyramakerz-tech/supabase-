@@ -409,7 +409,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
 });
 
 // Sessions (Redis/Upstash) — added after /health
-const { sessionMiddleware, redisClient, getSessionDiagnostics, destroySessionsForUser } = require("./session-redis");
+const { sessionMiddleware, redisClient, getSessionDiagnostics, setUserAuthRevokedAt, getUserAuthRevokedAt } = require("./session-redis");
 app.use(sessionMiddleware);
 
 // Public session diagnostics: exposes only configuration booleans, never secrets.
@@ -9186,24 +9186,37 @@ function _pageAccessDeniedResponse(req, res, { code = "PAGE_ACCESS_DENIED", erro
 }
 
 // Authentication middleware
-function requireAuth(req, res, next) {
-  if (req.session && req.session.authenticated) return next();
+async function requireAuth(req, res, next) {
+  const deny = (code = "AUTH_REQUIRED", message = "Login is required before calling this endpoint.") => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    if (String(req.path || "").startsWith("/api/")) {
+      return res.status(401).json({ ok: false, authenticated: false, code, message, redirect: "/login" });
+    }
+    return res.redirect(303, "/login?reason=session-invalidated");
+  };
 
-  // API calls should not silently render the login page. Returning JSON makes
-  // debugging and frontend handling clearer, while normal page routes still
-  // redirect to /login.
-  if (String(req.path || "").startsWith("/api/")) {
-    res.set("Cache-Control", "no-store");
-    return res.status(401).json({
-      ok: false,
-      authenticated: false,
-      code: "AUTH_REQUIRED",
-      message: "Login is required before calling this endpoint.",
-      redirect: "/login",
-    });
+  if (!req.session || !req.session.authenticated) return deny();
+
+  try {
+    const userId = String(req.session.userSupabaseId || req.session.userNotionId || "").trim();
+    const issuedAt = Number(req.session.authIssuedAt || 0);
+    if (userId) {
+      const revokedAt = await getUserAuthRevokedAt(userId);
+      if (revokedAt && issuedAt <= revokedAt) {
+        return req.session.destroy(() => {
+          res.clearCookie(process.env.SESSION_COOKIE_NAME || "op.sid", { path: "/" });
+          return deny("SESSION_INVALIDATED", "Your account details changed. Please sign in again.");
+        });
+      }
+    }
+  } catch (error) {
+    console.error("[auth] Session revocation check failed:", error?.message || error);
   }
 
-  return res.redirect("/login");
+  res.set("Cache-Control", "no-store");
+  return next();
 }
 
 // Page-Access middleware
@@ -11243,6 +11256,13 @@ app.post("/api/forgot-password", async (req, res) => {
   }
 });
 
+// Lightweight heartbeat used by every page to force immediate logout after
+// username/password changes or account deletion.
+app.get("/api/session-status", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  return res.json({ ok: true, authenticated: true });
+});
+
 // Login
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
@@ -11258,6 +11278,7 @@ app.post("/api/login", async (req, res) => {
           const { accountPayload, allowedNormalized, allowedUI, pageAccessRows } = await _sbAccountPayloadWithAccess(row, providedUsername);
 
           req.session.authenticated = true;
+          req.session.authIssuedAt = Date.now();
           req.session.username = accountPayload.username || providedUsername;
           req.session.allowedPages = allowedNormalized;
           req.session.pageAccess = pageAccessRows;
@@ -11296,6 +11317,7 @@ app.post("/api/login", async (req, res) => {
     if (storedPassword !== null && typeof storedPassword !== "undefined" && String(storedPassword) === providedPassword) {
       const allowedNormalized = extractAllowedPages(user.properties);
       req.session.authenticated = true;
+      req.session.authIssuedAt = Date.now();
       req.session.username = username;
       req.session.allowedPages = allowedNormalized;
       req.session.pageAccess = _legacyPageAccessRowsFromAllowed(allowedNormalized);
@@ -20960,19 +20982,22 @@ app.patch(
 
       if (_sbTeamMembersEnabled()) {
         const rows = await _sbSelectTeamMembersRows();
-        const existing = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim() === pageId) || null;
-        const beforeName = _sbString(_sbValueForLabel(existing || {}, "Name"));
-        const beforePassword = _sbString(_sbValueForLabel(existing || {}, "Password"));
+        const existingMember = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === pageId) || null;
         const writeRow = _sbBuildWriteRowFromFields(req.body?.fields || {}, rows);
         if (!Object.keys(writeRow).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
+        const oldName = _sbString(_sbValueForLabel(existingMember || {}, "Name"));
+        const oldPassword = _sbString(_sbValueForLabel(existingMember || {}, "Password"));
+        const updatesName = Object.keys(writeRow).some((key) => _sbCanon(key) === "name");
+        const updatesPassword = Object.keys(writeRow).some((key) => _sbCanon(key) === "password");
         const updated = await supabaseDb.updateById(_sbTeamMembersTable(), pageId, writeRow);
-        const afterName = _sbString(_sbValueForLabel(updated || { ...existing, ...writeRow }, "Name"));
-        const afterPassword = _sbString(_sbValueForLabel(updated || { ...existing, ...writeRow }, "Password"));
-        const credentialsChanged = beforeName !== afterName || beforePassword !== afterPassword;
-        if (credentialsChanged) {
-          await destroySessionsForUser(pageId).catch((error) => {
-            console.error("[sessions] Failed to revoke Team Member sessions:", error?.message || error);
-          });
+        const newName = updatesName
+          ? (_sbString(_sbValueForLabel(updated || writeRow, "Name")) || oldName)
+          : oldName;
+        const newPassword = updatesPassword
+          ? _sbString(_sbValueForLabel(updated || writeRow, "Password"))
+          : oldPassword;
+        if ((updatesName && newName !== oldName) || (updatesPassword && newPassword !== oldPassword)) {
+          await setUserAuthRevokedAt(pageId, Date.now());
         }
         await cacheDel(USER_ACCESS_CACHE_KEY);
         await cacheDel("cache:api:user-access:team-members:supabase:v1");
@@ -20987,16 +21012,17 @@ app.patch(
       if (errors.length) return res.status(400).json({ ok: false, error: errors.join(" ") });
       if (!Object.keys(properties).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
 
-      const changedLabels = new Set((req.body?.fields || []).map((field) => String(field?.label || field?.name || "").trim().toLowerCase()));
-      const credentialsChanged = changedLabels.has("name") || changedLabels.has("password");
+      const previousPage = await notion.pages.retrieve({ page_id: safePageId }).catch(() => null);
+      const previousName = previousPage?.properties?.Name?.title?.[0]?.plain_text || "";
+      const previousPassword = _extractPropText(previousPage?.properties?.Password) || "";
       await notion.pages.update({ page_id: safePageId, properties });
-      if (credentialsChanged) {
-        await destroySessionsForUser(pageId).catch((error) => {
-          console.error("[sessions] Failed to revoke Team Member sessions:", error?.message || error);
-        });
-      }
       await cacheDel(USER_ACCESS_CACHE_KEY);
       const page = await notion.pages.retrieve({ page_id: safePageId });
+      const currentName = page?.properties?.Name?.title?.[0]?.plain_text || "";
+      const currentPassword = _extractPropText(page?.properties?.Password) || "";
+      if (currentName !== previousName || currentPassword !== previousPassword) {
+        await setUserAuthRevokedAt(safePageId, Date.now());
+      }
       const member = await serializeTeamMemberForUserAccess(page);
       return res.json({ ok: true, member });
     } catch (error) {
@@ -21021,10 +21047,8 @@ app.delete(
     try {
       const memberId = String(req.params?.id || "").trim();
       const result = await _sbDeleteUserAccessTeamMember(memberId);
-      await destroySessionsForUser(memberId).catch((error) => {
-        console.error("[sessions] Failed to revoke deleted Team Member sessions:", error?.message || error);
-      });
-      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted and signed out from all devices.` });
+      await setUserAuthRevokedAt(memberId, Date.now());
+      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted.` });
     } catch (error) {
       console.error("DELETE /api/user-access/team-members/:id error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete team member." });
