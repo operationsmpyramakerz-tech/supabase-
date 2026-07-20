@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
-  <link href="/css/products.css?v=products-tag-filter-compact-cards-v2" rel="stylesheet" />
+  <link href="/css/products.css?v=products-active-tag-add-v3" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page">
@@ -85,28 +85,6 @@
       </header>
 
       <main class="products-shell">
-        <section class="products-hero" aria-labelledby="productsTitle">
-          <div class="products-hero__content products-hero__content--compact">
-            <div class="products-eyebrow" id="productsTitle"><i data-feather="package"></i><span>Products</span></div>
-            <div class="products-actions-row products-actions-row--compact">
-              <button type="button" class="products-add-btn" id="productsAddBtn">
-                <i data-feather="plus-circle"></i>
-                <span>Add Product</span>
-              </button>
-            </div>
-          </div>
-          <div class="products-hero__panel" aria-label="Products summary">
-            <div class="products-stat-card products-stat-card--primary">
-              <span class="products-stat-card__label">Products</span>
-              <strong id="productsTotalCount">—</strong>
-            </div>
-            <div class="products-stat-card">
-              <span class="products-stat-card__label">Groups</span>
-              <strong id="productsGroupsCount">—</strong>
-            </div>
-          </div>
-        </section>
-
         <section class="products-filter-panel" aria-label="Product tag filter">
           <div class="products-tag-filter-wrap">
             <button type="button" class="products-tag-filter-btn" id="productsTagFilterBtn" aria-expanded="false" aria-controls="productsTags">
@@ -165,7 +143,7 @@
             <strong>EGP</strong>
           </span>
         </label>
-        <label class="products-field">
+        <label class="products-field" id="productTagField">
           <span>Tag</span>
           <select id="productTagsInput" name="tags" aria-label="Product tag">
             <option value="">Select tag</option>
@@ -224,6 +202,6 @@
 
 
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/products.js?v=products-tag-filter-compact-cards-v2"></script>
+  <script src="/js/products.js?v=products-active-tag-add-v3"></script>
 </body>
 </html>
