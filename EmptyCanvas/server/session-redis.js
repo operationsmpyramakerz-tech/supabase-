@@ -152,8 +152,10 @@ if (!store) {
 const forceSecureCookie = String(process.env.FORCE_SECURE_COOKIE || "").toLowerCase() === "true";
 const secureCookie = forceSecureCookie ? true : "auto";
 
+const sessionStore = store || new session.MemoryStore();
+
 const sessionMiddleware = session({
-  store: store || undefined,
+  store: sessionStore,
   secret: process.env.SESSION_SECRET || "dev-fallback-secret",
   proxy: true,
   resave: false,
@@ -182,4 +184,101 @@ function getSessionDiagnostics() {
   };
 }
 
-module.exports = { sessionMiddleware, redisClient, sessionStoreType, getSessionDiagnostics };
+
+function _sessionMatchesUser(sess, userId) {
+  const wanted = String(userId || "").trim();
+  if (!wanted || !sess || typeof sess !== "object") return false;
+  return [sess.userSupabaseId, sess.userNotionId]
+    .map((value) => String(value || "").trim())
+    .some((value) => value && value === wanted);
+}
+
+async function _sessionEntries() {
+  if (sessionStoreType === "upstash-redis-url" && redisClient) {
+    if (!redisClient.isOpen) await redisClient.connect();
+    const entries = [];
+    for await (const key of redisClient.scanIterator({ MATCH: "op:*", COUNT: 100 })) {
+      const raw = await redisClient.get(key);
+      if (!raw) continue;
+      try {
+        entries.push([String(key).replace(/^op:/, ""), JSON.parse(raw)]);
+      } catch {}
+    }
+    return entries;
+  }
+
+  if (sessionStoreType === "upstash-rest" && typeof sessionStore?._command === "function") {
+    const entries = [];
+    let cursor = "0";
+    do {
+      const result = await sessionStore._command(["SCAN", cursor, "MATCH", "op:sess:*", "COUNT", 100]);
+      cursor = String(Array.isArray(result) ? result[0] : "0");
+      const keys = Array.isArray(result?.[1]) ? result[1] : [];
+      for (const key of keys) {
+        const raw = await sessionStore._command(["GET", key]);
+        if (!raw) continue;
+        try {
+          entries.push([String(key).replace(/^op:sess:/, ""), typeof raw === "object" ? raw : JSON.parse(String(raw))]);
+        } catch {}
+      }
+    } while (cursor !== "0");
+    return entries;
+  }
+
+  // express-session MemoryStore keeps JSON strings keyed by the session ID.
+  if (sessionStore?.sessions && typeof sessionStore.sessions === "object") {
+    return Object.entries(sessionStore.sessions).flatMap(([sid, raw]) => {
+      try {
+        return [[sid, typeof raw === "object" ? raw : JSON.parse(String(raw))]];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  return await new Promise((resolve, reject) => {
+    if (!sessionStore || typeof sessionStore.all !== "function") return resolve([]);
+    sessionStore.all((error, sessions) => {
+      if (error) return reject(error);
+      if (sessions && !Array.isArray(sessions) && typeof sessions === "object") {
+        return resolve(Object.entries(sessions));
+      }
+      resolve([]);
+    });
+  });
+}
+
+function _storeDestroy(sid) {
+  return new Promise((resolve, reject) => {
+    sessionStore.destroy(String(sid || ""), (error) => (error ? reject(error) : resolve()));
+  });
+}
+
+/**
+ * Destroy every active login session that belongs to a Team Member.
+ * Used after username/password changes and user deletion so all connected
+ * browsers/devices are signed out immediately on their next request.
+ */
+async function destroySessionsForUser(userId) {
+  const wanted = String(userId || "").trim();
+  if (!wanted) return { destroyed: 0 };
+
+  const entries = await _sessionEntries();
+
+  let destroyed = 0;
+  for (const [sid, sess] of entries) {
+    if (!_sessionMatchesUser(sess, wanted)) continue;
+    await _storeDestroy(sid);
+    destroyed += 1;
+  }
+  return { destroyed };
+}
+
+module.exports = {
+  sessionMiddleware,
+  sessionStore,
+  redisClient,
+  sessionStoreType,
+  getSessionDiagnostics,
+  destroySessionsForUser,
+};

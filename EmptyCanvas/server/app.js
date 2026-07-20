@@ -409,7 +409,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
 });
 
 // Sessions (Redis/Upstash) — added after /health
-const { sessionMiddleware, redisClient, getSessionDiagnostics } = require("./session-redis");
+const { sessionMiddleware, redisClient, getSessionDiagnostics, destroySessionsForUser } = require("./session-redis");
 app.use(sessionMiddleware);
 
 // Public session diagnostics: exposes only configuration booleans, never secrets.
@@ -20960,9 +20960,20 @@ app.patch(
 
       if (_sbTeamMembersEnabled()) {
         const rows = await _sbSelectTeamMembersRows();
+        const existing = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim() === pageId) || null;
+        const beforeName = _sbString(_sbValueForLabel(existing || {}, "Name"));
+        const beforePassword = _sbString(_sbValueForLabel(existing || {}, "Password"));
         const writeRow = _sbBuildWriteRowFromFields(req.body?.fields || {}, rows);
         if (!Object.keys(writeRow).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
         const updated = await supabaseDb.updateById(_sbTeamMembersTable(), pageId, writeRow);
+        const afterName = _sbString(_sbValueForLabel(updated || { ...existing, ...writeRow }, "Name"));
+        const afterPassword = _sbString(_sbValueForLabel(updated || { ...existing, ...writeRow }, "Password"));
+        const credentialsChanged = beforeName !== afterName || beforePassword !== afterPassword;
+        if (credentialsChanged) {
+          await destroySessionsForUser(pageId).catch((error) => {
+            console.error("[sessions] Failed to revoke Team Member sessions:", error?.message || error);
+          });
+        }
         await cacheDel(USER_ACCESS_CACHE_KEY);
         await cacheDel("cache:api:user-access:team-members:supabase:v1");
         const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows || []), rows || []);
@@ -20976,7 +20987,14 @@ app.patch(
       if (errors.length) return res.status(400).json({ ok: false, error: errors.join(" ") });
       if (!Object.keys(properties).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
 
+      const changedLabels = new Set((req.body?.fields || []).map((field) => String(field?.label || field?.name || "").trim().toLowerCase()));
+      const credentialsChanged = changedLabels.has("name") || changedLabels.has("password");
       await notion.pages.update({ page_id: safePageId, properties });
+      if (credentialsChanged) {
+        await destroySessionsForUser(pageId).catch((error) => {
+          console.error("[sessions] Failed to revoke Team Member sessions:", error?.message || error);
+        });
+      }
       await cacheDel(USER_ACCESS_CACHE_KEY);
       const page = await notion.pages.retrieve({ page_id: safePageId });
       const member = await serializeTeamMemberForUserAccess(page);
@@ -21001,8 +21019,12 @@ app.delete(
     }
     res.set("Cache-Control", "no-store");
     try {
-      const result = await _sbDeleteUserAccessTeamMember(req.params?.id || "");
-      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted.` });
+      const memberId = String(req.params?.id || "").trim();
+      const result = await _sbDeleteUserAccessTeamMember(memberId);
+      await destroySessionsForUser(memberId).catch((error) => {
+        console.error("[sessions] Failed to revoke deleted Team Member sessions:", error?.message || error);
+      });
+      return res.json({ ok: true, source: "supabase", result, message: `${result.name || "Team member"} deleted and signed out from all devices.` });
     } catch (error) {
       console.error("DELETE /api/user-access/team-members/:id error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete team member." });
