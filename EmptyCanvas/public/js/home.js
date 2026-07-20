@@ -298,7 +298,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const sorted = (list || []).slice().sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
 
     for (const o of sorted) {
-      const key = keyOf(o.createdTime);
+      // Keep each real order separate. Maintenance, withdrawal, and product
+      // orders can be created within the same minute, so grouping only by the
+      // timestamp can merge different ORD cards and make the Home analysis
+      // count smaller than Current Orders.
+      const explicitOrderKey =
+        o?.orderGroupId ??
+        o?.order_group_id ??
+        o?.orderIdNumber ??
+        o?.order_id_number ??
+        o?.orderId ??
+        o?.order_id ??
+        null;
+      const key = explicitOrderKey !== null && String(explicitOrderKey).trim()
+        ? `order:${String(explicitOrderKey).trim()}`
+        : `minute:${keyOf(o.createdTime)}`;
       let g = map.get(key);
       if (!g) {
         g = {
@@ -469,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const values = config.map((item) => summary.values[item.key]);
 
     values.forEach((value, index) => {
-      if (countEls[index]) countEls[index].textContent = `${value.count}/${summary.totalCount}`;
+      if (countEls[index]) countEls[index].textContent = String(value.count);
       if (costEls[index]) costEls[index].textContent = fmtMoney(value.cost);
       if (circles[index]) circles[index].style.stroke = config[index].color;
     });
@@ -1330,7 +1344,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let offset = 0;
     config.buckets.forEach((bucket) => {
       const value = totals[bucket.key];
-      if (bucket.countEl) bucket.countEl.textContent = `${value.count}/${groups.length}`;
+      if (bucket.countEl) bucket.countEl.textContent = String(value.count);
       if (bucket.costEl) bucket.costEl.textContent = fmtMoney(value.cost);
       offset = setRingSegment(bucket.circleEl, value.count, groups.length, offset, gap);
     });
