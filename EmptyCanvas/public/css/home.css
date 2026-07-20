@@ -2254,10 +2254,10 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   }
 }
 
-/* Current Orders ring correction: 30% thinner while preserving responsive auto-fit */
+/* Home order analysis rings: 40% thinner across Current Orders, Operations Orders, and Orders Review */
 .page-home .home-orders-ring__track,
 .page-home .home-orders-ring__segment{
-  stroke-width:9.8 !important;
+  stroke-width:5.9 !important;
 }
 
 /* Home: Operations Orders + Orders Review performance cards */
@@ -2319,7 +2319,7 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
 .page-home .home-summary-ring__track,
 .page-home .home-summary-ring__segment{
   fill:none;
-  stroke-width:9.8;
+  stroke-width:5.9;
   stroke-linecap:round;
 }
 .page-home .home-summary-ring__track{stroke:#e5e7eb;}
