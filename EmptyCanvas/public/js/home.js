@@ -15,6 +15,15 @@ document.addEventListener('DOMContentLoaded', () => {
     kpiTasksSub: $('#kpiTasksSub'),
     kpiOrdersMain: $('#kpiOrdersMain'),
     kpiOrdersSub: $('#kpiOrdersSub'),
+    ordersInProgressCount: $('#ordersInProgressCount'),
+    ordersInProgressCost: $('#ordersInProgressCost'),
+    ordersCompletedCount: $('#ordersCompletedCount'),
+    ordersCompletedCost: $('#ordersCompletedCost'),
+    ordersRejectedCount: $('#ordersRejectedCount'),
+    ordersRejectedCost: $('#ordersRejectedCost'),
+    ordersRingInProgress: $('#ordersRingInProgress'),
+    ordersRingCompleted: $('#ordersRingCompleted'),
+    ordersRingRejected: $('#ordersRingRejected'),
     kpiRequestedMain: $('#kpiRequestedMain'),
     kpiRequestedSub: $('#kpiRequestedSub'),
     kpiStockMain: $('#kpiStockMain'),
@@ -289,6 +298,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function ordersEstimateTotal(items) {
     return (items || []).reduce((sum, x) => sum + (Number(x.quantity) || 0) * (Number(x.unitPrice) || 0), 0);
+  }
+
+  function currentOrderPerformanceStatus(items) {
+    const statuses = (items || []).map((item) => norm(optionText(item?.status)).replace(/[_-]+/g, ' '));
+    if (statuses.some((status) => /rejected/.test(status))) return 'rejected';
+    if (statuses.some((status) => /arrived/.test(status))) return 'completed';
+    if (statuses.some((status) => /(under supervision|approved)/.test(status))) return 'inProgress';
+    return 'other';
+  }
+
+  function setRingSegment(circle, value, total, offset) {
+    if (!circle) return offset;
+    const radius = 44;
+    const circumference = 2 * Math.PI * radius;
+    const safeTotal = Math.max(1, Number(total) || 0);
+    const length = Math.max(0, (Number(value) || 0) / safeTotal * circumference);
+    circle.style.strokeDasharray = `${length} ${Math.max(0, circumference - length)}`;
+    circle.style.strokeDashoffset = `${-offset}`;
+    return offset + length;
+  }
+
+  function renderCurrentOrdersPerformance(groups) {
+    const summary = {
+      totalCount: 0,
+      totalCost: 0,
+      inProgress: { count: 0, cost: 0 },
+      completed: { count: 0, cost: 0 },
+      rejected: { count: 0, cost: 0 },
+    };
+
+    (Array.isArray(groups) ? groups : []).forEach((group) => {
+      const products = group?.products || [];
+      const cost = ordersEstimateTotal(products);
+      const status = currentOrderPerformanceStatus(products);
+      summary.totalCount += 1;
+      summary.totalCost += cost;
+      if (summary[status]) {
+        summary[status].count += 1;
+        summary[status].cost += cost;
+      }
+    });
+
+    if (els.kpiOrdersMain) els.kpiOrdersMain.textContent = String(summary.totalCount);
+    if (els.kpiOrdersSub) els.kpiOrdersSub.textContent = fmtMoney(summary.totalCost);
+    if (els.ordersInProgressCount) els.ordersInProgressCount.textContent = `${summary.inProgress.count}/${summary.totalCount}`;
+    if (els.ordersInProgressCost) els.ordersInProgressCost.textContent = fmtMoney(summary.inProgress.cost);
+    if (els.ordersCompletedCount) els.ordersCompletedCount.textContent = `${summary.completed.count}/${summary.totalCount}`;
+    if (els.ordersCompletedCost) els.ordersCompletedCost.textContent = fmtMoney(summary.completed.cost);
+    if (els.ordersRejectedCount) els.ordersRejectedCount.textContent = `${summary.rejected.count}/${summary.totalCount}`;
+    if (els.ordersRejectedCost) els.ordersRejectedCost.textContent = fmtMoney(summary.rejected.cost);
+
+    let offset = 0;
+    offset = setRingSegment(els.ordersRingInProgress, summary.inProgress.count, summary.totalCount, offset);
+    offset = setRingSegment(els.ordersRingCompleted, summary.completed.count, summary.totalCount, offset);
+    setRingSegment(els.ordersRingRejected, summary.rejected.count, summary.totalCount, offset);
   }
 
   // ===== Requested orders grouping (operations orders) =====
@@ -914,13 +978,7 @@ document.addEventListener('DOMContentLoaded', () => {
       totalEstimate += ordersEstimateTotal(g.products || []);
     }
 
-    const openGroups = groups.filter((g) => orderComputeStage(g.products || []).idx < 5).length;
-    setKpi(
-      els.kpiOrdersMain,
-      els.kpiOrdersSub,
-      `${openGroups} open`,
-      `In progress: ${counts[3]} • Shipped: ${counts[4]} • Total: ${fmtMoney(totalEstimate)}`,
-    );
+    renderCurrentOrdersPerformance(groups);
 
     if (els.ordersSubtitle) {
       els.ordersSubtitle.textContent = `${groups.length} order groups`;
