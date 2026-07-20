@@ -68,9 +68,9 @@
     const n = Number(value);
     if (!Number.isFinite(n)) return '—';
     try {
-      return `£${n.toLocaleString('en-GB', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+      return `${n.toLocaleString('en-GB', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })} EGP`;
     } catch {
-      return `£${n.toFixed(2)}`;
+      return `${n.toFixed(2)} EGP`;
     }
   }
 
@@ -167,10 +167,19 @@
   }
 
   function renderTagOptions() {
+    const tags = getAllTags();
     if (els.tagOptions) {
-      els.tagOptions.innerHTML = getAllTags()
+      els.tagOptions.innerHTML = tags
         .map((tag) => `<option value="${escapeHTML(tag.name)}"></option>`)
         .join('');
+    }
+    if (els.tagsInput) {
+      const currentValue = String(els.tagsInput.value || '').trim();
+      els.tagsInput.innerHTML = [
+        '<option value="">Select tag</option>',
+        ...tags.map((tag) => `<option value="${escapeHTML(tag.name)}">${escapeHTML(tag.name)}</option>`),
+      ].join('');
+      if (currentValue && tags.some((tag) => tag.name === currentValue)) els.tagsInput.value = currentValue;
     }
     if (els.proposalTagSelect) {
       const options = getAllTags().filter((tag) => Number(tag.count) > 0)
@@ -204,8 +213,7 @@
 
     return `
       <article class="product-card" data-product-id="${escapeHTML(id)}" data-search="${escapeHTML(searchText)}">
-        <div class="product-card__top">
-          <span class="product-card__badge" title="${escapeHTML(tag)}"><i data-feather="tag"></i>${escapeHTML(tag)}</span>
+        <div class="product-card__top product-card__top--actions-only">
           <button type="button" class="product-card__edit" data-action="edit-product" data-product-id="${escapeHTML(id)}" aria-label="Edit ${escapeHTML(name)}">
             <i data-feather="edit-3"></i><span>Edit</span>
           </button>
@@ -231,7 +239,6 @@
             <span class="products-group__icon"><i data-feather="layers"></i></span>
             <div>
               <h3 title="${escapeHTML(group.tag)}">${escapeHTML(group.tag)}</h3>
-              <p>${formatNumber(count)} product${count === 1 ? '' : 's'} grouped under this tag</p>
             </div>
           </div>
           <div class="products-group__metrics">
@@ -437,14 +444,7 @@
     setTagModalError('');
 
     if (els.tagModalTitle) els.tagModalTitle.textContent = 'Edit Tag';
-    if (els.tagModalSubtitle) els.tagModalSubtitle.textContent = 'Rename this tag for all products inside the group.';
     if (els.tagInputLabel) els.tagInputLabel.innerHTML = 'New Tag <em>*</em>';
-    if (els.tagSummary) els.tagSummary.hidden = false;
-    if (els.tagCurrentLabel) els.tagCurrentLabel.textContent = currentTag;
-    if (els.tagCountLabel) {
-      const count = tagProductsCount(currentTag);
-      els.tagCountLabel.textContent = `${formatNumber(count)} product${count === 1 ? '' : 's'} will be updated`;
-    }
     setInputValue(els.newTagInput, currentTag);
     setTagSaving(false);
 
@@ -462,9 +462,7 @@
     state.editingTag = '';
     setTagModalError('');
     if (els.tagModalTitle) els.tagModalTitle.textContent = 'Add Tag';
-    if (els.tagModalSubtitle) els.tagModalSubtitle.textContent = 'Create a new product tag and make it available in the catalog.';
     if (els.tagInputLabel) els.tagInputLabel.innerHTML = 'Tag Name <em>*</em>';
-    if (els.tagSummary) els.tagSummary.hidden = true;
     setInputValue(els.newTagInput, '');
     setTagSaving(false);
     if (els.tagModal) {
@@ -487,7 +485,6 @@
     state.tagModalMode = 'edit';
     setTagModalError('');
     setInputValue(els.newTagInput, '');
-    if (els.tagSummary) els.tagSummary.hidden = false;
   }
 
   function inputNumberValue(el) {
