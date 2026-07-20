@@ -113,10 +113,57 @@
           </div>
 
           <div class="stats home-kpis" id="homeKpis">
-<a class="stat home-kpi" href="/orders" data-block="orders">
-              <div class="stat__label">Current orders</div>
-              <div class="stat__value" id="kpiOrdersMain">—</div>
-              <div class="home-kpi-sub" id="kpiOrdersSub">—</div>
+<a class="stat home-kpi home-orders-performance" href="/orders" data-block="orders" aria-label="Current orders performance overview">
+              <div class="home-orders-performance__head">
+                <div>
+                  <div class="stat__label">Current orders</div>
+                  <div class="home-orders-performance__subtitle">Performance overview</div>
+                </div>
+                <span class="home-orders-performance__period">All orders</span>
+              </div>
+
+              <div class="home-orders-performance__body">
+                <div class="home-orders-ring" aria-hidden="true">
+                  <svg viewBox="0 0 120 120" focusable="false">
+                    <circle class="home-orders-ring__track" cx="60" cy="60" r="44"></circle>
+                    <circle id="ordersRingInProgress" class="home-orders-ring__segment home-orders-ring__segment--progress" cx="60" cy="60" r="44"></circle>
+                    <circle id="ordersRingCompleted" class="home-orders-ring__segment home-orders-ring__segment--completed" cx="60" cy="60" r="44"></circle>
+                    <circle id="ordersRingRejected" class="home-orders-ring__segment home-orders-ring__segment--rejected" cx="60" cy="60" r="44"></circle>
+                  </svg>
+                  <div class="home-orders-ring__center">
+                    <strong id="kpiOrdersMain">—</strong>
+                    <span>Total orders</span>
+                    <small id="kpiOrdersSub">—</small>
+                  </div>
+                </div>
+
+                <div class="home-orders-performance__legend">
+                  <div class="home-orders-status home-orders-status--progress">
+                    <span class="home-orders-status__bar"></span>
+                    <div>
+                      <strong id="ordersInProgressCount">—</strong>
+                      <span>In progress</span>
+                      <small id="ordersInProgressCost">—</small>
+                    </div>
+                  </div>
+                  <div class="home-orders-status home-orders-status--completed">
+                    <span class="home-orders-status__bar"></span>
+                    <div>
+                      <strong id="ordersCompletedCount">—</strong>
+                      <span>Completed</span>
+                      <small id="ordersCompletedCost">—</small>
+                    </div>
+                  </div>
+                  <div class="home-orders-status home-orders-status--rejected">
+                    <span class="home-orders-status__bar"></span>
+                    <div>
+                      <strong id="ordersRejectedCount">—</strong>
+                      <span>Rejected</span>
+                      <small id="ordersRejectedCost">—</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </a>
 
             <a class="stat home-kpi" href="/orders/requested" data-block="requested">
