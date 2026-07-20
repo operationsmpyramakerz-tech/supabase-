@@ -439,6 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (els.kpiOrdersMain) els.kpiOrdersMain.textContent = String(summary.totalCount);
     if (els.kpiOrdersSub) els.kpiOrdersSub.textContent = fmtMoney(summary.totalCost);
+    requestAnimationFrame(fitOrdersRingToContent);
 
     const countEls = [els.ordersInProgressCount, els.ordersCompletedCount, els.ordersRejectedCount];
     const costEls = [els.ordersInProgressCost, els.ordersCompletedCost, els.ordersRejectedCost];
@@ -457,6 +458,48 @@ document.addEventListener('DOMContentLoaded', () => {
     values.forEach((value, index) => {
       offset = setRingSegment(circles[index], value.count, summary.totalCount, offset, segmentGap);
     });
+  }
+
+  function fitOrdersRingToContent() {
+    const ring = document.querySelector('.home-orders-ring');
+    const center = ring?.querySelector('.home-orders-ring__center');
+    if (!ring || !center) return;
+
+    const children = Array.from(center.children);
+    const measure = document.createElement('span');
+    measure.setAttribute('aria-hidden', 'true');
+    Object.assign(measure.style, {
+      position: 'fixed',
+      left: '-9999px',
+      top: '-9999px',
+      width: 'max-content',
+      maxWidth: 'none',
+      whiteSpace: 'nowrap',
+      visibility: 'hidden',
+      pointerEvents: 'none',
+    });
+    document.body.appendChild(measure);
+
+    let widest = 0;
+    let textHeight = 0;
+    children.forEach((child) => {
+      const style = getComputedStyle(child);
+      measure.style.font = style.font;
+      measure.style.fontWeight = style.fontWeight;
+      measure.style.letterSpacing = style.letterSpacing;
+      measure.textContent = child.textContent || '';
+      widest = Math.max(widest, measure.getBoundingClientRect().width);
+      textHeight += Math.max(parseFloat(style.lineHeight) || child.getBoundingClientRect().height, 12);
+    });
+    measure.remove();
+
+    const mobile = window.matchMedia('(max-width: 700px)').matches;
+    const minimum = mobile ? 142 : 154;
+    const maximum = mobile ? 196 : 220;
+    const horizontalRoom = 76; // ring stroke + safe inner padding
+    const verticalRoom = 64;
+    const desired = Math.ceil(Math.max(widest + horizontalRoom, textHeight + verticalRoom, minimum));
+    ring.style.setProperty('--orders-ring-size', `${Math.min(maximum, desired)}px`);
   }
 
   function ordersAnalysisTimeLabel(value) {
