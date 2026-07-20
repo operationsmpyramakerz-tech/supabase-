@@ -113,7 +113,7 @@
           </div>
 
           <div class="stats home-kpis" id="homeKpis">
-<a class="stat home-kpi home-orders-performance" href="/orders" data-block="orders" aria-label="Current orders performance overview">
+<div class="stat home-kpi home-orders-performance" data-href="/orders" data-block="orders" role="link" tabindex="0" aria-label="Current orders performance overview">
               <div class="home-orders-performance__head">
                 <div>
                   <div class="stat__label">Current orders</div>
@@ -129,25 +129,21 @@
                   </button>
                   <div class="home-orders-analysis__menu" id="ordersAnalysisMenu" hidden>
                     <div class="home-orders-analysis__field">
-                      <label for="ordersAnalysisTime">Time</label>
-                      <div class="home-orders-analysis__select-wrap">
-                        <select id="ordersAnalysisTime">
-                          <option value="week">Last week</option>
-                          <option value="month">Last month</option>
-                          <option value="year">Last year</option>
-                          <option value="all" selected>All time</option>
-                        </select>
-                        <i data-feather="chevron-down"></i>
+                      <span class="home-orders-analysis__field-label">Time</span>
+                      <input id="ordersAnalysisTime" type="hidden" value="all" />
+                      <div class="home-orders-analysis__options" role="group" aria-label="Analysis time range">
+                        <button type="button" class="home-orders-analysis__option" data-analysis-time="week"><span>Last week</span><i data-feather="check"></i></button>
+                        <button type="button" class="home-orders-analysis__option" data-analysis-time="month"><span>Last month</span><i data-feather="check"></i></button>
+                        <button type="button" class="home-orders-analysis__option" data-analysis-time="year"><span>Last year</span><i data-feather="check"></i></button>
+                        <button type="button" class="home-orders-analysis__option is-selected" data-analysis-time="all"><span>All time</span><i data-feather="check"></i></button>
                       </div>
                     </div>
                     <div class="home-orders-analysis__field">
-                      <label for="ordersAnalysisBy">Analysis by</label>
-                      <div class="home-orders-analysis__select-wrap">
-                        <select id="ordersAnalysisBy">
-                          <option value="status" selected>Status</option>
-                          <option value="type">Type</option>
-                        </select>
-                        <i data-feather="chevron-down"></i>
+                      <span class="home-orders-analysis__field-label">Analysis by</span>
+                      <input id="ordersAnalysisBy" type="hidden" value="status" />
+                      <div class="home-orders-analysis__options" role="group" aria-label="Analysis dimension">
+                        <button type="button" class="home-orders-analysis__option is-selected" data-analysis-by="status"><span>Status</span><i data-feather="check"></i></button>
+                        <button type="button" class="home-orders-analysis__option" data-analysis-by="type"><span>Type</span><i data-feather="check"></i></button>
                       </div>
                     </div>
                   </div>
@@ -196,7 +192,7 @@
                   </div>
                 </div>
               </div>
-            </a>
+            </div>
 
             <a class="stat home-kpi" href="/orders/requested" data-block="requested">
               <div class="stat__label">Operations orders</div>
