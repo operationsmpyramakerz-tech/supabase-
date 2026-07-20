@@ -188,11 +188,8 @@
     }
     if (els.tagsInput) {
       const currentValue = String(els.tagsInput.value || '').trim();
-      els.tagsInput.innerHTML = [
-        '<option value="">Select tag</option>',
-        ...tags.map((tag) => `<option value="${escapeHTML(tag.name)}">${escapeHTML(tag.name)}</option>`),
-      ].join('');
-      if (currentValue && tags.some((tag) => tag.name === currentValue)) els.tagsInput.value = currentValue;
+      if (currentValue && !tags.some((tag) => tag.name === currentValue)) els.tagsInput.value = '';
+      renderProductTagSelect();
     }
     if (els.proposalTagSelect) {
       const options = getAllTags().filter((tag) => Number(tag.count) > 0)
@@ -200,6 +197,23 @@
         .join('');
       els.proposalTagSelect.innerHTML = options || '<option value="">No tags available</option>';
     }
+  }
+
+  function closeProductTagSelect() {
+    if (els.tagSelectMenu) els.tagSelectMenu.hidden = true;
+    if (els.tagSelectButton) els.tagSelectButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function renderProductTagSelect() {
+    if (!els.tagsInput || !els.tagSelectMenu || !els.tagSelectLabel) return;
+    const tags = getAllTags();
+    const current = String(els.tagsInput.value || '').trim();
+    els.tagSelectLabel.textContent = current || 'Select tag';
+    els.tagSelectMenu.innerHTML = [
+      `<button type="button" class="products-modern-select__option ${!current ? 'is-selected' : ''}" data-value=""><span>Select tag</span>${!current ? '<i data-feather="check"></i>' : ''}</button>`,
+      ...tags.map((tag) => `<button type="button" class="products-modern-select__option ${current === tag.name ? 'is-selected' : ''}" data-value="${escapeHTML(tag.name)}"><span>${escapeHTML(tag.name)}</span>${current === tag.name ? '<i data-feather="check"></i>' : ''}</button>`),
+    ].join('');
+    hydrateIcons(els.tagSelectMenu);
   }
 
   function renderProductSelect() {
@@ -232,10 +246,10 @@
 
     return `
       <article class="product-card" data-product-id="${escapeHTML(id)}" data-search="${escapeHTML(searchText)}">
-        <div class="product-card__media ${image ? '' : 'is-fallback'}">
+        <button type="button" class="product-card__media ${image ? '' : 'is-fallback'}" ${imageSrc ? `data-action="open-product-image" data-image-url="${escapeHTML(imageSrc)}" aria-label="Open ${escapeHTML(name)} image"` : 'disabled aria-label="No product image"'}>
           ${image}
           <div class="product-card__image-fallback"><i data-feather="package"></i></div>
-        </div>
+        </button>
         <div class="product-card__content">
           <div class="product-card__headline">
             <h4 title="${escapeHTML(name)}">${escapeHTML(name)}</h4>
@@ -635,6 +649,7 @@
       } else {
         await loadProducts({ silent: true });
       }
+      setSaving(false);
       closeModal();
       renderCatalog();
       toast('success', 'Products', isEdit ? 'Product updated successfully.' : 'Product added successfully.');
@@ -1115,6 +1130,13 @@
         const deleteTagBtn = event.target.closest('[data-action="delete-tag"]');
         if (deleteTagBtn) { deleteTag(deleteTagBtn.getAttribute('data-tag')); return; }
 
+        const imageBtn = event.target.closest('[data-action="open-product-image"]');
+        if (imageBtn) {
+          const src = String(imageBtn.getAttribute('data-image-url') || '').trim();
+          if (src) window.open(src, '_blank', 'noopener,noreferrer');
+          return;
+        }
+
         const menuBtn = event.target.closest('[data-action="toggle-product-menu"]');
         if (menuBtn) {
           event.preventDefault();
@@ -1176,6 +1198,21 @@
       renderProductImagePreview();
     });
 
+    if (els.tagSelectButton) els.tagSelectButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      const opening = !!els.tagSelectMenu?.hidden;
+      if (els.tagSelectMenu) els.tagSelectMenu.hidden = !opening;
+      els.tagSelectButton.setAttribute('aria-expanded', opening ? 'true' : 'false');
+      if (opening) renderProductTagSelect();
+    });
+    if (els.tagSelectMenu) els.tagSelectMenu.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-value]');
+      if (!option) return;
+      setInputValue(els.tagsInput, option.getAttribute('data-value') || '');
+      renderProductTagSelect();
+      closeProductTagSelect();
+    });
+
     if (els.form) els.form.addEventListener('submit', saveProduct);
     if (els.tagForm) els.tagForm.addEventListener('submit', saveTag);
     if (els.proposalForm) els.proposalForm.addEventListener('submit', createProposal);
@@ -1194,6 +1231,7 @@
 
     document.addEventListener('click', (event) => {
       if (!event.target.closest('.product-card__menu-wrap')) closeProductMenus();
+      if (!event.target.closest('.products-tag-field')) closeProductTagSelect();
       if (!event.target.closest('.products-tag-filter-wrap') && els.tags && !els.tags.hidden) {
         els.tags.hidden = true;
         if (els.tagFilterBtn) els.tagFilterBtn.setAttribute('aria-expanded', 'false');
@@ -1254,6 +1292,9 @@
     els.idCodeInput = $('productIdCodeInput');
     els.priceInput = $('productPriceInput');
     els.tagsInput = $('productTagsInput');
+    els.tagSelectButton = $('productTagSelectButton');
+    els.tagSelectLabel = $('productTagSelectLabel');
+    els.tagSelectMenu = $('productTagSelectMenu');
     els.tagField = $('productTagField');
     els.urlInput = $('productUrlInput');
     els.imageInput = $('productImageInput');
