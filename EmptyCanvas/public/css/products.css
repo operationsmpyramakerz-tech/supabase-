@@ -1407,3 +1407,45 @@ body.products-page .products-tag-option{
   .products-group__metrics{ flex-wrap:wrap; justify-content:flex-end; }
   .products-group-add-product,.products-group-edit-tag{ min-height:38px; padding:0 12px; }
 }
+
+/* 2026-07-20: separate tag cards and fixed action menus */
+body.products-page .products-results{
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+  padding:0 !important;
+}
+body.products-page .products-results .products-group{
+  background:#fff !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  border-radius:28px !important;
+  box-shadow:0 18px 48px rgba(15,23,42,.10) !important;
+  padding:18px !important;
+  overflow:visible !important;
+}
+body.products-page .products-results .products-group + .products-group{
+  margin-top:20px !important;
+  padding-top:18px !important;
+  border-top:1px solid rgba(15,23,42,.08) !important;
+}
+body.products-page .product-card{ position:relative; }
+body.products-page .product-card__headline{ padding-right:38px; }
+body.products-page .product-card__menu-wrap{
+  position:absolute !important; top:12px !important; right:12px !important; z-index:25;
+}
+body.products-page .product-card__menu-btn{
+  display:grid !important; place-items:center !important; color:#111827 !important;
+  font-size:24px !important; line-height:1 !important; font-weight:800 !important;
+}
+body.products-page .product-card__menu-btn span{ display:block; transform:translateY(-1px); }
+.products-group-menu-wrap{ position:relative; flex:0 0 auto; }
+.products-group-menu-btn{
+  width:42px; height:42px; border-radius:14px; border:1px solid rgba(15,23,42,.09); background:#fff;
+  display:grid; place-items:center; cursor:pointer; color:#111827; font-size:25px; line-height:1; box-shadow:0 8px 22px rgba(15,23,42,.07);
+}
+.products-group-menu{ position:absolute; right:0; top:48px; z-index:260; min-width:160px; padding:7px; border-radius:15px; background:#fff; border:1px solid rgba(15,23,42,.08); box-shadow:0 18px 40px rgba(15,23,42,.16); }
+.products-group-menu[hidden]{ display:none !important; }
+.products-group-menu button{ width:100%; border:0; background:transparent; display:flex; align-items:center; gap:9px; padding:10px; border-radius:10px; color:#111827; font-weight:850; cursor:pointer; text-align:left; }
+.products-group-menu button:hover{ background:#f8fafc; }
+.products-group-menu button.is-danger{ color:#dc2626; }
+.products-group-menu button svg{ width:16px; height:16px; }
