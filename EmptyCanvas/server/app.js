@@ -5924,6 +5924,10 @@ function _sbNormalizeProductPayload(body = {}, { partial = false } = {}) {
     out.url = _sbProductCleanUrl(body.url ?? body.productUrl ?? body.product_url ?? body.link);
   }
 
+  if (has("imageUrl") || has("image_url")) {
+    out.image_url = _sbProductCleanUrl(body.imageUrl ?? body.image_url);
+  }
+
   if (!partial && !String(out.name || "").trim()) {
     const err = new Error("Product name is required.");
     err.status = 400;
@@ -5982,8 +5986,43 @@ async function _sbNextNumericProductId() {
   return foundNumericId ? maxId + 1 : 1;
 }
 
+async function _sbPrepareProductImagePayload(body = {}) {
+  const prepared = { ...(body || {}) };
+  const imageData = String(prepared.imageData || prepared.image_data || '').trim();
+  const removeImage = prepared.removeImage === true || String(prepared.removeImage || '').toLowerCase() === 'true';
+
+  delete prepared.imageData;
+  delete prepared.image_data;
+  delete prepared.imageName;
+  delete prepared.imageType;
+  delete prepared.removeImage;
+
+  if (imageData) {
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(imageData)) {
+      const err = new Error('Invalid product image.');
+      err.status = 400;
+      throw err;
+    }
+    const approxBytes = Math.ceil((imageData.length - (imageData.indexOf(',') + 1)) * 0.75);
+    if (approxBytes > 10 * 1024 * 1024) {
+      const err = new Error('Product image must not exceed 10 MB.');
+      err.status = 400;
+      throw err;
+    }
+    const originalName = String(body.imageName || 'product-image').trim() || 'product-image';
+    const safeName = originalName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'product-image';
+    const objectPath = `products/images/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    prepared.imageUrl = await uploadToBlobFromBase64(imageData, objectPath);
+  } else if (removeImage) {
+    prepared.imageUrl = null;
+  }
+
+  return prepared;
+}
+
 async function _sbCreateProduct(body = {}) {
-  const row = _sbNormalizeProductPayload(body, { partial: false });
+  const preparedBody = await _sbPrepareProductImagePayload(body);
+  const row = _sbNormalizeProductPayload(preparedBody, { partial: false });
   let created;
 
   try {
@@ -6022,7 +6061,8 @@ async function _sbUpdateProduct(productId, body = {}) {
     err.status = 400;
     throw err;
   }
-  const row = _sbNormalizeProductPayload(body, { partial: true });
+  const preparedBody = await _sbPrepareProductImagePayload(body);
+  const row = _sbNormalizeProductPayload(preparedBody, { partial: true });
   const updated = await supabaseDb.updateById(_sbProductsTable(), id, row);
   await _sbInvalidateProductsCaches();
   return _sbSerializeProductRow(updated || { ...row, id });
