@@ -2485,3 +2485,121 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
     grid-column:1 / -1 !important;
   }
 }
+
+/* Home overview: three equal order-analysis cards in one row */
+@media (min-width: 1101px){
+  .page-home .home-kpis{
+    display:grid !important;
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    align-items:stretch !important;
+    gap:12px !important;
+  }
+
+  .page-home .home-orders-performance,
+  .page-home .home-summary-performance--review,
+  .page-home .home-summary-performance--operations{
+    grid-column:auto !important;
+    width:100% !important;
+    min-width:0 !important;
+    height:100% !important;
+    min-height:0 !important;
+    padding:14px !important;
+    box-sizing:border-box !important;
+  }
+
+  .page-home .home-orders-performance__head,
+  .page-home .home-summary-performance__head{
+    min-height:48px !important;
+    margin-bottom:8px !important;
+  }
+
+  .page-home .home-orders-performance__body,
+  .page-home .home-summary-performance__body{
+    grid-template-columns:108px minmax(0,1fr) !important;
+    gap:10px !important;
+    align-items:center !important;
+  }
+
+  .page-home .home-orders-ring,
+  .page-home .home-summary-ring{
+    width:104px !important;
+    height:104px !important;
+    margin:auto !important;
+  }
+
+  .page-home .home-orders-ring__center strong,
+  .page-home .home-summary-ring__center strong{
+    font-size:20px !important;
+  }
+
+  .page-home .home-orders-ring__center span,
+  .page-home .home-summary-ring__center span{
+    font-size:8px !important;
+  }
+
+  .page-home .home-orders-ring__center small,
+  .page-home .home-summary-ring__center small{
+    max-width:78px !important;
+    font-size:7px !important;
+  }
+
+  .page-home .home-orders-performance__legend,
+  .page-home .home-summary-performance__legend{
+    gap:7px !important;
+  }
+
+  .page-home .home-orders-status,
+  .page-home .home-summary-status{
+    min-height:52px !important;
+    padding:8px 9px !important;
+    gap:8px !important;
+    border-radius:12px !important;
+  }
+
+  .page-home .home-orders-status__bar,
+  .page-home .home-summary-status__bar{
+    width:4px !important;
+    height:34px !important;
+  }
+
+  .page-home .home-orders-status strong,
+  .page-home .home-summary-status strong{
+    font-size:14px !important;
+  }
+
+  .page-home .home-orders-status span:not(.home-orders-status__bar),
+  .page-home .home-summary-status span:not(.home-summary-status__bar){
+    font-size:8px !important;
+  }
+
+  .page-home .home-orders-status small,
+  .page-home .home-summary-status small{
+    font-size:7px !important;
+  }
+
+  .page-home .home-orders-analysis__trigger{
+    max-width:170px !important;
+    padding:7px 9px !important;
+  }
+
+  .page-home .home-orders-analysis__trigger-copy small{font-size:7px !important;}
+  .page-home .home-orders-analysis__trigger-copy strong{font-size:9px !important;}
+
+  .page-home .home-kpis>.home-kpi:not(.home-orders-performance):not(.home-summary-performance){
+    grid-column:auto !important;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1100px){
+  .page-home .home-kpis{
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  }
+  .page-home .home-orders-performance,
+  .page-home .home-summary-performance--review,
+  .page-home .home-summary-performance--operations{
+    grid-column:auto !important;
+  }
+  .page-home .home-summary-performance--operations{
+    grid-column:1 / -1 !important;
+  }
+}
