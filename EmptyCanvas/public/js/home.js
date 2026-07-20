@@ -24,6 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
     ordersRingInProgress: $('#ordersRingInProgress'),
     ordersRingCompleted: $('#ordersRingCompleted'),
     ordersRingRejected: $('#ordersRingRejected'),
+    ordersAnalysisControl: $('#ordersAnalysisControl'),
+    ordersAnalysisTrigger: $('#ordersAnalysisTrigger'),
+    ordersAnalysisMenu: $('#ordersAnalysisMenu'),
+    ordersAnalysisTime: $('#ordersAnalysisTime'),
+    ordersAnalysisBy: $('#ordersAnalysisBy'),
+    ordersAnalysisLabel: $('#ordersAnalysisLabel'),
     kpiRequestedMain: $('#kpiRequestedMain'),
     kpiRequestedSub: $('#kpiRequestedSub'),
     kpiStockMain: $('#kpiStockMain'),
@@ -66,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     requestedGroups: [],
     expenses: [],
     stock: [],
+    ordersAnalysis: { time: 'all', by: 'status' },
   };
 
   const norm = (s) => String(s || '').trim().toLowerCase();
@@ -336,67 +343,152 @@ document.addEventListener('DOMContentLoaded', () => {
     return offset + allocatedLength;
   }
 
+  function filterOrderGroupsByTime(groups, range) {
+    const source = Array.isArray(groups) ? groups : [];
+    if (range === 'all') return source;
+
+    const now = new Date();
+    const from = new Date(now);
+    if (range === 'week') from.setDate(from.getDate() - 7);
+    else if (range === 'month') from.setMonth(from.getMonth() - 1);
+    else if (range === 'year') from.setFullYear(from.getFullYear() - 1);
+    else return source;
+
+    return source.filter((group) => {
+      const date = new Date(group?.latestCreated || group?.products?.[0]?.createdTime || 0);
+      return Number.isFinite(date.getTime()) && date >= from && date <= now;
+    });
+  }
+
+  function currentOrderTypeBucket(group) {
+    const raw = optionText(group?.orderType || group?.products?.[0]?.orderType);
+    const key = norm(raw).replace(/[^a-z0-9]+/g, '');
+    if (/(withdraw|withdrawal)/.test(key)) return 'withdrawal';
+    if (/(maintenance|requestmaintenance)/.test(key)) return 'maintenance';
+    return 'request';
+  }
+
+  function updateOrdersAnalysisLabels(mode) {
+    const config = mode === 'type'
+      ? [
+          { key: 'request', label: 'Request', color: '#f97316' },
+          { key: 'withdrawal', label: 'Withdrawal', color: '#17324d' },
+          { key: 'maintenance', label: 'Maintenance', color: '#176b3a' },
+        ]
+      : [
+          { key: 'inProgress', label: 'In progress', color: '#f97316' },
+          { key: 'completed', label: 'Completed', color: '#176b3a' },
+          { key: 'rejected', label: 'Rejected', color: '#dc2626' },
+        ];
+
+    const cards = Array.from(document.querySelectorAll('.home-orders-status'));
+    cards.forEach((card, index) => {
+      const item = config[index];
+      if (!item) return;
+      card.dataset.analysisKey = item.key;
+      card.style.setProperty('--status-color', item.color);
+      const label = card.querySelector('span:not(.home-orders-status__bar)');
+      if (label) label.textContent = item.label;
+    });
+    return config;
+  }
+
   function renderCurrentOrdersPerformance(groups) {
+    const timeRange = state.ordersAnalysis?.time || 'all';
+    const analysisBy = state.ordersAnalysis?.by || 'status';
+    const filteredGroups = filterOrderGroupsByTime(groups, timeRange);
+    const config = updateOrdersAnalysisLabels(analysisBy);
     const summary = {
-      totalCount: 0,
+      totalCount: filteredGroups.length,
       totalCost: 0,
-      inProgress: { count: 0, cost: 0 },
-      completed: { count: 0, cost: 0 },
-      rejected: { count: 0, cost: 0 },
+      values: Object.fromEntries(config.map((item) => [item.key, { count: 0, cost: 0 }])),
     };
 
-    (Array.isArray(groups) ? groups : []).forEach((group) => {
+    filteredGroups.forEach((group) => {
       const products = group?.products || [];
       const cost = ordersEstimateTotal(products);
-      const status = currentOrderPerformanceStatus(products);
-      summary.totalCount += 1;
+      const bucket = analysisBy === 'type'
+        ? currentOrderTypeBucket(group)
+        : currentOrderPerformanceStatus(products);
       summary.totalCost += cost;
-      if (summary[status]) {
-        summary[status].count += 1;
-        summary[status].cost += cost;
+      if (summary.values[bucket]) {
+        summary.values[bucket].count += 1;
+        summary.values[bucket].cost += cost;
       }
     });
 
     if (els.kpiOrdersMain) els.kpiOrdersMain.textContent = String(summary.totalCount);
     if (els.kpiOrdersSub) els.kpiOrdersSub.textContent = fmtMoney(summary.totalCost);
-    if (els.ordersInProgressCount) els.ordersInProgressCount.textContent = `${summary.inProgress.count}/${summary.totalCount}`;
-    if (els.ordersInProgressCost) els.ordersInProgressCost.textContent = fmtMoney(summary.inProgress.cost);
-    if (els.ordersCompletedCount) els.ordersCompletedCount.textContent = `${summary.completed.count}/${summary.totalCount}`;
-    if (els.ordersCompletedCost) els.ordersCompletedCost.textContent = fmtMoney(summary.completed.cost);
-    if (els.ordersRejectedCount) els.ordersRejectedCount.textContent = `${summary.rejected.count}/${summary.totalCount}`;
-    if (els.ordersRejectedCost) els.ordersRejectedCost.textContent = fmtMoney(summary.rejected.cost);
 
-    const activeSegments = [
-      summary.inProgress.count,
-      summary.completed.count,
-      summary.rejected.count,
-    ].filter((count) => Number(count) > 0).length;
+    const countEls = [els.ordersInProgressCount, els.ordersCompletedCount, els.ordersRejectedCount];
+    const costEls = [els.ordersInProgressCost, els.ordersCompletedCost, els.ordersRejectedCost];
+    const circles = [els.ordersRingInProgress, els.ordersRingCompleted, els.ordersRingRejected];
+    const values = config.map((item) => summary.values[item.key]);
 
-    // Use a visible separator only when more than one status is represented.
-    // The value is large enough to remain clear with rounded SVG line caps.
+    values.forEach((value, index) => {
+      if (countEls[index]) countEls[index].textContent = `${value.count}/${summary.totalCount}`;
+      if (costEls[index]) costEls[index].textContent = fmtMoney(value.cost);
+      if (circles[index]) circles[index].style.stroke = config[index].color;
+    });
+
+    const activeSegments = values.filter((value) => value.count > 0).length;
     const segmentGap = activeSegments > 1 ? 18 : 0;
     let offset = 0;
-    offset = setRingSegment(
-      els.ordersRingInProgress,
-      summary.inProgress.count,
-      summary.totalCount,
-      offset,
-      segmentGap,
-    );
-    offset = setRingSegment(
-      els.ordersRingCompleted,
-      summary.completed.count,
-      summary.totalCount,
-      offset,
-      segmentGap,
-    );
-    setRingSegment(
-      els.ordersRingRejected,
-      summary.rejected.count,
-      summary.totalCount,
-      offset,
-      segmentGap,
-    );
+    values.forEach((value, index) => {
+      offset = setRingSegment(circles[index], value.count, summary.totalCount, offset, segmentGap);
+    });
+  }
+
+  function ordersAnalysisTimeLabel(value) {
+    return ({ week: 'Last week', month: 'Last month', year: 'Last year', all: 'All time' })[value] || 'All time';
+  }
+
+  function syncOrdersAnalysisControl() {
+    if (els.ordersAnalysisLabel) {
+      const by = state.ordersAnalysis.by === 'type' ? 'Type' : 'Status';
+      els.ordersAnalysisLabel.textContent = `${ordersAnalysisTimeLabel(state.ordersAnalysis.time)} · ${by}`;
+    }
+    if (els.ordersAnalysisTime) els.ordersAnalysisTime.value = state.ordersAnalysis.time;
+    if (els.ordersAnalysisBy) els.ordersAnalysisBy.value = state.ordersAnalysis.by;
+  }
+
+  function closeOrdersAnalysisMenu() {
+    if (!els.ordersAnalysisMenu || !els.ordersAnalysisTrigger) return;
+    els.ordersAnalysisMenu.hidden = true;
+    els.ordersAnalysisTrigger.setAttribute('aria-expanded', 'false');
+    els.ordersAnalysisControl?.classList.remove('is-open');
+  }
+
+  function setupOrdersAnalysisControl() {
+    if (!els.ordersAnalysisTrigger || !els.ordersAnalysisMenu) return;
+    syncOrdersAnalysisControl();
+
+    els.ordersAnalysisTrigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const willOpen = els.ordersAnalysisMenu.hidden;
+      els.ordersAnalysisMenu.hidden = !willOpen;
+      els.ordersAnalysisTrigger.setAttribute('aria-expanded', String(willOpen));
+      els.ordersAnalysisControl?.classList.toggle('is-open', willOpen);
+    });
+
+    els.ordersAnalysisMenu.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    const apply = () => {
+      state.ordersAnalysis.time = els.ordersAnalysisTime?.value || 'all';
+      state.ordersAnalysis.by = els.ordersAnalysisBy?.value || 'status';
+      syncOrdersAnalysisControl();
+      renderCurrentOrdersPerformance(state.orderGroups || []);
+    };
+    els.ordersAnalysisTime?.addEventListener('change', apply);
+    els.ordersAnalysisBy?.addEventListener('change', apply);
+    document.addEventListener('click', closeOrdersAnalysisMenu);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeOrdersAnalysisMenu();
+    });
   }
 
   // ===== Requested orders grouping (operations orders) =====
@@ -1134,6 +1226,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  setupOrdersAnalysisControl();
 
   // ===== Init =====
   (async () => {
