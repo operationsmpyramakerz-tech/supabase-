@@ -27247,6 +27247,39 @@ app.patch(
 );
 
 
+app.delete(
+  "/api/products/tags",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const tag = _sbProductText(req.body?.tag || req.body?.name).trim();
+      if (!tag) return res.status(400).json({ ok: false, error: "Tag name is required." });
+      if (normKey(tag) === normKey("Uncategorized")) return res.status(400).json({ ok: false, error: "Uncategorized cannot be deleted." });
+
+      const products = await _sbProductsList();
+      const matches = products.filter((product) => normKey(firstProductTagForServer(product)) === normKey(tag));
+      for (const ids of _sbProductChunk(matches.map((product) => product.id), 120)) {
+        await supabaseDb.updateByIds(_sbProductsTable(), ids, { tags: "Uncategorized", updated_at: new Date().toISOString() });
+      }
+
+      const rows = await supabaseDb.selectAll(_sbProductTagsTable(), { limit: 1000, order: "name.asc" }).catch(() => []);
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const rowName = _sbProductText(_sbGet(row, ["name", "tag", "tags", "Name", "Tag"])).trim();
+        const rowId = _sbGet(row, ["id", "ID"]);
+        if (rowId && normKey(rowName) === normKey(tag)) await supabaseDb.deleteById(_sbProductTagsTable(), rowId);
+      }
+      await _sbInvalidateProductsCaches();
+      return res.json({ ok: true, deletedTag: tag, movedCount: matches.length });
+    } catch (error) {
+      console.error("DELETE /api/products/tags error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete product tag." });
+    }
+  },
+);
+
+
 
 async function _requireProductsAdminPassword(req, res) {
   const password = String(req?.body?.adminPassword || req?.body?.password || '').trim();
