@@ -1,36 +1,30 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#FFFFFF" />
-
-  <link rel="icon" href="/icons/icon-192.png" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="mobile-web-app-capable" content="yes" />
-
-  <script src="/pwa-register.js" defer></script>
-
-  <meta charset="utf-8" />
-  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Home</title>
-
-  <!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
-  <style>
+<link href="/manifest.webmanifest" rel="manifest"/>
+<meta content="#FFFFFF" name="theme-color"/>
+<link href="/icons/icon-192.png" rel="icon"/>
+<link href="/icons/icon-192.png" rel="apple-touch-icon"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="default" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="yes" name="mobile-web-app-capable"/>
+<script defer="" src="/pwa-register.js"></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Home</title>
+<!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
+<style>
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
-
-  <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
-  <link href="/css/home.css" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
+<link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet"/>
+<link href="/css/home.css" rel="stylesheet"/>
+<link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
-  <script src="/js/vendor/feather-icons.min.js"></script>
+<script src="/js/vendor/feather-icons.min.js"></script>
 </head>
-
 <body class="permissions-loading page-home">
-  <script>
+<script>
     (function() {
       try {
         if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
@@ -39,327 +33,300 @@
       } catch(e) {}
     })();
   </script>
-
-  <div class="app-container">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <h2>Dashboard</h2>
-        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
-          <i data-feather="chevrons-left"></i>
-        </button>
-      </div>
-
-      <nav class="sidebar-nav">
-        <ul class="nav-list">
-          <li><a class="nav-link active" href="/home"><i data-feather="home"></i><span class="nav-label">Home</span></a></li>
-          <li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
-          <li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
-        <li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
-          <li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
-          <li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
-          <li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
-          <li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
-          <li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses Users</span></a></li>
-          <li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
-          </ul>
-      </nav>
-
-      <div class="sidebar-footer">
-        <button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
-      </div>
-    </aside>
-
-    <div class="main-content">
-      <header class="main-header">
-        <div class="header-row1">
-          <div class="left">
-            <div class="greeting-pill" aria-live="polite">
-              <span class="greeting-avatar">
-                <img src="/images/greeting-icon.png" alt="Hi icon" />
-              </span>
-              <div class="greet-text">
-                <div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
-                <div class="greet-sub">Your operations overview</div>
-              </div>
-            </div>
-
-            <div class="searchbar" id="home-searchbar" role="search">
-              <i data-feather="search"></i>
-              <input id="homeSearch" type="search" placeholder="Search inside Home..." aria-label="Search in Home" />
-            </div>
-          </div>
-
-          <div class="right topbar-right">
-            <a class="account-mini" href="/account" title="My account" aria-label="My account">
-              <span class="ico-circle"><img src="/images/logo.png" alt="Logo" /></span>
-              <span class="label">My account</span>
-            </a>
-          </div>
-        </div>
-
-        <div class="header-row2">
-          <h1 class="page-title">Home</h1>
-          <div class="home-updated" id="homeUpdated" aria-live="polite">—</div>
-        </div>
-      </header>
-
-      <main class="container-full-width">
-
-        <!-- KPIs -->
-        <section class="card home-card home-card--hero" aria-label="Overview">
-          <div class="home-section-head">
-            <h2 class="home-section-title"><i data-feather="activity"></i> Overview</h2>
-            <div class="home-section-sub" id="homeScopeLine">—</div>
-          </div>
-
-          <div class="stats home-kpis" id="homeKpis">
-<div class="stat home-kpi home-orders-performance" data-href="/orders" data-block="orders" role="link" tabindex="0" aria-label="Current orders performance overview">
-              <div class="home-orders-performance__head">
-                <div>
-                  <div class="stat__label">Current orders</div>
-                </div>
-                <div class="home-orders-analysis" id="ordersAnalysisControl">
-                  <button class="home-orders-analysis__trigger" id="ordersAnalysisTrigger" type="button" aria-haspopup="true" aria-expanded="false">
-                    <span class="home-orders-analysis__icon"><i data-feather="activity"></i></span>
-                    <span class="home-orders-analysis__trigger-copy">
-                      <small>Order analysis</small>
-                      <strong id="ordersAnalysisLabel">All time · Status</strong>
-                    </span>
-                    <i class="home-orders-analysis__chevron" data-feather="chevron-down"></i>
-                  </button>
-                  <div class="home-orders-analysis__menu" id="ordersAnalysisMenu" hidden>
-                    <div class="home-orders-analysis__field">
-                      <span class="home-orders-analysis__field-label">Time</span>
-                      <input id="ordersAnalysisTime" type="hidden" value="all" />
-                      <div class="home-analysis-select" data-analysis-select="time">
-                        <button type="button" class="home-analysis-select__trigger" aria-haspopup="listbox" aria-expanded="false">
-                          <span data-analysis-select-label>All time</span>
-                          <i data-feather="chevron-down"></i>
-                        </button>
-                        <div class="home-analysis-select__menu" role="listbox" hidden>
-                          <button type="button" class="home-analysis-select__option" data-analysis-time="week"><span>Last week</span><i data-feather="check"></i></button>
-                          <button type="button" class="home-analysis-select__option" data-analysis-time="month"><span>Last month</span><i data-feather="check"></i></button>
-                          <button type="button" class="home-analysis-select__option" data-analysis-time="year"><span>Last year</span><i data-feather="check"></i></button>
-                          <button type="button" class="home-analysis-select__option is-selected" data-analysis-time="all"><span>All time</span><i data-feather="check"></i></button>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="home-orders-analysis__field">
-                      <span class="home-orders-analysis__field-label">Analysis by</span>
-                      <input id="ordersAnalysisBy" type="hidden" value="status" />
-                      <div class="home-analysis-select" data-analysis-select="by">
-                        <button type="button" class="home-analysis-select__trigger" aria-haspopup="listbox" aria-expanded="false">
-                          <span data-analysis-select-label>Status</span>
-                          <i data-feather="chevron-down"></i>
-                        </button>
-                        <div class="home-analysis-select__menu" role="listbox" hidden>
-                          <button type="button" class="home-analysis-select__option is-selected" data-analysis-by="status"><span>Status</span><i data-feather="check"></i></button>
-                          <button type="button" class="home-analysis-select__option" data-analysis-by="type"><span>Type</span><i data-feather="check"></i></button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="home-orders-performance__body">
-                <div class="home-orders-ring" aria-hidden="true">
-                  <svg viewBox="0 0 120 120" focusable="false">
-                    <circle class="home-orders-ring__track" cx="60" cy="60" r="44"></circle>
-                    <circle id="ordersRingInProgress" class="home-orders-ring__segment home-orders-ring__segment--progress" cx="60" cy="60" r="44"></circle>
-                    <circle id="ordersRingCompleted" class="home-orders-ring__segment home-orders-ring__segment--completed" cx="60" cy="60" r="44"></circle>
-                    <circle id="ordersRingRejected" class="home-orders-ring__segment home-orders-ring__segment--rejected" cx="60" cy="60" r="44"></circle>
-                  </svg>
-                  <div class="home-orders-ring__center">
-                    <strong id="kpiOrdersMain">—</strong>
-                    <span>Total orders</span>
-                    <small id="kpiOrdersSub">—</small>
-                  </div>
-                </div>
-
-                <div class="home-orders-performance__legend">
-                  <div class="home-orders-status home-orders-status--progress">
-                    <span class="home-orders-status__bar"></span>
-                    <div>
-                      <strong id="ordersInProgressCount">—</strong>
-                      <span>In progress</span>
-                      <small id="ordersInProgressCost">—</small>
-                    </div>
-                  </div>
-                  <div class="home-orders-status home-orders-status--completed">
-                    <span class="home-orders-status__bar"></span>
-                    <div>
-                      <strong id="ordersCompletedCount">—</strong>
-                      <span>Completed</span>
-                      <small id="ordersCompletedCost">—</small>
-                    </div>
-                  </div>
-                  <div class="home-orders-status home-orders-status--rejected">
-                    <span class="home-orders-status__bar"></span>
-                    <div>
-                      <strong id="ordersRejectedCount">—</strong>
-                      <span>Rejected</span>
-                      <small id="ordersRejectedCost">—</small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <a class="stat home-kpi home-summary-performance home-summary-performance--operations" href="/orders/requested" data-block="requested" aria-label="Operations orders overview">
-              <div class="home-summary-performance__head">
-                <div>
-                  <div class="stat__label">Operations orders</div>
-                  <div class="home-summary-performance__subtitle">Order processing overview</div>
-                </div>
-              </div>
-              <div class="home-summary-performance__body">
-                <div class="home-summary-ring" data-summary-ring="operations">
-                  <svg viewBox="0 0 120 120" focusable="false" aria-hidden="true">
-                    <circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
-                    <circle id="operationsRingPending" class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" r="44"></circle>
-                    <circle id="operationsRingReceived" class="home-summary-ring__segment home-summary-ring__segment--navy" cx="60" cy="60" r="44"></circle>
-                    <circle id="operationsRingDelivered" class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" r="44"></circle>
-                  </svg>
-                  <div class="home-summary-ring__center">
-                    <strong id="kpiRequestedMain">—</strong>
-                    <span>Total orders</span>
-                    <small id="kpiRequestedSub">—</small>
-                  </div>
-                </div>
-                <div class="home-summary-performance__legend">
-                  <div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="operationsPendingCount">—</strong><span>Pending</span><small id="operationsPendingCost">—</small></div></div>
-                  <div class="home-summary-status home-summary-status--navy"><span class="home-summary-status__bar"></span><div><strong id="operationsReceivedCount">—</strong><span>Received</span><small id="operationsReceivedCost">—</small></div></div>
-                  <div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="operationsDeliveredCount">—</strong><span>Delivered</span><small id="operationsDeliveredCost">—</small></div></div>
-                </div>
-              </div>
-            </a>
-
-            <a class="stat home-kpi home-summary-performance home-summary-performance--review" href="/orders/sv-orders" data-block="review" aria-label="Orders review overview">
-              <div class="home-summary-performance__head">
-                <div>
-                  <div class="stat__label">Orders review</div>
-                  <div class="home-summary-performance__subtitle">Approval decision overview</div>
-                </div>
-              </div>
-              <div class="home-summary-performance__body">
-                <div class="home-summary-ring" data-summary-ring="review">
-                  <svg viewBox="0 0 120 120" focusable="false" aria-hidden="true">
-                    <circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
-                    <circle id="reviewRingPending" class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" r="44"></circle>
-                    <circle id="reviewRingApproved" class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" r="44"></circle>
-                    <circle id="reviewRingRejected" class="home-summary-ring__segment home-summary-ring__segment--red" cx="60" cy="60" r="44"></circle>
-                  </svg>
-                  <div class="home-summary-ring__center">
-                    <strong id="kpiReviewMain">—</strong>
-                    <span>Total orders</span>
-                    <small id="kpiReviewSub">—</small>
-                  </div>
-                </div>
-                <div class="home-summary-performance__legend">
-                  <div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="reviewPendingCount">—</strong><span>Pending</span><small id="reviewPendingCost">—</small></div></div>
-                  <div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="reviewApprovedCount">—</strong><span>Approved</span><small id="reviewApprovedCost">—</small></div></div>
-                  <div class="home-summary-status home-summary-status--red"><span class="home-summary-status__bar"></span><div><strong id="reviewRejectedCount">—</strong><span>Rejected</span><small id="reviewRejectedCost">—</small></div></div>
-                </div>
-              </div>
-            </a>
-
-            <a class="stat home-kpi" href="/stocktaking" data-block="stock">
-              <div class="stat__label">Stocktaking</div>
-              <div class="stat__value" id="kpiStockMain">—</div>
-              <div class="home-kpi-sub" id="kpiStockSub">—</div>
-            </a>
-
-            <a class="stat home-kpi" href="/expenses" data-block="expenses">
-              <div class="stat__label">Expenses</div>
-              <div class="stat__value" id="kpiExpensesMain">—</div>
-              <div class="home-kpi-sub" id="kpiExpensesSub">—</div>
-            </a>
-          </div>
-        </section>
-
-        <section class="home-analytics" aria-label="Analytics">
-<section class="card home-analytics-card home-analytics-card--orange" data-block="orders" aria-label="Orders flow">
-            <div class="card-header home-card-header">
-              <div>
-                <h2>Orders flow</h2>
-                <div class="card-subtitle" id="ordersChartSubtitle">Pipeline snapshot by stage</div>
-              </div>
-              <span class="home-card-chip">Live</span>
-            </div>
-            <div class="home-chart home-chart--bars" id="homeOrdersChart"></div>
-          </section>
-
-          <section class="card home-analytics-card home-analytics-card--white" data-block="expenses" aria-label="Cashflow trend">
-            <div class="card-header home-card-header">
-              <div>
-                <h2>Cashflow trend</h2>
-                <div class="card-subtitle" id="expensesChartSubtitle">Last 6 months in vs out</div>
-              </div>
-              <span class="home-card-chip">Finance</span>
-            </div>
-            <div class="home-chart home-chart--timeline" id="homeExpensesChart"></div>
-          </section>
-        </section>
+<div class="app-container">
+<aside class="sidebar">
+<div class="sidebar-header">
+<h2>Dashboard</h2>
+<button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
+<i data-feather="chevrons-left"></i>
+</button>
+</div>
+<nav class="sidebar-nav">
+<ul class="nav-list">
+<li><a class="nav-link active" href="/home"><i data-feather="home"></i><span class="nav-label">Home</span></a></li>
+<li><a class="nav-link" href="/orders"><i data-feather="list"></i><span class="nav-label">Current Orders</span></a></li>
+<li><a class="nav-link" href="/orders/requested"><i data-feather="users"></i><span class="nav-label">Operations Orders</span></a></li>
+<li><a class="nav-link" href="/orders/maintenance-orders"><i data-feather="tool"></i><span class="nav-label">Maintenance Orders</span></a></li>
+<li><a class="nav-link" href="/orders/new"><i data-feather="shopping-cart"></i><span class="nav-label">Create New Order</span></a></li>
+<li><a class="nav-link" href="/stocktaking"><i data-feather="archive"></i><span class="nav-label">Stocktaking</span></a></li>
+<li><a class="nav-link" href="/orders/sv-orders"><i data-feather="award"></i><span class="nav-label">Orders Review</span></a></li>
+<li><a class="nav-link" href="/expenses"><i data-feather="dollar-sign"></i><span class="nav-label">Expenses</span></a></li>
+<li><a class="nav-link" href="/expenses/users"><i data-feather="credit-card"></i><span class="nav-label">Expenses Users</span></a></li>
+<li><a class="nav-link" href="/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+</ul>
+</nav>
+<div class="sidebar-footer">
+<button class="logout-btn" id="logoutBtn"><i data-feather="log-out"></i> Logout</button>
+</div>
+</aside>
+<div class="main-content">
+<header class="main-header">
+<div class="header-row1">
+<div class="left">
+<div aria-live="polite" class="greeting-pill">
+<span class="greeting-avatar">
+<img alt="Hi icon" src="/images/greeting-icon.png"/>
+</span>
+<div class="greet-text">
+<div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+<div class="greet-sub">Your operations overview</div>
+</div>
+</div>
+<div class="searchbar" id="home-searchbar" role="search">
+<i data-feather="search"></i>
+<input aria-label="Search in Home" id="homeSearch" placeholder="Search inside Home..." type="search"/>
+</div>
+</div>
+<div class="right topbar-right">
+<a aria-label="My account" class="account-mini" href="/account" title="My account">
+<span class="ico-circle"><img alt="Logo" src="/images/logo.png"/></span>
+<span class="label">My account</span>
+</a>
+</div>
+</div>
+<div class="header-row2">
+<h1 class="page-title">Home</h1>
+<div aria-live="polite" class="home-updated" id="homeUpdated">—</div>
+</div>
+</header>
+<main class="container-full-width">
+<!-- KPIs -->
+<section aria-label="Overview" class="card home-card home-card--hero">
+<div class="home-section-head">
+<h2 class="home-section-title"><i data-feather="activity"></i> Overview</h2>
+<div class="home-section-sub" id="homeScopeLine">—</div>
+</div>
+<div class="stats home-kpis" id="homeKpis">
 
 
-        <!-- Grid -->
-        <section class="home-grid" aria-label="Details">
+
+<div aria-label="Current orders performance overview" class="stat home-kpi home-orders-performance" data-block="orders" data-href="/orders" role="link" tabindex="0">
+<div class="home-orders-performance__head">
+<div>
+<div class="stat__label">Current orders</div>
+</div>
+<div class="home-orders-analysis" id="ordersAnalysisControl">
+<button aria-expanded="false" aria-haspopup="true" class="home-orders-analysis__trigger" id="ordersAnalysisTrigger" type="button">
+<span class="home-orders-analysis__icon"><i data-feather="activity"></i></span>
+<span class="home-orders-analysis__trigger-copy">
+<small>Order analysis</small>
+<strong id="ordersAnalysisLabel">All time · Status</strong>
+</span>
+<i class="home-orders-analysis__chevron" data-feather="chevron-down"></i>
+</button>
+<div class="home-orders-analysis__menu" hidden="" id="ordersAnalysisMenu">
+<div class="home-orders-analysis__field">
+<span class="home-orders-analysis__field-label">Time</span>
+<input id="ordersAnalysisTime" type="hidden" value="all"/>
+<div class="home-analysis-select" data-analysis-select="time">
+<button aria-expanded="false" aria-haspopup="listbox" class="home-analysis-select__trigger" type="button">
+<span data-analysis-select-label="">All time</span>
+<i data-feather="chevron-down"></i>
+</button>
+<div class="home-analysis-select__menu" hidden="" role="listbox">
+<button class="home-analysis-select__option" data-analysis-time="week" type="button"><span>Last week</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-time="month" type="button"><span>Last month</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-time="year" type="button"><span>Last year</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option is-selected" data-analysis-time="all" type="button"><span>All time</span><i data-feather="check"></i></button>
+</div>
+</div>
+</div>
+<div class="home-orders-analysis__field">
+<span class="home-orders-analysis__field-label">Analysis by</span>
+<input id="ordersAnalysisBy" type="hidden" value="status"/>
+<div class="home-analysis-select" data-analysis-select="by">
+<button aria-expanded="false" aria-haspopup="listbox" class="home-analysis-select__trigger" type="button">
+<span data-analysis-select-label="">Status</span>
+<i data-feather="chevron-down"></i>
+</button>
+<div class="home-analysis-select__menu" hidden="" role="listbox">
+<button class="home-analysis-select__option is-selected" data-analysis-by="status" type="button"><span>Status</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-by="type" type="button"><span>Type</span><i data-feather="check"></i></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="home-orders-performance__body">
+<div aria-hidden="true" class="home-orders-ring">
+<svg focusable="false" viewbox="0 0 120 120">
+<circle class="home-orders-ring__track" cx="60" cy="60" r="44"></circle>
+<circle class="home-orders-ring__segment home-orders-ring__segment--progress" cx="60" cy="60" id="ordersRingInProgress" r="44"></circle>
+<circle class="home-orders-ring__segment home-orders-ring__segment--completed" cx="60" cy="60" id="ordersRingCompleted" r="44"></circle>
+<circle class="home-orders-ring__segment home-orders-ring__segment--rejected" cx="60" cy="60" id="ordersRingRejected" r="44"></circle>
+</svg>
+<div class="home-orders-ring__center">
+<strong id="kpiOrdersMain">—</strong>
+<span>Total orders</span>
+<small id="kpiOrdersSub">—</small>
+</div>
+</div>
+<div class="home-orders-performance__legend">
+<div class="home-orders-status home-orders-status--progress">
+<span class="home-orders-status__bar"></span>
+<div>
+<strong id="ordersInProgressCount">—</strong>
+<span>In progress</span>
+<small id="ordersInProgressCost">—</small>
+</div>
+</div>
+<div class="home-orders-status home-orders-status--completed">
+<span class="home-orders-status__bar"></span>
+<div>
+<strong id="ordersCompletedCount">—</strong>
+<span>Completed</span>
+<small id="ordersCompletedCost">—</small>
+</div>
+</div>
+<div class="home-orders-status home-orders-status--rejected">
+<span class="home-orders-status__bar"></span>
+<div>
+<strong id="ordersRejectedCount">—</strong>
+<span>Rejected</span>
+<small id="ordersRejectedCost">—</small>
+</div>
+</div>
+</div>
+</div>
+</div><a aria-label="Orders review overview" class="stat home-kpi home-summary-performance home-summary-performance--review" data-block="review" href="/orders/sv-orders">
+<div class="home-summary-performance__head">
+<div>
+<div class="stat__label">Orders review</div>
+<div class="home-summary-performance__subtitle">Approval decision overview</div>
+</div>
+</div>
+<div class="home-summary-performance__body">
+<div class="home-summary-ring" data-summary-ring="review">
+<svg aria-hidden="true" focusable="false" viewbox="0 0 120 120">
+<circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" id="reviewRingPending" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" id="reviewRingApproved" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--red" cx="60" cy="60" id="reviewRingRejected" r="44"></circle>
+</svg>
+<div class="home-summary-ring__center">
+<strong id="kpiReviewMain">—</strong>
+<span>Total orders</span>
+<small id="kpiReviewSub">—</small>
+</div>
+</div>
+<div class="home-summary-performance__legend">
+<div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="reviewPendingCount">—</strong><span>Pending</span><small id="reviewPendingCost">—</small></div></div>
+<div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="reviewApprovedCount">—</strong><span>Approved</span><small id="reviewApprovedCost">—</small></div></div>
+<div class="home-summary-status home-summary-status--red"><span class="home-summary-status__bar"></span><div><strong id="reviewRejectedCount">—</strong><span>Rejected</span><small id="reviewRejectedCost">—</small></div></div>
+</div>
+</div>
+</a><a aria-label="Operations orders overview" class="stat home-kpi home-summary-performance home-summary-performance--operations" data-block="requested" href="/orders/requested">
+<div class="home-summary-performance__head">
+<div>
+<div class="stat__label">Operations orders</div>
+<div class="home-summary-performance__subtitle">Order processing overview</div>
+</div>
+</div>
+<div class="home-summary-performance__body">
+<div class="home-summary-ring" data-summary-ring="operations">
+<svg aria-hidden="true" focusable="false" viewbox="0 0 120 120">
+<circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" id="operationsRingPending" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--navy" cx="60" cy="60" id="operationsRingReceived" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" id="operationsRingDelivered" r="44"></circle>
+</svg>
+<div class="home-summary-ring__center">
+<strong id="kpiRequestedMain">—</strong>
+<span>Total orders</span>
+<small id="kpiRequestedSub">—</small>
+</div>
+</div>
+<div class="home-summary-performance__legend">
+<div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="operationsPendingCount">—</strong><span>Pending</span><small id="operationsPendingCost">—</small></div></div>
+<div class="home-summary-status home-summary-status--navy"><span class="home-summary-status__bar"></span><div><strong id="operationsReceivedCount">—</strong><span>Received</span><small id="operationsReceivedCost">—</small></div></div>
+<div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="operationsDeliveredCount">—</strong><span>Delivered</span><small id="operationsDeliveredCost">—</small></div></div>
+</div>
+</div>
+</a><a class="stat home-kpi" data-block="stock" href="/stocktaking">
+<div class="stat__label">Stocktaking</div>
+<div class="stat__value" id="kpiStockMain">—</div>
+<div class="home-kpi-sub" id="kpiStockSub">—</div>
+</a>
+<a class="stat home-kpi" data-block="expenses" href="/expenses">
+<div class="stat__label">Expenses</div>
+<div class="stat__value" id="kpiExpensesMain">—</div>
+<div class="home-kpi-sub" id="kpiExpensesSub">—</div>
+</a>
+</div>
+</section>
+<section aria-label="Analytics" class="home-analytics">
+<section aria-label="Orders flow" class="card home-analytics-card home-analytics-card--orange" data-block="orders">
+<div class="card-header home-card-header">
+<div>
+<h2>Orders flow</h2>
+<div class="card-subtitle" id="ordersChartSubtitle">Pipeline snapshot by stage</div>
+</div>
+<span class="home-card-chip">Live</span>
+</div>
+<div class="home-chart home-chart--bars" id="homeOrdersChart"></div>
+</section>
+<section aria-label="Cashflow trend" class="card home-analytics-card home-analytics-card--white" data-block="expenses">
+<div class="card-header home-card-header">
+<div>
+<h2>Cashflow trend</h2>
+<div class="card-subtitle" id="expensesChartSubtitle">Last 6 months in vs out</div>
+</div>
+<span class="home-card-chip">Finance</span>
+</div>
+<div class="home-chart home-chart--timeline" id="homeExpensesChart"></div>
+</section>
+</section>
+<!-- Grid -->
+<section aria-label="Details" class="home-grid">
 <!-- Orders list -->
-          <section class="card home-list-card home-list-card--orders" data-block="orders" aria-label="Recent orders">
-            <div class="card-header">
-              <div>
-                <h2>Recent orders</h2>
-                <div class="card-subtitle" id="ordersSubtitle">—</div>
-              </div>
-              <a class="btn btn-primary btn-sm" href="/orders">Open</a>
-            </div>
-            <div class="home-list" id="homeOrdersList"></div>
-          </section>
-
-          <!-- Quick actions -->
-          <section class="card home-actions home-panel home-panel--white" aria-label="Quick actions">
-            <div class="card-header">
-              <div>
-                <h2>Quick actions</h2>
-                <div class="card-subtitle">Shortcuts based on your access</div>
-              </div>
-            </div>
-
-            <div class="home-actions-grid" id="homeActions"></div>
-          </section>
-
-          <!-- Scope -->
-          <section class="card home-scope home-panel home-panel--navy" aria-label="Your scope">
-            <div class="card-header">
-              <div>
-                <h2>Your scope</h2>
-                <div class="card-subtitle">Department, position & available pages</div>
-              </div>
-              <a class="btn btn-primary btn-sm" href="/account">Account</a>
-            </div>
-
-            <div class="home-scope-body">
-              <div class="home-scope-row">
-                <div class="home-scope-k">Department</div>
-                <div class="home-scope-v" id="scopeDept">—</div>
-              </div>
-              <div class="home-scope-row">
-                <div class="home-scope-k">Position</div>
-                <div class="home-scope-v" id="scopePos">—</div>
-              </div>
-
-              <div class="home-scope-chips" id="scopeChips"></div>
-            </div>
-          </section>
-
-        </section>
-      </main>
-    </div>
-  </div>
-
-  <script>if (window.feather) feather.replace();</script>
-  <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/home.js?v=home-system-dashboard-v2"></script>
+<section aria-label="Recent orders" class="card home-list-card home-list-card--orders" data-block="orders">
+<div class="card-header">
+<div>
+<h2>Recent orders</h2>
+<div class="card-subtitle" id="ordersSubtitle">—</div>
+</div>
+<a class="btn btn-primary btn-sm" href="/orders">Open</a>
+</div>
+<div class="home-list" id="homeOrdersList"></div>
+</section>
+<!-- Quick actions -->
+<section aria-label="Quick actions" class="card home-actions home-panel home-panel--white">
+<div class="card-header">
+<div>
+<h2>Quick actions</h2>
+<div class="card-subtitle">Shortcuts based on your access</div>
+</div>
+</div>
+<div class="home-actions-grid" id="homeActions"></div>
+</section>
+<!-- Scope -->
+<section aria-label="Your scope" class="card home-scope home-panel home-panel--navy">
+<div class="card-header">
+<div>
+<h2>Your scope</h2>
+<div class="card-subtitle">Department, position &amp; available pages</div>
+</div>
+<a class="btn btn-primary btn-sm" href="/account">Account</a>
+</div>
+<div class="home-scope-body">
+<div class="home-scope-row">
+<div class="home-scope-k">Department</div>
+<div class="home-scope-v" id="scopeDept">—</div>
+</div>
+<div class="home-scope-row">
+<div class="home-scope-k">Position</div>
+<div class="home-scope-v" id="scopePos">—</div>
+</div>
+<div class="home-scope-chips" id="scopeChips"></div>
+</div>
+</section>
+</section>
+</main>
+</div>
+</div>
+<script>if (window.feather) feather.replace();</script>
+<script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
+<script src="/js/home.js?v=home-system-dashboard-v2"></script>
 </body>
 </html>
