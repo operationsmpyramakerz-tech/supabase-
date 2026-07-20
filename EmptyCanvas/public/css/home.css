@@ -2254,54 +2254,8 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   }
 }
 
-/* Current orders ring: thicker stroke and content-aware sizing */
-.page-home .home-orders-ring{
-  --orders-ring-size:154px;
-  width:var(--orders-ring-size) !important;
-  height:var(--orders-ring-size) !important;
-  flex:0 0 var(--orders-ring-size) !important;
-  min-width:var(--orders-ring-size) !important;
-  transition:width .22s ease,height .22s ease,flex-basis .22s ease !important;
-}
-
+/* Current Orders ring correction: 30% thinner while preserving responsive auto-fit */
 .page-home .home-orders-ring__track,
 .page-home .home-orders-ring__segment{
-  stroke-width:18.2 !important;
-}
-
-.page-home .home-orders-ring__center{
-  inset:18% !important;
-  min-width:0 !important;
-  min-height:0 !important;
-  padding:2px !important;
-}
-
-.page-home .home-orders-ring__center strong,
-.page-home .home-orders-ring__center span,
-.page-home .home-orders-ring__center small{
-  max-width:100% !important;
-  overflow:visible !important;
-  text-overflow:clip !important;
-  white-space:normal !important;
-  overflow-wrap:anywhere !important;
-  word-break:normal !important;
-  text-align:center !important;
-}
-
-.page-home .home-orders-ring__center strong{
-  font-size:clamp(20px,calc(var(--orders-ring-size) * .18),30px) !important;
-}
-
-.page-home .home-orders-ring__center span{
-  font-size:clamp(8px,calc(var(--orders-ring-size) * .068),11px) !important;
-}
-
-.page-home .home-orders-ring__center small{
-  font-size:clamp(7px,calc(var(--orders-ring-size) * .061),10px) !important;
-}
-
-@media (max-width:700px){
-  .page-home .home-orders-ring{
-    --orders-ring-size:142px;
-  }
+  stroke-width:9.8 !important;
 }
