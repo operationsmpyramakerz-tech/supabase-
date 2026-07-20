@@ -308,10 +308,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function currentOrderPerformanceStatus(items) {
-    const statuses = (items || []).map((item) => norm(optionText(item?.status)).replace(/[_-]+/g, ' '));
-    if (statuses.some((status) => /rejected/.test(status))) return 'rejected';
+    const rows = Array.isArray(items) ? items : [];
+
+    // A rejected decision is stored in the review/approval fields while the
+    // operational status may remain "In progress" or "Shipping". Use the
+    // same rejection signals as Current Orders / Orders Review so Home stays
+    // consistent with those pages.
+    const isRejected = rows.some((item) => {
+      const signals = [
+        item?.status,
+        item?.operationsApproval,
+        item?.operations_approval,
+        item?.svApproval,
+        item?.svApprovalName,
+        item?.sv_approval,
+      ]
+        .map((value) => norm(optionText(value)).replace(/[_-]+/g, ' '));
+      const rejectedReason = String(item?.rejectedReason || item?.rejected_reason || '').trim();
+      return signals.some((value) => /rejected/.test(value)) || Boolean(rejectedReason);
+    });
+    if (isRejected) return 'rejected';
+
+    const statuses = rows.map((item) => norm(optionText(item?.status)).replace(/[_-]+/g, ' '));
     if (statuses.some((status) => /(arrived|shipping|shipped)/.test(status))) return 'completed';
-    if (statuses.some((status) => /(under supervision|approved)/.test(status))) return 'inProgress';
+    if (statuses.some((status) => /(under supervision|approved|in progress)/.test(status))) return 'inProgress';
     return 'other';
   }
 
