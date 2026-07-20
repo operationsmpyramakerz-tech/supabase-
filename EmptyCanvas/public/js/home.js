@@ -451,6 +451,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.ordersAnalysisTime) els.ordersAnalysisTime.value = state.ordersAnalysis.time;
     if (els.ordersAnalysisBy) els.ordersAnalysisBy.value = state.ordersAnalysis.by;
 
+    const timeSelectLabel = document.querySelector('[data-analysis-select="time"] [data-analysis-select-label]');
+    const bySelectLabel = document.querySelector('[data-analysis-select="by"] [data-analysis-select-label]');
+    if (timeSelectLabel) timeSelectLabel.textContent = ordersAnalysisTimeLabel(state.ordersAnalysis.time);
+    if (bySelectLabel) bySelectLabel.textContent = state.ordersAnalysis.by === 'type' ? 'Type' : 'Status';
+
     document.querySelectorAll('[data-analysis-time]').forEach((button) => {
       const selected = button.dataset.analysisTime === state.ordersAnalysis.time;
       button.classList.toggle('is-selected', selected);
@@ -468,6 +473,13 @@ document.addEventListener('DOMContentLoaded', () => {
     els.ordersAnalysisMenu.hidden = true;
     els.ordersAnalysisTrigger.setAttribute('aria-expanded', 'false');
     els.ordersAnalysisControl?.classList.remove('is-open');
+    els.ordersAnalysisMenu.querySelectorAll('.home-analysis-select').forEach((select) => {
+      select.classList.remove('is-open');
+      const trigger = select.querySelector('.home-analysis-select__trigger');
+      const menu = select.querySelector('.home-analysis-select__menu');
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      if (menu) menu.hidden = true;
+    });
   }
 
   function setupOrdersAnalysisControl() {
@@ -488,6 +500,32 @@ document.addEventListener('DOMContentLoaded', () => {
       event.stopPropagation();
     });
 
+    const closeInnerSelects = (except = null) => {
+      els.ordersAnalysisMenu.querySelectorAll('.home-analysis-select').forEach((select) => {
+        if (select === except) return;
+        select.classList.remove('is-open');
+        const trigger = select.querySelector('.home-analysis-select__trigger');
+        const menu = select.querySelector('.home-analysis-select__menu');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (menu) menu.hidden = true;
+      });
+    };
+
+    els.ordersAnalysisMenu.querySelectorAll('.home-analysis-select').forEach((select) => {
+      const trigger = select.querySelector('.home-analysis-select__trigger');
+      const menu = select.querySelector('.home-analysis-select__menu');
+      if (!trigger || !menu) return;
+      trigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const willOpen = menu.hidden;
+        closeInnerSelects(select);
+        menu.hidden = !willOpen;
+        select.classList.toggle('is-open', willOpen);
+        trigger.setAttribute('aria-expanded', String(willOpen));
+      });
+    });
+
     const apply = () => {
       state.ordersAnalysis.time = els.ordersAnalysisTime?.value || 'all';
       state.ordersAnalysis.by = els.ordersAnalysisBy?.value || 'status';
@@ -501,6 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.stopPropagation();
         if (els.ordersAnalysisTime) els.ordersAnalysisTime.value = button.dataset.analysisTime || 'all';
         apply();
+        closeInnerSelects();
       });
     });
     els.ordersAnalysisMenu.querySelectorAll('[data-analysis-by]').forEach((button) => {
@@ -509,6 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.stopPropagation();
         if (els.ordersAnalysisBy) els.ordersAnalysisBy.value = button.dataset.analysisBy || 'status';
         apply();
+        closeInnerSelects();
       });
     });
 
