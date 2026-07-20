@@ -308,15 +308,32 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'other';
   }
 
-  function setRingSegment(circle, value, total, offset) {
+  function setRingSegment(circle, value, total, offset, gapLength = 0) {
     if (!circle) return offset;
+
     const radius = 44;
     const circumference = 2 * Math.PI * radius;
-    const safeTotal = Math.max(1, Number(total) || 0);
-    const length = Math.max(0, (Number(value) || 0) / safeTotal * circumference);
-    circle.style.strokeDasharray = `${length} ${Math.max(0, circumference - length)}`;
+    const numericValue = Math.max(0, Number(value) || 0);
+    const numericTotal = Math.max(0, Number(total) || 0);
+
+    // A zero-length SVG circle with round line caps can still render as a dot.
+    // Hide empty statuses completely so only statuses with data appear.
+    if (!numericTotal || !numericValue) {
+      circle.style.display = 'none';
+      circle.style.strokeDasharray = `0 ${circumference}`;
+      circle.style.strokeDashoffset = '0';
+      return offset;
+    }
+
+    circle.style.display = '';
+    const allocatedLength = (numericValue / numericTotal) * circumference;
+    const visibleLength = Math.max(1, allocatedLength - gapLength);
+    circle.style.strokeDasharray = `${visibleLength} ${Math.max(0, circumference - visibleLength)}`;
     circle.style.strokeDashoffset = `${-offset}`;
-    return offset + length;
+
+    // Advance using the full allocated span. The removed portion becomes the
+    // clean separator between this segment and the next visible segment.
+    return offset + allocatedLength;
   }
 
   function renderCurrentOrdersPerformance(groups) {
@@ -349,10 +366,37 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.ordersRejectedCount) els.ordersRejectedCount.textContent = `${summary.rejected.count}/${summary.totalCount}`;
     if (els.ordersRejectedCost) els.ordersRejectedCost.textContent = fmtMoney(summary.rejected.cost);
 
+    const activeSegments = [
+      summary.inProgress.count,
+      summary.completed.count,
+      summary.rejected.count,
+    ].filter((count) => Number(count) > 0).length;
+
+    // Use a visible separator only when more than one status is represented.
+    // The value is large enough to remain clear with rounded SVG line caps.
+    const segmentGap = activeSegments > 1 ? 18 : 0;
     let offset = 0;
-    offset = setRingSegment(els.ordersRingInProgress, summary.inProgress.count, summary.totalCount, offset);
-    offset = setRingSegment(els.ordersRingCompleted, summary.completed.count, summary.totalCount, offset);
-    setRingSegment(els.ordersRingRejected, summary.rejected.count, summary.totalCount, offset);
+    offset = setRingSegment(
+      els.ordersRingInProgress,
+      summary.inProgress.count,
+      summary.totalCount,
+      offset,
+      segmentGap,
+    );
+    offset = setRingSegment(
+      els.ordersRingCompleted,
+      summary.completed.count,
+      summary.totalCount,
+      offset,
+      segmentGap,
+    );
+    setRingSegment(
+      els.ordersRingRejected,
+      summary.rejected.count,
+      summary.totalCount,
+      offset,
+      segmentGap,
+    );
   }
 
   // ===== Requested orders grouping (operations orders) =====
