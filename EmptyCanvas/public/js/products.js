@@ -239,7 +239,7 @@
           <div class="product-card__headline">
             <h4 title="${escapeHTML(name)}">${escapeHTML(name)}</h4>
             <div class="product-card__menu-wrap">
-              <button type="button" class="product-card__menu-btn" data-action="toggle-product-menu" data-product-id="${escapeHTML(id)}" aria-label="Product actions" aria-expanded="false"><span aria-hidden="true">⋮</span></button>
+              <button type="button" class="product-card__menu-btn" data-action="toggle-product-menu" data-product-id="${escapeHTML(id)}" aria-label="Product actions" aria-expanded="false"><i data-feather="more-vertical" aria-hidden="true"></i></button>
               <div class="product-card__menu" hidden>
                 <button type="button" data-action="edit-product" data-product-id="${escapeHTML(id)}"><i data-feather="edit-3"></i><span>Edit</span></button>
                 <button type="button" class="is-danger" data-action="delete-product" data-product-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
@@ -274,7 +274,7 @@
               <i data-feather="plus-circle"></i><span>Add Product</span>
             </button>
             <div class="products-group-menu-wrap">
-              <button type="button" class="products-group-menu-btn" data-action="toggle-tag-menu" data-tag="${escapeHTML(group.tag)}" aria-label="Tag actions" aria-expanded="false"><span aria-hidden="true">⋮</span></button>
+              <button type="button" class="products-group-menu-btn" data-action="toggle-tag-menu" data-tag="${escapeHTML(group.tag)}" aria-label="Tag actions" aria-expanded="false"><i data-feather="more-vertical" aria-hidden="true"></i></button>
               <div class="products-group-menu" hidden>
                 <button type="button" data-action="edit-tag" data-tag="${escapeHTML(group.tag)}"><i data-feather="edit-3"></i><span>Edit Tag</span></button>
                 <button type="button" class="is-danger" data-action="delete-tag" data-tag="${escapeHTML(group.tag)}"><i data-feather="trash-2"></i><span>Delete Tag</span></button>
