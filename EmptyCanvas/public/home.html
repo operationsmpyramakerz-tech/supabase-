@@ -131,19 +131,31 @@
                     <div class="home-orders-analysis__field">
                       <span class="home-orders-analysis__field-label">Time</span>
                       <input id="ordersAnalysisTime" type="hidden" value="all" />
-                      <div class="home-orders-analysis__options" role="group" aria-label="Analysis time range">
-                        <button type="button" class="home-orders-analysis__option" data-analysis-time="week"><span>Last week</span><i data-feather="check"></i></button>
-                        <button type="button" class="home-orders-analysis__option" data-analysis-time="month"><span>Last month</span><i data-feather="check"></i></button>
-                        <button type="button" class="home-orders-analysis__option" data-analysis-time="year"><span>Last year</span><i data-feather="check"></i></button>
-                        <button type="button" class="home-orders-analysis__option is-selected" data-analysis-time="all"><span>All time</span><i data-feather="check"></i></button>
+                      <div class="home-analysis-select" data-analysis-select="time">
+                        <button type="button" class="home-analysis-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                          <span data-analysis-select-label>All time</span>
+                          <i data-feather="chevron-down"></i>
+                        </button>
+                        <div class="home-analysis-select__menu" role="listbox" hidden>
+                          <button type="button" class="home-analysis-select__option" data-analysis-time="week"><span>Last week</span><i data-feather="check"></i></button>
+                          <button type="button" class="home-analysis-select__option" data-analysis-time="month"><span>Last month</span><i data-feather="check"></i></button>
+                          <button type="button" class="home-analysis-select__option" data-analysis-time="year"><span>Last year</span><i data-feather="check"></i></button>
+                          <button type="button" class="home-analysis-select__option is-selected" data-analysis-time="all"><span>All time</span><i data-feather="check"></i></button>
+                        </div>
                       </div>
                     </div>
                     <div class="home-orders-analysis__field">
                       <span class="home-orders-analysis__field-label">Analysis by</span>
                       <input id="ordersAnalysisBy" type="hidden" value="status" />
-                      <div class="home-orders-analysis__options" role="group" aria-label="Analysis dimension">
-                        <button type="button" class="home-orders-analysis__option is-selected" data-analysis-by="status"><span>Status</span><i data-feather="check"></i></button>
-                        <button type="button" class="home-orders-analysis__option" data-analysis-by="type"><span>Type</span><i data-feather="check"></i></button>
+                      <div class="home-analysis-select" data-analysis-select="by">
+                        <button type="button" class="home-analysis-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                          <span data-analysis-select-label>Status</span>
+                          <i data-feather="chevron-down"></i>
+                        </button>
+                        <div class="home-analysis-select__menu" role="listbox" hidden>
+                          <button type="button" class="home-analysis-select__option is-selected" data-analysis-by="status"><span>Status</span><i data-feather="check"></i></button>
+                          <button type="button" class="home-analysis-select__option" data-analysis-by="type"><span>Type</span><i data-feather="check"></i></button>
+                        </div>
                       </div>
                     </div>
                   </div>
