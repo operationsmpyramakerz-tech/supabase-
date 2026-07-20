@@ -1449,3 +1449,48 @@ body.products-page .product-card__menu-btn span{ display:block; transform:transl
 .products-group-menu button:hover{ background:#f8fafc; }
 .products-group-menu button.is-danger{ color:#dc2626; }
 .products-group-menu button svg{ width:16px; height:16px; }
+
+
+/* 2026-07-20: compact centered three-dot action buttons */
+body.products-page .product-card__menu-btn,
+body.products-page .products-group-menu-btn{
+  width:36px !important;
+  height:36px !important;
+  min-width:36px !important;
+  min-height:36px !important;
+  padding:0 !important;
+  border-radius:12px !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  background:#fff !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  line-height:0 !important;
+  box-shadow:0 4px 12px rgba(15,23,42,.05) !important;
+  cursor:pointer !important;
+}
+body.products-page .product-card__menu-btn:hover,
+body.products-page .products-group-menu-btn:hover{
+  background:#f8f8f8 !important;
+  box-shadow:0 6px 16px rgba(15,23,42,.08) !important;
+}
+body.products-page .product-card__menu-btn svg,
+body.products-page .products-group-menu-btn svg{
+  width:18px !important;
+  height:18px !important;
+  display:block !important;
+  flex:0 0 18px !important;
+  stroke-width:2 !important;
+  margin:0 !important;
+}
+body.products-page .product-card__menu-wrap{
+  top:12px !important;
+  right:12px !important;
+}
+body.products-page .products-group-menu-wrap{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+}
+body.products-page .product-card__menu{ top:42px !important; }
+body.products-page .products-group-menu{ top:42px !important; }
