@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function currentOrderPerformanceStatus(items) {
     const statuses = (items || []).map((item) => norm(optionText(item?.status)).replace(/[_-]+/g, ' '));
     if (statuses.some((status) => /rejected/.test(status))) return 'rejected';
-    if (statuses.some((status) => /arrived/.test(status))) return 'completed';
+    if (statuses.some((status) => /(arrived|shipping|shipped)/.test(status))) return 'completed';
     if (statuses.some((status) => /(under supervision|approved)/.test(status))) return 'inProgress';
     return 'other';
   }
