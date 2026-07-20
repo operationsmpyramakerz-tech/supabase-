@@ -15,7 +15,7 @@
   <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet" />
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
-  <link href="/css/products.css?v=b2b-addname-transparent-pdf-v1" rel="stylesheet" />
+  <link href="/css/products.css?v=products-section-cards-egp-tag-select-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading products-page">
@@ -161,12 +161,17 @@
         </label>
         <label class="products-field">
           <span>Unit Price</span>
-          <input id="productPriceInput" name="unitPrice" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" />
+          <span class="products-price-input">
+            <input id="productPriceInput" name="unitPrice" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" />
+            <strong>EGP</strong>
+          </span>
         </label>
         <label class="products-field">
           <span>Tag</span>
-          <input id="productTagsInput" name="tags" type="text" list="productsTagOptions" autocomplete="off" placeholder="1/ Electric components" />
-          <datalist id="productsTagOptions"></datalist>
+          <select id="productTagsInput" name="tags" aria-label="Product tag">
+            <option value="">Select tag</option>
+          </select>
+          <datalist id="productsTagOptions" hidden></datalist>
         </label>
         <label class="products-field products-field--wide">
           <span>Product URL</span>
@@ -195,20 +200,14 @@
         <div class="products-modal__icon"><i data-feather="tag"></i></div>
         <div>
           <h2 id="productTagModalTitle">Edit Tag</h2>
-          <p id="productTagModalSubtitle">Rename the selected tag for all products inside this group.</p>
         </div>
       </div>
 
-      <div class="products-tag-summary" id="productTagSummary">
-        <span>Current Tag</span>
-        <strong id="productTagCurrentLabel">—</strong>
-        <small id="productTagCountLabel">0 products will be updated</small>
-      </div>
 
       <div class="products-form-grid">
         <label class="products-field products-field--wide">
           <span id="productTagInputLabel">New Tag <em>*</em></span>
-          <input id="productNewTagInput" name="newTag" type="text" list="productsTagOptions" autocomplete="off" required placeholder="Example: Addons" />
+          <input id="productNewTagInput" name="newTag" type="text" autocomplete="off" required placeholder="Example: Addons" />
         </label>
       </div>
 
@@ -226,6 +225,6 @@
 
 
   <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-  <script src="/js/products.js?v=global-delete-modal-v1"></script>
+  <script src="/js/products.js?v=products-section-cards-egp-tag-select-v1"></script>
 </body>
 </html>
