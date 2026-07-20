@@ -41,6 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     scopeDept: $('#scopeDept'),
     scopePos: $('#scopePos'),
     scopeChips: $('#scopeChips'),
+    modulesGrid: $('#homeModulesGrid'),
+    modulesCount: $('#homeModulesCount'),
   };
 
   const state = {
@@ -62,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const moneyFmt = (() => {
     try {
-      return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
+      return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EGP' });
     } catch {
       return null;
     }
@@ -71,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function fmtMoney(value) {
     const n = Number(value);
     const safe = Number.isFinite(n) ? n : 0;
-    return moneyFmt ? moneyFmt.format(safe) : `£${safe.toFixed(2)}`;
+    return moneyFmt ? moneyFmt.format(safe) : `${safe.toFixed(2)} EGP`;
   }
 
   function optionText(value) {
@@ -723,6 +725,58 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.feather) window.feather.replace();
   }
 
+
+  const PAGE_CATALOG = [
+    { names:['Current Orders'], path:'/orders', icon:'list', color:'navy', description:'Track current orders and delivery progress' },
+    { names:['Requested Orders','Operations Orders'], path:'/orders/requested', icon:'users', color:'orange', description:'Review and process requested orders' },
+    { names:['Maintenance Orders'], path:'/orders/maintenance-orders', icon:'tool', color:'green', description:'Manage maintenance requests and status' },
+    { names:['Create New Order'], path:'/orders/new', icon:'shopping-cart', color:'orange', description:'Create a product, withdrawal, or maintenance order' },
+    { names:['Stocktaking'], path:'/stocktaking', icon:'archive', color:'navy', description:'Inventory quantities, kits, and stock records' },
+    { names:['Orders Review'], path:'/orders/sv-orders', icon:'award', color:'green', description:'Review and approve submitted orders' },
+    { names:['Expenses'], path:'/expenses', icon:'dollar-sign', color:'orange', description:'Cash in, cash out, and expense analytics' },
+    { names:['Expenses Users'], path:'/expenses/users', icon:'credit-card', color:'gray', description:'Review expenses by team member' },
+    { names:['B2B'], path:'/b2b', icon:'folder', color:'navy', description:'Schools, stock, and B2B operations' },
+    { names:['B2C'], path:'/b2c', icon:'database', color:'green', description:'Databases, tables, forms, and records' },
+    { names:['Products'], path:'/products', icon:'box', color:'orange', description:'Product catalog, tags, prices, and images' },
+    { names:['Task Management','My Tasks'], path:'/task-management/my-tasks', icon:'git-branch', color:'navy', description:'My tasks, delegated tasks, and workflows' },
+    { names:['KPIs'], path:'/kpis', icon:'bar-chart-2', color:'green', description:'Standards, reviews, and performance metrics' },
+    { names:['Events','Event Calendar'], path:'/events/calendar', icon:'calendar', color:'orange', description:'Events, requests, and calendar planning' },
+    { names:['Messages'], path:'/messages', icon:'message-square', color:'navy', description:'Team conversations and comments' },
+    { names:['User Access'], path:'/user-access', icon:'shield', color:'gray', description:'Page access and permission management' },
+    { names:['Proposals'], path:'/proposals', icon:'file-text', color:'green', description:'Create and review proposals' },
+    { names:['Account'], path:'/account', icon:'user', color:'gray', description:'Profile, position, and account settings', always:true },
+  ];
+
+  function renderModules() {
+    if (!els.modulesGrid) return;
+    const allowedLabels = (state.allowedPagesRaw || []).map((x) => String(x || '').trim()).filter(Boolean);
+    const cards = PAGE_CATALOG.filter((page) => page.always || page.names.some((name) => hasAccess(name)) || hasAccess(page.path));
+
+    // Include newly-created pages even before they are added to PAGE_CATALOG.
+    const known = new Set(cards.flatMap((p) => p.names.map(norm)));
+    allowedLabels.forEach((label) => {
+      if (!label || known.has(norm(label))) return;
+      cards.push({ names:[label], path:'#', icon:'layout', color:'gray', description:'Available system page' });
+      known.add(norm(label));
+    });
+
+    els.modulesGrid.innerHTML = cards.map((page) => {
+      const title = page.names[0];
+      const disabled = page.path === '#';
+      return `
+        <a class="home-module home-module--${safeText(page.color)}${disabled ? ' is-disabled' : ''}" href="${safeText(page.path)}" ${disabled ? 'aria-disabled="true"' : ''}>
+          <span class="home-module__icon"><i data-feather="${safeText(page.icon)}"></i></span>
+          <span class="home-module__content">
+            <strong>${safeText(title)}</strong>
+            <small>${safeText(page.description)}</small>
+          </span>
+          <span class="home-module__arrow"><i data-feather="arrow-up-right"></i></span>
+        </a>`;
+    }).join('');
+    if (els.modulesCount) els.modulesCount.textContent = `${cards.length} module${cards.length === 1 ? '' : 's'}`;
+    if (window.feather) window.feather.replace();
+  }
+
   function renderScopeChips(pages) {
     if (!els.scopeChips) return;
     els.scopeChips.innerHTML = '';
@@ -788,6 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!canExpenses) hideBlock('expenses'); else showBlock('expenses');
 
     renderActions();
+    renderModules();
 
     return { canTasks, canOrders, canRequested, canStock, canExpenses };
   }
