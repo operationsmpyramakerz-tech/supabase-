@@ -143,13 +143,17 @@
             <strong>EGP</strong>
           </span>
         </label>
-        <label class="products-field" id="productTagField">
+        <div class="products-field products-tag-field" id="productTagField">
           <span>Tag</span>
-          <select id="productTagsInput" name="tags" aria-label="Product tag">
-            <option value="">Select tag</option>
-          </select>
+          <input id="productTagsInput" name="tags" type="hidden" />
+          <button type="button" class="products-modern-select" id="productTagSelectButton" aria-haspopup="listbox" aria-expanded="false">
+            <span class="products-modern-select__icon"><i data-feather="tag"></i></span>
+            <span class="products-modern-select__label" id="productTagSelectLabel">Select tag</span>
+            <i class="products-modern-select__chevron" data-feather="chevron-down"></i>
+          </button>
+          <div class="products-modern-select__menu" id="productTagSelectMenu" role="listbox" hidden></div>
           <datalist id="productsTagOptions" hidden></datalist>
-        </label>
+        </div>
         <label class="products-field products-field--wide">
           <span>Product URL</span>
           <input id="productUrlInput" name="url" type="url" autocomplete="off" placeholder="https://supplier.com/product" />
