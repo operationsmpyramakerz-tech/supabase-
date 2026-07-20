@@ -32,6 +32,26 @@ document.addEventListener('DOMContentLoaded', () => {
     ordersAnalysisLabel: $('#ordersAnalysisLabel'),
     kpiRequestedMain: $('#kpiRequestedMain'),
     kpiRequestedSub: $('#kpiRequestedSub'),
+    operationsPendingCount: $('#operationsPendingCount'),
+    operationsPendingCost: $('#operationsPendingCost'),
+    operationsReceivedCount: $('#operationsReceivedCount'),
+    operationsReceivedCost: $('#operationsReceivedCost'),
+    operationsDeliveredCount: $('#operationsDeliveredCount'),
+    operationsDeliveredCost: $('#operationsDeliveredCost'),
+    operationsRingPending: $('#operationsRingPending'),
+    operationsRingReceived: $('#operationsRingReceived'),
+    operationsRingDelivered: $('#operationsRingDelivered'),
+    kpiReviewMain: $('#kpiReviewMain'),
+    kpiReviewSub: $('#kpiReviewSub'),
+    reviewPendingCount: $('#reviewPendingCount'),
+    reviewPendingCost: $('#reviewPendingCost'),
+    reviewApprovedCount: $('#reviewApprovedCount'),
+    reviewApprovedCost: $('#reviewApprovedCost'),
+    reviewRejectedCount: $('#reviewRejectedCount'),
+    reviewRejectedCost: $('#reviewRejectedCost'),
+    reviewRingPending: $('#reviewRingPending'),
+    reviewRingApproved: $('#reviewRingApproved'),
+    reviewRingRejected: $('#reviewRingRejected'),
     kpiStockMain: $('#kpiStockMain'),
     kpiStockSub: $('#kpiStockSub'),
     kpiExpensesMain: $('#kpiExpensesMain'),
@@ -70,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     orderGroups: [],
     requestedItems: [],
     requestedGroups: [],
+    reviewItems: [],
+    reviewGroups: [],
     expenses: [],
     stock: [],
     ordersAnalysis: { time: 'all', by: 'status' },
@@ -1176,20 +1198,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Decide what blocks to show
     const canTasks = false; // Legacy Tasks page was retired in favor of Task Management.
     const canOrders = hasAccess('Current Orders') || hasAccess('/orders');
-    const canRequested = hasAccess('Requested Orders') || hasAccess('/orders/requested');
+    const canRequested = hasAccess('Requested Orders') || hasAccess('Operations Orders') || hasAccess('/orders/requested');
+    const canReview = hasAccess('Orders Review') || hasAccess('/orders/sv-orders');
     const canStock = hasAccess('Stocktaking') || hasAccess('/stocktaking');
     const canExpenses = hasAccess('Expenses') || hasAccess('/expenses');
 
     if (!canTasks) hideBlock('tasks'); else showBlock('tasks');
     if (!canOrders) hideBlock('orders'); else showBlock('orders');
     if (!canRequested) hideBlock('requested'); else showBlock('requested');
+    if (!canReview) hideBlock('review'); else showBlock('review');
     if (!canStock) hideBlock('stock'); else showBlock('stock');
     if (!canExpenses) hideBlock('expenses'); else showBlock('expenses');
 
     renderActions();
     renderModules();
 
-    return { canTasks, canOrders, canRequested, canStock, canExpenses };
+    return { canTasks, canOrders, canRequested, canReview, canStock, canExpenses };
   }
 
   async function loadTasks() {
@@ -1269,6 +1293,49 @@ document.addEventListener('DOMContentLoaded', () => {
     renderOrdersChart(groups);
   }
 
+  function summaryGroupCost(group) {
+    const rows = group?.items || group?.products || [];
+    return ordersEstimateTotal(rows);
+  }
+
+  function reviewDecision(items) {
+    const values = (items || []).map((item) => norm(
+      item?.approval || item?.svApproval || item?.sv_approval || item?.status || ''
+    ));
+    if (values.some((value) => value.includes('rejected'))) return 'rejected';
+    if (values.length && values.every((value) => value.includes('approved'))) return 'approved';
+    return 'pending';
+  }
+
+  function renderSummaryPerformance(config) {
+    const groups = Array.isArray(config.groups) ? config.groups : [];
+    const totals = Object.fromEntries(config.buckets.map((bucket) => [bucket.key, { count: 0, cost: 0 }]));
+    let totalCost = 0;
+
+    groups.forEach((group) => {
+      const key = config.getBucket(group);
+      const cost = summaryGroupCost(group);
+      totalCost += cost;
+      if (totals[key]) {
+        totals[key].count += 1;
+        totals[key].cost += cost;
+      }
+    });
+
+    if (config.totalCountEl) config.totalCountEl.textContent = String(groups.length);
+    if (config.totalCostEl) config.totalCostEl.textContent = fmtMoney(totalCost);
+
+    const active = config.buckets.filter((bucket) => totals[bucket.key].count > 0).length;
+    const gap = active > 1 ? 18 : 0;
+    let offset = 0;
+    config.buckets.forEach((bucket) => {
+      const value = totals[bucket.key];
+      if (bucket.countEl) bucket.countEl.textContent = `${value.count}/${groups.length}`;
+      if (bucket.costEl) bucket.costEl.textContent = fmtMoney(value.cost);
+      offset = setRingSegment(bucket.circleEl, value.count, groups.length, offset, gap);
+    });
+  }
+
   async function loadRequested() {
     setKpi(els.kpiRequestedMain, els.kpiRequestedSub, '…', 'Loading');
     const list = await fetchJson('/api/orders/requested');
@@ -1283,12 +1350,39 @@ document.addEventListener('DOMContentLoaded', () => {
       counts[stage.tab] = (counts[stage.tab] || 0) + 1;
     }
 
-    setKpi(
-      els.kpiRequestedMain,
-      els.kpiRequestedSub,
-      `${counts['not-started']} pending`,
-      `Received: ${counts.received} • Delivered: ${counts.delivered} • Total: ${groups.length}`,
-    );
+    renderSummaryPerformance({
+      groups,
+      totalCountEl: els.kpiRequestedMain,
+      totalCostEl: els.kpiRequestedSub,
+      getBucket: (group) => reqComputeStage(group.items || []).tab,
+      buckets: [
+        { key: 'not-started', countEl: els.operationsPendingCount, costEl: els.operationsPendingCost, circleEl: els.operationsRingPending },
+        { key: 'received', countEl: els.operationsReceivedCount, costEl: els.operationsReceivedCost, circleEl: els.operationsRingReceived },
+        { key: 'delivered', countEl: els.operationsDeliveredCount, costEl: els.operationsDeliveredCost, circleEl: els.operationsRingDelivered },
+      ],
+    });
+  }
+
+  async function loadReview() {
+    if (els.kpiReviewMain) els.kpiReviewMain.textContent = '…';
+    if (els.kpiReviewSub) els.kpiReviewSub.textContent = 'Loading';
+    const list = await fetchJson('/api/sv-orders?tab=all');
+    const items = Array.isArray(list) ? list : (Array.isArray(list?.items) ? list.items : []);
+    state.reviewItems = items;
+    const groups = groupRequested(items);
+    state.reviewGroups = groups;
+
+    renderSummaryPerformance({
+      groups,
+      totalCountEl: els.kpiReviewMain,
+      totalCostEl: els.kpiReviewSub,
+      getBucket: (group) => reviewDecision(group.items || []),
+      buckets: [
+        { key: 'pending', countEl: els.reviewPendingCount, costEl: els.reviewPendingCost, circleEl: els.reviewRingPending },
+        { key: 'approved', countEl: els.reviewApprovedCount, costEl: els.reviewApprovedCost, circleEl: els.reviewRingApproved },
+        { key: 'rejected', countEl: els.reviewRejectedCount, costEl: els.reviewRejectedCost, circleEl: els.reviewRingRejected },
+      ],
+    });
   }
 
   async function loadStock() {
@@ -1380,7 +1474,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setUpdatedNow();
       wireSearch();
 
-      const { canTasks, canOrders, canRequested, canStock, canExpenses } = await loadAccount();
+      const { canTasks, canOrders, canRequested, canReview, canStock, canExpenses } = await loadAccount();
       setUpdatedNow();
 
       const jobs = [];
@@ -1399,6 +1493,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (canRequested) jobs.push(loadRequested().catch((e) => {
         console.error(e);
         setKpi(els.kpiRequestedMain, els.kpiRequestedSub, '—', 'Failed to load');
+      }));
+
+      if (canReview) jobs.push(loadReview().catch((e) => {
+        console.error(e);
+        if (els.kpiReviewMain) els.kpiReviewMain.textContent = '—';
+        if (els.kpiReviewSub) els.kpiReviewSub.textContent = 'Failed to load';
       }));
 
       if (canStock) jobs.push(loadStock().catch((e) => {
