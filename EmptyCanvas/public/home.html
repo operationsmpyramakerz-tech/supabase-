@@ -206,10 +206,62 @@
               </div>
             </div>
 
-            <a class="stat home-kpi" href="/orders/requested" data-block="requested">
-              <div class="stat__label">Operations orders</div>
-              <div class="stat__value" id="kpiRequestedMain">—</div>
-              <div class="home-kpi-sub" id="kpiRequestedSub">—</div>
+            <a class="stat home-kpi home-summary-performance" href="/orders/requested" data-block="requested" aria-label="Operations orders overview">
+              <div class="home-summary-performance__head">
+                <div>
+                  <div class="stat__label">Operations orders</div>
+                  <div class="home-summary-performance__subtitle">Order processing overview</div>
+                </div>
+              </div>
+              <div class="home-summary-performance__body">
+                <div class="home-summary-ring" data-summary-ring="operations">
+                  <svg viewBox="0 0 120 120" focusable="false" aria-hidden="true">
+                    <circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
+                    <circle id="operationsRingPending" class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" r="44"></circle>
+                    <circle id="operationsRingReceived" class="home-summary-ring__segment home-summary-ring__segment--navy" cx="60" cy="60" r="44"></circle>
+                    <circle id="operationsRingDelivered" class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" r="44"></circle>
+                  </svg>
+                  <div class="home-summary-ring__center">
+                    <strong id="kpiRequestedMain">—</strong>
+                    <span>Total orders</span>
+                    <small id="kpiRequestedSub">—</small>
+                  </div>
+                </div>
+                <div class="home-summary-performance__legend">
+                  <div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="operationsPendingCount">—</strong><span>Pending</span><small id="operationsPendingCost">—</small></div></div>
+                  <div class="home-summary-status home-summary-status--navy"><span class="home-summary-status__bar"></span><div><strong id="operationsReceivedCount">—</strong><span>Received</span><small id="operationsReceivedCost">—</small></div></div>
+                  <div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="operationsDeliveredCount">—</strong><span>Delivered</span><small id="operationsDeliveredCost">—</small></div></div>
+                </div>
+              </div>
+            </a>
+
+            <a class="stat home-kpi home-summary-performance" href="/orders/sv-orders" data-block="review" aria-label="Orders review overview">
+              <div class="home-summary-performance__head">
+                <div>
+                  <div class="stat__label">Orders review</div>
+                  <div class="home-summary-performance__subtitle">Approval decision overview</div>
+                </div>
+              </div>
+              <div class="home-summary-performance__body">
+                <div class="home-summary-ring" data-summary-ring="review">
+                  <svg viewBox="0 0 120 120" focusable="false" aria-hidden="true">
+                    <circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
+                    <circle id="reviewRingPending" class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" r="44"></circle>
+                    <circle id="reviewRingApproved" class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" r="44"></circle>
+                    <circle id="reviewRingRejected" class="home-summary-ring__segment home-summary-ring__segment--red" cx="60" cy="60" r="44"></circle>
+                  </svg>
+                  <div class="home-summary-ring__center">
+                    <strong id="kpiReviewMain">—</strong>
+                    <span>Total orders</span>
+                    <small id="kpiReviewSub">—</small>
+                  </div>
+                </div>
+                <div class="home-summary-performance__legend">
+                  <div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="reviewPendingCount">—</strong><span>Pending</span><small id="reviewPendingCost">—</small></div></div>
+                  <div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="reviewApprovedCount">—</strong><span>Approved</span><small id="reviewApprovedCost">—</small></div></div>
+                  <div class="home-summary-status home-summary-status--red"><span class="home-summary-status__bar"></span><div><strong id="reviewRejectedCount">—</strong><span>Rejected</span><small id="reviewRejectedCost">—</small></div></div>
+                </div>
+              </div>
             </a>
 
             <a class="stat home-kpi" href="/stocktaking" data-block="stock">
