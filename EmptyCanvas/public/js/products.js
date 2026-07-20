@@ -10,6 +10,7 @@
     activeTag: '__all__',
     modalMode: 'create',
     editingId: '',
+    creatingTag: '',
     savingTag: false,
     editingTag: '',
     tagModalMode: 'edit',
@@ -269,6 +270,9 @@
             </div>
           </div>
           <div class="products-group__metrics">
+            <button type="button" class="products-group-add-product" data-action="add-product-to-tag" data-tag="${escapeHTML(group.tag)}">
+              <i data-feather="plus-circle"></i><span>Add Product</span>
+            </button>
             <button type="button" class="products-group-edit-tag" data-action="edit-tag" data-tag="${escapeHTML(group.tag)}">
               <i data-feather="edit-3"></i><span>Edit Tag</span>
             </button>
@@ -401,12 +405,16 @@
     setInputValue(els.urlInput, '');
   }
 
-  function openModal(mode = 'create', product = null) {
+  function openModal(mode = 'create', product = null, createTag = '') {
     state.modalMode = mode;
+    state.creatingTag = mode === 'create' ? String(createTag || state.activeTag || '').trim() : '';
     state.editingId = mode === 'edit' ? String(product?.id || '').trim() : '';
     resetForm();
 
     if (els.modalTitle) els.modalTitle.textContent = mode === 'edit' ? 'Edit Product' : 'Add Product';
+    if (els.tagField) els.tagField.hidden = mode === 'create';
+    if (mode === 'create' && els.tagsInput) setInputValue(els.tagsInput, state.creatingTag && state.creatingTag !== '__all__' ? state.creatingTag : '');
+
     if (els.modalSubtitle) {
       els.modalSubtitle.textContent = mode === 'edit'
         ? 'Update this product record.'
@@ -439,6 +447,8 @@
     document.body.classList.remove('products-modal-open');
     state.modalMode = 'create';
     state.editingId = '';
+    state.creatingTag = '';
+    if (els.tagField) els.tagField.hidden = false;
     resetForm();
   }
 
@@ -528,7 +538,7 @@
       name,
       idCode: String(els.idCodeInput?.value || '').trim() || null,
       unitPrice: inputNumberValue(els.priceInput),
-      tags: String(els.tagsInput?.value || '').trim() || null,
+      tags: (state.modalMode === 'create' ? String(state.creatingTag || '').trim() : String(els.tagsInput?.value || '').trim()) || null,
       url: String(els.urlInput?.value || '').trim() || null,
     };
   }
@@ -961,7 +971,7 @@
       });
     }
 
-    if (els.addBtn) els.addBtn.addEventListener('click', () => openModal('create'));
+    if (els.addBtn) els.addBtn.addEventListener('click', () => openModal('create', null, state.activeTag));
     if (els.proposalsBtn) els.proposalsBtn.addEventListener('click', async () => { setProductsView('proposals'); await loadProposals(); });
     if (els.backCatalogBtn) els.backCatalogBtn.addEventListener('click', () => setProductsView('catalog'));
     if (els.createProposalBtn) els.createProposalBtn.addEventListener('click', openProposalModal);
@@ -1006,6 +1016,9 @@
 
     if (els.results) {
       els.results.addEventListener('click', (event) => {
+        const addProductBtn = event.target.closest('[data-action="add-product-to-tag"]');
+        if (addProductBtn) { openModal('create', null, addProductBtn.getAttribute('data-tag')); return; }
+
         const tagBtn = event.target.closest('[data-action="edit-tag"]');
         if (tagBtn) { openTagModal(tagBtn.getAttribute('data-tag')); return; }
 
@@ -1137,6 +1150,7 @@
     els.idCodeInput = $('productIdCodeInput');
     els.priceInput = $('productPriceInput');
     els.tagsInput = $('productTagsInput');
+    els.tagField = $('productTagField');
     els.urlInput = $('productUrlInput');
 
     els.editSelectedTagBtn = $('productsEditSelectedTagBtn');
