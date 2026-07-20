@@ -5967,6 +5967,18 @@ async function _sbUpdateProduct(productId, body = {}) {
   return _sbSerializeProductRow(updated || { ...row, id });
 }
 
+async function _sbDeleteProduct(productId) {
+  const id = String(productId || "").trim();
+  if (!id) {
+    const err = new Error("Missing product ID.");
+    err.status = 400;
+    throw err;
+  }
+  const deleted = await supabaseDb.deleteById(_sbProductsTable(), id);
+  await _sbInvalidateProductsCaches();
+  return deleted;
+}
+
 function _sbProductChunk(list = [], size = 100) {
   const out = [];
   const cleanSize = Math.max(1, Number(size) || 100);
@@ -27785,6 +27797,63 @@ app.patch(
     } catch (error) {
       console.error("PATCH /api/products/:id error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update product." });
+    }
+  },
+);
+
+app.delete(
+  "/api/products/:id",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const deleted = await _sbDeleteProduct(req.params.id);
+      if (!deleted) return res.status(404).json({ ok: false, error: "Product not found." });
+      return res.json({ ok: true, source: "supabase" });
+    } catch (error) {
+      console.error("DELETE /api/products/:id error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete product." });
+    }
+  },
+);
+
+app.get(
+  "/api/products/:id/image",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    try {
+      const product = await _sbProductById(req.params.id);
+      if (!product) return res.status(404).end();
+      if (product.imageUrl) return res.redirect(302, product.imageUrl);
+      const pageUrl = String(product.url || "").trim();
+      if (!/^https?:\/\//i.test(pageUrl)) return res.status(404).end();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 7000);
+      const response = await fetch(pageUrl, {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; ProductsImagePreview/1.0)", Accept: "text/html,application/xhtml+xml" },
+      });
+      clearTimeout(timer);
+      if (!response.ok) return res.status(404).end();
+      const html = (await response.text()).slice(0, 750000);
+      const patterns = [
+        /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+        /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i,
+        /<img[^>]+src=["']([^"']+)["']/i,
+      ];
+      let found = "";
+      for (const pattern of patterns) { const match = html.match(pattern); if (match?.[1]) { found = match[1]; break; } }
+      if (!found) return res.status(404).end();
+      const absolute = new URL(found, response.url || pageUrl).toString();
+      if (!/^https?:\/\//i.test(absolute)) return res.status(404).end();
+      return res.redirect(302, absolute);
+    } catch (error) {
+      return res.status(404).end();
     }
   },
 );
