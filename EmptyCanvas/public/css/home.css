@@ -1520,3 +1520,13 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
     min-height: 52px !important;
   }
 }
+
+
+/* Current Orders status alignment refinement */
+.page-home .home-orders-status > div{
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:center !important;
+  align-self:stretch !important;
+  min-width:0 !important;
+}
