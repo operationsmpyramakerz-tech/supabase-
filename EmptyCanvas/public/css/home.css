@@ -2425,3 +2425,63 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   .page-home .home-summary-performance__body{grid-template-columns:96px minmax(0,1fr);gap:8px;}
   .page-home .home-summary-ring{width:92px;height:92px;}
 }
+
+/* Home overview: Current Orders and Operations Orders side by side */
+@media (min-width: 901px){
+  .page-home .home-kpis{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    align-items:stretch !important;
+    gap:14px !important;
+  }
+
+  .page-home .home-orders-performance,
+  .page-home .home-summary-performance--operations{
+    grid-column:auto !important;
+    width:100% !important;
+    min-width:0 !important;
+    height:100% !important;
+    box-sizing:border-box !important;
+  }
+
+  .page-home .home-orders-performance{
+    padding:16px 18px !important;
+  }
+
+  .page-home .home-orders-performance__body,
+  .page-home .home-summary-performance--operations .home-summary-performance__body{
+    grid-template-columns:150px minmax(0,1fr) !important;
+    gap:14px !important;
+    align-items:center !important;
+  }
+
+  .page-home .home-orders-ring,
+  .page-home .home-summary-performance--operations .home-summary-ring{
+    width:136px !important;
+    height:136px !important;
+    margin:auto !important;
+  }
+
+  .page-home .home-orders-performance__legend,
+  .page-home .home-summary-performance--operations .home-summary-performance__legend{
+    gap:8px !important;
+  }
+
+  .page-home .home-orders-status,
+  .page-home .home-summary-performance--operations .home-summary-status{
+    min-height:58px !important;
+    padding:9px 11px !important;
+  }
+
+  .page-home .home-summary-performance--review{
+    grid-column:1 / -1 !important;
+  }
+}
+
+@media (max-width: 900px){
+  .page-home .home-orders-performance,
+  .page-home .home-summary-performance--operations,
+  .page-home .home-summary-performance--review{
+    grid-column:1 / -1 !important;
+  }
+}
