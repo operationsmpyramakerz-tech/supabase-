@@ -205,26 +205,43 @@
     const code = String(product?.displayId || '').trim() || 'No ID';
     const price = formatPrice(product?.unitPrice);
     const url = String(product?.url || '').trim();
-    const link = url
-      ? `<a class="product-link" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer"><i data-feather="external-link"></i><span>Open URL</span></a>`
-      : `<span class="product-link is-disabled"><i data-feather="link-2"></i><span>No URL</span></span>`;
-
+    const imageUrl = String(product?.imageUrl || '').trim();
+    const imageSrc = imageUrl || (url ? `/api/products/${encodeURIComponent(id)}/image` : '');
     const searchText = [name, tag, code, price, url].join(' ');
+
+    const image = imageSrc
+      ? `<img class="product-card__image" src="${escapeHTML(imageSrc)}" alt="${escapeHTML(name)}" loading="lazy" onerror="this.closest('.product-card__media').classList.add('is-fallback');this.remove();">`
+      : '';
+
+    const urlButton = url
+      ? `<a class="product-card__url" href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open product URL" title="Open product URL"><i data-feather="external-link"></i></a>`
+      : `<span class="product-card__url is-disabled" aria-label="No product URL" title="No product URL"><i data-feather="link-2"></i></span>`;
 
     return `
       <article class="product-card" data-product-id="${escapeHTML(id)}" data-search="${escapeHTML(searchText)}">
-        <div class="product-card__top product-card__top--actions-only">
-          <button type="button" class="product-card__edit" data-action="edit-product" data-product-id="${escapeHTML(id)}" aria-label="Edit ${escapeHTML(name)}">
-            <i data-feather="edit-3"></i><span>Edit</span>
-          </button>
+        <div class="product-card__media ${image ? '' : 'is-fallback'}">
+          ${image}
+          <div class="product-card__image-fallback"><i data-feather="package"></i></div>
         </div>
-        <h4 title="${escapeHTML(name)}">${escapeHTML(name)}</h4>
-        <div class="product-card__meta">
-          <div class="product-meta-box"><span>ID Code</span><strong title="${escapeHTML(code)}">${escapeHTML(code)}</strong></div>
-          <div class="product-meta-box"><span>Unit Price</span><strong>${escapeHTML(price)}</strong></div>
-        </div>
-        <div class="product-card__footer">
-          ${link}
+        <div class="product-card__content">
+          <div class="product-card__headline">
+            <h4 title="${escapeHTML(name)}">${escapeHTML(name)}</h4>
+            <div class="product-card__menu-wrap">
+              <button type="button" class="product-card__menu-btn" data-action="toggle-product-menu" data-product-id="${escapeHTML(id)}" aria-label="Product actions" aria-expanded="false"><i data-feather="more-vertical"></i></button>
+              <div class="product-card__menu" hidden>
+                <button type="button" data-action="edit-product" data-product-id="${escapeHTML(id)}"><i data-feather="edit-3"></i><span>Edit</span></button>
+                <button type="button" class="is-danger" data-action="delete-product" data-product-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
+              </div>
+            </div>
+          </div>
+          <div class="product-card__details">
+            <span class="product-card__code">${escapeHTML(code)}</span>
+            <span class="product-card__tag">${escapeHTML(tag)}</span>
+          </div>
+          <div class="product-card__bottom">
+            <strong class="product-card__price">${escapeHTML(price)}</strong>
+            ${urlButton}
+          </div>
         </div>
       </article>
     `;
@@ -889,6 +906,35 @@
     }
   }
 
+  async function deleteProduct(product) {
+    const id = String(product?.id || '').trim();
+    if (!id) return;
+    const name = String(product?.name || 'this product');
+    if (!window.confirm(`Delete ${name}? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to delete product.');
+      state.products = state.products.filter((item) => String(item?.id) !== id);
+      renderCatalog();
+      toast('success', 'Products', 'Product deleted successfully.');
+    } catch (error) {
+      toast('error', 'Products', error?.message || 'Failed to delete product.');
+    }
+  }
+
+  function closeProductMenus(except = null) {
+    document.querySelectorAll('.product-card__menu:not([hidden])').forEach((menu) => {
+      if (menu === except) return;
+      menu.hidden = true;
+      const btn = menu.parentElement?.querySelector('.product-card__menu-btn');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
   function bindEvents() {
     if (els.searchInput) {
       els.searchInput.addEventListener('input', () => {
@@ -934,11 +980,34 @@
       els.results.addEventListener('click', (event) => {
         const tagBtn = event.target.closest('[data-action="edit-tag"]');
         if (tagBtn) { openTagModal(tagBtn.getAttribute('data-tag')); return; }
-        const btn = event.target.closest('[data-action="edit-product"]');
-        if (!btn) return;
-        const product = findProduct(btn.getAttribute('data-product-id'));
-        if (!product) return;
-        openModal('edit', product);
+
+        const menuBtn = event.target.closest('[data-action="toggle-product-menu"]');
+        if (menuBtn) {
+          event.preventDefault();
+          event.stopPropagation();
+          const menu = menuBtn.parentElement?.querySelector('.product-card__menu');
+          if (!menu) return;
+          const willOpen = menu.hidden;
+          closeProductMenus(menu);
+          menu.hidden = !willOpen;
+          menuBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+          return;
+        }
+
+        const editBtn = event.target.closest('[data-action="edit-product"]');
+        if (editBtn) {
+          closeProductMenus();
+          const product = findProduct(editBtn.getAttribute('data-product-id'));
+          if (product) openModal('edit', product);
+          return;
+        }
+
+        const deleteBtn = event.target.closest('[data-action="delete-product"]');
+        if (deleteBtn) {
+          closeProductMenus();
+          const product = findProduct(deleteBtn.getAttribute('data-product-id'));
+          if (product) deleteProduct(product);
+        }
       });
     }
 
@@ -977,6 +1046,10 @@
     if (els.proposalCloseBtn) els.proposalCloseBtn.addEventListener('click', closeProposalModal);
     if (els.proposalCancelBtn) els.proposalCancelBtn.addEventListener('click', closeProposalModal);
     if (els.proposalModal) els.proposalModal.addEventListener('click', (event) => { if (event.target === els.proposalModal) closeProposalModal(); });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.product-card__menu-wrap')) closeProductMenus();
+    });
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
