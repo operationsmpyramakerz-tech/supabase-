@@ -707,7 +707,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const sorted = (list || []).slice().sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime));
 
     for (const it of sorted) {
-      const key = it?.orderGroupId ? String(it.orderGroupId) : minuteKey(it.createdTime);
+      // Keep every real order group separate. The review and operations APIs
+      // expose the order number using different field names depending on the
+      // backend (Supabase / Notion). Falling back directly to the creation
+      // minute can merge separate ORD cards created during the same minute.
+      const explicitOrderKey =
+        it?.orderGroupId ??
+        it?.order_group_id ??
+        it?.orderIdNumber ??
+        it?.order_id_number ??
+        it?.orderNumber ??
+        it?.order_number ??
+        it?.orderId ??
+        it?.order_id ??
+        null;
+      const key = explicitOrderKey !== null && String(explicitOrderKey).trim()
+        ? `order:${String(explicitOrderKey).trim()}`
+        : `row:${String(it?.id || '').trim() || minuteKey(it.createdTime)}`;
       let g = map.get(key);
       if (!g) {
         g = {
