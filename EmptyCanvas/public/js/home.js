@@ -371,9 +371,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateOrdersAnalysisLabels(mode) {
     const config = mode === 'type'
       ? [
-          { key: 'request', label: 'Request', color: '#f97316' },
-          { key: 'withdrawal', label: 'Withdrawal', color: '#17324d' },
-          { key: 'maintenance', label: 'Maintenance', color: '#176b3a' },
+          { key: 'request', label: 'Request', color: '#176b3a' },
+          { key: 'withdrawal', label: 'Withdrawal', color: '#dc2626' },
+          { key: 'maintenance', label: 'Maintenance', color: '#eab308' },
         ]
       : [
           { key: 'inProgress', label: 'In progress', color: '#f97316' },
@@ -450,6 +450,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (els.ordersAnalysisTime) els.ordersAnalysisTime.value = state.ordersAnalysis.time;
     if (els.ordersAnalysisBy) els.ordersAnalysisBy.value = state.ordersAnalysis.by;
+
+    document.querySelectorAll('[data-analysis-time]').forEach((button) => {
+      const selected = button.dataset.analysisTime === state.ordersAnalysis.time;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+    document.querySelectorAll('[data-analysis-by]').forEach((button) => {
+      const selected = button.dataset.analysisBy === state.ordersAnalysis.by;
+      button.classList.toggle('is-selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
   }
 
   function closeOrdersAnalysisMenu() {
@@ -483,8 +494,39 @@ document.addEventListener('DOMContentLoaded', () => {
       syncOrdersAnalysisControl();
       renderCurrentOrdersPerformance(state.orderGroups || []);
     };
-    els.ordersAnalysisTime?.addEventListener('change', apply);
-    els.ordersAnalysisBy?.addEventListener('change', apply);
+
+    els.ordersAnalysisMenu.querySelectorAll('[data-analysis-time]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (els.ordersAnalysisTime) els.ordersAnalysisTime.value = button.dataset.analysisTime || 'all';
+        apply();
+      });
+    });
+    els.ordersAnalysisMenu.querySelectorAll('[data-analysis-by]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (els.ordersAnalysisBy) els.ordersAnalysisBy.value = button.dataset.analysisBy || 'status';
+        apply();
+      });
+    });
+
+    const performanceCard = els.ordersAnalysisControl?.closest('.home-orders-performance');
+    if (performanceCard) {
+      const openOrders = () => { window.location.href = performanceCard.dataset.href || '/orders'; };
+      performanceCard.addEventListener('click', (event) => {
+        if (event.target.closest('button, input, .home-orders-analysis__menu')) return;
+        openOrders();
+      });
+      performanceCard.addEventListener('keydown', (event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button, input')) {
+          event.preventDefault();
+          openOrders();
+        }
+      });
+    }
+
     document.addEventListener('click', closeOrdersAnalysisMenu);
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') closeOrdersAnalysisMenu();
