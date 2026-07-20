@@ -7005,3 +7005,60 @@ function initOpsPersistentShellHost() {
   try { history.replaceState({ opsShellPath: state.currentPath }, '', state.currentPath); } catch {}
   loadFrame(state.currentPath, { replaceHistory: true, hideLegacy: false });
 }
+
+// Keep authenticated pages synchronized with server-side session revocation.
+// A username/password change or account deletion invalidates every active device.
+(() => {
+  if (window.__OPS_SESSION_GUARD__) return;
+  window.__OPS_SESSION_GUARD__ = true;
+
+  const currentPath = String(window.location.pathname || '').toLowerCase();
+  if (currentPath === '/login' || currentPath === '/' || currentPath.includes('forgot-password')) return;
+
+  let checking = false;
+  let invalidated = false;
+
+  const forceLogin = () => {
+    if (invalidated) return;
+    invalidated = true;
+    try { sessionStorage.clear(); } catch {}
+    try { localStorage.removeItem('accountCache'); } catch {}
+    const target = '/login?reason=session-invalidated';
+    try { window.history.replaceState(null, '', target); } catch {}
+    window.location.replace(target);
+  };
+
+  const checkSession = async () => {
+    if (checking || invalidated || document.visibilityState === 'hidden') return;
+    checking = true;
+    try {
+      const response = await fetch(`/api/session-status?_=${Date.now()}`, {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'X-Ops-Session-Check': '1' },
+      });
+      if (response.status === 401 || response.redirected && /\/login/i.test(response.url || '')) {
+        forceLogin();
+        return;
+      }
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.authenticated === false || payload?.code === 'SESSION_INVALIDATED') {
+        forceLogin();
+      }
+    } catch {
+      // Network errors must not log users out. The next heartbeat retries.
+    } finally {
+      checking = false;
+    }
+  };
+
+  window.addEventListener('pageshow', checkSession);
+  window.addEventListener('focus', checkSession);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkSession();
+  });
+
+  checkSession();
+  window.setInterval(checkSession, 1500);
+})();
