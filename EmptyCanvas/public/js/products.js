@@ -153,17 +153,28 @@
     if (!els.tags) return;
     const tags = getAllTags();
     const total = (state.products || []).length;
-    const chips = [
-      `<button type="button" class="products-tag-chip ${state.activeTag === '__all__' ? 'is-active' : ''}" data-tag="__all__">
-        <span>All Products</span><span class="products-tag-chip__count">${formatNumber(total)}</span>
+    const active = state.activeTag === '__all__' ? null : tags.find((tag) => tag.name === state.activeTag);
+    if (els.tagFilterLabel) els.tagFilterLabel.textContent = active?.name || 'All Products';
+    if (els.tagFilterCount) els.tagFilterCount.textContent = formatNumber(active?.count ?? total);
+    els.tags.innerHTML = [
+      `<button type="button" class="products-tag-option products-tag-option--add" data-action="add-new-tag">
+        <span class="products-tag-option__icon"><i data-feather="plus"></i></span>
+        <span><strong>Add new tag</strong><small>Create a product group</small></span>
+      </button>`,
+      `<button type="button" class="products-tag-option ${state.activeTag === '__all__' ? 'is-active' : ''}" data-tag="__all__">
+        <span class="products-tag-option__icon"><i data-feather="layers"></i></span>
+        <span><strong>All Products</strong><small>${formatNumber(total)} products</small></span>
+        ${state.activeTag === '__all__' ? '<i data-feather="check"></i>' : ''}
       </button>`,
       ...tags.map((tag) => `
-        <button type="button" class="products-tag-chip ${state.activeTag === tag.name ? 'is-active' : ''}" data-tag="${escapeHTML(tag.name)}">
-          <span>${escapeHTML(tag.name)}</span><span class="products-tag-chip__count">${formatNumber(tag.count)}</span>
+        <button type="button" class="products-tag-option ${state.activeTag === tag.name ? 'is-active' : ''}" data-tag="${escapeHTML(tag.name)}">
+          <span class="products-tag-option__icon"><i data-feather="tag"></i></span>
+          <span><strong>${escapeHTML(tag.name)}</strong><small>${formatNumber(tag.count)} products</small></span>
+          ${state.activeTag === tag.name ? '<i data-feather="check"></i>' : ''}
         </button>
       `),
-    ];
-    els.tags.innerHTML = chips.join('');
+    ].join('');
+    hydrateIcons(els.tags);
   }
 
   function renderTagOptions() {
@@ -236,7 +247,6 @@
           </div>
           <div class="product-card__details">
             <span class="product-card__code">${escapeHTML(code)}</span>
-            <span class="product-card__tag">${escapeHTML(tag)}</span>
           </div>
           <div class="product-card__bottom">
             <strong class="product-card__price">${escapeHTML(price)}</strong>
@@ -967,11 +977,29 @@
       });
     }
 
+    if (els.tagFilterBtn) {
+      els.tagFilterBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const open = els.tags?.hidden !== false;
+        if (els.tags) els.tags.hidden = !open;
+        els.tagFilterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    }
+
     if (els.tags) {
       els.tags.addEventListener('click', (event) => {
-        const btn = event.target.closest('.products-tag-chip');
+        const addBtn = event.target.closest('[data-action="add-new-tag"]');
+        if (addBtn) {
+          els.tags.hidden = true;
+          if (els.tagFilterBtn) els.tagFilterBtn.setAttribute('aria-expanded', 'false');
+          openCreateTagModal();
+          return;
+        }
+        const btn = event.target.closest('.products-tag-option[data-tag]');
         if (!btn) return;
         state.activeTag = btn.getAttribute('data-tag') || '__all__';
+        els.tags.hidden = true;
+        if (els.tagFilterBtn) els.tagFilterBtn.setAttribute('aria-expanded', 'false');
         renderCatalog();
       });
     }
@@ -1049,6 +1077,10 @@
 
     document.addEventListener('click', (event) => {
       if (!event.target.closest('.product-card__menu-wrap')) closeProductMenus();
+      if (!event.target.closest('.products-tag-filter-wrap') && els.tags && !els.tags.hidden) {
+        els.tags.hidden = true;
+        if (els.tagFilterBtn) els.tagFilterBtn.setAttribute('aria-expanded', 'false');
+      }
     });
 
     document.addEventListener('keydown', (event) => {
@@ -1067,9 +1099,12 @@
     els.addBtn = $('productsAddBtn');
     els.proposalsBtn = $('productsProposalsBtn');
     els.addTagBtn = $('productsAddTagBtn');
+    els.tagFilterBtn = $('productsTagFilterBtn');
+    els.tagFilterLabel = $('productsTagFilterLabel');
+    els.tagFilterCount = $('productsTagFilterCount');
     els.tags = $('productsTags');
     els.results = $('productsResults');
-    els.filterPanel = $('productsTagsTitle') ? $('productsTagsTitle').closest('.products-filter-panel') : null;
+    els.filterPanel = els.tagFilterBtn ? els.tagFilterBtn.closest('.products-filter-panel') : null;
     els.tagOptions = $('productsTagOptions');
 
     els.proposalsView = $('productsProposalsView');
