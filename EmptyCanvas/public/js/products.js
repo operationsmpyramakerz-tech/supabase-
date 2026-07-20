@@ -239,7 +239,7 @@
           <div class="product-card__headline">
             <h4 title="${escapeHTML(name)}">${escapeHTML(name)}</h4>
             <div class="product-card__menu-wrap">
-              <button type="button" class="product-card__menu-btn" data-action="toggle-product-menu" data-product-id="${escapeHTML(id)}" aria-label="Product actions" aria-expanded="false"><i data-feather="more-vertical"></i></button>
+              <button type="button" class="product-card__menu-btn" data-action="toggle-product-menu" data-product-id="${escapeHTML(id)}" aria-label="Product actions" aria-expanded="false"><span aria-hidden="true">⋮</span></button>
               <div class="product-card__menu" hidden>
                 <button type="button" data-action="edit-product" data-product-id="${escapeHTML(id)}"><i data-feather="edit-3"></i><span>Edit</span></button>
                 <button type="button" class="is-danger" data-action="delete-product" data-product-id="${escapeHTML(id)}"><i data-feather="trash-2"></i><span>Delete</span></button>
@@ -273,10 +273,13 @@
             <button type="button" class="products-group-add-product" data-action="add-product-to-tag" data-tag="${escapeHTML(group.tag)}">
               <i data-feather="plus-circle"></i><span>Add Product</span>
             </button>
-            <button type="button" class="products-group-edit-tag" data-action="edit-tag" data-tag="${escapeHTML(group.tag)}">
-              <i data-feather="edit-3"></i><span>Edit Tag</span>
-            </button>
-            <span class="products-mini-metric"><i data-feather="box"></i>${formatNumber(count)} items</span>
+            <div class="products-group-menu-wrap">
+              <button type="button" class="products-group-menu-btn" data-action="toggle-tag-menu" data-tag="${escapeHTML(group.tag)}" aria-label="Tag actions" aria-expanded="false"><span aria-hidden="true">⋮</span></button>
+              <div class="products-group-menu" hidden>
+                <button type="button" data-action="edit-tag" data-tag="${escapeHTML(group.tag)}"><i data-feather="edit-3"></i><span>Edit Tag</span></button>
+                <button type="button" class="is-danger" data-action="delete-tag" data-tag="${escapeHTML(group.tag)}"><i data-feather="trash-2"></i><span>Delete Tag</span></button>
+              </div>
+            </div>
           </div>
         </header>
         <div class="products-grid">
@@ -625,6 +628,26 @@
       toast('error', 'Products', error?.message || (isCreate ? 'Failed to add tag.' : 'Failed to update tag.'));
     } finally {
       setTagSaving(false);
+    }
+  }
+
+  async function deleteTag(tag) {
+    const cleanTag = String(tag || '').trim();
+    if (!cleanTag) return;
+    const confirmed = window.confirm(`Delete the tag "${cleanTag}"? Products in this tag will be moved to Uncategorized.`);
+    if (!confirmed) return;
+    try {
+      const res = await fetch('/api/products/tags', {
+        method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: cleanTag }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to delete tag.');
+      if (normalizeText(state.activeTag) === normalizeText(cleanTag)) state.activeTag = '__all__';
+      await loadProducts({ silent: true });
+      toast('success', 'Products', 'Tag deleted successfully.');
+    } catch (error) {
+      toast('error', 'Products', error?.message || 'Failed to delete tag.');
     }
   }
 
@@ -1021,6 +1044,18 @@
 
         const tagBtn = event.target.closest('[data-action="edit-tag"]');
         if (tagBtn) { openTagModal(tagBtn.getAttribute('data-tag')); return; }
+
+        const tagMenuBtn = event.target.closest('[data-action="toggle-tag-menu"]');
+        if (tagMenuBtn) {
+          event.preventDefault(); event.stopPropagation();
+          const menu = tagMenuBtn.parentElement?.querySelector('.products-group-menu');
+          document.querySelectorAll('.products-group-menu:not([hidden])').forEach((other) => { if (other !== menu) other.hidden = true; });
+          if (menu) { const willOpen = menu.hidden; menu.hidden = !willOpen; tagMenuBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false'); }
+          return;
+        }
+
+        const deleteTagBtn = event.target.closest('[data-action="delete-tag"]');
+        if (deleteTagBtn) { deleteTag(deleteTagBtn.getAttribute('data-tag')); return; }
 
         const menuBtn = event.target.closest('[data-action="toggle-product-menu"]');
         if (menuBtn) {
