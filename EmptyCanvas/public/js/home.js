@@ -1495,12 +1495,44 @@ document.addEventListener('DOMContentLoaded', () => {
         if (subMenu) subMenu.hidden = true;
       });
     };
+    // Move the summary dropdown to <body> while it is open. This avoids every
+    // card/grid stacking context and overflow rule, including mobile browsers
+    // that keep transformed sibling cards above absolutely-positioned children.
+    const menuHome = document.createComment(`${scope}-analysis-menu-home`);
+    menu.parentNode.insertBefore(menuHome, menu);
+
+    const positionPortalMenu = () => {
+      if (!menu.classList.contains('home-analysis-menu--portal') || menu.hidden) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewportGap = 12;
+      const width = Math.min(252, window.innerWidth - (viewportGap * 2));
+      const left = Math.max(viewportGap, Math.min(rect.right - width, window.innerWidth - width - viewportGap));
+      menu.style.setProperty('--analysis-menu-left', `${Math.round(left)}px`);
+      menu.style.setProperty('--analysis-menu-top', `${Math.round(rect.bottom + 8)}px`);
+      menu.style.setProperty('--analysis-menu-width', `${Math.round(width)}px`);
+    };
+
+    const mountPortalMenu = () => {
+      document.body.appendChild(menu);
+      menu.classList.add('home-analysis-menu--portal');
+      positionPortalMenu();
+    };
+
+    const restorePortalMenu = () => {
+      menu.classList.remove('home-analysis-menu--portal');
+      menu.style.removeProperty('--analysis-menu-left');
+      menu.style.removeProperty('--analysis-menu-top');
+      menu.style.removeProperty('--analysis-menu-width');
+      if (menuHome.parentNode) menuHome.parentNode.insertBefore(menu, menuHome.nextSibling);
+    };
+
     const close = () => {
       menu.hidden = true;
       trigger.setAttribute('aria-expanded', 'false');
       control.classList.remove('is-open');
       parentCard?.classList.remove('home-analysis-card--open');
       closeInner();
+      restorePortalMenu();
     };
     const sync = () => {
       const timeLabel = menu.querySelector('[data-analysis-select="time"] [data-analysis-select-label]');
@@ -1514,10 +1546,17 @@ document.addEventListener('DOMContentLoaded', () => {
     trigger.addEventListener('click', (event) => {
       event.preventDefault(); event.stopPropagation();
       const opening = menu.hidden;
-      menu.hidden = !opening;
-      trigger.setAttribute('aria-expanded', String(opening));
-      control.classList.toggle('is-open', opening);
-      parentCard?.classList.toggle('home-analysis-card--open', opening);
+      if (opening) {
+        mountPortalMenu();
+        menu.hidden = false;
+        positionPortalMenu();
+      } else {
+        close();
+        return;
+      }
+      trigger.setAttribute('aria-expanded', 'true');
+      control.classList.add('is-open');
+      parentCard?.classList.add('home-analysis-card--open');
     });
     menu.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
     menu.querySelectorAll('.home-analysis-select').forEach((select) => {
@@ -1545,6 +1584,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (byInput) byInput.value = analysis.by;
       sync(); render(); closeInner();
     }));
+    window.addEventListener('resize', positionPortalMenu, { passive: true });
+    window.addEventListener('scroll', positionPortalMenu, { passive: true, capture: true });
     document.addEventListener('click', close);
   }
 
