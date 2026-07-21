@@ -95,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
     expenses: [],
     stock: [],
     ordersAnalysis: { time: 'all', by: 'status' },
+    reviewAnalysis: { time: 'all', by: 'status' },
+    operationsAnalysis: { time: 'all', by: 'status' },
   };
 
   const norm = (s) => String(s || '').trim().toLowerCase();
@@ -1366,6 +1368,166 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+
+  function summaryAnalysisConfig(mode, statusBuckets) {
+    return mode === 'type'
+      ? [
+          { key: 'request', label: 'Request', color: '#176b3a' },
+          { key: 'withdrawal', label: 'Withdrawal', color: '#dc2626' },
+          { key: 'maintenance', label: 'Maintenance', color: '#eab308' },
+        ]
+      : statusBuckets;
+  }
+
+  function updateSummaryLabels(scope, config) {
+    const card = document.querySelector(`[data-summary-scope="${scope}"]`);
+    if (!card) return;
+    const statusCards = Array.from(card.querySelectorAll('.home-summary-status'));
+    statusCards.forEach((statusCard, index) => {
+      const item = config[index];
+      if (!item) return;
+      statusCard.style.setProperty('--summary-status-color', item.color);
+      const label = statusCard.querySelector('span:not(.home-summary-status__bar)');
+      if (label) label.textContent = item.label;
+    });
+  }
+
+  function renderAnalyzedSummary(scope, groups, analysis, statusBuckets, elements, getStatusBucket) {
+    const filtered = filterOrderGroupsByTime(groups, analysis.time || 'all');
+    const config = summaryAnalysisConfig(analysis.by || 'status', statusBuckets);
+    updateSummaryLabels(scope, config);
+    const totals = Object.fromEntries(config.map((item) => [item.key, { count: 0, cost: 0 }]));
+    let totalCost = 0;
+    filtered.forEach((group) => {
+      const cost = summaryGroupCost(group);
+      const key = analysis.by === 'type' ? currentOrderTypeBucket(group) : getStatusBucket(group);
+      totalCost += cost;
+      if (totals[key]) {
+        totals[key].count += 1;
+        totals[key].cost += cost;
+      }
+    });
+    if (elements.totalCountEl) elements.totalCountEl.textContent = String(filtered.length);
+    if (elements.totalCostEl) elements.totalCostEl.textContent = fmtMoney(totalCost);
+    const active = config.filter((item) => totals[item.key].count > 0).length;
+    const gap = active > 1 ? 18 : 0;
+    let offset = 0;
+    config.forEach((item, index) => {
+      const value = totals[item.key];
+      const bucketEl = elements.buckets[index];
+      if (bucketEl.countEl) bucketEl.countEl.textContent = String(value.count);
+      if (bucketEl.costEl) bucketEl.costEl.textContent = fmtMoney(value.cost);
+      if (bucketEl.circleEl) bucketEl.circleEl.style.stroke = item.color;
+      offset = setRingSegment(bucketEl.circleEl, value.count, filtered.length, offset, gap);
+    });
+  }
+
+  function renderOperationsAnalysis() {
+    renderAnalyzedSummary('operations', state.requestedGroups || [], state.operationsAnalysis,
+      [
+        { key: 'not-started', label: 'Pending', color: '#f97316' },
+        { key: 'received', label: 'Received', color: '#172554' },
+        { key: 'delivered', label: 'Delivered', color: '#176b3a' },
+      ],
+      {
+        totalCountEl: els.kpiRequestedMain, totalCostEl: els.kpiRequestedSub,
+        buckets: [
+          { countEl: els.operationsPendingCount, costEl: els.operationsPendingCost, circleEl: els.operationsRingPending },
+          { countEl: els.operationsReceivedCount, costEl: els.operationsReceivedCost, circleEl: els.operationsRingReceived },
+          { countEl: els.operationsDeliveredCount, costEl: els.operationsDeliveredCost, circleEl: els.operationsRingDelivered },
+        ],
+      },
+      (group) => reqComputeStage(group.items || []).tab);
+  }
+
+  function renderReviewAnalysis() {
+    renderAnalyzedSummary('review', state.reviewGroups || [], state.reviewAnalysis,
+      [
+        { key: 'pending', label: 'Pending', color: '#f97316' },
+        { key: 'approved', label: 'Approved', color: '#176b3a' },
+        { key: 'rejected', label: 'Rejected', color: '#dc2626' },
+      ],
+      {
+        totalCountEl: els.kpiReviewMain, totalCostEl: els.kpiReviewSub,
+        buckets: [
+          { countEl: els.reviewPendingCount, costEl: els.reviewPendingCost, circleEl: els.reviewRingPending },
+          { countEl: els.reviewApprovedCount, costEl: els.reviewApprovedCost, circleEl: els.reviewRingApproved },
+          { countEl: els.reviewRejectedCount, costEl: els.reviewRejectedCost, circleEl: els.reviewRingRejected },
+        ],
+      },
+      (group) => reviewDecision(group.items || []));
+  }
+
+  function setupSummaryAnalysisControl(scope, render) {
+    const control = document.getElementById(`${scope}AnalysisControl`);
+    const trigger = document.getElementById(`${scope}AnalysisTrigger`);
+    const menu = document.getElementById(`${scope}AnalysisMenu`);
+    const timeInput = document.getElementById(`${scope}AnalysisTime`);
+    const byInput = document.getElementById(`${scope}AnalysisBy`);
+    const analysis = state[`${scope}Analysis`];
+    if (!control || !trigger || !menu || !analysis) return;
+
+    const closeInner = (except = null) => {
+      menu.querySelectorAll('.home-analysis-select').forEach((select) => {
+        if (select === except) return;
+        select.classList.remove('is-open');
+        const subTrigger = select.querySelector('.home-analysis-select__trigger');
+        const subMenu = select.querySelector('.home-analysis-select__menu');
+        if (subTrigger) subTrigger.setAttribute('aria-expanded', 'false');
+        if (subMenu) subMenu.hidden = true;
+      });
+    };
+    const close = () => {
+      menu.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      control.classList.remove('is-open');
+      closeInner();
+    };
+    const sync = () => {
+      const timeLabel = menu.querySelector('[data-analysis-select="time"] [data-analysis-select-label]');
+      const byLabel = menu.querySelector('[data-analysis-select="by"] [data-analysis-select-label]');
+      if (timeLabel) timeLabel.textContent = ordersAnalysisTimeLabel(analysis.time);
+      if (byLabel) byLabel.textContent = analysis.by === 'type' ? 'Type' : 'Status';
+      menu.querySelectorAll('[data-analysis-time]').forEach((button) => button.classList.toggle('is-selected', button.dataset.analysisTime === analysis.time));
+      menu.querySelectorAll('[data-analysis-by]').forEach((button) => button.classList.toggle('is-selected', button.dataset.analysisBy === analysis.by));
+    };
+    sync();
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault(); event.stopPropagation();
+      const opening = menu.hidden;
+      menu.hidden = !opening;
+      trigger.setAttribute('aria-expanded', String(opening));
+      control.classList.toggle('is-open', opening);
+    });
+    menu.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
+    menu.querySelectorAll('.home-analysis-select').forEach((select) => {
+      const subTrigger = select.querySelector('.home-analysis-select__trigger');
+      const subMenu = select.querySelector('.home-analysis-select__menu');
+      if (!subTrigger || !subMenu) return;
+      subTrigger.addEventListener('click', (event) => {
+        event.preventDefault(); event.stopPropagation();
+        const opening = subMenu.hidden;
+        closeInner(select);
+        subMenu.hidden = !opening;
+        select.classList.toggle('is-open', opening);
+        subTrigger.setAttribute('aria-expanded', String(opening));
+      });
+    });
+    menu.querySelectorAll('[data-analysis-time]').forEach((button) => button.addEventListener('click', (event) => {
+      event.preventDefault(); event.stopPropagation();
+      analysis.time = button.dataset.analysisTime || 'all';
+      if (timeInput) timeInput.value = analysis.time;
+      sync(); render(); closeInner();
+    }));
+    menu.querySelectorAll('[data-analysis-by]').forEach((button) => button.addEventListener('click', (event) => {
+      event.preventDefault(); event.stopPropagation();
+      analysis.by = button.dataset.analysisBy || 'status';
+      if (byInput) byInput.value = analysis.by;
+      sync(); render(); closeInner();
+    }));
+    document.addEventListener('click', close);
+  }
+
   async function loadRequested() {
     setKpi(els.kpiRequestedMain, els.kpiRequestedSub, '…', 'Loading');
     const list = await fetchJson('/api/orders/requested');
@@ -1380,17 +1542,7 @@ document.addEventListener('DOMContentLoaded', () => {
       counts[stage.tab] = (counts[stage.tab] || 0) + 1;
     }
 
-    renderSummaryPerformance({
-      groups,
-      totalCountEl: els.kpiRequestedMain,
-      totalCostEl: els.kpiRequestedSub,
-      getBucket: (group) => reqComputeStage(group.items || []).tab,
-      buckets: [
-        { key: 'not-started', countEl: els.operationsPendingCount, costEl: els.operationsPendingCost, circleEl: els.operationsRingPending },
-        { key: 'received', countEl: els.operationsReceivedCount, costEl: els.operationsReceivedCost, circleEl: els.operationsRingReceived },
-        { key: 'delivered', countEl: els.operationsDeliveredCount, costEl: els.operationsDeliveredCost, circleEl: els.operationsRingDelivered },
-      ],
-    });
+    renderOperationsAnalysis();
   }
 
   async function loadReview() {
@@ -1402,17 +1554,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const groups = groupRequested(items);
     state.reviewGroups = groups;
 
-    renderSummaryPerformance({
-      groups,
-      totalCountEl: els.kpiReviewMain,
-      totalCostEl: els.kpiReviewSub,
-      getBucket: (group) => reviewDecision(group.items || []),
-      buckets: [
-        { key: 'pending', countEl: els.reviewPendingCount, costEl: els.reviewPendingCost, circleEl: els.reviewRingPending },
-        { key: 'approved', countEl: els.reviewApprovedCount, costEl: els.reviewApprovedCost, circleEl: els.reviewRingApproved },
-        { key: 'rejected', countEl: els.reviewRejectedCount, costEl: els.reviewRejectedCost, circleEl: els.reviewRingRejected },
-      ],
-    });
+    renderReviewAnalysis();
   }
 
   async function loadStock() {
@@ -1497,6 +1639,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   setupOrdersAnalysisControl();
+  setupSummaryAnalysisControl('review', renderReviewAnalysis);
+  setupSummaryAnalysisControl('operations', renderOperationsAnalysis);
 
   // ===== Init =====
   (async () => {
