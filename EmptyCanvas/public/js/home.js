@@ -54,6 +54,12 @@ document.addEventListener('DOMContentLoaded', () => {
     reviewRingRejected: $('#reviewRingRejected'),
     kpiStockMain: $('#kpiStockMain'),
     kpiStockSub: $('#kpiStockSub'),
+    kpiStockCost: $('#kpiStockCost'),
+    stockAnalysisControl: $('#stockAnalysisControl'),
+    stockAnalysisTrigger: $('#stockAnalysisTrigger'),
+    stockAnalysisMenu: $('#stockAnalysisMenu'),
+    stockUserFilter: $('#stockUserFilter'),
+    stockTagFilter: $('#stockTagFilter'),
     kpiExpensesMain: $('#kpiExpensesMain'),
     kpiExpensesSub: $('#kpiExpensesSub'),
 
@@ -94,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reviewGroups: [],
     expenses: [],
     stock: [],
+    stockFilters: { user: 'all', tag: 'all' },
     ordersAnalysis: { time: 'all', by: 'status' },
     reviewAnalysis: { time: 'all', by: 'status' },
     operationsAnalysis: { time: 'all', by: 'status' },
@@ -1645,30 +1652,93 @@ document.addEventListener('DOMContentLoaded', () => {
     renderReviewAnalysis();
   }
 
+  function stockUserName(item) {
+    return String(item?.userName || item?.username || item?.createdBy || item?.requestedBy || item?.ownerName || 'Unknown user').trim() || 'Unknown user';
+  }
+
+  function stockTagName(item) {
+    return String(item?.tag?.name || item?.tag || 'Untagged').trim() || 'Untagged';
+  }
+
+  function populateStockFilters(items) {
+    const currentUser = state.stockFilters.user;
+    const currentTag = state.stockFilters.tag;
+    const users = Array.from(new Set(items.map(stockUserName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const tags = Array.from(new Set(items.map(stockTagName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+    if (els.stockUserFilter) {
+      els.stockUserFilter.innerHTML = '<option value="all">All users</option>' + users.map((name) => `<option value="${safeText(name)}">${safeText(name)}</option>`).join('');
+      els.stockUserFilter.value = users.includes(currentUser) ? currentUser : 'all';
+      state.stockFilters.user = els.stockUserFilter.value;
+    }
+    if (els.stockTagFilter) {
+      els.stockTagFilter.innerHTML = '<option value="all">All tags</option>' + tags.map((name) => `<option value="${safeText(name)}">${safeText(name)}</option>`).join('');
+      els.stockTagFilter.value = tags.includes(currentTag) ? currentTag : 'all';
+      state.stockFilters.tag = els.stockTagFilter.value;
+    }
+  }
+
+  function renderStockSummary() {
+    const filtered = state.stock.filter((item) => {
+      const userOk = state.stockFilters.user === 'all' || stockUserName(item) === state.stockFilters.user;
+      const tagOk = state.stockFilters.tag === 'all' || stockTagName(item) === state.stockFilters.tag;
+      return userOk && tagOk;
+    });
+
+    let totalComponents = 0;
+    let totalCost = 0;
+    for (const item of filtered) {
+      const quantity = safeNum(item?.quantity);
+      const unitPrice = safeNum(item?.unitPrice ?? item?.unityPrice);
+      totalComponents += quantity;
+      totalCost += quantity * unitPrice;
+    }
+
+    if (els.kpiStockMain) els.kpiStockMain.textContent = String(totalComponents);
+    if (els.kpiStockCost) els.kpiStockCost.textContent = fmtMoney(totalCost);
+    if (els.kpiStockSub) {
+      const parts = [`${filtered.length} component records`];
+      if (state.stockFilters.user !== 'all') parts.push(state.stockFilters.user);
+      if (state.stockFilters.tag !== 'all') parts.push(state.stockFilters.tag);
+      els.kpiStockSub.textContent = parts.join(' • ');
+    }
+  }
+
+  function setupStockAnalysis() {
+    if (!els.stockAnalysisTrigger || !els.stockAnalysisMenu) return;
+    const close = () => {
+      els.stockAnalysisMenu.hidden = true;
+      els.stockAnalysisTrigger.setAttribute('aria-expanded', 'false');
+    };
+    els.stockAnalysisTrigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const willOpen = els.stockAnalysisMenu.hidden;
+      els.stockAnalysisMenu.hidden = !willOpen;
+      els.stockAnalysisTrigger.setAttribute('aria-expanded', String(willOpen));
+    });
+    els.stockAnalysisMenu.addEventListener('click', (event) => event.stopPropagation());
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+    els.stockUserFilter?.addEventListener('change', () => {
+      state.stockFilters.user = els.stockUserFilter.value || 'all';
+      renderStockSummary();
+    });
+    els.stockTagFilter?.addEventListener('change', () => {
+      state.stockFilters.tag = els.stockTagFilter.value || 'all';
+      renderStockSummary();
+    });
+  }
+
   async function loadStock() {
-    setKpi(els.kpiStockMain, els.kpiStockSub, '…', 'Loading');
+    if (els.kpiStockMain) els.kpiStockMain.textContent = '…';
+    if (els.kpiStockCost) els.kpiStockCost.textContent = '…';
+    if (els.kpiStockSub) els.kpiStockSub.textContent = 'Loading';
     const list = await fetchJson('/api/stock');
     const items = Array.isArray(list) ? list : [];
     state.stock = items;
-
-    let totalUnits = 0;
-    let totalKits = 0;
-    for (const it of items) {
-      const q = Number(it?.quantity || 0);
-      totalUnits += Number.isFinite(q) ? q : 0;
-
-      const kitQty = Number(it?.oneKitQuantity || 0);
-      if (Number.isFinite(kitQty) && kitQty > 0 && Number.isFinite(q)) {
-        totalKits += Math.floor(q / kitQty);
-      }
-    }
-
-    setKpi(
-      els.kpiStockMain,
-      els.kpiStockSub,
-      `${items.length} items`,
-      `Units: ${totalUnits} • Kits: ${totalKits}`,
-    );
+    populateStockFilters(items);
+    renderStockSummary();
   }
 
   async function loadExpenses() {
@@ -1729,6 +1799,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupOrdersAnalysisControl();
   setupSummaryAnalysisControl('review', renderReviewAnalysis);
   setupSummaryAnalysisControl('operations', renderOperationsAnalysis);
+  setupStockAnalysis();
 
   // ===== Init =====
   (async () => {
@@ -1765,7 +1836,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (canStock) jobs.push(loadStock().catch((e) => {
         console.error(e);
-        setKpi(els.kpiStockMain, els.kpiStockSub, '—', 'Failed to load');
+        if (els.kpiStockMain) els.kpiStockMain.textContent = '—';
+        if (els.kpiStockCost) els.kpiStockCost.textContent = '—';
+        if (els.kpiStockSub) els.kpiStockSub.textContent = 'Failed to load';
       }));
 
       if (canExpenses) jobs.push(loadExpenses().catch((e) => {
