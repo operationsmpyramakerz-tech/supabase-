@@ -298,8 +298,22 @@
   <div class="home-stock-analysis" id="stockAnalysisControl">
     <button class="home-stock-analysis__trigger" id="stockAnalysisTrigger" type="button" aria-expanded="false"><i data-feather="activity"></i><span>Analysis</span><i data-feather="chevron-down"></i></button>
     <div class="home-stock-analysis__menu" id="stockAnalysisMenu" hidden>
-      <label>Filter by users<select id="stockUserFilter"><option value="all">All users</option></select></label>
-      <label>Filter by tag<select id="stockTagFilter"><option value="all">All tags</option></select></label>
+      <div class="home-stock-filter" data-stock-filter="user">
+        <span class="home-stock-filter__label">Filter by users</span>
+        <button class="home-stock-filter__trigger" id="stockUserFilterTrigger" type="button" aria-expanded="false">
+          <span id="stockUserFilterText">All users</span><i data-feather="chevron-down"></i>
+        </button>
+        <div class="home-stock-filter__options" id="stockUserFilterOptions" hidden></div>
+        <input id="stockUserFilter" type="hidden" value="all">
+      </div>
+      <div class="home-stock-filter" data-stock-filter="tag">
+        <span class="home-stock-filter__label">Filter by tag</span>
+        <button class="home-stock-filter__trigger" id="stockTagFilterTrigger" type="button" aria-expanded="false">
+          <span id="stockTagFilterText">All tags</span><i data-feather="chevron-down"></i>
+        </button>
+        <div class="home-stock-filter__options" id="stockTagFilterOptions" hidden></div>
+        <input id="stockTagFilter" type="hidden" value="all">
+      </div>
     </div>
   </div>
 </div>
