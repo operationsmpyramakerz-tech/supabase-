@@ -586,17 +586,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!els.ordersAnalysisTrigger || !els.ordersAnalysisMenu) return;
     syncOrdersAnalysisControl();
 
-    const currentControl = els.ordersAnalysisControl;
-    const blockCardNavigation = (event) => {
-      event.stopPropagation();
-      if (event.type === 'click') event.preventDefault();
-    };
-    if (currentControl) {
-      ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((eventName) => {
-        currentControl.addEventListener(eventName, blockCardNavigation, true);
-      });
-    }
-
     els.ordersAnalysisTrigger.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1477,23 +1466,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const analysis = state[`${scope}Analysis`];
     if (!control || !trigger || !menu || !analysis) return;
 
-    // These controls live inside clickable summary cards (<a>). Block the
-    // parent-card navigation before it can run on desktop pointer events.
-    const blockCardNavigation = (event) => {
-      event.stopPropagation();
-      if (event.type === 'click') event.preventDefault();
-    };
-    ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((eventName) => {
-      control.addEventListener(eventName, blockCardNavigation, true);
-      menu.addEventListener(eventName, blockCardNavigation, true);
-    });
-
+    // These controls live inside clickable summary cards (<a>). Prevent the
+    // anchor's default navigation, but do not stop propagation during capture;
+    // the actual trigger/menu handlers still need to receive the click.
     const parentCard = control.closest('a[href]');
     if (parentCard) {
       parentCard.addEventListener('click', (event) => {
         if (event.target.closest('.home-orders-analysis')) {
           event.preventDefault();
-          event.stopPropagation();
         }
       }, true);
     }
