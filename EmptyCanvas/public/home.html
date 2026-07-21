@@ -94,7 +94,7 @@
 <section aria-label="Overview" class="card home-card home-card--hero">
 <div class="home-section-head">
 <h2 class="home-section-title"><i data-feather="activity"></i> Overview</h2>
-<div class="home-section-sub" id="homeScopeLine">—</div>
+
 </div>
 <div class="stats home-kpis" id="homeKpis">
 
@@ -109,8 +109,7 @@
 <button aria-expanded="false" aria-haspopup="true" class="home-orders-analysis__trigger" id="ordersAnalysisTrigger" type="button">
 <span class="home-orders-analysis__icon"><i data-feather="activity"></i></span>
 <span class="home-orders-analysis__trigger-copy">
-<small>Order analysis</small>
-<strong id="ordersAnalysisLabel">All time · Status</strong>
+<strong id="ordersAnalysisLabel">Analysis</strong>
 </span>
 <i class="home-orders-analysis__chevron" data-feather="chevron-down"></i>
 </button>
@@ -189,11 +188,37 @@
 </div>
 </div>
 </div>
-</div><a aria-label="Orders review overview" class="stat home-kpi home-summary-performance home-summary-performance--review" data-block="review" href="/orders/sv-orders">
+</div><a aria-label="Orders review overview" class="stat home-kpi home-summary-performance home-summary-performance--review" data-block="review" data-summary-scope="review" href="/orders/sv-orders">
 <div class="home-summary-performance__head">
-<div>
-<div class="stat__label">Orders review</div>
-</div>
+<div><div class="stat__label">Orders review</div></div>
+<div class="home-orders-analysis home-summary-analysis" id="reviewAnalysisControl" data-summary-analysis="review">
+<button aria-expanded="false" aria-haspopup="true" class="home-orders-analysis__trigger" id="reviewAnalysisTrigger" type="button">
+<span class="home-orders-analysis__icon"><i data-feather="activity"></i></span>
+<span class="home-orders-analysis__trigger-copy"><strong>Analysis</strong></span>
+<i class="home-orders-analysis__chevron" data-feather="chevron-down"></i>
+</button>
+<div class="home-orders-analysis__menu" hidden id="reviewAnalysisMenu">
+<div class="home-orders-analysis__field">
+<span class="home-orders-analysis__field-label">Time</span>
+<input id="reviewAnalysisTime" type="hidden" value="all"/>
+<div class="home-analysis-select" data-analysis-select="time">
+<button aria-expanded="false" aria-haspopup="listbox" class="home-analysis-select__trigger" type="button"><span data-analysis-select-label>All time</span><i data-feather="chevron-down"></i></button>
+<div class="home-analysis-select__menu" hidden role="listbox">
+<button class="home-analysis-select__option" data-analysis-time="week" type="button"><span>Last week</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-time="month" type="button"><span>Last month</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-time="year" type="button"><span>Last year</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option is-selected" data-analysis-time="all" type="button"><span>All time</span><i data-feather="check"></i></button>
+</div></div></div>
+<div class="home-orders-analysis__field">
+<span class="home-orders-analysis__field-label">Analysis by</span>
+<input id="reviewAnalysisBy" type="hidden" value="status"/>
+<div class="home-analysis-select" data-analysis-select="by">
+<button aria-expanded="false" aria-haspopup="listbox" class="home-analysis-select__trigger" type="button"><span data-analysis-select-label>Status</span><i data-feather="chevron-down"></i></button>
+<div class="home-analysis-select__menu" hidden role="listbox">
+<button class="home-analysis-select__option is-selected" data-analysis-by="status" type="button"><span>Status</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-by="type" type="button"><span>Type</span><i data-feather="check"></i></button>
+</div></div></div>
+</div></div>
 </div>
 <div class="home-summary-performance__body">
 <div class="home-summary-ring" data-summary-ring="review">
@@ -215,11 +240,37 @@
 <div class="home-summary-status home-summary-status--red"><span class="home-summary-status__bar"></span><div><strong id="reviewRejectedCount">—</strong><span>Rejected</span><small id="reviewRejectedCost">—</small></div></div>
 </div>
 </div>
-</a><a aria-label="Operations orders overview" class="stat home-kpi home-summary-performance home-summary-performance--operations" data-block="requested" href="/orders/requested">
+</a><a aria-label="Operations orders overview" class="stat home-kpi home-summary-performance home-summary-performance--operations" data-block="requested" data-summary-scope="operations" href="/orders/requested">
 <div class="home-summary-performance__head">
-<div>
-<div class="stat__label">Operations orders</div>
-</div>
+<div><div class="stat__label">Operations orders</div></div>
+<div class="home-orders-analysis home-summary-analysis" id="operationsAnalysisControl" data-summary-analysis="operations">
+<button aria-expanded="false" aria-haspopup="true" class="home-orders-analysis__trigger" id="operationsAnalysisTrigger" type="button">
+<span class="home-orders-analysis__icon"><i data-feather="activity"></i></span>
+<span class="home-orders-analysis__trigger-copy"><strong>Analysis</strong></span>
+<i class="home-orders-analysis__chevron" data-feather="chevron-down"></i>
+</button>
+<div class="home-orders-analysis__menu" hidden id="operationsAnalysisMenu">
+<div class="home-orders-analysis__field">
+<span class="home-orders-analysis__field-label">Time</span>
+<input id="operationsAnalysisTime" type="hidden" value="all"/>
+<div class="home-analysis-select" data-analysis-select="time">
+<button aria-expanded="false" aria-haspopup="listbox" class="home-analysis-select__trigger" type="button"><span data-analysis-select-label>All time</span><i data-feather="chevron-down"></i></button>
+<div class="home-analysis-select__menu" hidden role="listbox">
+<button class="home-analysis-select__option" data-analysis-time="week" type="button"><span>Last week</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-time="month" type="button"><span>Last month</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-time="year" type="button"><span>Last year</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option is-selected" data-analysis-time="all" type="button"><span>All time</span><i data-feather="check"></i></button>
+</div></div></div>
+<div class="home-orders-analysis__field">
+<span class="home-orders-analysis__field-label">Analysis by</span>
+<input id="operationsAnalysisBy" type="hidden" value="status"/>
+<div class="home-analysis-select" data-analysis-select="by">
+<button aria-expanded="false" aria-haspopup="listbox" class="home-analysis-select__trigger" type="button"><span data-analysis-select-label>Status</span><i data-feather="chevron-down"></i></button>
+<div class="home-analysis-select__menu" hidden role="listbox">
+<button class="home-analysis-select__option is-selected" data-analysis-by="status" type="button"><span>Status</span><i data-feather="check"></i></button>
+<button class="home-analysis-select__option" data-analysis-by="type" type="button"><span>Type</span><i data-feather="check"></i></button>
+</div></div></div>
+</div></div>
 </div>
 <div class="home-summary-performance__body">
 <div class="home-summary-ring" data-summary-ring="operations">
