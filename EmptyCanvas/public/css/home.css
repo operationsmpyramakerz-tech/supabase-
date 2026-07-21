@@ -3167,3 +3167,22 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
 .home-orders-analysis__menu.home-analysis-menu--portal .home-analysis-select__menu{
   z-index:2147483001 !important;
 }
+
+/* Home Stocktaking summary + analysis filters */
+.page-home .home-stock-card{position:relative;display:block;text-decoration:none;overflow:visible!important;cursor:default;z-index:8;background:linear-gradient(145deg,#14532d,#166534)!important;color:#fff!important;}
+.page-home .home-stock-card__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.page-home .home-stock-card__title{color:#fff;text-decoration:none;font-weight:800;font-size:14px;}
+.page-home .home-stock-analysis{position:relative;}
+.page-home .home-stock-analysis__trigger{display:flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.34);background:rgba(255,255,255,.12);color:#fff;border-radius:12px;padding:8px 10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer;}
+.page-home .home-stock-analysis__trigger svg{width:15px;height:15px;}
+.page-home .home-stock-analysis__menu{position:absolute;right:0;top:calc(100% + 8px);z-index:5000;width:245px;padding:13px;background:#fff;border:1px solid #e5e7eb;border-radius:15px;box-shadow:0 18px 40px rgba(15,23,42,.22);color:#0f172a;}
+.page-home .home-stock-analysis__menu label{display:block;margin-bottom:11px;color:#64748b;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;}
+.page-home .home-stock-analysis__menu label:last-child{margin-bottom:0;}
+.page-home .home-stock-analysis__menu select{display:block;width:100%;margin-top:6px;border:1px solid #dbe2ea;border-radius:11px;background:#f8fafc;color:#0f172a;padding:10px 34px 10px 11px;font:inherit;font-size:12px;font-weight:750;outline:none;}
+.page-home .home-stock-analysis__menu select:focus{border-color:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.12);}
+.page-home .home-stock-card__metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.page-home .home-stock-card__metrics>div{min-width:0;padding:10px 11px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);border-radius:13px;}
+.page-home .home-stock-card__metrics span{display:block;font-size:10px;font-weight:700;opacity:.78;margin-bottom:5px;}
+.page-home .home-stock-card__metrics strong{display:block;color:#fff;font-size:18px;line-height:1.15;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.page-home .home-stock-card .home-kpi-sub{margin-top:10px;color:rgba(255,255,255,.78)!important;font-size:10px;}
+@media(max-width:700px){.page-home .home-stock-analysis__menu{right:-4px;width:min(245px,72vw)}.page-home .home-stock-card__metrics{grid-template-columns:1fr}}
