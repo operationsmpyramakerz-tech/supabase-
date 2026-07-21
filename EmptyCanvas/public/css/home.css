@@ -3142,3 +3142,28 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
 .page-home .home-analysis-card--open .home-analysis-select__menu{
   z-index:1040 !important;
 }
+
+
+/* 2026-07-21: body-level portal for Review/Operations Analysis menus.
+   This is intentionally independent from card overflow and stacking contexts. */
+.page-home .home-orders-analysis__menu.home-analysis-menu--portal,
+.home-orders-analysis__menu.home-analysis-menu--portal{
+  position:fixed !important;
+  left:var(--analysis-menu-left) !important;
+  right:auto !important;
+  top:var(--analysis-menu-top) !important;
+  width:var(--analysis-menu-width) !important;
+  max-width:none !important;
+  z-index:2147483000 !important;
+  overflow:visible !important;
+  margin:0 !important;
+}
+
+.home-orders-analysis__menu.home-analysis-menu--portal .home-analysis-select.is-open{
+  position:relative !important;
+  z-index:2 !important;
+}
+
+.home-orders-analysis__menu.home-analysis-menu--portal .home-analysis-select__menu{
+  z-index:2147483001 !important;
+}
