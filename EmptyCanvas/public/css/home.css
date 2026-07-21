@@ -3100,3 +3100,45 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
 .page-home .home-summary-performance--operations .home-analysis-select__menu{
   z-index:540 !important;
 }
+\n\n/* 2026-07-21: deterministic stacking fix for Review/Operations Analysis dropdowns.
+   The explicit class is set by home.js, so this also works in browsers where :has()
+   does not reliably promote the active card above its grid siblings. */
+.page-home .home-card--hero,
+.page-home .home-kpis{
+  overflow:visible !important;
+}
+
+.page-home .home-kpis > .home-kpi{
+  position:relative !important;
+  z-index:1;
+}
+
+.page-home .home-kpis > .home-kpi.home-analysis-card--open{
+  z-index:1000 !important;
+}
+
+.page-home .home-analysis-card--open .home-summary-performance__head,
+.page-home .home-analysis-card--open .home-summary-analysis,
+.page-home .home-analysis-card--open .home-orders-analysis__menu,
+.page-home .home-analysis-card--open .home-analysis-select,
+.page-home .home-analysis-card--open .home-analysis-select__menu{
+  overflow:visible !important;
+}
+
+.page-home .home-analysis-card--open .home-orders-analysis{
+  position:relative !important;
+  z-index:1010 !important;
+}
+
+.page-home .home-analysis-card--open .home-orders-analysis__menu{
+  z-index:1020 !important;
+}
+
+.page-home .home-analysis-card--open .home-analysis-select.is-open{
+  position:relative !important;
+  z-index:1030 !important;
+}
+
+.page-home .home-analysis-card--open .home-analysis-select__menu{
+  z-index:1040 !important;
+}
