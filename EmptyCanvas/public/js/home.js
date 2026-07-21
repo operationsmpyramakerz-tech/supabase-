@@ -1499,6 +1499,7 @@ document.addEventListener('DOMContentLoaded', () => {
       menu.hidden = true;
       trigger.setAttribute('aria-expanded', 'false');
       control.classList.remove('is-open');
+      parentCard?.classList.remove('home-analysis-card--open');
       closeInner();
     };
     const sync = () => {
@@ -1516,6 +1517,7 @@ document.addEventListener('DOMContentLoaded', () => {
       menu.hidden = !opening;
       trigger.setAttribute('aria-expanded', String(opening));
       control.classList.toggle('is-open', opening);
+      parentCard?.classList.toggle('home-analysis-card--open', opening);
     });
     menu.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
     menu.querySelectorAll('.home-analysis-select').forEach((select) => {
