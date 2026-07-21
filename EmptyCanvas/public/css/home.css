@@ -2789,3 +2789,160 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
     padding:9px 11px !important;
   }
 }
+
+/* 2026-07-21: final precision alignment for the three overview analysis cards */
+@media (min-width:1101px){
+  .page-home .home-orders-performance,
+  .page-home .home-summary-performance--review,
+  .page-home .home-summary-performance--operations{
+    padding:14px !important;
+  }
+
+  .page-home .home-orders-performance__head,
+  .page-home .home-summary-performance--review .home-summary-performance__head,
+  .page-home .home-summary-performance--operations .home-summary-performance__head{
+    height:50px !important;
+    min-height:50px !important;
+    margin:0 0 8px !important;
+    align-items:flex-start !important;
+  }
+
+  .page-home .home-orders-performance .stat__label,
+  .page-home .home-summary-performance--review .stat__label,
+  .page-home .home-summary-performance--operations .stat__label{
+    margin:0 !important;
+    font-size:15px !important;
+    line-height:18px !important;
+    font-weight:800 !important;
+  }
+
+  .page-home .home-orders-performance__body,
+  .page-home .home-summary-performance--review .home-summary-performance__body,
+  .page-home .home-summary-performance--operations .home-summary-performance__body{
+    grid-template-columns:112px minmax(0,1fr) !important;
+    gap:10px !important;
+    min-height:178px !important;
+    align-items:center !important;
+  }
+
+  .page-home .home-orders-ring,
+  .page-home .home-summary-performance--review .home-summary-ring,
+  .page-home .home-summary-performance--operations .home-summary-ring{
+    width:108px !important;
+    height:108px !important;
+    min-width:108px !important;
+    min-height:108px !important;
+    max-width:108px !important;
+    max-height:108px !important;
+    flex:0 0 108px !important;
+    margin:auto !important;
+  }
+
+  .page-home .home-orders-ring svg,
+  .page-home .home-summary-performance--review .home-summary-ring svg,
+  .page-home .home-summary-performance--operations .home-summary-ring svg{
+    width:108px !important;
+    height:108px !important;
+  }
+
+  .page-home .home-orders-ring__track,
+  .page-home .home-orders-ring__segment,
+  .page-home .home-summary-performance--review .home-summary-ring__track,
+  .page-home .home-summary-performance--review .home-summary-ring__segment,
+  .page-home .home-summary-performance--operations .home-summary-ring__track,
+  .page-home .home-summary-performance--operations .home-summary-ring__segment{
+    stroke-width:6 !important;
+  }
+
+  .page-home .home-orders-ring__center strong,
+  .page-home .home-summary-performance--review .home-summary-ring__center strong,
+  .page-home .home-summary-performance--operations .home-summary-ring__center strong{
+    font-size:20px !important;
+    line-height:20px !important;
+  }
+
+  .page-home .home-orders-ring__center span,
+  .page-home .home-summary-performance--review .home-summary-ring__center span,
+  .page-home .home-summary-performance--operations .home-summary-ring__center span{
+    margin-top:5px !important;
+    font-size:8px !important;
+    line-height:10px !important;
+  }
+
+  .page-home .home-orders-ring__center small,
+  .page-home .home-summary-performance--review .home-summary-ring__center small,
+  .page-home .home-summary-performance--operations .home-summary-ring__center small{
+    margin-top:4px !important;
+    max-width:78px !important;
+    font-size:7px !important;
+    line-height:9px !important;
+  }
+
+  .page-home .home-orders-performance__legend,
+  .page-home .home-summary-performance--review .home-summary-performance__legend,
+  .page-home .home-summary-performance--operations .home-summary-performance__legend{
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:center !important;
+    gap:7px !important;
+    min-height:178px !important;
+  }
+
+  .page-home .home-orders-status,
+  .page-home .home-summary-performance--review .home-summary-status,
+  .page-home .home-summary-performance--operations .home-summary-status{
+    display:flex !important;
+    align-items:center !important;
+    min-height:52px !important;
+    height:52px !important;
+    padding:8px 9px !important;
+    gap:8px !important;
+    border-radius:12px !important;
+  }
+
+  .page-home .home-orders-status__bar,
+  .page-home .home-summary-performance--review .home-summary-status__bar,
+  .page-home .home-summary-performance--operations .home-summary-status__bar{
+    width:4px !important;
+    min-width:4px !important;
+    height:34px !important;
+    min-height:34px !important;
+  }
+
+  .page-home .home-orders-status > div,
+  .page-home .home-summary-performance--review .home-summary-status > div,
+  .page-home .home-summary-performance--operations .home-summary-status > div{
+    display:grid !important;
+    grid-template-columns:auto 1fr !important;
+    grid-template-areas:"count label" "cost cost" !important;
+    column-gap:7px !important;
+    row-gap:4px !important;
+    align-items:center !important;
+  }
+
+  .page-home .home-orders-status strong,
+  .page-home .home-summary-performance--review .home-summary-status strong,
+  .page-home .home-summary-performance--operations .home-summary-status strong{
+    grid-area:count !important;
+    font-size:14px !important;
+    line-height:14px !important;
+  }
+
+  .page-home .home-orders-status span:not(.home-orders-status__bar),
+  .page-home .home-summary-performance--review .home-summary-status span:not(.home-summary-status__bar),
+  .page-home .home-summary-performance--operations .home-summary-status span:not(.home-summary-status__bar){
+    grid-area:label !important;
+    margin:0 !important;
+    font-size:8px !important;
+    line-height:10px !important;
+  }
+
+  .page-home .home-orders-status small,
+  .page-home .home-summary-performance--review .home-summary-status small,
+  .page-home .home-summary-performance--operations .home-summary-status small{
+    grid-area:cost !important;
+    margin:0 !important;
+    font-size:7px !important;
+    line-height:9px !important;
+  }
+}
