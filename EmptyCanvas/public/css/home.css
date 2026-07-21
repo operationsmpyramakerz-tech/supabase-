@@ -2988,3 +2988,77 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   .page-home .home-summary-analysis .home-orders-analysis__trigger-copy,
   .page-home .home-summary-analysis .home-orders-analysis__chevron{display:none;}
 }
+
+/* 2026-07-21: align all three Analysis controls and keep summary dropdowns unclipped */
+.page-home .home-orders-performance,
+.page-home .home-summary-performance{
+  position:relative !important;
+  overflow:visible !important;
+}
+
+.page-home .home-orders-performance:has(.home-orders-analysis.is-open),
+.page-home .home-summary-performance:has(.home-orders-analysis.is-open){
+  z-index:220 !important;
+}
+
+.page-home .home-orders-analysis{
+  z-index:230 !important;
+}
+
+.page-home .home-orders-performance .home-orders-analysis__trigger,
+.page-home .home-summary-performance .home-orders-analysis__trigger{
+  width:126px !important;
+  min-width:126px !important;
+  height:42px !important;
+  padding:6px 9px !important;
+  grid-template-columns:30px minmax(0,1fr) 14px !important;
+  gap:7px !important;
+  border-radius:13px !important;
+}
+
+.page-home .home-orders-performance .home-orders-analysis__icon,
+.page-home .home-summary-performance .home-orders-analysis__icon{
+  width:30px !important;
+  height:30px !important;
+  border-radius:9px !important;
+}
+
+.page-home .home-orders-performance .home-orders-analysis__icon svg,
+.page-home .home-summary-performance .home-orders-analysis__icon svg{
+  width:16px !important;
+  height:16px !important;
+}
+
+.page-home .home-orders-performance .home-orders-analysis__chevron,
+.page-home .home-summary-performance .home-orders-analysis__chevron{
+  width:14px !important;
+  height:14px !important;
+}
+
+.page-home .home-summary-performance .home-orders-analysis__menu{
+  top:calc(100% + 8px) !important;
+  right:0 !important;
+  left:auto !important;
+  width:252px !important;
+  max-width:min(252px, calc(100vw - 32px)) !important;
+  z-index:260 !important;
+}
+
+@media (max-width:700px){
+  .page-home .home-orders-performance .home-orders-analysis__trigger,
+  .page-home .home-summary-performance .home-orders-analysis__trigger{
+    width:44px !important;
+    min-width:44px !important;
+    height:44px !important;
+    padding:7px !important;
+    grid-template-columns:30px !important;
+    justify-content:center !important;
+  }
+
+  .page-home .home-orders-performance .home-orders-analysis__trigger-copy,
+  .page-home .home-orders-performance .home-orders-analysis__chevron,
+  .page-home .home-summary-performance .home-orders-analysis__trigger-copy,
+  .page-home .home-summary-performance .home-orders-analysis__chevron{
+    display:none !important;
+  }
+}
