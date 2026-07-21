@@ -30511,6 +30511,7 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
       _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])) || "",
     ),
     unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
+    userName: _sbStocktakingText(_sbGet(row, ["user_name", "username", "User Name", "Username", "created_by", "Created By", "requested_by", "Requested By", "owner_name", "Owner Name", "employee", "Employee"])) || "Unknown user",
     tag: { name: tagName, color: _stockMovementTagColor(tagName, "default") },
     quantityColumn: quantityColumn || null,
     source: "supabase",
@@ -30963,6 +30964,14 @@ app.get(
               quantity: Number(quantity) || 0,
               oneKitQuantity: Number(oneKitQuantity) || 0,
               idCode,
+              unitPrice: firstDefinedNumber(props["Unity Price"], props["Unit Price"], props["one_piece_price"]),
+              userName:
+                props["Created By"]?.people?.[0]?.name ||
+                props["Requested By"]?.people?.[0]?.name ||
+                props.User?.select?.name ||
+                props.Username?.rich_text?.[0]?.plain_text ||
+                req.session.username ||
+                "Unknown user",
               tag,
             };
           })
