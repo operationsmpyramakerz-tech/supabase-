@@ -59,7 +59,13 @@ document.addEventListener('DOMContentLoaded', () => {
     stockAnalysisTrigger: $('#stockAnalysisTrigger'),
     stockAnalysisMenu: $('#stockAnalysisMenu'),
     stockUserFilter: $('#stockUserFilter'),
+    stockUserFilterTrigger: $('#stockUserFilterTrigger'),
+    stockUserFilterText: $('#stockUserFilterText'),
+    stockUserFilterOptions: $('#stockUserFilterOptions'),
     stockTagFilter: $('#stockTagFilter'),
+    stockTagFilterTrigger: $('#stockTagFilterTrigger'),
+    stockTagFilterText: $('#stockTagFilterText'),
+    stockTagFilterOptions: $('#stockTagFilterOptions'),
     kpiExpensesMain: $('#kpiExpensesMain'),
     kpiExpensesSub: $('#kpiExpensesSub'),
 
@@ -1660,22 +1666,33 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(item?.tag?.name || item?.tag || 'Untagged').trim() || 'Untagged';
   }
 
+  function renderStockFilterOptions(optionsEl, values, allLabel, selectedValue) {
+    if (!optionsEl) return;
+    const options = [{ value: 'all', label: allLabel }, ...values.map((value) => ({ value, label: value }))];
+    optionsEl.innerHTML = options.map((option) => `
+      <button class="home-stock-filter__option${option.value === selectedValue ? ' is-selected' : ''}" type="button" data-value="${safeText(option.value)}">
+        <span>${safeText(option.label)}</span>
+        <i data-feather="check"></i>
+      </button>`).join('');
+    if (window.feather) window.feather.replace();
+  }
+
   function populateStockFilters(items) {
     const currentUser = state.stockFilters.user;
     const currentTag = state.stockFilters.tag;
     const users = Array.from(new Set(items.map(stockUserName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     const tags = Array.from(new Set(items.map(stockTagName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
-    if (els.stockUserFilter) {
-      els.stockUserFilter.innerHTML = '<option value="all">All users</option>' + users.map((name) => `<option value="${safeText(name)}">${safeText(name)}</option>`).join('');
-      els.stockUserFilter.value = users.includes(currentUser) ? currentUser : 'all';
-      state.stockFilters.user = els.stockUserFilter.value;
-    }
-    if (els.stockTagFilter) {
-      els.stockTagFilter.innerHTML = '<option value="all">All tags</option>' + tags.map((name) => `<option value="${safeText(name)}">${safeText(name)}</option>`).join('');
-      els.stockTagFilter.value = tags.includes(currentTag) ? currentTag : 'all';
-      state.stockFilters.tag = els.stockTagFilter.value;
-    }
+    const userValue = users.includes(currentUser) ? currentUser : 'all';
+    const tagValue = tags.includes(currentTag) ? currentTag : 'all';
+    state.stockFilters.user = userValue;
+    state.stockFilters.tag = tagValue;
+    if (els.stockUserFilter) els.stockUserFilter.value = userValue;
+    if (els.stockTagFilter) els.stockTagFilter.value = tagValue;
+    if (els.stockUserFilterText) els.stockUserFilterText.textContent = userValue === 'all' ? 'All users' : userValue;
+    if (els.stockTagFilterText) els.stockTagFilterText.textContent = tagValue === 'all' ? 'All tags' : tagValue;
+    renderStockFilterOptions(els.stockUserFilterOptions, users, 'All users', userValue);
+    renderStockFilterOptions(els.stockTagFilterOptions, tags, 'All tags', tagValue);
   }
 
   function renderStockSummary() {
@@ -1706,28 +1723,87 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setupStockAnalysis() {
     if (!els.stockAnalysisTrigger || !els.stockAnalysisMenu) return;
+    const placeholder = document.createComment('stock-analysis-menu-placeholder');
+    const originalParent = els.stockAnalysisMenu.parentNode;
+
+    const closeFilterLists = () => {
+      [
+        [els.stockUserFilterOptions, els.stockUserFilterTrigger],
+        [els.stockTagFilterOptions, els.stockTagFilterTrigger]
+      ].forEach(([options, trigger]) => {
+        if (options) options.hidden = true;
+        trigger?.setAttribute('aria-expanded', 'false');
+      });
+    };
+
+    const positionMenu = () => {
+      if (els.stockAnalysisMenu.hidden) return;
+      const rect = els.stockAnalysisTrigger.getBoundingClientRect();
+      const gap = 10;
+      const width = Math.min(300, Math.max(260, rect.width + 120));
+      const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
+      els.stockAnalysisMenu.style.width = `${width}px`;
+      els.stockAnalysisMenu.style.left = `${left}px`;
+      els.stockAnalysisMenu.style.top = `${rect.bottom + gap}px`;
+    };
+
     const close = () => {
+      closeFilterLists();
       els.stockAnalysisMenu.hidden = true;
       els.stockAnalysisTrigger.setAttribute('aria-expanded', 'false');
+      els.stockAnalysisMenu.classList.remove('home-stock-analysis__menu--portal');
+      els.stockAnalysisMenu.removeAttribute('style');
+      if (placeholder.parentNode) placeholder.replaceWith(els.stockAnalysisMenu);
     };
+
+    const open = () => {
+      if (els.stockAnalysisMenu.parentNode !== document.body) {
+        els.stockAnalysisMenu.replaceWith(placeholder);
+        document.body.appendChild(els.stockAnalysisMenu);
+      }
+      els.stockAnalysisMenu.hidden = false;
+      els.stockAnalysisMenu.classList.add('home-stock-analysis__menu--portal');
+      els.stockAnalysisTrigger.setAttribute('aria-expanded', 'true');
+      positionMenu();
+    };
+
+    const setupFilter = ({ trigger, options, input, text, stateKey, allLabel }) => {
+      if (!trigger || !options || !input || !text) return;
+      trigger.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const willOpen = options.hidden;
+        closeFilterLists();
+        options.hidden = !willOpen;
+        trigger.setAttribute('aria-expanded', String(willOpen));
+      });
+      options.addEventListener('click', (event) => {
+        const option = event.target.closest('[data-value]');
+        if (!option) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const value = option.dataset.value || 'all';
+        input.value = value;
+        state.stockFilters[stateKey] = value;
+        text.textContent = value === 'all' ? allLabel : value;
+        options.querySelectorAll('.home-stock-filter__option').forEach((item) => item.classList.toggle('is-selected', item === option));
+        closeFilterLists();
+        renderStockSummary();
+      });
+    };
+
     els.stockAnalysisTrigger.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const willOpen = els.stockAnalysisMenu.hidden;
-      els.stockAnalysisMenu.hidden = !willOpen;
-      els.stockAnalysisTrigger.setAttribute('aria-expanded', String(willOpen));
+      els.stockAnalysisMenu.hidden ? open() : close();
     });
     els.stockAnalysisMenu.addEventListener('click', (event) => event.stopPropagation());
+    setupFilter({ trigger: els.stockUserFilterTrigger, options: els.stockUserFilterOptions, input: els.stockUserFilter, text: els.stockUserFilterText, stateKey: 'user', allLabel: 'All users' });
+    setupFilter({ trigger: els.stockTagFilterTrigger, options: els.stockTagFilterOptions, input: els.stockTagFilter, text: els.stockTagFilterText, stateKey: 'tag', allLabel: 'All tags' });
+    window.addEventListener('resize', positionMenu, { passive: true });
+    window.addEventListener('scroll', positionMenu, { passive: true, capture: true });
     document.addEventListener('click', close);
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
-    els.stockUserFilter?.addEventListener('change', () => {
-      state.stockFilters.user = els.stockUserFilter.value || 'all';
-      renderStockSummary();
-    });
-    els.stockTagFilter?.addEventListener('change', () => {
-      state.stockFilters.tag = els.stockTagFilter.value || 'all';
-      renderStockSummary();
-    });
   }
 
   async function loadStock() {
