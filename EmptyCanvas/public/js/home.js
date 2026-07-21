@@ -419,10 +419,37 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function currentOrderTypeBucket(group) {
-    const raw = optionText(group?.orderType || group?.products?.[0]?.orderType);
-    const key = norm(raw).replace(/[^a-z0-9]+/g, '');
-    if (/(withdraw|withdrawal)/.test(key)) return 'withdrawal';
-    if (/(maintenance|requestmaintenance)/.test(key)) return 'maintenance';
+    // Current Orders groups store rows in `products`, while Operations Orders
+    // and Orders Review groups store the same API rows in `items`. Read the
+    // type from the group first, then inspect every row so mixed backend field
+    // shapes (Supabase / Notion compatibility) are handled consistently.
+    const rows = [
+      ...(Array.isArray(group?.products) ? group.products : []),
+      ...(Array.isArray(group?.items) ? group.items : []),
+    ];
+
+    const candidates = [
+      group?.orderType,
+      group?.order_type,
+      group?.type,
+      ...rows.flatMap((row) => [
+        row?.orderType,
+        row?.order_type,
+        row?.type,
+        row?.requestType,
+        row?.request_type,
+      ]),
+    ];
+
+    for (const candidate of candidates) {
+      const raw = optionText(candidate);
+      const key = norm(raw).replace(/[^a-z0-9]+/g, '');
+      if (!key) continue;
+      if (/(withdraw|withdrawal)/.test(key)) return 'withdrawal';
+      if (/(maintenance|requestmaintenance)/.test(key)) return 'maintenance';
+      if (/(request|delivery|product)/.test(key)) return 'request';
+    }
+
     return 'request';
   }
 
