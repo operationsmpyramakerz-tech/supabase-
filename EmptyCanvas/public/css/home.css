@@ -2946,3 +2946,45 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
     line-height:9px !important;
   }
 }
+
+
+/* 2026-07-21: unified Analysis controls for all three order cards */
+.page-home .home-orders-analysis__trigger-copy{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.page-home .home-orders-analysis__trigger-copy strong{
+  font-weight:800 !important;
+  font-size:11px !important;
+  line-height:1 !important;
+  color:#0f172a;
+}
+.page-home .home-summary-performance__head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  min-height:42px;
+}
+.page-home .home-summary-analysis{margin-left:auto;}
+.page-home .home-summary-analysis .home-orders-analysis__trigger{
+  min-width:112px;
+  width:auto;
+}
+.page-home .home-summary-analysis .home-orders-analysis__menu{
+  right:0;
+  left:auto;
+  z-index:80;
+}
+.page-home .home-summary-status__bar{background:var(--summary-status-color, currentColor) !important;}
+.page-home .home-summary-analysis + *{min-width:0;}
+@media (max-width:700px){
+  .page-home .home-summary-performance__head{align-items:flex-start;}
+  .page-home .home-summary-analysis .home-orders-analysis__trigger{
+    min-width:44px;
+    width:44px;
+  }
+  .page-home .home-summary-analysis .home-orders-analysis__trigger-copy,
+  .page-home .home-summary-analysis .home-orders-analysis__chevron{display:none;}
+}
