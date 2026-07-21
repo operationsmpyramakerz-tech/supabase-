@@ -1466,16 +1466,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const analysis = state[`${scope}Analysis`];
     if (!control || !trigger || !menu || !analysis) return;
 
-    // These controls live inside clickable summary cards (<a>). Prevent the
-    // anchor's default navigation, but do not stop propagation during capture;
-    // the actual trigger/menu handlers still need to receive the click.
-    const parentCard = control.closest('a[href]');
-    if (parentCard) {
+    // Summary cards are keyboard-accessible containers, not anchors. This keeps
+    // the Analysis control a real button (including on Android long-press) and
+    // prevents the browser link menu from replacing the dropdown.
+    const parentCard = control.closest('.home-summary-performance[data-href]');
+    if (parentCard && !parentCard.dataset.navigationWired) {
+      parentCard.dataset.navigationWired = 'true';
+      const openCard = () => { window.location.href = parentCard.dataset.href; };
       parentCard.addEventListener('click', (event) => {
-        if (event.target.closest('.home-orders-analysis')) {
+        if (event.target.closest('button, input, .home-orders-analysis')) return;
+        openCard();
+      });
+      parentCard.addEventListener('keydown', (event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button, input, .home-orders-analysis')) {
           event.preventDefault();
+          openCard();
         }
-      }, true);
+      });
     }
 
     const closeInner = (except = null) => {
