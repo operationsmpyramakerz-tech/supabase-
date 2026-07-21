@@ -3062,3 +3062,41 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
     display:none !important;
   }
 }
+
+/* 2026-07-21: keep nested Analysis-by dropdowns fully visible in Review and Operations cards */
+.page-home .home-kpis,
+.page-home .home-summary-performance--review,
+.page-home .home-summary-performance--operations,
+.page-home .home-summary-performance--review .home-summary-performance__head,
+.page-home .home-summary-performance--operations .home-summary-performance__head,
+.page-home .home-summary-performance--review .home-summary-analysis,
+.page-home .home-summary-performance--operations .home-summary-analysis,
+.page-home .home-summary-performance--review .home-orders-analysis__menu,
+.page-home .home-summary-performance--operations .home-orders-analysis__menu{
+  overflow:visible !important;
+}
+
+.page-home .home-summary-performance--review:has(.home-orders-analysis.is-open),
+.page-home .home-summary-performance--operations:has(.home-orders-analysis.is-open){
+  z-index:500 !important;
+}
+
+.page-home .home-summary-performance--review .home-orders-analysis.is-open,
+.page-home .home-summary-performance--operations .home-orders-analysis.is-open{
+  z-index:510 !important;
+}
+
+.page-home .home-summary-performance--review .home-orders-analysis__menu,
+.page-home .home-summary-performance--operations .home-orders-analysis__menu{
+  z-index:520 !important;
+}
+
+.page-home .home-summary-performance--review .home-analysis-select.is-open,
+.page-home .home-summary-performance--operations .home-analysis-select.is-open{
+  z-index:530 !important;
+}
+
+.page-home .home-summary-performance--review .home-analysis-select__menu,
+.page-home .home-summary-performance--operations .home-analysis-select__menu{
+  z-index:540 !important;
+}
