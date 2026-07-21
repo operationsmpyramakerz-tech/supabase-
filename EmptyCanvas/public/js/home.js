@@ -546,8 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function syncOrdersAnalysisControl() {
     if (els.ordersAnalysisLabel) {
-      const by = state.ordersAnalysis.by === 'type' ? 'Type' : 'Status';
-      els.ordersAnalysisLabel.textContent = `${ordersAnalysisTimeLabel(state.ordersAnalysis.time)} · ${by}`;
+      els.ordersAnalysisLabel.textContent = 'Analysis';
     }
     if (els.ordersAnalysisTime) els.ordersAnalysisTime.value = state.ordersAnalysis.time;
     if (els.ordersAnalysisBy) els.ordersAnalysisBy.value = state.ordersAnalysis.by;
@@ -586,6 +585,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupOrdersAnalysisControl() {
     if (!els.ordersAnalysisTrigger || !els.ordersAnalysisMenu) return;
     syncOrdersAnalysisControl();
+
+    const currentControl = els.ordersAnalysisControl;
+    const blockCardNavigation = (event) => {
+      event.stopPropagation();
+      if (event.type === 'click') event.preventDefault();
+    };
+    if (currentControl) {
+      ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((eventName) => {
+        currentControl.addEventListener(eventName, blockCardNavigation, true);
+      });
+    }
 
     els.ordersAnalysisTrigger.addEventListener('click', (event) => {
       event.preventDefault();
@@ -1466,6 +1476,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const byInput = document.getElementById(`${scope}AnalysisBy`);
     const analysis = state[`${scope}Analysis`];
     if (!control || !trigger || !menu || !analysis) return;
+
+    // These controls live inside clickable summary cards (<a>). Block the
+    // parent-card navigation before it can run on desktop pointer events.
+    const blockCardNavigation = (event) => {
+      event.stopPropagation();
+      if (event.type === 'click') event.preventDefault();
+    };
+    ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach((eventName) => {
+      control.addEventListener(eventName, blockCardNavigation, true);
+      menu.addEventListener(eventName, blockCardNavigation, true);
+    });
+
+    const parentCard = control.closest('a[href]');
+    if (parentCard) {
+      parentCard.addEventListener('click', (event) => {
+        if (event.target.closest('.home-orders-analysis')) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+    }
 
     const closeInner = (except = null) => {
       menu.querySelectorAll('.home-analysis-select').forEach((select) => {
