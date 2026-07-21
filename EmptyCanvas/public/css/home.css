@@ -3186,3 +3186,106 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
 .page-home .home-stock-card__metrics strong{display:block;color:#fff;font-size:18px;line-height:1.15;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .page-home .home-stock-card .home-kpi-sub{margin-top:10px;color:rgba(255,255,255,.78)!important;font-size:10px;}
 @media(max-width:700px){.page-home .home-stock-analysis__menu{right:-4px;width:min(245px,72vw)}.page-home .home-stock-card__metrics{grid-template-columns:1fr}}
+
+/* Stocktaking analysis menu: body portal + modern custom dropdowns */
+.page-home .home-stock-analysis__menu--portal,
+.home-stock-analysis__menu--portal{
+  position:fixed!important;
+  right:auto!important;
+  bottom:auto!important;
+  z-index:2147483000!important;
+  width:280px;
+  padding:14px;
+  overflow:visible!important;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:18px;
+  background:rgba(255,255,255,.98);
+  box-shadow:0 24px 65px rgba(15,23,42,.24),0 4px 14px rgba(15,23,42,.10);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  color:#111827;
+}
+.home-stock-analysis__menu[hidden],
+.home-stock-filter__options[hidden]{display:none!important;}
+.home-stock-filter{position:relative;margin:0 0 13px;}
+.home-stock-filter:last-child{margin-bottom:0;}
+.home-stock-filter__label{
+  display:block;
+  margin:0 0 7px;
+  color:#7c8798;
+  font-size:10px;
+  line-height:1.2;
+  font-weight:900;
+  letter-spacing:.075em;
+  text-transform:uppercase;
+}
+.home-stock-filter__trigger{
+  width:100%;
+  min-height:45px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:0 13px;
+  border:1px solid #dfe4ea;
+  border-radius:13px;
+  background:linear-gradient(180deg,#fff,#f8fafc);
+  color:#111827;
+  font:inherit;
+  font-size:13px;
+  font-weight:800;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 2px 8px rgba(15,23,42,.04);
+  transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
+}
+.home-stock-filter__trigger:hover{border-color:#c9d1db;box-shadow:0 5px 14px rgba(15,23,42,.08);}
+.home-stock-filter__trigger:focus-visible,
+.home-stock-filter__trigger[aria-expanded="true"]{
+  outline:none;
+  border-color:#f28a45;
+  box-shadow:0 0 0 4px rgba(242,138,69,.14),0 7px 18px rgba(15,23,42,.08);
+}
+.home-stock-filter__trigger svg{width:16px;height:16px;flex:0 0 auto;transition:transform .18s ease;}
+.home-stock-filter__trigger[aria-expanded="true"] svg{transform:rotate(180deg);}
+.home-stock-filter__options{
+  position:absolute;
+  left:0;
+  right:0;
+  top:calc(100% + 7px);
+  z-index:2147483001;
+  max-height:210px;
+  overflow:auto;
+  padding:6px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 18px 42px rgba(15,23,42,.20),0 3px 10px rgba(15,23,42,.08);
+  scrollbar-width:thin;
+}
+.home-stock-filter__option{
+  width:100%;
+  min-height:39px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 10px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#263142;
+  font:inherit;
+  font-size:13px;
+  font-weight:700;
+  text-align:left;
+  cursor:pointer;
+  transition:background .15s ease,color .15s ease;
+}
+.home-stock-filter__option:hover{background:#fff4eb;color:#c65f1c;}
+.home-stock-filter__option.is-selected{background:#fff1e7;color:#c95f1a;}
+.home-stock-filter__option svg{width:15px;height:15px;opacity:0;}
+.home-stock-filter__option.is-selected svg{opacity:1;}
+@media(max-width:700px){
+  .home-stock-analysis__menu--portal{width:min(280px,calc(100vw - 24px))!important;}
+}
