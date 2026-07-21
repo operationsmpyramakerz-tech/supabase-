@@ -292,11 +292,23 @@
 <div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="operationsDeliveredCount">—</strong><span>Delivered</span><small id="operationsDeliveredCost">—</small></div></div>
 </div>
 </div>
-</div><a class="stat home-kpi" data-block="stock" href="/stocktaking">
-<div class="stat__label">Stocktaking</div>
-<div class="stat__value" id="kpiStockMain">—</div>
+</div><div class="stat home-kpi home-stock-card" data-block="stock" id="homeStockCard">
+<div class="home-stock-card__head">
+  <a class="home-stock-card__title" href="/stocktaking">Stocktaking</a>
+  <div class="home-stock-analysis" id="stockAnalysisControl">
+    <button class="home-stock-analysis__trigger" id="stockAnalysisTrigger" type="button" aria-expanded="false"><i data-feather="activity"></i><span>Analysis</span><i data-feather="chevron-down"></i></button>
+    <div class="home-stock-analysis__menu" id="stockAnalysisMenu" hidden>
+      <label>Filter by users<select id="stockUserFilter"><option value="all">All users</option></select></label>
+      <label>Filter by tag<select id="stockTagFilter"><option value="all">All tags</option></select></label>
+    </div>
+  </div>
+</div>
+<div class="home-stock-card__metrics">
+  <div><span>Total components</span><strong id="kpiStockMain">—</strong></div>
+  <div><span>Total components cost</span><strong id="kpiStockCost">—</strong></div>
+</div>
 <div class="home-kpi-sub" id="kpiStockSub">—</div>
-</a>
+</div>
 <a class="stat home-kpi" data-block="expenses" href="/expenses">
 <div class="stat__label">Expenses</div>
 <div class="stat__value" id="kpiExpensesMain">—</div>
