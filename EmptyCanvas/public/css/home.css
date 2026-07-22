@@ -3673,3 +3673,54 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   .page-home .home-expense-monthly-card{grid-column:auto !important;padding:14px;}
   .page-home .home-expense-chart-shell{min-width:520px;}
 }
+
+/* 2026-07-22: dark Expenses monthly card with a white chart surface. */
+.page-home .home-expense-monthly-card{
+  background:linear-gradient(145deg,#111827,#080d18) !important;
+  border-color:rgba(255,255,255,.10) !important;
+  box-shadow:0 16px 34px rgba(2,6,23,.22) !important;
+}
+.page-home .home-expense-monthly-card .home-expense-eyebrow{
+  color:#9ca3af !important;
+}
+.page-home .home-expense-monthly-card .home-expense-card-head h2{
+  color:#fff !important;
+}
+.page-home .home-expense-monthly-card .home-card-header{
+  margin-bottom:10px;
+}
+.page-home .home-expense-monthly-card .home-expense-year-select{
+  background:#fff !important;
+  border-color:#e5e7eb !important;
+  color:#334155 !important;
+  box-shadow:0 5px 14px rgba(0,0,0,.12);
+}
+.page-home .home-expense-monthly-card .home-expense-year-select select{
+  color:#0f172a !important;
+}
+.page-home .home-expense-monthly-card .home-expense-monthly-chart{
+  padding:12px 12px 6px;
+  border-radius:14px;
+  background:#fff;
+  box-shadow:inset 0 0 0 1px #edf0f4;
+}
+.page-home .home-expense-monthly-card .home-expense-chart-y-axis{
+  color:#94a3b8 !important;
+}
+.page-home .home-expense-monthly-card .home-expense-chart-grid span{
+  border-top-color:rgba(148,163,184,.25) !important;
+}
+.page-home .home-expense-monthly-card .home-expense-month-bar__track{
+  background:repeating-linear-gradient(135deg,#f8fafc 0 5px,#e8edf3 5px 9px) !important;
+  box-shadow:inset 0 0 0 1px #e2e8f0 !important;
+}
+.page-home .home-expense-monthly-card .home-expense-month-bar.is-active .home-expense-month-bar__track{
+  background:repeating-linear-gradient(135deg,#fff8f2 0 5px,#ffead9 5px 9px) !important;
+  box-shadow:inset 0 0 0 1px #fdba74,0 8px 18px rgba(249,115,22,.16) !important;
+}
+.page-home .home-expense-monthly-card .home-expense-month-bar__label{
+  color:#64748b !important;
+}
+.page-home .home-expense-monthly-card .home-expense-month-bar.is-active .home-expense-month-bar__label{
+  color:#0f172a !important;
+}
