@@ -41,6 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
     operationsRingPending: $('#operationsRingPending'),
     operationsRingReceived: $('#operationsRingReceived'),
     operationsRingDelivered: $('#operationsRingDelivered'),
+    kpiMaintenanceMain: $('#kpiMaintenanceMain'),
+    kpiMaintenanceSub: $('#kpiMaintenanceSub'),
+    maintenancePendingCount: $('#maintenancePendingCount'),
+    maintenancePendingCost: $('#maintenancePendingCost'),
+    maintenanceInProgressCount: $('#maintenanceInProgressCount'),
+    maintenanceInProgressCost: $('#maintenanceInProgressCost'),
+    maintenanceCompletedCount: $('#maintenanceCompletedCount'),
+    maintenanceCompletedCost: $('#maintenanceCompletedCost'),
+    maintenanceRingPending: $('#maintenanceRingPending'),
+    maintenanceRingInProgress: $('#maintenanceRingInProgress'),
+    maintenanceRingCompleted: $('#maintenanceRingCompleted'),
     kpiReviewMain: $('#kpiReviewMain'),
     kpiReviewSub: $('#kpiReviewSub'),
     reviewPendingCount: $('#reviewPendingCount'),
@@ -120,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ordersAnalysis: { time: 'all', by: 'status' },
     reviewAnalysis: { time: 'all', by: 'status' },
     operationsAnalysis: { time: 'all', by: 'status' },
+    maintenanceGroups: [],
   };
 
   const norm = (s) => String(s || '').trim().toLowerCase();
@@ -1313,6 +1325,7 @@ document.addEventListener('DOMContentLoaded', () => {
       orders: [els.kpiOrdersMain, els.kpiOrdersSub, [els.ordersInProgressCount, els.ordersCompletedCount, els.ordersRejectedCount], [els.ordersInProgressCost, els.ordersCompletedCost, els.ordersRejectedCost], [els.ordersRingInProgress, els.ordersRingCompleted, els.ordersRingRejected]],
       review: [els.kpiReviewMain, els.kpiReviewSub, [els.reviewPendingCount, els.reviewApprovedCount, els.reviewRejectedCount], [els.reviewPendingCost, els.reviewApprovedCost, els.reviewRejectedCost], [els.reviewRingPending, els.reviewRingApproved, els.reviewRingRejected]],
       operations: [els.kpiRequestedMain, els.kpiRequestedSub, [els.operationsPendingCount, els.operationsReceivedCount, els.operationsDeliveredCount], [els.operationsPendingCost, els.operationsReceivedCost, els.operationsDeliveredCost], [els.operationsRingPending, els.operationsRingReceived, els.operationsRingDelivered]],
+      maintenance: [els.kpiMaintenanceMain, els.kpiMaintenanceSub, [els.maintenancePendingCount, els.maintenanceInProgressCount, els.maintenanceCompletedCount], [els.maintenancePendingCost, els.maintenanceInProgressCost, els.maintenanceCompletedCost], [els.maintenanceRingPending, els.maintenanceRingInProgress, els.maintenanceRingCompleted]],
     };
     const entry = map[scope];
     if (!entry) return;
@@ -1376,6 +1389,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (user && !userHasPage(user, ['Requested Orders', 'Operations Orders', '/orders/requested'])) renderNoAccess('operations');
     else renderOperationsAnalysis();
+
+    if (user && !userHasPage(user, ['Maintenance Orders', '/orders/maintenance-orders'])) renderNoAccess('maintenance');
+    else renderMaintenanceAnalysis();
 
     renderExpensesForGlobalFilter();
     renderStockForGlobalFilter();
@@ -1472,6 +1488,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const canTasks = false; // Legacy Tasks page was retired in favor of Task Management.
     const canOrders = hasAccess('Current Orders') || hasAccess('/orders');
     const canRequested = hasAccess('Requested Orders') || hasAccess('Operations Orders') || hasAccess('/orders/requested');
+    const canMaintenance = hasAccess('Maintenance Orders') || hasAccess('/orders/maintenance-orders');
     const canReview = hasAccess('Orders Review') || hasAccess('/orders/sv-orders');
     const canStock = hasAccess('Stocktaking') || hasAccess('/stocktaking');
     const canExpenses = hasAccess('Expenses') || hasAccess('/expenses');
@@ -1479,6 +1496,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!canTasks) hideBlock('tasks'); else showBlock('tasks');
     if (!canOrders) hideBlock('orders'); else showBlock('orders');
     if (!canRequested) hideBlock('requested'); else showBlock('requested');
+    if (!canMaintenance) hideBlock('maintenance'); else showBlock('maintenance');
     if (!canReview) hideBlock('review'); else showBlock('review');
     if (!canStock) hideBlock('stock'); else showBlock('stock');
     if (!canExpenses) hideBlock('expenses'); else showBlock('expenses');
@@ -1486,7 +1504,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderActions();
     renderModules();
 
-    return { canTasks, canOrders, canRequested, canReview, canStock, canExpenses };
+    return { canTasks, canOrders, canRequested, canMaintenance, canReview, canStock, canExpenses };
   }
 
   async function loadTasks() {
@@ -1660,6 +1678,42 @@ document.addEventListener('DOMContentLoaded', () => {
       if (bucketEl.costEl) bucketEl.costEl.textContent = fmtMoney(value.cost);
       if (bucketEl.circleEl) bucketEl.circleEl.style.stroke = item.color;
       offset = setRingSegment(bucketEl.circleEl, value.count, filtered.length, offset, gap);
+    });
+  }
+
+  function maintenanceItemHasLog(item = {}) {
+    const spareNames = item?.sparePartsReplacedNames || item?.spare_parts_replaced_names || item?.sparePartsReplacedName || item?.spare_parts_replaced_name;
+    return !!(
+      String(item?.resolutionMethod || item?.resolution_method || '').trim() ||
+      String(item?.actualIssueDescription || item?.actual_issue_description || '').trim() ||
+      String(item?.repairAction || item?.repair_action || '').trim() ||
+      (Array.isArray(spareNames) ? spareNames.some(Boolean) : String(spareNames || '').trim())
+    );
+  }
+
+  function maintenanceWorkflowBucket(group) {
+    const rows = group?.items || [];
+    const stage = reqComputeStage(rows);
+    const maxIdx = Math.max(1, ...rows.map((item) => reqStatusToIndex(item?.status)));
+    if (maxIdx >= 4 || stage.tab === 'delivered') return 'completed';
+    if (rows.some(maintenanceItemHasLog)) return 'in-progress';
+    return 'pending';
+  }
+
+  function renderMaintenanceAnalysis() {
+    const maintenanceGroups = (state.requestedGroups || []).filter((group) => currentOrderTypeBucket(group) === 'maintenance');
+    state.maintenanceGroups = maintenanceGroups;
+    const filtered = globalFilterGroups(maintenanceGroups);
+    renderSummaryPerformance({
+      groups: filtered,
+      totalCountEl: els.kpiMaintenanceMain,
+      totalCostEl: els.kpiMaintenanceSub,
+      buckets: [
+        { key: 'pending', countEl: els.maintenancePendingCount, costEl: els.maintenancePendingCost, circleEl: els.maintenanceRingPending },
+        { key: 'in-progress', countEl: els.maintenanceInProgressCount, costEl: els.maintenanceInProgressCost, circleEl: els.maintenanceRingInProgress },
+        { key: 'completed', countEl: els.maintenanceCompletedCount, costEl: els.maintenanceCompletedCost, circleEl: els.maintenanceRingCompleted },
+      ],
+      getBucket: maintenanceWorkflowBucket,
     });
   }
 
@@ -1846,6 +1900,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     renderOperationsAnalysis();
+    renderMaintenanceAnalysis();
   }
 
   async function loadReview() {
@@ -2075,6 +2130,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setupOrdersAnalysisControl();
   setupSummaryAnalysisControl('review', renderReviewAnalysis);
   setupSummaryAnalysisControl('operations', renderOperationsAnalysis);
+  const maintenanceCard = document.querySelector('[data-block="maintenance"]');
+  if (maintenanceCard) {
+    const openMaintenance = () => { window.location.href = maintenanceCard.dataset.href || '/orders/maintenance-orders'; };
+    maintenanceCard.addEventListener('click', openMaintenance);
+    maintenanceCard.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMaintenance(); } });
+  }
   setupStockAnalysis();
 
   // ===== Init =====
@@ -2083,7 +2144,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setUpdatedNow();
       wireSearch();
 
-      const { canTasks, canOrders, canRequested, canReview, canStock, canExpenses } = await loadAccount();
+      const { canTasks, canOrders, canRequested, canMaintenance, canReview, canStock, canExpenses } = await loadAccount();
       await loadAnalysisUsers();
       setUpdatedNow();
 
@@ -2100,9 +2161,10 @@ document.addEventListener('DOMContentLoaded', () => {
         renderEmpty(els.ordersList, 'Failed to load orders');
       }));
 
-      if (canRequested) jobs.push(loadRequested().catch((e) => {
+      if (canRequested || canMaintenance) jobs.push(loadRequested().catch((e) => {
         console.error(e);
         setKpi(els.kpiRequestedMain, els.kpiRequestedSub, '—', 'Failed to load');
+        setKpi(els.kpiMaintenanceMain, els.kpiMaintenanceSub, '—', 'Failed to load');
       }));
 
       if (canReview) jobs.push(loadReview().catch((e) => {
