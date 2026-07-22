@@ -100,6 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
     tasksChartSubtitle: $('#tasksChartSubtitle'),
     ordersChartSubtitle: $('#ordersChartSubtitle'),
     expensesChartSubtitle: $('#expensesChartSubtitle'),
+    homeExpenseChartYear: $('#homeExpenseChartYear'),
+    homeExpenseMonthlyChart: $('#homeExpenseMonthlyChart'),
+    homeExpenseTypesMonth: $('#homeExpenseTypesMonth'),
+    homeExpenseTypesChart: $('#homeExpenseTypesChart'),
 
     // Actions + scope
     actions: $('#homeActions'),
@@ -132,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reviewAnalysis: { time: 'all', by: 'status' },
     operationsAnalysis: { time: 'all', by: 'status' },
     maintenanceGroups: [],
+    expenseAnalytics: { year: new Date().getFullYear(), month: '' },
   };
 
   const norm = (s) => String(s || '').trim().toLowerCase();
@@ -1067,6 +1072,145 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const HOME_EXPENSE_TYPE_COLORS = ['#203a70', '#f97316', '#166534', '#dc2626', '#7c3aed', '#0891b2'];
+
+  function homeExpenseMonthKey(item) {
+    const raw = item?.date || item?.createdTime || item?.created_at || item?.created || '';
+    const d = new Date(raw);
+    if (!Number.isFinite(d.getTime())) return String(raw).slice(0, 7);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function homeExpenseTypeLabel(item) {
+    return optionText(item?.type || item?.expenseType || item?.expense_type || item?.reasonType || item?.reason_type || item?.category || item?.route || item?.reason) || 'Other';
+  }
+
+  function homeExpenseCompactMoney(value) {
+    const n = safeNum(value);
+    const sign = n < 0 ? '-' : '';
+    const abs = Math.abs(n);
+    const shown = abs >= 1000 ? `${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k` : `${Math.round(abs)}`;
+    return `${sign}£${shown}`;
+  }
+
+  function homeExpenseYears(items) {
+    const years = new Set([new Date().getFullYear()]);
+    (items || []).forEach((item) => {
+      const key = homeExpenseMonthKey(item);
+      const year = Number(String(key).slice(0, 4));
+      if (Number.isFinite(year)) years.add(year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }
+
+  function syncHomeExpenseYear(items) {
+    if (!els.homeExpenseChartYear) return;
+    const years = homeExpenseYears(items);
+    if (!years.includes(Number(state.expenseAnalytics.year))) state.expenseAnalytics.year = years[0];
+    els.homeExpenseChartYear.innerHTML = years.map((year) => `<option value="${year}"${year === Number(state.expenseAnalytics.year) ? ' selected' : ''}>${year}</option>`).join('');
+  }
+
+  function homeExpenseMonthlyTotals(items, year) {
+    const totals = Array(12).fill(0);
+    (items || []).forEach((item) => {
+      const key = homeExpenseMonthKey(item);
+      if (Number(String(key).slice(0, 4)) !== Number(year)) return;
+      const month = Number(String(key).slice(5, 7)) - 1;
+      if (month >= 0 && month < 12) totals[month] += safeNum(item?.cashOut);
+    });
+    return totals;
+  }
+
+  function chooseHomeExpenseMonth(totals) {
+    const year = Number(state.expenseAnalytics.year);
+    if (String(state.expenseAnalytics.month).startsWith(`${year}-`)) return;
+    const now = new Date();
+    if (year === now.getFullYear() && safeNum(totals[now.getMonth()]) > 0) {
+      state.expenseAnalytics.month = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      return;
+    }
+    let idx = -1;
+    totals.forEach((value, i) => { if (safeNum(value) > 0) idx = i; });
+    if (idx < 0) idx = year === now.getFullYear() ? now.getMonth() : 11;
+    state.expenseAnalytics.month = `${year}-${String(idx + 1).padStart(2, '0')}`;
+  }
+
+  function renderHomeExpenseMonthlyChart(items) {
+    if (!els.homeExpenseMonthlyChart) return;
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const totals = homeExpenseMonthlyTotals(items, state.expenseAnalytics.year);
+    chooseHomeExpenseMonth(totals);
+    const max = Math.max(1, ...totals);
+    els.homeExpenseMonthlyChart.innerHTML = `<div class="home-expense-bars">${totals.map((total, index) => {
+      const key = `${state.expenseAnalytics.year}-${String(index + 1).padStart(2, '0')}`;
+      const active = key === state.expenseAnalytics.month;
+      const height = total > 0 ? Math.max(8, (total / max) * 100) : 0;
+      return `<button type="button" class="home-expense-month-bar${active ? ' is-active' : ''}" data-home-expense-month="${key}" title="${months[index]} ${state.expenseAnalytics.year}: ${homeExpenseCompactMoney(total)}">
+        <span class="home-expense-month-bar__bubble">${safeText(homeExpenseCompactMoney(total))}</span>
+        <span class="home-expense-month-bar__track"><span class="home-expense-month-bar__fill" style="height:${height.toFixed(2)}%"></span></span>
+        <span class="home-expense-month-bar__label">${months[index]}</span>
+      </button>`;
+    }).join('')}</div>`;
+    els.homeExpenseMonthlyChart.querySelectorAll('[data-home-expense-month]').forEach((button) => button.addEventListener('click', () => {
+      state.expenseAnalytics.month = button.dataset.homeExpenseMonth;
+      renderHomeExpenseAnalytics(items);
+    }));
+  }
+
+  function renderHomeExpenseTypesChart(items) {
+    if (!els.homeExpenseTypesChart) return;
+    const monthKey = state.expenseAnalytics.month;
+    if (els.homeExpenseTypesMonth) {
+      const [y,m] = String(monthKey).split('-').map(Number);
+      els.homeExpenseTypesMonth.textContent = y && m ? new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month:'short', year:'numeric' }) : '—';
+    }
+    const map = new Map();
+    (items || []).forEach((item) => {
+      if (homeExpenseMonthKey(item) !== monthKey) return;
+      const value = safeNum(item?.cashOut);
+      if (value <= 0) return;
+      const label = homeExpenseTypeLabel(item);
+      map.set(label, safeNum(map.get(label)) + value);
+    });
+    let rows = Array.from(map, ([label,value]) => ({label,value})).sort((a,b) => b.value-a.value);
+    if (rows.length > 6) {
+      const other = rows.slice(5).reduce((sum,row) => sum + row.value, 0);
+      rows = rows.slice(0,5).concat({label:'Other',value:other});
+    }
+    const total = rows.reduce((sum,row) => sum + row.value, 0);
+    if (!rows.length || total <= 0) {
+      renderEmpty(els.homeExpenseTypesChart, 'No cash-out expenses in this month');
+      return;
+    }
+    let cursor = 0;
+    const gradient = rows.map((row,index) => {
+      const start = cursor; cursor += row.value / total * 100;
+      return `${HOME_EXPENSE_TYPE_COLORS[index % HOME_EXPENSE_TYPE_COLORS.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+    }).join(',');
+    els.homeExpenseTypesChart.innerHTML = `<div class="home-expense-types-layout">
+      <div class="home-expense-donut" style="--home-expense-gradient:conic-gradient(${gradient})"><div class="home-expense-donut__center"><span>Total</span><strong>${safeText(homeExpenseCompactMoney(total))}</strong></div></div>
+      <div class="home-expense-types-legend">${rows.map((row,index) => `<div class="home-expense-type-row"><span class="home-expense-type-row__dot" style="background:${HOME_EXPENSE_TYPE_COLORS[index % HOME_EXPENSE_TYPE_COLORS.length]}"></span><span>${safeText(row.label)}</span><strong>${(row.value / total * 100).toFixed(row.value / total >= .1 ? 0 : 1)}%</strong></div>`).join('')}</div>
+    </div>`;
+  }
+
+  function renderHomeExpenseAnalytics(items) {
+    const list = Array.isArray(items) ? items : [];
+    syncHomeExpenseYear(list);
+    renderHomeExpenseMonthlyChart(list);
+    renderHomeExpenseTypesChart(list);
+    if (window.feather) window.feather.replace();
+  }
+
+  function bindHomeExpenseAnalytics() {
+    if (!els.homeExpenseChartYear || els.homeExpenseChartYear.dataset.bound === '1') return;
+    els.homeExpenseChartYear.dataset.bound = '1';
+    els.homeExpenseChartYear.addEventListener('change', () => {
+      state.expenseAnalytics.year = Number(els.homeExpenseChartYear.value) || new Date().getFullYear();
+      state.expenseAnalytics.month = '';
+      renderHomeExpenseAnalytics(state.expenses || []);
+    });
+  }
+
   function renderExpensesChart(items) {
     if (!els.expensesChart) return;
 
@@ -1355,6 +1499,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let cashIn = 0, cashOut = 0;
     items.forEach((item) => { cashIn += safeNum(item.cashIn); cashOut += safeNum(item.cashOut); });
     setKpi(els.kpiExpensesMain, els.kpiExpensesSub, fmtMoney(cashIn - cashOut), `In: ${fmtMoney(cashIn)} • Out: ${fmtMoney(cashOut)}`);
+    renderHomeExpenseAnalytics(items);
   }
 
   async function renderStockForGlobalFilter() {
@@ -2102,6 +2247,8 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     renderExpensesForGlobalFilter();
     renderExpensesChart(items);
+    bindHomeExpenseAnalytics();
+    renderHomeExpenseAnalytics(items);
   }
 
   // ===== Search =====
