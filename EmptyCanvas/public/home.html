@@ -94,7 +94,36 @@
 <section aria-label="Overview" class="card home-card home-card--hero">
 <div class="home-section-head">
 <h2 class="home-section-title"><i data-feather="activity"></i> Overview</h2>
-
+<div class="home-global-analysis" id="globalAnalysisControl">
+  <button class="home-global-analysis__trigger" id="globalAnalysisTrigger" type="button" aria-haspopup="true" aria-expanded="false">
+    <span class="home-global-analysis__icon"><i data-feather="activity"></i></span>
+    <strong>Analysis</strong>
+    <i data-feather="chevron-down"></i>
+  </button>
+  <div class="home-global-analysis__menu" id="globalAnalysisMenu" hidden>
+    <div class="home-global-analysis__field">
+      <span>Users</span>
+      <input id="globalAnalysisUser" type="hidden" value="all">
+      <div class="home-global-select">
+        <button class="home-global-select__trigger" id="globalUserTrigger" type="button" aria-expanded="false"><span id="globalUserText">All users</span><i data-feather="chevron-down"></i></button>
+        <div class="home-global-select__options" id="globalUserOptions" hidden></div>
+      </div>
+    </div>
+    <div class="home-global-analysis__field">
+      <span>Duration</span>
+      <input id="globalAnalysisDuration" type="hidden" value="all">
+      <div class="home-global-select">
+        <button class="home-global-select__trigger" id="globalDurationTrigger" type="button" aria-expanded="false"><span id="globalDurationText">All time</span><i data-feather="chevron-down"></i></button>
+        <div class="home-global-select__options" id="globalDurationOptions" hidden>
+          <button type="button" class="home-global-select__option is-selected" data-value="all" data-label="All time"><span>All time</span><i data-feather="check"></i></button>
+          <button type="button" class="home-global-select__option" data-value="week" data-label="Last week"><span>Last week</span><i data-feather="check"></i></button>
+          <button type="button" class="home-global-select__option" data-value="month" data-label="Last month"><span>Last month</span><i data-feather="check"></i></button>
+          <button type="button" class="home-global-select__option" data-value="year" data-label="Last year"><span>Last year</span><i data-feather="check"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 <div class="stats home-kpis" id="homeKpis">
 
@@ -402,6 +431,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-<script src="/js/home.js?v=home-stock-users-center-v1"></script>
+<script src="/js/home.js?v=home-global-analysis-v1"></script>
 </body>
 </html>
