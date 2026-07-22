@@ -66,6 +66,17 @@ document.addEventListener('DOMContentLoaded', () => {
     stockTagFilterTrigger: $('#stockTagFilterTrigger'),
     stockTagFilterText: $('#stockTagFilterText'),
     stockTagFilterOptions: $('#stockTagFilterOptions'),
+    globalAnalysisControl: $('#globalAnalysisControl'),
+    globalAnalysisTrigger: $('#globalAnalysisTrigger'),
+    globalAnalysisMenu: $('#globalAnalysisMenu'),
+    globalAnalysisUser: $('#globalAnalysisUser'),
+    globalUserTrigger: $('#globalUserTrigger'),
+    globalUserText: $('#globalUserText'),
+    globalUserOptions: $('#globalUserOptions'),
+    globalAnalysisDuration: $('#globalAnalysisDuration'),
+    globalDurationTrigger: $('#globalDurationTrigger'),
+    globalDurationText: $('#globalDurationText'),
+    globalDurationOptions: $('#globalDurationOptions'),
     kpiExpensesMain: $('#kpiExpensesMain'),
     kpiExpensesSub: $('#kpiExpensesSub'),
 
@@ -109,6 +120,8 @@ document.addEventListener('DOMContentLoaded', () => {
     stockDefault: [],
     stockUsers: [],
     stockFilters: { user: 'all', tag: 'all' },
+    analysisUsers: [],
+    globalAnalysis: { user: 'all', duration: 'all' },
     ordersAnalysis: { time: 'all', by: 'status' },
     reviewAnalysis: { time: 'all', by: 'status' },
     operationsAnalysis: { time: 'all', by: 'status' },
@@ -1237,6 +1250,198 @@ document.addEventListener('DOMContentLoaded', () => {
     els.scopeChips.appendChild(frag);
   }
 
+  function globalSelectedUser() {
+    return state.analysisUsers.find((user) => String(user.id) === String(state.globalAnalysis.user)) || null;
+  }
+
+  function userHasPage(user, aliases) {
+    if (!user || state.globalAnalysis.user === 'all') return true;
+    const set = buildAllowedSet(user.allowedPages || []);
+    return aliases.some((alias) => {
+      const key = norm(alias);
+      const path = normPath(alias);
+      return set.has(key) || set.has(path) || set.has('/' + path) || set.has(path.replace(/^\//, ''));
+    });
+  }
+
+  function itemOwnerValues(item = {}) {
+    return [
+      item.createdById, item.createdByName, item.teamMemberId, item.teamMemberName,
+      item.userId, item.userName, item.username, item.requestedBy, item.ownerName,
+      item.createdBy, item.requesterName,
+    ].flatMap((value) => Array.isArray(value) ? value : [value]).map((value) => norm(value)).filter(Boolean);
+  }
+
+  function itemMatchesUser(item, user) {
+    if (!user) return true;
+    const targets = [user.id, user.name, user.username, user.email, user.employeeCode].map(norm).filter(Boolean);
+    const owners = itemOwnerValues(item);
+    return targets.some((target) => owners.some((owner) => owner === target || owner.includes(target) || target.includes(owner)));
+  }
+
+  function groupMatchesUser(group, user) {
+    if (!user) return true;
+    const rows = group?.items || group?.products || [];
+    return rows.some((row) => itemMatchesUser(row, user));
+  }
+
+  function withinGlobalDuration(dateLike) {
+    const duration = state.globalAnalysis.duration || 'all';
+    if (duration === 'all') return true;
+    const date = new Date(dateLike || 0);
+    if (!Number.isFinite(date.getTime())) return false;
+    const now = new Date();
+    const cutoff = new Date(now);
+    if (duration === 'week') cutoff.setDate(cutoff.getDate() - 7);
+    else if (duration === 'month') cutoff.setMonth(cutoff.getMonth() - 1);
+    else if (duration === 'year') cutoff.setFullYear(cutoff.getFullYear() - 1);
+    return date >= cutoff && date <= now;
+  }
+
+  function globalFilterGroups(groups) {
+    const user = globalSelectedUser();
+    return (groups || []).filter((group) => {
+      const rows = group?.items || group?.products || [];
+      const created = group?.createdTime || rows[0]?.createdTime || rows[0]?.created_at || rows[0]?.date;
+      return groupMatchesUser(group, user) && withinGlobalDuration(created);
+    });
+  }
+
+  function clearRing(circle) {
+    if (!circle) return;
+    circle.style.strokeDasharray = '0 999';
+    circle.style.strokeDashoffset = '0';
+  }
+
+  function renderNoAccess(scope) {
+    const map = {
+      orders: [els.kpiOrdersMain, els.kpiOrdersSub, [els.ordersInProgressCount, els.ordersCompletedCount, els.ordersRejectedCount], [els.ordersInProgressCost, els.ordersCompletedCost, els.ordersRejectedCost], [els.ordersRingInProgress, els.ordersRingCompleted, els.ordersRingRejected]],
+      review: [els.kpiReviewMain, els.kpiReviewSub, [els.reviewPendingCount, els.reviewApprovedCount, els.reviewRejectedCount], [els.reviewPendingCost, els.reviewApprovedCost, els.reviewRejectedCost], [els.reviewRingPending, els.reviewRingApproved, els.reviewRingRejected]],
+      operations: [els.kpiRequestedMain, els.kpiRequestedSub, [els.operationsPendingCount, els.operationsReceivedCount, els.operationsDeliveredCount], [els.operationsPendingCost, els.operationsReceivedCost, els.operationsDeliveredCost], [els.operationsRingPending, els.operationsRingReceived, els.operationsRingDelivered]],
+    };
+    const entry = map[scope];
+    if (!entry) return;
+    entry[0] && (entry[0].textContent = '—');
+    entry[1] && (entry[1].textContent = 'No access');
+    entry[2].forEach((el) => el && (el.textContent = '—'));
+    entry[3].forEach((el) => el && (el.textContent = '—'));
+    entry[4].forEach(clearRing);
+  }
+
+  async function renderExpensesForGlobalFilter() {
+    const user = globalSelectedUser();
+    if (user && !userHasPage(user, ['Expenses', '/expenses'])) {
+      setKpi(els.kpiExpensesMain, els.kpiExpensesSub, '—', 'No access');
+      return;
+    }
+    let sourceItems = state.expenses || [];
+    if (user) {
+      try {
+        const payload = await fetchJson(`/api/home/analysis-users/${encodeURIComponent(user.id)}/expenses`);
+        sourceItems = Array.isArray(payload?.items) ? payload.items : [];
+      } catch {
+        sourceItems = [];
+      }
+    }
+    const items = sourceItems.filter((item) => withinGlobalDuration(item.date || item.createdTime));
+    let cashIn = 0, cashOut = 0;
+    items.forEach((item) => { cashIn += safeNum(item.cashIn); cashOut += safeNum(item.cashOut); });
+    setKpi(els.kpiExpensesMain, els.kpiExpensesSub, fmtMoney(cashIn - cashOut), `In: ${fmtMoney(cashIn)} • Out: ${fmtMoney(cashOut)}`);
+  }
+
+  async function renderStockForGlobalFilter() {
+    const user = globalSelectedUser();
+    if (user && !userHasPage(user, ['Stocktaking', '/stocktaking'])) {
+      if (els.kpiStockMain) els.kpiStockMain.textContent = '—';
+      if (els.kpiStockCost) els.kpiStockCost.textContent = '—';
+      if (els.kpiStockSub) els.kpiStockSub.textContent = 'No access';
+      return;
+    }
+    if (!user) {
+      state.stock = state.stockDefault.slice();
+      renderStockSummary();
+      return;
+    }
+    try {
+      const payload = await fetchJson(`/api/home/stocktaking-users/${encodeURIComponent(user.id)}`);
+      state.stock = Array.isArray(payload?.items) ? payload.items : [];
+    } catch {
+      state.stock = [];
+    }
+    renderStockSummary();
+  }
+
+  function applyGlobalAnalysis() {
+    const user = globalSelectedUser();
+    if (user && !userHasPage(user, ['Current Orders', '/orders'])) renderNoAccess('orders');
+    else renderCurrentOrdersPerformance(globalFilterGroups(state.orderGroups || []));
+
+    if (user && !userHasPage(user, ['Orders Review', '/orders/sv-orders'])) renderNoAccess('review');
+    else renderReviewAnalysis();
+
+    if (user && !userHasPage(user, ['Requested Orders', 'Operations Orders', '/orders/requested'])) renderNoAccess('operations');
+    else renderOperationsAnalysis();
+
+    renderExpensesForGlobalFilter();
+    renderStockForGlobalFilter();
+  }
+
+  function setupGlobalAnalysis() {
+    const { globalAnalysisTrigger: trigger, globalAnalysisMenu: menu } = els;
+    if (!trigger || !menu) return;
+    const placeholder = document.createComment('global-analysis-menu-placeholder');
+    const closeLists = () => {
+      [
+        [els.globalUserOptions, els.globalUserTrigger],
+        [els.globalDurationOptions, els.globalDurationTrigger],
+      ].forEach(([options, button]) => { if (options) options.hidden = true; button?.setAttribute('aria-expanded', 'false'); });
+    };
+    const position = () => {
+      if (menu.hidden) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(310, window.innerWidth - 24);
+      menu.style.width = `${width}px`;
+      menu.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width))}px`;
+      menu.style.top = `${rect.bottom + 10}px`;
+    };
+    const close = () => {
+      closeLists(); menu.hidden = true; trigger.setAttribute('aria-expanded', 'false');
+      menu.classList.remove('home-global-analysis__menu--portal'); menu.removeAttribute('style');
+      if (placeholder.parentNode) placeholder.replaceWith(menu);
+    };
+    const open = () => {
+      if (menu.parentNode !== document.body) { menu.replaceWith(placeholder); document.body.appendChild(menu); }
+      menu.hidden = false; menu.classList.add('home-global-analysis__menu--portal'); trigger.setAttribute('aria-expanded', 'true'); position();
+    };
+    const setupSelect = (button, options, onChoose) => {
+      button?.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); const opening = options.hidden; closeLists(); options.hidden = !opening; button.setAttribute('aria-expanded', String(opening)); });
+      options?.addEventListener('click', (event) => {
+        const option = event.target.closest('[data-value]'); if (!option) return;
+        event.preventDefault(); event.stopPropagation();
+        options.querySelectorAll('.home-global-select__option').forEach((node) => node.classList.toggle('is-selected', node === option));
+        onChoose(option.dataset.value || 'all', option.dataset.label || option.textContent.trim()); closeLists(); applyGlobalAnalysis();
+      });
+    };
+    trigger.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); menu.hidden ? open() : close(); });
+    menu.addEventListener('click', (event) => event.stopPropagation());
+    setupSelect(els.globalUserTrigger, els.globalUserOptions, (value, label) => { state.globalAnalysis.user = value; if (els.globalAnalysisUser) els.globalAnalysisUser.value = value; if (els.globalUserText) els.globalUserText.textContent = label; });
+    setupSelect(els.globalDurationTrigger, els.globalDurationOptions, (value, label) => { state.globalAnalysis.duration = value; if (els.globalAnalysisDuration) els.globalAnalysisDuration.value = value; if (els.globalDurationText) els.globalDurationText.textContent = label; });
+    window.addEventListener('resize', position, { passive: true });
+    window.addEventListener('scroll', position, { passive: true, capture: true });
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+  }
+
+  async function loadAnalysisUsers() {
+    const payload = await fetchJson('/api/home/analysis-users').catch(() => ({ users: [] }));
+    state.analysisUsers = Array.isArray(payload?.users) ? payload.users : [];
+    if (els.globalUserOptions) {
+      const options = [{ id: 'all', name: 'All users' }, ...state.analysisUsers];
+      els.globalUserOptions.innerHTML = options.map((user, index) => `<button type="button" class="home-global-select__option${index === 0 ? ' is-selected' : ''}" data-value="${safeText(user.id)}" data-label="${safeText(user.name)}"><span>${safeText(user.name)}</span><i data-feather="check"></i></button>`).join('');
+      if (window.feather) window.feather.replace();
+    }
+  }
+
   // ===== Data loaders =====
   async function fetchJson(url) {
     const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
@@ -1434,7 +1639,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderAnalyzedSummary(scope, groups, analysis, statusBuckets, elements, getStatusBucket) {
-    const filtered = filterOrderGroupsByTime(groups, analysis.time || 'all');
+    const filtered = filterOrderGroupsByTime(globalFilterGroups(groups), analysis.time || 'all');
     const config = summaryAnalysisConfig(analysis.by || 'status', statusBuckets);
     updateSummaryLabels(scope, config);
     const totals = Object.fromEntries(config.map((item) => [item.key, { count: 0, cost: 0 }]));
@@ -1887,6 +2092,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `${fmtMoney(balM)} this month`,
       `In: ${fmtMoney(inM)} • Out: ${fmtMoney(outM)} • All-time: ${fmtMoney(balanceAll)}`,
     );
+    renderExpensesForGlobalFilter();
     renderExpensesChart(items);
   }
 
@@ -1912,6 +2118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  setupGlobalAnalysis();
   setupOrdersAnalysisControl();
   setupSummaryAnalysisControl('review', renderReviewAnalysis);
   setupSummaryAnalysisControl('operations', renderOperationsAnalysis);
@@ -1924,6 +2131,7 @@ document.addEventListener('DOMContentLoaded', () => {
       wireSearch();
 
       const { canTasks, canOrders, canRequested, canReview, canStock, canExpenses } = await loadAccount();
+      await loadAnalysisUsers();
       setUpdatedNow();
 
       const jobs = [];
@@ -1963,6 +2171,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }));
 
       await Promise.allSettled(jobs);
+      applyGlobalAnalysis();
       setUpdatedNow();
     } catch (e) {
       console.error(e);
