@@ -30532,6 +30532,68 @@ async function _sbStocktakingForRequest(req) {
   return items.filter((item) => Number(item.quantity) !== 0);
 }
 
+// Home global analysis — all Users Center members plus their page access.
+app.get(
+  "/api/home/analysis-users",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled()) return res.json({ users: [], source: "unavailable" });
+      const rows = await _sbSelectTeamMembersRows();
+      const users = [];
+      for (const row of rows || []) {
+        const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+        const name = _sbString(_sbValueForLabel(row, "Name")) || "Unnamed";
+        if (!id || !name) continue;
+        let allowedPages = [];
+        try {
+          const access = await _sbAccountPayloadWithAccess(row, name);
+          allowedPages = Array.isArray(access?.accountPayload?.allowedPages)
+            ? access.accountPayload.allowedPages
+            : [];
+        } catch (accessError) {
+          console.warn("[home-analysis] failed to resolve user access:", id, accessError?.message || accessError);
+        }
+        users.push({
+          id,
+          name,
+          username: _sbString(_sbValueForLabel(row, "Username")) || name,
+          email: _sbString(_sbValueForLabel(row, "Email")) || "",
+          employeeCode: _sbString(_sbValueForLabel(row, "Employee Code")) || "",
+          allowedPages,
+        });
+      }
+      users.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      return res.json({ users, source: "supabase" });
+    } catch (error) {
+      console.error("GET /api/home/analysis-users error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to load analysis users." });
+    }
+  },
+);
+
+// Home global analysis — expenses for a selected Users Center member.
+app.get(
+  "/api/home/analysis-users/:id/expenses",
+  requireAuth,
+  requirePage("Expenses"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbExpensesEnabled()) return res.json({ items: [], source: "unavailable" });
+      const memberId = String(req.params.id || "").trim();
+      if (!memberId) return res.status(400).json({ error: "Missing user id." });
+      const rows = await _sbSelectExpensesRows();
+      const items = _sbExpenseRowsForMemberId(rows, memberId).map(_sbSerializeExpenseRow);
+      return res.json({ items, source: "supabase" });
+    } catch (error) {
+      console.error("GET /api/home/analysis-users/:id/expenses error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to load user expenses." });
+    }
+  },
+);
+
 // Home Stocktaking analysis — Users Center members and their assigned Stocktaking columns.
 app.get(
   "/api/home/stocktaking-users",
