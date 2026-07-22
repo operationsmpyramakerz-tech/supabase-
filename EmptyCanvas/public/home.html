@@ -375,11 +375,15 @@
 <span class="home-expense-eyebrow">Monthly overview</span>
 <h2>Expenses by month</h2>
 </div>
-<label class="home-expense-year-select" aria-label="Select expense chart year">
+<div class="home-expense-year-select" id="homeExpenseYearControl">
+<button class="home-expense-year-select__trigger" id="homeExpenseYearTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Select expense chart year">
 <i data-feather="calendar"></i>
-<select id="homeExpenseChartYear"></select>
-<i data-feather="chevron-down"></i>
-</label>
+<span id="homeExpenseYearText">2026</span>
+<i class="home-expense-year-select__chevron" data-feather="chevron-down"></i>
+</button>
+<div class="home-expense-year-select__options" id="homeExpenseYearOptions" role="listbox" hidden></div>
+<input id="homeExpenseChartYear" type="hidden" value="2026">
+</div>
 </div>
 <div class="home-expense-monthly-chart" id="homeExpenseMonthlyChart" aria-live="polite"></div>
 </section>
@@ -436,6 +440,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-<script src="/js/home.js?v=home-expenses-dark-card-v1"></script>
+<script src="/js/home.js?v=home-expenses-modern-year-v1"></script>
 </body>
 </html>
