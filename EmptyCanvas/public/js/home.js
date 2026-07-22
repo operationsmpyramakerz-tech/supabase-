@@ -58,10 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
     stockAnalysisControl: $('#stockAnalysisControl'),
     stockAnalysisTrigger: $('#stockAnalysisTrigger'),
     stockAnalysisMenu: $('#stockAnalysisMenu'),
-    stockUserFilter: $('#stockUserFilter'),
-    stockUserFilterTrigger: $('#stockUserFilterTrigger'),
-    stockUserFilterText: $('#stockUserFilterText'),
-    stockUserFilterOptions: $('#stockUserFilterOptions'),
     stockTagFilter: $('#stockTagFilter'),
     stockTagFilterTrigger: $('#stockTagFilterTrigger'),
     stockTagFilterText: $('#stockTagFilterText'),
@@ -118,8 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     expenses: [],
     stock: [],
     stockDefault: [],
-    stockUsers: [],
-    stockFilters: { user: 'all', tag: 'all' },
+    stockFilters: { tag: 'all' },
     analysisUsers: [],
     globalAnalysis: { user: 'all', duration: 'all' },
     ordersAnalysis: { time: 'all', by: 'status' },
@@ -1890,21 +1885,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function populateStockFilters(items) {
-    const currentUser = state.stockFilters.user;
     const currentTag = state.stockFilters.tag;
-    const users = (state.stockUsers || []).map((user) => ({ value: String(user.id), label: user.name }));
     const tags = Array.from(new Set(items.map(stockTagName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
-    const userValue = currentUser === 'all' || users.some((user) => user.value === currentUser) ? currentUser : 'all';
     const tagValue = tags.includes(currentTag) ? currentTag : 'all';
-    state.stockFilters.user = userValue;
     state.stockFilters.tag = tagValue;
-    if (els.stockUserFilter) els.stockUserFilter.value = userValue;
     if (els.stockTagFilter) els.stockTagFilter.value = tagValue;
-    const selectedUser = (state.stockUsers || []).find((user) => String(user.id) === userValue);
-    if (els.stockUserFilterText) els.stockUserFilterText.textContent = selectedUser?.name || 'All users';
     if (els.stockTagFilterText) els.stockTagFilterText.textContent = tagValue === 'all' ? 'All tags' : tagValue;
-    renderStockFilterOptions(els.stockUserFilterOptions, users, 'All users', userValue);
     renderStockFilterOptions(els.stockTagFilterOptions, tags, 'All tags', tagValue);
   }
 
@@ -1927,7 +1914,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.kpiStockCost) els.kpiStockCost.textContent = fmtMoney(totalCost);
     if (els.kpiStockSub) {
       const parts = [`${filtered.length} component records`];
-      if (state.stockFilters.user !== 'all') parts.push(state.stockFilters.user);
       if (state.stockFilters.tag !== 'all') parts.push(state.stockFilters.tag);
       els.kpiStockSub.textContent = parts.join(' • ');
     }
@@ -1940,7 +1926,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeFilterLists = () => {
       [
-        [els.stockUserFilterOptions, els.stockUserFilterTrigger],
         [els.stockTagFilterOptions, els.stockTagFilterTrigger]
       ].forEach(([options, trigger]) => {
         if (options) options.hidden = true;
@@ -2001,34 +1986,7 @@ document.addEventListener('DOMContentLoaded', () => {
         text.textContent = value === 'all' ? allLabel : label;
         options.querySelectorAll('.home-stock-filter__option').forEach((item) => item.classList.toggle('is-selected', item === option));
         closeFilterLists();
-        if (stateKey === 'user') {
-          state.stockFilters.tag = 'all';
-          if (els.stockTagFilter) els.stockTagFilter.value = 'all';
-          if (els.stockTagFilterText) els.stockTagFilterText.textContent = 'All tags';
-          if (value === 'all') {
-            state.stock = state.stockDefault.slice();
-            populateStockFilters(state.stock);
-            renderStockSummary();
-          } else {
-            if (els.kpiStockMain) els.kpiStockMain.textContent = '…';
-            if (els.kpiStockCost) els.kpiStockCost.textContent = '…';
-            if (els.kpiStockSub) els.kpiStockSub.textContent = 'Loading user stocktaking';
-            fetchJson(`/api/home/stocktaking-users/${encodeURIComponent(value)}`)
-              .then((payload) => {
-                state.stock = Array.isArray(payload?.items) ? payload.items : [];
-                populateStockFilters(state.stock);
-                renderStockSummary();
-              })
-              .catch((error) => {
-                console.error(error);
-                state.stock = [];
-                populateStockFilters(state.stock);
-                renderStockSummary();
-              });
-          }
-        } else {
-          renderStockSummary();
-        }
+        renderStockSummary();
       });
     };
 
@@ -2038,7 +1996,6 @@ document.addEventListener('DOMContentLoaded', () => {
       els.stockAnalysisMenu.hidden ? open() : close();
     });
     els.stockAnalysisMenu.addEventListener('click', (event) => event.stopPropagation());
-    setupFilter({ trigger: els.stockUserFilterTrigger, options: els.stockUserFilterOptions, input: els.stockUserFilter, text: els.stockUserFilterText, stateKey: 'user', allLabel: 'All users' });
     setupFilter({ trigger: els.stockTagFilterTrigger, options: els.stockTagFilterOptions, input: els.stockTagFilter, text: els.stockTagFilterText, stateKey: 'tag', allLabel: 'All tags' });
     window.addEventListener('resize', positionMenu, { passive: true });
     window.addEventListener('scroll', positionMenu, { passive: true, capture: true });
@@ -2050,14 +2007,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.kpiStockMain) els.kpiStockMain.textContent = '…';
     if (els.kpiStockCost) els.kpiStockCost.textContent = '…';
     if (els.kpiStockSub) els.kpiStockSub.textContent = 'Loading';
-    const [list, usersPayload] = await Promise.all([
-      fetchJson('/api/stock'),
-      fetchJson('/api/home/stocktaking-users').catch(() => ({ users: [] })),
-    ]);
+    const list = await fetchJson('/api/stock');
     const items = Array.isArray(list) ? list : [];
     state.stockDefault = items.slice();
     state.stock = items;
-    state.stockUsers = Array.isArray(usersPayload?.users) ? usersPayload.users : [];
     populateStockFilters(items);
     renderStockSummary();
   }
