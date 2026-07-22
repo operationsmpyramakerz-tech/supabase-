@@ -3414,3 +3414,34 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   .page-home .home-kpis{grid-template-columns:1fr !important;}
   .page-home .home-stock-card,.page-home [data-block="expenses"]{grid-column:auto !important;}
 }
+
+/* 2026-07-22: keep all four order overview cards in the same top row. */
+@media (min-width:1181px){
+  .page-home .home-kpis{
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+  }
+
+  .page-home .home-kpis > .home-orders-performance,
+  .page-home .home-kpis > .home-summary-performance--review,
+  .page-home .home-kpis > .home-summary-performance--operations,
+  .page-home .home-kpis > .home-summary-performance--maintenance{
+    grid-column:auto !important;
+    grid-row:auto !important;
+    width:auto !important;
+    min-width:0 !important;
+  }
+}
+
+/* Maintenance status colors must match the other overview cards. */
+.page-home .home-summary-performance--maintenance .home-summary-status--orange .home-summary-status__bar{
+  --summary-status-color:#f97316;
+  background:#f97316 !important;
+}
+.page-home .home-summary-performance--maintenance .home-summary-status--navy .home-summary-status__bar{
+  --summary-status-color:#172554;
+  background:#172554 !important;
+}
+.page-home .home-summary-performance--maintenance .home-summary-status--green .home-summary-status__bar{
+  --summary-status-color:#166534;
+  background:#166534 !important;
+}
