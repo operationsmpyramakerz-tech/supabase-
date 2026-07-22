@@ -3481,3 +3481,78 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
 .home-expense-type-row strong { color:#26364d; font-weight:850; }
 @media (max-width:1180px){ .page-home .home-analytics{grid-template-columns:1fr 1fr;} .page-home .home-analytics > :first-child{grid-column:1/-1;} }
 @media (max-width:768px){ .page-home .home-analytics{grid-template-columns:1fr;} .page-home .home-analytics > :first-child{grid-column:auto;} .home-expense-types-layout{grid-template-columns:1fr;} }
+
+/* 2026-07-22: group the two expense charts in one black container on Home. */
+.page-home .home-expenses-analytics-group{
+  margin-top:14px;
+  padding:18px;
+  border-radius:24px;
+  background:linear-gradient(145deg,#111827 0%,#05070c 100%);
+  box-shadow:0 20px 46px rgba(2,6,23,.24);
+  overflow:hidden;
+}
+.page-home .home-expenses-analytics-group__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:14px;
+  color:#fff;
+}
+.page-home .home-expenses-analytics-group__header span{
+  display:block;
+  margin-bottom:3px;
+  color:#9ca3af;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+.page-home .home-expenses-analytics-group__header h2{
+  margin:0;
+  color:#fff;
+  font-size:20px;
+  font-weight:900;
+}
+.page-home .home-expenses-analytics-group__header a{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:38px;
+  padding:0 14px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:12px;
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  font-size:11px;
+  font-weight:850;
+  text-decoration:none;
+  transition:.18s ease;
+}
+.page-home .home-expenses-analytics-group__header a:hover{
+  background:rgba(255,255,255,.14);
+  transform:translateY(-1px);
+}
+.page-home .home-expenses-analytics-group__grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  align-items:stretch;
+}
+.page-home .home-expenses-analytics-group .home-expense-analytics-card{
+  min-height:300px;
+  margin:0;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+  background:#fff;
+  box-shadow:none;
+}
+@media(max-width:900px){
+  .page-home .home-expenses-analytics-group__grid{grid-template-columns:1fr;}
+}
+@media(max-width:600px){
+  .page-home .home-expenses-analytics-group{padding:12px;border-radius:20px;}
+  .page-home .home-expenses-analytics-group__header{align-items:flex-start;}
+  .page-home .home-expenses-analytics-group__header h2{font-size:18px;}
+  .page-home .home-expenses-analytics-group__header a{min-height:34px;padding:0 10px;font-size:10px;}
+}
