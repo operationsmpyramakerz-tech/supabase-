@@ -18,7 +18,7 @@
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
 <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet"/>
-<link href="/css/home.css?v=home-maintenance-row-v2" rel="stylesheet"/>
+<link href="/css/home.css?v=home-expense-charts-v1" rel="stylesheet"/>
 <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
@@ -386,15 +386,29 @@
 </div>
 <div class="home-chart home-chart--bars" id="homeOrdersChart"></div>
 </section>
-<section aria-label="Cashflow trend" class="card home-analytics-card home-analytics-card--white" data-block="expenses">
-<div class="card-header home-card-header">
+<section aria-label="Expenses by month" class="card home-analytics-card home-expense-analytics-card" data-block="expenses">
+<div class="card-header home-card-header home-expense-card-head">
 <div>
-<h2>Cashflow trend</h2>
-<div class="card-subtitle" id="expensesChartSubtitle">Last 6 months in vs out</div>
+<span class="home-expense-eyebrow">Monthly overview</span>
+<h2>Expenses by month</h2>
 </div>
-<span class="home-card-chip">Finance</span>
+<label class="home-expense-year-select" aria-label="Select expense chart year">
+<i data-feather="calendar"></i>
+<select id="homeExpenseChartYear"></select>
+<i data-feather="chevron-down"></i>
+</label>
 </div>
-<div class="home-chart home-chart--timeline" id="homeExpensesChart"></div>
+<div class="home-expense-monthly-chart" id="homeExpenseMonthlyChart" aria-live="polite"></div>
+</section>
+<section aria-label="Expense types" class="card home-analytics-card home-expense-analytics-card" data-block="expenses">
+<div class="card-header home-card-header home-expense-card-head">
+<div>
+<span class="home-expense-eyebrow">Selected month</span>
+<h2>Expense types</h2>
+</div>
+<span class="home-expense-selected-month" id="homeExpenseTypesMonth">—</span>
+</div>
+<div class="home-expense-types-chart" id="homeExpenseTypesChart" aria-live="polite"></div>
 </section>
 </section>
 <!-- Grid -->
@@ -447,6 +461,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-<script src="/js/home.js?v=home-maintenance-card-v1"></script>
+<script src="/js/home.js?v=home-expense-charts-v1"></script>
 </body>
 </html>
