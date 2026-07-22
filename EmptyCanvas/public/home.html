@@ -321,6 +321,30 @@
 <div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="operationsDeliveredCount">—</strong><span>Delivered</span><small id="operationsDeliveredCost">—</small></div></div>
 </div>
 </div>
+</div><div aria-label="Maintenance orders overview" class="stat home-kpi home-summary-performance home-summary-performance--maintenance" data-block="maintenance" data-href="/orders/maintenance-orders" role="link" tabindex="0">
+<div class="home-summary-performance__head">
+<div><div class="stat__label">Maintenance orders</div></div>
+</div>
+<div class="home-summary-performance__body">
+<div class="home-summary-ring" data-summary-ring="maintenance">
+<svg aria-hidden="true" focusable="false" viewbox="0 0 120 120">
+<circle class="home-summary-ring__track" cx="60" cy="60" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--orange" cx="60" cy="60" id="maintenanceRingPending" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--navy" cx="60" cy="60" id="maintenanceRingInProgress" r="44"></circle>
+<circle class="home-summary-ring__segment home-summary-ring__segment--green" cx="60" cy="60" id="maintenanceRingCompleted" r="44"></circle>
+</svg>
+<div class="home-summary-ring__center">
+<strong id="kpiMaintenanceMain">—</strong>
+<span>Total orders</span>
+<small id="kpiMaintenanceSub">—</small>
+</div>
+</div>
+<div class="home-summary-performance__legend">
+<div class="home-summary-status home-summary-status--orange"><span class="home-summary-status__bar"></span><div><strong id="maintenancePendingCount">—</strong><span>Pending</span><small id="maintenancePendingCost">—</small></div></div>
+<div class="home-summary-status home-summary-status--navy"><span class="home-summary-status__bar"></span><div><strong id="maintenanceInProgressCount">—</strong><span>In progress</span><small id="maintenanceInProgressCost">—</small></div></div>
+<div class="home-summary-status home-summary-status--green"><span class="home-summary-status__bar"></span><div><strong id="maintenanceCompletedCount">—</strong><span>Completed</span><small id="maintenanceCompletedCost">—</small></div></div>
+</div>
+</div>
 </div><div class="stat home-kpi home-stock-card" data-block="stock" id="homeStockCard">
 <div class="home-stock-card__head">
   <a class="home-stock-card__title" href="/stocktaking">Stocktaking</a>
@@ -423,6 +447,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-<script src="/js/home.js?v=home-stock-tags-only-v1"></script>
+<script src="/js/home.js?v=home-maintenance-card-v1"></script>
 </body>
 </html>
