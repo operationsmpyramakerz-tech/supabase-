@@ -18,7 +18,7 @@
     body.permissions-loading .sidebar li { display: none !important; }
   </style>
 <link href="/css/style.css?v=bidi-mixed-v1" rel="stylesheet"/>
-<link href="/css/home.css?v=home-expense-charts-v1" rel="stylesheet"/>
+<link href="/css/home.css?v=home-expenses-black-group-v2" rel="stylesheet"/>
 <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
 <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
 <script src="/js/vendor/feather-icons.min.js"></script>
@@ -368,25 +368,19 @@
 </div>
 <div class="home-kpi-sub" id="kpiStockSub">—</div>
 </div>
-<a class="stat home-kpi" data-block="expenses" href="/expenses">
-<div class="stat__label">Expenses</div>
-<div class="stat__value" id="kpiExpensesMain">—</div>
-<div class="home-kpi-sub" id="kpiExpensesSub">—</div>
-</a>
+
 </div>
 </section>
-<section aria-label="Analytics" class="home-analytics">
-<section aria-label="Orders flow" class="card home-analytics-card home-analytics-card--orange" data-block="orders">
-<div class="card-header home-card-header">
-<div>
-<h2>Orders flow</h2>
-<div class="card-subtitle" id="ordersChartSubtitle">Pipeline snapshot by stage</div>
+<section aria-label="Expenses analytics" class="home-expenses-analytics-group" data-block="expenses">
+<div class="home-expenses-analytics-group__header">
+  <div>
+    <span>Finance analytics</span>
+    <h2>Expenses overview</h2>
+  </div>
+  <a href="/expenses">Open expenses</a>
 </div>
-<span class="home-card-chip">Live</span>
-</div>
-<div class="home-chart home-chart--bars" id="homeOrdersChart"></div>
-</section>
-<section aria-label="Expenses by month" class="card home-analytics-card home-expense-analytics-card" data-block="expenses">
+<div class="home-expenses-analytics-group__grid">
+<section aria-label="Expenses by month" class="card home-analytics-card home-expense-analytics-card">
 <div class="card-header home-card-header home-expense-card-head">
 <div>
 <span class="home-expense-eyebrow">Monthly overview</span>
@@ -400,7 +394,7 @@
 </div>
 <div class="home-expense-monthly-chart" id="homeExpenseMonthlyChart" aria-live="polite"></div>
 </section>
-<section aria-label="Expense types" class="card home-analytics-card home-expense-analytics-card" data-block="expenses">
+<section aria-label="Expense types" class="card home-analytics-card home-expense-analytics-card">
 <div class="card-header home-card-header home-expense-card-head">
 <div>
 <span class="home-expense-eyebrow">Selected month</span>
@@ -410,6 +404,7 @@
 </div>
 <div class="home-expense-types-chart" id="homeExpenseTypesChart" aria-live="polite"></div>
 </section>
+</div>
 </section>
 <!-- Grid -->
 <section aria-label="Details" class="home-grid">
@@ -461,6 +456,6 @@
 </div>
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
-<script src="/js/home.js?v=home-expense-charts-v1"></script>
+<script src="/js/home.js?v=home-expenses-black-group-v2"></script>
 </body>
 </html>
