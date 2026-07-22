@@ -106,6 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
     reviewGroups: [],
     expenses: [],
     stock: [],
+    stockDefault: [],
+    stockUsers: [],
     stockFilters: { user: 'all', tag: 'all' },
     ordersAnalysis: { time: 'all', by: 'status' },
     reviewAnalysis: { time: 'all', by: 'status' },
@@ -1668,9 +1670,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderStockFilterOptions(optionsEl, values, allLabel, selectedValue) {
     if (!optionsEl) return;
-    const options = [{ value: 'all', label: allLabel }, ...values.map((value) => ({ value, label: value }))];
+    const normalized = values.map((value) => (
+      value && typeof value === 'object'
+        ? { value: String(value.value ?? value.id ?? value.label ?? ''), label: String(value.label ?? value.name ?? value.value ?? '') }
+        : { value: String(value), label: String(value) }
+    )).filter((option) => option.value && option.label);
+    const options = [{ value: 'all', label: allLabel }, ...normalized];
     optionsEl.innerHTML = options.map((option) => `
-      <button class="home-stock-filter__option${option.value === selectedValue ? ' is-selected' : ''}" type="button" data-value="${safeText(option.value)}">
+      <button class="home-stock-filter__option${option.value === selectedValue ? ' is-selected' : ''}" type="button" data-value="${safeText(option.value)}" data-label="${safeText(option.label)}">
         <span>${safeText(option.label)}</span>
         <i data-feather="check"></i>
       </button>`).join('');
@@ -1680,16 +1687,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function populateStockFilters(items) {
     const currentUser = state.stockFilters.user;
     const currentTag = state.stockFilters.tag;
-    const users = Array.from(new Set(items.map(stockUserName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const users = (state.stockUsers || []).map((user) => ({ value: String(user.id), label: user.name }));
     const tags = Array.from(new Set(items.map(stockTagName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
-    const userValue = users.includes(currentUser) ? currentUser : 'all';
+    const userValue = currentUser === 'all' || users.some((user) => user.value === currentUser) ? currentUser : 'all';
     const tagValue = tags.includes(currentTag) ? currentTag : 'all';
     state.stockFilters.user = userValue;
     state.stockFilters.tag = tagValue;
     if (els.stockUserFilter) els.stockUserFilter.value = userValue;
     if (els.stockTagFilter) els.stockTagFilter.value = tagValue;
-    if (els.stockUserFilterText) els.stockUserFilterText.textContent = userValue === 'all' ? 'All users' : userValue;
+    const selectedUser = (state.stockUsers || []).find((user) => String(user.id) === userValue);
+    if (els.stockUserFilterText) els.stockUserFilterText.textContent = selectedUser?.name || 'All users';
     if (els.stockTagFilterText) els.stockTagFilterText.textContent = tagValue === 'all' ? 'All tags' : tagValue;
     renderStockFilterOptions(els.stockUserFilterOptions, users, 'All users', userValue);
     renderStockFilterOptions(els.stockTagFilterOptions, tags, 'All tags', tagValue);
@@ -1697,9 +1705,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderStockSummary() {
     const filtered = state.stock.filter((item) => {
-      const userOk = state.stockFilters.user === 'all' || stockUserName(item) === state.stockFilters.user;
       const tagOk = state.stockFilters.tag === 'all' || stockTagName(item) === state.stockFilters.tag;
-      return userOk && tagOk;
+      return tagOk;
     });
 
     let totalComponents = 0;
@@ -1783,12 +1790,40 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         event.stopPropagation();
         const value = option.dataset.value || 'all';
+        const label = option.dataset.label || (value === 'all' ? allLabel : value);
         input.value = value;
         state.stockFilters[stateKey] = value;
-        text.textContent = value === 'all' ? allLabel : value;
+        text.textContent = value === 'all' ? allLabel : label;
         options.querySelectorAll('.home-stock-filter__option').forEach((item) => item.classList.toggle('is-selected', item === option));
         closeFilterLists();
-        renderStockSummary();
+        if (stateKey === 'user') {
+          state.stockFilters.tag = 'all';
+          if (els.stockTagFilter) els.stockTagFilter.value = 'all';
+          if (els.stockTagFilterText) els.stockTagFilterText.textContent = 'All tags';
+          if (value === 'all') {
+            state.stock = state.stockDefault.slice();
+            populateStockFilters(state.stock);
+            renderStockSummary();
+          } else {
+            if (els.kpiStockMain) els.kpiStockMain.textContent = '…';
+            if (els.kpiStockCost) els.kpiStockCost.textContent = '…';
+            if (els.kpiStockSub) els.kpiStockSub.textContent = 'Loading user stocktaking';
+            fetchJson(`/api/home/stocktaking-users/${encodeURIComponent(value)}`)
+              .then((payload) => {
+                state.stock = Array.isArray(payload?.items) ? payload.items : [];
+                populateStockFilters(state.stock);
+                renderStockSummary();
+              })
+              .catch((error) => {
+                console.error(error);
+                state.stock = [];
+                populateStockFilters(state.stock);
+                renderStockSummary();
+              });
+          }
+        } else {
+          renderStockSummary();
+        }
       });
     };
 
@@ -1810,9 +1845,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.kpiStockMain) els.kpiStockMain.textContent = '…';
     if (els.kpiStockCost) els.kpiStockCost.textContent = '…';
     if (els.kpiStockSub) els.kpiStockSub.textContent = 'Loading';
-    const list = await fetchJson('/api/stock');
+    const [list, usersPayload] = await Promise.all([
+      fetchJson('/api/stock'),
+      fetchJson('/api/home/stocktaking-users').catch(() => ({ users: [] })),
+    ]);
     const items = Array.isArray(list) ? list : [];
+    state.stockDefault = items.slice();
     state.stock = items;
+    state.stockUsers = Array.isArray(usersPayload?.users) ? usersPayload.users : [];
     populateStockFilters(items);
     renderStockSummary();
   }
