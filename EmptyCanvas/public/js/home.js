@@ -101,6 +101,10 @@ document.addEventListener('DOMContentLoaded', () => {
     ordersChartSubtitle: $('#ordersChartSubtitle'),
     expensesChartSubtitle: $('#expensesChartSubtitle'),
     homeExpenseChartYear: $('#homeExpenseChartYear'),
+    homeExpenseYearControl: $('#homeExpenseYearControl'),
+    homeExpenseYearTrigger: $('#homeExpenseYearTrigger'),
+    homeExpenseYearText: $('#homeExpenseYearText'),
+    homeExpenseYearOptions: $('#homeExpenseYearOptions'),
     homeExpenseMonthlyChart: $('#homeExpenseMonthlyChart'),
     homeExpenseTypesMonth: $('#homeExpenseTypesMonth'),
     homeExpenseTypesChart: $('#homeExpenseTypesChart'),
@@ -1117,7 +1121,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!els.homeExpenseChartYear) return;
     const years = homeExpenseYears(items);
     if (!years.includes(Number(state.expenseAnalytics.year))) state.expenseAnalytics.year = years[0];
-    els.homeExpenseChartYear.innerHTML = years.map((year) => `<option value="${year}"${year === Number(state.expenseAnalytics.year) ? ' selected' : ''}>${year}</option>`).join('');
+    const activeYear = Number(state.expenseAnalytics.year);
+    els.homeExpenseChartYear.value = String(activeYear);
+    if (els.homeExpenseYearText) els.homeExpenseYearText.textContent = String(activeYear);
+    if (els.homeExpenseYearOptions) {
+      els.homeExpenseYearOptions.innerHTML = years.map((year) => `<button type="button" class="home-expense-year-select__option${year === activeYear ? ' is-selected' : ''}" role="option" aria-selected="${year === activeYear ? 'true' : 'false'}" data-expense-year="${year}"><span>${year}</span>${year === activeYear ? '<i data-feather="check"></i>' : ''}</button>`).join('');
+    }
   }
 
   function homeExpenseMonthlyTotals(items, year) {
@@ -1223,10 +1232,37 @@ document.addEventListener('DOMContentLoaded', () => {
   function bindHomeExpenseAnalytics() {
     if (!els.homeExpenseChartYear || els.homeExpenseChartYear.dataset.bound === '1') return;
     els.homeExpenseChartYear.dataset.bound = '1';
-    els.homeExpenseChartYear.addEventListener('change', () => {
-      state.expenseAnalytics.year = Number(els.homeExpenseChartYear.value) || new Date().getFullYear();
+
+    const closeYearMenu = () => {
+      if (!els.homeExpenseYearOptions || !els.homeExpenseYearTrigger) return;
+      els.homeExpenseYearOptions.hidden = true;
+      els.homeExpenseYearTrigger.setAttribute('aria-expanded', 'false');
+      els.homeExpenseYearControl?.classList.remove('is-open');
+    };
+
+    els.homeExpenseYearTrigger?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = !!els.homeExpenseYearOptions?.hidden;
+      if (!els.homeExpenseYearOptions) return;
+      els.homeExpenseYearOptions.hidden = !willOpen;
+      els.homeExpenseYearTrigger.setAttribute('aria-expanded', String(willOpen));
+      els.homeExpenseYearControl?.classList.toggle('is-open', willOpen);
+    });
+
+    els.homeExpenseYearOptions?.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-expense-year]');
+      if (!option) return;
+      state.expenseAnalytics.year = Number(option.dataset.expenseYear) || new Date().getFullYear();
       state.expenseAnalytics.month = '';
+      closeYearMenu();
       renderHomeExpenseAnalytics(state.expenses || []);
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!els.homeExpenseYearControl?.contains(event.target)) closeYearMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeYearMenu();
     });
   }
 
