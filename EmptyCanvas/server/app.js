@@ -30532,6 +30532,94 @@ async function _sbStocktakingForRequest(req) {
   return items.filter((item) => Number(item.quantity) !== 0);
 }
 
+// Home Stocktaking analysis — Users Center members and their assigned Stocktaking columns.
+app.get(
+  "/api/home/stocktaking-users",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled() || !_sbStocktakingEnabled()) {
+        return res.json({ users: [], source: "unavailable" });
+      }
+
+      const [memberRows, stockRows] = await Promise.all([
+        _sbSelectTeamMembersRows(),
+        _sbStocktakingRows(),
+      ]);
+      const sample = (stockRows || [])[0] || {};
+      const users = (memberRows || [])
+        .map((row) => {
+          const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+          const name = _sbString(_sbValueForLabel(row, "Name")) || "Unnamed";
+          const stocktakingColumn = _sbStocktakingText(_sbValueForLabel(row, "School"));
+          const resolvedColumn = stocktakingColumn
+            ? _sbDetectStocktakingQuantityColumn(sample, stocktakingColumn)
+            : "";
+          return {
+            id,
+            name,
+            stocktakingColumn: stocktakingColumn || null,
+            hasStocktakingColumn: Boolean(resolvedColumn),
+          };
+        })
+        .filter((user) => user.id && user.name)
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+      return res.json({ users, source: "supabase" });
+    } catch (error) {
+      console.error("GET /api/home/stocktaking-users error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to load Stocktaking users." });
+    }
+  },
+);
+
+app.get(
+  "/api/home/stocktaking-users/:id",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbTeamMembersEnabled() || !_sbStocktakingEnabled()) {
+        return res.json({ user: null, items: [], source: "unavailable" });
+      }
+
+      const member = await _sbFindTeamMemberById(String(req.params.id || "").trim());
+      if (!member) return res.status(404).json({ error: "User not found." });
+
+      const id = String(_sbGet(member, ["id", "ID"]) ?? "").trim();
+      const name = _sbString(_sbValueForLabel(member, "Name")) || "Unnamed";
+      const stocktakingColumn = _sbStocktakingText(_sbValueForLabel(member, "School"));
+      if (!stocktakingColumn) {
+        return res.json({
+          user: { id, name, stocktakingColumn: null, hasStocktakingColumn: false },
+          items: [],
+          source: "supabase",
+        });
+      }
+
+      const rows = await _sbStocktakingRows();
+      const resolvedColumn = _sbDetectStocktakingQuantityColumn((rows || [])[0] || {}, stocktakingColumn);
+      const items = resolvedColumn
+        ? rows
+            .map((row) => ({ ..._sbSerializeStocktakingRow(row, resolvedColumn), userName: name }))
+            .filter((item) => Number(item.quantity) !== 0)
+        : [];
+
+      return res.json({
+        user: { id, name, stocktakingColumn, hasStocktakingColumn: Boolean(resolvedColumn) },
+        items,
+        source: "supabase",
+      });
+    } catch (error) {
+      console.error("GET /api/home/stocktaking-users/:id error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to load the selected user's Stocktaking analysis." });
+    }
+  },
+);
+
 async function _sbRenderStocktakingPdf(req, res) {
   const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
   if (!schoolName) {
