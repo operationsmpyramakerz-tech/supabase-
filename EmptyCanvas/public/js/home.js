@@ -1093,6 +1093,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${sign}£${shown}`;
   }
 
+  function homeExpenseNiceChartMax(value) {
+    const max = Math.max(0, safeNum(value));
+    if (max <= 0) return 200;
+    const roughStep = max / 4;
+    const magnitude = 10 ** Math.floor(Math.log10(roughStep || 1));
+    const normalized = roughStep / magnitude;
+    const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return Math.max(4 * niceNormalized * magnitude, 4);
+  }
+
   function homeExpenseYears(items) {
     const years = new Set([new Date().getFullYear()]);
     (items || []).forEach((item) => {
@@ -1140,20 +1150,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const totals = homeExpenseMonthlyTotals(items, state.expenseAnalytics.year);
     chooseHomeExpenseMonth(totals);
-    const max = Math.max(1, ...totals);
-    els.homeExpenseMonthlyChart.innerHTML = `<div class="home-expense-bars">${totals.map((total, index) => {
-      const key = `${state.expenseAnalytics.year}-${String(index + 1).padStart(2, '0')}`;
-      const active = key === state.expenseAnalytics.month;
-      const height = total > 0 ? Math.max(8, (total / max) * 100) : 0;
-      return `<button type="button" class="home-expense-month-bar${active ? ' is-active' : ''}" data-home-expense-month="${key}" title="${months[index]} ${state.expenseAnalytics.year}: ${homeExpenseCompactMoney(total)}">
-        <span class="home-expense-month-bar__bubble">${safeText(homeExpenseCompactMoney(total))}</span>
-        <span class="home-expense-month-bar__track"><span class="home-expense-month-bar__fill" style="height:${height.toFixed(2)}%"></span></span>
-        <span class="home-expense-month-bar__label">${months[index]}</span>
-      </button>`;
-    }).join('')}</div>`;
+    const chartMax = homeExpenseNiceChartMax(Math.max(0, ...totals));
+    const axisValues = [chartMax, chartMax * 0.75, chartMax * 0.5, chartMax * 0.25, 0];
+
+    els.homeExpenseMonthlyChart.innerHTML = `<div class="home-expense-chart-shell" role="group" aria-label="Monthly expense bar chart for ${safeText(state.expenseAnalytics.year)}">
+      <div class="home-expense-chart-y-axis" aria-hidden="true">${axisValues.map((value) => `<span>${safeText(homeExpenseCompactMoney(value))}</span>`).join('')}</div>
+      <div class="home-expense-chart-stage">
+        <div class="home-expense-chart-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="home-expense-bars">${totals.map((total, index) => {
+          const key = `${state.expenseAnalytics.year}-${String(index + 1).padStart(2, '0')}`;
+          const active = key === state.expenseAnalytics.month;
+          const height = chartMax ? Math.max(0, Math.min(100, (safeNum(total) / chartMax) * 100)) : 0;
+          return `<button type="button" class="home-expense-month-bar${active ? ' is-active' : ''}${safeNum(total) > 0 ? ' has-data' : ' is-empty'}" data-home-expense-month="${key}" title="${months[index]} ${state.expenseAnalytics.year}: ${homeExpenseCompactMoney(total)}">
+            <span class="home-expense-month-bar__bubble">${safeText(homeExpenseCompactMoney(total))}</span>
+            <span class="home-expense-month-bar__track"><span class="home-expense-month-bar__fill" style="height:${height.toFixed(2)}%"></span></span>
+            <span class="home-expense-month-bar__label">${months[index]}</span>
+          </button>`;
+        }).join('')}</div>
+      </div>
+    </div>`;
+
     els.homeExpenseMonthlyChart.querySelectorAll('[data-home-expense-month]').forEach((button) => button.addEventListener('click', () => {
       state.expenseAnalytics.month = button.dataset.homeExpenseMonth;
-      renderHomeExpenseAnalytics(items);
+      renderHomeExpenseMonthlyChart(items);
     }));
   }
 
