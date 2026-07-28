@@ -3071,62 +3071,10 @@ async function _sbSelectTeamMembersRows() {
 }
 
 async function _sbFindTeamMemberByName(name) {
-  const rawName = String(name || "").trim();
-  const wanted = norm(rawName);
+  const wanted = norm(String(name || ""));
   if (!wanted) return null;
-
-  // Login must remain recoverable after database imports or environment changes.
-  // Some deployments still have an old SUPABASE_TEAM_MEMBERS_TABLE value even
-  // though the restored table is public.team_members. Try the configured table
-  // first, then the canonical table name used by the current schema.
-  const configuredTable = _sbTeamMembersTable();
-  const tableCandidates = [...new Set([
-    configuredTable,
-    "team_members",
-    "Team_Members",
-    "team-members",
-  ].filter(Boolean))];
-
-  let lastError = null;
-
-  for (const table of tableCandidates) {
-    // Prefer a small server-side filtered query. The current exported schema
-    // uses the lowercase `name` column.
-    try {
-      const rows = await supabaseDb.select(table, {
-        select: "*",
-        name: `ilike.${rawName}`,
-        limit: 20,
-      });
-      const exact = (Array.isArray(rows) ? rows : []).find(
-        (row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted
-      );
-      if (exact) return exact;
-    } catch (error) {
-      lastError = error;
-    }
-
-    // Fallback for legacy/imported schemas where filtering by `name` is not
-    // available or the column casing differs.
-    try {
-      const rows = await supabaseDb.selectAll(table, { limit: 5000 });
-      const exact = (Array.isArray(rows) ? rows : []).find(
-        (row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted
-      );
-      if (exact) return exact;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastError) {
-    const err = new Error(`Unable to read the Supabase team members table: ${lastError.message || lastError}`);
-    err.code = "SUPABASE_TEAM_MEMBERS_READ_FAILED";
-    err.cause = lastError;
-    throw err;
-  }
-
-  return null;
+  const rows = await _sbSelectTeamMembersRows();
+  return (rows || []).find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted) || null;
 }
 
 async function _sbFindTeamMemberById(id) {
@@ -11246,24 +11194,12 @@ app.post("/api/login", async (req, res) => {
   const providedUsername = String(username || "").trim();
   const providedPassword = String(password || "").trim();
 
-  if (!_sbTeamMembersEnabled()) {
-    return res.status(503).json({
-      error: "Supabase login is not configured on this deployment. Check SUPABASE_URL and the service-role key environment variable, then redeploy.",
-      code: "SUPABASE_NOT_CONFIGURED",
-    });
-  }
-
   if (_sbTeamMembersEnabled()) {
     try {
       const row = await _sbFindTeamMemberByName(providedUsername);
       if (row) {
         const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
-        const activeValue = _sbGet(row, ["is_active", "Is Active", "active", "enabled"]);
-        const isInactive = activeValue === false || /^(false|0|no|inactive|disabled)$/i.test(String(activeValue ?? "").trim());
-        if (isInactive) {
-          return res.status(403).json({ error: "This account is inactive.", code: "ACCOUNT_INACTIVE" });
-        }
-        if (String(storedPassword) === providedPassword) {
+        if (storedPassword && String(storedPassword) === providedPassword) {
           const { accountPayload, allowedNormalized, allowedUI, pageAccessRows } = await _sbAccountPayloadWithAccess(row, providedUsername);
 
           req.session.authenticated = true;
@@ -11280,32 +11216,13 @@ app.post("/api/login", async (req, res) => {
             return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase", redirect: "/home" });
           });
         }
-        return res.status(401).json({ error: "Invalid username or password", code: "SUPABASE_PASSWORD_MISMATCH" });
+        return res.status(401).json({ error: "incorrect password" });
       }
-      return res.status(401).json({
-        error: "Invalid username or password",
-        code: "SUPABASE_USER_NOT_FOUND",
-        table: _sbTeamMembersTable(),
-      });
     } catch (error) {
       console.error("Supabase login error:", error?.details || error);
-      // Do not hide a Supabase connection/table failure behind a misleading
-      // "invalid username" response from the old Notion fallback.
-      if (error?.code === "SUPABASE_TEAM_MEMBERS_READ_FAILED" || error?.code === "SUPABASE_NOT_CONFIGURED") {
-        return res.status(503).json({
-          error: "The users database could not be read. Check the Supabase URL/key and team_members table configuration.",
-          code: error.code,
-        });
-      }
     }
   }
 
-  return res.status(500).json({
-    error: "Supabase login did not complete.",
-    code: "SUPABASE_LOGIN_UNEXPECTED_FALLTHROUGH",
-  });
-
-  /* Legacy Notion login retained below for reference only. */
   if (!teamMembersDatabaseId) {
     return res
       .status(500)

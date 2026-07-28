@@ -2,32 +2,22 @@
 // Lightweight Supabase REST helper for Vercel/Express backend.
 // Keeps the Service Role / Secret key server-only and avoids adding a new dependency.
 
-function cleanEnvValue(raw) {
-  const value = String(raw || '').trim();
-  if ((value.startsWith('\"') && value.endsWith('\"')) || (value.startsWith("'") && value.endsWith("'"))) {
-    return value.slice(1, -1).trim();
-  }
-  return value;
-}
-
 function cleanBaseUrl(raw) {
-  return cleanEnvValue(raw)
+  return String(raw || '')
+    .trim()
     .replace(/\/+$/, '')
     .replace(/\/rest\/v1\/?$/i, '');
 }
 
 function getConfig() {
   const url = cleanBaseUrl(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '');
-  const key = cleanEnvValue(
+  const key = String(
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE ||
     process.env.SUPABASE_SECRET_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     ''
-  );
+  ).trim();
   const teamMembersTable = String(process.env.SUPABASE_TEAM_MEMBERS_TABLE || 'team_members').trim() || 'team_members';
   const ordersTable = String(process.env.SUPABASE_ORDERS_TABLE || 'orders').trim() || 'orders';
   const expensesTable = String(process.env.SUPABASE_EXPENSES_TABLE || 'expenses').trim() || 'expenses';
@@ -35,8 +25,10 @@ function getConfig() {
   const stocktakingTable = String(process.env.SUPABASE_STOCKTAKING_TABLE || 'stocktaking').trim() || 'stocktaking';
   const b2bSchoolsTable = String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
   const tasksTable = String(process.env.SUPABASE_TASKS_TABLE || 'tasks').trim() || 'tasks';
+  const messagesChatsTable = String(process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
+  const messagesTable = String(process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
   const storageBucket = String(process.env.SUPABASE_STORAGE_BUCKET || process.env.SUPABASE_BUCKET || 'operations-files').trim() || 'operations-files';
-  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable, storageBucket };
+  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable, messagesChatsTable, messagesTable, storageBucket };
 }
 
 function isConfigured() {
