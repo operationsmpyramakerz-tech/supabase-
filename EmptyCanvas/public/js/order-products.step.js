@@ -1649,15 +1649,18 @@
         const qtyMetric = document.createElement('div');
         qtyMetric.className = 'cart-card-metric cart-card-metric--qty';
         qtyMetric.innerHTML = '<div class="cart-card-metric-label">Qty</div>';
-        qtyMetric.appendChild(qtyCtl);
 
-        const uomMetric = document.createElement('div');
-        uomMetric.className = 'cart-card-metric cart-card-metric--uom';
+        const qtyUnitRow = document.createElement('div');
+        qtyUnitRow.className = 'cart-card-qty-unit-row';
+        qtyUnitRow.appendChild(qtyCtl);
+
         const measurementUnit = String(c?.unit || '').trim() || 'Unit';
-        uomMetric.innerHTML = `
-          <div class="cart-card-metric-label">Measurement Unit</div>
-          <div class="cart-card-metric-value" title="${escapeHtml(measurementUnit)}">${escapeHtml(measurementUnit)}</div>
-        `;
+        const unitBadge = document.createElement('div');
+        unitBadge.className = 'cart-card-unit-badge';
+        unitBadge.title = measurementUnit;
+        unitBadge.textContent = measurementUnit;
+        qtyUnitRow.appendChild(unitBadge);
+        qtyMetric.appendChild(qtyUnitRow);
 
         const unitMetric = document.createElement('div');
         unitMetric.className = 'cart-card-metric cart-card-metric--unit';
@@ -1674,7 +1677,6 @@
         `;
 
         metrics.appendChild(qtyMetric);
-        metrics.appendChild(uomMetric);
         metrics.appendChild(unitMetric);
         metrics.appendChild(totalMetric);
 
