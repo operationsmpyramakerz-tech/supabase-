@@ -1400,6 +1400,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { names:['Task Management','My Tasks'], path:'/task-management/my-tasks', icon:'git-branch', color:'navy', description:'My tasks, delegated tasks, and workflows' },
     { names:['KPIs'], path:'/kpis', icon:'bar-chart-2', color:'green', description:'Standards, reviews, and performance metrics' },
     { names:['Events','Event Calendar'], path:'/events/calendar', icon:'calendar', color:'orange', description:'Events, requests, and calendar planning' },
+    { names:['Messages'], path:'/messages', icon:'message-square', color:'navy', description:'Team conversations and comments' },
     { names:['User Access'], path:'/user-access', icon:'shield', color:'gray', description:'Page access and permission management' },
     { names:['Proposals'], path:'/proposals', icon:'file-text', color:'green', description:'Create and review proposals' },
     { names:['Account'], path:'/account', icon:'user', color:'gray', description:'Profile, position, and account settings', always:true },

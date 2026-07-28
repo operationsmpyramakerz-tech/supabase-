@@ -842,6 +842,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const APP_API_CACHE_RULES = [
     { name: 'account', test: (url) => url.pathname === '/api/account', ttlMs: 5 * 60 * 1000 },
     { name: 'notifications', test: (url) => url.pathname === '/api/notifications', ttlMs: 2 * 1000 },
+    { name: 'messages-chats', test: (url) => url.pathname === '/api/messages/chats', ttlMs: 15 * 1000 },
+    { name: 'messages-team-members', test: (url) => url.pathname === '/api/messages/team-members', ttlMs: 2 * 60 * 1000 },
+    { name: 'messages-comments', test: (url) => /^\/api\/messages\/chats\/[^/]+\/comments$/.test(url.pathname), ttlMs: 8 * 1000 },
     { name: 'b2b-schools', test: (url) => url.pathname === '/api/b2b/schools', ttlMs: 10 * 60 * 1000 },
     { name: 'b2b-school', test: (url) => /^\/api\/b2b\/schools\/[^/]+$/.test(url.pathname), ttlMs: 5 * 60 * 1000 },
     { name: 'b2b-school-stock', test: (url) => /^\/api\/b2b\/schools\/[^/]+\/stock$/.test(url.pathname), ttlMs: 2 * 60 * 1000 },
@@ -2370,6 +2373,10 @@ if (document.querySelector('.sidebar')) {
     'database': 'a[href="/backup"]',
     'system database': 'a[href="/backup"]',
     'system backup': 'a[href="/backup"]',
+    'messages': 'a[href="/messages"]',
+    'emails': 'a[href="/messages"]',
+    'email': 'a[href="/messages"]',
+    'mail': 'a[href="/messages"]',
 
     'requested orders': 'a[href="/orders/requested"]',
     'schools requested orders': 'a[href="/orders/requested"]',
@@ -3064,6 +3071,15 @@ if (document.querySelector('.sidebar')) {
       }
     } catch {}
 
+    // Emails are exposed from the header shortcut only, not from the sidebar.
+    try {
+      document.querySelectorAll('a[href="/messages"], a[href="/emails"]').forEach((link) => {
+        const li = link.closest('li');
+        if (li && li.closest('.sidebar')) {
+          try { li.remove(); } catch { hideEl(li); }
+        }
+      });
+    } catch {}
 
     // History and Database are exposed from the user profile menu only, not from the sidebar.
     try { removeSidebarSystemLinks(); } catch {}
@@ -3203,6 +3219,7 @@ if (document.querySelector('.sidebar')) {
     if (cachedAllowed.length) {
       try { cacheAllowedPages(cachedAllowed); } catch {}
       try { applyAllowedPages(cachedAllowed); } catch {}
+      try { window.__opsApplyMailAccess?.(cachedAllowed, window.__opsUserInfo || null); } catch {}
       document.body.classList.remove('permissions-loading');
       document.body.classList.add('permissions-ready');
       return true;
@@ -3247,6 +3264,15 @@ if (document.querySelector('.sidebar')) {
     } catch {}
   }
 
+  function removeSidebarMailLinks(){
+    try {
+      document.querySelectorAll('.sidebar a[href="/messages"], .sidebar a[href="/emails"]').forEach((link) => {
+        const li = link.closest('li');
+        if (li) li.remove();
+        else link.remove();
+      });
+    } catch {}
+  }
 
   function removeSidebarSystemLinks(){
     try {
@@ -3380,7 +3406,7 @@ if (document.querySelector('.sidebar')) {
       // letting them jump above the requested order. System/mail links are removed elsewhere.
       allLinks.forEach((link) => {
         const li = link.closest('li');
-        if (li && !used.has(li) && !link.matches('a[href="/history"], a[href="/backup"]')) {
+        if (li && !used.has(li) && !link.matches('a[href="/messages"], a[href="/emails"], a[href="/history"], a[href="/backup"]')) {
           list.appendChild(li);
           used.add(li);
         }
@@ -3578,7 +3604,8 @@ if (document.querySelector('.sidebar')) {
 
   // Rename sidebar labels (display-only) without changing routes
   function renameSidebarLabels(){
-    // History and Database are intentionally not displayed in the sidebar.
+    // Emails, History, and Database are intentionally not displayed in the sidebar.
+    try { removeSidebarMailLinks(); } catch {}
     try { removeSidebarSystemLinks(); } catch {}
 
     // Operations Orders (was: Operations Requested Orders)
@@ -3696,6 +3723,7 @@ if (document.querySelector('.sidebar')) {
         // feel instant after the first load.
         schedulePrefetchForAllowedPages(resolvedAllowedPages);
 
+        try { window.__opsApplyMailAccess?.(resolvedAllowedPages, data); } catch {}
 
         // ✅ بعد ما طبقنا الصلاحيات، نكشف اللي مسموح بس (بدون فلاش)
         document.body.classList.remove('permissions-loading');
@@ -3909,6 +3937,7 @@ if (document.querySelector('.sidebar')) {
   bindSidebarScrollPersistence();
   ensureOrderedSidebarLinks();
   normalizeKitsSidebarIcon();
+  removeSidebarMailLinks();
   removeSidebarSystemLinks();
   reorderSidebarNav();
 
@@ -4305,6 +4334,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   try {
+    initMessagesShortcutWidget();
   } catch (e) {
     console.warn("[messages-shortcut] init failed", e);
   }
@@ -4877,6 +4907,155 @@ function initFloatingSearchWidget() {
 // --------------------------------------------
 // User Menu (avatar → drop window)
 // --------------------------------------------
+
+// --------------------------------------------
+// Emails shortcut (icon next to notifications)
+// --------------------------------------------
+
+const OPS_MAIL_ALLOWED_ALIASES = new Set(['mail', 'email', 'emails', 'messages', 'message', 'massage', '/messages', '/emails', 'messages chats', 'team email']);
+function opsNormalizeAllowedPagesForMail(allowed) {
+  const values = Array.isArray(allowed) ? allowed : [];
+  const set = new Set();
+  values.forEach((value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    set.add(lower);
+    set.add(lower.replace(/\/+$/, ''));
+    if (!lower.startsWith('/')) set.add('/' + lower.replace(/^\/+/, ''));
+    set.add(lower.replace(/[^a-z0-9]/g, ''));
+  });
+  return set;
+}
+function opsUserHasMailAccess(allowed) {
+  const set = opsNormalizeAllowedPagesForMail(allowed);
+  return Array.from(OPS_MAIL_ALLOWED_ALIASES).some((key) => set.has(key) || set.has(String(key).replace(/[^a-z0-9]/g, '')));
+}
+function opsReadMailAllowedFromCache() {
+  try {
+    const raw = sessionStorage.getItem('allowedPages');
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function opsReadEmailReadStateKey(account = null) {
+  const source = account || window.__opsUserInfo || {};
+  const email = String(source.email || '').trim().toLowerCase();
+  const name = String(source.name || localStorage.getItem('username') || '').trim().toLowerCase();
+  return `operationsHub.emails.readState.${email || name || 'anonymous'}`;
+}
+function opsChatTimeValue(value) {
+  const time = Date.parse(value || '');
+  return Number.isFinite(time) ? time : 0;
+}
+async function opsUpdateMailUnreadDot() {
+  const btn = document.getElementById('messagesShortcutBtn');
+  if (!btn || btn.hidden || btn.style.display === 'none') return;
+  if (!opsMailPollAllowed()) return;
+  window.__opsMailUnreadInFlight = true;
+  try {
+    const response = await fetch('/api/messages/chats?limit=80', { credentials: 'include', cache: 'no-store' });
+    if (!response.ok) throw new Error('mail unread fetch failed');
+    const data = await response.json().catch(() => ({}));
+    const chats = Array.isArray(data.chats) ? data.chats : [];
+    let readState = {};
+    try { readState = JSON.parse(localStorage.getItem(opsReadEmailReadStateKey()) || '{}') || {}; } catch { readState = {}; }
+    const unread = chats.filter((chat) => {
+      const id = String(chat?.id || '');
+      if (!id) return false;
+      const count = Number(chat?.commentsCount || 0);
+      if (!count) return false;
+      const last = opsChatTimeValue(chat?.lastMessageTime || chat?.lastEditedTime || chat?.createdTime);
+      const read = opsChatTimeValue(readState[id]);
+      return last > read;
+    }).length;
+    btn.classList.toggle('has-unread', unread > 0);
+    btn.setAttribute('data-unread-count', unread > 99 ? '99+' : String(unread || ''));
+    btn.setAttribute('aria-label', unread > 0 ? `Emails, ${unread} unread` : 'Emails');
+  } catch {
+    btn.classList.remove('has-unread');
+    btn.removeAttribute('data-unread-count');
+  } finally {
+    window.__opsMailUnreadInFlight = false;
+  }
+}
+function opsMailPollAllowed() {
+  try {
+    if (document.visibilityState === 'hidden') return false;
+    if (window.__opsMailUnreadInFlight) return false;
+  } catch {}
+  return true;
+}
+
+function opsApplyMailShortcutAccess(allowed, account = null) {
+  const btn = document.getElementById('messagesShortcutBtn');
+  if (!btn) return;
+  if (account && typeof account === 'object') {
+    try { window.__opsUserInfo = Object.assign({}, window.__opsUserInfo || {}, { email: account.email || '', name: account.name || account.username || window.__opsUserInfo?.name || '' }); } catch {}
+  }
+  const ok = opsUserHasMailAccess(allowed);
+  btn.hidden = !ok;
+  if (ok) {
+    btn.style.removeProperty('display');
+    opsUpdateMailUnreadDot();
+    if (!window.__opsMailUnreadTimer) {
+      window.__opsMailUnreadTimer = window.setInterval(opsUpdateMailUnreadDot, 30000);
+    }
+  } else {
+    btn.style.setProperty('display', 'none', 'important');
+    btn.classList.remove('has-unread');
+  }
+}
+window.__opsApplyMailAccess = opsApplyMailShortcutAccess;
+window.__opsRefreshMailUnread = opsUpdateMailUnreadDot;
+
+function initMessagesShortcutWidget() {
+  if (document.getElementById('messagesShortcutBtn')) return;
+
+  const mount =
+    document.querySelector('.main-header .header-row1 .right') ||
+    document.querySelector('.main-header .topbar-right') ||
+    document.querySelector('.main-header .header-row1') ||
+    document.querySelector('.tasks-v2-actions') ||
+    null;
+
+  if (!mount) return;
+
+  const btn = document.createElement('a');
+  btn.id = 'messagesShortcutBtn';
+  btn.className = 'header-message-btn';
+  btn.href = '/messages';
+  btn.hidden = true;
+  btn.setAttribute('aria-label', 'Emails');
+  btn.setAttribute('title', 'Emails');
+  btn.innerHTML = `<i data-feather="mail"></i><span class="header-message-unread-dot" aria-hidden="true"></span>`;
+
+  const searchBtn = mount.querySelector('#searchIconBtn, #headerSearchBtn, .search-icon-btn');
+  const notifWrap = mount.querySelector('.notif-wrap');
+  const userEl = mount.querySelector('a.header-user, a.account-mini');
+
+  if (searchBtn && searchBtn.parentElement === mount) {
+    if (searchBtn.nextSibling) mount.insertBefore(btn, searchBtn.nextSibling);
+    else mount.appendChild(btn);
+  } else if (notifWrap) {
+    mount.insertBefore(btn, notifWrap);
+  } else if (userEl) {
+    mount.insertBefore(btn, userEl);
+  } else {
+    mount.appendChild(btn);
+  }
+
+  try {
+    const currentPath = String(window.location?.pathname || '').replace(/\/+$/, '') || '/';
+    if (currentPath === '/messages') btn.classList.add('is-active');
+  } catch {}
+
+  if (window.feather) {
+    try { window.feather.replace(); } catch {}
+  }
+
+  try { opsApplyMailShortcutAccess(opsReadMailAllowedFromCache(), window.__opsUserInfo || null); } catch {}
+}
 
 function initUserMenuWidget() {
   const mount =
@@ -6471,12 +6650,17 @@ function bindOpsShellFrameNavigation(frameDoc) {
 function shouldSkipOpsPersistentShellHostForCurrentPage() {
   try {
     const pathname = new URL(window.location.href).pathname.replace(/\/+$/, '') || '/';
+    if (pathname === '/messages' || pathname === '/emails') return true;
     // Direct desktop loads of these pages stay in normal-page mode. Their legacy
     // layout CSS can otherwise force a hidden page visible beneath the iframe.
     if (pathname === '/expenses' || pathname === '/expenses/users') return true;
     if (pathname === '/proposals' || pathname === '/kits' || pathname === '/b2b') return true;
   } catch {}
 
+  try {
+    const body = document.body;
+    if (body?.classList?.contains('emails-page') || body?.classList?.contains('email-inbox-redesign')) return true;
+  } catch {}
 
   return false;
 }
@@ -6554,6 +6738,10 @@ function initOpsPersistentShellHost() {
   // Fresh API/cache bypass is still handled by pageForcesFreshApiRequests(),
   // so added/removed pages and fresh data continue to update correctly.
 
+  // The Emails page already has its own full layout and mobile dock.
+  // Creating a persistent iframe shell on a direct /messages refresh makes
+  // the page render inside itself, so we intentionally keep /messages as a
+  // normal page host and only use shell-embedded mode when another page loads it.
   if (shouldSkipOpsPersistentShellHostForCurrentPage()) {
     try {
       document.body.classList.remove('page-shell-host');
