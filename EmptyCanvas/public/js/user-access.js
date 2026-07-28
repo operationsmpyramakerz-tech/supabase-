@@ -296,10 +296,6 @@
             <div class="ua-meta-line" title="${escapeHTML(email)}"><i data-feather="mail"></i><span>${escapeHTML(email)}</span></div>
           </div>
           <div class="ua-member-card__actions">
-            <button type="button" class="ua-btn ua-btn--light" data-action="message" data-member-id="${escapeHTML(member.id)}">
-              <i data-feather="mail"></i>
-              <span>Email</span>
-            </button>
             <button type="button" class="ua-btn ua-btn--dark" data-action="edit" data-member-id="${escapeHTML(member.id)}">
               <i data-feather="edit-3"></i>
               <span>Edit</span>
@@ -1980,51 +1976,6 @@
     setTimeout(() => els.foldersPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 20);
   }
 
-  function readAllowedPagesFromCache() {
-    try {
-      const raw = sessionStorage.getItem('allowedPages') || sessionStorage.getItem('ops.orders.allowedPages') || '[]';
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  async function currentUserHasMailAccess() {
-    const canCheck = typeof window.opsUserHasMailAccess === 'function';
-    const cached = readAllowedPagesFromCache();
-    if (cached.length) return canCheck ? window.opsUserHasMailAccess(cached) : cached.some((p) => /^(mail|email|emails|messages)$/i.test(String(p || '').trim()));
-    try {
-      const res = await fetch('/api/account', { credentials: 'same-origin', cache: 'no-store' });
-      const data = await res.json().catch(() => ({}));
-      const allowed = Array.isArray(data?.allowedPages) ? data.allowedPages : [];
-      if (allowed.length) {
-        try { sessionStorage.setItem('allowedPages', JSON.stringify(allowed)); } catch {}
-      }
-      return canCheck ? window.opsUserHasMailAccess(allowed) : allowed.some((p) => /^(mail|email|emails|messages)$/i.test(String(p || '').trim()));
-    } catch {
-      return false;
-    }
-  }
-
-  async function handleMessage(memberId) {
-    const id = String(memberId || '').trim();
-    const member = state.membersById.get(id);
-    const allowed = await currentUserHasMailAccess();
-    if (!allowed) {
-      openInfoDialog({
-        title: 'No Email Access',
-        message: 'You do not have access on the email page, please refer to admin.',
-        buttonLabel: 'OK',
-      });
-      return;
-    }
-    const url = new URL('/messages', window.location.origin);
-    if (id) url.searchParams.set('compose', id);
-    if (member?.name) url.searchParams.set('toName', member.name);
-    window.location.href = url.toString();
-  }
-
   async function loadMembers({ force = false, keepDepartment = false } = {}) {
     const requestedDepartment = keepDepartment ? state.activeDepartmentId : readDepartmentFromUrl();
     state.loading = true;
@@ -2968,7 +2919,6 @@
       if (action === 'toggle-member-menu') return toggleMemberMenu(id);
       closeMemberMenus();
       if (action === 'edit') runAdminProtectedAction(id, 'edit');
-      if (action === 'message') handleMessage(id);
       if (action === 'move-member') runAdminProtectedAction(id, 'move');
       if (action === 'delete-member') runAdminProtectedAction(id, 'delete-member');
     });

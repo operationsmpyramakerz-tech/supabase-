@@ -1400,7 +1400,6 @@ document.addEventListener('DOMContentLoaded', () => {
     { names:['Task Management','My Tasks'], path:'/task-management/my-tasks', icon:'git-branch', color:'navy', description:'My tasks, delegated tasks, and workflows' },
     { names:['KPIs'], path:'/kpis', icon:'bar-chart-2', color:'green', description:'Standards, reviews, and performance metrics' },
     { names:['Events','Event Calendar'], path:'/events/calendar', icon:'calendar', color:'orange', description:'Events, requests, and calendar planning' },
-    { names:['Messages'], path:'/messages', icon:'message-square', color:'navy', description:'Team conversations and comments' },
     { names:['User Access'], path:'/user-access', icon:'shield', color:'gray', description:'Page access and permission management' },
     { names:['Proposals'], path:'/proposals', icon:'file-text', color:'green', description:'Create and review proposals' },
     { names:['Account'], path:'/account', icon:'user', color:'gray', description:'Profile, position, and account settings', always:true },
@@ -1705,54 +1704,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderModules();
 
     return { canTasks, canOrders, canRequested, canMaintenance, canReview, canStock, canExpenses };
-  }
-
-  async function loadTasks() {
-    // KPI placeholders
-    setKpi(els.kpiTasksMain, els.kpiTasksSub, '…', 'Loading');
-    if (els.tasksList) renderEmpty(els.tasksList, 'Loading…');
-
-    const data = await fetchJson('/api/tasks?scope=mine');
-    const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
-    state.tasks = tasks;
-
-    const today = toYMD(new Date());
-    const open = tasks.filter((t) => !isDoneStatus(optionText(t.status)));
-    const dueToday = open.filter((t) => t.dueDate && toYMD(t.dueDate) === today);
-    const overdue = open.filter((t) => t.dueDate && toYMD(t.dueDate) < today);
-    const high = open.filter((t) => /(high|urgent)/.test(norm(optionText(t.priority))));
-
-    const avgCompletion = (() => {
-      const vals = open
-        .map((t) => (Number.isFinite(Number(t.completion)) ? Number(t.completion) : null))
-        .filter((n) => typeof n === 'number');
-      if (!vals.length) return null;
-      return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-    })();
-
-    setKpi(
-      els.kpiTasksMain,
-      els.kpiTasksSub,
-      `${dueToday.length} due today`,
-      `Overdue: ${overdue.length} • High: ${high.length}${avgCompletion !== null ? ` • Avg: ${avgCompletion}%` : ''}`,
-    );
-
-    if (els.tasksSubtitle) {
-      els.tasksSubtitle.textContent = `${open.length} open tasks`;
-    }
-
-    // Next tasks list = open tasks sorted by dueDate then createdTime
-    const next = open
-      .slice()
-      .sort((a, b) => {
-        const ad = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY;
-        const bd = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
-        if (ad !== bd) return ad - bd;
-        return new Date(b.createdTime) - new Date(a.createdTime);
-      });
-
-    renderTasksList(next);
-    renderTasksChart(tasks);
   }
 
   async function loadOrders() {
@@ -2351,11 +2302,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setUpdatedNow();
 
       const jobs = [];
-      if (canTasks) jobs.push(loadTasks().catch((e) => {
-        console.error(e);
-        setKpi(els.kpiTasksMain, els.kpiTasksSub, '—', 'Failed to load');
-        renderEmpty(els.tasksList, 'Failed to load tasks');
-      }));
 
       if (canOrders) jobs.push(loadOrders().catch((e) => {
         console.error(e);
