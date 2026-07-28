@@ -1735,3 +1735,21 @@ body.products-page .products-grid.is-empty{
   body.products-page .products-tag-option>svg{ width:15px; height:15px; }
   .products-group-empty{ min-height:100px; padding:18px; }
 }
+
+/* 2026-07-28: product units selector and card badge */
+.products-unit-field{position:relative}
+.products-modern-select__option--add{margin-top:5px;border-top:1px solid rgba(15,23,42,.07);border-radius:10px;color:#c45a12}
+.products-modern-select__option--add span{display:flex;align-items:center;gap:8px}
+.products-modern-select__option--add svg{width:17px;height:17px}
+.products-unit-add{margin-top:8px;padding:8px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;border:1px solid rgba(237,138,40,.2);border-radius:15px;background:#fff9f2}
+.products-unit-add[hidden]{display:none!important}
+.products-unit-add input{width:100%;min-height:42px;padding:0 12px;border:1px solid #d9dde5;border-radius:11px;background:#fff;color:#1d2430;font:inherit;font-size:13px;font-weight:750;outline:none}
+.products-unit-add input:focus{border-color:#ed8a28;box-shadow:0 0 0 3px rgba(237,138,40,.12)}
+.products-unit-add button{min-height:42px;padding:0 14px;border:0;border-radius:11px;background:#101827;color:#fff;display:inline-flex;align-items:center;gap:7px;font-weight:850;cursor:pointer}
+.products-unit-add button:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.15)}
+.products-unit-add button:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none}
+.products-unit-add button svg{width:16px;height:16px}
+.product-card__price-wrap{min-width:0;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.product-card__unit{min-height:25px;padding:4px 8px;border:1px solid rgba(196,90,18,.13);border-radius:999px;background:#fff4e8;color:#a7460c;display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:900;line-height:1;white-space:nowrap}
+.product-card__unit svg{width:12px;height:12px;stroke-width:2.4}
+@media(max-width:640px){.products-unit-add{grid-template-columns:1fr}.products-unit-add button{justify-content:center}.product-card__price-wrap{gap:5px}.product-card__unit{font-size:.62rem;padding:4px 6px}}
