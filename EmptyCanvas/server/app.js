@@ -3071,10 +3071,62 @@ async function _sbSelectTeamMembersRows() {
 }
 
 async function _sbFindTeamMemberByName(name) {
-  const wanted = norm(String(name || ""));
+  const rawName = String(name || "").trim();
+  const wanted = norm(rawName);
   if (!wanted) return null;
-  const rows = await _sbSelectTeamMembersRows();
-  return (rows || []).find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted) || null;
+
+  // Login must remain recoverable after database imports or environment changes.
+  // Some deployments still have an old SUPABASE_TEAM_MEMBERS_TABLE value even
+  // though the restored table is public.team_members. Try the configured table
+  // first, then the canonical table name used by the current schema.
+  const configuredTable = _sbTeamMembersTable();
+  const tableCandidates = [...new Set([
+    configuredTable,
+    "team_members",
+    "Team_Members",
+    "team-members",
+  ].filter(Boolean))];
+
+  let lastError = null;
+
+  for (const table of tableCandidates) {
+    // Prefer a small server-side filtered query. The current exported schema
+    // uses the lowercase `name` column.
+    try {
+      const rows = await supabaseDb.select(table, {
+        select: "*",
+        name: `ilike.${rawName}`,
+        limit: 20,
+      });
+      const exact = (Array.isArray(rows) ? rows : []).find(
+        (row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted
+      );
+      if (exact) return exact;
+    } catch (error) {
+      lastError = error;
+    }
+
+    // Fallback for legacy/imported schemas where filtering by `name` is not
+    // available or the column casing differs.
+    try {
+      const rows = await supabaseDb.selectAll(table, { limit: 5000 });
+      const exact = (Array.isArray(rows) ? rows : []).find(
+        (row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted
+      );
+      if (exact) return exact;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) {
+    const err = new Error(`Unable to read the Supabase team members table: ${lastError.message || lastError}`);
+    err.code = "SUPABASE_TEAM_MEMBERS_READ_FAILED";
+    err.cause = lastError;
+    throw err;
+  }
+
+  return null;
 }
 
 async function _sbFindTeamMemberById(id) {
@@ -11220,6 +11272,14 @@ app.post("/api/login", async (req, res) => {
       }
     } catch (error) {
       console.error("Supabase login error:", error?.details || error);
+      // Do not hide a Supabase connection/table failure behind a misleading
+      // "invalid username" response from the old Notion fallback.
+      if (error?.code === "SUPABASE_TEAM_MEMBERS_READ_FAILED" || error?.code === "SUPABASE_NOT_CONFIGURED") {
+        return res.status(503).json({
+          error: "The users database could not be read. Check the Supabase URL/key and team_members table configuration.",
+          code: error.code,
+        });
+      }
     }
   }
 
