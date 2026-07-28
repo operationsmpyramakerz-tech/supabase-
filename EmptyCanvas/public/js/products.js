@@ -16,6 +16,8 @@
     editingTag: '',
     tagModalMode: 'edit',
     tagCatalog: [],
+    unitCatalog: ['Piece', 'Pack', 'Kilogram', 'Metre', 'Inch'],
+    savingUnit: false,
     view: 'catalog',
     proposals: [],
     proposalsLoading: false,
@@ -117,6 +119,7 @@
       product?.name,
       product?.displayId,
       product?.unitPrice,
+      product?.unit,
       product?.url,
       ...(Array.isArray(product?.tags) ? product.tags : []),
     ].join(' ').toLowerCase();
@@ -226,6 +229,53 @@
     hydrateIcons(els.tagSelectMenu);
   }
 
+  function closeProductUnitSelect() {
+    if (els.unitSelectMenu) els.unitSelectMenu.hidden = true;
+    if (els.unitSelectButton) els.unitSelectButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function renderProductUnitSelect() {
+    if (!els.unitInput || !els.unitSelectMenu || !els.unitSelectLabel) return;
+    const units = Array.from(new Set((state.unitCatalog || []).map((unit) => String(unit || '').trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b));
+    const current = String(els.unitInput.value || '').trim();
+    els.unitSelectLabel.textContent = current || 'Select unit';
+    els.unitSelectMenu.innerHTML = [
+      `<button type="button" class="products-modern-select__option ${!current ? 'is-selected' : ''}" data-unit-value=""><span>No unit</span>${!current ? '<i data-feather="check"></i>' : ''}</button>`,
+      ...units.map((unit) => `<button type="button" class="products-modern-select__option ${current === unit ? 'is-selected' : ''}" data-unit-value="${escapeHTML(unit)}"><span>${escapeHTML(unit)}</span>${current === unit ? '<i data-feather="check"></i>' : ''}</button>`),
+      `<button type="button" class="products-modern-select__option products-modern-select__option--add" data-action="show-add-unit"><span><i data-feather="plus-circle"></i> Add new unit</span></button>`,
+    ].join('');
+    hydrateIcons(els.unitSelectMenu);
+  }
+
+  async function addProductUnit() {
+    if (state.savingUnit) return;
+    const name = String(els.newUnitInput?.value || '').trim();
+    if (!name) { setModalError('Please enter a unit name.'); return; }
+    state.savingUnit = true;
+    if (els.addUnitBtn) els.addUnitBtn.disabled = true;
+    try {
+      const res = await fetch('/api/products/units', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to add unit.');
+      const unit = String(data?.unit || name).trim();
+      if (!state.unitCatalog.some((item) => normalizeText(item) === normalizeText(unit))) state.unitCatalog.push(unit);
+      setInputValue(els.unitInput, unit);
+      if (els.newUnitInput) els.newUnitInput.value = '';
+      if (els.unitAddPanel) els.unitAddPanel.hidden = true;
+      renderProductUnitSelect();
+      closeProductUnitSelect();
+      toast('success', 'Products', `Unit "${unit}" added successfully.`);
+    } catch (error) {
+      setModalError(error?.message || 'Failed to add unit.');
+    } finally {
+      state.savingUnit = false;
+      if (els.addUnitBtn) els.addUnitBtn.disabled = false;
+    }
+  }
+
   function renderProductSelect() {
     if (!els.proposalProductSelect) return;
     const options = sortProducts(state.products).map((product) => {
@@ -241,10 +291,11 @@
     const tag = firstTag(product);
     const code = String(product?.displayId || '').trim() || 'No ID';
     const price = formatPrice(product?.unitPrice);
+    const unit = String(product?.unit || '').trim();
     const url = String(product?.url || '').trim();
     const imageUrl = String(product?.imageUrl || '').trim();
     const imageSrc = imageUrl;
-    const searchText = [name, tag, code, price, url].join(' ');
+    const searchText = [name, tag, code, price, unit, url].join(' ');
 
     const image = imageSrc
       ? `<img class="product-card__image" src="${escapeHTML(imageSrc)}" alt="${escapeHTML(name)}" loading="lazy" onerror="this.closest('.product-card__media').classList.add('is-fallback');this.remove();">`
@@ -275,7 +326,10 @@
             <span class="product-card__code">${escapeHTML(code)}</span>
           </div>
           <div class="product-card__bottom">
-            <strong class="product-card__price">${escapeHTML(price)}</strong>
+            <div class="product-card__price-wrap">
+              <strong class="product-card__price">${escapeHTML(price)}</strong>
+              ${unit ? `<span class="product-card__unit"><i data-feather="maximize-2"></i>${escapeHTML(unit)}</span>` : ''}
+            </div>
             ${urlButton}
           </div>
         </div>
@@ -382,6 +436,7 @@
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load products.');
       state.products = Array.isArray(data?.products) ? data.products : [];
       state.tagCatalog = Array.isArray(data?.tagsCatalog) ? data.tagsCatalog : [];
+      state.unitCatalog = Array.isArray(data?.unitsCatalog) && data.unitsCatalog.length ? data.unitsCatalog : state.unitCatalog;
       state.loading = false;
       renderCatalog();
     } catch (error) {
@@ -429,6 +484,8 @@
     setInputValue(els.nameInput, '');
     setInputValue(els.idCodeInput, '');
     setInputValue(els.priceInput, '');
+    setInputValue(els.unitInput, '');
+    if (els.unitAddPanel) els.unitAddPanel.hidden = true;
     setInputValue(els.tagsInput, '');
     setInputValue(els.urlInput, '');
     resetProductImage();
@@ -504,6 +561,7 @@
       setInputValue(els.nameInput, product.name || '');
       setInputValue(els.idCodeInput, product.displayId || '');
       setInputValue(els.priceInput, product.unitPrice ?? '');
+      setInputValue(els.unitInput, product.unit || '');
       setInputValue(els.tagsInput, firstTag(product) === 'Uncategorized' ? '' : firstTag(product));
       setInputValue(els.urlInput, product.url || '');
       state.productImage = { dataUrl: '', name: 'Current product image', type: '', size: 0, existingUrl: product.imageUrl || '', removed: false };
@@ -619,6 +677,7 @@
       name,
       idCode: String(els.idCodeInput?.value || '').trim() || null,
       unitPrice: inputNumberValue(els.priceInput),
+      unit: String(els.unitInput?.value || '').trim() || null,
       tags: (state.modalMode === 'create' ? String(state.creatingTag || '').trim() : String(els.tagsInput?.value || '').trim()) || null,
       url: String(els.urlInput?.value || '').trim() || null,
       imageData: state.productImage?.dataUrl || null,
@@ -1225,6 +1284,32 @@
       renderProductImagePreview();
     });
 
+    if (els.unitSelectButton) els.unitSelectButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      const opening = !!els.unitSelectMenu?.hidden;
+      if (els.unitSelectMenu) els.unitSelectMenu.hidden = !opening;
+      els.unitSelectButton.setAttribute('aria-expanded', opening ? 'true' : 'false');
+      if (opening) renderProductUnitSelect();
+    });
+    if (els.unitSelectMenu) els.unitSelectMenu.addEventListener('click', (event) => {
+      const addBtn = event.target.closest('[data-action="show-add-unit"]');
+      if (addBtn) {
+        if (els.unitAddPanel) els.unitAddPanel.hidden = false;
+        closeProductUnitSelect();
+        setTimeout(() => els.newUnitInput?.focus(), 30);
+        return;
+      }
+      const option = event.target.closest('[data-unit-value]');
+      if (!option) return;
+      setInputValue(els.unitInput, option.getAttribute('data-unit-value') || '');
+      renderProductUnitSelect();
+      closeProductUnitSelect();
+    });
+    if (els.addUnitBtn) els.addUnitBtn.addEventListener('click', addProductUnit);
+    if (els.newUnitInput) els.newUnitInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); addProductUnit(); }
+    });
+
     if (els.tagSelectButton) els.tagSelectButton.addEventListener('click', (event) => {
       event.preventDefault();
       const opening = !!els.tagSelectMenu?.hidden;
@@ -1259,6 +1344,7 @@
     document.addEventListener('click', (event) => {
       if (!event.target.closest('.product-card__menu-wrap')) closeProductMenus();
       if (!event.target.closest('.products-tag-field')) closeProductTagSelect();
+      if (!event.target.closest('.products-unit-field')) closeProductUnitSelect();
       if (!event.target.closest('.products-tag-filter-wrap') && els.tags && !els.tags.hidden) {
         els.tags.hidden = true;
         if (els.tagFilterBtn) els.tagFilterBtn.setAttribute('aria-expanded', 'false');
@@ -1318,6 +1404,13 @@
     els.nameInput = $('productNameInput');
     els.idCodeInput = $('productIdCodeInput');
     els.priceInput = $('productPriceInput');
+    els.unitInput = $('productUnitInput');
+    els.unitSelectButton = $('productUnitSelectButton');
+    els.unitSelectLabel = $('productUnitSelectLabel');
+    els.unitSelectMenu = $('productUnitSelectMenu');
+    els.unitAddPanel = $('productUnitAddPanel');
+    els.newUnitInput = $('productNewUnitInput');
+    els.addUnitBtn = $('productAddUnitBtn');
     els.tagsInput = $('productTagsInput');
     els.tagSelectButton = $('productTagSelectButton');
     els.tagSelectLabel = $('productTagSelectLabel');
