@@ -1448,15 +1448,11 @@
   function openProductImageViewer(url, name = 'Product image') {
     const safeUrl = safeHttpUrl(url);
     if (!safeUrl) return;
-    const viewer = ensureProductImageViewer();
-    const image = viewer.querySelector('.product-image-viewer__image');
-    if (!image) return;
-    image.src = safeUrl;
-    image.alt = String(name || 'Product image');
-    viewer.classList.add('is-open');
-    viewer.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('product-image-viewer-open');
-    viewer.querySelector('.product-image-viewer__close')?.focus?.();
+
+    // Keep the Shopping Cart image behaviour consistent with the Products page:
+    // open the original image directly in a separate browser tab/viewer.
+    const imageWindow = window.open(safeUrl, '_blank', 'noopener,noreferrer');
+    if (imageWindow) imageWindow.opener = null;
   }
 
   function updateQtyUnitLabel(productId = componentSelectEl?.value) {
