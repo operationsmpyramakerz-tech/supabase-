@@ -24,11 +24,8 @@ function getConfig() {
   const productsTable = String(process.env.SUPABASE_PRODUCTS_TABLE || 'products').trim() || 'products';
   const stocktakingTable = String(process.env.SUPABASE_STOCKTAKING_TABLE || 'stocktaking').trim() || 'stocktaking';
   const b2bSchoolsTable = String(process.env.SUPABASE_B2B_SCHOOLS_TABLE || 'b2b_schools').trim() || 'b2b_schools';
-  const tasksTable = String(process.env.SUPABASE_TASKS_TABLE || 'tasks').trim() || 'tasks';
-  const messagesChatsTable = String(process.env.SUPABASE_MESSAGES_CHATS_TABLE || 'messages_chats').trim() || 'messages_chats';
-  const messagesTable = String(process.env.SUPABASE_MESSAGES_TABLE || 'messages').trim() || 'messages';
   const storageBucket = String(process.env.SUPABASE_STORAGE_BUCKET || process.env.SUPABASE_BUCKET || 'operations-files').trim() || 'operations-files';
-  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, tasksTable, messagesChatsTable, messagesTable, storageBucket };
+  return { url, key, teamMembersTable, ordersTable, expensesTable, productsTable, stocktakingTable, b2bSchoolsTable, storageBucket };
 }
 
 function isConfigured() {
