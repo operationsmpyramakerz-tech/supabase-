@@ -55,6 +55,7 @@
   const schoolSelectEl = document.getElementById('cartSchoolSelect');
   const expectedSpareSelectEl = document.getElementById('cartExpectedSpareSelect');
   const qtyInputEl = document.getElementById('cartQtyInput');
+  const qtyUnitEl = document.getElementById('cartQtyUnit');
 
   // Request Maintenance: Issue Description field (replaces Qty)
   const issueDescInputEl = document.getElementById('cartIssueDescInput');
@@ -1412,6 +1413,61 @@
       : Promise.resolve(window.confirm(`Delete “${itemName}” from this order?`));
   }
 
+  function ensureProductImageViewer() {
+    let viewer = document.getElementById('productImageViewer');
+    if (viewer) return viewer;
+
+    viewer = document.createElement('div');
+    viewer.id = 'productImageViewer';
+    viewer.className = 'product-image-viewer';
+    viewer.setAttribute('aria-hidden', 'true');
+    viewer.innerHTML = `
+      <button type="button" class="product-image-viewer__close" aria-label="Close image preview">×</button>
+      <div class="product-image-viewer__stage" role="dialog" aria-modal="true" aria-label="Product image preview">
+        <img class="product-image-viewer__image" alt="Product image preview" />
+      </div>
+    `;
+    document.body.appendChild(viewer);
+
+    const close = () => {
+      viewer.classList.remove('is-open');
+      viewer.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('product-image-viewer-open');
+      const image = viewer.querySelector('.product-image-viewer__image');
+      if (image) image.removeAttribute('src');
+    };
+
+    viewer.querySelector('.product-image-viewer__close')?.addEventListener('click', close);
+    viewer.addEventListener('click', (event) => {
+      if (event.target === viewer || event.target?.classList?.contains('product-image-viewer__stage')) close();
+    });
+    viewer._closeProductImageViewer = close;
+    return viewer;
+  }
+
+  function openProductImageViewer(url, name = 'Product image') {
+    const safeUrl = safeHttpUrl(url);
+    if (!safeUrl) return;
+    const viewer = ensureProductImageViewer();
+    const image = viewer.querySelector('.product-image-viewer__image');
+    if (!image) return;
+    image.src = safeUrl;
+    image.alt = String(name || 'Product image');
+    viewer.classList.add('is-open');
+    viewer.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('product-image-viewer-open');
+    viewer.querySelector('.product-image-viewer__close')?.focus?.();
+  }
+
+  function updateQtyUnitLabel(productId = componentSelectEl?.value) {
+    if (!qtyUnitEl) return;
+    const item = byId.get(String(productId || '')) || null;
+    const unit = String(item?.unit || '').trim();
+    qtyUnitEl.textContent = unit || 'Unit';
+    qtyUnitEl.title = unit || 'Unit of measurement';
+    qtyUnitEl.classList.toggle('is-placeholder', !unit);
+  }
+
   function makeCardEditorTrigger(el, onOpen, label) {
     if (!el || typeof onOpen !== 'function') return;
     el.style.cursor = 'pointer';
@@ -1489,6 +1545,21 @@
         img.alt = name;
         img.loading = 'lazy';
         img.src = c.imageUrl;
+        thumb.classList.add('has-image');
+        thumb.setAttribute('role', 'button');
+        thumb.setAttribute('tabindex', '0');
+        thumb.setAttribute('aria-label', `Open ${name} image full screen`);
+        thumb.title = 'Open image full screen';
+        const openImage = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openProductImageViewer(c.imageUrl, name);
+        };
+        thumb.addEventListener('click', openImage);
+        thumb.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          openImage(event);
+        });
         thumb.appendChild(img);
       } else {
         // Show sequential number (1,2,3,...) instead of first letter
@@ -1834,6 +1905,7 @@
 
     const maintenance = isMaintenanceType();
     if (qtyInputEl) qtyInputEl.value = '1';
+    updateQtyUnitLabel('');
     if (issueDescInputEl) issueDescInputEl.value = '';
     clearSelectValue(schoolSelectEl);
     clearSelectValue(expectedSpareSelectEl);
@@ -1850,6 +1922,7 @@
       setModalLoading(false);
 
       clearSelectValue(componentSelectEl);
+      updateQtyUnitLabel('');
       if (maintenance) {
         clearSelectValue(schoolSelectEl);
         clearSelectValue(expectedSpareSelectEl);
@@ -1908,6 +1981,7 @@
     editingId = String(item.id);
     if (addToCartBtn) addToCartBtn.textContent = 'Update';
     if (qtyInputEl) qtyInputEl.value = String(normalizeQty(Number(item.quantity), 1));
+    updateQtyUnitLabel(item.id);
     if (issueDescInputEl) issueDescInputEl.value = String(item.issueDescription || '').trim();
     clearSelectValue(schoolSelectEl);
     clearSelectValue(expectedSpareSelectEl);
@@ -1918,6 +1992,7 @@
 
     const applySelection = () => {
       setSelectValue(componentSelectEl, String(item.id));
+      updateQtyUnitLabel(item.id);
       if (maintenance) {
         setSelectValue(schoolSelectEl, String(item.schoolId || ''));
         setSelectValue(expectedSpareSelectEl, String(item.expectedSparePartId || ''));
@@ -2096,7 +2171,7 @@
           event.stopPropagation();
           if (event.type === 'click') {
             const url = String(media.dataset.imageUrl || '').trim();
-            if (url) window.open(url, '_blank', 'noopener,noreferrer');
+            if (url) openProductImageViewer(url, media.getAttribute('aria-label') || 'Product image');
           }
         };
         root.addEventListener('pointerdown', stopImageSelection, true);
@@ -2434,6 +2509,8 @@
 
     modalCloseBtn?.addEventListener('click', closeModal);
 
+    componentSelectEl?.addEventListener('change', () => updateQtyUnitLabel(componentSelectEl.value));
+
     // Close modal when clicking backdrop
     modalEl?.addEventListener('click', (e) => {
       if (e.target === modalEl) closeModal();
@@ -2441,9 +2518,13 @@
 
     // Esc closes modal
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && modalEl && modalEl.style.display === 'flex') {
-        closeModal();
+      if (e.key !== 'Escape') return;
+      const viewer = document.getElementById('productImageViewer');
+      if (viewer?.classList.contains('is-open')) {
+        viewer._closeProductImageViewer?.();
+        return;
       }
+      if (modalEl && modalEl.style.display === 'flex') closeModal();
     });
 
     addToCartBtn?.addEventListener('click', async () => {
