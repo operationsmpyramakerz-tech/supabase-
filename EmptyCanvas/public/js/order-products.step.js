@@ -2160,16 +2160,32 @@
 
       if (root.dataset.productChoiceEvents !== '1') {
         root.dataset.productChoiceEvents = '1';
+        let lastImageOpenAt = 0;
+
         const stopImageSelection = (event) => {
           const media = event.target.closest('.product-choice-media[data-image-url]');
           if (!media || !root.contains(media)) return;
+
+          // Choices.js handles selection on pointer/mouse down. Intercept that exact
+          // gesture so tapping the image opens it instead of selecting the product.
           event.preventDefault();
           event.stopPropagation();
-          if (event.type === 'click') {
-            const url = String(media.dataset.imageUrl || '').trim();
-            if (url) openProductImageViewer(url, media.getAttribute('aria-label') || 'Product image');
-          }
+          if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+
+          const now = Date.now();
+          const isPrimaryOpenGesture =
+            event.type === 'pointerdown' ||
+            (typeof window.PointerEvent === 'undefined' && (event.type === 'touchstart' || event.type === 'mousedown'));
+          const isClickFallback = event.type === 'click' && now - lastImageOpenAt > 700;
+
+          if (!isPrimaryOpenGesture && !isClickFallback) return;
+
+          const url = String(media.dataset.imageUrl || '').trim();
+          if (!url) return;
+          lastImageOpenAt = now;
+          openProductImageViewer(url, media.getAttribute('aria-label') || 'Product image');
         };
+
         root.addEventListener('pointerdown', stopImageSelection, true);
         root.addEventListener('mousedown', stopImageSelection, true);
         root.addEventListener('touchstart', stopImageSelection, { capture: true, passive: false });
