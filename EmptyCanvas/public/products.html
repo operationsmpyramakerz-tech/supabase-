@@ -143,6 +143,20 @@
             <strong>EGP</strong>
           </span>
         </label>
+        <div class="products-field products-unit-field" id="productUnitField">
+          <span>Unit of Measurement</span>
+          <input id="productUnitInput" name="unit" type="hidden" />
+          <button type="button" class="products-modern-select" id="productUnitSelectButton" aria-haspopup="listbox" aria-expanded="false">
+            <span class="products-modern-select__icon"><i data-feather="maximize-2"></i></span>
+            <span class="products-modern-select__label" id="productUnitSelectLabel">Select unit</span>
+            <i class="products-modern-select__chevron" data-feather="chevron-down"></i>
+          </button>
+          <div class="products-modern-select__menu" id="productUnitSelectMenu" role="listbox" hidden></div>
+          <div class="products-unit-add" id="productUnitAddPanel" hidden>
+            <input id="productNewUnitInput" type="text" autocomplete="off" placeholder="Example: Box" />
+            <button type="button" id="productAddUnitBtn"><i data-feather="plus"></i><span>Add</span></button>
+          </div>
+        </div>
         <div class="products-field products-tag-field" id="productTagField">
           <span>Tag</span>
           <input id="productTagsInput" name="tags" type="hidden" />
