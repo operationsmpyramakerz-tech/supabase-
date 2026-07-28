@@ -2739,7 +2739,7 @@ body.ops-login-splash-active .app-container{
   color: #92400E;
 }
 
-
+/* Mail shortcut is header-only; match the other circular topbar controls. */
 .header-message-btn{
   width: 44px !important;
   height: 44px !important;
@@ -2850,7 +2850,7 @@ body.ops-login-splash-active .app-container{
 }
 
 /* Global compact transparent 3-dot action buttons */
-:is(.ua-member-menu-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn) {
+:is(.ua-member-menu-btn, .msg-inbox-more-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn) {
   width: 24px !important;
   height: 24px !important;
   min-width: 24px !important;
@@ -2868,8 +2868,8 @@ body.ops-login-splash-active .app-container{
   line-height: 1 !important;
 }
 
-:is(.ua-member-menu-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn):hover,
-:is(.ua-member-menu-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn)[aria-expanded="true"],
+:is(.ua-member-menu-btn, .msg-inbox-more-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn):hover,
+:is(.ua-member-menu-btn, .msg-inbox-more-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn)[aria-expanded="true"],
 .tv2-checkpoint-card__menu-btn.is-open {
   background: rgba(15, 23, 42, 0.06) !important;
   color: #0b1220 !important;
@@ -2877,13 +2877,13 @@ body.ops-login-splash-active .app-container{
   transform: none !important;
 }
 
-:is(.ua-member-menu-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn) svg {
+:is(.ua-member-menu-btn, .msg-inbox-more-btn, .proposal-folder-menu-btn, .school-folder__menu-btn, .tv2-checkpoint-card__menu-btn) svg {
   width: 18px !important;
   height: 18px !important;
   stroke-width: 3.4 !important;
 }
 
-:is(.proposal-menu-dots, .ua-member-menu-dots) {
+:is(.msg-inbox-more-dots, .proposal-menu-dots, .ua-member-menu-dots) {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;

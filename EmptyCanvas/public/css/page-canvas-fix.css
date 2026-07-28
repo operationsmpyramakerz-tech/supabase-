@@ -73,6 +73,7 @@ body:not(.login-page):not(.pwa-offline):not(.pwa-start) :is(
   main.backup-page-shell,
   main.kpis-main,
   main.tasks-v2-main,
+  main.messages-body,
   main.page-body,
   main.container-full-width,
   main.ua-page-body
