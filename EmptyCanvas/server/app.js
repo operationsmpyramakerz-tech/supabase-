@@ -5728,6 +5728,7 @@ function _sbSerializeProductRow(row = {}) {
   const name = _sbProductText(_sbProductGet(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product";
   const displayId = _sbProductText(_sbProductGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
   const unitPrice = _sbProductNum(_sbProductGet(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"]));
+  const unit = _sbProductText(_sbProductGet(row, ["unit", "unit_name", "measurement_unit", "Unit", "Unit Name"])).trim() || null;
   const url = _sbExtractUrl(_sbProductGet(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"]));
   const imageUrl = _sbExtractUrl(_sbProductGet(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"]));
   return {
@@ -5735,6 +5736,7 @@ function _sbSerializeProductRow(row = {}) {
     name,
     url: url || null,
     unitPrice: unitPrice !== null ? unitPrice : null,
+    unit,
     displayId,
     imageUrl: imageUrl || null,
     tags: _sbProductTags(row),
@@ -5818,6 +5820,40 @@ async function _sbCreateProductTag(name) {
   return { name: _sbProductText(_sbGet(created || row, ["name", "tag", "Name", "Tag"])) || clean, alreadyExists: false };
 }
 
+function _sbProductUnitsTable() {
+  return String(process.env.SUPABASE_PRODUCT_UNITS_TABLE || "product_units").trim() || "product_units";
+}
+
+async function _sbProductUnitsList() {
+  const map = new Map();
+  const add = (value) => {
+    const clean = _sbProductText(value).trim();
+    if (clean && !map.has(normKey(clean))) map.set(normKey(clean), clean);
+  };
+  ["Piece", "Pack", "Kilogram", "Metre", "Inch"].forEach(add);
+  const rows = await supabaseDb.selectAll(_sbProductUnitsTable(), { limit: 1000, order: "name.asc" }).catch((error) => {
+    if (_sbIsMissingTableError(error)) return [];
+    throw error;
+  });
+  for (const row of Array.isArray(rows) ? rows : []) add(_sbGet(row, ["name", "unit", "Name", "Unit"]));
+  for (const product of await _sbProductsList()) add(product?.unit);
+  return Array.from(map.values()).sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+async function _sbCreateProductUnit(name) {
+  const clean = _sbProductText(name).trim();
+  if (!clean) { const err = new Error("Unit name is required."); err.status = 400; throw err; }
+  const existing = await _sbProductUnitsList();
+  const match = existing.find((unit) => normKey(unit) === normKey(clean));
+  if (match) return { name: match, alreadyExists: true };
+  const row = { name: clean, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const created = await supabaseDb.insert(_sbProductUnitsTable(), row).catch((error) => {
+    if (_sbIsMissingTableError(error)) { const err = new Error("Product units table is not created yet. Please run products_units_migration.sql in Supabase first."); err.status = 400; throw err; }
+    throw error;
+  });
+  return { name: _sbProductText(_sbGet(created || row, ["name", "unit", "Name", "Unit"])) || clean, alreadyExists: false };
+}
+
 function _sbProductNullableText(value) {
   const text = _sbProductText(value).trim();
   return text ? text : null;
@@ -5858,6 +5894,7 @@ function _sbNormalizeProductPayload(body = {}, { partial = false } = {}) {
   setText("id_code", ["idCode", "id_code", "code"]);
   setText("tags", ["tags", "tag"]);
   setNum("unit_price", ["unitPrice", "unit_price", "price"]);
+  setText("unit", ["unit", "unitName", "unit_name", "measurementUnit", "measurement_unit"]);
 
   if (has("url") || has("productUrl") || has("product_url") || has("link")) {
     out.url = _sbProductCleanUrl(body.url ?? body.productUrl ?? body.product_url ?? body.link);
@@ -22622,10 +22659,44 @@ app.get(
       }
       const rows = await _sbProductsList();
       const tagsCatalog = await _sbProductsTagCatalogList().catch(() => []);
-      return res.json({ ok: true, source: "supabase", products: rows, tagsCatalog });
+      const unitsCatalog = await _sbProductUnitsList().catch(() => ["Piece", "Pack", "Kilogram", "Metre", "Inch"]);
+      return res.json({ ok: true, source: "supabase", products: rows, tagsCatalog, unitsCatalog });
     } catch (error) {
       console.error("GET /api/products error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load products." });
+    }
+  },
+);
+
+
+app.get(
+  "/api/products/units",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const units = await _sbProductUnitsList();
+      return res.json({ ok: true, source: "supabase", units });
+    } catch (error) {
+      console.error("GET /api/products/units error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load product units." });
+    }
+  },
+);
+
+app.post(
+  "/api/products/units",
+  requireAuth,
+  requirePage("Products"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const unit = await _sbCreateProductUnit(req.body?.name || req.body?.unit || req.body?.newUnit);
+      return res.status(unit.alreadyExists ? 200 : 201).json({ ok: true, source: "supabase", unit: unit.name, alreadyExists: !!unit.alreadyExists });
+    } catch (error) {
+      console.error("POST /api/products/units error:", error?.details || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add product unit." });
     }
   },
 );
