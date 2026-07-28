@@ -11246,12 +11246,24 @@ app.post("/api/login", async (req, res) => {
   const providedUsername = String(username || "").trim();
   const providedPassword = String(password || "").trim();
 
+  if (!_sbTeamMembersEnabled()) {
+    return res.status(503).json({
+      error: "Supabase login is not configured on this deployment. Check SUPABASE_URL and the service-role key environment variable, then redeploy.",
+      code: "SUPABASE_NOT_CONFIGURED",
+    });
+  }
+
   if (_sbTeamMembersEnabled()) {
     try {
       const row = await _sbFindTeamMemberByName(providedUsername);
       if (row) {
         const storedPassword = _sbString(_sbValueForLabel(row, "Password"));
-        if (storedPassword && String(storedPassword) === providedPassword) {
+        const activeValue = _sbGet(row, ["is_active", "Is Active", "active", "enabled"]);
+        const isInactive = activeValue === false || /^(false|0|no|inactive|disabled)$/i.test(String(activeValue ?? "").trim());
+        if (isInactive) {
+          return res.status(403).json({ error: "This account is inactive.", code: "ACCOUNT_INACTIVE" });
+        }
+        if (String(storedPassword) === providedPassword) {
           const { accountPayload, allowedNormalized, allowedUI, pageAccessRows } = await _sbAccountPayloadWithAccess(row, providedUsername);
 
           req.session.authenticated = true;
@@ -11268,8 +11280,13 @@ app.post("/api/login", async (req, res) => {
             return res.json({ success: true, message: "Login successful", allowedPages: allowedUI, source: "supabase", redirect: "/home" });
           });
         }
-        return res.status(401).json({ error: "incorrect password" });
+        return res.status(401).json({ error: "Invalid username or password", code: "SUPABASE_PASSWORD_MISMATCH" });
       }
+      return res.status(401).json({
+        error: "Invalid username or password",
+        code: "SUPABASE_USER_NOT_FOUND",
+        table: _sbTeamMembersTable(),
+      });
     } catch (error) {
       console.error("Supabase login error:", error?.details || error);
       // Do not hide a Supabase connection/table failure behind a misleading
@@ -11283,6 +11300,12 @@ app.post("/api/login", async (req, res) => {
     }
   }
 
+  return res.status(500).json({
+    error: "Supabase login did not complete.",
+    code: "SUPABASE_LOGIN_UNEXPECTED_FALLTHROUGH",
+  });
+
+  /* Legacy Notion login retained below for reference only. */
   if (!teamMembersDatabaseId) {
     return res
       .status(500)
