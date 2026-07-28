@@ -852,7 +852,119 @@
   }
 
   .modal-card .choices__list--dropdown .choices__item--choice.is-highlighted{
-    background: #f1f5f9 !important;
+    background: transparent !important;
+  }
+
+  /* Product choices are displayed as compact, image-enabled cards. */
+  .modal-card .choices__list--dropdown .choices__list[role="listbox"]{
+    padding: 4px 9px 10px !important;
+    max-height: min(430px, 54vh) !important;
+  }
+  .modal-card .choices__list--dropdown .choices__item--choice.product-choice{
+    padding: 4px 0 !important;
+    background: transparent !important;
+  }
+  .modal-card .product-choice-card{
+    width: 100%;
+    min-height: 66px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 10px 9px 14px;
+    border: 1px solid #e8edf4;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 7px 20px rgba(15, 23, 42, 0.045);
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+  }
+  .modal-card .choices__item--choice.product-choice.is-highlighted .product-choice-card{
+    border-color: #cbd5e1;
+    background: #f8fafc;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.09);
+    transform: translateY(-1px);
+  }
+  .modal-card .product-choice-info{
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .modal-card .product-choice-name{
+    color: #111827;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.28;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .modal-card .product-choice-meta{
+    margin-top: 4px;
+    color: #7c8798;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .modal-card .product-choice-media{
+    position: relative;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 1px solid #e5eaf1;
+    border-radius: 12px;
+    background: #f8fafc;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    cursor: zoom-in;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .modal-card button.product-choice-media:hover,
+  .modal-card button.product-choice-media:focus-visible{
+    transform: scale(1.05);
+    border-color: #94a3b8;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+    outline: none;
+  }
+  .modal-card .product-choice-media img{
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 4px;
+    box-sizing: border-box;
+    background: #fff;
+  }
+  .modal-card .product-choice-media-fallback{
+    display: none;
+    width: 23px;
+    height: 23px;
+    color: #c1662f;
+  }
+  .modal-card .product-choice-media-fallback svg{
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .modal-card .product-choice-media.is-fallback{
+    cursor: default;
+    background: #fff7ed;
+    border-color: #fed7aa;
+  }
+  .modal-card .product-choice-media.is-fallback .product-choice-media-fallback{
+    display: block;
+  }
+
+  @media (max-width: 640px){
+    .modal-card .product-choice-card{ min-height: 60px; padding: 8px 8px 8px 11px; }
+    .modal-card .product-choice-media{ flex-basis: 44px; width: 44px; height: 44px; }
+    .modal-card .product-choice-name{ font-size: 13px; }
   }
 
   /* Add a clear (x) button for the dropdown search input */
@@ -2041,6 +2153,6 @@
 <script>if (window.feather) feather.replace();</script>
 <script src="/js/common-ui.js?v=global-delete-modal-v1"></script>
 <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
-<script src="/js/order-products.step.js?v=global-delete-modal-v2"></script>
+<script src="/js/order-products.step.js?v=product-card-dropdown-v1"></script>
 </body>
 </html>
