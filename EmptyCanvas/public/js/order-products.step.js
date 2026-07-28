@@ -2005,7 +2005,122 @@
     }
   }
 
-  function initChoicesSelect(selectEl, { items, placeholderText, emptyText }) {
+  function productChoiceSecondaryText(item) {
+    const displayId = String(item?.displayId || '').trim();
+    const tags = Array.isArray(item?.tags)
+      ? item.tags.map((tag) => String(tag || '').trim()).filter(Boolean)
+      : [];
+    if (displayId && tags.length) return `${displayId} • ${tags[0]}`;
+    return displayId || tags[0] || '';
+  }
+
+  function decorateProductChoices(selectEl, items) {
+    try {
+      const root = selectEl?.closest('.choices');
+      if (!root) return;
+
+      const itemMap = new Map((Array.isArray(items) ? items : []).map((item) => [String(item?.id || ''), item]));
+      const choiceEls = root.querySelectorAll('.choices__list--dropdown .choices__item--choice[data-value]');
+
+      choiceEls.forEach((choiceEl) => {
+        const value = String(choiceEl.dataset.value || '');
+        const item = itemMap.get(value);
+        if (!item || choiceEl.dataset.productCardReady === '1') return;
+
+        choiceEl.dataset.productCardReady = '1';
+        choiceEl.classList.add('product-choice');
+        choiceEl.textContent = '';
+
+        const card = document.createElement('div');
+        card.className = 'product-choice-card';
+
+        const info = document.createElement('div');
+        info.className = 'product-choice-info';
+
+        const name = document.createElement('div');
+        name.className = 'product-choice-name';
+        name.textContent = String(item?.name || 'Untitled product');
+        name.title = name.textContent;
+        info.appendChild(name);
+
+        const secondaryText = productChoiceSecondaryText(item);
+        if (secondaryText) {
+          const meta = document.createElement('div');
+          meta.className = 'product-choice-meta';
+          meta.textContent = secondaryText;
+          meta.title = secondaryText;
+          info.appendChild(meta);
+        }
+
+        const imageUrl = String(item?.imageUrl || '').trim();
+        let media;
+        if (imageUrl) {
+          media = document.createElement('button');
+          media.type = 'button';
+          media.className = 'product-choice-media';
+          media.dataset.imageUrl = imageUrl;
+          media.setAttribute('aria-label', `Open ${name.textContent} image`);
+          media.title = 'Open product image';
+
+          const img = document.createElement('img');
+          img.src = imageUrl;
+          img.alt = name.textContent;
+          img.loading = 'lazy';
+          img.addEventListener('error', () => {
+            media.classList.add('is-fallback');
+            img.remove();
+          }, { once: true });
+          media.appendChild(img);
+        } else {
+          media = document.createElement('span');
+          media.className = 'product-choice-media is-fallback';
+          media.setAttribute('aria-hidden', 'true');
+        }
+
+        const fallback = document.createElement('span');
+        fallback.className = 'product-choice-media-fallback';
+        fallback.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>';
+        media.appendChild(fallback);
+
+        card.appendChild(info);
+        card.appendChild(media);
+        choiceEl.appendChild(card);
+      });
+
+      if (root.dataset.productChoiceEvents !== '1') {
+        root.dataset.productChoiceEvents = '1';
+        const stopImageSelection = (event) => {
+          const media = event.target.closest('.product-choice-media[data-image-url]');
+          if (!media || !root.contains(media)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.type === 'click') {
+            const url = String(media.dataset.imageUrl || '').trim();
+            if (url) window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        };
+        root.addEventListener('pointerdown', stopImageSelection, true);
+        root.addEventListener('mousedown', stopImageSelection, true);
+        root.addEventListener('touchstart', stopImageSelection, { capture: true, passive: false });
+        root.addEventListener('click', stopImageSelection, true);
+      }
+    } catch (error) {
+      console.warn('Failed to decorate product choices:', error);
+    }
+  }
+
+  function setupProductChoiceCards(selectEl, items) {
+    if (!selectEl) return;
+    if (selectEl._productChoiceShowHandler) {
+      selectEl.removeEventListener('showDropdown', selectEl._productChoiceShowHandler);
+    }
+    const decorate = () => window.setTimeout(() => decorateProductChoices(selectEl, items), 0);
+    selectEl._productChoiceShowHandler = decorate;
+    decorate();
+    selectEl.addEventListener('showDropdown', decorate);
+  }
+
+  function initChoicesSelect(selectEl, { items, placeholderText, emptyText, productCards = false }) {
     if (!selectEl) return null;
 
     setSelectOptions(selectEl, items, placeholderText, emptyText);
@@ -2026,6 +2141,7 @@
 
       setChoicesInstance(selectEl, inst);
       setupChoicesSearchClearButton(selectEl);
+      if (productCards) setupProductChoiceCards(selectEl, items);
       return inst;
     } catch (e) {
       console.warn('Choices init failed:', e);
@@ -2039,6 +2155,7 @@
       items: getComponentsForSelect(),
       placeholderText: 'Select product...',
       emptyText: 'No products available',
+      productCards: true,
     });
   }
 
@@ -2055,6 +2172,7 @@
       items: getSparePartsForSelect(),
       placeholderText: 'Select spare part...',
       emptyText: 'No spare parts available',
+      productCards: true,
     });
   }
 
