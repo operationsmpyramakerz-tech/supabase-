@@ -3057,27 +3057,6 @@ if (document.querySelector('.sidebar')) {
       window.__opsUserInfo?.pageAccess || readChromeCache()?.pageAccess || null
     );
 
-    // LMS has its own independent navigation and permission model.
-    // Do not run the ERP sidebar default-deny pass against LMS links; the
-    // corresponding server routes still enforce LMS page access.
-    const isLmsWorkspace = document.body?.classList?.contains('page-lms')
-      || window.location.pathname.replace(/\/+$/, '').startsWith('/lms');
-    if (isLmsWorkspace) {
-      try {
-        const nav = document.querySelector('.lms-sidebar .nav-list')
-          || document.querySelector('.sidebar-nav .nav-list');
-        if (nav?.children) {
-          Array.from(nav.children).forEach((child) => {
-            if (child && String(child.tagName).toUpperCase() === 'LI') showEl(child);
-          });
-        }
-        ensureSidebarBranding();
-        ensureNavTooltips();
-        if (window.feather) window.feather.replace();
-      } catch {}
-      return;
-    }
-
     // Default-deny for the sidebar: hide every first-level nav item.
     // (Some CSS rules use `display: flex !important`, so we use hideEl() which
     // sets `display: none !important`.)
