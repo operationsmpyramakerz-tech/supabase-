@@ -2015,6 +2015,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const header = document.querySelector('.sidebar .sidebar-header');
     if (!header) return;
 
+    const isLmsWorkspace = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '') === '/lms';
+    if (isLmsWorkspace) {
+      const h2 = header.querySelector('h2');
+      if (h2) h2.style.display = 'none';
+      header.querySelectorAll('#sidebar-logo-toggle, img.sidebar-brand-logo').forEach((el) => el.remove());
+      let back = header.querySelector('.lms-sidebar-back');
+      if (!back) {
+        back = document.createElement('a');
+        back.className = 'lms-sidebar-back';
+        back.href = '/home';
+        back.setAttribute('aria-label', 'Back to main workspace');
+        back.setAttribute('title', 'Back to main workspace');
+        back.innerHTML = '<i data-feather="arrow-left"></i><span>Back</span>';
+        header.insertBefore(back, header.firstChild);
+      }
+      return;
+    }
+
     // Replace the "Dashboard" title with the company orange logo.
     // (Do not rely on editing every HTML page.)
     const h2 = header.querySelector('h2');
@@ -2342,6 +2360,8 @@ if (document.querySelector('.sidebar')) {
     'products': 'a[href="/products"]',
     'product': 'a[href="/products"]',
     'components': 'a[href="/products"]',
+    'lms': 'a[href="/lms"]',
+    'learning management system': 'a[href="/lms"]',
     'proposals': 'a[href="/proposals"]',
     'proposal': 'a[href="/proposals"]',
     'kits': 'a[href="/kits"]',
@@ -3052,6 +3072,12 @@ if (document.querySelector('.sidebar')) {
       if (home) showEl(home.closest('li') || home);
     } catch {}
 
+    // LMS is a top-level workspace switch and is available to every authenticated user.
+    try {
+      const lms = document.querySelector('a[href="/lms"]');
+      if (lms) showEl(lms.closest('li') || lms);
+    } catch {}
+
     // Proposals and Kits are standalone pages, but existing product users should still see both workspaces.
     try {
       const proposals = document.querySelector('a[href="/proposals"]');
@@ -3270,6 +3296,7 @@ if (document.querySelector('.sidebar')) {
   const OPS_SIDEBAR_SCROLL_KEY = 'ops.sidebar.selectedScroll.v1';
   const OPS_SIDEBAR_ORDER = [
     { href: '/home', label: 'Home', icon: 'home' },
+    { href: '/lms', label: 'LMS', icon: 'book-open' },
     { href: '/orders', label: 'Current Orders', icon: 'list' },
     { href: '/orders/sv-orders', label: 'Orders Review', icon: 'award' },
     { href: '/orders/requested', label: 'Operations Orders', icon: 'users' },
@@ -6221,6 +6248,7 @@ function isOpsShellNavigableHref(href) {
     const url = new URL(String(href || ''), window.location.origin);
     if (url.origin !== window.location.origin) return false;
     if (url.pathname.startsWith('/api/')) return false;
+    if (url.pathname.replace(/\/+$/, '') === '/lms') return false;
     if (/\.(?:css|js|mjs|map|json|png|jpe?g|gif|webp|svg|ico|pdf|zip|txt|xml|woff2?|ttf|eot|mp4|mp3)$/i.test(url.pathname)) return false;
     return true;
   } catch {
@@ -6480,6 +6508,7 @@ function shouldSkipOpsPersistentShellHostForCurrentPage() {
     const pathname = new URL(window.location.href).pathname.replace(/\/+$/, '') || '/';
     // Direct desktop loads of these pages stay in normal-page mode. Their legacy
     // layout CSS can otherwise force a hidden page visible beneath the iframe.
+    if (pathname === '/lms') return true;
     if (pathname === '/expenses' || pathname === '/expenses/users') return true;
     if (pathname === '/proposals' || pathname === '/kits' || pathname === '/b2b') return true;
   } catch {}
