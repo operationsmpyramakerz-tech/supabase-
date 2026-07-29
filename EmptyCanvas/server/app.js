@@ -9365,6 +9365,10 @@ app.get("/user-access", requireAuth, requirePage(USER_ACCESS_PAGE_ALIASES), (req
   res.sendFile(path.join(__dirname, "..", "public", "user-access.html"));
 });
 
+app.get("/lms/user-access", requireAuth, requireLmsPageAccess("lms-users-center"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "lms-user-access.html"));
+});
+
 
 app.get("/orders", requireAuth, requirePage("Current Orders"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "current-orders.html"));
@@ -16004,6 +16008,182 @@ app.post(
     }
   },
 );
+
+
+// LMS User Center — separate page catalog and access matrix for LMS workspace pages.
+function _sbSerializeLmsPage(row = {}) {
+  const id = _sbGet(row, ["id", "page_id", "ID"]);
+  return {
+    id: String(id ?? ""),
+    pageId: String(id ?? ""),
+    pageKey: _sbString(_sbGet(row, ["page_key", "pageKey"])) || "",
+    pageName: _sbString(_sbGet(row, ["page_name", "pageName", "name"])) || "",
+    routePath: _sbString(_sbGet(row, ["route_path", "routePath"])) || "",
+    routePattern: _sbString(_sbGet(row, ["route_pattern", "routePattern"])) || "",
+    moduleName: _sbString(_sbGet(row, ["module_name", "moduleName"])) || "LMS",
+    parentPageKey: _sbString(_sbGet(row, ["parent_page_key", "parentPageKey"])) || "",
+    sortOrder: Number(_sbGet(row, ["sort_order", "sortOrder"]) || 100),
+    isActive: _sbBool(_sbGet(row, ["is_active", "isActive"]), true),
+    isAssignable: _sbBool(_sbGet(row, ["is_assignable", "isAssignable"]), true),
+    visibleInSidebar: _sbBool(_sbGet(row, ["visible_in_sidebar", "visibleInSidebar"]), true),
+  };
+}
+
+async function _sbSelectLmsPages({ assignableOnly = true, activeOnly = true } = {}) {
+  const params = ["select=*", "order=sort_order.asc", "limit=1000"];
+  if (activeOnly) params.push("is_active=eq.true");
+  if (assignableOnly) params.push("is_assignable=eq.true");
+  const rows = await supabaseDb.request(`/lms_pages?${params.join("&")}`);
+  return (Array.isArray(rows) ? rows : []).map(_sbSerializeLmsPage).filter((page) => page.id && page.pageKey && page.pageName);
+}
+
+async function _sbSelectRawLmsPageAccessForMember(teamMemberId) {
+  const id = String(teamMemberId || "").trim();
+  if (!id) return [];
+  const rows = await supabaseDb.request(`/team_member_lms_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function requireLmsPageAccess(pageKey) {
+  return async (req, res, next) => {
+    try {
+      if (_sessionIsBuiltInAdmin(req)) return next();
+      const memberId = String(req.session?.userSupabaseId || "").trim();
+      if (!memberId) return res.status(403).send("Access denied.");
+      const pages = await supabaseDb.request(`/lms_pages?select=id&page_key=eq.${_sbRestFilterValue(pageKey)}&is_active=eq.true&limit=1`);
+      const pageId = String(Array.isArray(pages) && pages[0]?.id ? pages[0].id : "").trim();
+      if (!pageId) return res.status(403).send("LMS page is not available.");
+      const access = await supabaseDb.request(`/team_member_lms_page_access?select=id&team_member_id=eq.${_sbRestFilterValue(memberId)}&page_id=eq.${_sbRestFilterValue(pageId)}&is_enabled=eq.true&limit=1`);
+      if (!Array.isArray(access) || !access.length) return res.status(403).send("Access denied.");
+      return next();
+    } catch (error) {
+      console.error("LMS page access check failed:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).send("Unable to verify LMS access.");
+    }
+  };
+}
+
+function _sbLmsPageAccessSummary(rows = []) {
+  const enabled = (rows || []).filter((row) => _sbBool(_sbGet(row, ["is_enabled", "isEnabled"]), false));
+  return {
+    allowedPages: enabled.map((row) => String(_sbGet(row, ["page_name", "pageName"]) || "").trim()).filter(Boolean),
+    accessCount: enabled.length,
+    adminCount: enabled.filter((row) => _sbNormalizePageAccessLevel(_sbGet(row, ["access_level", "accessLevel"])) === PAGE_ACCESS_LEVELS.ADMIN).length,
+  };
+}
+
+async function _sbLmsPageAccessPayloadForMember(teamMemberId) {
+  const [pages, accessRows] = await Promise.all([
+    _sbSelectLmsPages({ assignableOnly: true }),
+    _sbSelectRawLmsPageAccessForMember(teamMemberId).catch(() => []),
+  ]);
+  const byPageId = new Map((accessRows || []).map((row) => [String(_sbGet(row, ["page_id", "pageId"]) ?? ""), row]));
+  const items = pages.map((page) => {
+    const access = byPageId.get(String(page.pageId || page.id));
+    return {
+      ...page,
+      accessId: String(_sbGet(access || {}, ["id", "access_id", "accessId"]) ?? ""),
+      accessLevel: _sbNormalizePageAccessLevel(_sbGet(access || {}, ["access_level", "accessLevel"]) || "edit"),
+      isEnabled: access ? _sbBool(_sbGet(access, ["is_enabled", "isEnabled"]), false) : false,
+    };
+  });
+  return {
+    pages: items,
+    summary: _sbLmsPageAccessSummary(items.map((item) => ({ ...item, page_name: item.pageName, is_enabled: item.isEnabled, access_level: item.accessLevel }))),
+  };
+}
+
+async function _sbSaveLmsPageAccessForMember(teamMemberId, entries = [], { teamMemberName = "", grantedBy = "" } = {}) {
+  const memberId = String(teamMemberId || "").trim();
+  if (!memberId) {
+    const error = new Error("Missing team member ID.");
+    error.status = 400;
+    throw error;
+  }
+  const pages = await _sbSelectLmsPages({ assignableOnly: true });
+  const pagesById = new Map(pages.map((page) => [String(page.pageId || page.id), page]));
+  const pagesByKey = new Map(pages.map((page) => [String(page.pageKey), page]));
+  const cleanEntries = _sbNormalizePageAccessEntries(entries);
+  const writeRows = [];
+  for (const entry of cleanEntries) {
+    if (!entry.isEnabled) continue;
+    const page = (entry.pageId && pagesById.get(entry.pageId)) || (entry.pageKey && pagesByKey.get(entry.pageKey));
+    if (!page) continue;
+    writeRows.push({
+      team_member_id: Number(memberId),
+      team_member_name: teamMemberName || null,
+      page_id: Number(page.pageId || page.id),
+      access_level: _sbNormalizePageAccessLevel(entry.accessLevel),
+      is_enabled: true,
+      granted_by: grantedBy || null,
+    });
+  }
+  if (cleanEntries.length && !writeRows.length && cleanEntries.some((entry) => entry.isEnabled)) {
+    const error = new Error("No valid LMS pages were received. Reload the page and try again.");
+    error.status = 400;
+    throw error;
+  }
+  await supabaseDb.request(`/team_member_lms_page_access?team_member_id=eq.${_sbRestFilterValue(memberId)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" },
+  });
+  if (!writeRows.length) return [];
+  const created = await supabaseDb.request('/team_member_lms_page_access', {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: writeRows,
+  });
+  return Array.isArray(created) ? created : [];
+}
+
+app.use("/api/lms/user-access", requireAuth, requireLmsPageAccess("lms-users-center"));
+
+app.get("/api/lms/user-access/pages", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const pages = await _sbSelectLmsPages({ assignableOnly: true });
+    return res.json({ ok: true, source: "supabase", pages });
+  } catch (error) {
+    console.error("GET /api/lms/user-access/pages error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load LMS pages." });
+  }
+});
+
+app.get("/api/lms/user-access/team-members/:id/page-access", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const memberId = String(req.params?.id || "").trim();
+    if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
+    const member = await _sbFindTeamMemberById(memberId).catch(() => null);
+    if (!member) return res.status(404).json({ ok: false, error: "Team member was not found." });
+    const payload = await _sbLmsPageAccessPayloadForMember(memberId);
+    return res.json({ ok: true, source: "supabase", memberId, pages: payload.pages, summary: payload.summary });
+  } catch (error) {
+    console.error("GET /api/lms/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load LMS page access." });
+  }
+});
+
+app.patch("/api/lms/user-access/team-members/:id/page-access", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (!_uaAdminVerified(req)) {
+      return res.status(403).json({ ok: false, error: "Admin verification expired. Please enter the Admin password again." });
+    }
+    const memberId = String(req.params?.id || "").trim();
+    if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
+    const member = await _sbFindTeamMemberById(memberId).catch(() => null);
+    if (!member) return res.status(404).json({ ok: false, error: "Team member was not found." });
+    const memberName = _sbString(_sbValueForLabel(member || {}, "Name"));
+    const grantedBy = String(req.session?.username || "Admin").trim() || "Admin";
+    await _sbSaveLmsPageAccessForMember(memberId, req.body?.pages || req.body?.access || [], { teamMemberName: memberName, grantedBy });
+    const payload = await _sbLmsPageAccessPayloadForMember(memberId);
+    return res.json({ ok: true, source: "supabase", memberId, memberName, pages: payload.pages, summary: payload.summary });
+  } catch (error) {
+    console.error("PATCH /api/lms/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save LMS page access." });
+  }
+});
 
 // User Access & Data — Page-access catalog from Supabase app_pages
 app.get(
