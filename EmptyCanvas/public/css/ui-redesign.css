@@ -4613,11 +4613,20 @@ body.proposals-page .products-proposal-detail{
 /* =========================================================
    LMS workspace switch
    The main ERP sidebar exposes LMS as a top-level workspace.
-   Inside LMS the rail is intentionally empty and the brand area becomes Back.
+   Inside LMS the brand area becomes Back while LMS pages remain visible.
    ========================================================= */
-.page-lms .sidebar-nav,
+.page-lms .sidebar-nav{
+  display:block!important;
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+}
 .page-lms .sidebar-footer{
   display:none!important;
+}
+.page-lms .sidebar-nav .nav-list{
+  display:flex!important;
+  flex-direction:column;
 }
 
 .page-lms .sidebar-header{
