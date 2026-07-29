@@ -9356,6 +9356,11 @@ app.get("/home", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "home.html"));
 });
 
+// LMS workspace shell (available for every authenticated user)
+app.get("/lms", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "lms.html"));
+});
+
 app.get("/user-access", requireAuth, requirePage(USER_ACCESS_PAGE_ALIASES), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "user-access.html"));
 });
