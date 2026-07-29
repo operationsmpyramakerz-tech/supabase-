@@ -2011,6 +2011,47 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ====== Sidebar Branding + Profile + Settings ======
+  function setupLmsWorkspaceTransition(){
+    if (window.__LMS_WORKSPACE_TRANSITION__) return;
+    window.__LMS_WORKSPACE_TRANSITION__ = true;
+
+    const isLmsPage = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '') === '/lms';
+
+    // Run the entrance motion after the initial layout is ready.
+    document.body.classList.add('workspace-switch-enter');
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => document.body.classList.add('workspace-switch-enter-active'));
+    });
+    window.setTimeout(() => {
+      document.body.classList.remove('workspace-switch-enter', 'workspace-switch-enter-active');
+    }, 620);
+
+    const transitionTo = (href, direction) => {
+      if (document.body.classList.contains('workspace-switch-leaving')) return;
+      document.body.classList.add('workspace-switch-leaving', direction === 'lms' ? 'workspace-switch-to-lms' : 'workspace-switch-to-main');
+      window.setTimeout(() => window.location.assign(href), 330);
+    };
+
+    document.addEventListener('click', (event) => {
+      const anchor = event.target.closest('a[href]');
+      if (!anchor) return;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (anchor.hasAttribute('download')) return;
+      const target = String(anchor.getAttribute('target') || '').toLowerCase();
+      if (target && target !== '_self') return;
+
+      const path = sidebarPath(anchor.getAttribute('href') || anchor.href || '');
+      const isMainToLms = !isLmsPage && path === '/lms';
+      const isLmsToMain = isLmsPage && anchor.classList.contains('lms-sidebar-back');
+      if (!isMainToLms && !isLmsToMain) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      transitionTo(isMainToLms ? '/lms' : '/home', isMainToLms ? 'lms' : 'main');
+    }, true);
+  }
+
   function ensureSidebarBranding(){
     const header = document.querySelector('.sidebar .sidebar-header');
     if (!header) return;
@@ -2027,11 +2068,16 @@ document.addEventListener('DOMContentLoaded', () => {
         back.href = '/home';
         back.setAttribute('aria-label', 'Back to main workspace');
         back.setAttribute('title', 'Back to main workspace');
-        back.innerHTML = '<i data-feather="arrow-left"></i><span>Back</span>';
+        back.innerHTML = '<i data-feather="arrow-left"></i>';
         header.insertBefore(back, header.firstChild);
       }
       return;
     }
+
+    // Visually separate the two workspace switches (Home + LMS) from ERP pages.
+    const lmsLink = document.querySelector('.sidebar a[href="/lms"]');
+    const lmsItem = lmsLink?.closest('li');
+    if (lmsItem) lmsItem.classList.add('sidebar-workspace-boundary');
 
     // Replace the "Dashboard" title with the company orange logo.
     // (Do not rely on editing every HTML page.)
@@ -2335,6 +2381,7 @@ if (document.querySelector('.sidebar')) {
   ensureSidebarBackdrop();
   menuToggle = ensureMenuToggle();
   ensureSidebarBranding();
+  setupLmsWorkspaceTransition();
 
   // Remove the old arrow toggle button (we toggle via the company logo instead)
   if (sidebarToggle) {
