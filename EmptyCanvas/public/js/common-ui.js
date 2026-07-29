@@ -3047,6 +3047,29 @@ if (document.querySelector('.sidebar')) {
   function applyAllowedPages(allowed){
     if (!Array.isArray(allowed)) return;
 
+    // LMS has its own page catalogue and access table. ERP page-access must not
+    // hide the dedicated LMS navigation. Route-level LMS permissions remain
+    // enforced by the server.
+    if (document.body?.classList?.contains('page-lms') || sidebarPath(window.location.pathname).startsWith('/lms')) {
+      try {
+        const nav = document.querySelector('.lms-sidebar .nav-list')
+          || document.querySelector('.sidebar-nav .nav-list');
+        if (nav?.children) {
+          Array.from(nav.children).forEach((child) => {
+            if (child && String(child.tagName).toUpperCase() === 'LI') showEl(child);
+          });
+        }
+        document.querySelectorAll('.lms-sidebar .nav-link').forEach((link) => {
+          showEl(link.closest('li') || link);
+        });
+      } catch {}
+      try {
+        document.body.classList.remove('permissions-loading');
+        document.body.classList.add('permissions-ready');
+      } catch {}
+      return;
+    }
+
     // Add all known links before applying the hide/show pass. Previously the
     // Events link could be injected after this pass and inherit an incorrect
     // display state inside the mobile dock.
