@@ -2,6 +2,9 @@
 (function () {
   'use strict';
 
+  const isLmsAccessScope = document.body?.dataset?.userAccessScope === 'lms';
+  const pageAccessApiBase = isLmsAccessScope ? '/api/lms/user-access' : '/api/user-access';
+
   const state = {
     departments: [],
     editableFields: [],
@@ -2345,14 +2348,14 @@
     const memberId = String(state.formMemberId || '').trim();
     if (state.formMode === 'create') {
       if (state.pageAccessDraft.length) return normalizeAccessRows(state.pageAccessDraft);
-      const res = await fetch('/api/user-access/pages', { credentials: 'same-origin', cache: 'no-store' });
+      const res = await fetch(`${pageAccessApiBase}/pages`, { credentials: 'same-origin', cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Failed to load pages.');
       return normalizeAccessRows((data.pages || []).map((page) => ({ ...page, accessLevel: 'edit', isEnabled: false })));
     }
     if (!memberId) throw new Error('Missing team member ID.');
     if (state.pageAccessCache.has(memberId)) return normalizeAccessRows(state.pageAccessCache.get(memberId));
-    const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/page-access`, {
+    const res = await fetch(`${pageAccessApiBase}/team-members/${encodeURIComponent(memberId)}/page-access`, {
       credentials: 'same-origin',
       cache: 'no-store',
     });
@@ -2371,10 +2374,10 @@
     state.pageAccessModalLoading = true;
     state.pageAccessModalRows = [];
     setPageAccessFormError('');
-    if (els.pageAccessTitle) els.pageAccessTitle.textContent = 'Page Access';
+    if (els.pageAccessTitle) els.pageAccessTitle.textContent = isLmsAccessScope ? 'LMS Page Access' : 'Page Access';
     if (els.pageAccessSubtitle) {
       const memberName = state.formMode === 'create' ? 'new team member' : (state.formMemberSnapshot?.name || 'this team member');
-      els.pageAccessSubtitle.textContent = `Configure page access for ${memberName}.`;
+      els.pageAccessSubtitle.textContent = `Configure ${isLmsAccessScope ? 'LMS ' : ''}page access for ${memberName}.`;
     }
     els.pageAccessModal.hidden = false;
     els.pageAccessModal.setAttribute('aria-hidden', 'false');
@@ -2420,7 +2423,7 @@
   }
 
   async function savePageAccessForMember(memberId, rows) {
-    const res = await fetch(`/api/user-access/team-members/${encodeURIComponent(memberId)}/page-access`, {
+    const res = await fetch(`${pageAccessApiBase}/team-members/${encodeURIComponent(memberId)}/page-access`, {
       method: 'PATCH',
       credentials: 'same-origin',
       cache: 'no-store',

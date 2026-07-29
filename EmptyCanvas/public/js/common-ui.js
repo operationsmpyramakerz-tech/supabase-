@@ -2015,7 +2015,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.__LMS_WORKSPACE_TRANSITION__) return;
     window.__LMS_WORKSPACE_TRANSITION__ = true;
 
-    const isLmsPage = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '') === '/lms';
+    const isLmsPage = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '').startsWith('/lms');
 
     // Run the entrance motion after the initial layout is ready.
     document.body.classList.add('workspace-switch-enter');
@@ -2056,7 +2056,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const header = document.querySelector('.sidebar .sidebar-header');
     if (!header) return;
 
-    const isLmsWorkspace = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '') === '/lms';
+    const isLmsWorkspace = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '').startsWith('/lms');
     if (isLmsWorkspace) {
       const h2 = header.querySelector('h2');
       if (h2) h2.style.display = 'none';
@@ -3419,6 +3419,7 @@ if (document.querySelector('.sidebar')) {
   }
 
   function ensureOrderedSidebarLinks(){
+    if (document.body?.classList?.contains('page-lms')) return;
     try {
       OPS_SIDEBAR_ORDER.forEach((item) => {
         ensureLink({ href: item.href, label: item.label, icon: item.icon });
@@ -3427,6 +3428,7 @@ if (document.querySelector('.sidebar')) {
   }
 
   function reorderSidebarNav(){
+    if (document.body?.classList?.contains('page-lms')) return;
     try {
       const nav = getSidebarNavRoot();
       const list = getSidebarPagesList();
