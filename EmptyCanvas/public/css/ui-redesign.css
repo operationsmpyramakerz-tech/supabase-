@@ -4609,3 +4609,61 @@ body.proposals-page .products-proposal-detail{
     font-size: .76rem !important;
   }
 }
+
+/* =========================================================
+   LMS workspace switch
+   The main ERP sidebar exposes LMS as a top-level workspace.
+   Inside LMS the rail is intentionally empty and the brand area becomes Back.
+   ========================================================= */
+.page-lms .sidebar-nav,
+.page-lms .sidebar-footer{
+  display:none!important;
+}
+
+.page-lms .sidebar-header{
+  justify-content:center!important;
+  padding:18px 10px!important;
+}
+
+.page-lms .lms-sidebar-back{
+  width:100%;
+  min-height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:17px;
+  color:#fff;
+  background:rgba(255,255,255,.08);
+  text-decoration:none;
+  font-weight:900;
+  transition:transform .18s ease,background .18s ease,border-color .18s ease;
+}
+.page-lms .lms-sidebar-back:hover{
+  transform:translateY(-1px);
+  background:rgba(255,255,255,.14);
+  border-color:rgba(255,255,255,.3);
+}
+.page-lms .lms-sidebar-back svg{width:23px;height:23px;stroke-width:2.5}
+body.sidebar-collapsed.page-lms .lms-sidebar-back span{display:none}
+body.sidebar-collapsed.page-lms .lms-sidebar-back{width:52px;padding:0}
+
+.page-lms .lms-workspace{
+  min-height:calc(100vh - 178px);
+}
+.page-lms .lms-workspace__canvas{
+  min-height:calc(100vh - 210px);
+  border-radius:28px;
+  background:#fff;
+  border:1px solid rgba(15,23,42,.07);
+  box-shadow:0 18px 55px rgba(15,23,42,.08);
+}
+
+@media(max-width:768px){
+  .page-lms .sidebar-header{padding:10px 8px!important}
+  .page-lms .lms-sidebar-back{min-height:48px;border-radius:15px}
+  .page-lms .lms-sidebar-back span{display:none}
+  .page-lms .lms-workspace{min-height:calc(100vh - 145px)}
+  .page-lms .lms-workspace__canvas{min-height:calc(100vh - 175px);border-radius:22px}
+}
