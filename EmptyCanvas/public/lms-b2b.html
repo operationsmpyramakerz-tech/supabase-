@@ -1623,6 +1623,233 @@
     white-space: nowrap !important;
   }
 </style>
+
+<style>
+  /* LMS Schools: modern add/edit school form */
+  body.b2b-page.b2b-form-view .b2b-floating-actions{
+    display:none !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-wrap{
+    gap:0 !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-page{
+    width:100%;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-page__shell{
+    width:min(100%, 1120px) !important;
+    margin:0 auto !important;
+    border-radius:30px !important;
+    border:1px solid rgba(255,255,255,.82) !important;
+    background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,250,252,.98)) !important;
+    box-shadow:0 28px 70px rgba(15,23,42,.16) !important;
+    overflow:visible !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-page__header{
+    padding:24px 26px 20px !important;
+    border-bottom:1px solid rgba(15,23,42,.07) !important;
+    background:linear-gradient(135deg,#fff 0%,#fffaf5 58%,#f8fafc 100%) !important;
+    border-radius:30px 30px 0 0 !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-modal__body{
+    display:grid !important;
+    gap:18px !important;
+    padding:22px 24px 26px !important;
+    background:transparent !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-form-section{
+    position:relative;
+    margin:0 !important;
+    padding:20px !important;
+    border:1px solid rgba(15,23,42,.08) !important;
+    border-radius:22px !important;
+    background:rgba(255,255,255,.96) !important;
+    box-shadow:0 14px 34px rgba(15,23,42,.07) !important;
+    overflow:visible !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-form-section::before{
+    content:"";
+    position:absolute;
+    left:0;
+    top:18px;
+    bottom:18px;
+    width:4px;
+    border-radius:0 999px 999px 0;
+    background:linear-gradient(180deg,#fb923c,#ea580c);
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-form-section__title{
+    margin:0 0 16px !important;
+    padding-bottom:13px !important;
+    border-bottom:1px solid rgba(15,23,42,.07) !important;
+    color:#111827 !important;
+    font-size:1rem !important;
+    letter-spacing:.01em;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-form-section__title svg{
+    width:20px !important;
+    height:20px !important;
+    padding:4px;
+    box-sizing:content-box;
+    border-radius:10px;
+    color:#c2410c;
+    background:#fff7ed;
+    border:1px solid rgba(234,88,12,.14);
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-form-grid{
+    gap:16px !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-field{
+    gap:8px !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-field label{
+    color:#475569 !important;
+    font-size:.8rem !important;
+    letter-spacing:.015em;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-field input,
+  body.b2b-page.b2b-form-view .b2b-school-field textarea,
+  body.b2b-page.b2b-form-view .b2b-contract-years select,
+  body.b2b-page.b2b-form-view .b2b-inline-add input{
+    min-height:54px !important;
+    border:1px solid rgba(15,23,42,.10) !important;
+    border-radius:16px !important;
+    background:linear-gradient(180deg,#fff,#f8fafc) !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 8px 20px rgba(15,23,42,.04) !important;
+    transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-field input:focus,
+  body.b2b-page.b2b-form-view .b2b-school-field textarea:focus,
+  body.b2b-page.b2b-form-view .b2b-contract-years select:focus,
+  body.b2b-page.b2b-form-view .b2b-inline-add input:focus{
+    border-color:#fb923c !important;
+    box-shadow:0 0 0 4px rgba(251,146,60,.14),0 14px 28px rgba(15,23,42,.08) !important;
+    transform:translateY(-1px);
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-select{
+    z-index:1;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-select.is-open{
+    z-index:80;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-select__button{
+    min-height:54px !important;
+    border-color:rgba(15,23,42,.10) !important;
+    border-radius:16px !important;
+    background:linear-gradient(180deg,#fff,#f8fafc) !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 8px 20px rgba(15,23,42,.05) !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-select__button:hover{
+    border-color:rgba(249,115,22,.28) !important;
+    transform:translateY(-1px);
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-select.is-open .b2b-modern-select__button{
+    border-color:#fb923c !important;
+    box-shadow:0 0 0 4px rgba(251,146,60,.14),0 18px 34px rgba(15,23,42,.12) !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-select__panel{
+    top:calc(100% + 9px) !important;
+    padding:9px !important;
+    border-radius:18px !important;
+    border:1px solid rgba(15,23,42,.09) !important;
+    background:rgba(255,255,255,.99) !important;
+    box-shadow:0 26px 60px rgba(15,23,42,.2) !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-option{
+    min-height:44px !important;
+    border-radius:13px !important;
+    padding:11px 12px !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modern-option:hover,
+  body.b2b-page.b2b-form-view .b2b-modern-option.is-selected,
+  body.b2b-page.b2b-form-view .b2b-modern-option--check:has(input:checked){
+    background:linear-gradient(135deg,#fff7ed,#ffedd5) !important;
+    color:#9a3412 !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-inline-add{
+    margin-top:14px !important;
+    padding:12px !important;
+    border-radius:18px;
+    background:#f8fafc;
+    border:1px dashed rgba(15,23,42,.10);
+  }
+
+  body.b2b-page.b2b-form-view .b2b-mini-btn{
+    min-height:50px !important;
+    border-radius:15px !important;
+    background:linear-gradient(135deg,#111827,#050914) !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-school-modal__footer{
+    position:sticky;
+    bottom:0;
+    z-index:20;
+    padding:16px 24px 20px !important;
+    border-top:1px solid rgba(15,23,42,.07) !important;
+    background:rgba(248,250,252,.94) !important;
+    backdrop-filter:blur(16px);
+    border-radius:0 0 30px 30px;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modal-btn{
+    min-height:50px;
+    border-radius:15px !important;
+    padding:0 20px !important;
+  }
+
+  body.b2b-page.b2b-form-view .b2b-modal-btn--dark{
+    background:linear-gradient(135deg,#111827,#050914) !important;
+    box-shadow:0 14px 28px rgba(15,23,42,.18);
+  }
+
+  @media (max-width:760px){
+    body.b2b-page.b2b-form-view .b2b-school-page__header{
+      padding:18px 16px 15px !important;
+    }
+    body.b2b-page.b2b-form-view .b2b-school-modal__body{
+      gap:14px !important;
+      padding:16px 14px 18px !important;
+    }
+    body.b2b-page.b2b-form-view .b2b-school-form-section{
+      padding:16px 14px 16px 17px !important;
+      border-radius:19px !important;
+    }
+    body.b2b-page.b2b-form-view .b2b-school-form-grid{
+      grid-template-columns:1fr !important;
+    }
+    body.b2b-page.b2b-form-view .b2b-school-field--wide{
+      grid-column:auto !important;
+    }
+    body.b2b-page.b2b-form-view .b2b-school-modal__footer{
+      padding:14px !important;
+    }
+    body.b2b-page.b2b-form-view .b2b-modal-btn{
+      flex:1;
+    }
+  }
+</style>
+
 </head>
 <body class="permissions-loading b2b-page page-lms">
 <script>
@@ -1709,7 +1936,7 @@
 </div>
 
 <script>if (window.feather) feather.replace();</script>
-<script src="/js/common-ui.js?v=lms-schools-labels-v1"></script>
-<script src="/js/b2b.js?v=lms-schools-labels-v1"></script>
+<script src="/js/common-ui.js?v=lms-school-form-modern-v2"></script>
+<script src="/js/b2b.js?v=lms-school-form-modern-v2"></script>
 </body>
 </html>
