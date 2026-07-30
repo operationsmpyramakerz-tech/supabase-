@@ -14,7 +14,7 @@
 <script src="/pwa-register.js" defer></script>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>B2B - Dashboard</title>
+  <title>Schools - LMS</title>
   <!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
   <style>
     body.permissions-loading .sidebar li { display: none !important; }
@@ -1644,7 +1644,7 @@
     <nav class="sidebar-nav" aria-label="LMS pages">
       <ul class="nav-list">
         <li><a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a></li>
-        <li><a class="nav-link active" href="/lms/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+        <li><a class="nav-link active" href="/lms/b2b"><i data-feather="home"></i><span class="nav-label">Schools</span></a></li>
       </ul>
     </nav>
     <div class="sidebar-footer"></div>
@@ -1658,7 +1658,7 @@
             <span class="greeting-avatar"><img src="/images/greeting-icon.png" alt="Hi icon"/></span>
             <div class="greet-text">
               <div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
-              <div class="greet-sub">Browse B2B schools</div>
+              <div class="greet-sub">Browse schools</div>
             </div>
           </div>
 
@@ -1677,7 +1677,7 @@
       </div>
 
       <div class="header-row2">
-        <h1 class="page-title">B2B</h1>
+        <h1 class="page-title">Schools</h1>
       </div>
     </header>
 
@@ -1686,7 +1686,7 @@
         <div class="b2b-floating-actions">
           <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
             <i data-feather="plus-circle"></i>
-            <span>Add new customer</span>
+            <span>Add new school</span>
           </button>
         </div>
 
@@ -1701,7 +1701,7 @@
 </div>
 
 <script>if (window.feather) feather.replace();</script>
-<script src="/js/common-ui.js?v=lms-b2b-move-v1"></script>
-<script src="/js/b2b.js?v=lms-b2b-functionality-fix-v2"></script>
+<script src="/js/common-ui.js?v=lms-schools-labels-v1"></script>
+<script src="/js/b2b.js?v=lms-schools-labels-v1"></script>
 </body>
 </html>
