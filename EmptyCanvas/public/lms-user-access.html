@@ -16,8 +16,8 @@
   <link href="/css/style.css?v=lms-users-center-shell-v4" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=lms-users-center-shell-v4" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
-  <link href="/css/task-management.css?v=lms-structure-builder-v2" rel="stylesheet" />
-  <link href="/css/lms-user-access.css?v=lms-structure-builder-v2" rel="stylesheet" />
+  <link href="/css/task-management.css?v=lms-structure-builder-v3" rel="stylesheet" />
+  <link href="/css/lms-user-access.css?v=lms-structure-builder-v3" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-lms task-management-page" data-sidebar-open-scroll="instant">
@@ -72,7 +72,7 @@
 
       <main class="lms-structure-page" aria-label="LMS Users Center workspace">
         <section class="lms-structure-toolbar">
-          <div><h2>Learning Structures</h2><p>Create schools and connect instructors and co-instructors through a visual workflow.</p></div>
+          <div><h2>Learning Structures</h2><p>Select a school, then build its learning team through a visual workflow.</p></div>
           <button type="button" class="tm-btn tm-btn--primary" id="lmsAddStructureBtn"><i data-feather="plus"></i><span>Add New Structure</span></button>
         </section>
         <section class="lms-structure-empty" aria-label="LMS structures list">
@@ -82,6 +82,32 @@
     </div>
   </div>
 
+
+  <div class="tm-overlay lms-school-picker-overlay" id="lmsSchoolPickerOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-lms-close="school-picker"></div>
+    <section class="lms-school-picker" role="dialog" aria-modal="true" aria-labelledby="lmsSchoolPickerTitle">
+      <button type="button" class="tm-icon-btn lms-school-picker__close" aria-label="Close" data-lms-close="school-picker"><i data-feather="x"></i></button>
+      <div class="lms-school-picker__icon"><i data-feather="home"></i></div>
+      <span class="tm-eyebrow">New learning structure</span>
+      <h2 id="lmsSchoolPickerTitle">Choose a school</h2>
+      <p>Select the school that this LMS structure belongs to before opening the builder.</p>
+      <label class="lms-modern-select">
+        <span>School <b>*</b></span>
+        <div class="lms-modern-select__control">
+          <i data-feather="search"></i>
+          <select id="lmsSchoolSelect" required>
+            <option value="">Loading schools...</option>
+          </select>
+          <i data-feather="chevron-down"></i>
+        </div>
+      </label>
+      <div class="lms-school-picker__error" id="lmsSchoolPickerError" aria-live="polite"></div>
+      <div class="lms-school-picker__actions">
+        <button type="button" class="tm-btn tm-btn--secondary" data-lms-close="school-picker">Cancel</button>
+        <button type="button" class="tm-btn tm-btn--primary" id="lmsContinueToBuilderBtn"><span>Continue to Builder</span><i data-feather="arrow-right"></i></button>
+      </div>
+    </section>
+  </div>
 
   <div class="tm-overlay tm-overlay--builder-layer" id="lmsBuilderOverlay" hidden aria-hidden="true">
     <div class="tm-overlay__backdrop" data-lms-close="builder"></div>
@@ -95,9 +121,13 @@
           <div id="lmsAddBlockWrap" style="position:relative">
             <button type="button" class="tm-builder-tool tm-builder-tool--primary" id="lmsAddBlockBtn"><i data-feather="plus-square"></i><span>Add Block</span></button>
             <div class="lms-add-menu" id="lmsAddBlockMenu" hidden>
-              <button type="button" data-add-kind="school"><i data-feather="home"></i><span>School</span></button>
+              <button type="button" data-add-kind="supervisor"><i data-feather="shield"></i><span>Supervisor</span></button>
+              <button type="button" data-add-kind="team_leader"><i data-feather="award"></i><span>Team Leader</span></button>
               <button type="button" data-add-kind="instructor"><i data-feather="user"></i><span>Instructor</span></button>
               <button type="button" data-add-kind="co_instructor"><i data-feather="users"></i><span>Co-Instructor</span></button>
+              <button type="button" data-add-kind="school_coordinator"><i data-feather="clipboard"></i><span>School Coordinator</span></button>
+              <button type="button" data-add-kind="students"><i data-feather="book-open"></i><span>Students</span></button>
+              <button type="button" data-add-kind="parents"><i data-feather="heart"></i><span>Parents</span></button>
             </div>
           </div>
           <div class="tm-builder-zoom" role="group" aria-label="Canvas zoom controls">
@@ -116,15 +146,15 @@
       <div class="tm-builder-canvas-wrap" id="lmsBuilderCanvasWrap" tabindex="-1">
         <div class="tm-builder-board" id="lmsBuilderBoard" aria-label="LMS structure design canvas">
           <svg class="tm-connection-layer" id="lmsBuilderArrows" aria-hidden="true"></svg>
-          <div class="tm-builder-empty" id="lmsBuilderEmpty"><i data-feather="git-branch"></i><b>Your LMS structure canvas is ready</b><span>Use <strong>Add Block</strong> to add a School, Instructor, or Co-Instructor, then connect the blocks.</span></div>
+          <div class="tm-builder-empty" id="lmsBuilderEmpty"><i data-feather="git-branch"></i><b>Your LMS structure canvas is ready</b><span>Use <strong>Add Block</strong> to add roles, then connect the blocks.</span></div>
         </div>
       </div>
-      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block represents one LMS entity</span><span><i class="tm-legend-arrow">→</i>Connect an output point to another block's input point</span><span><i class="tm-legend-handle"></i>Drag a block to reposition it</span></div>
+      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block represents one LMS role</span><span><i class="tm-legend-arrow">→</i>Connect an output point to another block's input point</span><span><i class="tm-legend-handle"></i>Drag a block to reposition it</span></div>
     </section>
   </div>
 
   <script>if(window.feather)feather.replace();</script>
-  <script src="/js/common-ui.js?v=lms-structure-builder-v2"></script>
-  <script src="/js/lms-user-access.js?v=lms-structure-builder-v2"></script>
+  <script src="/js/common-ui.js?v=lms-structure-builder-v3"></script>
+  <script src="/js/lms-user-access.js?v=lms-structure-builder-v3"></script>
 </body>
 </html>
