@@ -3474,7 +3474,7 @@ if (document.querySelector('.sidebar')) {
       .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/b2b');
     if (!b2bLink) {
       const item = document.createElement('li');
-      item.innerHTML = '<a class="nav-link" href="/lms/b2b"><i data-feather="home"></i><span class="nav-label">Schools</span></a>';
+      item.innerHTML = `<a class="nav-link" href="/lms/b2b"><svg class="lms-school-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10.5 12 4l8 6.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-5h5v5"/><path d="M8 12h1.5M14.5 12H16"/><circle cx="12" cy="9" r="1.6"/><path d="M12 7.4v1.7l1 .6"/><path d="M12 4V1.8h4l-1 1 1 1h-4"/></svg><span class="nav-label">Schools</span></a>`;
       list.appendChild(item);
       b2bLink = item.querySelector('a.nav-link');
     }
