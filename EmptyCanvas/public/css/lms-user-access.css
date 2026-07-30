@@ -1,1 +1,44 @@
 .lms-structure-page{padding:18px 20px 28px}.lms-structure-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 20px;border-radius:22px;background:#fff;box-shadow:0 12px 32px rgba(8,17,35,.10)}.lms-structure-toolbar h2{margin:0;font-size:1.25rem}.lms-structure-toolbar p{margin:5px 0 0;color:#70798a}.lms-structure-empty{min-height:420px;margin-top:16px;border-radius:24px;background:#fff;display:grid;place-items:center;text-align:center;color:#737b89}.lms-structure-empty i{width:42px;height:42px;margin-bottom:10px}.lms-add-menu{position:absolute;z-index:40;min-width:220px;padding:8px;border:1px solid #e5e8ef;border-radius:16px;background:#fff;box-shadow:0 18px 44px rgba(8,17,35,.18)}.lms-add-menu[hidden]{display:none}.lms-add-menu button{width:100%;display:flex;align-items:center;gap:11px;border:0;background:transparent;border-radius:11px;padding:11px 12px;text-align:left;font:inherit;font-weight:700;color:#172033;cursor:pointer}.lms-add-menu button:hover{background:#f5f7fb}.lms-add-menu button svg{width:18px;height:18px;color:#d06a2b}.lms-builder-block__type{display:inline-flex;align-items:center;width:max-content;padding:5px 9px;border-radius:999px;background:#fff3e9;color:#a84e17;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}.lms-builder-block__hint{color:#7b8391;font-size:.82rem}.lms-structure-name{display:flex;align-items:center;gap:10px}.lms-structure-name input{min-width:250px;border:1px solid #dfe3eb;border-radius:11px;padding:9px 12px;font:inherit;font-weight:700}.lms-builder-status{margin-left:auto;color:#6b7484;font-size:.82rem}.lms-builder-block{touch-action:none}.lms-builder-block .tm-builder-block__body{gap:8px}.lms-builder-block[data-kind="school"] .tm-builder-block__number{background:#fff1e4;color:#b45318}.lms-builder-block[data-kind="instructor"] .tm-builder-block__number{background:#eaf3ff;color:#1d5fb8}.lms-builder-block[data-kind="co_instructor"] .tm-builder-block__number{background:#ecf9f1;color:#18794e}@media(max-width:720px){.lms-structure-toolbar{align-items:flex-start;flex-direction:column}.lms-structure-name{width:100%;flex-direction:column;align-items:stretch}.lms-structure-name input{min-width:0;width:100%}.tm-dialog--builder{width:calc(100vw - 18px)!important}.tm-builder-toolbar{align-items:stretch}.tm-builder-toolbar,.tm-builder-toolbar__tools,.tm-builder-toolbar__actions{flex-wrap:wrap}.lms-builder-status{width:100%;margin:0}}
+
+
+/* LMS structure builder visual parity with the Task Management workflow builder */
+.page-lms.task-management-page .tm-overlay--builder-layer{z-index:10020;}
+.page-lms.task-management-page .tm-dialog--builder{border:1px solid rgba(255,255,255,.7);border-radius:24px;box-shadow:0 30px 90px rgba(4,11,28,.28);}
+.page-lms.task-management-page .tm-builder-header{padding:1px 1px 0;}
+.page-lms.task-management-page .tm-builder-header .tm-eyebrow{font-size:10px;font-weight:900;letter-spacing:.11em;text-transform:uppercase;color:#7f8795;}
+.page-lms.task-management-page .tm-builder-toolbar{justify-content:space-between;}
+.page-lms.task-management-page .tm-builder-toolbar__tools{min-width:0;flex-wrap:wrap;}
+.page-lms.task-management-page .tm-builder-toolbar__actions{margin-left:auto;}
+.page-lms.task-management-page .lms-structure-name{height:38px;padding:0 10px;border:1px solid #e0e3ea;border-radius:11px;background:#fff;gap:8px;}
+.page-lms.task-management-page .lms-structure-name span{font-size:11px;font-weight:900;color:#5f6878;white-space:nowrap;}
+.page-lms.task-management-page .lms-structure-name input{width:230px;min-width:0;height:34px;padding:0;border:0;border-radius:0;background:transparent;font-size:12px;font-weight:800;color:#202938;outline:0;}
+.page-lms.task-management-page .lms-structure-name:focus-within{border-color:#b9adff;box-shadow:0 0 0 3px rgba(96,70,232,.10);}
+.page-lms.task-management-page .lms-builder-status{max-width:280px;color:#697386;font-size:11px;font-weight:800;line-height:1.35;text-align:right;}
+.page-lms.task-management-page .lms-add-menu{top:calc(100% + 8px);left:0;z-index:50;min-width:220px;border-radius:14px;box-shadow:0 18px 46px rgba(15,23,42,.20);}
+.page-lms.task-management-page .lms-add-menu button{min-height:42px;}
+.page-lms.task-management-page .lms-builder-block__type{padding:4px 8px;border-radius:8px;font-size:10px;}
+.page-lms.task-management-page .lms-builder-block__hint{margin-top:auto;font-size:11px;line-height:1.4;}
+.page-lms.task-management-page .tm-builder-board{background-color:#fafbfe;}
+
+@media(max-width:900px){
+  .page-lms.task-management-page .tm-dialog--builder{width:calc(100vw - 24px);height:calc(100vh - 34px);padding:16px;border-radius:20px;}
+  .page-lms.task-management-page .tm-builder-toolbar{align-items:stretch;flex-direction:column;gap:9px;margin-top:14px;}
+  .page-lms.task-management-page .tm-builder-toolbar__tools,.page-lms.task-management-page .tm-builder-toolbar__actions{width:100%;}
+  .page-lms.task-management-page .tm-builder-toolbar__actions{justify-content:flex-end;margin-left:0;}
+  .page-lms.task-management-page .lms-builder-status{flex:1;max-width:none;text-align:left;}
+  .page-lms.task-management-page .lms-structure-name{flex:1;min-width:210px;}
+  .page-lms.task-management-page .lms-structure-name input{width:100%;}
+}
+
+@media(max-width:640px){
+  .page-lms.task-management-page .tm-dialog--builder{width:calc(100vw - 18px)!important;height:calc(100vh - 22px);padding:14px;}
+  .page-lms.task-management-page .tm-builder-header h2{font-size:21px;}
+  .page-lms.task-management-page .tm-builder-toolbar__tools{display:grid;grid-template-columns:auto auto 1fr;gap:7px;}
+  .page-lms.task-management-page #lmsAddBlockWrap{grid-column:1;}
+  .page-lms.task-management-page .tm-builder-zoom{grid-column:2;}
+  .page-lms.task-management-page .lms-structure-name{grid-column:1/-1;width:100%;}
+  .page-lms.task-management-page .tm-builder-toolbar__actions{display:grid;grid-template-columns:1fr auto auto;}
+  .page-lms.task-management-page .lms-builder-status{grid-column:1/-1;width:100%;}
+  .page-lms.task-management-page .tm-builder-canvas-wrap{min-height:360px;}
+  .page-lms.task-management-page .tm-builder-legend{gap:8px;font-size:10px;}
+}
