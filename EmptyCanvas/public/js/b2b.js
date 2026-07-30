@@ -505,12 +505,12 @@ document.addEventListener('DOMContentLoaded', () => {
       <form class="b2b-school-page__shell b2b-school-modal__dialog" data-b2b-school-form>
         <div class="b2b-school-page__header">
           <div class="b2b-school-page__title-pill">
-            <button class="b2b-school-page__back" type="button" data-b2b-modal-close aria-label="Back to B2B customers"><i data-feather="arrow-left"></i></button>
-            <h2 class="b2b-school-modal__title" data-b2b-modal-title>Add new customer</h2>
+            <button class="b2b-school-page__back" type="button" data-b2b-modal-close aria-label="Back to schools"><i data-feather="arrow-left"></i></button>
+            <h2 class="b2b-school-modal__title" data-b2b-modal-title>Add new school</h2>
           </div>
           <div class="b2b-school-page__header-copy">
-            <div class="b2b-school-modal__eyebrow">B2B customers</div>
-            <p class="b2b-school-modal__subtitle" data-b2b-modal-subtitle>Create or update a customer page.</p>
+            <div class="b2b-school-modal__eyebrow">Schools</div>
+            <p class="b2b-school-modal__subtitle" data-b2b-modal-subtitle>Create or update a school page.</p>
           </div>
         </div>
         <div class="b2b-school-form-error" data-b2b-modal-error></div>
@@ -1057,11 +1057,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const ui = ensureModal();
     activeEditId = mode === 'edit' ? activeEditId : null;
     activeEditName = mode === 'edit' ? schoolName : '';
-    ui.title.textContent = mode === 'edit' ? 'Edit customer' : 'Add new customer';
+    ui.title.textContent = mode === 'edit' ? 'Edit school' : 'Add new school';
     ui.subtitle.textContent = mode === 'edit'
-      ? `Update ${schoolName || 'this customer'} data.`
-      : 'Create a new B2B customer page.';
-    ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add Customer';
+      ? `Update ${schoolName || 'this school'} data.`
+      : 'Create a new school page.';
+    ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
     ui.submit.disabled = false;
     setModalError('');
     renderModalFields(values || {});
@@ -1219,8 +1219,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (!activeAdminPassword) {
         ui.submit.disabled = false;
-        ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add Customer';
-        const password = await requireAdminForAction(mode === 'edit' ? 'save B2B customer changes' : 'add a B2B customer');
+        ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
+        const password = await requireAdminForAction(mode === 'edit' ? 'save school changes' : 'add a school');
         if (!password) return;
         activeAdminPassword = password;
         ui.submit.disabled = true;
@@ -1249,7 +1249,7 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(errorPayload.error || 'Failed to save school');
       }
 
-      setB2BFlash(mode === 'edit' ? 'Customer updated successfully.' : 'Customer saved successfully.');
+      setB2BFlash(mode === 'edit' ? 'School updated successfully.' : 'School saved successfully.');
       window.location.href = b2bBasePath;
       return;
     } catch (error) {
@@ -1257,7 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setModalError(error.message || 'Failed to save school.');
     } finally {
       ui.submit.disabled = false;
-      ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add Customer';
+      ui.submit.textContent = mode === 'edit' ? 'Save Changes' : 'Add School';
     }
   }
 

@@ -3474,7 +3474,7 @@ if (document.querySelector('.sidebar')) {
       .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/b2b');
     if (!b2bLink) {
       const item = document.createElement('li');
-      item.innerHTML = '<a class="nav-link" href="/lms/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a>';
+      item.innerHTML = '<a class="nav-link" href="/lms/b2b"><i data-feather="home"></i><span class="nav-label">Schools</span></a>';
       list.appendChild(item);
       b2bLink = item.querySelector('a.nav-link');
     }
