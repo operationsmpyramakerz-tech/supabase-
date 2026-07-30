@@ -3441,6 +3441,65 @@ if (document.querySelector('.sidebar')) {
     } catch {}
   }
 
+  function enforceLmsSidebarNavigation(){
+    const currentPath = sidebarPath(window.location.pathname || '');
+    const isLmsWorkspace = document.body?.classList?.contains('page-lms') || currentPath.startsWith('/lms');
+    if (!isLmsWorkspace) return;
+
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    sidebar.classList.add('lms-sidebar');
+
+    const nav = sidebar.querySelector('.sidebar-nav');
+    const list = nav?.querySelector('.nav-list');
+    if (!nav || !list) return;
+
+    // LMS owns a completely separate navigation catalogue. Any ERP links that
+    // may be injected by the shared chrome must be removed immediately.
+    Array.from(list.children).forEach((item) => {
+      const link = item.querySelector?.('a.nav-link[href]');
+      const path = sidebarPath(link?.getAttribute('href') || '');
+      if (!path.startsWith('/lms')) item.remove();
+    });
+
+    let usersLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
+      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/user-access');
+    if (!usersLink) {
+      const item = document.createElement('li');
+      item.innerHTML = '<a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a>';
+      list.appendChild(item);
+      usersLink = item.querySelector('a.nav-link');
+    }
+
+    list.querySelectorAll('a.nav-link[href]').forEach((link) => {
+      const path = sidebarPath(link.getAttribute('href') || '');
+      const active = path === currentPath;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+      showEl(link.closest('li') || link);
+    });
+
+    nav.style.setProperty('display', 'block', 'important');
+    document.body.classList.remove('permissions-loading');
+    document.body.classList.add('permissions-ready');
+    hydratePendingFeatherIcons(sidebar);
+  }
+
+  function watchLmsSidebarNavigation(){
+    const isLmsWorkspace = document.body?.classList?.contains('page-lms')
+      || sidebarPath(window.location.pathname || '').startsWith('/lms');
+    if (!isLmsWorkspace || window.__LMS_SIDEBAR_GUARD__) return;
+    window.__LMS_SIDEBAR_GUARD__ = true;
+    enforceLmsSidebarNavigation();
+
+    const list = document.querySelector('.lms-sidebar .sidebar-nav .nav-list')
+      || document.querySelector('.sidebar .sidebar-nav .nav-list');
+    if (!list || typeof MutationObserver !== 'function') return;
+    const observer = new MutationObserver(() => enforceLmsSidebarNavigation());
+    observer.observe(list, { childList: true, subtree: true });
+  }
+
   function ensureOrderedSidebarLinks(){
     if (document.body?.classList?.contains('page-lms')) return;
     try {
@@ -3828,6 +3887,7 @@ if (document.querySelector('.sidebar')) {
         reorderSidebarNav();
         renameSidebarLabels();
         ensureNavTooltips();
+        enforceLmsSidebarNavigation();
         scheduleSidebarScrollRestore();
         if (window.feather) feather.replace();
       } catch {}
@@ -4016,6 +4076,7 @@ if (document.querySelector('.sidebar')) {
   // Home should appear for everyone (not tied to permissions), and all pages
   // should keep one stable order on every route.
   bindSidebarScrollPersistence();
+  watchLmsSidebarNavigation();
   ensureOrderedSidebarLinks();
   normalizeKitsSidebarIcon();
   removeSidebarMailLinks();
@@ -4035,6 +4096,7 @@ if (document.querySelector('.sidebar')) {
   ensureNavTooltips();
 
   ensureGreetingAndPages();
+  enforceLmsSidebarNavigation();
 
   window.addEventListener('user:updated', () => {
     // Refresh name + sidebar profile + permissions from the server
