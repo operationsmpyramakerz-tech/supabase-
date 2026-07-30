@@ -16185,6 +16185,108 @@ app.patch("/api/lms/user-access/team-members/:id/page-access", async (req, res) 
   }
 });
 
+
+// LMS structure builder — schools, instructors and co-instructors linked as a workflow.
+app.use("/api/lms/structures", requireAuth, requireLmsPageAccess("lms-users-center"));
+
+app.get("/api/lms/structures", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const rows = await supabaseDb.request('/lms_structures?select=*&order=created_at.desc&limit=500');
+    return res.json({ ok: true, structures: Array.isArray(rows) ? rows : [] });
+  } catch (error) {
+    console.error("GET /api/lms/structures error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load LMS structures." });
+  }
+});
+
+app.post("/api/lms/structures", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const allowedKinds = new Set(["school", "instructor", "co_instructor"]);
+  try {
+    const name = String(req.body?.name || "").trim().slice(0, 200) || "Untitled LMS Structure";
+    const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : [];
+    const edges = Array.isArray(req.body?.edges) ? req.body.edges : [];
+    if (!nodes.length) return res.status(400).json({ ok: false, error: "Add at least one structure block." });
+    if (nodes.length > 500) return res.status(400).json({ ok: false, error: "The structure contains too many blocks." });
+
+    const cleanNodes = nodes.map((node, index) => {
+      const clientId = String(node?.clientId || node?.id || "").trim();
+      const kind = String(node?.kind || "").trim().toLowerCase();
+      if (!clientId || !allowedKinds.has(kind)) {
+        const error = new Error(`Invalid LMS block at position ${index + 1}.`);
+        error.status = 400;
+        throw error;
+      }
+      return {
+        clientId,
+        kind,
+        x: Math.max(0, Math.min(100000, Number(node?.x) || 0)),
+        y: Math.max(0, Math.min(100000, Number(node?.y) || 0)),
+      };
+    });
+    const clientIds = new Set(cleanNodes.map((node) => node.clientId));
+    if (clientIds.size !== cleanNodes.length) return res.status(400).json({ ok: false, error: "Duplicate block identifiers were received." });
+
+    const cleanEdges = edges.map((edge) => ({
+      from: String(edge?.from || "").trim(),
+      to: String(edge?.to || "").trim(),
+    })).filter((edge) => edge.from && edge.to && edge.from !== edge.to && clientIds.has(edge.from) && clientIds.has(edge.to));
+
+    const createdByRaw = String(req.session?.userSupabaseId || "").trim();
+    const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
+    const structureRows = await supabaseDb.request('/lms_structures', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: { name, created_by: createdBy },
+    });
+    const structure = Array.isArray(structureRows) ? structureRows[0] : structureRows;
+    const structureId = structure?.id;
+    if (!structureId) throw new Error("The LMS structure could not be created.");
+
+    try {
+      const blockRows = cleanNodes.map((node, index) => ({
+        structure_id: structureId,
+        client_key: node.clientId,
+        block_type: node.kind,
+        sort_order: index + 1,
+        position_x: node.x,
+        position_y: node.y,
+        config: {},
+      }));
+      const createdBlocks = await supabaseDb.request('/lms_structure_blocks', {
+        method: 'POST',
+        headers: { Prefer: 'return=representation' },
+        body: blockRows,
+      });
+      const idByClient = new Map((Array.isArray(createdBlocks) ? createdBlocks : []).map((row) => [String(row.client_key), row.id]));
+      const edgeRows = cleanEdges.map((edge, index) => ({
+        structure_id: structureId,
+        from_block_id: idByClient.get(edge.from),
+        to_block_id: idByClient.get(edge.to),
+        sort_order: index + 1,
+      })).filter((row) => row.from_block_id && row.to_block_id);
+      if (edgeRows.length) {
+        await supabaseDb.request('/lms_structure_edges', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: edgeRows,
+        });
+      }
+      return res.status(201).json({ ok: true, structure, blocks: createdBlocks, edgeCount: edgeRows.length });
+    } catch (nestedError) {
+      await supabaseDb.request(`/lms_structures?id=eq.${_sbRestFilterValue(structureId)}`, {
+        method: 'DELETE',
+        headers: { Prefer: 'return=minimal' },
+      }).catch(() => null);
+      throw nestedError;
+    }
+  } catch (error) {
+    console.error("POST /api/lms/structures error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create LMS structure." });
+  }
+});
+
 // User Access & Data — Page-access catalog from Supabase app_pages
 app.get(
   "/api/user-access/pages",
