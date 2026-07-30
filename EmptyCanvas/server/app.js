@@ -9369,6 +9369,20 @@ app.get("/lms/user-access", requireAuth, requireLmsPageAccess("lms-users-center"
   res.sendFile(path.join(__dirname, "..", "public", "lms-user-access.html"));
 });
 
+const LMS_ROLE_DIRECTORY_CONFIG = Object.freeze({
+  supervisors: { table: "lms_supervisors", label: "Supervisor", plural: "Supervisors", icon: "shield" },
+  "team-leaders": { table: "lms_team_leaders", label: "Team Leader", plural: "Team Leaders", icon: "award" },
+  instructors: { table: "lms_instructors", label: "Instructor", plural: "Instructors", icon: "user" },
+  "co-instructors": { table: "lms_co_instructors", label: "Co-Instructor", plural: "Co-Instructors", icon: "users" },
+  "school-coordinators": { table: "lms_school_coordinators", label: "School Coordinator", plural: "School Coordinators", icon: "clipboard" },
+  students: { table: "lms_students", label: "Student", plural: "Students", icon: "book-open" },
+  parents: { table: "lms_parents", label: "Parent", plural: "Parents", icon: "heart" },
+});
+
+app.get("/lms/user-access/:role(supervisors|team-leaders|instructors|co-instructors|school-coordinators|students|parents)", requireAuth, requireLmsPageAccess("lms-users-center"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "lms-role-directory.html"));
+});
+
 
 app.get("/orders", requireAuth, requirePage("Current Orders"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "current-orders.html"));
@@ -16359,6 +16373,45 @@ app.post("/api/lms/structures", async (req, res) => {
   } catch (error) {
     console.error("POST /api/lms/structures error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create LMS structure." });
+  }
+});
+
+
+// LMS Users Center role directories. Each role has its own table so its details can evolve independently.
+app.use("/api/lms/users-center/roles", requireAuth, requireLmsPageAccess("lms-users-center"));
+
+app.get("/api/lms/users-center/roles/:role", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const config = LMS_ROLE_DIRECTORY_CONFIG[String(req.params.role || "")];
+  if (!config) return res.status(404).json({ ok: false, error: "Unknown LMS role directory." });
+  try {
+    const rows = await supabaseDb.request(`/${config.table}?select=*&order=created_at.desc&limit=1000`);
+    return res.json({ ok: true, role: req.params.role, config, items: Array.isArray(rows) ? rows : [] });
+  } catch (error) {
+    console.error(`GET LMS role ${req.params.role} error:`, error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || `Failed to load ${config.plural}.` });
+  }
+});
+
+app.post("/api/lms/users-center/roles/:role", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const config = LMS_ROLE_DIRECTORY_CONFIG[String(req.params.role || "")];
+  if (!config) return res.status(404).json({ ok: false, error: "Unknown LMS role directory." });
+  try {
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    if (!name) return res.status(400).json({ ok: false, error: `${config.label} name is required.` });
+    const schoolId = String(req.body?.schoolId || "").trim().slice(0, 200) || null;
+    const schoolName = String(req.body?.schoolName || "").trim().slice(0, 300) || null;
+    const createdByRaw = String(req.session?.userSupabaseId || "").trim();
+    const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
+    const rows = await supabaseDb.request(`/${config.table}`, {
+      method: "POST", headers: { Prefer: "return=representation" },
+      body: { name, school_id: schoolId, school_name: schoolName, created_by: createdBy, metadata: {} },
+    });
+    return res.status(201).json({ ok: true, item: Array.isArray(rows) ? rows[0] : rows });
+  } catch (error) {
+    console.error(`POST LMS role ${req.params.role} error:`, error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || `Failed to add ${config.label}.` });
   }
 });
 
