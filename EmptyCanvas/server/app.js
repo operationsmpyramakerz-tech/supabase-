@@ -16257,11 +16257,29 @@ app.get("/api/lms/structures", async (req, res) => {
   }
 });
 
+app.get("/api/lms/structures/schools", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const schools = await _getB2BSchoolsList();
+    const items = (Array.isArray(schools) ? schools : []).map((school) => ({
+      id: String(school?.id ?? school?.schoolId ?? "").trim(),
+      name: String(school?.name ?? school?.school_name ?? school?.title ?? "Untitled school").trim() || "Untitled school",
+    })).filter((school) => school.id);
+    return res.json({ ok: true, schools: items });
+  } catch (error) {
+    console.error("GET /api/lms/structures/schools error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load schools." });
+  }
+});
+
 app.post("/api/lms/structures", async (req, res) => {
   res.set("Cache-Control", "no-store");
-  const allowedKinds = new Set(["school", "instructor", "co_instructor"]);
+  const allowedKinds = new Set(["supervisor", "team_leader", "instructor", "co_instructor", "school_coordinator", "students", "parents"]);
   try {
     const name = String(req.body?.name || "").trim().slice(0, 200) || "Untitled LMS Structure";
+    const schoolId = String(req.body?.schoolId || "").trim().slice(0, 200);
+    const schoolName = String(req.body?.schoolName || "").trim().slice(0, 300);
+    if (!schoolId) return res.status(400).json({ ok: false, error: "Choose a school before creating the structure." });
     const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : [];
     const edges = Array.isArray(req.body?.edges) ? req.body.edges : [];
     if (!nodes.length) return res.status(400).json({ ok: false, error: "Add at least one structure block." });
@@ -16295,7 +16313,7 @@ app.post("/api/lms/structures", async (req, res) => {
     const structureRows = await supabaseDb.request('/lms_structures', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: { name, created_by: createdBy },
+      body: { name, selected_school_id: schoolId, selected_school_name: schoolName || null, created_by: createdBy },
     });
     const structure = Array.isArray(structureRows) ? structureRows[0] : structureRows;
     const structureId = structure?.id;
