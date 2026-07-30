@@ -3481,7 +3481,7 @@ if (document.querySelector('.sidebar')) {
 
     list.querySelectorAll('a.nav-link[href]').forEach((link) => {
       const path = sidebarPath(link.getAttribute('href') || '');
-      const active = path === currentPath;
+      const active = path === currentPath || (path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'));
       link.classList.toggle('active', active);
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
@@ -7058,4 +7058,82 @@ function initOpsPersistentShellHost() {
 
   checkSession();
   window.setInterval(checkSession, 1500);
+})();
+
+// LMS Users Center secondary navigation (mirrors the Task Management flyout pattern).
+(function initLmsUsersCenterRoleFlyout() {
+  const path = String(window.location.pathname || '').replace(/\/+$/, '') || '/';
+  if (!path.startsWith('/lms')) return;
+  const pages = [
+    { route: '/lms/user-access', label: 'Learning Structures', icon: 'git-branch' },
+    { route: '/lms/user-access/supervisors', label: 'Supervisors', icon: 'shield' },
+    { route: '/lms/user-access/team-leaders', label: 'Team Leaders', icon: 'award' },
+    { route: '/lms/user-access/instructors', label: 'Instructors', icon: 'user' },
+    { route: '/lms/user-access/co-instructors', label: 'Co-Instructors', icon: 'users' },
+    { route: '/lms/user-access/school-coordinators', label: 'School Coordinators', icon: 'clipboard' },
+    { route: '/lms/user-access/students', label: 'Students', icon: 'book-open' },
+    { route: '/lms/user-access/parents', label: 'Parents', icon: 'heart' },
+  ];
+  const normalized = (value) => String(value || '').split('?')[0].replace(/\/+$/, '') || '/';
+  let panel = null;
+  function parentLink() {
+    return Array.from(document.querySelectorAll('.lms-sidebar a.nav-link[href]'))
+      .find((link) => normalized(link.getAttribute('href')) === '/lms/user-access');
+  }
+  function close() {
+    if (!panel) return;
+    panel.hidden = true;
+    panel.classList.remove('is-open');
+    parentLink()?.setAttribute('aria-expanded', 'false');
+  }
+  function ensurePanel() {
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'lms-users-center-subpage-flyout';
+    panel.className = 'task-management-subpage-flyout lms-users-center-subpage-flyout';
+    panel.hidden = true;
+    panel.setAttribute('role', 'menu');
+    panel.setAttribute('aria-label', 'LMS Users Center pages');
+    document.body.appendChild(panel);
+    return panel;
+  }
+  function open(trigger) {
+    const flyout = ensurePanel();
+    flyout.innerHTML = `<div class="task-management-subpage-flyout__list">${pages.map((page) => `
+      <a class="task-management-subpage-flyout__link${path === page.route ? ' is-active' : ''}" href="${page.route}" role="menuitem">
+        <i data-feather="${page.icon}"></i><span>${page.label}</span>
+      </a>`).join('')}</div>`;
+    const rect = trigger.getBoundingClientRect();
+    flyout.style.left = `${Math.min(window.innerWidth - 250, Math.max(12, rect.right + 10))}px`;
+    flyout.style.top = `${Math.min(window.innerHeight - 390, Math.max(12, rect.top - 10))}px`;
+    flyout.hidden = false;
+    flyout.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    if (window.feather) window.feather.replace({ width: 17, height: 17 });
+  }
+  function bind() {
+    const parent = parentLink();
+    if (!parent || parent.dataset.lmsRoleFlyoutBound) return false;
+    parent.dataset.lmsRoleFlyoutBound = '1';
+    parent.setAttribute('aria-haspopup', 'menu');
+    parent.setAttribute('aria-expanded', 'false');
+    parent.classList.toggle('active', path === '/lms/user-access' || path.startsWith('/lms/user-access/'));
+    parent.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (panel?.classList.contains('is-open')) close(); else open(parent);
+    });
+    return true;
+  }
+  const timer = window.setInterval(() => { if (bind()) window.clearInterval(timer); }, 120);
+  window.setTimeout(() => window.clearInterval(timer), 6000);
+  document.addEventListener('click', (event) => {
+    if (!panel?.classList.contains('is-open')) return;
+    if (panel.contains(event.target)) { if (event.target.closest('a')) close(); return; }
+    if (parentLink()?.contains(event.target)) return;
+    close();
+  });
+  window.addEventListener('resize', close);
+  window.addEventListener('pagehide', close);
+  window.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
 })();
