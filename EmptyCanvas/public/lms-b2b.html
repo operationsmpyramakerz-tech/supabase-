@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#FFFFFF" />
+
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>B2B - Dashboard</title>
+  <!-- CRITICAL: Prevent sidebar links flash before CSS/permissions load -->
+  <style>
+    body.permissions-loading .sidebar li { display: none !important; }
+  
+
+    .b2b-head-copy[aria-hidden="true"]{
+      display:none !important;
+    }
+
+    .b2b-admin-password-modal{
+      position:fixed;
+      inset:0;
+      z-index:10080;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:clamp(16px, 4vw, 28px);
+    }
+
+    .b2b-admin-password-modal.is-open{
+      display:flex;
+    }
+
+    .b2b-admin-password-modal__backdrop{
+      position:absolute;
+      inset:0;
+      background:rgba(15,23,42,.58);
+      backdrop-filter:blur(18px);
+    }
+
+    .b2b-admin-password-modal__dialog{
+      position:relative;
+      width:min(100%, 520px);
+      border-radius:32px;
+      border:1px solid rgba(15,23,42,.08);
+      background:linear-gradient(180deg,#fff,#f8fafc);
+      box-shadow:0 35px 90px rgba(15,23,42,.28);
+      padding:28px;
+      color:#0f172a;
+    }
+
+    .b2b-admin-password-modal__close{
+      position:absolute;
+      top:18px;
+      right:18px;
+      width:48px;
+      height:48px;
+      border-radius:16px;
+      border:1px solid rgba(15,23,42,.08);
+      background:#fff;
+      display:grid;
+      place-items:center;
+      font-size:30px;
+      line-height:1;
+      font-weight:800;
+      color:#0f172a;
+      cursor:pointer;
+    }
+
+    .b2b-admin-password-modal__icon{
+      width:64px;
+      height:64px;
+      display:grid;
+      place-items:center;
+      border-radius:22px;
+      border:1px solid rgba(234,88,12,.14);
+      background:#fff7ed;
+      color:#c2410c;
+      margin-bottom:18px;
+    }
+
+    .b2b-admin-password-modal__icon svg{
+      width:28px;
+      height:28px;
+    }
+
+    .b2b-admin-password-modal__copy span{
+      display:block;
+      margin-bottom:8px;
+      color:#c2410c;
+      font-size:.78rem;
+      font-weight:950;
+      letter-spacing:.1em;
+    }
+
+    .b2b-admin-password-modal__copy h3{
+      margin:0;
+      font-size:clamp(1.55rem, 3.5vw, 2.2rem);
+      line-height:1.1;
+      font-weight:950;
+    }
+
+    .b2b-admin-password-modal__copy p{
+      margin:10px 0 22px;
+      color:#64748b;
+      font-weight:750;
+      line-height:1.55;
+    }
+
+    .b2b-admin-password-modal__field{
+      display:grid;
+      gap:9px;
+      font-weight:900;
+      color:#475569;
+      margin-bottom:12px;
+    }
+
+    .b2b-admin-password-modal__field input{
+      width:100%;
+      min-height:58px;
+      border-radius:18px;
+      border:1px solid rgba(15,23,42,.12);
+      background:#fff;
+      padding:0 18px;
+      font:inherit;
+      font-weight:850;
+      color:#0f172a;
+      outline:none;
+    }
+
+    .b2b-admin-password-modal__field input:focus{
+      border-color:#fb923c;
+      box-shadow:0 0 0 5px rgba(251,146,60,.16);
+    }
+
+    .b2b-admin-password-modal__error{
+      min-height:22px;
+      color:#dc2626;
+      font-weight:800;
+      margin-bottom:14px;
+    }
+
+    .b2b-admin-password-modal__actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .b2b-admin-password-modal__btn{
+      min-height:56px;
+      border-radius:18px;
+      border:0;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .b2b-admin-password-modal__btn--light{
+      background:#fff;
+      border:1px solid rgba(15,23,42,.08);
+      color:#0f172a;
+    }
+
+    .b2b-admin-password-modal__btn--dark{
+      background:#050914;
+      color:#fff;
+      box-shadow:0 18px 32px rgba(15,23,42,.2);
+    }
+
+    .b2b-admin-password-modal__btn:disabled{
+      opacity:.65;
+      cursor:not-allowed;
+    }
+</style>
+  <link rel="stylesheet" href="/css/style.css?v=b2b-addname-transparent-pdf-v1"/>
+  <link href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" rel="stylesheet"/>
+<link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet"/>
+  <script src="/js/vendor/feather-icons.min.js"></script>
+
+  <style>
+    .b2b-wrap{
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .b2b-card-shell{
+      background: linear-gradient(180deg, #fbfbfb 0%, #f5f5f4 100%) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+
+    .b2b-section-head{
+      padding: 24px 26px 0;
+    }
+
+    .b2b-section-head .card-header{
+      margin: 0;
+      padding: 0 0 20px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+    }
+
+    .b2b-section-head h2{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 8px;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .b2b-section-head h2 i,
+    .b2b-section-head h2 svg{
+      width: 18px;
+      height: 18px;
+      color: #6b7280;
+    }
+
+    .b2b-section-head .card-subtitle{
+      max-width: 620px;
+      line-height: 1.55;
+    }
+
+    .b2b-grid{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 26px 24px;
+      padding: 26px;
+      align-items: start;
+    }
+
+    .school-folder{
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 228px;
+      padding: 16px 14px 14px;
+      text-decoration: none;
+      background: #f1f1ef;
+      border: 1px solid rgba(15, 23, 42, 0.04);
+      border-radius: 18px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .school-folder:hover{
+      transform: translateY(-4px);
+      background: #ececea;
+      box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .school-folder:focus-visible{
+      outline: 3px solid rgba(249, 115, 22, 0.18);
+      outline-offset: 2px;
+    }
+
+    .school-folder__figure{
+      position: relative;
+      width: 176px;
+      height: 122px;
+      margin-bottom: 16px;
+      pointer-events: none;
+    }
+
+    .school-folder__paper{
+      position: absolute;
+      top: 6px;
+      width: 76px;
+      height: 46px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.1);
+      border: 1px solid rgba(17, 24, 39, 0.05);
+    }
+
+    .school-folder__paper::before{
+      content: '';
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: 12px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.22);
+      box-shadow:
+        0 14px 0 rgba(148, 163, 184, 0.14),
+        0 28px 0 rgba(148, 163, 184, 0.12);
+    }
+
+    .school-folder__paper--left{
+      left: 22px;
+      transform: rotate(-3deg);
+    }
+
+    .school-folder__paper--right{
+      right: 22px;
+      transform: rotate(4deg);
+    }
+
+    .school-folder__back{
+      position: absolute;
+      left: 30px;
+      top: 16px;
+      width: 126px;
+      height: 76px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #777777 0%, #5f5f5f 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    .school-folder__back::after{
+      content: '';
+      position: absolute;
+      right: 20px;
+      top: 0;
+      width: 38px;
+      height: 16px;
+      border-bottom-left-radius: 16px;
+      background: #f1f1ef;
+      opacity: 0.95;
+    }
+
+    .school-folder__front{
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      width: 156px;
+      height: 86px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #707070 0%, #626262 100%);
+      box-shadow:
+        0 16px 24px rgba(15, 23, 42, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .school-folder__front::before{
+      content: '';
+      position: absolute;
+      left: 0;
+      top: -18px;
+      width: 92px;
+      height: 36px;
+      border-radius: 18px 18px 12px 12px;
+      background: linear-gradient(180deg, #818181 0%, #6d6d6d 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .school-folder__front::after{
+      content: '';
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: 12px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .school-folder__chips{
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+
+    .school-folder__chip{
+      width: 24px;
+      height: 24px;
+      margin-left: -7px;
+      border-radius: 999px;
+      border: 2px solid #676767;
+      background: var(--chip-bg, #ffffff);
+      color: #111827;
+      font-size: 10px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 6px 10px rgba(15, 23, 42, 0.1);
+      overflow: hidden;
+    }
+
+    .school-folder__chip:first-child{
+      margin-left: 0;
+    }
+
+    .school-folder__chip--1{ --chip-bg: #f8fafc; }
+    .school-folder__chip--2{ --chip-bg: #e0f2fe; }
+    .school-folder__chip--3{ --chip-bg: #dcfce7; }
+
+    .school-folder__name{
+      width: 100%;
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.35;
+      color: #111827;
+      text-align: center;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 2.7em;
+    }
+
+    .school-folder__caption{
+      width: 100%;
+      margin-top: 8px;
+      color: #6b7280;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      text-align: center;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 2.6em;
+    }
+
+    .b2b-loading,
+    .b2b-empty,
+    .empty-block,
+    .error-block,
+    .modern-loading{
+      grid-column: 1 / -1;
+    }
+
+    .b2b-loading,
+    .b2b-empty{
+      padding: 30px 10px;
+      text-align: center;
+      color: #64748b;
+    }
+
+
+
+    .b2b-section-head .card-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:18px;
+    }
+
+    .b2b-head-copy{ min-width:0; }
+
+    .b2b-add-school-btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      border:0;
+      border-radius:16px;
+      background:#070b1a;
+      color:#fff;
+      padding:12px 18px;
+      font-weight:900;
+      font-size:.95rem;
+      cursor:pointer;
+      box-shadow:0 16px 30px rgba(15,23,42,.16);
+      transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+      white-space:nowrap;
+    }
+
+    .b2b-add-school-btn:hover{ transform:translateY(-2px); box-shadow:0 18px 38px rgba(15,23,42,.2); }
+    .b2b-add-school-btn svg{ width:18px; height:18px; }
+
+    .school-folder-card{
+      position:relative;
+      min-width:0;
+    }
+
+    .school-folder{ width:100%; }
+
+    .school-folder-actions{
+      position:absolute;
+      top:12px;
+      right:12px;
+      z-index:5;
+    }
+
+    .school-folder__menu-btn{
+      width:38px;
+      height:38px;
+      border:1px solid rgba(234,88,12,.20);
+      border-radius:999px;
+      background:rgba(255,247,237,.96);
+      color:#c2410c;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      box-shadow:0 10px 22px rgba(15,23,42,.10);
+      backdrop-filter:blur(10px);
+      transition:transform .16s ease, background .16s ease;
+    }
+
+    .school-folder__menu-btn:hover{ background:#ffedd5; transform:translateY(-1px); }
+    .school-folder__menu-btn svg{ width:18px; height:18px; }
+
+    .school-folder__actions-menu{
+      position:absolute;
+      top:46px;
+      right:0;
+      width:138px;
+      display:none;
+      padding:7px;
+      border:1px solid rgba(15,23,42,.08);
+      border-radius:16px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 18px 38px rgba(15,23,42,.18);
+      backdrop-filter:blur(12px);
+    }
+
+    .school-folder-card.is-actions-open .school-folder__actions-menu{ display:block; }
+
+    .school-folder__actions-menu button{
+      width:100%;
+      border:0;
+      border-radius:12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 11px;
+      background:transparent;
+      color:#0f172a;
+      font-weight:900;
+      font-size:.86rem;
+      cursor:pointer;
+      text-align:left;
+    }
+
+    .school-folder__actions-menu button:hover{ background:#f8fafc; }
+    .school-folder__actions-menu button.is-danger{ color:#dc2626; }
+    .school-folder__actions-menu button.is-danger:hover{ background:#fef2f2; }
+    .school-folder__actions-menu svg{ width:15px; height:15px; }
+
+    .b2b-school-modal{
+      position:fixed;
+      inset:0;
+      z-index:9999;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:22px;
+    }
+
+    .b2b-school-modal.is-open{ display:flex; }
+
+    .b2b-school-modal__backdrop{
+      position:absolute;
+      inset:0;
+      background:rgba(15,23,42,.56);
+      backdrop-filter:blur(8px);
+    }
+
+    .b2b-school-modal__dialog{
+      position:relative;
+      width:min(880px, calc(100vw - 36px));
+      max-height:min(86vh, 760px);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      border-radius:28px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 30px 90px rgba(15,23,42,.28);
+      border:1px solid rgba(15,23,42,.08);
+    }
+
+    .b2b-school-modal__header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:18px;
+      padding:24px 26px 18px;
+      border-bottom:1px solid rgba(15,23,42,.08);
+    }
+
+    .b2b-school-modal__eyebrow{
+      color:#c2410c;
+      font-size:.78rem;
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      margin-bottom:6px;
+    }
+
+    .b2b-school-modal__title{
+      margin:0;
+      font-size:1.8rem;
+      line-height:1.1;
+      color:#0f172a;
+      font-weight:950;
+    }
+
+    .b2b-school-modal__subtitle{
+      margin:8px 0 0;
+      color:#64748b;
+      font-weight:700;
+    }
+
+    .b2b-school-modal__close{
+      width:48px;
+      height:48px;
+      border:0;
+      border-radius:18px;
+      background:#f1f5f9;
+      color:#0f172a;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      font-size:1.6rem;
+      line-height:1;
+      font-weight:900;
+    }
+
+    .b2b-school-modal__body{
+      overflow:auto;
+      padding:20px 26px 24px;
+    }
+
+    .b2b-school-form-section{
+      margin-bottom:22px;
+    }
+
+    .b2b-school-form-section__title{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin:0 0 12px;
+      color:#0f172a;
+      font-size:.95rem;
+      font-weight:950;
+    }
+
+    .b2b-school-form-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:14px;
+    }
+
+    .b2b-school-field{
+      display:flex;
+      flex-direction:column;
+      gap:7px;
+    }
+
+    .b2b-school-field label{
+      color:#334155;
+      font-size:.82rem;
+      font-weight:900;
+    }
+
+    .b2b-school-field input,
+    .b2b-school-field textarea,
+    .b2b-school-field select,
+    .b2b-contract-years select{
+      width:100%;
+      border:1px solid #e2e8f0;
+      border-radius:15px;
+      padding:13px 14px;
+      background:#fff;
+      color:#0f172a;
+      font:inherit;
+      font-weight:750;
+      outline:none;
+      box-shadow:inset 0 1px 0 rgba(15,23,42,.02);
+    }
+
+    .b2b-school-field select,
+    .b2b-contract-years select{
+      cursor:pointer;
+      appearance:auto;
+    }
+
+    .b2b-school-field input:focus,
+    .b2b-school-field textarea:focus,
+    .b2b-school-field select:focus,
+    .b2b-contract-years select:focus{
+      border-color:rgba(249,115,22,.55);
+      box-shadow:0 0 0 4px rgba(249,115,22,.10);
+    }
+
+    .b2b-school-field--wide{ grid-column:1 / -1; }
+
+    .b2b-contract-years{
+      display:grid;
+      grid-template-columns:1fr auto 1fr;
+      align-items:center;
+      gap:10px;
+    }
+
+    .b2b-contract-years span{
+      color:#64748b;
+      font-weight:900;
+      text-align:center;
+    }
+
+    .b2b-grades-dropdown{
+      position:relative;
+      max-width:100%;
+    }
+
+    .b2b-grades-dropdown__toggle{
+      width:100%;
+      min-height:52px;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:13px 15px;
+      color:#0f172a;
+      font:inherit;
+      font-weight:850;
+      text-align:left;
+      cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(15,23,42,.02);
+    }
+
+    .b2b-grades-dropdown__toggle span{
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .b2b-grades-dropdown__toggle svg{ width:18px; height:18px; flex:0 0 auto; }
+
+    .b2b-grades-menu{
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(4, minmax(0, 1fr));
+      gap:10px;
+      padding:12px;
+      border:1px solid #e2e8f0;
+      border-radius:18px;
+      background:#fff;
+      box-shadow:0 16px 34px rgba(15,23,42,.08);
+    }
+
+    .b2b-grade-check{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      border:1px solid #e2e8f0;
+      border-radius:14px;
+      padding:11px 8px;
+      background:#fff;
+      cursor:pointer;
+      font-weight:900;
+      color:#334155;
+    }
+
+    .b2b-grade-check:has(input:checked){
+      border-color:rgba(249,115,22,.45);
+      background:#fff7ed;
+      color:#c2410c;
+    }
+
+    .b2b-grade-check input{ width:16px; height:16px; accent-color:#f97316; }
+
+    .b2b-school-modal__footer{
+      display:flex;
+      justify-content:flex-end;
+      gap:12px;
+      padding:16px 26px 24px;
+      border-top:1px solid rgba(15,23,42,.08);
+      background:rgba(248,250,252,.88);
+    }
+
+    .b2b-modal-btn{
+      border:0;
+      border-radius:16px;
+      padding:13px 18px;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .b2b-modal-btn--light{ background:#fff; color:#0f172a; border:1px solid #e2e8f0; }
+    .b2b-modal-btn--dark{ background:#070b1a; color:#fff; min-width:150px; }
+    .b2b-modal-btn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+    .b2b-school-form-error{
+      display:none;
+      margin-top:12px;
+      padding:11px 12px;
+      border-radius:14px;
+      background:#fef2f2;
+      color:#991b1b;
+      font-weight:800;
+      border:1px solid #fecaca;
+    }
+
+    .b2b-school-form-error.is-visible{ display:block; }
+
+
+
+    /* B2B modern controls update */
+    .school-folder-actions{
+      top:7px !important;
+      right:7px !important;
+    }
+
+    .school-folder__menu-btn{
+      width:30px !important;
+      height:30px !important;
+      border-radius:12px !important;
+      border-color:rgba(234,88,12,.16) !important;
+      box-shadow:0 8px 16px rgba(15,23,42,.10) !important;
+    }
+
+    .school-folder__menu-btn svg{ width:15px !important; height:15px !important; }
+    .school-folder__actions-menu{ top:36px !important; right:0 !important; }
+
+    .b2b-modern-select{
+      position:relative;
+      width:100%;
+    }
+
+    .b2b-modern-select__button{
+      width:100%;
+      min-height:54px;
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:13px 15px;
+      font:inherit;
+      font-weight:850;
+      text-align:left;
+      cursor:pointer;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 10px 22px rgba(15,23,42,.04);
+      transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    }
+
+    .b2b-modern-select__button span{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .b2b-modern-select__button svg{
+      width:18px;
+      height:18px;
+      flex:0 0 auto;
+      color:#64748b;
+      transition:transform .18s ease;
+    }
+
+    .b2b-modern-select.is-open .b2b-modern-select__button{
+      border-color:rgba(249,115,22,.55);
+      box-shadow:0 0 0 4px rgba(249,115,22,.10), 0 16px 30px rgba(15,23,42,.10);
+      transform:translateY(-1px);
+    }
+
+    .b2b-modern-select.is-open .b2b-modern-select__button svg{ transform:rotate(180deg); }
+
+    .b2b-modern-select__panel{
+      position:absolute;
+      left:0;
+      right:0;
+      top:calc(100% + 8px);
+      z-index:30;
+      max-height:220px;
+      overflow:auto;
+      padding:8px;
+      border:1px solid rgba(15,23,42,.08);
+      border-radius:18px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 24px 60px rgba(15,23,42,.18);
+      backdrop-filter:blur(12px);
+    }
+
+    .b2b-modern-option{
+      width:100%;
+      min-height:40px;
+      border:0;
+      border-radius:12px;
+      background:transparent;
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 11px;
+      font:inherit;
+      font-weight:850;
+      text-align:left;
+      cursor:pointer;
+      transition:background .14s ease, color .14s ease;
+    }
+
+    .b2b-modern-option:hover,
+    .b2b-modern-option.is-selected{
+      background:#fff7ed;
+      color:#c2410c;
+    }
+
+    .b2b-modern-option--check input{
+      width:17px;
+      height:17px;
+      flex:0 0 auto;
+      accent-color:#f97316;
+    }
+
+    .b2b-modern-option--check:has(input:checked){
+      background:#fff7ed;
+      color:#c2410c;
+    }
+
+    .b2b-school-field--contract-year > label{ display:none; }
+    .b2b-school-field--contract-year{ min-width:0; }
+
+
+    .b2b-stocktaking-column-field{
+      overflow:visible;
+    }
+
+    .b2b-inline-add{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:10px;
+      margin-top:12px;
+      align-items:center;
+    }
+
+    .b2b-inline-add input{
+      width:100%;
+      min-height:48px;
+      border:1px solid #e2e8f0;
+      border-radius:14px;
+      background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);
+      color:#0f172a;
+      padding:12px 14px;
+      font:inherit;
+      font-weight:800;
+      outline:none;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px rgba(15,23,42,.04);
+    }
+
+    .b2b-inline-add input:focus{
+      border-color:rgba(249,115,22,.55);
+      box-shadow:0 0 0 4px rgba(249,115,22,.10), 0 12px 24px rgba(15,23,42,.08);
+    }
+
+    .b2b-mini-btn{
+      min-height:48px;
+      border:0;
+      border-radius:14px;
+      background:#070b1a;
+      color:#fff;
+      padding:0 16px;
+      font:inherit;
+      font-weight:900;
+      cursor:pointer;
+      white-space:nowrap;
+      box-shadow:0 14px 24px rgba(15,23,42,.16);
+      transition:transform .16s ease, opacity .16s ease;
+    }
+
+    .b2b-mini-btn:hover{ transform:translateY(-1px); }
+    .b2b-mini-btn:disabled{ opacity:.62; cursor:not-allowed; transform:none; }
+
+    .b2b-stocktaking-help{
+      display:block;
+      margin-top:8px;
+      color:#94a3b8;
+      font-size:.86rem;
+      font-weight:800;
+      line-height:1.4;
+    }
+
+    @media (max-width:640px){
+      .b2b-inline-add{ grid-template-columns:1fr; }
+      .b2b-mini-btn{ width:100%; }
+    }
+
+    .b2b-contract-years{
+      overflow:visible;
+      align-items:end;
+    }
+
+    .b2b-file-upload-btn{
+      width:100%;
+      min-height:72px;
+      border:1px dashed rgba(249,115,22,.45);
+      border-radius:18px;
+      background:linear-gradient(135deg,#fff7ed 0%,#ffffff 58%,#f8fafc 100%);
+      color:#0f172a;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      padding:14px;
+      cursor:pointer;
+      text-align:left;
+      box-shadow:0 12px 24px rgba(15,23,42,.06);
+      transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+
+    .b2b-file-upload-btn:hover{
+      transform:translateY(-1px);
+      border-color:#f97316;
+      box-shadow:0 16px 32px rgba(15,23,42,.10);
+    }
+
+    .b2b-file-upload-btn.has-file{ border-style:solid; background:linear-gradient(135deg,#ecfdf5 0%,#fff 100%); }
+
+    .b2b-file-upload-btn__icon{
+      width:46px;
+      height:46px;
+      border-radius:16px;
+      background:#070b1a;
+      color:#fff;
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      box-shadow:0 14px 22px rgba(15,23,42,.18);
+    }
+
+    .b2b-file-upload-btn__icon svg{ width:22px; height:22px; }
+
+    .b2b-file-upload-btn strong{
+      display:block;
+      font-weight:950;
+      margin-bottom:3px;
+    }
+
+    .b2b-file-upload-btn small{
+      display:block;
+      color:#64748b;
+      font-weight:750;
+      line-height:1.35;
+    }
+
+    .b2b-file-upload-meta{
+      color:#64748b;
+      font-size:.84rem;
+      font-weight:750;
+      line-height:1.45;
+    }
+
+    .b2b-file-upload-meta a{ color:#c2410c; font-weight:900; text-decoration:none; }
+
+    .b2b-delete-modal{
+      position:fixed;
+      inset:0;
+      z-index:10050;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+
+    .b2b-delete-modal.is-open{ display:flex; }
+
+    .b2b-delete-modal__backdrop{
+      position:absolute;
+      inset:0;
+      background:rgba(15,23,42,.54);
+      backdrop-filter:blur(9px);
+    }
+
+    .b2b-delete-modal__dialog{
+      position:relative;
+      width:min(390px, calc(100vw - 32px));
+      border-radius:28px;
+      background:#fff;
+      border:1px solid rgba(15,23,42,.08);
+      box-shadow:0 30px 90px rgba(15,23,42,.28);
+      padding:24px;
+      text-align:center;
+    }
+
+    .b2b-delete-modal__icon{
+      width:58px;
+      height:58px;
+      margin:0 auto 14px;
+      border-radius:20px;
+      display:grid;
+      place-items:center;
+      background:#fef2f2;
+      color:#dc2626;
+    }
+
+    .b2b-delete-modal__icon svg{ width:26px; height:26px; }
+
+    .b2b-delete-modal__dialog h3{
+      margin:0;
+      color:#0f172a;
+      font-size:1.35rem;
+      font-weight:950;
+    }
+
+    .b2b-delete-modal__dialog p{
+      margin:8px 0 0;
+      color:#64748b;
+      font-weight:750;
+      line-height:1.5;
+    }
+
+    .b2b-delete-modal__actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:20px;
+    }
+
+    .b2b-delete-modal__btn{
+      border:0;
+      border-radius:16px;
+      padding:13px 16px;
+      font-weight:950;
+      cursor:pointer;
+    }
+
+    .b2b-delete-modal__btn--light{
+      background:#f8fafc;
+      color:#0f172a;
+      border:1px solid #e2e8f0;
+    }
+
+    .b2b-delete-modal__btn--danger{
+      background:#dc2626;
+      color:#fff;
+      box-shadow:0 14px 26px rgba(220,38,38,.22);
+    }
+
+    @media (max-width: 768px){
+
+      .b2b-section-head .card-header{ flex-direction:column; align-items:stretch; }
+      .b2b-add-school-btn{ width:100%; }
+      .b2b-school-modal{ padding:12px; }
+      .b2b-school-modal__dialog{ width:calc(100vw - 24px); max-height:88vh; border-radius:24px; }
+      .b2b-school-modal__header{ padding:20px 18px 14px; }
+      .b2b-school-modal__title{ font-size:1.45rem; }
+      .b2b-school-modal__body{ padding:16px 18px 18px; }
+      .b2b-school-form-grid{ grid-template-columns:1fr; }
+      .b2b-grades-menu{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      .b2b-school-modal__footer{ padding:14px 18px 18px; }
+
+      .b2b-section-head{
+        padding: 20px 18px 0;
+      }
+
+      .b2b-grid{
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 20px 16px;
+        padding: 20px 18px 24px;
+      }
+
+      .school-folder{
+        min-height: 214px;
+        padding: 14px 10px 12px;
+      }
+
+      .school-folder__figure{
+        width: 154px;
+        height: 110px;
+      }
+
+      .school-folder__paper{
+        width: 68px;
+        height: 42px;
+      }
+
+      .school-folder__back{
+        left: 24px;
+        width: 112px;
+        height: 70px;
+      }
+
+      .school-folder__front{
+        left: 8px;
+        width: 138px;
+        height: 78px;
+      }
+
+      .school-folder__front::before{
+        width: 82px;
+        height: 32px;
+        top: -16px;
+      }
+    }
+  
+
+    /* 2026-06-08: B2B page kits-style folder redesign */
+    .b2b-wrap{
+      width:100% !important;
+      max-width:none !important;
+      margin:0 !important;
+      padding:18px 28px 80px !important;
+      box-sizing:border-box !important;
+    }
+
+    .b2b-card-shell{
+      min-height:calc(100vh - 235px) !important;
+      border-radius:28px !important;
+      border:1px solid rgba(15,23,42,.06) !important;
+      background:rgba(255,255,255,.96) !important;
+      box-shadow:0 24px 60px rgba(15,23,42,.08) !important;
+      padding:0 !important;
+      overflow:visible !important;
+    }
+
+    .b2b-section-head{
+      padding:22px 24px 0 !important;
+    }
+
+    .b2b-section-head .card-header{
+      display:grid !important;
+      grid-template-columns:minmax(0,1fr) auto !important;
+      align-items:center !important;
+      gap:18px !important;
+      padding:0 0 16px !important;
+      border-bottom:1px solid rgba(15,23,42,.08) !important;
+    }
+
+    .b2b-head-copy{
+      display:block !important;
+      min-width:0 !important;
+    }
+
+    .b2b-head-copy h2{
+      margin:0 !important;
+      color:#0f172a !important;
+      font-size:1.15rem !important;
+      line-height:1.1 !important;
+      font-weight:950 !important;
+      letter-spacing:-.035em !important;
+    }
+
+    .b2b-head-copy p{
+      margin:5px 0 0 !important;
+      color:#667085 !important;
+      font-size:.82rem !important;
+      line-height:1.25 !important;
+      font-weight:800 !important;
+    }
+
+    .b2b-add-school-btn{
+      min-height:50px !important;
+      border-radius:18px !important;
+      padding:0 22px !important;
+      background:linear-gradient(135deg,#fb923c 0%,#f97316 52%,#ea580c 100%) !important;
+      color:#fff !important;
+      box-shadow:0 18px 34px rgba(249,115,22,.30) !important;
+      font-size:.95rem !important;
+      font-weight:950 !important;
+    }
+
+    .b2b-add-school-btn:hover{
+      transform:translateY(-2px) !important;
+      box-shadow:0 22px 42px rgba(249,115,22,.36) !important;
+    }
+
+    .b2b-add-school-btn svg{
+      width:18px !important;
+      height:18px !important;
+    }
+
+    .b2b-grid{
+      width:100% !important;
+      display:grid !important;
+      grid-template-columns:repeat(auto-fill, minmax(154px, 154px)) !important;
+      justify-content:start !important;
+      justify-items:start !important;
+      align-items:start !important;
+      gap:18px 16px !important;
+      padding:18px 24px 28px !important;
+    }
+
+    .school-folder-card{
+      position:relative !important;
+      width:154px !important;
+      min-width:154px !important;
+      height:144px !important;
+      isolation:isolate !important;
+    }
+
+    .school-folder{
+      position:relative !important;
+      display:block !important;
+      width:154px !important;
+      height:144px !important;
+      min-height:144px !important;
+      padding:0 !important;
+      border:5px solid #101217 !important;
+      border-radius:20px !important;
+      overflow:hidden !important;
+      isolation:isolate !important;
+      text-align:left !important;
+      background:
+        radial-gradient(circle at 23% 5%, rgba(255,255,255,.42) 0 14%, rgba(255,255,255,0) 36%),
+        radial-gradient(circle at 82% 0%, rgba(255,255,255,.18) 0 11%, rgba(255,255,255,0) 32%),
+        linear-gradient(135deg, #ff8a1f 0%, #f97316 46%, #e45512 100%) !important;
+      box-shadow:0 14px 26px rgba(15,23,42,.12) !important;
+      transform:none !important;
+      transition:transform .18s ease, box-shadow .18s ease !important;
+    }
+
+    .school-folder:hover{
+      transform:translateY(-2px) !important;
+      box-shadow:0 20px 34px rgba(15,23,42,.16) !important;
+      background:
+        radial-gradient(circle at 23% 5%, rgba(255,255,255,.42) 0 14%, rgba(255,255,255,0) 36%),
+        radial-gradient(circle at 82% 0%, rgba(255,255,255,.18) 0 11%, rgba(255,255,255,0) 32%),
+        linear-gradient(135deg, #ff8a1f 0%, #f97316 46%, #e45512 100%) !important;
+    }
+
+    .school-folder:focus-visible{
+      outline:3px solid rgba(249,115,22,.22) !important;
+      outline-offset:3px !important;
+    }
+
+    .school-folder::before{
+      content:'';
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:86px;
+      z-index:2;
+      border-radius:0 0 15px 15px;
+      background:#272727;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+    }
+
+    .school-folder::after{
+      content:'';
+      position:absolute;
+      top:43px;
+      left:0;
+      width:130px;
+      height:28px;
+      z-index:3;
+      display:block;
+      background:#272727;
+      border-radius:0 13px 0 0;
+      clip-path:polygon(0 0, 83px 0, 130px 100%, 100% 100%, 0 100%);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+    }
+
+    .school-folder__figure{
+      position:absolute !important;
+      top:16px !important;
+      left:50% !important;
+      z-index:1 !important;
+      width:118px !important;
+      height:68px !important;
+      margin:0 !important;
+      transform:translateX(-50%) !important;
+      pointer-events:none !important;
+    }
+
+    .school-folder__paper{
+      position:absolute !important;
+      top:0 !important;
+      width:50px !important;
+      height:54px !important;
+      border-radius:7px !important;
+      border:1px solid rgba(15,23,42,.05) !important;
+      background:linear-gradient(180deg,#ffffff 0%,#fafafa 100%) !important;
+      box-shadow:0 10px 18px rgba(15,23,42,.15) !important;
+    }
+
+    .school-folder__paper::before{
+      content:'' !important;
+      position:absolute !important;
+      left:8px !important;
+      right:8px !important;
+      top:10px !important;
+      height:3px !important;
+      border-radius:999px !important;
+      background:rgba(203,213,225,.55) !important;
+      box-shadow:0 10px 0 rgba(203,213,225,.42), 0 20px 0 rgba(203,213,225,.32) !important;
+    }
+
+    .school-folder__paper--left{
+      left:9px !important;
+      transform:rotate(-6deg) !important;
+    }
+
+    .school-folder__paper--middle{
+      left:34px !important;
+      top:-4px !important;
+      z-index:2 !important;
+      transform:rotate(1deg) !important;
+    }
+
+    .school-folder__paper--right{
+      right:9px !important;
+      transform:rotate(7deg) !important;
+    }
+
+    .school-folder__back,
+    .school-folder__front,
+    .school-folder__chips{
+      display:none !important;
+    }
+
+    .school-folder__name{
+      position:absolute !important;
+      left:11px !important;
+      right:31px !important;
+      top:70px !important;
+      z-index:5 !important;
+      width:auto !important;
+      min-height:0 !important;
+      margin:0 !important;
+      color:#fff !important;
+      font-size:.72rem !important;
+      line-height:1.03 !important;
+      font-weight:850 !important;
+      letter-spacing:-.015em !important;
+      text-align:left !important;
+      display:block !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
+    .school-folder__caption{
+      position:absolute !important;
+      left:11px !important;
+      right:7px !important;
+      bottom:10px !important;
+      z-index:5 !important;
+      width:auto !important;
+      min-height:0 !important;
+      margin:0 !important;
+      color:rgba(255,255,255,.55) !important;
+      font-size:.58rem !important;
+      line-height:1 !important;
+      font-weight:750 !important;
+      text-align:left !important;
+      display:flex !important;
+      align-items:center !important;
+      gap:4px !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
+    .school-folder__caption::before{
+      content:'';
+      width:10px;
+      height:10px;
+      flex:0 0 auto;
+      opacity:.76;
+      background:currentColor;
+      -webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>') center / contain no-repeat;
+      mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>') center / contain no-repeat;
+    }
+
+    .school-folder-actions{
+      position:absolute !important;
+      top:64px !important;
+      right:7px !important;
+      z-index:12 !important;
+    }
+
+    .school-folder__menu-btn{
+      width:17px !important;
+      height:17px !important;
+      min-width:17px !important;
+      min-height:17px !important;
+      padding:0 !important;
+      border:0 !important;
+      border-radius:999px !important;
+      background:transparent !important;
+      color:rgba(255,255,255,.86) !important;
+      box-shadow:none !important;
+      display:grid !important;
+      place-items:center !important;
+    }
+
+    .school-folder__menu-btn:hover,
+    .school-folder__menu-btn[aria-expanded="true"]{
+      background:rgba(255,255,255,.10) !important;
+      color:#fff !important;
+      transform:none !important;
+    }
+
+    .school-folder__menu-dots{
+      color:rgba(255,255,255,.86) !important;
+      font-size:9px !important;
+      line-height:1 !important;
+      letter-spacing:.7px !important;
+      transform:translateY(-1px) !important;
+      font-weight:950 !important;
+    }
+
+    .school-folder__actions-menu{
+      top:27px !important;
+      right:0 !important;
+      z-index:40 !important;
+      width:128px !important;
+    }
+
+    @media (max-width:900px){
+      .b2b-section-head .card-header{
+        grid-template-columns:1fr !important;
+        align-items:stretch !important;
+      }
+      .b2b-add-school-btn{ width:100% !important; }
+    }
+
+    @media (max-width:640px){
+      .b2b-wrap{
+        padding-left:14px !important;
+        padding-right:14px !important;
+      }
+      .b2b-section-head{
+        padding-left:16px !important;
+        padding-right:16px !important;
+      }
+      .b2b-grid{
+        grid-template-columns:repeat(auto-fill, minmax(154px, 154px)) !important;
+        gap:16px 14px !important;
+        padding-left:16px !important;
+        padding-right:16px !important;
+      }
+    }
+</style>
+
+<style>
+  /* 2026-06-08: floating Add action and folders-only white card for B2B */
+  .b2b-wrap{
+    display:flex !important;
+    flex-direction:column !important;
+    gap:18px !important;
+  }
+  .b2b-floating-actions{
+    display:flex !important;
+    justify-content:flex-end !important;
+    align-items:center !important;
+    width:100% !important;
+    padding:0 !important;
+    margin:0 !important;
+    background:transparent !important;
+    border:0 !important;
+    box-shadow:none !important;
+  }
+  .b2b-folders-card{
+    background:rgba(255,255,255,.96) !important;
+    border:1px solid rgba(255,255,255,.78) !important;
+    box-shadow:0 24px 60px rgba(15,23,42,.08) !important;
+    min-height:calc(100vh - 300px) !important;
+    padding:0 !important;
+    overflow:visible !important;
+  }
+  .b2b-floating-actions .b2b-add-school-btn{
+    width:auto !important;
+    min-height:50px !important;
+    border-radius:18px !important;
+    padding:0 24px !important;
+    background:linear-gradient(135deg,#fb923c 0%,#f97316 52%,#ea580c 100%) !important;
+    color:#fff !important;
+    box-shadow:0 18px 34px rgba(249,115,22,.30) !important;
+    border:0 !important;
+  }
+  .b2b-floating-actions .b2b-add-school-btn:hover{
+    transform:translateY(-2px) !important;
+    box-shadow:0 22px 42px rgba(249,115,22,.36) !important;
+  }
+  @media (max-width:900px){
+    .b2b-floating-actions{
+      justify-content:stretch !important;
+    }
+    .b2b-floating-actions .b2b-add-school-btn{
+      width:100% !important;
+    }
+  }
+</style>
+
+<style>
+  /* 2026-06-11: black Add button + no white backing card on B2B folders */
+  body.b2b-page .b2b-floating-actions .b2b-add-school-btn,
+  body.b2b-page .b2b-add-school-btn{
+    background:#050b18 !important;
+    color:#ffffff !important;
+    border:1px solid #050b18 !important;
+    box-shadow:0 16px 34px rgba(15,23,42,.24) !important;
+  }
+  body.b2b-page .b2b-floating-actions .b2b-add-school-btn:hover,
+  body.b2b-page .b2b-add-school-btn:hover{
+    background:#0b1220 !important;
+    box-shadow:0 20px 40px rgba(15,23,42,.30) !important;
+  }
+  body.b2b-page .b2b-add-school-btn svg,
+  body.b2b-page .b2b-add-school-btn span{
+    color:#ffffff !important;
+    stroke:currentColor !important;
+  }
+  body.b2b-page .b2b-folders-card{
+    background:transparent !important;
+    border:0 !important;
+    box-shadow:none !important;
+    min-height:0 !important;
+    padding:0 !important;
+  }
+  body.b2b-page .b2b-grid{
+    padding:18px 0 28px !important;
+    background:transparent !important;
+  }
+</style>
+
+<style>
+  /* 2026-06-11: longer B2B Add new customer label */
+  body.b2b-page .b2b-floating-actions .b2b-add-school-btn{
+    min-width: 178px !important;
+    white-space: nowrap !important;
+  }
+</style>
+</head>
+<body class="permissions-loading b2b-page page-lms">
+<script>
+  (function() {
+    try {
+      if (window.innerWidth > 768 && localStorage.getItem('ui.sidebarMini') === '1') {
+        document.body.classList.add('sidebar-mini');
+      }
+    } catch(e) {}
+  })();
+</script>
+
+<div class="app-container">
+  <aside class="sidebar lms-sidebar" aria-label="LMS workspace navigation">
+    <div class="sidebar-header">
+      <h2>LMS</h2>
+      <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="true"><i data-feather="chevrons-left"></i></button>
+    </div>
+    <nav class="sidebar-nav" aria-label="LMS pages">
+      <ul class="nav-list">
+        <li><a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a></li>
+        <li><a class="nav-link active" href="/lms/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a></li>
+      </ul>
+    </nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-row1">
+        <div class="left">
+          <div class="greeting-pill" aria-live="polite">
+            <span class="greeting-avatar"><img src="/images/greeting-icon.png" alt="Hi icon"/></span>
+            <div class="greet-text">
+              <div class="greet-title">Hi, <span data-username="">...</span> 👋</div>
+              <div class="greet-sub">Browse B2B schools</div>
+            </div>
+          </div>
+
+          <div class="searchbar" role="search" style="margin-left:8px;">
+            <i data-feather="search"></i>
+            <input id="b2bSearch" type="search" placeholder="Search schools..." aria-label="Search schools" />
+          </div>
+        </div>
+
+        <div class="right topbar-right">
+          <a class="account-mini" href="/account" aria-label="My account" title="My account">
+            <span class="ico-circle"><img src="/images/logo.png" alt="Logo"/></span>
+            <span class="label">My account</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="header-row2">
+        <h1 class="page-title">B2B</h1>
+      </div>
+    </header>
+
+    <main class="container-full-width">
+      <div class="b2b-wrap">
+        <div class="b2b-floating-actions">
+          <button class="b2b-add-school-btn" id="addB2BSchoolBtn" type="button">
+            <i data-feather="plus-circle"></i>
+            <span>Add new customer</span>
+          </button>
+        </div>
+
+        <section class="card b2b-card-shell b2b-folders-card">
+          <div id="b2b-schools" class="b2b-grid" aria-live="polite">
+            <div class="b2b-loading">Loading schools…</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>if (window.feather) feather.replace();</script>
+<script src="/js/common-ui.js?v=lms-b2b-move-v1"></script>
+<script src="/js/b2b.js?v=lms-b2b-move-v1"></script>
+</body>
+</html>
