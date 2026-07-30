@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const wrap = document.querySelector('.b2b-wrap');
   const floatingActions = document.querySelector('.b2b-floating-actions');
   const foldersCard = document.querySelector('.b2b-folders-card');
+  const isLmsB2B = String(window.location.pathname || '').startsWith('/lms/b2b');
+  const b2bBasePath = isLmsB2B ? '/lms/b2b' : '/b2b';
 
   let allSchools = [];
   let activeEditId = null;
@@ -181,11 +183,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function b2bRoute() {
-    const isLmsB2B = String(window.location.pathname || '').startsWith('/lms/b2b');
-    const b2bBasePath = isLmsB2B ? '/lms/b2b' : '/b2b';
     const path = String(window.location.pathname || '').replace(/\/+$/, '') || b2bBasePath;
-    if (/^\/b2b\/new$/i.test(path)) return { mode: 'add' };
-    const editMatch = path.match(/^\/b2b\/edit\/(.+)$/i);
+    if (/^\/(?:lms\/)?b2b\/new$/i.test(path)) return { mode: 'add' };
+    const editMatch = path.match(/^\/(?:lms\/)?b2b\/edit\/(.+)$/i);
     if (editMatch) return { mode: 'edit', id: decodeURIComponent(editMatch[1] || '') };
     return { mode: 'list' };
   }
@@ -407,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             event.stopPropagation();
             closeActionMenus();
-            window.location.href = `/b2b/edit/${encodeURIComponent(school.id)}`;
+            window.location.href = `${b2bBasePath}/edit/${encodeURIComponent(school.id)}`;
           });
         }
 
@@ -1086,7 +1086,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeEditName = '';
     activeAdminPassword = '';
     setModalError('');
-    if (/^\/b2b\/(new|edit\/)/i.test(window.location.pathname || '')) {
+    if (/^\/(?:lms\/)?b2b\/(new|edit\/)/i.test(window.location.pathname || '')) {
       window.history.pushState({}, '', b2bBasePath);
       fetchSchools();
       consumeB2BFlash();
