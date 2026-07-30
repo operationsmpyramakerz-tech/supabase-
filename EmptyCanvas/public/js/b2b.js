@@ -505,7 +505,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <form class="b2b-school-page__shell b2b-school-modal__dialog" data-b2b-school-form>
         <div class="b2b-school-page__header">
           <div class="b2b-school-page__title-pill">
-            <button class="b2b-school-page__back" type="button" data-b2b-modal-close aria-label="Back to schools"><i data-feather="arrow-left"></i></button>
             <h2 class="b2b-school-modal__title" data-b2b-modal-title>Add new school</h2>
           </div>
           <div class="b2b-school-page__header-copy">
