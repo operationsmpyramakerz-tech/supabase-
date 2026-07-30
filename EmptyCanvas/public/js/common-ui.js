@@ -3355,7 +3355,7 @@ if (document.querySelector('.sidebar')) {
 
   function removeSidebarSystemLinks(){
     try {
-      document.querySelectorAll('.sidebar a[href="/history"], .sidebar a[href="/backup"]').forEach((link) => {
+      document.querySelectorAll('.sidebar a[href="/history"], .sidebar a[href="/backup"], body:not(.page-lms) .sidebar a[href="/b2b"]').forEach((link) => {
         const li = link.closest('li');
         if (li) li.remove();
         else link.remove();
@@ -3374,7 +3374,6 @@ if (document.querySelector('.sidebar')) {
     { href: '/events', label: 'Events', icon: 'calendar' },
     { href: '/orders/new', label: 'Shopping Cart', icon: 'shopping-cart' },
     { href: '/stocktaking', label: 'Stocktaking', icon: 'archive' },
-    { href: '/b2b', label: 'B2B', icon: 'folder' },
     { href: '/b2c', label: 'B2C', icon: 'user-plus' },
     { href: '/products', label: 'Products', icon: 'package' },
     { href: '/kits', label: 'Kits', icon: 'briefcase' },
@@ -3469,6 +3468,15 @@ if (document.querySelector('.sidebar')) {
       item.innerHTML = '<a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a>';
       list.appendChild(item);
       usersLink = item.querySelector('a.nav-link');
+    }
+
+    let b2bLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
+      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/b2b');
+    if (!b2bLink) {
+      const item = document.createElement('li');
+      item.innerHTML = '<a class="nav-link" href="/lms/b2b"><i data-feather="folder"></i><span class="nav-label">B2B</span></a>';
+      list.appendChild(item);
+      b2bLink = item.querySelector('a.nav-link');
     }
 
     list.querySelectorAll('a.nav-link[href]').forEach((link) => {

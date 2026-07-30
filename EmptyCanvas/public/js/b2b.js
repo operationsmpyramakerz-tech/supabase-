@@ -181,7 +181,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function b2bRoute() {
-    const path = String(window.location.pathname || '').replace(/\/+$/, '') || '/b2b';
+    const isLmsB2B = String(window.location.pathname || '').startsWith('/lms/b2b');
+    const b2bBasePath = isLmsB2B ? '/lms/b2b' : '/b2b';
+    const path = String(window.location.pathname || '').replace(/\/+$/, '') || b2bBasePath;
     if (/^\/b2b\/new$/i.test(path)) return { mode: 'add' };
     const editMatch = path.match(/^\/b2b\/edit\/(.+)$/i);
     if (editMatch) return { mode: 'edit', id: decodeURIComponent(editMatch[1] || '') };
@@ -355,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         card.className = 'school-folder-card';
         card.innerHTML = `
-          <a class="school-folder" href="/b2b/school/${encodeURIComponent(school.id)}" aria-label="Open ${escapeHtml(schoolName)}">
+          <a class="school-folder" href="${b2bBasePath}/school/${encodeURIComponent(school.id)}" aria-label="Open ${escapeHtml(schoolName)}">
             <div class="school-folder__figure" aria-hidden="true">
               <span class="school-folder__paper school-folder__paper--left"></span>
               <span class="school-folder__paper school-folder__paper--middle"></span>
@@ -1085,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeAdminPassword = '';
     setModalError('');
     if (/^\/b2b\/(new|edit\/)/i.test(window.location.pathname || '')) {
-      window.history.pushState({}, '', '/b2b');
+      window.history.pushState({}, '', b2bBasePath);
       fetchSchools();
       consumeB2BFlash();
     }
@@ -1248,7 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       setB2BFlash(mode === 'edit' ? 'Customer updated successfully.' : 'Customer saved successfully.');
-      window.location.href = '/b2b';
+      window.location.href = b2bBasePath;
       return;
     } catch (error) {
       console.error(error);
@@ -1336,7 +1338,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (addBtn) {
     addBtn.addEventListener('click', () => {
-      window.location.href = '/b2b/new';
+      window.location.href = `${b2bBasePath}/new`;
     });
   }
 
