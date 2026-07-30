@@ -13445,6 +13445,65 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
   });
 }
 
+
+function _sbMissingWritableColumn(error) {
+  const msg = String(error?.message || error?.details?.message || error?.details || error || '');
+  const patterns = [
+    /Could not find the ['"]([^'"]+)['"] column/i,
+    /column ['"]([^'"]+)['"] of relation/i,
+    /column ['"]([^'"]+)['"] does not exist/i,
+    /cannot insert a non-DEFAULT value into column ['"]([^'"]+)['"]/i,
+    /cannot insert into column ['"]([^'"]+)['"]/i,
+    /column ['"]([^'"]+)['"] is generated/i,
+  ];
+  for (const pattern of patterns) {
+    const match = msg.match(pattern);
+    const column = String(match?.[1] || '').trim();
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) return column;
+  }
+  return '';
+}
+
+async function _sbInsertWithMissingColumnFallback(table, sourceRow = {}, requiredColumns = []) {
+  let row = { ...(sourceRow || {}) };
+  const required = new Set((requiredColumns || []).map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
+  const removed = new Set();
+
+  for (let attempt = 0; attempt <= Object.keys(row).length; attempt += 1) {
+    try {
+      return await supabaseDb.insert(table, row);
+    } catch (error) {
+      const missing = _sbMissingWritableColumn(error);
+      const key = Object.keys(row).find((name) => String(name).toLowerCase() === String(missing).toLowerCase());
+      if (!missing || !key || required.has(String(key).toLowerCase()) || removed.has(String(key).toLowerCase())) throw error;
+      delete row[key];
+      removed.add(String(key).toLowerCase());
+    }
+  }
+
+  return await supabaseDb.insert(table, row);
+}
+
+async function _sbUpdateByIdWithMissingColumnFallback(table, id, sourceRow = {}, requiredColumns = []) {
+  let row = { ...(sourceRow || {}) };
+  const required = new Set((requiredColumns || []).map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
+  const removed = new Set();
+
+  for (let attempt = 0; attempt <= Object.keys(row).length; attempt += 1) {
+    try {
+      return await supabaseDb.updateById(table, id, row);
+    } catch (error) {
+      const missing = _sbMissingWritableColumn(error);
+      const key = Object.keys(row).find((name) => String(name).toLowerCase() === String(missing).toLowerCase());
+      if (!missing || !key || required.has(String(key).toLowerCase()) || removed.has(String(key).toLowerCase())) throw error;
+      delete row[key];
+      removed.add(String(key).toLowerCase());
+    }
+  }
+
+  return await supabaseDb.updateById(table, id, row);
+}
+
 app.get(
   "/api/b2b/schools",
   requireAuth,
