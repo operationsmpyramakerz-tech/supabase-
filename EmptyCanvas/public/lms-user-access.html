@@ -16,6 +16,8 @@
   <link href="/css/style.css?v=lms-users-center-shell-v4" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=lms-users-center-shell-v4" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
+  <link href="/css/task-management.css?v=lms-structure-builder-v1" rel="stylesheet" />
+  <link href="/css/lms-user-access.css?v=lms-structure-builder-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-lms" data-sidebar-open-scroll="instant">
@@ -59,13 +61,61 @@
         </div>
       </header>
 
-      <main class="lms-workspace" aria-label="LMS Users Center workspace">
-        <section class="lms-workspace__canvas" aria-label="Empty LMS Users Center workspace"></section>
+      <main class="lms-structure-page" aria-label="LMS Users Center workspace">
+        <section class="lms-structure-toolbar">
+          <div><h2>Learning Structures</h2><p>Create schools and connect instructors and co-instructors through a visual workflow.</p></div>
+          <button type="button" class="tm-btn tm-btn--primary" id="lmsAddStructureBtn"><i data-feather="plus"></i><span>Add New Structure</span></button>
+        </section>
+        <section class="lms-structure-empty" aria-label="LMS structures list">
+          <div><i data-feather="git-branch"></i><h3>No structures yet</h3><p>Create the first LMS structure to begin.</p></div>
+        </section>
       </main>
     </div>
   </div>
 
+
+  <div class="tm-overlay tm-overlay--builder-layer" id="lmsBuilderOverlay" hidden aria-hidden="true">
+    <div class="tm-overlay__backdrop" data-lms-close="builder"></div>
+    <section class="tm-dialog tm-dialog--builder" role="dialog" aria-modal="true" aria-labelledby="lmsBuilderTitle">
+      <div class="tm-builder-header">
+        <div><span class="tm-eyebrow">Workflow builder</span><h2 id="lmsBuilderTitle">Create LMS Structure</h2></div>
+        <button type="button" class="tm-icon-btn" aria-label="Close workflow builder" data-lms-close="builder"><i data-feather="x"></i></button>
+      </div>
+      <div class="tm-builder-toolbar" role="toolbar" aria-label="LMS structure builder tools">
+        <div class="tm-builder-toolbar__tools">
+          <div id="lmsAddBlockWrap" style="position:relative">
+            <button type="button" class="tm-builder-tool tm-builder-tool--primary" id="lmsAddBlockBtn"><i data-feather="plus-square"></i><span>Add Block</span></button>
+            <div class="lms-add-menu" id="lmsAddBlockMenu" hidden>
+              <button type="button" data-add-kind="school"><i data-feather="home"></i><span>School</span></button>
+              <button type="button" data-add-kind="instructor"><i data-feather="user"></i><span>Instructor</span></button>
+              <button type="button" data-add-kind="co_instructor"><i data-feather="users"></i><span>Co-Instructor</span></button>
+            </div>
+          </div>
+          <div class="tm-builder-zoom" role="group" aria-label="Canvas zoom controls">
+            <button type="button" class="tm-builder-tool tm-builder-tool--icon" id="lmsZoomOutBtn" aria-label="Zoom out"><i data-feather="minus"></i></button>
+            <button type="button" class="tm-builder-zoom__label" id="lmsZoomResetBtn"><span id="lmsZoomLabel">100%</span></button>
+            <button type="button" class="tm-builder-tool tm-builder-tool--icon" id="lmsZoomInBtn" aria-label="Zoom in"><i data-feather="plus"></i></button>
+          </div>
+          <label class="lms-structure-name"><span>Structure name</span><input id="lmsStructureName" maxlength="200" placeholder="Example: Green Valley School" /></label>
+        </div>
+        <div class="tm-builder-toolbar__actions">
+          <span class="lms-builder-status" id="lmsBuilderStatus" aria-live="polite">Add blocks and connect them to build the structure.</span>
+          <button type="button" class="tm-btn tm-btn--secondary" data-lms-close="builder">Cancel</button>
+          <button type="button" class="tm-btn tm-btn--primary" id="lmsSaveStructureBtn"><i data-feather="save"></i><span>Create Structure</span></button>
+        </div>
+      </div>
+      <div class="tm-builder-canvas-wrap" id="lmsBuilderCanvasWrap" tabindex="-1">
+        <div class="tm-builder-board" id="lmsBuilderBoard" aria-label="LMS structure design canvas">
+          <svg class="tm-connection-layer" id="lmsBuilderArrows" aria-hidden="true"></svg>
+          <div class="tm-builder-empty" id="lmsBuilderEmpty"><i data-feather="git-branch"></i><b>Your LMS structure canvas is ready</b><span>Use <strong>Add Block</strong> to add a School, Instructor, or Co-Instructor, then connect the blocks.</span></div>
+        </div>
+      </div>
+      <div class="tm-builder-legend"><span><i class="tm-legend-dot tm-legend-dot--ready"></i>Each block represents one LMS entity</span><span><i class="tm-legend-arrow">→</i>Connect an output point to another block's input point</span><span><i class="tm-legend-handle"></i>Drag a block to reposition it</span></div>
+    </section>
+  </div>
+
   <script>if(window.feather)feather.replace();</script>
-  <script src="/js/common-ui.js?v=lms-users-center-shell-v4"></script>
+  <script src="/js/common-ui.js?v=lms-structure-builder-v1"></script>
+  <script src="/js/lms-user-access.js?v=lms-structure-builder-v1"></script>
 </body>
 </html>
