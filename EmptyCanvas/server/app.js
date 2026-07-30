@@ -9504,23 +9504,21 @@ app.get("/kpis", requireAuth, requirePage("KPIs"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "kpis.html"));
 });
 
-// B2B page
-app.get("/b2b", requireAuth, requirePage("B2B"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2b.html"));
+// B2B is now part of the LMS workspace and uses the LMS page-access catalogue.
+app.get(["/lms/b2b", "/lms/b2b/new", "/lms/b2b/edit/:id"], requireAuth, requireLmsPageAccess("lms-b2b"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "lms-b2b.html"));
 });
 
-app.get("/b2b/new", requireAuth, requirePage("B2B"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2b.html"));
+app.get("/lms/b2b/school/:id", requireAuth, requireLmsPageAccess("lms-b2b"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "lms-b2b-school.html"));
 });
 
-app.get("/b2b/edit/:id", requireAuth, requirePage("B2B"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2b.html"));
+// Preserve old bookmarks while moving users into the LMS workspace.
+app.get(["/b2b", "/b2b/new", "/b2b/edit/:id"], requireAuth, (req, res) => {
+  const suffix = req.path.replace(/^\/b2b/, "");
+  res.redirect(`/lms/b2b${suffix}`);
 });
-
-// B2B School detail page
-app.get("/b2b/school/:id", requireAuth, requirePage("B2B"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2b-school.html"));
-});
+app.get("/b2b/school/:id", requireAuth, (req, res) => res.redirect(`/lms/b2b/school/${encodeURIComponent(req.params.id)}`));
 
 // Account page
 app.get("/account", requireAuth, (req, res) => {
@@ -13450,7 +13448,7 @@ async function _getB2BSchoolStocktakingPayload(schoolId) {
 app.get(
   "/api/b2b/schools",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
       return res.status(500).json({ error: "B2B schools table/database is not configured." });
@@ -13480,7 +13478,7 @@ app.get(
 app.post(
   "/api/b2b/schools",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbB2BSchoolsEnabled()) {
       return res.status(400).json({ error: "Adding B2B schools is available only after Supabase migration is configured." });
@@ -13545,7 +13543,7 @@ app.post(
 app.patch(
   "/api/b2b/schools/:id",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbB2BSchoolsEnabled()) {
       return res.status(400).json({ error: "Editing B2B schools is available only after Supabase migration is configured." });
@@ -13595,7 +13593,7 @@ app.patch(
 app.delete(
   "/api/b2b/schools/:id",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbB2BSchoolsEnabled()) {
       return res.status(400).json({ error: "Deleting B2B schools is available only after Supabase migration is configured." });
@@ -13625,7 +13623,7 @@ app.delete(
 app.get(
   "/api/b2b/schools/:id",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbB2BSchoolsEnabled() && !b2bDatabaseId) {
       return res.status(500).json({ error: "B2B schools table/database is not configured." });
@@ -13711,7 +13709,7 @@ app.get(
 app.get(
   "/api/b2b/schools/:id/stock",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking table/database is not configured." });
@@ -13752,7 +13750,7 @@ async function _requireB2BAdminPassword(req, res) {
 app.post(
   "/api/b2b/admin/verify",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -13773,7 +13771,7 @@ app.post(
 app.get(
   "/api/b2b/stocktaking-columns",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -13792,7 +13790,7 @@ app.get(
 app.post(
   "/api/b2b/stocktaking-columns",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -13821,7 +13819,7 @@ app.post(
 app.post(
   "/api/b2b/schools/:id/inventory",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking table/database is not configured." });
@@ -13902,7 +13900,7 @@ app.post(
 app.patch(
   "/api/b2b/schools/:id/stock/:stockId/inventory",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking table/database is not configured." });
@@ -14023,7 +14021,7 @@ app.patch(
 app.patch(
   "/api/b2b/schools/:id/stock/:stockId/defected",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking table/database is not configured." });
@@ -14226,7 +14224,7 @@ function _b2bReceiptNumbersInline(value) {
 app.get(
   "/api/b2b/schools/:id/stock/pdf",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking table/database is not configured." });
@@ -14721,7 +14719,7 @@ app.get(
 app.get(
   "/api/b2b/schools/:id/stock/excel",
   requireAuth,
-  requirePage("B2B"),
+  requireLmsPageAccess("lms-b2b"),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && !stocktakingDatabaseId) {
       return res.status(500).json({ error: "Stocktaking table/database is not configured." });
