@@ -9383,6 +9383,10 @@ app.get("/lms/user-access/:role(supervisors|team-leaders|instructors|co-instruct
   res.sendFile(path.join(__dirname, "..", "public", "lms-role-directory.html"));
 });
 
+app.get(["/lms/curriculum", "/lms/curriculum/:id"], requireAuth, requireLmsPageAccess("lms-curriculum"), (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "lms-curriculum.html"));
+});
+
 
 app.get("/orders", requireAuth, requirePage("Current Orders"), (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "current-orders.html"));
@@ -16412,6 +16416,109 @@ app.post("/api/lms/users-center/roles/:role", async (req, res) => {
   } catch (error) {
     console.error(`POST LMS role ${req.params.role} error:`, error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || `Failed to add ${config.label}.` });
+  }
+});
+
+// LMS Curriculum — curriculum folders with grouped resource records.
+app.use("/api/lms/curriculum", requireAuth, requireLmsPageAccess("lms-curriculum"));
+
+const LMS_CURRICULUM_RESOURCE_TYPES = Object.freeze({
+  teacher_guide: "Teacher Guide",
+  lesson_plan: "Lesson Plan",
+  presentation: "Presentation",
+  materials: "Materials",
+  exam: "Exam",
+});
+
+app.get("/api/lms/curriculum", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const rows = await supabaseDb.request('/lms_curricula?select=*&order=created_at.desc&limit=1000');
+    return res.json({ ok: true, curricula: Array.isArray(rows) ? rows : [] });
+  } catch (error) {
+    console.error("GET /api/lms/curriculum error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load curricula." });
+  }
+});
+
+app.post("/api/lms/curriculum", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const description = String(req.body?.description || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "Curriculum name is required." });
+    const createdByRaw = String(req.session?.userSupabaseId || "").trim();
+    const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
+    const rows = await supabaseDb.request('/lms_curricula', {
+      method: 'POST', headers: { Prefer: 'return=representation' },
+      body: { name, description, created_by: createdBy, metadata: {} },
+    });
+    return res.status(201).json({ ok: true, curriculum: Array.isArray(rows) ? rows[0] : rows });
+  } catch (error) {
+    console.error("POST /api/lms/curriculum error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create curriculum." });
+  }
+});
+
+app.get("/api/lms/curriculum/:id", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const id = String(req.params?.id || "").trim();
+    if (!/^\d+$/.test(id)) return res.status(400).json({ ok: false, error: "Invalid curriculum ID." });
+    const [curricula, resources] = await Promise.all([
+      supabaseDb.request(`/lms_curricula?select=*&id=eq.${_sbRestFilterValue(id)}&limit=1`),
+      supabaseDb.request(`/lms_curriculum_resources?select=*&curriculum_id=eq.${_sbRestFilterValue(id)}&order=created_at.desc&limit=5000`),
+    ]);
+    const curriculum = Array.isArray(curricula) ? curricula[0] : null;
+    if (!curriculum) return res.status(404).json({ ok: false, error: "Curriculum was not found." });
+    return res.json({ ok: true, curriculum, resources: Array.isArray(resources) ? resources : [], resourceTypes: LMS_CURRICULUM_RESOURCE_TYPES });
+  } catch (error) {
+    console.error("GET /api/lms/curriculum/:id error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load curriculum." });
+  }
+});
+
+app.post("/api/lms/curriculum/:id/resources", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    if (!/^\d+$/.test(curriculumId)) return res.status(400).json({ ok: false, error: "Invalid curriculum ID." });
+    const resourceType = String(req.body?.resourceType || "").trim().toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(LMS_CURRICULUM_RESOURCE_TYPES, resourceType)) {
+      return res.status(400).json({ ok: false, error: "Choose a valid curriculum file type." });
+    }
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const resourceUrl = String(req.body?.resourceUrl || "").trim().slice(0, 2000) || null;
+    const notes = String(req.body?.notes || "").trim().slice(0, 4000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "File name is required." });
+    const exists = await supabaseDb.request(`/lms_curricula?select=id&id=eq.${_sbRestFilterValue(curriculumId)}&limit=1`);
+    if (!Array.isArray(exists) || !exists.length) return res.status(404).json({ ok: false, error: "Curriculum was not found." });
+    const createdByRaw = String(req.session?.userSupabaseId || "").trim();
+    const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
+    const rows = await supabaseDb.request('/lms_curriculum_resources', {
+      method: 'POST', headers: { Prefer: 'return=representation' },
+      body: { curriculum_id: Number(curriculumId), resource_type: resourceType, name, resource_url: resourceUrl, notes, created_by: createdBy, metadata: {} },
+    });
+    return res.status(201).json({ ok: true, resource: Array.isArray(rows) ? rows[0] : rows });
+  } catch (error) {
+    console.error("POST /api/lms/curriculum/:id/resources error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add curriculum file." });
+  }
+});
+
+app.delete("/api/lms/curriculum/:id/resources/:resourceId", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const resourceId = String(req.params?.resourceId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(resourceId)) return res.status(400).json({ ok: false, error: "Invalid file ID." });
+    await supabaseDb.request(`/lms_curriculum_resources?id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}`, {
+      method: 'DELETE', headers: { Prefer: 'return=minimal' },
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("DELETE /api/lms/curriculum/:id/resources/:resourceId error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete curriculum file." });
   }
 });
 
