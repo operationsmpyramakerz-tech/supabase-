@@ -2136,6 +2136,38 @@ document.addEventListener('DOMContentLoaded', () => {
         logo.innerHTML = '<img src="/images/logo.png" alt="Company logo">';
         header.replaceChildren(logo);
       }
+
+      // Keep the LMS brand mark identical on every LMS page. Some page-level
+      // stylesheets contain broad image rules, so lock both the wrapper and
+      // image dimensions here as well as in the shared stylesheet.
+      logo.style.setProperty('width', '48px', 'important');
+      logo.style.setProperty('height', '48px', 'important');
+      logo.style.setProperty('min-width', '48px', 'important');
+      logo.style.setProperty('min-height', '48px', 'important');
+      logo.style.setProperty('max-width', '48px', 'important');
+      logo.style.setProperty('max-height', '48px', 'important');
+      logo.style.setProperty('display', 'flex', 'important');
+      logo.style.setProperty('align-items', 'center', 'important');
+      logo.style.setProperty('justify-content', 'center', 'important');
+      logo.style.setProperty('overflow', 'hidden', 'important');
+      logo.style.setProperty('margin', '0', 'important');
+      logo.style.setProperty('padding', '0', 'important');
+      logo.style.setProperty('background', 'transparent', 'important');
+
+      const logoImage = logo.querySelector('img');
+      if (logoImage) {
+        logoImage.style.setProperty('width', '38px', 'important');
+        logoImage.style.setProperty('height', '38px', 'important');
+        logoImage.style.setProperty('min-width', '38px', 'important');
+        logoImage.style.setProperty('min-height', '38px', 'important');
+        logoImage.style.setProperty('max-width', '38px', 'important');
+        logoImage.style.setProperty('max-height', '38px', 'important');
+        logoImage.style.setProperty('display', 'block', 'important');
+        logoImage.style.setProperty('object-fit', 'contain', 'important');
+        logoImage.style.setProperty('object-position', 'center', 'important');
+        logoImage.style.setProperty('margin', '0', 'important');
+        logoImage.style.setProperty('padding', '0', 'important');
+      }
       return;
     }
 
