@@ -2124,26 +2124,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const isLmsWorkspace = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '').startsWith('/lms');
     if (isLmsWorkspace) {
-      ensureLmsBackButtonStyle();
       const h2 = header.querySelector('h2');
-      if (h2) h2.style.display = 'none';
-      header.querySelectorAll('#sidebar-logo-toggle, img.sidebar-brand-logo').forEach((el) => el.remove());
-      // The LMS back control is canonical markup, not a page-specific toggle.
-      // Remove stale copies and always keep one direct child of sidebar-header so
-      // page CSS cannot turn it into a bare arrow on Curriculum/Schools pages.
-      const allBackButtons = Array.from(document.querySelectorAll('.sidebar.lms-sidebar .lms-sidebar-back'));
-      let back = allBackButtons.find((node) => node.parentElement === header) || allBackButtons[0] || null;
-      allBackButtons.forEach((node) => { if (node !== back) node.remove(); });
-      if (!back) {
-        back = document.createElement('a');
-        back.innerHTML = '<i data-feather="arrow-left"></i>';
+      if (h2) h2.remove();
+      header.querySelectorAll('.lms-sidebar-back, .sidebar-toggle, #sidebar-toggle, #sidebar-logo-toggle, img.sidebar-brand-logo').forEach((el) => el.remove());
+
+      let logo = header.querySelector('.lms-sidebar-logo');
+      if (!logo) {
+        logo = document.createElement('div');
+        logo.className = 'lms-sidebar-logo';
+        logo.setAttribute('aria-label', 'Company logo');
+        logo.innerHTML = '<img src="/images/logo.png" alt="Company logo">';
+        header.replaceChildren(logo);
       }
-      back.className = 'lms-sidebar-back lms-sidebar-back--fixed';
-      back.href = '/home';
-      back.setAttribute('aria-label', 'Back to main workspace');
-      back.setAttribute('title', 'Back to main workspace');
-      if (back.parentElement !== header) header.prepend(back);
-      header.querySelectorAll('.sidebar-toggle, #sidebar-toggle').forEach((node) => node.remove());
       return;
     }
 
@@ -3532,7 +3524,8 @@ if (document.querySelector('.sidebar')) {
 
     const SCHOOL_ICON = `<svg class="lms-school-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10.5 12 4l8 6.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-5h5v5"/><path d="M8 12h1.5M14.5 12H16"/><circle cx="12" cy="9" r="1.6"/><path d="M12 7.4v1.7l1 .6"/><path d="M12 4V1.8h4l-1 1 1 1h-4"/></svg>`;
     const catalogue = [
-      { path: '/lms', label: 'LMS Home', icon: '<i data-feather="home"></i>', className: 'lms-home-anchor' },
+      { path: '/home', label: 'Back', icon: '<i data-feather="arrow-left"></i>', className: 'lms-sidebar-back lms-back-nav' },
+      { path: '/lms', label: 'LMS Home', icon: '<i data-feather="home"></i>', className: 'lms-home-anchor', boundary: true },
       { path: '/lms/user-access', label: 'Users Center', icon: '<i data-feather="users"></i>' },
       { path: '/lms/b2b', label: 'Schools', icon: SCHOOL_ICON },
       { path: '/lms/curriculum', label: 'Curriculum', icon: '<i data-feather="book-open"></i>' },
@@ -3553,6 +3546,8 @@ if (document.querySelector('.sidebar')) {
         const fragment = document.createDocumentFragment();
         catalogue.forEach((entry) => {
           const item = document.createElement('li');
+          if (entry.path === '/home') item.className = 'lms-back-item';
+          if (entry.boundary) item.classList.add('lms-home-boundary');
           const link = document.createElement('a');
           link.href = entry.path;
           link.className = `nav-link${entry.className ? ` ${entry.className}` : ''}`;
@@ -3577,6 +3572,13 @@ if (document.querySelector('.sidebar')) {
         // book icon without rebuilding the whole sidebar or re-triggering the guard.
         if (entry) {
           link.classList.toggle('lms-home-anchor', entry.path === '/lms');
+          link.classList.toggle('lms-sidebar-back', entry.path === '/home');
+          link.classList.toggle('lms-back-nav', entry.path === '/home');
+          const itemNode = link.closest('li');
+          if (itemNode) {
+            itemNode.classList.toggle('lms-back-item', entry.path === '/home');
+            itemNode.classList.toggle('lms-home-boundary', Boolean(entry.boundary));
+          }
           link.setAttribute('title', entry.label);
           link.setAttribute('aria-label', entry.label);
 
@@ -3598,7 +3600,8 @@ if (document.querySelector('.sidebar')) {
               else link.insertBefore(replacement, label);
             }
           } else {
-            const expectedFeather = entry.path === '/lms' ? 'home'
+            const expectedFeather = entry.path === '/home' ? 'arrow-left'
+              : entry.path === '/lms' ? 'home'
               : entry.path === '/lms/user-access' ? 'users'
               : 'book-open';
             const renderedFeather = currentIcon?.getAttribute?.('data-feather')
