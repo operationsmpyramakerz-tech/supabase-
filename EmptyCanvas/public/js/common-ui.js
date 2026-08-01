@@ -7158,18 +7158,21 @@ function initOpsPersistentShellHost() {
   ];
   const normalized = (value) => String(value || '').split('?')[0].replace(/\/+$/, '') || '/';
   let panel = null;
+
   function parentLink() {
-    return Array.from(document.querySelectorAll('.lms-sidebar a.nav-link[href]'))
+    return Array.from(document.querySelectorAll('.lms-sidebar a.nav-link[href], .sidebar a.nav-link[href]'))
       .find((link) => normalized(link.getAttribute('href')) === '/lms/user-access');
   }
+
   function close() {
     if (!panel) return;
     panel.hidden = true;
     panel.classList.remove('is-open');
     parentLink()?.setAttribute('aria-expanded', 'false');
   }
+
   function ensurePanel() {
-    if (panel) return panel;
+    if (panel?.isConnected) return panel;
     panel = document.createElement('div');
     panel.id = 'lms-users-center-subpage-flyout';
     panel.className = 'task-management-subpage-flyout lms-users-center-subpage-flyout';
@@ -7179,6 +7182,7 @@ function initOpsPersistentShellHost() {
     document.body.appendChild(panel);
     return panel;
   }
+
   function open(trigger) {
     const flyout = ensurePanel();
     flyout.innerHTML = `<div class="task-management-subpage-flyout__list">${pages.map((page) => `
@@ -7190,32 +7194,33 @@ function initOpsPersistentShellHost() {
     flyout.style.top = `${Math.min(window.innerHeight - 390, Math.max(12, rect.top - 10))}px`;
     flyout.hidden = false;
     flyout.classList.add('is-open');
+    trigger.setAttribute('aria-haspopup', 'menu');
     trigger.setAttribute('aria-expanded', 'true');
     if (window.feather) window.feather.replace({ width: 17, height: 17 });
   }
-  function bind() {
-    const parent = parentLink();
-    if (!parent || parent.dataset.lmsRoleFlyoutBound) return false;
-    parent.dataset.lmsRoleFlyoutBound = '1';
-    parent.setAttribute('aria-haspopup', 'menu');
-    parent.setAttribute('aria-expanded', 'false');
-    parent.classList.toggle('active', path === '/lms/user-access' || path.startsWith('/lms/user-access/'));
-    parent.addEventListener('click', (event) => {
+
+  // Use delegated handling because the canonical LMS sidebar can rebuild its
+  // links after page load. A listener attached to the original Users Center
+  // element would be lost, which made some LMS pages navigate immediately.
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest?.('.lms-sidebar a.nav-link[href="/lms/user-access"], .sidebar a.nav-link[href="/lms/user-access"]');
+    if (trigger) {
       event.preventDefault();
       event.stopPropagation();
-      if (panel?.classList.contains('is-open')) close(); else open(parent);
-    });
-    return true;
-  }
-  const timer = window.setInterval(() => { if (bind()) window.clearInterval(timer); }, 120);
-  window.setTimeout(() => window.clearInterval(timer), 6000);
-  document.addEventListener('click', (event) => {
+      if (panel?.classList.contains('is-open')) close();
+      else open(trigger);
+      return;
+    }
+
     if (!panel?.classList.contains('is-open')) return;
-    if (panel.contains(event.target)) { if (event.target.closest('a')) close(); return; }
-    if (parentLink()?.contains(event.target)) return;
+    if (panel.contains(event.target)) {
+      if (event.target.closest('a')) close();
+      return;
+    }
     close();
-  });
+  }, true);
+
   window.addEventListener('resize', close);
   window.addEventListener('pagehide', close);
   window.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
-})();
+})();;
