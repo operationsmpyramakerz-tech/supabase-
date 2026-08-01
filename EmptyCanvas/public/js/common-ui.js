@@ -3479,9 +3479,20 @@ if (document.querySelector('.sidebar')) {
       b2bLink = item.querySelector('a.nav-link');
     }
 
+    let curriculumLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
+      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/curriculum');
+    if (!curriculumLink) {
+      const item = document.createElement('li');
+      item.innerHTML = '<a class="nav-link" href="/lms/curriculum"><i data-feather="book-open"></i><span class="nav-label">Curriculum</span></a>';
+      list.appendChild(item);
+      curriculumLink = item.querySelector('a.nav-link');
+    }
+
     list.querySelectorAll('a.nav-link[href]').forEach((link) => {
       const path = sidebarPath(link.getAttribute('href') || '');
-      const active = path === currentPath || (path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'));
+      const active = path === currentPath
+        || (path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'))
+        || (path === '/lms/curriculum' && currentPath.startsWith('/lms/curriculum/'));
       link.classList.toggle('active', active);
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
