@@ -2128,17 +2128,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const h2 = header.querySelector('h2');
       if (h2) h2.style.display = 'none';
       header.querySelectorAll('#sidebar-logo-toggle, img.sidebar-brand-logo').forEach((el) => el.remove());
-      let back = header.querySelector('.lms-sidebar-back');
-      if (back) back.classList.add('lms-sidebar-back--fixed');
+      // The LMS back control is canonical markup, not a page-specific toggle.
+      // Remove stale copies and always keep one direct child of sidebar-header so
+      // page CSS cannot turn it into a bare arrow on Curriculum/Schools pages.
+      const allBackButtons = Array.from(document.querySelectorAll('.sidebar.lms-sidebar .lms-sidebar-back'));
+      let back = allBackButtons.find((node) => node.parentElement === header) || allBackButtons[0] || null;
+      allBackButtons.forEach((node) => { if (node !== back) node.remove(); });
       if (!back) {
         back = document.createElement('a');
-        back.className = 'lms-sidebar-back lms-sidebar-back--fixed';
-        back.href = '/home';
-        back.setAttribute('aria-label', 'Back to main workspace');
-        back.setAttribute('title', 'Back to main workspace');
         back.innerHTML = '<i data-feather="arrow-left"></i>';
-        header.insertBefore(back, header.firstChild);
       }
+      back.className = 'lms-sidebar-back lms-sidebar-back--fixed';
+      back.href = '/home';
+      back.setAttribute('aria-label', 'Back to main workspace');
+      back.setAttribute('title', 'Back to main workspace');
+      if (back.parentElement !== header) header.prepend(back);
+      header.querySelectorAll('.sidebar-toggle, #sidebar-toggle').forEach((node) => node.remove());
       return;
     }
 
