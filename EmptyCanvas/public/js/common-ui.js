@@ -3454,60 +3454,58 @@ if (document.querySelector('.sidebar')) {
     const list = nav?.querySelector('.nav-list');
     if (!nav || !list) return;
 
-    // LMS owns a completely separate navigation catalogue. Any ERP links that
-    // may be injected by the shared chrome must be removed immediately.
-    Array.from(list.children).forEach((item) => {
-      const link = item.querySelector?.('a.nav-link[href]');
+    const SCHOOL_ICON = `<svg class="lms-school-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10.5 12 4l8 6.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-5h5v5"/><path d="M8 12h1.5M14.5 12H16"/><circle cx="12" cy="9" r="1.6"/><path d="M12 7.4v1.7l1 .6"/><path d="M12 4V1.8h4l-1 1 1 1h-4"/></svg>`;
+    const catalogue = [
+      { path: '/lms', label: 'LMS Home', icon: '<i data-feather="home"></i>', className: 'lms-home-anchor' },
+      { path: '/lms/user-access', label: 'Users Center', icon: '<i data-feather="users"></i>' },
+      { path: '/lms/b2b', label: 'Schools', icon: SCHOOL_ICON },
+      { path: '/lms/curriculum', label: 'Curriculum', icon: '<i data-feather="book-open"></i>' },
+    ];
+
+    // Rebuild the LMS navigation from one canonical catalogue. This prevents
+    // individual LMS pages and shared ERP chrome from changing icon order,
+    // markup, or spacing while navigating between pages.
+    const existingByPath = new Map();
+    Array.from(list.querySelectorAll(':scope > li')).forEach((item) => {
+      const link = item.querySelector('a.nav-link[href]');
       const path = sidebarPath(link?.getAttribute('href') || '');
-      if (!path.startsWith('/lms')) item.remove();
+      if (!catalogue.some((entry) => entry.path === path) || existingByPath.has(path)) {
+        item.remove();
+        return;
+      }
+      existingByPath.set(path, item);
     });
 
-    let homeLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
-      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms');
-    if (!homeLink) {
-      const item = document.createElement('li');
-      item.innerHTML = '<a class="nav-link lms-home-anchor" href="/lms"><i data-feather="home"></i><span class="nav-label">LMS Home</span></a>';
-      list.insertBefore(item, list.firstChild);
-      homeLink = item.querySelector('a.nav-link');
-    }
-    homeLink.classList.add('lms-home-anchor');
+    catalogue.forEach((entry, index) => {
+      let item = existingByPath.get(entry.path);
+      if (!item) {
+        item = document.createElement('li');
+        existingByPath.set(entry.path, item);
+      }
 
-    let usersLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
-      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/user-access');
-    if (!usersLink) {
-      const item = document.createElement('li');
-      item.innerHTML = '<a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a>';
-      list.appendChild(item);
-      usersLink = item.querySelector('a.nav-link');
-    }
+      let link = item.querySelector('a.nav-link');
+      if (!link) {
+        link = document.createElement('a');
+        link.className = 'nav-link';
+        item.replaceChildren(link);
+      }
 
-    let b2bLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
-      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/b2b');
-    if (!b2bLink) {
-      const item = document.createElement('li');
-      item.innerHTML = `<a class="nav-link" href="/lms/b2b"><svg class="lms-school-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 10.5 12 4l8 6.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-5h5v5"/><path d="M8 12h1.5M14.5 12H16"/><circle cx="12" cy="9" r="1.6"/><path d="M12 7.4v1.7l1 .6"/><path d="M12 4V1.8h4l-1 1 1 1h-4"/></svg><span class="nav-label">Schools</span></a>`;
-      list.appendChild(item);
-      b2bLink = item.querySelector('a.nav-link');
-    }
+      link.href = entry.path;
+      link.className = `nav-link${entry.className ? ` ${entry.className}` : ''}`;
+      const desiredMarkup = `${entry.icon}<span class="nav-label">${entry.label}</span>`;
+      if (link.innerHTML.trim() !== desiredMarkup.trim()) link.innerHTML = desiredMarkup;
 
-    let curriculumLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
-      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/curriculum');
-    if (!curriculumLink) {
-      const item = document.createElement('li');
-      item.innerHTML = '<a class="nav-link" href="/lms/curriculum"><i data-feather="book-open"></i><span class="nav-label">Curriculum</span></a>';
-      list.appendChild(item);
-      curriculumLink = item.querySelector('a.nav-link');
-    }
-
-    list.querySelectorAll('a.nav-link[href]').forEach((link) => {
-      const path = sidebarPath(link.getAttribute('href') || '');
-      const active = path === currentPath
-        || (path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'))
-        || (path === '/lms/curriculum' && currentPath.startsWith('/lms/curriculum/'));
+      const active = entry.path === currentPath
+        || (entry.path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'))
+        || (entry.path === '/lms/b2b' && currentPath.startsWith('/lms/b2b/'))
+        || (entry.path === '/lms/curriculum' && currentPath.startsWith('/lms/curriculum/'));
       link.classList.toggle('active', active);
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
-      showEl(link.closest('li') || link);
+
+      const currentAtIndex = list.children[index];
+      if (currentAtIndex !== item) list.insertBefore(item, currentAtIndex || null);
+      showEl(item);
     });
 
     nav.style.setProperty('display', 'block', 'important');
