@@ -3496,6 +3496,51 @@ if (document.querySelector('.sidebar')) {
 
       Array.from(list.querySelectorAll(':scope > li > a.nav-link[href]')).forEach((link) => {
         const path = sidebarPath(link.getAttribute('href') || '');
+        const entry = catalogue.find((item) => item.path === path);
+
+        // Keep every LMS icon tied to its route, even when the page already has the
+        // correct link order. Some LMS pages ship with different placeholder icons,
+        // and Feather converts <i> nodes into <svg> nodes before this guard runs.
+        // Normalizing by route here prevents LMS Home from inheriting Curriculum's
+        // book icon without rebuilding the whole sidebar or re-triggering the guard.
+        if (entry) {
+          link.classList.toggle('lms-home-anchor', entry.path === '/lms');
+          link.setAttribute('title', entry.label);
+          link.setAttribute('aria-label', entry.label);
+
+          let label = link.querySelector('.nav-label');
+          if (!label) {
+            label = document.createElement('span');
+            label.className = 'nav-label';
+            link.appendChild(label);
+          }
+          label.textContent = entry.label;
+
+          const currentIcon = link.querySelector('svg, i[data-feather], i');
+          if (entry.path === '/lms/b2b') {
+            if (!currentIcon?.classList?.contains('lms-school-nav-icon')) {
+              const holder = document.createElement('span');
+              holder.innerHTML = SCHOOL_ICON;
+              const replacement = holder.firstElementChild;
+              if (currentIcon) currentIcon.replaceWith(replacement);
+              else link.insertBefore(replacement, label);
+            }
+          } else {
+            const expectedFeather = entry.path === '/lms' ? 'home'
+              : entry.path === '/lms/user-access' ? 'users'
+              : 'book-open';
+            const renderedFeather = currentIcon?.getAttribute?.('data-feather')
+              || (currentIcon?.classList ? Array.from(currentIcon.classList)
+                .find((name) => name.startsWith('feather-'))?.replace(/^feather-/, '') : '');
+            if (!currentIcon || renderedFeather !== expectedFeather) {
+              const replacement = document.createElement('i');
+              replacement.setAttribute('data-feather', expectedFeather);
+              if (currentIcon) currentIcon.replaceWith(replacement);
+              else link.insertBefore(replacement, label);
+            }
+          }
+        }
+
         const active = path === currentPath
           || (path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'))
           || (path === '/lms/b2b' && currentPath.startsWith('/lms/b2b/'))
