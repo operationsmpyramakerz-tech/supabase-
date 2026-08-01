@@ -4841,3 +4841,112 @@ body.page-lms .lms-sidebar .nav-list a.lms-home-anchor svg{
   stroke-width:2.2!important;
 }
 body.page-lms .lms-sidebar .nav-list a.lms-home-anchor .nav-label{display:none!important}
+
+/* =========================================================
+   LMS canonical sidebar — fixed order, geometry and controls
+   Back / Home / Users Center / Schools / Curriculum must stay
+   identical on every /lms page regardless of page markup.
+   ========================================================= */
+body.page-lms .lms-sidebar{
+  --lms-nav-size:54px;
+}
+body.page-lms .lms-sidebar .sidebar-header{
+  min-height:78px!important;
+  flex:0 0 78px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:12px 8px!important;
+}
+body.page-lms .lms-sidebar .sidebar-header > :not(.lms-sidebar-back):not(.lms-sidebar-back--fixed){
+  display:none!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav{
+  display:block!important;
+  overflow:visible!important;
+  padding:0!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list{
+  display:grid!important;
+  grid-template-columns:var(--lms-nav-size)!important;
+  grid-auto-rows:var(--lms-nav-size)!important;
+  justify-content:center!important;
+  align-content:start!important;
+  gap:14px!important;
+  margin:0!important;
+  padding:0 8px!important;
+  list-style:none!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li{
+  width:var(--lms-nav-size)!important;
+  height:var(--lms-nav-size)!important;
+  min-width:var(--lms-nav-size)!important;
+  min-height:var(--lms-nav-size)!important;
+  margin:0!important;
+  padding:0!important;
+  display:block!important;
+  position:relative!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link{
+  box-sizing:border-box!important;
+  width:var(--lms-nav-size)!important;
+  height:var(--lms-nav-size)!important;
+  min-width:var(--lms-nav-size)!important;
+  min-height:var(--lms-nav-size)!important;
+  margin:0!important;
+  padding:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:0!important;
+  border:1px solid transparent!important;
+  border-radius:18px!important;
+  color:rgba(255,255,255,.88)!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  transform:none!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link:hover{
+  color:#fff!important;
+  background:rgba(255,255,255,.09)!important;
+  transform:none!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link.active{
+  color:#111827!important;
+  background:#fff!important;
+  border-color:rgba(255,255,255,.95)!important;
+  box-shadow:0 0 0 2px rgba(8,12,20,.94),0 10px 24px rgba(0,0,0,.22)!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link svg,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link .lms-school-nav-icon{
+  width:23px!important;
+  height:23px!important;
+  min-width:23px!important;
+  min-height:23px!important;
+  stroke:currentColor!important;
+  stroke-width:2!important;
+  display:block!important;
+  flex:0 0 23px!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link .nav-label{
+  display:none!important;
+}
+/* Home follows the same fixed geometry; only the current page is highlighted. */
+body.page-lms .lms-sidebar .nav-list a.lms-home-anchor:not(.active){
+  color:rgba(255,255,255,.88)!important;
+  background:transparent!important;
+  border-color:transparent!important;
+  box-shadow:none!important;
+}
+body.page-lms .lms-sidebar .nav-list a.lms-home-anchor.active{
+  color:#111827!important;
+  background:#fff!important;
+  border-color:rgba(255,255,255,.95)!important;
+  box-shadow:0 0 0 2px rgba(8,12,20,.94),0 10px 24px rgba(0,0,0,.22)!important;
+}
+@media(max-width:768px){
+  body.page-lms .lms-sidebar{--lms-nav-size:48px}
+  body.page-lms .lms-sidebar .sidebar-header{min-height:66px!important;flex-basis:66px!important;padding:9px 6px!important}
+  body.page-lms .lms-sidebar .sidebar-nav > .nav-list{gap:12px!important;padding:0 6px!important}
+  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link{border-radius:15px!important}
+}
