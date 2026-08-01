@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=lms-curriculum-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=lms-back-arrow-v10" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=lms-curriculum-v1" rel="stylesheet" />
-  <link href="/css/lms-curriculum.css?v=lms-theme-grade-v2" rel="stylesheet" />
+  <link href="/css/lms-curriculum.css?v=lms-storage-upload-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-lms lms-curriculum-page" data-sidebar-open-scroll="instant">
@@ -65,10 +65,34 @@
 
   <div id="gradeModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-grade-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-grade-close><i data-feather="x"></i></button><span class="curriculum-kicker">NEW GRADE FOLDER</span><h2>Add New Grade</h2><label><span>Grade Name *</span><input id="gradeNameInput" maxlength="240" placeholder="Example: Grade 5" /></label><label><span>Description</span><textarea id="gradeDescriptionInput" rows="4" maxlength="2000" placeholder="Optional short description"></textarea></label><div id="gradeModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-grade-close>Cancel</button><button id="saveGradeBtn" class="curriculum-btn curriculum-btn--dark">Create Grade</button></div></section></div>
 
-  <div id="resourceModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-resource-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-resource-close><i data-feather="x"></i></button><span class="curriculum-kicker" id="resourceModalKicker">NEW FILE</span><h2 id="resourceModalTitle">Add File</h2><label><span>File Name *</span><input id="resourceNameInput" maxlength="240" placeholder="Enter file name" /></label><label><span>File URL</span><input id="resourceUrlInput" maxlength="2000" placeholder="https://..." inputmode="url" /></label><label><span>Notes</span><textarea id="resourceNotesInput" rows="3" maxlength="4000" placeholder="Optional notes"></textarea></label><div id="resourceModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-resource-close>Cancel</button><button id="saveResourceBtn" class="curriculum-btn curriculum-btn--dark">Add File</button></div></section></div>
+  <div id="resourceModal" class="curriculum-modal" hidden>
+    <div class="curriculum-modal__backdrop" data-resource-close></div>
+    <section class="curriculum-modal__card curriculum-resource-modal__card">
+      <button class="curriculum-modal__x" data-resource-close><i data-feather="x"></i></button>
+      <span class="curriculum-kicker" id="resourceModalKicker">NEW FILE</span>
+      <h2 id="resourceModalTitle">Add File</h2>
+      <label><span>File Name *</span><input id="resourceNameInput" maxlength="240" placeholder="Enter file name" /></label>
+      <div class="curriculum-upload-field">
+        <input id="resourceFileInput" class="curriculum-upload-field__input" type="file" />
+        <label class="curriculum-upload-field__picker" for="resourceFileInput">
+          <span class="curriculum-upload-field__icon"><i data-feather="paperclip"></i></span>
+          <span class="curriculum-upload-field__copy"><b>Upload file</b><small>Select a file up to 500 MB. It will be stored in Supabase Storage.</small></span>
+          <span class="curriculum-upload-field__action">Choose file</span>
+        </label>
+      </div>
+      <div id="resourceFilePreview" class="curriculum-upload-file" hidden></div>
+      <div id="resourceUploadProgress" class="curriculum-upload-progress" hidden>
+        <div class="curriculum-upload-progress__track"><span id="resourceUploadProgressBar"></span></div>
+        <div class="curriculum-upload-progress__meta"><b id="resourceUploadProgressLabel">Uploading…</b><strong id="resourceUploadProgressPercent">0%</strong></div>
+      </div>
+      <label><span>Notes</span><textarea id="resourceNotesInput" rows="3" maxlength="4000" placeholder="Optional notes"></textarea></label>
+      <div id="resourceModalError" class="curriculum-modal__error"></div>
+      <div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-resource-close>Cancel</button><button id="saveResourceBtn" class="curriculum-btn curriculum-btn--dark">Upload & Add File</button></div>
+    </section>
+  </div>
 
   <script>if(window.feather)feather.replace()</script>
   <script src="/js/common-ui.js?v=lms-logo-lock-v9"></script>
-  <script src="/js/lms-curriculum.js?v=lms-theme-grade-v2"></script>
+  <script src="/js/lms-curriculum.js?v=lms-storage-upload-v1"></script>
 </body>
 </html>
