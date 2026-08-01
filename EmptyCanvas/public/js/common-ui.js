@@ -2062,9 +2062,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (h2) h2.style.display = 'none';
       header.querySelectorAll('#sidebar-logo-toggle, img.sidebar-brand-logo').forEach((el) => el.remove());
       let back = header.querySelector('.lms-sidebar-back');
+      if (back) back.classList.add('lms-sidebar-back--fixed');
       if (!back) {
         back = document.createElement('a');
-        back.className = 'lms-sidebar-back';
+        back.className = 'lms-sidebar-back lms-sidebar-back--fixed';
         back.href = '/home';
         back.setAttribute('aria-label', 'Back to main workspace');
         back.setAttribute('title', 'Back to main workspace');
@@ -3460,6 +3461,16 @@ if (document.querySelector('.sidebar')) {
       const path = sidebarPath(link?.getAttribute('href') || '');
       if (!path.startsWith('/lms')) item.remove();
     });
+
+    let homeLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
+      .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms');
+    if (!homeLink) {
+      const item = document.createElement('li');
+      item.innerHTML = '<a class="nav-link lms-home-anchor" href="/lms"><i data-feather="home"></i><span class="nav-label">LMS Home</span></a>';
+      list.insertBefore(item, list.firstChild);
+      homeLink = item.querySelector('a.nav-link');
+    }
+    homeLink.classList.add('lms-home-anchor');
 
     let usersLink = Array.from(list.querySelectorAll('a.nav-link[href]'))
       .find((link) => sidebarPath(link.getAttribute('href') || '') === '/lms/user-access');
