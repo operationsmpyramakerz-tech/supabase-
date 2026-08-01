@@ -16211,6 +16211,62 @@ async function _sbSaveLmsPageAccessForMember(teamMemberId, entries = [], { teamM
   return Array.isArray(created) ? created : [];
 }
 
+
+// LMS Home overview — aggregate LMS-only data for the LMS dashboard.
+app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
+  const readRows = async (table, query = "select=id&limit=10000") => {
+    try {
+      const rows = await supabaseDb.request(`/${table}?${query}`);
+      return Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      console.warn(`LMS Home: unable to read ${table}:`, error?.details || error?.body || error?.message || error);
+      return [];
+    }
+  };
+
+  try {
+    const roleTables = {
+      supervisors: "lms_supervisors",
+      team_leaders: "lms_team_leaders",
+      instructors: "lms_instructors",
+      co_instructors: "lms_co_instructors",
+      school_coordinators: "lms_school_coordinators",
+      students: "lms_students",
+      parents: "lms_parents",
+    };
+    const [schools, structures, curricula, recentCurricula, resources, ...roleRows] = await Promise.all([
+      readRows("b2b_schools"),
+      readRows("lms_structures"),
+      readRows("lms_curricula"),
+      readRows("lms_curricula", "select=*&order=created_at.desc&limit=5"),
+      readRows("lms_curriculum_resources", "select=id,resource_type&limit=10000"),
+      ...Object.values(roleTables).map((table) => readRows(table)),
+    ]);
+    const roles = {};
+    Object.keys(roleTables).forEach((key, index) => { roles[key] = roleRows[index]?.length || 0; });
+    const resourceTypes = { teacher_guide:0, lesson_plan:0, presentation:0, materials:0, exam:0 };
+    resources.forEach((row) => {
+      const key = String(row?.resource_type || "").trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(resourceTypes, key)) resourceTypes[key] += 1;
+    });
+    res.json({
+      counts: {
+        schools: schools.length,
+        people: Object.values(roles).reduce((sum, value) => sum + Number(value || 0), 0),
+        structures: structures.length,
+        curricula: curricula.length,
+        resources: resources.length,
+      },
+      roles,
+      resourceTypes,
+      recentCurricula,
+    });
+  } catch (error) {
+    console.error("GET /api/lms/home/overview error:", error?.details || error?.body || error);
+    res.status(500).json({ error: "Unable to load LMS overview." });
+  }
+});
+
 app.use("/api/lms/user-access", requireAuth, requireLmsPageAccess("lms-users-center"));
 
 app.get("/api/lms/user-access/pages", async (req, res) => {
