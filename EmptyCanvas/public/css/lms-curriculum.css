@@ -32,3 +32,42 @@
 .curriculum-upload-progress__meta strong{color:#c7662d;font-size:12px}
 .curriculum-btn:disabled,.curriculum-upload-field__input:disabled+.curriculum-upload-field__picker{opacity:.58;cursor:not-allowed;pointer-events:none}
 @media(max-width:700px){.curriculum-upload-field__picker{align-items:flex-start}.curriculum-upload-field__action{display:none}.curriculum-resource-modal__card{padding:22px 18px}}
+
+
+/* Upload alignment and result states -------------------------------------- */
+.curriculum-upload-field__icon,
+.curriculum-upload-file__icon{
+  align-items:center!important;
+  justify-content:center!important;
+  line-height:0!important;
+  padding:0!important;
+}
+.curriculum-upload-field__icon svg,
+.curriculum-upload-file__icon svg{
+  display:block!important;
+  margin:auto!important;
+  flex:none!important;
+  transform:none!important;
+  stroke-width:2!important;
+}
+.curriculum-upload-progress{position:relative;overflow:hidden;transition:border-color .2s ease,background .2s ease,transform .2s ease}
+.curriculum-upload-progress__meta b{display:flex;align-items:center;gap:8px}
+.curriculum-upload-status-icon{width:22px;height:22px;display:inline-grid;place-items:center;flex:0 0 auto;border-radius:999px;color:#c7662d;background:#fff1e4;line-height:0}
+.curriculum-upload-status-icon svg{display:block;width:14px;height:14px;margin:auto}
+.curriculum-upload-progress.is-uploading .curriculum-upload-status-icon svg{animation:curriculumUploadPulse 1.1s ease-in-out infinite}
+.curriculum-upload-progress.is-success{border-color:#9ad7b4;background:#f0fff6;animation:curriculumUploadResult .42s ease both}
+.curriculum-upload-progress.is-success .curriculum-upload-progress__track span{background:linear-gradient(90deg,#1f9d5a,#49c77e);box-shadow:0 0 16px rgba(31,157,90,.28)}
+.curriculum-upload-progress.is-success .curriculum-upload-status-icon{color:#147a43;background:#dff8e9}
+.curriculum-upload-progress.is-success .curriculum-upload-progress__meta strong{color:#147a43}
+.curriculum-upload-progress.is-success .curriculum-upload-status-icon svg{animation:curriculumUploadDone .55s cubic-bezier(.2,.8,.2,1) both}
+.curriculum-upload-progress.is-failed{border-color:#efaaa5;background:#fff4f3;animation:curriculumUploadShake .38s ease both}
+.curriculum-upload-progress.is-failed .curriculum-upload-progress__track span{background:linear-gradient(90deg,#d92d20,#ef6b62);box-shadow:0 0 16px rgba(217,45,32,.22)}
+.curriculum-upload-progress.is-failed .curriculum-upload-status-icon{color:#b42318;background:#fee4e2}
+.curriculum-upload-progress.is-failed .curriculum-upload-progress__meta strong{color:#b42318}
+.curriculum-upload-progress.is-failed .curriculum-upload-status-icon svg{animation:curriculumUploadFailed .42s ease both}
+@keyframes curriculumUploadPulse{0%,100%{transform:translateY(0);opacity:.75}50%{transform:translateY(-2px);opacity:1}}
+@keyframes curriculumUploadDone{0%{transform:scale(.35) rotate(-16deg);opacity:0}70%{transform:scale(1.18) rotate(3deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+@keyframes curriculumUploadFailed{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
+@keyframes curriculumUploadResult{from{transform:translateY(4px);opacity:.4}to{transform:translateY(0);opacity:1}}
+@keyframes curriculumUploadShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@media(prefers-reduced-motion:reduce){.curriculum-upload-progress,.curriculum-upload-status-icon svg{animation:none!important}}
