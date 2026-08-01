@@ -2052,12 +2052,79 @@ document.addEventListener('DOMContentLoaded', () => {
     }, true);
   }
 
+  function ensureLmsBackButtonStyle(){
+    if (document.getElementById('lms-back-button-fixed-style')) return;
+    const style = document.createElement('style');
+    style.id = 'lms-back-button-fixed-style';
+    style.textContent = `
+      body.page-lms .sidebar.lms-sidebar .sidebar-header {
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        padding:10px 8px !important;
+        min-height:74px !important;
+      }
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back,
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back--fixed {
+        width:54px !important;
+        min-width:54px !important;
+        max-width:54px !important;
+        height:54px !important;
+        min-height:54px !important;
+        max-height:54px !important;
+        padding:0 !important;
+        margin:0 auto !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        border:1px solid rgba(255,255,255,.18) !important;
+        border-radius:18px !important;
+        color:#fff !important;
+        background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.07)) !important;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 10px 26px rgba(0,0,0,.18) !important;
+        text-decoration:none !important;
+        opacity:1 !important;
+        visibility:visible !important;
+        transform:none !important;
+        flex:0 0 54px !important;
+      }
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back:hover,
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back--fixed:hover {
+        color:#fff !important;
+        background:linear-gradient(145deg,rgba(255,255,255,.23),rgba(255,255,255,.10)) !important;
+        border-color:rgba(255,255,255,.30) !important;
+        transform:translateX(-2px) translateY(-1px) !important;
+      }
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back:active,
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back--fixed:active {
+        transform:translateX(-1px) scale(.96) !important;
+      }
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back svg,
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back--fixed svg {
+        width:25px !important;
+        height:25px !important;
+        min-width:25px !important;
+        min-height:25px !important;
+        color:#fff !important;
+        stroke:#fff !important;
+        stroke-width:2.35 !important;
+        fill:none !important;
+      }
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back span,
+      body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-back--fixed span {
+        display:none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function ensureSidebarBranding(){
     const header = document.querySelector('.sidebar .sidebar-header');
     if (!header) return;
 
     const isLmsWorkspace = document.body?.classList?.contains('page-lms') || window.location.pathname.replace(/\/+$/, '').startsWith('/lms');
     if (isLmsWorkspace) {
+      ensureLmsBackButtonStyle();
       const h2 = header.querySelector('h2');
       if (h2) h2.style.display = 'none';
       header.querySelectorAll('#sidebar-logo-toggle, img.sidebar-brand-logo').forEach((el) => el.remove());
