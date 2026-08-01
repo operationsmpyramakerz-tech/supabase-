@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <script src="/pwa-register.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Curriculum</title>
+  <style>body.permissions-loading .sidebar li{display:none!important}</style>
+  <link href="/css/style.css?v=lms-curriculum-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=lms-curriculum-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=lms-curriculum-v1" rel="stylesheet" />
+  <link href="/css/lms-curriculum.css?v=lms-curriculum-v1" rel="stylesheet" />
+  <script src="/js/vendor/feather-icons.min.js"></script>
+</head>
+<body class="permissions-loading page-lms lms-curriculum-page" data-sidebar-open-scroll="instant">
+  <div class="app-container">
+    <aside class="sidebar lms-sidebar" aria-label="LMS workspace navigation">
+      <div class="sidebar-header"><h2>LMS</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
+      <nav class="sidebar-nav" aria-label="LMS pages"><ul class="nav-list">
+        <li><a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a></li>
+        <li><a class="nav-link" href="/lms/b2b"><i data-feather="home"></i><span class="nav-label">Schools</span></a></li>
+        <li><a class="nav-link active" href="/lms/curriculum"><i data-feather="book-open"></i><span class="nav-label">Curriculum</span></a></li>
+      </ul></nav><div class="sidebar-footer"></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="main-header"><div class="header-row1"><div class="left"><div class="greeting-pill"><span class="greeting-avatar"><i data-feather="book-open"></i></span><div class="greet-text"><div class="greet-title" id="curriculumPageTitle">Curriculum</div><div class="greet-sub">LMS workspace</div></div></div></div><div class="right topbar-right"><a class="account-mini" href="/account"><span class="ico-circle"><img src="/images/logo.png" alt="Logo" /></span></a></div></div></header>
+
+      <main class="curriculum-shell">
+        <section id="curriculumListView">
+          <div class="curriculum-toolbar"><div><span class="curriculum-kicker">LMS CONTENT</span><h1>Curriculum</h1><p>Create curriculum folders, then organize learning files inside grouped sections.</p></div><button id="addCurriculumBtn" class="curriculum-primary-btn"><i data-feather="folder-plus"></i><span>Add New Curriculum</span></button></div>
+          <section id="curriculumFolderGrid" class="curriculum-folder-grid" aria-live="polite"></section>
+        </section>
+
+        <section id="curriculumDetailView" hidden>
+          <div class="curriculum-detail-toolbar"><button id="backToCurriculaBtn" class="curriculum-icon-btn" aria-label="Back to curriculum folders"><i data-feather="arrow-left"></i></button><div><span class="curriculum-kicker">CURRICULUM FOLDER</span><h1 id="curriculumDetailTitle">Curriculum</h1><p id="curriculumDetailDescription">Grouped curriculum files.</p></div></div>
+          <section id="curriculumGroups" class="curriculum-groups"></section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="curriculumModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-curriculum-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-curriculum-close><i data-feather="x"></i></button><span class="curriculum-kicker">NEW CURRICULUM FOLDER</span><h2>Add New Curriculum</h2><label><span>Curriculum Name *</span><input id="curriculumNameInput" maxlength="240" placeholder="Example: Grade 5 Science" /></label><label><span>Description</span><textarea id="curriculumDescriptionInput" rows="4" maxlength="2000" placeholder="Optional short description"></textarea></label><div id="curriculumModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-curriculum-close>Cancel</button><button id="saveCurriculumBtn" class="curriculum-btn curriculum-btn--dark">Create Folder</button></div></section></div>
+
+  <div id="resourceModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-resource-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-resource-close><i data-feather="x"></i></button><span class="curriculum-kicker" id="resourceModalKicker">NEW FILE</span><h2 id="resourceModalTitle">Add File</h2><label><span>File Name *</span><input id="resourceNameInput" maxlength="240" placeholder="Enter file name" /></label><label><span>File URL</span><input id="resourceUrlInput" maxlength="2000" placeholder="https://..." inputmode="url" /></label><label><span>Notes</span><textarea id="resourceNotesInput" rows="3" maxlength="4000" placeholder="Optional notes"></textarea></label><div id="resourceModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-resource-close>Cancel</button><button id="saveResourceBtn" class="curriculum-btn curriculum-btn--dark">Add File</button></div></section></div>
+
+  <script>if(window.feather)feather.replace()</script>
+  <script src="/js/common-ui.js?v=lms-curriculum-v1"></script>
+  <script src="/js/lms-curriculum.js?v=lms-curriculum-v1"></script>
+</body>
+</html>
