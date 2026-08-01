@@ -1,34 +1,286 @@
-(()=>{'use strict';
-const TYPES={teacher_guide:{label:'Teacher Guide',icon:'book'},lesson_plan:{label:'Lesson Plan',icon:'clipboard'},presentation:{label:'Presentation',icon:'monitor'},materials:{label:'Materials',icon:'package'},exam:{label:'Exam',icon:'file-text'}};
-const $=id=>document.getElementById(id);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let currentThemeId='';let currentGradeId='';let activeResourceType='';let currentTheme=null;
-function icons(){if(window.feather)feather.replace()}
-async function jsonFetch(url,options={}){const r=await fetch(url,{credentials:'include',cache:'no-store',...options});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed.');return d}
-function showView(name){$('curriculumListView').hidden=name!=='list';$('curriculumThemeView').hidden=name!=='theme';$('curriculumGradeView').hidden=name!=='grade'}
-function emptyFolders(title,text){return `<div class="curriculum-empty"><div><i data-feather="folder"></i><h3>${esc(title)}</h3><p>${esc(text)}</p></div></div>`}
-function folderCard(item,kind){const fallback=kind==='theme'?'Theme folder':'Grade folder';return `<button class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}"><div class="curriculum-folder-card__visual"><i data-feather="folder"></i></div><div class="curriculum-folder-card__body"><h3>${esc(item.name)}</h3><p>${esc(item.description||fallback)}</p><span><i data-feather="folder-open"></i> Open ${kind}</span></div></button>`}
-function renderThemes(items){const grid=$('curriculumFolderGrid');if(!items.length){grid.innerHTML=emptyFolders('No themes yet','Use Add New Theme to create the first theme.');icons();return}grid.innerHTML=items.map(x=>folderCard(x,'theme')).join('');grid.querySelectorAll('[data-theme-id]').forEach(x=>x.addEventListener('click',()=>openTheme(x.dataset.themeId)));icons()}
-function renderGrades(items){const grid=$('curriculumGradeGrid');if(!items.length){grid.innerHTML=emptyFolders('No grades yet','Use Add New Grade to create the first grade inside this theme.');icons();return}grid.innerHTML=items.map(x=>folderCard(x,'grade')).join('');grid.querySelectorAll('[data-grade-id]').forEach(x=>x.addEventListener('click',()=>openGrade(x.dataset.gradeId)));icons()}
-async function loadThemes(){const d=await jsonFetch('/api/lms/curriculum');renderThemes(d.curricula||[])}
-function renderGroups(resources){const grouped={};Object.keys(TYPES).forEach(k=>grouped[k]=[]);(resources||[]).forEach(x=>{if(grouped[x.resource_type])grouped[x.resource_type].push(x)});$('curriculumGroups').innerHTML=Object.entries(TYPES).map(([key,cfg])=>`<article class="curriculum-group-card"><header><div class="curriculum-group-card__title"><span><i data-feather="${cfg.icon}"></i></span><div><h2>${cfg.label}</h2><p>${grouped[key].length} file${grouped[key].length===1?'':'s'}</p></div></div><button class="curriculum-add-file-btn" data-resource-type="${key}"><i data-feather="plus"></i><span>Add ${cfg.label}</span></button></header><div class="curriculum-file-grid">${grouped[key].length?grouped[key].map(file=>`<article class="curriculum-file-card"><div class="curriculum-file-card__icon"><i data-feather="file"></i></div><div class="curriculum-file-card__content"><h3>${esc(file.name)}</h3><p>${esc(file.notes||cfg.label)}</p><div>${file.resource_url?`<a href="${esc(file.resource_url)}" target="_blank" rel="noopener"><i data-feather="external-link"></i> Open</a>`:''}<button data-delete-resource="${esc(file.id)}" aria-label="Delete ${esc(file.name)}"><i data-feather="trash-2"></i></button></div></div></article>`).join(''):`<div class="curriculum-group-empty"><i data-feather="folder"></i><span>No ${cfg.label.toLowerCase()} files yet</span></div>`}</div></article>`).join('');
-$('curriculumGroups').querySelectorAll('[data-resource-type]').forEach(btn=>btn.addEventListener('click',()=>openResourceModal(btn.dataset.resourceType)));$('curriculumGroups').querySelectorAll('[data-delete-resource]').forEach(btn=>btn.addEventListener('click',()=>deleteResource(btn.dataset.deleteResource)));icons()}
-async function openTheme(id){currentThemeId=String(id||'');currentGradeId='';history.pushState({},'',`/lms/curriculum/${encodeURIComponent(currentThemeId)}`);await loadTheme()}
-async function loadTheme(){if(!currentThemeId)return;const d=await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}`);currentTheme=d.curriculum;showView('theme');$('curriculumPageTitle').textContent=currentTheme.name||'Curriculum';$('curriculumThemeTitle').textContent=currentTheme.name||'Theme';$('curriculumThemeDescription').textContent=currentTheme.description||'Add grades inside this theme.';renderGrades(d.grades||[])}
-async function openGrade(id){currentGradeId=String(id||'');history.pushState({},'',`/lms/curriculum/${encodeURIComponent(currentThemeId)}/grade/${encodeURIComponent(currentGradeId)}`);await loadGrade()}
-async function loadGrade(){if(!currentThemeId||!currentGradeId)return;const d=await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}`);currentTheme=d.curriculum;showView('grade');$('curriculumPageTitle').textContent=d.grade.name||'Grade';$('curriculumGradeTitle').textContent=d.grade.name||'Grade';$('curriculumGradeDescription').textContent=d.grade.description||`Learning files for ${d.curriculum.name||'this theme'}.`;renderGroups(d.resources||[])}
-function backToThemes(){currentThemeId='';currentGradeId='';history.pushState({},'','/lms/curriculum');showView('list');$('curriculumPageTitle').textContent='Curriculum';loadThemes().catch(showListError)}
-function backToGrades(){currentGradeId='';history.pushState({},'',`/lms/curriculum/${encodeURIComponent(currentThemeId)}`);loadTheme().catch(e=>alert(e.message))}
-function showListError(e){$('curriculumFolderGrid').innerHTML=emptyFolders('Unable to load themes',e.message);icons()}
-function openCurriculumModal(){$('curriculumModal').hidden=false;$('curriculumModalError').textContent='';setTimeout(()=>$('curriculumNameInput').focus(),20)}
-function closeCurriculumModal(){$('curriculumModal').hidden=true;$('curriculumModalError').textContent=''}
-function openGradeModal(){$('gradeModal').hidden=false;$('gradeModalError').textContent='';setTimeout(()=>$('gradeNameInput').focus(),20)}
-function closeGradeModal(){$('gradeModal').hidden=true;$('gradeModalError').textContent=''}
-function openResourceModal(type){activeResourceType=type;const cfg=TYPES[type];$('resourceModalKicker').textContent=`NEW ${cfg.label.toUpperCase()}`;$('resourceModalTitle').textContent=`Add ${cfg.label}`;$('resourceModal').hidden=false;$('resourceModalError').textContent='';setTimeout(()=>$('resourceNameInput').focus(),20)}
-function closeResourceModal(){$('resourceModal').hidden=true;$('resourceModalError').textContent='';activeResourceType=''}
-async function saveTheme(){const name=$('curriculumNameInput').value.trim();if(!name){$('curriculumModalError').textContent='Theme name is required.';return}const btn=$('saveCurriculumBtn');btn.disabled=true;try{const d=await jsonFetch('/api/lms/curriculum',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description:$('curriculumDescriptionInput').value.trim()})});$('curriculumNameInput').value='';$('curriculumDescriptionInput').value='';closeCurriculumModal();await loadThemes();if(d.curriculum?.id)await openTheme(d.curriculum.id)}catch(e){$('curriculumModalError').textContent=e.message}finally{btn.disabled=false}}
-async function saveGrade(){const name=$('gradeNameInput').value.trim();if(!name){$('gradeModalError').textContent='Grade name is required.';return}const btn=$('saveGradeBtn');btn.disabled=true;try{const d=await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description:$('gradeDescriptionInput').value.trim()})});$('gradeNameInput').value='';$('gradeDescriptionInput').value='';closeGradeModal();await loadTheme();if(d.grade?.id)await openGrade(d.grade.id)}catch(e){$('gradeModalError').textContent=e.message}finally{btn.disabled=false}}
-async function saveResource(){const name=$('resourceNameInput').value.trim();if(!name){$('resourceModalError').textContent='File name is required.';return}const btn=$('saveResourceBtn');btn.disabled=true;try{await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resourceType:activeResourceType,name,resourceUrl:$('resourceUrlInput').value.trim(),notes:$('resourceNotesInput').value.trim()})});$('resourceNameInput').value='';$('resourceUrlInput').value='';$('resourceNotesInput').value='';closeResourceModal();await loadGrade()}catch(e){$('resourceModalError').textContent=e.message}finally{btn.disabled=false}}
-async function deleteResource(id){if(!confirm('Delete this curriculum file?'))return;try{await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(id)}`,{method:'DELETE'});await loadGrade()}catch(e){alert(e.message)}}
-function parseRoute(){const p=location.pathname.split('/').filter(Boolean);currentThemeId=p[2]||'';currentGradeId=p[3]==='grade'?(p[4]||''):''}
-$('addCurriculumBtn').addEventListener('click',openCurriculumModal);$('addGradeBtn').addEventListener('click',openGradeModal);$('saveCurriculumBtn').addEventListener('click',saveTheme);$('saveGradeBtn').addEventListener('click',saveGrade);$('saveResourceBtn').addEventListener('click',saveResource);$('backToCurriculaBtn').addEventListener('click',backToThemes);$('backToGradesBtn').addEventListener('click',backToGrades);document.querySelectorAll('[data-curriculum-close]').forEach(x=>x.addEventListener('click',closeCurriculumModal));document.querySelectorAll('[data-grade-close]').forEach(x=>x.addEventListener('click',closeGradeModal));document.querySelectorAll('[data-resource-close]').forEach(x=>x.addEventListener('click',closeResourceModal));window.addEventListener('popstate',()=>{parseRoute();currentGradeId?loadGrade().catch(e=>alert(e.message)):currentThemeId?loadTheme().catch(e=>alert(e.message)):backToThemes()});
-parseRoute();currentGradeId?loadGrade().catch(e=>{alert(e.message);backToGrades()}):currentThemeId?loadTheme().catch(e=>{alert(e.message);backToThemes()}):loadThemes().catch(showListError);icons();})();
+(() => {
+  'use strict';
+
+  const TYPES = {
+    teacher_guide: { label: 'Teacher Guide', icon: 'book' },
+    lesson_plan: { label: 'Lesson Plan', icon: 'clipboard' },
+    presentation: { label: 'Presentation', icon: 'monitor' },
+    materials: { label: 'Materials', icon: 'package' },
+    exam: { label: 'Exam', icon: 'file-text' },
+  };
+  const MAX_FILE_BYTES = 500 * 1024 * 1024;
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[char]));
+
+  let currentThemeId = '';
+  let currentGradeId = '';
+  let activeResourceType = '';
+  let currentTheme = null;
+  let selectedResourceFile = null;
+  let resourceUploadPending = false;
+
+  function icons() { if (window.feather) window.feather.replace(); }
+  function formatBytes(bytes) {
+    const value = Number(bytes) || 0;
+    if (!value) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+    return `${(value / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+  }
+  async function jsonFetch(url, options = {}) {
+    const response = await fetch(url, { credentials: 'include', cache: 'no-store', ...options });
+    let data = {};
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data.error || 'Request failed.');
+    return data;
+  }
+  function showView(name) {
+    $('curriculumListView').hidden = name !== 'list';
+    $('curriculumThemeView').hidden = name !== 'theme';
+    $('curriculumGradeView').hidden = name !== 'grade';
+  }
+  function emptyFolders(title, text) {
+    return `<div class="curriculum-empty"><div><i data-feather="folder"></i><h3>${esc(title)}</h3><p>${esc(text)}</p></div></div>`;
+  }
+  function folderCard(item, kind) {
+    const fallback = kind === 'theme' ? 'Theme folder' : 'Grade folder';
+    return `<button class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}"><div class="curriculum-folder-card__visual"><i data-feather="folder"></i></div><div class="curriculum-folder-card__body"><h3>${esc(item.name)}</h3><p>${esc(item.description || fallback)}</p><span><i data-feather="folder-open"></i> Open ${kind}</span></div></button>`;
+  }
+  function renderThemes(items) {
+    const grid = $('curriculumFolderGrid');
+    if (!items.length) {
+      grid.innerHTML = emptyFolders('No themes yet', 'Use Add New Theme to create the first theme.');
+      icons();
+      return;
+    }
+    grid.innerHTML = items.map((item) => folderCard(item, 'theme')).join('');
+    grid.querySelectorAll('[data-theme-id]').forEach((item) => item.addEventListener('click', () => openTheme(item.dataset.themeId)));
+    icons();
+  }
+  function renderGrades(items) {
+    const grid = $('curriculumGradeGrid');
+    if (!items.length) {
+      grid.innerHTML = emptyFolders('No grades yet', 'Use Add New Grade to create the first grade inside this theme.');
+      icons();
+      return;
+    }
+    grid.innerHTML = items.map((item) => folderCard(item, 'grade')).join('');
+    grid.querySelectorAll('[data-grade-id]').forEach((item) => item.addEventListener('click', () => openGrade(item.dataset.gradeId)));
+    icons();
+  }
+  async function loadThemes() {
+    const data = await jsonFetch('/api/lms/curriculum');
+    renderThemes(data.curricula || []);
+  }
+  function renderGroups(resources) {
+    const grouped = {};
+    Object.keys(TYPES).forEach((key) => { grouped[key] = []; });
+    (resources || []).forEach((item) => { if (grouped[item.resource_type]) grouped[item.resource_type].push(item); });
+    $('curriculumGroups').innerHTML = Object.entries(TYPES).map(([key, config]) => `
+      <article class="curriculum-group-card">
+        <header>
+          <div class="curriculum-group-card__title"><span><i data-feather="${config.icon}"></i></span><div><h2>${config.label}</h2><p>${grouped[key].length} file${grouped[key].length === 1 ? '' : 's'}</p></div></div>
+          <button class="curriculum-add-file-btn" data-resource-type="${key}"><i data-feather="plus"></i><span>Add ${config.label}</span></button>
+        </header>
+        <div class="curriculum-file-grid">${grouped[key].length ? grouped[key].map((file) => `
+          <article class="curriculum-file-card">
+            <div class="curriculum-file-card__icon"><i data-feather="file"></i></div>
+            <div class="curriculum-file-card__content"><h3>${esc(file.name)}</h3><p>${esc(file.notes || [file.mime_type, formatBytes(file.file_size)].filter(Boolean).join(' · ') || config.label)}</p><div>${file.resource_url ? `<a href="${esc(file.resource_url)}" target="_blank" rel="noopener"><i data-feather="external-link"></i> Open</a>` : ''}<button data-delete-resource="${esc(file.id)}" aria-label="Delete ${esc(file.name)}"><i data-feather="trash-2"></i></button></div></div>
+          </article>`).join('') : `<div class="curriculum-group-empty"><i data-feather="folder"></i><span>No ${config.label.toLowerCase()} files yet</span></div>`}</div>
+      </article>`).join('');
+    $('curriculumGroups').querySelectorAll('[data-resource-type]').forEach((button) => button.addEventListener('click', () => openResourceModal(button.dataset.resourceType)));
+    $('curriculumGroups').querySelectorAll('[data-delete-resource]').forEach((button) => button.addEventListener('click', () => deleteResource(button.dataset.deleteResource)));
+    icons();
+  }
+
+  async function openTheme(id) { currentThemeId = String(id || ''); currentGradeId = ''; history.pushState({}, '', `/lms/curriculum/${encodeURIComponent(currentThemeId)}`); await loadTheme(); }
+  async function loadTheme() {
+    if (!currentThemeId) return;
+    const data = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}`);
+    currentTheme = data.curriculum;
+    showView('theme');
+    $('curriculumPageTitle').textContent = currentTheme.name || 'Curriculum';
+    $('curriculumThemeTitle').textContent = currentTheme.name || 'Theme';
+    $('curriculumThemeDescription').textContent = currentTheme.description || 'Add grades inside this theme.';
+    renderGrades(data.grades || []);
+  }
+  async function openGrade(id) { currentGradeId = String(id || ''); history.pushState({}, '', `/lms/curriculum/${encodeURIComponent(currentThemeId)}/grade/${encodeURIComponent(currentGradeId)}`); await loadGrade(); }
+  async function loadGrade() {
+    if (!currentThemeId || !currentGradeId) return;
+    const data = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}`);
+    currentTheme = data.curriculum;
+    showView('grade');
+    $('curriculumPageTitle').textContent = data.grade.name || 'Grade';
+    $('curriculumGradeTitle').textContent = data.grade.name || 'Grade';
+    $('curriculumGradeDescription').textContent = data.grade.description || `Learning files for ${data.curriculum.name || 'this theme'}.`;
+    renderGroups(data.resources || []);
+  }
+  function backToThemes() { currentThemeId = ''; currentGradeId = ''; history.pushState({}, '', '/lms/curriculum'); showView('list'); $('curriculumPageTitle').textContent = 'Curriculum'; loadThemes().catch(showListError); }
+  function backToGrades() { currentGradeId = ''; history.pushState({}, '', `/lms/curriculum/${encodeURIComponent(currentThemeId)}`); loadTheme().catch((error) => alert(error.message)); }
+  function showListError(error) { $('curriculumFolderGrid').innerHTML = emptyFolders('Unable to load themes', error.message); icons(); }
+
+  function openCurriculumModal() { $('curriculumModal').hidden = false; $('curriculumModalError').textContent = ''; setTimeout(() => $('curriculumNameInput').focus(), 20); }
+  function closeCurriculumModal() { $('curriculumModal').hidden = true; $('curriculumModalError').textContent = ''; }
+  function openGradeModal() { $('gradeModal').hidden = false; $('gradeModalError').textContent = ''; setTimeout(() => $('gradeNameInput').focus(), 20); }
+  function closeGradeModal() { $('gradeModal').hidden = true; $('gradeModalError').textContent = ''; }
+
+  function resetResourceUploadUi() {
+    selectedResourceFile = null;
+    resourceUploadPending = false;
+    $('resourceFileInput').value = '';
+    $('resourceFilePreview').hidden = true;
+    $('resourceFilePreview').innerHTML = '';
+    $('resourceUploadProgress').hidden = true;
+    $('resourceUploadProgressBar').style.width = '0%';
+    $('resourceUploadProgressPercent').textContent = '0%';
+    $('resourceUploadProgressLabel').textContent = 'Uploading…';
+    $('saveResourceBtn').disabled = false;
+  }
+  function renderSelectedFile() {
+    const preview = $('resourceFilePreview');
+    if (!selectedResourceFile) { preview.hidden = true; preview.innerHTML = ''; return; }
+    preview.hidden = false;
+    preview.innerHTML = `<span class="curriculum-upload-file__icon"><i data-feather="file-text"></i></span><span class="curriculum-upload-file__info"><b>${esc(selectedResourceFile.name)}</b><small>${esc([selectedResourceFile.type || 'File', formatBytes(selectedResourceFile.size)].filter(Boolean).join(' · '))}</small></span><button id="removeResourceFileBtn" type="button" aria-label="Remove selected file"><i data-feather="trash-2"></i></button>`;
+    $('removeResourceFileBtn').addEventListener('click', () => { resetResourceUploadUi(); $('resourceNameInput').value = ''; });
+    icons();
+  }
+  function chooseResourceFile(file) {
+    $('resourceModalError').textContent = '';
+    if (!file) { resetResourceUploadUi(); return; }
+    if (!file.size) { $('resourceModalError').textContent = 'The selected file is empty.'; resetResourceUploadUi(); return; }
+    if (file.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = `“${file.name}” is larger than 500 MB.`; resetResourceUploadUi(); return; }
+    selectedResourceFile = file;
+    if (!$('resourceNameInput').value.trim()) $('resourceNameInput').value = file.name.replace(/\.[^.]+$/, '').slice(0, 240);
+    renderSelectedFile();
+  }
+  function openResourceModal(type) {
+    activeResourceType = type;
+    const config = TYPES[type];
+    resetResourceUploadUi();
+    $('resourceNameInput').value = '';
+    $('resourceNotesInput').value = '';
+    $('resourceModalKicker').textContent = `NEW ${config.label.toUpperCase()}`;
+    $('resourceModalTitle').textContent = `Add ${config.label}`;
+    $('resourceModal').hidden = false;
+    $('resourceModalError').textContent = '';
+    setTimeout(() => $('resourceFileInput').focus(), 20);
+  }
+  function closeResourceModal() {
+    if (resourceUploadPending) return;
+    $('resourceModal').hidden = true;
+    $('resourceModalError').textContent = '';
+    activeResourceType = '';
+    resetResourceUploadUi();
+  }
+
+  function uploadFileToSignedUrl(signedUrl, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', signedUrl, true);
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else {
+          let message = `Upload failed with status ${xhr.status}.`;
+          try { const body = JSON.parse(xhr.responseText || '{}'); message = body.message || body.error || message; } catch {}
+          reject(new Error(message));
+        }
+      });
+      xhr.addEventListener('error', () => reject(new Error('Network error while uploading the file.')));
+      xhr.addEventListener('abort', () => reject(new Error('File upload was cancelled.')));
+      const form = new FormData();
+      form.append('cacheControl', '3600');
+      form.append('', file);
+      xhr.send(form);
+    });
+  }
+
+  async function saveTheme() {
+    const name = $('curriculumNameInput').value.trim();
+    if (!name) { $('curriculumModalError').textContent = 'Theme name is required.'; return; }
+    const button = $('saveCurriculumBtn');
+    button.disabled = true;
+    try {
+      const data = await jsonFetch('/api/lms/curriculum', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('curriculumDescriptionInput').value.trim() }) });
+      $('curriculumNameInput').value = ''; $('curriculumDescriptionInput').value = ''; closeCurriculumModal(); await loadThemes(); if (data.curriculum?.id) await openTheme(data.curriculum.id);
+    } catch (error) { $('curriculumModalError').textContent = error.message; } finally { button.disabled = false; }
+  }
+  async function saveGrade() {
+    const name = $('gradeNameInput').value.trim();
+    if (!name) { $('gradeModalError').textContent = 'Grade name is required.'; return; }
+    const button = $('saveGradeBtn');
+    button.disabled = true;
+    try {
+      const data = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('gradeDescriptionInput').value.trim() }) });
+      $('gradeNameInput').value = ''; $('gradeDescriptionInput').value = ''; closeGradeModal(); await loadTheme(); if (data.grade?.id) await openGrade(data.grade.id);
+    } catch (error) { $('gradeModalError').textContent = error.message; } finally { button.disabled = false; }
+  }
+  async function saveResource() {
+    const name = $('resourceNameInput').value.trim();
+    if (!name) { $('resourceModalError').textContent = 'File name is required.'; return; }
+    if (!selectedResourceFile) { $('resourceModalError').textContent = 'Choose a file to upload.'; return; }
+    if (selectedResourceFile.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = 'The file must be 500 MB or less.'; return; }
+    const button = $('saveResourceBtn');
+    resourceUploadPending = true;
+    button.disabled = true;
+    $('resourceFileInput').disabled = true;
+    $('resourceModalError').textContent = '';
+    $('resourceUploadProgress').hidden = false;
+    try {
+      const ticketData = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/upload-ticket`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream' }),
+      });
+      const upload = ticketData.upload || {};
+      await uploadFileToSignedUrl(upload.signedUrl, selectedResourceFile, (percent) => {
+        $('resourceUploadProgressBar').style.width = `${percent}%`;
+        $('resourceUploadProgressPercent').textContent = `${percent}%`;
+        $('resourceUploadProgressLabel').textContent = percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…';
+      });
+      await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, name, resourceUrl: upload.publicUrl, storagePath: upload.path, storageBucket: upload.bucket, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream', notes: $('resourceNotesInput').value.trim() }),
+      });
+      resourceUploadPending = false;
+      $('resourceModal').hidden = true;
+      resetResourceUploadUi();
+      activeResourceType = '';
+      await loadGrade();
+    } catch (error) {
+      $('resourceModalError').textContent = error.message || 'Failed to upload the file.';
+      resourceUploadPending = false;
+      button.disabled = false;
+      $('resourceFileInput').disabled = false;
+      $('resourceUploadProgressLabel').textContent = 'Upload failed';
+    }
+  }
+  async function deleteResource(id) {
+    if (!confirm('Delete this curriculum file? This also removes it from Supabase Storage.')) return;
+    try { await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadGrade(); }
+    catch (error) { alert(error.message); }
+  }
+  function parseRoute() {
+    const parts = location.pathname.split('/').filter(Boolean);
+    currentThemeId = parts[2] || '';
+    currentGradeId = parts[3] === 'grade' ? (parts[4] || '') : '';
+  }
+
+  $('addCurriculumBtn').addEventListener('click', openCurriculumModal);
+  $('addGradeBtn').addEventListener('click', openGradeModal);
+  $('saveCurriculumBtn').addEventListener('click', saveTheme);
+  $('saveGradeBtn').addEventListener('click', saveGrade);
+  $('saveResourceBtn').addEventListener('click', saveResource);
+  $('resourceFileInput').addEventListener('change', (event) => chooseResourceFile(event.target.files?.[0] || null));
+  $('backToCurriculaBtn').addEventListener('click', backToThemes);
+  $('backToGradesBtn').addEventListener('click', backToGrades);
+  document.querySelectorAll('[data-curriculum-close]').forEach((item) => item.addEventListener('click', closeCurriculumModal));
+  document.querySelectorAll('[data-grade-close]').forEach((item) => item.addEventListener('click', closeGradeModal));
+  document.querySelectorAll('[data-resource-close]').forEach((item) => item.addEventListener('click', closeResourceModal));
+  window.addEventListener('popstate', () => { parseRoute(); currentGradeId ? loadGrade().catch((error) => alert(error.message)) : currentThemeId ? loadTheme().catch((error) => alert(error.message)) : backToThemes(); });
+
+  parseRoute();
+  currentGradeId ? loadGrade().catch((error) => { alert(error.message); backToGrades(); }) : currentThemeId ? loadTheme().catch((error) => { alert(error.message); backToThemes(); }) : loadThemes().catch(showListError);
+  icons();
+})();
