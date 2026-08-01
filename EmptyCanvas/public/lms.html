@@ -11,69 +11,58 @@
   <script src="/pwa-register.js" defer></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LMS</title>
+  <title>LMS Home</title>
   <style>body.permissions-loading .sidebar li{display:none!important}</style>
-  <link href="/css/style.css?v=lms-shell-v1" rel="stylesheet" />
-  <link href="/css/ui-redesign.css?v=lms-workspace-shell-v3" rel="stylesheet" />
-  <link href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" rel="stylesheet" />
+  <link href="/css/style.css?v=lms-home-v1" rel="stylesheet" />
+  <link href="/css/ui-redesign.css?v=lms-home-v1" rel="stylesheet" />
+  <link href="/css/page-canvas-fix.css?v=lms-home-v1" rel="stylesheet" />
+  <link href="/css/lms-home.css?v=lms-home-v1" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
-<body class="permissions-loading page-lms" data-sidebar-open-scroll="instant">
+<body class="permissions-loading page-lms lms-home-page" data-sidebar-open-scroll="instant">
   <div class="app-container">
     <aside class="sidebar lms-sidebar" aria-label="LMS workspace navigation">
-      <div class="sidebar-header">
-        <h2>LMS</h2>
-        <button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle">
-          <i data-feather="chevrons-left"></i>
-        </button>
-      </div>
-      <nav class="sidebar-nav" aria-label="LMS pages">
-        <ul class="nav-list">
-          <li><a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a></li>
-                  <li><a class="nav-link" href="/lms/b2b"><svg class="lms-school-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-  <path d="M4 10.5 12 4l8 6.5"/>
-  <path d="M5.5 9.5V20h13V9.5"/>
-  <path d="M9.5 20v-5h5v5"/>
-  <path d="M8 12h1.5M14.5 12H16"/>
-  <circle cx="12" cy="9" r="1.6"/>
-  <path d="M12 7.4v1.7l1 .6"/>
-  <path d="M12 4V1.8h4l-1 1 1 1h-4"/>
-</svg><span class="nav-label">Schools</span></a></li>
-        </ul>
-      </nav>
+      <div class="sidebar-header"><h2>LMS</h2><button aria-expanded="true" aria-label="Toggle sidebar" class="sidebar-toggle" id="sidebar-toggle"><i data-feather="chevrons-left"></i></button></div>
+      <nav class="sidebar-nav" aria-label="LMS pages"><ul class="nav-list">
+        <li><a class="nav-link active" href="/lms"><i data-feather="home"></i><span class="nav-label">LMS Home</span></a></li>
+        <li><a class="nav-link" href="/lms/user-access"><i data-feather="users"></i><span class="nav-label">Users Center</span></a></li>
+        <li><a class="nav-link" href="/lms/b2b"><svg class="lms-school-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-5h5v5"/><path d="M8 12h1.5M14.5 12H16"/><circle cx="12" cy="9" r="1.6"/><path d="M12 7.4v1.7l1 .6"/><path d="M12 4V1.8h4l-1 1 1 1h-4"/></svg><span class="nav-label">Schools</span></a></li>
+        <li><a class="nav-link" href="/lms/curriculum"><i data-feather="book-open"></i><span class="nav-label">Curriculum</span></a></li>
+      </ul></nav>
       <div class="sidebar-footer"></div>
     </aside>
 
     <div class="main-content">
       <header class="main-header">
-        <div class="header-row1">
-          <div class="left">
-            <div class="greeting-pill" aria-live="polite">
-              <span class="greeting-avatar"><i data-feather="book-open"></i></span>
-              <div class="greet-text">
-                <div class="greet-title">Learning Management System</div>
-                <div class="greet-sub">Learning workspace</div>
-              </div>
-            </div>
-          </div>
-          <div class="right topbar-right">
-            <a class="account-mini" href="/account" title="My account" aria-label="My account">
-              <span class="ico-circle"><img src="/images/logo.png" alt="Logo" /></span>
-              <span class="label">My account</span>
-            </a>
-          </div>
-        </div>
-        <div class="header-row2">
-          <h1 class="page-title">LMS</h1>
-        </div>
+        <div class="header-row1"><div class="left"><div class="greeting-pill"><span class="greeting-avatar"><i data-feather="home"></i></span><div class="greet-text"><div class="greet-title">LMS Home</div><div class="greet-sub">Learning overview</div></div></div></div><div class="right topbar-right"><a class="account-mini" href="/account" title="My account"><span class="ico-circle"><img src="/images/logo.png" alt="Logo" /></span><span class="label">My account</span></a></div></div>
       </header>
 
-      <main class="lms-workspace" aria-label="LMS workspace">
-        <section class="lms-workspace__canvas" aria-label="Empty LMS workspace"></section>
+      <main class="lms-home-shell">
+        <section class="lms-home-hero">
+          <div><span class="lms-home-kicker">LEARNING MANAGEMENT SYSTEM</span><h1>LMS Overview</h1><p>Live analysis of schools, learning teams, structures, curricula, and learning resources.</p></div>
+          <button id="lmsHomeRefresh" class="lms-home-refresh" type="button"><i data-feather="refresh-cw"></i><span>Refresh</span></button>
+        </section>
+
+        <section class="lms-home-kpis" aria-label="LMS key metrics">
+          <article class="lms-kpi-card"><span class="lms-kpi-icon"><i data-feather="home"></i></span><div><span>Schools</span><strong id="lmsKpiSchools">—</strong><small>Registered schools</small></div></article>
+          <article class="lms-kpi-card"><span class="lms-kpi-icon"><i data-feather="users"></i></span><div><span>Learning Team</span><strong id="lmsKpiPeople">—</strong><small>All LMS role records</small></div></article>
+          <article class="lms-kpi-card"><span class="lms-kpi-icon"><i data-feather="git-branch"></i></span><div><span>Structures</span><strong id="lmsKpiStructures">—</strong><small>School workflows</small></div></article>
+          <article class="lms-kpi-card"><span class="lms-kpi-icon"><i data-feather="book-open"></i></span><div><span>Curricula</span><strong id="lmsKpiCurricula">—</strong><small>Curriculum folders</small></div></article>
+          <article class="lms-kpi-card"><span class="lms-kpi-icon"><i data-feather="file-text"></i></span><div><span>Resources</span><strong id="lmsKpiResources">—</strong><small>Learning files</small></div></article>
+        </section>
+
+        <section class="lms-home-grid">
+          <article class="lms-panel lms-panel--roles"><div class="lms-panel-head"><div><span class="lms-home-kicker">TEAM DISTRIBUTION</span><h2>Users by Role</h2></div><i data-feather="pie-chart"></i></div><div id="lmsRoleBreakdown" class="lms-role-breakdown"></div></article>
+          <article class="lms-panel"><div class="lms-panel-head"><div><span class="lms-home-kicker">CONTENT MIX</span><h2>Curriculum Resources</h2></div><i data-feather="bar-chart-2"></i></div><div id="lmsResourceBreakdown" class="lms-resource-breakdown"></div></article>
+          <article class="lms-panel"><div class="lms-panel-head"><div><span class="lms-home-kicker">RECENT CONTENT</span><h2>Latest Curricula</h2></div><a href="/lms/curriculum">Open Curriculum</a></div><div id="lmsRecentCurricula" class="lms-recent-list"></div></article>
+          <article class="lms-panel"><div class="lms-panel-head"><div><span class="lms-home-kicker">QUICK ACCESS</span><h2>LMS Pages</h2></div><i data-feather="grid"></i></div><div class="lms-quick-grid"><a href="/lms/user-access"><i data-feather="users"></i><span>Users Center</span></a><a href="/lms/b2b"><i data-feather="home"></i><span>Schools</span></a><a href="/lms/curriculum"><i data-feather="book-open"></i><span>Curriculum</span></a></div></article>
+        </section>
+        <p id="lmsHomeUpdated" class="lms-home-updated">Loading LMS overview…</p>
       </main>
     </div>
   </div>
-  <script>if(window.feather)feather.replace();</script>
-  <script src="/js/common-ui.js?v=lms-curriculum-nav-v1"></script>
+  <script>if(window.feather)feather.replace()</script>
+  <script src="/js/common-ui.js?v=lms-home-v1"></script>
+  <script src="/js/lms-home.js?v=lms-home-v1"></script>
 </body>
 </html>
