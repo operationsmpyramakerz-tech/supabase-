@@ -5028,3 +5028,45 @@ body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-l
     padding-bottom:16px!important;
   }
 }
+
+
+/* =========================================================
+   LMS logo size lock v9
+   Prevent page-specific image rules from enlarging the brand mark.
+   ========================================================= */
+body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo{
+  width:48px!important;
+  height:48px!important;
+  min-width:48px!important;
+  min-height:48px!important;
+  max-width:48px!important;
+  max-height:48px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+  margin:0!important;
+  padding:0!important;
+  background:transparent!important;
+}
+body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo > img{
+  width:38px!important;
+  height:38px!important;
+  min-width:38px!important;
+  min-height:38px!important;
+  max-width:38px!important;
+  max-height:38px!important;
+  display:block!important;
+  object-fit:contain!important;
+  object-position:center!important;
+  margin:0!important;
+  padding:0!important;
+}
+@media(max-width:768px){
+  body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo{
+    width:44px!important; height:44px!important; min-width:44px!important; min-height:44px!important; max-width:44px!important; max-height:44px!important;
+  }
+  body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo > img{
+    width:34px!important; height:34px!important; min-width:34px!important; min-height:34px!important; max-width:34px!important; max-height:34px!important;
+  }
+}
