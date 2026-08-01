@@ -5070,3 +5070,28 @@ body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo > img{
     width:34px!important; height:34px!important; min-width:34px!important; min-height:34px!important; max-width:34px!important; max-height:34px!important;
   }
 }
+
+/* =========================================================
+   LMS Back button — transparent arrow-only style v10
+   Keep the Back action as a full accessible nav target while
+   visually matching the plain arrow used on Curriculum pages.
+   ========================================================= */
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:hover,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:focus-visible,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:active,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link.active{
+  background:transparent!important;
+  border-color:transparent!important;
+  box-shadow:none!important;
+  color:#fff!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link svg{
+  color:#fff!important;
+  stroke:#fff!important;
+  opacity:1!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:hover svg,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:focus-visible svg{
+  transform:translateX(-2px);
+}
