@@ -130,14 +130,31 @@
     selectedResourceFile = null;
     resourceUploadPending = false;
     $('resourceFileInput').value = '';
+    $('resourceFileInput').disabled = false;
     $('resourceFilePreview').hidden = true;
     $('resourceFilePreview').innerHTML = '';
     $('resourceUploadProgress').hidden = true;
+    $('resourceUploadProgress').classList.remove('is-uploading', 'is-success', 'is-failed');
     $('resourceUploadProgressBar').style.width = '0%';
     $('resourceUploadProgressPercent').textContent = '0%';
-    $('resourceUploadProgressLabel').textContent = 'Uploading…';
+    $('resourceUploadProgressLabel').innerHTML = '<span class="curriculum-upload-status-icon"><i data-feather="upload-cloud"></i></span><span>Uploading…</span>';
     $('saveResourceBtn').disabled = false;
+    $('saveResourceBtn').textContent = 'Upload & Add File';
+    icons();
   }
+  function setUploadStatus(state, label, percent) {
+    const progress = $('resourceUploadProgress');
+    const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+    const icon = state === 'success' ? 'check-circle' : state === 'failed' ? 'x-circle' : 'upload-cloud';
+    progress.hidden = false;
+    progress.classList.remove('is-uploading', 'is-success', 'is-failed');
+    progress.classList.add(`is-${state}`);
+    $('resourceUploadProgressBar').style.width = `${safePercent}%`;
+    $('resourceUploadProgressPercent').textContent = state === 'success' ? 'Done' : state === 'failed' ? 'Failed' : `${safePercent}%`;
+    $('resourceUploadProgressLabel').innerHTML = `<span class="curriculum-upload-status-icon"><i data-feather="${icon}"></i></span><span>${esc(label)}</span>`;
+    icons();
+  }
+  function wait(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
   function renderSelectedFile() {
     const preview = $('resourceFilePreview');
     if (!selectedResourceFile) { preview.hidden = true; preview.innerHTML = ''; return; }
@@ -148,6 +165,10 @@
   }
   function chooseResourceFile(file) {
     $('resourceModalError').textContent = '';
+    $('resourceUploadProgress').hidden = true;
+    $('resourceUploadProgress').classList.remove('is-uploading', 'is-success', 'is-failed');
+    $('saveResourceBtn').disabled = false;
+    $('resourceFileInput').disabled = false;
     if (!file) { resetResourceUploadUi(); return; }
     if (!file.size) { $('resourceModalError').textContent = 'The selected file is empty.'; resetResourceUploadUi(); return; }
     if (file.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = `“${file.name}” is larger than 500 MB.`; resetResourceUploadUi(); return; }
@@ -229,31 +250,37 @@
     button.disabled = true;
     $('resourceFileInput').disabled = true;
     $('resourceModalError').textContent = '';
-    $('resourceUploadProgress').hidden = false;
+    setUploadStatus('uploading', `Preparing ${selectedResourceFile.name}`, 0);
+    button.textContent = 'Uploading…';
     try {
       const ticketData = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/upload-ticket`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream' }),
       });
       const upload = ticketData.upload || {};
       await uploadFileToSignedUrl(upload.signedUrl, selectedResourceFile, (percent) => {
-        $('resourceUploadProgressBar').style.width = `${percent}%`;
-        $('resourceUploadProgressPercent').textContent = `${percent}%`;
-        $('resourceUploadProgressLabel').textContent = percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…';
+        setUploadStatus('uploading', percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…', percent);
       });
       await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, name, resourceUrl: upload.publicUrl, storagePath: upload.path, storageBucket: upload.bucket, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream', notes: $('resourceNotesInput').value.trim() }),
       });
+      setUploadStatus('success', `${selectedResourceFile.name} uploaded successfully`, 100);
+      button.textContent = 'Uploaded';
+      await wait(900);
       resourceUploadPending = false;
       $('resourceModal').hidden = true;
       resetResourceUploadUi();
+      $('resourceNameInput').value = '';
+      $('resourceNotesInput').value = '';
       activeResourceType = '';
       await loadGrade();
     } catch (error) {
-      $('resourceModalError').textContent = error.message || 'Failed to upload the file.';
+      const message = error.message || 'Failed to upload the file.';
+      $('resourceModalError').textContent = message;
       resourceUploadPending = false;
       button.disabled = false;
+      button.textContent = 'Try Upload Again';
       $('resourceFileInput').disabled = false;
-      $('resourceUploadProgressLabel').textContent = 'Upload failed';
+      setUploadStatus('failed', message, 100);
     }
   }
   async function deleteResource(id) {
