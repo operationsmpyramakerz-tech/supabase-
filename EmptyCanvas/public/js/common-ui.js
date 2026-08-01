@@ -3441,7 +3441,11 @@ if (document.querySelector('.sidebar')) {
     } catch {}
   }
 
+  let __lmsSidebarEnforcing = false;
+
   function enforceLmsSidebarNavigation(){
+    if (__lmsSidebarEnforcing) return;
+
     const currentPath = sidebarPath(window.location.pathname || '');
     const isLmsWorkspace = document.body?.classList?.contains('page-lms') || currentPath.startsWith('/lms');
     if (!isLmsWorkspace) return;
@@ -3462,56 +3466,55 @@ if (document.querySelector('.sidebar')) {
       { path: '/lms/curriculum', label: 'Curriculum', icon: '<i data-feather="book-open"></i>' },
     ];
 
-    // Rebuild the LMS navigation from one canonical catalogue. This prevents
-    // individual LMS pages and shared ERP chrome from changing icon order,
-    // markup, or spacing while navigating between pages.
-    const existingByPath = new Map();
-    Array.from(list.querySelectorAll(':scope > li')).forEach((item) => {
-      const link = item.querySelector('a.nav-link[href]');
-      const path = sidebarPath(link?.getAttribute('href') || '');
-      if (!catalogue.some((entry) => entry.path === path) || existingByPath.has(path)) {
-        item.remove();
-        return;
+    try {
+      __lmsSidebarEnforcing = true;
+
+      const currentLinks = Array.from(list.querySelectorAll(':scope > li > a.nav-link[href]'));
+      const currentSignature = currentLinks.map((link) => sidebarPath(link.getAttribute('href') || '')).join('|');
+      const desiredSignature = catalogue.map((entry) => entry.path).join('|');
+      let rebuilt = false;
+
+      // Rebuild only when the actual navigation structure differs. Do not compare
+      // innerHTML because Feather replaces <i> nodes with <svg>; comparing markup
+      // caused a MutationObserver loop that froze the LMS page.
+      if (currentSignature !== desiredSignature || currentLinks.length !== catalogue.length) {
+        const fragment = document.createDocumentFragment();
+        catalogue.forEach((entry) => {
+          const item = document.createElement('li');
+          const link = document.createElement('a');
+          link.href = entry.path;
+          link.className = `nav-link${entry.className ? ` ${entry.className}` : ''}`;
+          link.setAttribute('title', entry.label);
+          link.setAttribute('aria-label', entry.label);
+          link.innerHTML = `${entry.icon}<span class="nav-label">${entry.label}</span>`;
+          item.appendChild(link);
+          fragment.appendChild(item);
+        });
+        list.replaceChildren(fragment);
+        rebuilt = true;
       }
-      existingByPath.set(path, item);
-    });
 
-    catalogue.forEach((entry, index) => {
-      let item = existingByPath.get(entry.path);
-      if (!item) {
-        item = document.createElement('li');
-        existingByPath.set(entry.path, item);
+      Array.from(list.querySelectorAll(':scope > li > a.nav-link[href]')).forEach((link) => {
+        const path = sidebarPath(link.getAttribute('href') || '');
+        const active = path === currentPath
+          || (path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'))
+          || (path === '/lms/b2b' && currentPath.startsWith('/lms/b2b/'))
+          || (path === '/lms/curriculum' && currentPath.startsWith('/lms/curriculum/'));
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      });
+
+      nav.style.setProperty('display', 'block', 'important');
+      document.body.classList.remove('permissions-loading');
+      document.body.classList.add('permissions-ready');
+
+      if (rebuilt || list.querySelector('[data-feather]')) {
+        hydratePendingFeatherIcons(sidebar);
       }
-
-      let link = item.querySelector('a.nav-link');
-      if (!link) {
-        link = document.createElement('a');
-        link.className = 'nav-link';
-        item.replaceChildren(link);
-      }
-
-      link.href = entry.path;
-      link.className = `nav-link${entry.className ? ` ${entry.className}` : ''}`;
-      const desiredMarkup = `${entry.icon}<span class="nav-label">${entry.label}</span>`;
-      if (link.innerHTML.trim() !== desiredMarkup.trim()) link.innerHTML = desiredMarkup;
-
-      const active = entry.path === currentPath
-        || (entry.path === '/lms/user-access' && currentPath.startsWith('/lms/user-access/'))
-        || (entry.path === '/lms/b2b' && currentPath.startsWith('/lms/b2b/'))
-        || (entry.path === '/lms/curriculum' && currentPath.startsWith('/lms/curriculum/'));
-      link.classList.toggle('active', active);
-      if (active) link.setAttribute('aria-current', 'page');
-      else link.removeAttribute('aria-current');
-
-      const currentAtIndex = list.children[index];
-      if (currentAtIndex !== item) list.insertBefore(item, currentAtIndex || null);
-      showEl(item);
-    });
-
-    nav.style.setProperty('display', 'block', 'important');
-    document.body.classList.remove('permissions-loading');
-    document.body.classList.add('permissions-ready');
-    hydratePendingFeatherIcons(sidebar);
+    } finally {
+      __lmsSidebarEnforcing = false;
+    }
   }
 
   function watchLmsSidebarNavigation(){
@@ -3524,8 +3527,22 @@ if (document.querySelector('.sidebar')) {
     const list = document.querySelector('.lms-sidebar .sidebar-nav .nav-list')
       || document.querySelector('.sidebar .sidebar-nav .nav-list');
     if (!list || typeof MutationObserver !== 'function') return;
-    const observer = new MutationObserver(() => enforceLmsSidebarNavigation());
-    observer.observe(list, { childList: true, subtree: true });
+
+    let scheduled = false;
+    const observer = new MutationObserver((mutations) => {
+      if (__lmsSidebarEnforcing) return;
+      // Only react when direct navigation items are inserted/removed. Icon
+      // hydration mutates descendants and must not trigger another rebuild.
+      if (!mutations.some((mutation) => mutation.type === 'childList' && mutation.target === list)) return;
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        enforceLmsSidebarNavigation();
+      });
+    });
+    observer.observe(list, { childList: true });
+    window.__LMS_SIDEBAR_OBSERVER__ = observer;
   }
 
   function ensureOrderedSidebarLinks(){
