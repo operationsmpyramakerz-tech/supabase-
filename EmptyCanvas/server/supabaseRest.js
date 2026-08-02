@@ -285,7 +285,11 @@ async function createSignedDownloadUrl(objectPath, { bucketName = null, expiresI
   const { url, key, storageBucket } = getConfig();
   const bucket = String(bucketName || storageBucket || '').trim();
   const cleanPath = String(objectPath || '').replace(/^\/+/, '');
-  const safeExpiresIn = Math.max(30, Math.min(600, Number(expiresIn) || 180));
+  // Curriculum PDF viewing uses direct, short-lived Storage URLs so PDF.js can
+  // request byte ranges without routing every chunk through the Node server.
+  // Allow up to one hour; callers still choose the actual (usually shorter)
+  // lifetime they need.
+  const safeExpiresIn = Math.max(30, Math.min(3600, Number(expiresIn) || 180));
   if (!isConfigured() || !bucket) {
     const err = new Error('Supabase Storage is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or a storage bucket.');
     err.code = 'SUPABASE_STORAGE_NOT_CONFIGURED';

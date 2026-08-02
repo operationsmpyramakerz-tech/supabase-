@@ -16873,6 +16873,57 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId", async (req, res) => {
 
 const LMS_CURRICULUM_MAX_FILE_BYTES = 500 * 1024 * 1024;
 const LMS_CURRICULUM_STORAGE_BUCKET = String(process.env.SUPABASE_LMS_CURRICULUM_BUCKET || "lms-curriculum").trim() || "lms-curriculum";
+const LMS_CURRICULUM_DIRECT_PDF_URL_SECONDS = 30 * 60;
+const LMS_CURRICULUM_DIRECT_PREVIEW_URL_SECONDS = 10 * 60;
+const LMS_CURRICULUM_SIGNED_URL_CACHE_LIMIT = 4000;
+const lmsCurriculumSignedUrlCache = new Map();
+
+function _lmsCurriculumSignedUrlCacheKey(bucketName, objectPath) {
+  return `${String(bucketName || "").trim()}::${String(objectPath || "").trim()}`;
+}
+
+function _lmsCurriculumTrimSignedUrlCache() {
+  const now = Date.now();
+  for (const [key, entry] of lmsCurriculumSignedUrlCache.entries()) {
+    if (!entry?.signedUrl || Number(entry.expiresAt || 0) <= now + 30_000) {
+      lmsCurriculumSignedUrlCache.delete(key);
+    }
+  }
+  while (lmsCurriculumSignedUrlCache.size > LMS_CURRICULUM_SIGNED_URL_CACHE_LIMIT) {
+    lmsCurriculumSignedUrlCache.delete(lmsCurriculumSignedUrlCache.keys().next().value);
+  }
+}
+
+async function _lmsCurriculumCreateCachedSignedDownloadUrl(objectPath, {
+  bucketName = LMS_CURRICULUM_STORAGE_BUCKET,
+  expiresIn = LMS_CURRICULUM_DIRECT_PREVIEW_URL_SECONDS,
+} = {}) {
+  const cleanBucket = String(bucketName || LMS_CURRICULUM_STORAGE_BUCKET).trim() || LMS_CURRICULUM_STORAGE_BUCKET;
+  const cleanPath = String(objectPath || "").trim().replace(/^\/+/, "");
+  if (!cleanPath) throw new Error("Curriculum storage path is required.");
+  const key = _lmsCurriculumSignedUrlCacheKey(cleanBucket, cleanPath);
+  const now = Date.now();
+  const cached = lmsCurriculumSignedUrlCache.get(key);
+  if (cached?.signedUrl && Number(cached.expiresAt || 0) > now + 90_000) {
+    lmsCurriculumSignedUrlCache.delete(key);
+    lmsCurriculumSignedUrlCache.set(key, cached);
+    return cached;
+  }
+  const signed = await supabaseDb.createSignedDownloadUrl(cleanPath, {
+    bucketName: cleanBucket,
+    expiresIn,
+  });
+  const lifetimeSeconds = Math.max(30, Number(signed?.expiresIn || expiresIn) || expiresIn);
+  const entry = {
+    ...signed,
+    expiresAt: now + (lifetimeSeconds * 1000),
+  };
+  lmsCurriculumSignedUrlCache.set(key, entry);
+  if (lmsCurriculumSignedUrlCache.size > LMS_CURRICULUM_SIGNED_URL_CACHE_LIMIT) {
+    _lmsCurriculumTrimSignedUrlCache();
+  }
+  return entry;
+}
 
 function _lmsCurriculumSafeFileName(value = "file") {
   const raw = String(value || "file").trim().slice(0, 240) || "file";
@@ -17118,16 +17169,52 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/view-tick
         },
       });
     }
-    const streamUrl = `/api/lms/curriculum/${encodeURIComponent(curriculumId)}/grades/${encodeURIComponent(gradeId)}/resources/${encodeURIComponent(resourceId)}/stream`;
-    const previewUrls = previewKind === "pdf"
+    const protectedStreamUrl = `/api/lms/curriculum/${encodeURIComponent(curriculumId)}/grades/${encodeURIComponent(gradeId)}/resources/${encodeURIComponent(resourceId)}/stream`;
+    const protectedPreviewUrls = previewKind === "pdf"
       ? [1, 2].map((pageNumber) => `/api/lms/curriculum/${encodeURIComponent(curriculumId)}/grades/${encodeURIComponent(gradeId)}/resources/${encodeURIComponent(resourceId)}/fast-preview/${pageNumber}`)
       : [];
+
+    // Give the browser short-lived direct Storage URLs. This removes the most
+    // expensive part of opening large PDFs: every PDF.js range request no
+    // longer needs another database lookup, signed-URL request, and Node proxy
+    // stream. The authenticated in-app routes remain as automatic fallbacks.
+    const bucketName = resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET;
+    let streamUrl = protectedStreamUrl;
+    let streamUrlExpiresAt = null;
+    let previewUrls = protectedPreviewUrls;
+    if (previewKind === "pdf") {
+      const directResults = await Promise.allSettled([
+        _lmsCurriculumCreateCachedSignedDownloadUrl(storagePath, {
+          bucketName,
+          expiresIn: LMS_CURRICULUM_DIRECT_PDF_URL_SECONDS,
+        }),
+        ...[1, 2].map((pageNumber) => _lmsCurriculumCreateCachedSignedDownloadUrl(
+          _lmsCurriculumPdfPreviewObjectPath(storagePath, pageNumber),
+          { bucketName, expiresIn: LMS_CURRICULUM_DIRECT_PREVIEW_URL_SECONDS }
+        )),
+      ]);
+      const directPdf = directResults[0]?.status === "fulfilled" ? directResults[0].value : null;
+      if (directPdf?.signedUrl) {
+        streamUrl = directPdf.signedUrl;
+        streamUrlExpiresAt = new Date(Number(directPdf.expiresAt || 0)).toISOString();
+      }
+      previewUrls = [1, 2].map((pageNumber, index) => {
+        const result = directResults[index + 1];
+        return result?.status === "fulfilled" && result.value?.signedUrl
+          ? result.value.signedUrl
+          : protectedPreviewUrls[pageNumber - 1];
+      });
+    }
     return res.json({
       ok: true,
       preview: {
         ...commonPreview,
         streamUrl,
         previewUrls,
+        fallbackStreamUrl: protectedStreamUrl,
+        fallbackPreviewUrls: protectedPreviewUrls,
+        streamUrlExpiresAt,
+        directStorage: streamUrl !== protectedStreamUrl,
       },
     });
   } catch (error) {
@@ -17177,8 +17264,7 @@ app.post("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/fast-pre
 
 app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/fast-preview/:pageNumber", async (req, res) => {
   res.set({
-    "Cache-Control": "no-store, no-cache, must-revalidate, private",
-    Pragma: "no-cache",
+    "Cache-Control": "private, max-age=120, stale-while-revalidate=300",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "Cross-Origin-Resource-Policy": "same-origin",
@@ -17204,9 +17290,9 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/fast-prev
       return res.status(404).end();
     }
     const previewPath = _lmsCurriculumPdfPreviewObjectPath(storagePath, pageNumber);
-    const signed = await supabaseDb.createSignedDownloadUrl(previewPath, {
+    const signed = await _lmsCurriculumCreateCachedSignedDownloadUrl(previewPath, {
       bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
-      expiresIn: 90,
+      expiresIn: LMS_CURRICULUM_DIRECT_PREVIEW_URL_SECONDS,
     });
     const abortController = new AbortController();
     const abortUpstream = () => abortController.abort();
@@ -17277,9 +17363,9 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/stream", 
       return res.status(415).json({ ok: false, error: "This file format is not available in the protected viewer." });
     }
 
-    const signed = await supabaseDb.createSignedDownloadUrl(storagePath, {
+    const signed = await _lmsCurriculumCreateCachedSignedDownloadUrl(storagePath, {
       bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
-      expiresIn: 90,
+      expiresIn: LMS_CURRICULUM_DIRECT_PDF_URL_SECONDS,
     });
     const upstreamHeaders = { Accept: "*/*", "Accept-Encoding": "identity" };
     const requestedRange = String(req.headers.range || "").trim();
