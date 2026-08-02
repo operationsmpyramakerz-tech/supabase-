@@ -46,6 +46,8 @@
   const PDF_MAX_ZOOM = 2.2;
   const PDF_ZOOM_STEP = 0.15;
   const PDF_PAGE_CACHE_LIMIT = 8;
+  const PDF_FAST_PREVIEW_WAIT_MS = 1600;
+  let pdfFastPreviewBackfillScheduled = false;
   const curriculumGroupItems = new Map();
   const resourceItems = new Map();
   const folderItems = {
@@ -573,10 +575,11 @@
     resetResourceUploadUi();
   }
 
-  function uploadFileToSignedUrl(signedUrl, file, onProgress) {
+  function uploadFileToSignedUrl(signedUrl, file, onProgress, { upsert = false } = {}) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', signedUrl, true);
+      if (upsert) xhr.setRequestHeader('x-upsert', 'true');
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
       });
@@ -804,27 +807,29 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream' }),
         });
         const upload = ticketData.upload || {};
-        const fastPreviewPromise = isPdfUploadFile(selectedResourceFile)
-          ? createPdfFastPreviewFiles(selectedResourceFile).catch((error) => {
-            console.warn('Fast PDF preview creation skipped:', error?.message || error);
-            return [];
-          })
-          : Promise.resolve([]);
+        const fastPreviewUploadPromise = isPdfUploadFile(selectedResourceFile)
+          ? createPdfFastPreviewFiles(selectedResourceFile)
+            .then(async (previewFiles) => {
+              const previewUploads = Array.isArray(upload.previewUploads) ? upload.previewUploads : [];
+              if (!previewFiles.length || !previewUploads.length) return false;
+              await Promise.all(previewFiles.map(async (preview) => {
+                const previewUpload = previewUploads.find((item) => Number(item?.pageNumber) === preview.pageNumber);
+                if (!previewUpload?.signedUrl) return;
+                await uploadFileToSignedUrl(previewUpload.signedUrl, preview.file, () => {});
+              }));
+              return true;
+            })
+            .catch((error) => {
+              console.warn('Fast PDF preview creation/upload skipped:', error?.message || error);
+              return false;
+            })
+          : Promise.resolve(false);
         await uploadResourceFile(upload, selectedResourceFile, (percent) => {
           setUploadStatus('uploading', percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…', percent);
         });
-        try {
-          const previewFiles = await fastPreviewPromise;
-          const previewUploads = Array.isArray(upload.previewUploads) ? upload.previewUploads : [];
-          if (previewFiles.length && previewUploads.length) {
-            setUploadStatus('uploading', 'Optimizing the first two pages for instant opening…', 100);
-            for (const preview of previewFiles) {
-              const previewUpload = previewUploads.find((item) => Number(item?.pageNumber) === preview.pageNumber);
-              if (previewUpload?.signedUrl) await uploadFileToSignedUrl(previewUpload.signedUrl, preview.file, () => {});
-            }
-          }
-        } catch (previewError) {
-          console.warn('Fast PDF preview upload skipped:', previewError?.message || previewError);
+        if (isPdfUploadFile(selectedResourceFile)) {
+          setUploadStatus('uploading', 'Finalizing the instant first-page preview…', 100);
+          await fastPreviewUploadPromise;
         }
         Object.assign(payload, {
           resourceUrl: upload.publicUrl,
@@ -897,6 +902,7 @@
     try { loadingTask?.destroy?.().catch?.(() => {}); } catch {}
     activePdfSpreadStart = 1;
     activePdfZoom = 1;
+    pdfFastPreviewBackfillScheduled = false;
     $('resourceViewerContent').innerHTML = '';
     $('resourceViewerLoading').hidden = true;
   }
@@ -1391,7 +1397,7 @@
       networkTask = pdfjs.getDocument({
         url: streamUrl,
         withCredentials: true,
-        rangeChunkSize: 1024 * 1024,
+        rangeChunkSize: 256 * 1024,
         disableAutoFetch: true,
         disableRange: false,
         disableStream: true,
@@ -1435,6 +1441,9 @@
       const image = new Image();
       image.alt = 'Fast PDF page preview';
       image.draggable = false;
+      image.decoding = 'async';
+      image.loading = 'eager';
+      image.fetchPriority = 'high';
       image.referrerPolicy = 'no-referrer';
       image.addEventListener('load', () => resolve(image), { once: true });
       image.addEventListener('error', () => reject(new Error('Fast preview page is not available.')), { once: true });
@@ -1443,12 +1452,8 @@
   }
 
   async function showPdfFastPreview(ticket, token) {
-    const urls = Array.isArray(ticket?.previewUrls) ? ticket.previewUrls.slice(0, 2).filter(Boolean) : [];
-    if (!urls.length) return false;
-    const results = await Promise.allSettled(urls.map((url) => loadFastPreviewImage(url)));
-    if (token !== viewerLoadToken || activePdfDocument) return false;
-    const images = results.map((result) => result.status === 'fulfilled' ? result.value : null);
-    if (!images.some(Boolean)) return false;
+    const urls = Array.isArray(ticket?.previewUrls) ? ticket.previewUrls.slice(0, 2) : [];
+    if (!urls.some(Boolean)) return 0;
     const content = $('resourceViewerContent');
     content.innerHTML = `<section class="curriculum-pdf-reader curriculum-pdf-reader--fast-preview" aria-label="Fast preview of the first two PDF pages" aria-busy="true">
       <div class="curriculum-pdf-reader__viewport">
@@ -1462,28 +1467,123 @@
           </div>
         </div>
       </div>
-      <div class="curriculum-pdf-quick-status"><span class="curriculum-pdf-quick-status__spinner"></span><b>First pages ready</b><span>Loading the interactive book in the background…</span></div>
+      <div class="curriculum-pdf-quick-status"><span class="curriculum-pdf-quick-status__spinner"></span><b>Opening the first pages…</b><span>Preparing the interactive book in the background…</span></div>
     </section>`;
     const root = content.querySelector('.curriculum-pdf-reader');
-    root.querySelectorAll('[data-fast-preview-page]').forEach((slot, index) => {
-      const image = images[index];
-      if (image) slot.insertBefore(image, slot.firstChild);
-      else slot.classList.add('is-blank');
-    });
     activePdfZoom = 1;
     sizePdfBook(root);
     window.requestAnimationFrame(() => centerPdfStage(root));
-    $('resourceViewerLoading').hidden = true;
-    return true;
+
+    return new Promise((resolve) => {
+      let loadedCount = 0;
+      let settledCount = 0;
+      let resolved = false;
+      const finish = (pageCount) => {
+        if (resolved) return;
+        resolved = true;
+        window.clearTimeout(waitTimer);
+        resolve(Math.max(0, Number(pageCount) || 0));
+      };
+      const waitTimer = window.setTimeout(() => finish(loadedCount), PDF_FAST_PREVIEW_WAIT_MS);
+
+      urls.forEach((url, index) => {
+        const slot = root.querySelector(`[data-fast-preview-page="${index + 1}"]`);
+        if (!url || !slot) {
+          settledCount += 1;
+          slot?.classList.add('is-blank');
+          if (settledCount === urls.length && loadedCount === 0) finish(0);
+          return;
+        }
+        loadFastPreviewImage(url).then((image) => {
+          if (token !== viewerLoadToken || activePdfDocument || !content.contains(root)) return;
+          slot.classList.remove('is-blank');
+          slot.insertBefore(image, slot.firstChild);
+          loadedCount += 1;
+          root.setAttribute('aria-busy', 'false');
+          const status = root.querySelector('.curriculum-pdf-quick-status');
+          if (status) {
+            const label = status.querySelector('b');
+            if (label) label.textContent = loadedCount > 1 ? 'First pages ready' : 'First page ready';
+          }
+          $('resourceViewerLoading').hidden = true;
+          sizePdfBook(root);
+          window.requestAnimationFrame(() => centerPdfStage(root));
+          finish(loadedCount);
+        }).catch(() => {
+          if (content.contains(root)) slot.classList.add('is-blank');
+        }).finally(() => {
+          settledCount += 1;
+          if (settledCount !== urls.length) return;
+          if (loadedCount > 0) {
+            const label = root.querySelector('.curriculum-pdf-quick-status b');
+            if (label) label.textContent = loadedCount > 1 ? 'First pages ready' : 'First page ready';
+            finish(loadedCount);
+          } else {
+            if (content.contains(root)) content.innerHTML = '';
+            finish(0);
+          }
+        });
+      });
+    });
+  }
+
+  function schedulePdfFastPreviewBackfill(ticket, token) {
+    if (pdfFastPreviewBackfillScheduled || !activePdfDocument || !ticket?.id) return;
+    pdfFastPreviewBackfillScheduled = true;
+    const run = async () => {
+      if (token !== viewerLoadToken || !activePdfDocument) return;
+      try {
+        const ticketData = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(ticket.id)}/fast-preview-upload-ticket`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        if (token !== viewerLoadToken || !activePdfDocument) return;
+        const uploads = Array.isArray(ticketData?.uploads) ? ticketData.uploads : [];
+        await Promise.all(uploads.map(async (upload) => {
+          const pageNumber = Number(upload?.pageNumber || 0);
+          const source = pdfPageCache.get(pageNumber)?.canvas;
+          if (!source || !upload?.signedUrl) return;
+          const file = await canvasToJpegFile(source, pageNumber);
+          if (token !== viewerLoadToken) return;
+          await uploadFileToSignedUrl(upload.signedUrl, file, () => {}, { upsert: Boolean(upload.upsert) });
+        }));
+      } catch (error) {
+        console.warn('PDF fast preview backfill skipped:', error?.message || error);
+      }
+    };
+    if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1800 });
+    else window.setTimeout(run, 500);
   }
 
   async function renderPdfBook(streamUrl, ticket, token) {
     const content = $('resourceViewerContent');
     setViewerStatus('Opening the first two pages…');
-    showPdfFastPreview(ticket, token).catch(() => false);
+    const fastPreviewPageCount = await showPdfFastPreview(ticket, token).catch(() => 0);
+    if (fastPreviewPageCount > 0) {
+      await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+    }
     const pdfjs = await loadPdfJs();
     if (token !== viewerLoadToken) return;
-    const { documentRef, loadingTask } = await loadPdfDocument(pdfjs, streamUrl, token);
+    let documentRef;
+    let loadingTask;
+    try {
+      ({ documentRef, loadingTask } = await loadPdfDocument(pdfjs, streamUrl, token));
+    } catch (error) {
+      const previewRoot = content.querySelector('.curriculum-pdf-reader--fast-preview');
+      if (previewRoot?.querySelector('img')) {
+        const status = previewRoot.querySelector('.curriculum-pdf-quick-status');
+        status?.querySelector('.curriculum-pdf-quick-status__spinner')?.remove();
+        const label = status?.querySelector('b');
+        const detail = status?.querySelector('span:last-child');
+        if (label) label.textContent = 'First pages ready';
+        if (detail) detail.textContent = 'The remaining pages could not be streamed on this connection. The first pages are still available.';
+        previewRoot.setAttribute('aria-busy', 'false');
+        console.warn('Interactive PDF stream unavailable; keeping the fast preview visible:', error?.message || error);
+        return;
+      }
+      throw error;
+    }
     if (token !== viewerLoadToken) {
       if (activePdfLoadingTask === loadingTask) activePdfLoadingTask = null;
       try { await loadingTask?.destroy?.(); } catch {}
@@ -1554,6 +1654,9 @@
     book.addEventListener('pointercancel', handlePdfPointerEnd);
     icons();
     await renderPdfSpread();
+    if (fastPreviewPageCount < Math.min(2, documentRef.numPages)) {
+      schedulePdfFastPreviewBackfill(ticket, token);
+    }
   }
   async function renderProtectedPreview(ticket, token) {
     if (token !== viewerLoadToken) return;
