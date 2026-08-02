@@ -3558,9 +3558,9 @@ if (document.querySelector('.sidebar')) {
     const catalogue = [
       { path: '/home', label: 'Back', icon: '<i data-feather="arrow-left"></i>', className: 'lms-sidebar-back lms-back-nav' },
       { path: '/lms', label: 'LMS Home', icon: '<i data-feather="home"></i>', className: 'lms-home-anchor', boundary: true },
-      { path: '/lms/user-access', label: 'Users Center', icon: '<i data-feather="users"></i>' },
       { path: '/lms/b2b', label: 'Schools', icon: SCHOOL_ICON },
       { path: '/lms/curriculum', label: 'Curriculum', icon: '<i data-feather="book-open"></i>' },
+      { path: '/lms/user-access', label: 'Users Center', icon: '<i data-feather="shield"></i>', separatorBefore: true },
     ];
 
     try {
@@ -3580,6 +3580,7 @@ if (document.querySelector('.sidebar')) {
           const item = document.createElement('li');
           if (entry.path === '/home') item.className = 'lms-back-item';
           if (entry.boundary) item.classList.add('lms-home-boundary');
+          if (entry.separatorBefore) item.classList.add('lms-users-boundary');
           const link = document.createElement('a');
           link.href = entry.path;
           link.className = `nav-link${entry.className ? ` ${entry.className}` : ''}`;
@@ -3610,6 +3611,7 @@ if (document.querySelector('.sidebar')) {
           if (itemNode) {
             itemNode.classList.toggle('lms-back-item', entry.path === '/home');
             itemNode.classList.toggle('lms-home-boundary', Boolean(entry.boundary));
+            itemNode.classList.toggle('lms-users-boundary', Boolean(entry.separatorBefore));
           }
           link.setAttribute('title', entry.label);
           link.setAttribute('aria-label', entry.label);
@@ -3634,7 +3636,7 @@ if (document.querySelector('.sidebar')) {
           } else {
             const expectedFeather = entry.path === '/home' ? 'arrow-left'
               : entry.path === '/lms' ? 'home'
-              : entry.path === '/lms/user-access' ? 'users'
+              : entry.path === '/lms/user-access' ? 'shield'
               : 'book-open';
             const renderedFeather = currentIcon?.getAttribute?.('data-feather')
               || (currentIcon?.classList ? Array.from(currentIcon.classList)

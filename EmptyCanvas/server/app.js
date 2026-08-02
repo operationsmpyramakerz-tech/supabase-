@@ -4,6 +4,7 @@ const path = require("path");
 const net = require("net");
 const tls = require("tls");
 const crypto = require("crypto");
+const { Readable } = require("stream");
 const { Client } = require("@notionhq/client");
 const PDFDocument = require("pdfkit"); // PDF
 const { attachPageNumbers } = require("./pdfPageNumbers");
@@ -140,7 +141,7 @@ app.use(
       // Shared navigation and page-access behavior must always refresh after a
       // deployment; otherwise a browser can keep an older sidebar script even
       // after a user receives a newly enabled page permission.
-      if (filePath.endsWith("common-ui.js")) {
+      if (["common-ui.js", "ui-redesign.css", "lms-curriculum.js", "lms-curriculum.css"].some((name) => filePath.endsWith(name))) {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       }
       if (filePath.endsWith("manifest.webmanifest") || filePath.endsWith("manifest.json")) {
@@ -17048,26 +17049,103 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/view-tick
         ok: true,
         preview: {
           ...commonPreview,
-          signedUrl: null,
+          streamUrl: null,
           message: "This format has no safe native browser preview. Convert it to PDF, image, video, audio, or text to keep it view-only inside the system.",
         },
       });
     }
-    const signed = await supabaseDb.createSignedDownloadUrl(storagePath, {
-      bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
-      expiresIn: 180,
-    });
+    const streamUrl = `/api/lms/curriculum/${encodeURIComponent(curriculumId)}/grades/${encodeURIComponent(gradeId)}/resources/${encodeURIComponent(resourceId)}/stream`;
     return res.json({
       ok: true,
       preview: {
         ...commonPreview,
-        signedUrl: signed.signedUrl,
-        expiresIn: signed.expiresIn,
+        streamUrl,
       },
     });
   } catch (error) {
     console.error("GET curriculum protected preview ticket error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to prepare protected preview." });
+  }
+});
+
+app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/stream", async (req, res) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, private",
+    Pragma: "no-cache",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+  });
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    const resourceId = String(req.params?.resourceId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(gradeId) || !/^\d+$/.test(resourceId)) {
+      return res.status(400).json({ ok: false, error: "Invalid file ID." });
+    }
+    const rows = await supabaseDb.request(`/lms_curriculum_resources?select=id,name,file_name,mime_type,storage_path,storage_bucket&id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}&limit=1`);
+    const resource = Array.isArray(rows) ? rows[0] : null;
+    if (!resource) return res.status(404).json({ ok: false, error: "Curriculum file was not found." });
+    const storagePath = String(resource.storage_path || "").trim();
+    if (!storagePath) return res.status(409).json({ ok: false, error: "This legacy file must be re-uploaded before it can be previewed." });
+
+    const fileName = String(resource.file_name || resource.name || "Curriculum file").trim();
+    const mimeType = String(resource.mime_type || "application/octet-stream").trim().replace(/[\r\n]/g, "") || "application/octet-stream";
+    const previewKind = _lmsCurriculumPreviewKind(mimeType, fileName);
+    if (previewKind === "unsupported") {
+      return res.status(415).json({ ok: false, error: "This file format is not available in the protected viewer." });
+    }
+
+    const signed = await supabaseDb.createSignedDownloadUrl(storagePath, {
+      bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
+      expiresIn: 90,
+    });
+    const upstreamHeaders = { Accept: "*/*", "Accept-Encoding": "identity" };
+    const requestedRange = String(req.headers.range || "").trim();
+    if (/^bytes=\d*-\d*$/.test(requestedRange)) upstreamHeaders.Range = requestedRange;
+    const abortController = new AbortController();
+    const abortUpstream = () => abortController.abort();
+    if (typeof req.once === "function") req.once("aborted", abortUpstream);
+    if (typeof res.once === "function") res.once("close", abortUpstream);
+    const upstream = await fetch(signed.signedUrl, {
+      method: req.method === "HEAD" ? "HEAD" : "GET",
+      headers: upstreamHeaders,
+      redirect: "follow",
+      signal: abortController.signal,
+    });
+    if (!upstream.ok || (req.method !== "HEAD" && !upstream.body)) {
+      try { await upstream.body?.cancel(); } catch {}
+      const error = new Error("Protected file storage did not return the requested content.");
+      error.status = upstream.status || 502;
+      throw error;
+    }
+
+    const safeName = _lmsCurriculumSafeFileName(fileName).replace(/"/g, "") || "preview";
+    const safeContentType = previewKind === "pdf"
+      ? "application/pdf"
+      : previewKind === "text"
+        ? "text/plain; charset=utf-8"
+        : mimeType;
+    res.status(upstream.status === 206 ? 206 : 200);
+    res.setHeader("Content-Type", safeContentType);
+    res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+    ["content-length", "content-range", "accept-ranges"].forEach((header) => {
+      const value = upstream.headers.get(header);
+      if (value) res.setHeader(header, value);
+    });
+    if (req.method === "HEAD") return res.end();
+
+    const stream = Readable.fromWeb(upstream.body);
+    stream.on("error", (streamError) => {
+      if (streamError?.name !== "AbortError") console.error("Curriculum protected stream error:", streamError?.message || streamError);
+      if (!res.headersSent) res.status(502).end();
+      else res.destroy(streamError);
+    });
+    stream.pipe(res);
+  } catch (error) {
+    console.error("GET curriculum protected stream error:", error?.details || error?.body || error);
+    if (res.headersSent) return res.destroy(error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to stream the protected preview." });
   }
 });
 

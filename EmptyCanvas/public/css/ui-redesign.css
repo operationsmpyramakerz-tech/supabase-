@@ -5095,3 +5095,60 @@ body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-l
 body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:focus-visible svg{
   transform:translateX(-2px);
 }
+
+/* =========================================================
+   LMS stable separators and final Users Center action v11
+   The Home divider stays visible on every LMS route. Users
+   Center is always the final shield action with its own line.
+   ========================================================= */
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary,
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{
+  position:relative!important;
+  box-sizing:border-box!important;
+  border:0!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary{
+  height:calc(var(--lms-nav-size) + 18px)!important;
+  min-height:calc(var(--lms-nav-size) + 18px)!important;
+  padding:0 0 18px!important;
+  margin:0 0 2px!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary::after{
+  content:'';
+  position:absolute;
+  left:6px;
+  right:6px;
+  bottom:0;
+  height:1px;
+  border-radius:999px;
+  background:rgba(255,255,255,.24);
+  box-shadow:0 1px 0 rgba(0,0,0,.16);
+  pointer-events:none;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{
+  height:calc(var(--lms-nav-size) + 18px)!important;
+  min-height:calc(var(--lms-nav-size) + 18px)!important;
+  padding:18px 0 0!important;
+  margin:2px 0 0!important;
+}
+body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary::before{
+  content:'';
+  position:absolute;
+  left:6px;
+  right:6px;
+  top:0;
+  height:1px;
+  border-radius:999px;
+  background:rgba(255,255,255,.24);
+  box-shadow:0 1px 0 rgba(0,0,0,.16);
+  pointer-events:none;
+}
+@media(max-width:768px){
+  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary,
+  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{
+    height:calc(var(--lms-nav-size) + 16px)!important;
+    min-height:calc(var(--lms-nav-size) + 16px)!important;
+  }
+  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary{padding-bottom:16px!important}
+  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{padding-top:16px!important}
+}

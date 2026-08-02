@@ -6,7 +6,7 @@
     teacher_guide: { label: 'Teacher Guide', icon: 'book' },
     lesson_plan: { label: 'Lesson Plan', icon: 'clipboard' },
     presentation: { label: 'Presentation', icon: 'monitor' },
-    materials: { label: 'Materials', icon: 'package' },
+    materials: { label: 'Materials', icon: 'video' },
     exam: { label: 'Exam', icon: 'file-text' },
   };
   const MAX_FILE_BYTES = 500 * 1024 * 1024;
@@ -29,6 +29,11 @@
   let editingResourceId = '';
   let editingResourceItem = null;
   let viewerLoadToken = 0;
+  let activePdfDocument = null;
+  let activePdfSpreadStart = 1;
+  let pdfRenderToken = 0;
+  let pdfResizeTimer = 0;
+  let pdfJsPromise = null;
   const curriculumGroupItems = new Map();
   const resourceItems = new Map();
   const folderItems = {
@@ -248,18 +253,19 @@
   }
   function resourceCard(file, key, config) {
     const name = file.name || file.file_name || `Untitled ${config.label}`;
-    const meta = [resourceFormat(file), formatBytes(file.file_size)].filter(Boolean).join(' · ');
-    const note = file.notes || 'Open protected preview';
+    const format = resourceFormat(file);
+    const meta = formatBytes(file.file_size);
+    const note = String(file.notes || '').trim();
     return `<article class="curriculum-file-card curriculum-file-card--${key}" data-resource-card="${esc(file.id)}">
       <button type="button" class="curriculum-file-card__open" data-view-resource="${esc(file.id)}" aria-label="Preview ${esc(name)} inside the system">
         <span class="curriculum-file-card__visual">
           <span class="curriculum-file-card__document"><i data-feather="${config.icon}"></i></span>
-          <span class="curriculum-file-card__type-pill">${esc(config.label)}</span>
+          <span class="curriculum-file-card__type-pill">${esc(format)}</span>
         </span>
         <span class="curriculum-file-card__details">
           <h3 title="${esc(name)}">${esc(name)}</h3>
           <span class="curriculum-file-card__meta">${esc(meta)}</span>
-          <span class="curriculum-file-card__note">${esc(note)}</span>
+          ${note ? `<span class="curriculum-file-card__note">${esc(note)}</span>` : ''}
         </span>
       </button>
       <div class="curriculum-resource-actions">
@@ -712,6 +718,12 @@
     }
   }
   function clearViewerContent() {
+    pdfRenderToken += 1;
+    if (activePdfDocument) {
+      try { activePdfDocument.destroy(); } catch {}
+      activePdfDocument = null;
+    }
+    activePdfSpreadStart = 1;
     $('resourceViewerContent').innerHTML = '';
     $('resourceViewerLoading').hidden = true;
   }
@@ -722,13 +734,145 @@
     clearViewerContent();
     $('resourceViewerWatermark').innerHTML = '';
   }
+  function loadPdfJs() {
+    if (!pdfJsPromise) {
+      pdfJsPromise = import('/js/vendor/pdfjs/pdf.min.mjs').then((pdfjs) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = '/js/vendor/pdfjs/pdf.worker.min.mjs';
+        return pdfjs;
+      });
+    }
+    return pdfJsPromise;
+  }
+  function pdfSpreadRange(documentRef = activePdfDocument) {
+    if (!documentRef) return '';
+    const end = Math.min(activePdfSpreadStart + 1, documentRef.numPages);
+    return end === activePdfSpreadStart ? `${end}` : `${activePdfSpreadStart}–${end}`;
+  }
+  async function renderPdfPage(documentRef, pageNumber, slot, renderToken) {
+    const canvas = slot.querySelector('canvas');
+    const pageLabel = slot.querySelector('.curriculum-pdf-page__number');
+    if (!canvas || !pageLabel || renderToken !== pdfRenderToken) return;
+    if (pageNumber > documentRef.numPages) {
+      slot.classList.add('is-blank');
+      canvas.width = 1;
+      canvas.height = 1;
+      pageLabel.textContent = '';
+      return;
+    }
+    slot.classList.remove('is-blank');
+    pageLabel.textContent = String(pageNumber);
+    const page = await documentRef.getPage(pageNumber);
+    if (renderToken !== pdfRenderToken) return;
+    const natural = page.getViewport({ scale: 1 });
+    const availableWidth = Math.max(180, slot.clientWidth - 22);
+    const availableHeight = Math.max(240, slot.clientHeight - 22);
+    const cssScale = Math.max(.1, Math.min(availableWidth / natural.width, availableHeight / natural.height));
+    const density = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    const viewport = page.getViewport({ scale: cssScale * density });
+    const cssWidth = Math.max(1, Math.floor(viewport.width / density));
+    const cssHeight = Math.max(1, Math.floor(viewport.height / density));
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+    const context = canvas.getContext('2d', { alpha: false });
+    context.save();
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.restore();
+    try {
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+    } catch (error) {
+      if (renderToken === pdfRenderToken) throw error;
+    }
+  }
+  async function renderPdfSpread() {
+    const documentRef = activePdfDocument;
+    const root = $('resourceViewerContent').querySelector('.curriculum-pdf-reader');
+    if (!documentRef || !root) return;
+    const renderToken = ++pdfRenderToken;
+    const book = root.querySelector('.curriculum-pdf-book');
+    const stage = root.querySelector('.curriculum-pdf-reader__stage');
+    if (!book || !stage) return;
+    const stageWidth = Math.max(360, stage.clientWidth - 116);
+    const stageHeight = Math.max(320, stage.clientHeight - 24);
+    const bookWidth = Math.min(1180, stageWidth, stageHeight * 1.46);
+    book.style.width = `${Math.max(360, Math.floor(bookWidth))}px`;
+    book.style.height = `${Math.max(260, Math.floor(bookWidth / 1.46))}px`;
+    const slots = root.querySelectorAll('.curriculum-pdf-page');
+    root.querySelector('[data-pdf-range]').textContent = pdfSpreadRange(documentRef);
+    root.querySelector('[data-pdf-total]').textContent = String(documentRef.numPages);
+    const previous = root.querySelector('[data-pdf-prev]');
+    const next = root.querySelector('[data-pdf-next]');
+    previous.disabled = activePdfSpreadStart <= 1;
+    next.disabled = activePdfSpreadStart + 1 >= documentRef.numPages;
+    await Promise.all([
+      renderPdfPage(documentRef, activePdfSpreadStart, slots[0], renderToken),
+      renderPdfPage(documentRef, activePdfSpreadStart + 1, slots[1], renderToken),
+    ]);
+    if (renderToken === pdfRenderToken) $('resourceViewerLoading').hidden = true;
+  }
+  function turnPdfSpread(direction) {
+    const documentRef = activePdfDocument;
+    const root = $('resourceViewerContent').querySelector('.curriculum-pdf-reader');
+    if (!documentRef || !root) return;
+    const nextStart = Math.max(1, Math.min(documentRef.numPages, activePdfSpreadStart + (direction * 2)));
+    if (nextStart === activePdfSpreadStart) return;
+    const turnClass = direction > 0 ? 'is-turning-forward' : 'is-turning-backward';
+    root.classList.remove('is-turning-forward', 'is-turning-backward');
+    root.classList.add(turnClass);
+    window.setTimeout(async () => {
+      activePdfSpreadStart = nextStart;
+      await renderPdfSpread();
+      window.setTimeout(() => root.classList.remove(turnClass), 190);
+    }, 150);
+  }
+  async function renderPdfBook(streamUrl, ticket, token) {
+    const content = $('resourceViewerContent');
+    const pdfjs = await loadPdfJs();
+    if (token !== viewerLoadToken) return;
+    const loadingTask = pdfjs.getDocument({
+      url: streamUrl,
+      withCredentials: true,
+      rangeChunkSize: 256 * 1024,
+      disableAutoFetch: false,
+      disableStream: true,
+    });
+    const documentRef = await loadingTask.promise;
+    if (token !== viewerLoadToken) {
+      try { documentRef.destroy(); } catch {}
+      return;
+    }
+    activePdfDocument = documentRef;
+    activePdfSpreadStart = 1;
+    content.innerHTML = `<section class="curriculum-pdf-reader" aria-label="Open book PDF viewer">
+      <div class="curriculum-pdf-reader__toolbar">
+        <span class="curriculum-pdf-reader__title"><i data-feather="book-open"></i><b>Open book view</b></span>
+        <span class="curriculum-pdf-reader__counter">Pages <strong data-pdf-range>1–2</strong> of <strong data-pdf-total>${documentRef.numPages}</strong></span>
+      </div>
+      <div class="curriculum-pdf-reader__stage">
+        <button type="button" class="curriculum-pdf-turn curriculum-pdf-turn--previous" data-pdf-prev aria-label="Previous two pages"><i data-feather="chevron-left"></i></button>
+        <div class="curriculum-pdf-book" role="group" aria-label="Two-page PDF spread">
+          <div class="curriculum-pdf-page curriculum-pdf-page--left"><canvas aria-label="Left PDF page"></canvas><span class="curriculum-pdf-page__number"></span></div>
+          <span class="curriculum-pdf-book__spine" aria-hidden="true"></span>
+          <div class="curriculum-pdf-page curriculum-pdf-page--right"><canvas aria-label="Right PDF page"></canvas><span class="curriculum-pdf-page__number"></span></div>
+        </div>
+        <button type="button" class="curriculum-pdf-turn curriculum-pdf-turn--next" data-pdf-next aria-label="Next two pages"><i data-feather="chevron-right"></i></button>
+      </div>
+    </section>`;
+    const root = content.querySelector('.curriculum-pdf-reader');
+    root.querySelector('[data-pdf-prev]').addEventListener('click', () => turnPdfSpread(-1));
+    root.querySelector('[data-pdf-next]').addEventListener('click', () => turnPdfSpread(1));
+    icons();
+    await renderPdfSpread();
+  }
   async function renderProtectedPreview(ticket, token) {
     if (token !== viewerLoadToken) return;
     const content = $('resourceViewerContent');
     const kind = String(ticket?.previewKind || 'unsupported');
-    const signedUrl = String(ticket?.signedUrl || '');
+    const streamUrl = String(ticket?.streamUrl || '');
     content.innerHTML = '';
-    if (kind === 'unsupported' || !signedUrl) {
+    if (kind === 'unsupported' || !streamUrl) {
       setViewerStatus(ticket?.message || 'This file format cannot be previewed safely in the browser. Replace it with PDF, image, video, audio, or text to keep it view-only.', 'error');
       return;
     }
@@ -747,7 +891,7 @@
       image.referrerPolicy = 'no-referrer';
       image.addEventListener('load', markReady, { once: true });
       image.addEventListener('error', markFailed, { once: true });
-      image.src = signedUrl;
+      image.src = streamUrl;
       content.appendChild(image);
       return;
     }
@@ -761,7 +905,7 @@
       video.setAttribute('disableRemotePlayback', '');
       video.addEventListener('loadedmetadata', markReady, { once: true });
       video.addEventListener('error', markFailed, { once: true });
-      video.src = signedUrl;
+      video.src = streamUrl;
       content.appendChild(video);
       return;
     }
@@ -773,13 +917,13 @@
       audio.setAttribute('disableRemotePlayback', '');
       audio.addEventListener('loadedmetadata', markReady, { once: true });
       audio.addEventListener('error', markFailed, { once: true });
-      audio.src = signedUrl;
+      audio.src = streamUrl;
       content.appendChild(audio);
       return;
     }
     if (kind === 'text') {
       try {
-        const response = await fetch(signedUrl, { cache: 'no-store', referrerPolicy: 'no-referrer' });
+        const response = await fetch(streamUrl, { credentials: 'include', cache: 'no-store', referrerPolicy: 'no-referrer' });
         if (!response.ok) throw new Error('Preview request failed.');
         const body = await response.text();
         if (token !== viewerLoadToken) return;
@@ -793,15 +937,16 @@
       }
       return;
     }
-
-    const frame = document.createElement('iframe');
-    frame.title = ticket.name || 'Protected curriculum preview';
-    frame.referrerPolicy = 'no-referrer';
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
-    frame.addEventListener('load', markReady, { once: true });
-    frame.addEventListener('error', markFailed, { once: true });
-    frame.src = `${signedUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
-    content.appendChild(frame);
+    if (kind === 'pdf') {
+      try {
+        await renderPdfBook(streamUrl, ticket, token);
+      } catch (error) {
+        console.error('PDF preview failed:', error);
+        markFailed();
+      }
+      return;
+    }
+    markFailed();
   }
   async function openResourceViewer(id) {
     const cleanId = String(id || '');
@@ -914,6 +1059,11 @@
   $('resourceViewerStage').addEventListener('contextmenu', (event) => event.preventDefault());
   $('resourceViewerStage').addEventListener('dragstart', (event) => event.preventDefault());
   $('resourceViewerStage').addEventListener('copy', (event) => event.preventDefault());
+  window.addEventListener('resize', () => {
+    if (!activePdfDocument || $('resourceViewerModal').hidden) return;
+    window.clearTimeout(pdfResizeTimer);
+    pdfResizeTimer = window.setTimeout(() => renderPdfSpread().catch(() => {}), 140);
+  });
   document.addEventListener('click', (event) => {
     if (!event.target.closest('.curriculum-folder-actions') && !event.target.closest('.curriculum-catalog-actions') && !event.target.closest('.curriculum-resource-actions')) closeActionMenus();
   });
@@ -927,6 +1077,14 @@
     if (viewerOpen && (event.ctrlKey || event.metaKey) && ['s', 'p', 'u', 'c'].includes(String(event.key || '').toLowerCase())) {
       event.preventDefault();
       event.stopPropagation();
+    }
+    if (viewerOpen && activePdfDocument && event.key === 'ArrowLeft') {
+      event.preventDefault();
+      turnPdfSpread(-1);
+    }
+    if (viewerOpen && activePdfDocument && event.key === 'ArrowRight') {
+      event.preventDefault();
+      turnPdfSpread(1);
     }
   });
   window.addEventListener('popstate', () => {
