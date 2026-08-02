@@ -281,6 +281,63 @@ async function createSignedUploadUrl(objectPath, { bucketName = null, upsert = f
   return { bucket, path: cleanPath, token, signedUrl, publicUrl: storagePublicUrl(cleanPath, bucket), data };
 }
 
+async function createSignedDownloadUrl(objectPath, { bucketName = null, expiresIn = 180 } = {}) {
+  const { url, key, storageBucket } = getConfig();
+  const bucket = String(bucketName || storageBucket || '').trim();
+  const cleanPath = String(objectPath || '').replace(/^\/+/, '');
+  const safeExpiresIn = Math.max(30, Math.min(600, Number(expiresIn) || 180));
+  if (!isConfigured() || !bucket) {
+    const err = new Error('Supabase Storage is not configured. Missing SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or a storage bucket.');
+    err.code = 'SUPABASE_STORAGE_NOT_CONFIGURED';
+    throw err;
+  }
+  if (!cleanPath) {
+    const err = new Error('Storage object path is required.');
+    err.code = 'SUPABASE_STORAGE_PATH_REQUIRED';
+    throw err;
+  }
+
+  const endpoint = `${url}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ expiresIn: safeExpiresIn }),
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) {
+    const message = data && typeof data === 'object'
+      ? (data.message || data.error || JSON.stringify(data))
+      : (text || `Failed to create signed preview URL with status ${res.status}`);
+    const err = new Error(message);
+    err.status = res.status;
+    err.details = data;
+    throw err;
+  }
+
+  const token = String(data?.token || '').trim();
+  let signedUrl = String(data?.signedURL || data?.signedUrl || data?.url || '').trim();
+  if (!signedUrl && token) {
+    signedUrl = `${endpoint}?token=${encodeURIComponent(token)}`;
+  } else if (signedUrl.startsWith('/storage/v1/')) {
+    signedUrl = `${url}${signedUrl}`;
+  } else if (signedUrl.startsWith('/object/')) {
+    signedUrl = `${url}/storage/v1${signedUrl}`;
+  } else if (signedUrl && !/^https?:\/\//i.test(signedUrl)) {
+    signedUrl = `${url}/storage/v1/${signedUrl.replace(/^\/+/, '')}`;
+  }
+  if (token && signedUrl && !/[?&]token=/.test(signedUrl)) {
+    signedUrl += `${signedUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  }
+  if (!signedUrl) throw new Error('Supabase Storage did not return a signed preview URL.');
+  return { bucket, path: cleanPath, token, signedUrl, expiresIn: safeExpiresIn, data };
+}
+
 async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}) {
   const { url, key, storageBucket } = getConfig();
   const bucket = String(bucketName || storageBucket || '').trim();
@@ -321,4 +378,4 @@ async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}
   return { deleted: prefixes.length, data };
 }
 
-module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, deleteById, deleteByIds, uploadStorageObject, createSignedUploadUrl, deleteStorageObjects, storagePublicUrl };
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, deleteById, deleteByIds, uploadStorageObject, createSignedUploadUrl, createSignedDownloadUrl, deleteStorageObjects, storagePublicUrl };

@@ -16489,6 +16489,17 @@ const LMS_CURRICULUM_RESOURCE_TYPES = Object.freeze({
   exam: "Exam",
 });
 
+function _lmsCurriculumClientResource(resource = {}) {
+  const {
+    resource_url: _resourceUrl,
+    storage_path: _storagePath,
+    storage_bucket: _storageBucket,
+    metadata: _metadata,
+    ...safeResource
+  } = resource || {};
+  return safeResource;
+}
+
 async function _lmsCurriculumCleanupStoredResources(resources = []) {
   const pathsByBucket = new Map();
   (Array.isArray(resources) ? resources : []).forEach((resource) => {
@@ -16835,7 +16846,8 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId", async (req, res) => {
     const grade = Array.isArray(grades) ? grades[0] : null;
     if (!curriculum) return res.status(404).json({ ok: false, error: "Theme was not found." });
     if (!grade) return res.status(404).json({ ok: false, error: "Grade was not found." });
-    return res.json({ ok: true, curriculum, grade, resources: Array.isArray(resources) ? resources : [], resourceTypes: LMS_CURRICULUM_RESOURCE_TYPES });
+    const clientResources = (Array.isArray(resources) ? resources : []).map(_lmsCurriculumClientResource);
+    return res.json({ ok: true, curriculum, grade, resources: clientResources, resourceTypes: LMS_CURRICULUM_RESOURCE_TYPES });
   } catch (error) {
     console.error("GET /api/lms/curriculum/:id/grades/:gradeId error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load grade." });
@@ -16851,6 +16863,21 @@ function _lmsCurriculumSafeFileName(value = "file") {
   const stem = (dot > 0 ? raw.slice(0, dot) : raw).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "file";
   const ext = dot > 0 ? raw.slice(dot).replace(/[^a-zA-Z0-9.]+/g, "").slice(0, 20) : "";
   return `${stem.slice(0, 180)}${ext}`;
+}
+
+function _lmsCurriculumPreviewKind(mimeType = "", fileName = "") {
+  const mime = String(mimeType || "").trim().toLowerCase();
+  const extension = String(fileName || "").trim().toLowerCase().match(/\.([a-z0-9]{1,10})$/)?.[1] || "";
+  if (mime === "application/pdf" || extension === "pdf") return "pdf";
+  if (mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "avif"].includes(extension)) return "image";
+  if (mime.startsWith("video/") || ["mp4", "webm", "ogv", "mov", "m4v"].includes(extension)) return "video";
+  if (mime.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a", "aac", "flac"].includes(extension)) return "audio";
+  if (
+    mime.startsWith("text/") ||
+    ["txt", "md", "csv", "json", "xml", "log", "js", "css", "html", "htm"].includes(extension) ||
+    ["application/json", "application/xml", "application/javascript"].includes(mime)
+  ) return "text";
+  return "unsupported";
 }
 
 app.post("/api/lms/curriculum/:id/grades/:gradeId/upload-ticket", async (req, res) => {
@@ -16888,7 +16915,6 @@ app.post("/api/lms/curriculum/:id/grades/:gradeId/resources", async (req, res) =
     const resourceType = String(req.body?.resourceType || "").trim().toLowerCase();
     if (!Object.prototype.hasOwnProperty.call(LMS_CURRICULUM_RESOURCE_TYPES, resourceType)) return res.status(400).json({ ok: false, error: "Choose a valid curriculum file type." });
     const name = String(req.body?.name || req.body?.fileName || "").trim().slice(0, 240);
-    const resourceUrl = String(req.body?.resourceUrl || req.body?.publicUrl || "").trim().slice(0, 4000) || null;
     const storagePath = String(req.body?.storagePath || "").trim().slice(0, 2000) || null;
     const storageBucket = String(req.body?.storageBucket || LMS_CURRICULUM_STORAGE_BUCKET).trim().slice(0, 200) || LMS_CURRICULUM_STORAGE_BUCKET;
     const fileName = String(req.body?.fileName || name || "").trim().slice(0, 500) || name;
@@ -16896,19 +16922,152 @@ app.post("/api/lms/curriculum/:id/grades/:gradeId/resources", async (req, res) =
     const mimeType = String(req.body?.mimeType || "application/octet-stream").trim().slice(0, 240) || "application/octet-stream";
     const notes = String(req.body?.notes || "").trim().slice(0, 4000) || null;
     if (!name) return res.status(400).json({ ok: false, error: "File name is required." });
-    if (!resourceUrl || !storagePath) return res.status(400).json({ ok: false, error: "Upload the file before saving it." });
+    if (!storagePath) return res.status(400).json({ ok: false, error: "Upload the file before saving it." });
     const gradeExists = await supabaseDb.request(`/lms_curriculum_grades?select=id&id=eq.${_sbRestFilterValue(gradeId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&limit=1`);
     if (!Array.isArray(gradeExists) || !gradeExists.length) return res.status(404).json({ ok: false, error: "Grade was not found." });
     const createdByRaw = String(req.session?.userSupabaseId || "").trim();
     const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
     const rows = await supabaseDb.request('/lms_curriculum_resources', {
       method: 'POST', headers: { Prefer: 'return=representation' },
-      body: { curriculum_id: Number(curriculumId), grade_id: Number(gradeId), resource_type: resourceType, name, resource_url: resourceUrl, storage_path: storagePath, storage_bucket: storageBucket, file_name: fileName, file_size: fileSize, mime_type: mimeType, notes, created_by: createdBy, metadata: {} },
+      body: { curriculum_id: Number(curriculumId), grade_id: Number(gradeId), resource_type: resourceType, name, resource_url: null, storage_path: storagePath, storage_bucket: storageBucket, file_name: fileName, file_size: fileSize, mime_type: mimeType, notes, created_by: createdBy, metadata: {} },
     });
     return res.status(201).json({ ok: true, resource: Array.isArray(rows) ? rows[0] : rows });
   } catch (error) {
     console.error("POST grade curriculum resource error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add curriculum file." });
+  }
+});
+
+app.patch("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    const resourceId = String(req.params?.resourceId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(gradeId) || !/^\d+$/.test(resourceId)) {
+      return res.status(400).json({ ok: false, error: "Invalid file ID." });
+    }
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const notes = String(req.body?.notes || "").trim().slice(0, 4000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "File name is required." });
+
+    const existingRows = await supabaseDb.request(`/lms_curriculum_resources?select=*&id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}&limit=1`);
+    const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+    if (!existing) return res.status(404).json({ ok: false, error: "Curriculum file was not found." });
+
+    const replacementPath = String(req.body?.storagePath || "").trim().slice(0, 2000);
+    const hasReplacement = Boolean(replacementPath);
+    const payload = { name, notes, updated_at: new Date().toISOString() };
+    let replacementBucket = "";
+    if (hasReplacement) {
+      const fileName = String(req.body?.fileName || "").trim().slice(0, 500);
+      const fileSize = Number(req.body?.fileSize || 0);
+      const mimeType = String(req.body?.mimeType || "application/octet-stream").trim().slice(0, 240) || "application/octet-stream";
+      replacementBucket = String(req.body?.storageBucket || LMS_CURRICULUM_STORAGE_BUCKET).trim().slice(0, 200) || LMS_CURRICULUM_STORAGE_BUCKET;
+      if (!fileName) return res.status(400).json({ ok: false, error: "Replacement file name is required." });
+      if (!Number.isFinite(fileSize) || fileSize <= 0) return res.status(400).json({ ok: false, error: "The replacement file is empty." });
+      if (fileSize > LMS_CURRICULUM_MAX_FILE_BYTES) return res.status(413).json({ ok: false, error: "The file must be 500 MB or less." });
+      Object.assign(payload, {
+        resource_url: null,
+        storage_path: replacementPath,
+        storage_bucket: replacementBucket,
+        file_name: fileName,
+        file_size: fileSize,
+        mime_type: mimeType,
+      });
+    }
+
+    let rows;
+    try {
+      rows = await supabaseDb.request(`/lms_curriculum_resources?id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: payload,
+      });
+    } catch (error) {
+      if (hasReplacement) {
+        try { await supabaseDb.deleteStorageObjects([replacementPath], { bucketName: replacementBucket }); }
+        catch (cleanupError) { console.warn("Curriculum replacement rollback failed:", cleanupError?.message || cleanupError); }
+      }
+      throw error;
+    }
+    const resource = Array.isArray(rows) ? rows[0] : rows;
+    if (!resource?.id) return res.status(404).json({ ok: false, error: "Curriculum file was not found." });
+
+    if (hasReplacement && existing.storage_path && existing.storage_path !== replacementPath) {
+      try {
+        await supabaseDb.deleteStorageObjects([existing.storage_path], {
+          bucketName: existing.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
+        });
+      } catch (storageError) {
+        console.warn("Old curriculum file cleanup failed after replacement:", storageError?.message || storageError);
+      }
+    }
+    return res.json({ ok: true, resource: _lmsCurriculumClientResource(resource) });
+  } catch (error) {
+    console.error("PATCH grade curriculum resource error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update curriculum file." });
+  }
+});
+
+app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/view-ticket", async (req, res) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, private",
+    Pragma: "no-cache",
+    "Referrer-Policy": "no-referrer",
+  });
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    const resourceId = String(req.params?.resourceId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(gradeId) || !/^\d+$/.test(resourceId)) {
+      return res.status(400).json({ ok: false, error: "Invalid file ID." });
+    }
+    const rows = await supabaseDb.request(`/lms_curriculum_resources?select=id,name,file_name,file_size,mime_type,resource_type,storage_path,storage_bucket&id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}&limit=1`);
+    const resource = Array.isArray(rows) ? rows[0] : null;
+    if (!resource) return res.status(404).json({ ok: false, error: "Curriculum file was not found." });
+    const storagePath = String(resource.storage_path || "").trim();
+    if (!storagePath) {
+      return res.status(409).json({ ok: false, error: "This legacy file must be re-uploaded once before it can use protected in-system preview." });
+    }
+    const fileName = String(resource.file_name || resource.name || "Curriculum file").trim();
+    const mimeType = String(resource.mime_type || "application/octet-stream").trim() || "application/octet-stream";
+    const previewKind = _lmsCurriculumPreviewKind(mimeType, fileName);
+    const commonPreview = {
+      id: resource.id,
+      name: String(resource.name || fileName).trim(),
+      fileName,
+      fileSize: Number(resource.file_size || 0) || 0,
+      mimeType,
+      resourceType: String(resource.resource_type || "").trim(),
+      previewKind,
+      viewerName: String(req.session?.username || "Authorized user").trim().slice(0, 120) || "Authorized user",
+    };
+    if (previewKind === "unsupported") {
+      return res.json({
+        ok: true,
+        preview: {
+          ...commonPreview,
+          signedUrl: null,
+          message: "This format has no safe native browser preview. Convert it to PDF, image, video, audio, or text to keep it view-only inside the system.",
+        },
+      });
+    }
+    const signed = await supabaseDb.createSignedDownloadUrl(storagePath, {
+      bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
+      expiresIn: 180,
+    });
+    return res.json({
+      ok: true,
+      preview: {
+        ...commonPreview,
+        signedUrl: signed.signedUrl,
+        expiresIn: signed.expiresIn,
+      },
+    });
+  } catch (error) {
+    console.error("GET curriculum protected preview ticket error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to prepare protected preview." });
   }
 });
 

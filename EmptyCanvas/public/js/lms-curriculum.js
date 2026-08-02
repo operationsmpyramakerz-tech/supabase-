@@ -26,7 +26,11 @@
   let editingCurriculumGroupId = '';
   let editingThemeId = '';
   let editingGradeId = '';
+  let editingResourceId = '';
+  let editingResourceItem = null;
+  let viewerLoadToken = 0;
   const curriculumGroupItems = new Map();
+  const resourceItems = new Map();
   const folderItems = {
     theme: new Map(),
     grade: new Map(),
@@ -39,6 +43,16 @@
     const units = ['B', 'KB', 'MB', 'GB'];
     const index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
     return `${(value / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+  }
+  function fileExtension(name) {
+    const match = String(name || '').trim().match(/\.([a-z0-9]{1,10})$/i);
+    return match ? match[1].toUpperCase() : '';
+  }
+  function resourceFormat(item) {
+    const extension = fileExtension(item?.file_name || item?.name);
+    if (extension) return extension;
+    const mime = String(item?.mime_type || '').split('/').pop() || '';
+    return mime && mime !== 'octet-stream' ? mime.toUpperCase().slice(0, 12) : 'FILE';
   }
   async function jsonFetch(url, options = {}) {
     const response = await fetch(url, { credentials: 'include', cache: 'no-store', ...options });
@@ -67,9 +81,16 @@
       card.querySelector('[data-curriculum-actions-toggle]')?.setAttribute('aria-expanded', 'false');
     });
   }
+  function closeResourceActionMenus() {
+    document.querySelectorAll('.curriculum-file-card.is-actions-open').forEach((card) => {
+      card.classList.remove('is-actions-open');
+      card.querySelector('[data-resource-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    });
+  }
   function closeActionMenus() {
     closeFolderActionMenus();
     closeCurriculumGroupActionMenus();
+    closeResourceActionMenus();
   }
   function folderCard(item, kind) {
     const fallback = kind === 'theme' ? 'Theme folder' : 'Grade folder';
@@ -174,6 +195,7 @@
   function renderGrades(items) {
     const grid = $('curriculumGradeGrid');
     folderItems.grade.clear();
+    grid.classList.toggle('is-empty', !items.length);
     if (!items.length) {
       grid.innerHTML = emptyFolders('No grades yet', 'Use Add New Grade to create the first grade inside this theme.');
       icons();
@@ -224,24 +246,84 @@
     const data = await jsonFetch('/api/lms/curriculum');
     renderCurriculumGroups(data.groups || []);
   }
+  function resourceCard(file, key, config) {
+    const name = file.name || file.file_name || `Untitled ${config.label}`;
+    const meta = [resourceFormat(file), formatBytes(file.file_size)].filter(Boolean).join(' · ');
+    const note = file.notes || 'Open protected preview';
+    return `<article class="curriculum-file-card curriculum-file-card--${key}" data-resource-card="${esc(file.id)}">
+      <button type="button" class="curriculum-file-card__open" data-view-resource="${esc(file.id)}" aria-label="Preview ${esc(name)} inside the system">
+        <span class="curriculum-file-card__visual">
+          <span class="curriculum-file-card__document"><i data-feather="${config.icon}"></i></span>
+          <span class="curriculum-file-card__type-pill">${esc(config.label)}</span>
+        </span>
+        <span class="curriculum-file-card__details">
+          <h3 title="${esc(name)}">${esc(name)}</h3>
+          <span class="curriculum-file-card__meta">${esc(meta)}</span>
+          <span class="curriculum-file-card__note">${esc(note)}</span>
+        </span>
+      </button>
+      <div class="curriculum-resource-actions">
+        <button type="button" class="curriculum-resource-menu-btn" data-resource-actions-toggle aria-label="Actions for ${esc(name)}" aria-expanded="false"><i data-feather="more-vertical"></i></button>
+        <div class="curriculum-resource-actions__menu" role="menu">
+          <button type="button" data-edit-resource="${esc(file.id)}" role="menuitem"><i data-feather="edit-3"></i><span>Edit</span></button>
+          <button type="button" class="is-danger" data-delete-resource="${esc(file.id)}" role="menuitem"><i data-feather="trash-2"></i><span>Delete</span></button>
+        </div>
+      </div>
+    </article>`;
+  }
+  function bindResourceCards(container) {
+    container.querySelectorAll('[data-view-resource]').forEach((button) => {
+      button.addEventListener('click', () => openResourceViewer(button.dataset.viewResource));
+    });
+    container.querySelectorAll('[data-resource-actions-toggle]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const card = button.closest('.curriculum-file-card');
+        const willOpen = Boolean(card && !card.classList.contains('is-actions-open'));
+        closeActionMenus();
+        if (!card) return;
+        card.classList.toggle('is-actions-open', willOpen);
+        button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      });
+    });
+    container.querySelectorAll('[data-edit-resource]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const item = resourceItems.get(String(button.dataset.editResource || ''));
+        closeActionMenus();
+        if (item) openResourceEditModal(item);
+      });
+    });
+    container.querySelectorAll('[data-delete-resource]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeActionMenus();
+        deleteResource(button.dataset.deleteResource);
+      });
+    });
+  }
   function renderGroups(resources) {
     const grouped = {};
     Object.keys(TYPES).forEach((key) => { grouped[key] = []; });
-    (resources || []).forEach((item) => { if (grouped[item.resource_type]) grouped[item.resource_type].push(item); });
+    resourceItems.clear();
+    (resources || []).forEach((item) => {
+      if (!grouped[item.resource_type]) return;
+      grouped[item.resource_type].push(item);
+      resourceItems.set(String(item.id), item);
+    });
     $('curriculumGroups').innerHTML = Object.entries(TYPES).map(([key, config]) => `
       <article class="curriculum-group-card">
         <header>
-          <div class="curriculum-group-card__title"><span><i data-feather="${config.icon}"></i></span><div><h2>${config.label}</h2><p>${grouped[key].length} file${grouped[key].length === 1 ? '' : 's'}</p></div></div>
+          <div class="curriculum-group-card__title"><span><i data-feather="${config.icon}"></i></span><div><h2>${config.label}</h2></div></div>
           <button class="curriculum-add-file-btn" data-resource-type="${key}"><i data-feather="plus"></i><span>Add ${config.label}</span></button>
         </header>
-        <div class="curriculum-file-grid">${grouped[key].length ? grouped[key].map((file) => `
-          <article class="curriculum-file-card">
-            <div class="curriculum-file-card__icon"><i data-feather="file"></i></div>
-            <div class="curriculum-file-card__content"><h3>${esc(file.name)}</h3><p>${esc(file.notes || [file.mime_type, formatBytes(file.file_size)].filter(Boolean).join(' · ') || config.label)}</p><div>${file.resource_url ? `<a href="${esc(file.resource_url)}" target="_blank" rel="noopener"><i data-feather="external-link"></i> Open</a>` : ''}<button data-delete-resource="${esc(file.id)}" aria-label="Delete ${esc(file.name)}"><i data-feather="trash-2"></i></button></div></div>
-          </article>`).join('') : `<div class="curriculum-group-empty"><i data-feather="folder"></i><span>No ${config.label.toLowerCase()} files yet</span></div>`}</div>
+        <div class="curriculum-file-grid">${grouped[key].length ? grouped[key].map((file) => resourceCard(file, key, config)).join('') : `<div class="curriculum-group-empty"><i data-feather="folder"></i><span>No ${config.label.toLowerCase()} files yet</span></div>`}</div>
       </article>`).join('');
     $('curriculumGroups').querySelectorAll('[data-resource-type]').forEach((button) => button.addEventListener('click', () => openResourceModal(button.dataset.resourceType)));
-    $('curriculumGroups').querySelectorAll('[data-delete-resource]').forEach((button) => button.addEventListener('click', () => deleteResource(button.dataset.deleteResource)));
+    bindResourceCards($('curriculumGroups'));
     icons();
   }
 
@@ -263,7 +345,6 @@
     showView('grade');
     $('curriculumPageTitle').textContent = data.grade.name || 'Grade';
     $('curriculumGradeTitle').textContent = data.grade.name || 'Grade';
-    $('curriculumGradeDescription').textContent = data.grade.description || `Learning files for ${data.curriculum.name || 'this theme'}.`;
     renderGroups(data.resources || []);
   }
   function backToThemes() { currentThemeId = ''; currentGradeId = ''; history.pushState({}, '', '/lms/curriculum'); showView('list'); $('curriculumPageTitle').textContent = 'Curriculum'; loadCurriculumGroups().catch(showListError); }
@@ -367,6 +448,8 @@
     $('resourceFileInput').disabled = false;
     $('resourceFilePreview').hidden = true;
     $('resourceFilePreview').innerHTML = '';
+    $('resourceCurrentFile').hidden = true;
+    $('resourceCurrentFile').innerHTML = '';
     $('resourceUploadProgress').hidden = true;
     $('resourceUploadProgress').classList.remove('is-uploading', 'is-success', 'is-failed');
     $('resourceUploadProgressBar').style.width = '0%';
@@ -374,6 +457,8 @@
     $('resourceUploadProgressLabel').innerHTML = '<span class="curriculum-upload-status-icon"><i data-feather="upload-cloud"></i></span><span>Uploading…</span>';
     $('saveResourceBtn').disabled = false;
     $('saveResourceBtn').textContent = 'Upload & Add File';
+    $('resourceUploadLabel').textContent = 'Upload file';
+    $('resourceUploadHint').textContent = 'Select a file up to 500 MB. It will be stored securely.';
     icons();
   }
   function setUploadStatus(state, label, percent) {
@@ -389,12 +474,26 @@
     icons();
   }
   function wait(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
+  function clearSelectedResourceFile() {
+    selectedResourceFile = null;
+    $('resourceFileInput').value = '';
+    $('resourceFilePreview').hidden = true;
+    $('resourceFilePreview').innerHTML = '';
+    $('resourceUploadProgress').hidden = true;
+    $('resourceUploadProgress').classList.remove('is-uploading', 'is-success', 'is-failed');
+    $('saveResourceBtn').disabled = false;
+    $('resourceFileInput').disabled = false;
+    $('saveResourceBtn').textContent = editingResourceId ? 'Save Changes' : 'Upload & Add File';
+  }
   function renderSelectedFile() {
     const preview = $('resourceFilePreview');
     if (!selectedResourceFile) { preview.hidden = true; preview.innerHTML = ''; return; }
     preview.hidden = false;
     preview.innerHTML = `<span class="curriculum-upload-file__icon"><i data-feather="file-text"></i></span><span class="curriculum-upload-file__info"><b>${esc(selectedResourceFile.name)}</b><small>${esc([selectedResourceFile.type || 'File', formatBytes(selectedResourceFile.size)].filter(Boolean).join(' · '))}</small></span><button id="removeResourceFileBtn" type="button" aria-label="Remove selected file"><i data-feather="trash-2"></i></button>`;
-    $('removeResourceFileBtn').addEventListener('click', () => { resetResourceUploadUi(); $('resourceNameInput').value = ''; });
+    $('removeResourceFileBtn').addEventListener('click', () => {
+      clearSelectedResourceFile();
+      if (!editingResourceId) $('resourceNameInput').value = '';
+    });
     icons();
   }
   function chooseResourceFile(file) {
@@ -403,14 +502,16 @@
     $('resourceUploadProgress').classList.remove('is-uploading', 'is-success', 'is-failed');
     $('saveResourceBtn').disabled = false;
     $('resourceFileInput').disabled = false;
-    if (!file) { resetResourceUploadUi(); return; }
-    if (!file.size) { $('resourceModalError').textContent = 'The selected file is empty.'; resetResourceUploadUi(); return; }
-    if (file.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = `“${file.name}” is larger than 500 MB.`; resetResourceUploadUi(); return; }
+    if (!file) { clearSelectedResourceFile(); return; }
+    if (!file.size) { $('resourceModalError').textContent = 'The selected file is empty.'; clearSelectedResourceFile(); return; }
+    if (file.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = `“${file.name}” is larger than 500 MB.`; clearSelectedResourceFile(); return; }
     selectedResourceFile = file;
     if (!$('resourceNameInput').value.trim()) $('resourceNameInput').value = file.name.replace(/\.[^.]+$/, '').slice(0, 240);
     renderSelectedFile();
   }
   function openResourceModal(type) {
+    editingResourceId = '';
+    editingResourceItem = null;
     activeResourceType = type;
     const config = TYPES[type];
     resetResourceUploadUi();
@@ -422,11 +523,35 @@
     $('resourceModalError').textContent = '';
     setTimeout(() => $('resourceFileInput').focus(), 20);
   }
+  function openResourceEditModal(item) {
+    editingResourceId = String(item?.id || '');
+    editingResourceItem = item || null;
+    activeResourceType = String(item?.resource_type || '');
+    const config = TYPES[activeResourceType] || { label: 'File', icon: 'file-text' };
+    resetResourceUploadUi();
+    editingResourceId = String(item?.id || '');
+    editingResourceItem = item || null;
+    $('resourceNameInput').value = item?.name || '';
+    $('resourceNotesInput').value = item?.notes || '';
+    $('resourceModalKicker').textContent = `EDIT ${config.label.toUpperCase()}`;
+    $('resourceModalTitle').textContent = `Edit ${config.label}`;
+    $('resourceUploadLabel').textContent = 'Replace file (optional)';
+    $('resourceUploadHint').textContent = 'Choose a new file only if you want to replace the current one.';
+    $('saveResourceBtn').textContent = 'Save Changes';
+    $('resourceCurrentFile').hidden = false;
+    $('resourceCurrentFile').innerHTML = `<span><i data-feather="${config.icon}"></i></span><div><b>${esc(item?.file_name || item?.name || 'Current file')}</b><small>Current protected file · ${esc([resourceFormat(item), formatBytes(item?.file_size)].filter(Boolean).join(' · '))}</small></div>`;
+    $('resourceModal').hidden = false;
+    $('resourceModalError').textContent = '';
+    icons();
+    setTimeout(() => { $('resourceNameInput').focus(); $('resourceNameInput').select(); }, 20);
+  }
   function closeResourceModal() {
     if (resourceUploadPending) return;
     $('resourceModal').hidden = true;
     $('resourceModalError').textContent = '';
     activeResourceType = '';
+    editingResourceId = '';
+    editingResourceItem = null;
     resetResourceUploadUi();
   }
 
@@ -504,49 +629,214 @@
   }
   async function saveResource() {
     const name = $('resourceNameInput').value.trim();
+    const editId = editingResourceId;
     if (!name) { $('resourceModalError').textContent = 'File name is required.'; return; }
-    if (!selectedResourceFile) { $('resourceModalError').textContent = 'Choose a file to upload.'; return; }
-    if (selectedResourceFile.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = 'The file must be 500 MB or less.'; return; }
+    if (!editId && !selectedResourceFile) { $('resourceModalError').textContent = 'Choose a file to upload.'; return; }
+    if (selectedResourceFile && selectedResourceFile.size > MAX_FILE_BYTES) { $('resourceModalError').textContent = 'The file must be 500 MB or less.'; return; }
     const button = $('saveResourceBtn');
     resourceUploadPending = true;
     button.disabled = true;
     $('resourceFileInput').disabled = true;
     $('resourceModalError').textContent = '';
-    setUploadStatus('uploading', `Preparing ${selectedResourceFile.name}`, 0);
-    button.textContent = 'Uploading…';
+    if (selectedResourceFile) {
+      setUploadStatus('uploading', `Preparing ${selectedResourceFile.name}`, 0);
+      button.textContent = editId ? 'Replacing…' : 'Uploading…';
+    } else {
+      button.textContent = 'Saving…';
+    }
     try {
-      const ticketData = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/upload-ticket`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream' }),
-      });
-      const upload = ticketData.upload || {};
-      await uploadFileToSignedUrl(upload.signedUrl, selectedResourceFile, (percent) => {
-        setUploadStatus('uploading', percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…', percent);
-      });
-      await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, name, resourceUrl: upload.publicUrl, storagePath: upload.path, storageBucket: upload.bucket, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream', notes: $('resourceNotesInput').value.trim() }),
-      });
-      setUploadStatus('success', `${selectedResourceFile.name} uploaded successfully`, 100);
-      button.textContent = 'Uploaded';
-      await wait(900);
+      const payload = { name, notes: $('resourceNotesInput').value.trim() };
+      const uploadedFileName = selectedResourceFile?.name || '';
+      if (selectedResourceFile) {
+        const ticketData = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/upload-ticket`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream' }),
+        });
+        const upload = ticketData.upload || {};
+        await uploadFileToSignedUrl(upload.signedUrl, selectedResourceFile, (percent) => {
+          setUploadStatus('uploading', percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…', percent);
+        });
+        Object.assign(payload, {
+          resourceUrl: upload.publicUrl,
+          storagePath: upload.path,
+          storageBucket: upload.bucket,
+          fileName: selectedResourceFile.name,
+          fileSize: selectedResourceFile.size,
+          mimeType: selectedResourceFile.type || 'application/octet-stream',
+        });
+      }
+      if (editId) {
+        await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(editId)}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+      } else {
+        await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, ...payload }),
+        });
+      }
+      if (uploadedFileName) {
+        setUploadStatus('success', `${uploadedFileName} ${editId ? 'replaced' : 'uploaded'} successfully`, 100);
+        button.textContent = editId ? 'Updated' : 'Uploaded';
+        await wait(700);
+      }
       resourceUploadPending = false;
-      $('resourceModal').hidden = true;
-      resetResourceUploadUi();
-      $('resourceNameInput').value = '';
-      $('resourceNotesInput').value = '';
-      activeResourceType = '';
+      closeResourceModal();
       await loadGrade();
     } catch (error) {
-      const message = error.message || 'Failed to upload the file.';
+      const message = error.message || (editId ? 'Failed to update the file.' : 'Failed to upload the file.');
       $('resourceModalError').textContent = message;
       resourceUploadPending = false;
       button.disabled = false;
-      button.textContent = 'Try Upload Again';
+      button.textContent = editId ? 'Try Saving Again' : 'Try Upload Again';
       $('resourceFileInput').disabled = false;
-      setUploadStatus('failed', message, 100);
+      if (selectedResourceFile) setUploadStatus('failed', message, 100);
+    }
+  }
+  function setViewerStatus(message, state = 'loading') {
+    const status = $('resourceViewerLoading');
+    status.hidden = false;
+    status.classList.toggle('is-error', state === 'error');
+    status.innerHTML = state === 'error'
+      ? '<i data-feather="alert-triangle"></i><b></b>'
+      : '<span class="curriculum-viewer__spinner"></span><b></b>';
+    status.querySelector('b').textContent = message;
+    icons();
+  }
+  function fillViewerWatermark(label) {
+    const watermark = $('resourceViewerWatermark');
+    watermark.innerHTML = '';
+    const text = String(label || 'Authorized preview · Confidential').trim();
+    for (let index = 0; index < 24; index += 1) {
+      const item = document.createElement('span');
+      item.textContent = text;
+      watermark.appendChild(item);
+    }
+  }
+  function clearViewerContent() {
+    $('resourceViewerContent').innerHTML = '';
+    $('resourceViewerLoading').hidden = true;
+  }
+  function closeResourceViewer() {
+    viewerLoadToken += 1;
+    $('resourceViewerModal').hidden = true;
+    document.body.classList.remove('curriculum-viewer-open');
+    clearViewerContent();
+    $('resourceViewerWatermark').innerHTML = '';
+  }
+  async function renderProtectedPreview(ticket, token) {
+    if (token !== viewerLoadToken) return;
+    const content = $('resourceViewerContent');
+    const kind = String(ticket?.previewKind || 'unsupported');
+    const signedUrl = String(ticket?.signedUrl || '');
+    content.innerHTML = '';
+    if (kind === 'unsupported' || !signedUrl) {
+      setViewerStatus(ticket?.message || 'This file format cannot be previewed safely in the browser. Replace it with PDF, image, video, audio, or text to keep it view-only.', 'error');
+      return;
+    }
+
+    const markReady = () => {
+      if (token === viewerLoadToken) $('resourceViewerLoading').hidden = true;
+    };
+    const markFailed = () => {
+      if (token === viewerLoadToken) setViewerStatus('The protected preview could not be loaded. Please try again.', 'error');
+    };
+
+    if (kind === 'image') {
+      const image = document.createElement('img');
+      image.alt = ticket.name || 'Protected curriculum file';
+      image.draggable = false;
+      image.referrerPolicy = 'no-referrer';
+      image.addEventListener('load', markReady, { once: true });
+      image.addEventListener('error', markFailed, { once: true });
+      image.src = signedUrl;
+      content.appendChild(image);
+      return;
+    }
+    if (kind === 'video') {
+      const video = document.createElement('video');
+      video.controls = true;
+      video.autoplay = false;
+      video.preload = 'metadata';
+      video.disablePictureInPicture = true;
+      video.setAttribute('controlsList', 'nodownload noremoteplayback nofullscreen');
+      video.setAttribute('disableRemotePlayback', '');
+      video.addEventListener('loadedmetadata', markReady, { once: true });
+      video.addEventListener('error', markFailed, { once: true });
+      video.src = signedUrl;
+      content.appendChild(video);
+      return;
+    }
+    if (kind === 'audio') {
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.preload = 'metadata';
+      audio.setAttribute('controlsList', 'nodownload noremoteplayback');
+      audio.setAttribute('disableRemotePlayback', '');
+      audio.addEventListener('loadedmetadata', markReady, { once: true });
+      audio.addEventListener('error', markFailed, { once: true });
+      audio.src = signedUrl;
+      content.appendChild(audio);
+      return;
+    }
+    if (kind === 'text') {
+      try {
+        const response = await fetch(signedUrl, { cache: 'no-store', referrerPolicy: 'no-referrer' });
+        if (!response.ok) throw new Error('Preview request failed.');
+        const body = await response.text();
+        if (token !== viewerLoadToken) return;
+        const pre = document.createElement('pre');
+        pre.className = 'curriculum-viewer__text';
+        pre.textContent = body;
+        content.appendChild(pre);
+        markReady();
+      } catch {
+        markFailed();
+      }
+      return;
+    }
+
+    const frame = document.createElement('iframe');
+    frame.title = ticket.name || 'Protected curriculum preview';
+    frame.referrerPolicy = 'no-referrer';
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+    frame.addEventListener('load', markReady, { once: true });
+    frame.addEventListener('error', markFailed, { once: true });
+    frame.src = `${signedUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
+    content.appendChild(frame);
+  }
+  async function openResourceViewer(id) {
+    const cleanId = String(id || '');
+    const item = resourceItems.get(cleanId);
+    if (!item) return;
+    closeActionMenus();
+    const config = TYPES[item.resource_type] || { label: 'File', icon: 'file-text' };
+    const token = ++viewerLoadToken;
+    $('resourceViewerTitle').textContent = item.name || item.file_name || 'File preview';
+    $('resourceViewerType').textContent = `${config.label} · Protected preview`;
+    $('resourceViewerIcon').innerHTML = `<i data-feather="${config.icon}"></i>`;
+    $('resourceViewerModal').hidden = false;
+    document.body.classList.add('curriculum-viewer-open');
+    $('resourceViewerContent').innerHTML = '';
+    fillViewerWatermark('Confidential · Authorized preview');
+    setViewerStatus('Preparing protected preview…');
+    icons();
+    try {
+      const data = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(cleanId)}/view-ticket`);
+      if (token !== viewerLoadToken) return;
+      const ticket = data.preview || {};
+      fillViewerWatermark(`${ticket.viewerName || 'Authorized user'} · Confidential`);
+      await renderProtectedPreview(ticket, token);
+    } catch (error) {
+      if (token === viewerLoadToken) setViewerStatus(error.message || 'Unable to prepare the protected preview.', 'error');
     }
   }
   async function deleteResource(id) {
-    if (!confirm('Delete this curriculum file? This also removes it from Supabase Storage.')) return;
+    const item = resourceItems.get(String(id || ''));
+    const name = item?.name || 'this curriculum file';
+    const message = `You’re going to permanently delete “${name}”. The uploaded file will also be removed from protected storage.`;
+    const confirmed = window.OpsDeleteConfirm
+      ? await window.OpsDeleteConfirm.confirm({ title: 'Delete curriculum file?', itemType: 'curriculum file', itemName: name, message })
+      : window.confirm(`Delete “${name}”? This action cannot be undone.`);
+    if (!confirmed) return;
     try { await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadGrade(); }
     catch (error) { alert(error.message); }
   }
@@ -619,11 +909,31 @@
   document.querySelectorAll('[data-theme-close]').forEach((item) => item.addEventListener('click', closeThemeModal));
   document.querySelectorAll('[data-grade-close]').forEach((item) => item.addEventListener('click', closeGradeModal));
   document.querySelectorAll('[data-resource-close]').forEach((item) => item.addEventListener('click', closeResourceModal));
+  document.querySelectorAll('[data-viewer-close]').forEach((item) => item.addEventListener('click', closeResourceViewer));
+  $('closeResourceViewerBtn').addEventListener('click', closeResourceViewer);
+  $('resourceViewerStage').addEventListener('contextmenu', (event) => event.preventDefault());
+  $('resourceViewerStage').addEventListener('dragstart', (event) => event.preventDefault());
+  $('resourceViewerStage').addEventListener('copy', (event) => event.preventDefault());
   document.addEventListener('click', (event) => {
-    if (!event.target.closest('.curriculum-folder-actions') && !event.target.closest('.curriculum-catalog-actions')) closeActionMenus();
+    if (!event.target.closest('.curriculum-folder-actions') && !event.target.closest('.curriculum-catalog-actions') && !event.target.closest('.curriculum-resource-actions')) closeActionMenus();
   });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeActionMenus(); });
-  window.addEventListener('popstate', () => { parseRoute(); currentGradeId ? loadGrade().catch((error) => alert(error.message)) : currentThemeId ? loadTheme().catch((error) => alert(error.message)) : backToThemes(); });
+  document.addEventListener('keydown', (event) => {
+    const viewerOpen = !$('resourceViewerModal').hidden;
+    if (event.key === 'Escape') {
+      closeActionMenus();
+      if (viewerOpen) closeResourceViewer();
+      return;
+    }
+    if (viewerOpen && (event.ctrlKey || event.metaKey) && ['s', 'p', 'u', 'c'].includes(String(event.key || '').toLowerCase())) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  });
+  window.addEventListener('popstate', () => {
+    if (!$('resourceViewerModal').hidden) closeResourceViewer();
+    parseRoute();
+    currentGradeId ? loadGrade().catch((error) => alert(error.message)) : currentThemeId ? loadTheme().catch((error) => alert(error.message)) : backToThemes();
+  });
 
   parseRoute();
   currentGradeId ? loadGrade().catch((error) => { alert(error.message); backToGrades(); }) : currentThemeId ? loadTheme().catch((error) => { alert(error.message); backToThemes(); }) : loadCurriculumGroups().catch(showListError);

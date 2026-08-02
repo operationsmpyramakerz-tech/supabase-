@@ -16,7 +16,8 @@
   <link href="/css/style.css?v=lms-curriculum-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=lms-back-arrow-v10" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=lms-curriculum-v1" rel="stylesheet" />
-  <link href="/css/lms-curriculum.css?v=lms-curriculum-groups-v6" rel="stylesheet" />
+  <link href="/css/lms-curriculum.css?v=lms-curriculum-resources-v7" rel="stylesheet" />
+  <meta name="referrer" content="no-referrer" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-lms lms-curriculum-page" data-sidebar-open-scroll="instant">
@@ -53,7 +54,7 @@
         <section id="curriculumGradeView" hidden>
           <div class="curriculum-detail-toolbar">
             <button id="backToGradesBtn" class="curriculum-icon-btn" aria-label="Back to grades"><i data-feather="arrow-left"></i></button>
-            <div><span class="curriculum-kicker">GRADE FOLDER</span><h1 id="curriculumGradeTitle">Grade</h1><p id="curriculumGradeDescription">Files are grouped by curriculum content type.</p></div>
+            <div class="curriculum-detail-toolbar__copy"><h1 id="curriculumGradeTitle">Grade</h1></div>
           </div>
           <section id="curriculumGroups" class="curriculum-groups"></section>
         </section>
@@ -78,10 +79,11 @@
         <input id="resourceFileInput" class="curriculum-upload-field__input" type="file" />
         <label class="curriculum-upload-field__picker" for="resourceFileInput">
           <span class="curriculum-upload-field__icon"><i data-feather="paperclip"></i></span>
-          <span class="curriculum-upload-field__copy"><b>Upload file</b><small>Select a file up to 500 MB. It will be stored in Supabase Storage.</small></span>
+          <span class="curriculum-upload-field__copy"><b id="resourceUploadLabel">Upload file</b><small id="resourceUploadHint">Select a file up to 500 MB. It will be stored securely.</small></span>
           <span class="curriculum-upload-field__action">Choose file</span>
         </label>
       </div>
+      <div id="resourceCurrentFile" class="curriculum-current-file" hidden></div>
       <div id="resourceFilePreview" class="curriculum-upload-file" hidden></div>
       <div id="resourceUploadProgress" class="curriculum-upload-progress" hidden>
         <div class="curriculum-upload-progress__track"><span id="resourceUploadProgressBar"></span></div>
@@ -93,8 +95,27 @@
     </section>
   </div>
 
+  <div id="resourceViewerModal" class="curriculum-viewer" hidden role="dialog" aria-modal="true" aria-labelledby="resourceViewerTitle">
+    <div class="curriculum-viewer__backdrop" data-viewer-close></div>
+    <section class="curriculum-viewer__panel">
+      <header class="curriculum-viewer__header">
+        <div class="curriculum-viewer__identity">
+          <span id="resourceViewerIcon" class="curriculum-viewer__icon"><i data-feather="file-text"></i></span>
+          <div><span id="resourceViewerType" class="curriculum-viewer__type">Protected preview</span><h2 id="resourceViewerTitle">File preview</h2></div>
+        </div>
+        <button id="closeResourceViewerBtn" class="curriculum-viewer__close" type="button" aria-label="Close preview"><i data-feather="x"></i></button>
+      </header>
+      <div id="resourceViewerStage" class="curriculum-viewer__stage" tabindex="0">
+        <div id="resourceViewerLoading" class="curriculum-viewer__status"><span class="curriculum-viewer__spinner"></span><b>Preparing protected preview…</b></div>
+        <div id="resourceViewerContent" class="curriculum-viewer__content"></div>
+        <div id="resourceViewerWatermark" class="curriculum-viewer__watermark" aria-hidden="true"></div>
+      </div>
+      <footer class="curriculum-viewer__footer"><i data-feather="shield"></i><span>Protected in-system preview. Download, print, copy, and external-window controls are disabled.</span></footer>
+    </section>
+  </div>
+
   <script>if(window.feather)feather.replace()</script>
   <script src="/js/common-ui.js?v=lms-logo-lock-v9"></script>
-  <script src="/js/lms-curriculum.js?v=lms-curriculum-groups-v6"></script>
+  <script src="/js/lms-curriculum.js?v=lms-curriculum-resources-v7"></script>
 </body>
 </html>
