@@ -16900,7 +16900,30 @@ app.post("/api/lms/curriculum/:id/grades/:gradeId/upload-ticket", async (req, re
     const cleanName = _lmsCurriculumSafeFileName(fileName);
     const objectPath = `curriculum/${curriculumId}/grades/${gradeId}/${resourceType}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
     const ticket = await supabaseDb.createSignedUploadUrl(objectPath, { bucketName: LMS_CURRICULUM_STORAGE_BUCKET, upsert: false });
-    return res.status(201).json({ ok: true, upload: { signedUrl: ticket.signedUrl, path: ticket.path, bucket: ticket.bucket, publicUrl: ticket.publicUrl, fileName, fileSize, mimeType } });
+    const storageBaseUrl = String(supabaseDb.getConfig()?.url || "").trim().replace(/\/+$/, "");
+    const resumableApiKey = String(
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      ""
+    ).trim();
+    const resumableUrl = storageBaseUrl ? `${storageBaseUrl}/storage/v1/upload/resumable/sign` : "";
+    const resumableEnabled = Boolean(ticket.token && resumableUrl && resumableApiKey);
+    return res.status(201).json({
+      ok: true,
+      upload: {
+        mode: resumableEnabled ? "resumable" : "standard",
+        signedUrl: ticket.signedUrl,
+        token: ticket.token,
+        resumableUrl: resumableEnabled ? resumableUrl : null,
+        resumableApiKey: resumableEnabled ? resumableApiKey : null,
+        path: ticket.path,
+        bucket: ticket.bucket,
+        publicUrl: ticket.publicUrl,
+        fileName,
+        fileSize,
+        mimeType,
+      },
+    });
   } catch (error) {
     console.error("POST curriculum upload ticket error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to prepare the file upload." });
