@@ -800,7 +800,7 @@ body.curriculum-viewer-open{overflow:hidden}
   z-index:1;
   display:grid;
   grid-template-rows:auto minmax(0,1fr) auto;
-  width:min(1240px,100%);
+  width:min(1440px,100%);
   height:min(900px,calc(100vh - 36px));
   overflow:hidden;
   border:1px solid rgba(255,255,255,.12);
@@ -829,7 +829,7 @@ body.curriculum-viewer-open{overflow:hidden}
 .curriculum-viewer__close:hover{background:#ef7d16}
 .curriculum-viewer__close svg{width:19px;height:19px}
 .curriculum-viewer__stage{position:relative;min-height:0;overflow:hidden;background:#202733;outline:0;user-select:none;-webkit-user-select:none}
-.curriculum-viewer__content{position:absolute;inset:0;display:grid;place-items:center;overflow:auto}
+.curriculum-viewer__content{position:absolute;inset:0;z-index:1;display:grid;place-items:center;overflow:auto}
 .curriculum-viewer__content iframe{width:100%;height:100%;border:0;background:#4b5563}
 .curriculum-viewer__content img{display:block;max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none;user-drag:none}
 .curriculum-viewer__content video{width:100%;height:100%;background:#000;object-fit:contain}
@@ -850,7 +850,7 @@ body.curriculum-viewer-open{overflow:hidden}
 .curriculum-viewer__status{
   position:absolute;
   inset:0;
-  z-index:4;
+  z-index:50;
   display:grid;
   place-items:center;
   align-content:center;
@@ -868,7 +868,7 @@ body.curriculum-viewer-open{overflow:hidden}
 .curriculum-viewer__watermark{
   position:absolute;
   inset:-80px;
-  z-index:5;
+  z-index:40;
   display:grid;
   grid-template-columns:repeat(4,minmax(220px,1fr));
   grid-auto-rows:160px;
@@ -909,174 +909,344 @@ body.curriculum-viewer-open{overflow:hidden}
   }
 }
 
-/* Two-page protected PDF book ------------------------------------------- */
+/* Progressive, interactive two-page PDF book ----------------------------- */
+.curriculum-viewer.is-fullscreen-fallback{padding:0}
+.curriculum-viewer.is-fullscreen-fallback .curriculum-viewer__panel,
+.curriculum-viewer__panel:fullscreen,
+.curriculum-viewer__panel:-webkit-full-screen{
+  width:100vw;
+  max-width:none;
+  height:100vh;
+  max-height:none;
+  border:0;
+  border-radius:0;
+}
 .curriculum-pdf-reader{
+  --pdf-turn-progress:0;
+  --pdf-turn-shadow:0;
   width:100%;
   height:100%;
   min-height:0;
   display:grid;
-  grid-template-rows:48px minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr) 58px;
   overflow:hidden;
   background:
-    radial-gradient(circle at 50% 18%,rgba(255,255,255,.14),transparent 38%),
-    linear-gradient(145deg,#313b4a 0%,#202733 48%,#161d29 100%);
+    radial-gradient(circle at 13% 24%,rgba(248,159,92,.38),transparent 28%),
+    radial-gradient(circle at 88% 26%,rgba(116,204,193,.3),transparent 29%),
+    radial-gradient(circle at 48% 87%,rgba(251,221,143,.24),transparent 34%),
+    linear-gradient(145deg,#e9eef3 0%,#f5f1ea 48%,#e9f0ed 100%);
 }
-.curriculum-pdf-reader__toolbar{
-  position:relative;
-  z-index:8;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  padding:0 18px;
-  border-bottom:1px solid rgba(255,255,255,.08);
-  background:rgba(7,14,27,.58);
-  color:#d6dce5;
-  backdrop-filter:blur(12px);
+.curriculum-pdf-reader__viewport{position:relative;min-width:0;min-height:0;overflow:hidden;isolation:isolate}
+.curriculum-pdf-reader__viewport::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  opacity:.34;
+  background:
+    linear-gradient(115deg,transparent 0 42%,rgba(255,255,255,.52) 49%,transparent 56%),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.12) 0 1px,transparent 1px 6px);
+  pointer-events:none;
 }
-.curriculum-pdf-reader__title{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.02em}
-.curriculum-pdf-reader__title svg{width:16px;height:16px;color:#f59a49}
-.curriculum-pdf-reader__counter{padding:6px 10px;border:1px solid rgba(255,255,255,.09);border-radius:999px;background:rgba(255,255,255,.06);font-size:10px;font-weight:750}
-.curriculum-pdf-reader__counter strong{color:#fff}
 .curriculum-pdf-reader__stage{
-  position:relative;
-  min-width:0;
-  min-height:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:14px;
-  padding:12px 18px;
+  position:absolute;
+  inset:0;
   overflow:auto;
-  perspective:1700px;
+  overscroll-behavior:contain;
+  scrollbar-color:rgba(16,27,44,.32) transparent;
+  scrollbar-width:thin;
 }
+.curriculum-pdf-reader__stage::-webkit-scrollbar{width:8px;height:8px}
+.curriculum-pdf-reader__stage::-webkit-scrollbar-thumb{border-radius:999px;background:rgba(16,27,44,.28)}
+.curriculum-pdf-reader__canvas{position:relative;display:grid;place-items:center;min-width:100%;min-height:100%;padding:44px 76px 52px;perspective:2100px}
 .curriculum-pdf-book{
   position:relative;
+  z-index:2;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   flex:0 0 auto;
-  overflow:visible;
-  border:7px solid #18130f;
-  border-radius:12px 12px 16px 16px;
-  background:#d9cfbf;
+  border:8px solid #152238;
+  border-radius:13px 13px 18px 18px;
+  background:#dcd6ca;
   box-shadow:
-    0 34px 55px rgba(0,0,0,.48),
-    0 8px 0 #0d0b09,
-    inset 0 0 0 1px rgba(255,255,255,.22);
-  transform:rotateX(2.4deg);
+    0 42px 64px rgba(22,31,45,.31),
+    0 14px 18px rgba(22,31,45,.2),
+    0 9px 0 #0b1425,
+    inset 0 0 0 1px rgba(255,255,255,.28);
+  cursor:grab;
+  touch-action:none;
+  transform:rotateX(2.8deg) translateZ(0);
   transform-style:preserve-3d;
+  transition:filter .2s ease,box-shadow .2s ease;
 }
 .curriculum-pdf-book::before,
 .curriculum-pdf-book::after{
   content:'';
   position:absolute;
   z-index:-1;
-  bottom:-13px;
-  width:47%;
-  height:24px;
-  border-radius:0 0 16px 16px;
-  background:repeating-linear-gradient(180deg,#e9e1d5 0 2px,#c8bcaa 2px 3px);
-  box-shadow:0 12px 20px rgba(0,0,0,.28);
+  bottom:-17px;
+  width:47.5%;
+  height:28px;
+  border-radius:0 0 17px 17px;
+  background:repeating-linear-gradient(180deg,#faf8f3 0 2px,#d7d0c5 2px 3px);
+  box-shadow:0 13px 20px rgba(20,31,45,.2);
 }
-.curriculum-pdf-book::before{left:1.5%;transform:skewX(-7deg)}
-.curriculum-pdf-book::after{right:1.5%;transform:skewX(7deg)}
-.curriculum-pdf-page{
+.curriculum-pdf-book::before{left:1.3%;transform:skewX(-6deg)}
+.curriculum-pdf-book::after{right:1.3%;transform:skewX(6deg)}
+.curriculum-pdf-reader.is-dragging-page .curriculum-pdf-book{cursor:grabbing;box-shadow:0 48px 76px rgba(22,31,45,.36),0 15px 22px rgba(22,31,45,.23),0 9px 0 #0b1425}
+.curriculum-pdf-reader.is-preparing-turn .curriculum-pdf-book{cursor:progress;filter:saturate(.92)}
+.curriculum-pdf-page,
+.curriculum-pdf-sheet__face{
   position:relative;
-  z-index:2;
   min-width:0;
   min-height:0;
   display:grid;
   place-items:center;
   overflow:hidden;
-  background:
-    linear-gradient(90deg,rgba(116,93,65,.09),transparent 7%),
-    #fffefa;
-  backface-visibility:hidden;
+  background:#fffefa;
   transform-style:preserve-3d;
 }
+.curriculum-pdf-page{z-index:2}
 .curriculum-pdf-page--left{
-  border-radius:5px 2px 2px 9px;
-  box-shadow:inset -20px 0 25px -24px rgba(47,33,21,.72),inset 1px 0 0 rgba(255,255,255,.8);
-  transform:rotateY(1.15deg);
-  transform-origin:right center;
+  border-radius:5px 1px 1px 9px;
+  background:linear-gradient(270deg,rgba(49,52,58,.1),transparent 7%),#fffefa;
+  box-shadow:inset -22px 0 29px -27px rgba(38,36,34,.72),inset 1px 0 0 rgba(255,255,255,.9);
 }
 .curriculum-pdf-page--right{
-  border-radius:2px 5px 9px 2px;
-  box-shadow:inset 20px 0 25px -24px rgba(47,33,21,.72),inset -1px 0 0 rgba(255,255,255,.8);
-  transform:rotateY(-1.15deg);
-  transform-origin:left center;
+  border-radius:1px 5px 9px 1px;
+  background:linear-gradient(90deg,rgba(49,52,58,.1),transparent 7%),#fffefa;
+  box-shadow:inset 22px 0 29px -27px rgba(38,36,34,.72),inset -1px 0 0 rgba(255,255,255,.9);
 }
-.curriculum-pdf-page canvas{
+.curriculum-pdf-page canvas,
+.curriculum-pdf-sheet__face canvas{
   display:block;
-  max-width:calc(100% - 20px);
-  max-height:calc(100% - 20px);
+  max-width:calc(100% - 22px);
+  max-height:calc(100% - 22px);
   background:#fff;
-  box-shadow:0 1px 3px rgba(15,23,42,.12);
+  box-shadow:0 1px 4px rgba(15,23,42,.1);
   pointer-events:none;
 }
-.curriculum-pdf-page.is-blank::after{
+.curriculum-pdf-page>img{
+  display:block;
+  width:auto;
+  height:auto;
+  max-width:calc(100% - 22px);
+  max-height:calc(100% - 22px);
+  object-fit:contain;
+  background:#fff;
+  box-shadow:0 1px 4px rgba(15,23,42,.1);
+  pointer-events:none;
+}
+.curriculum-pdf-page.is-blank::after,
+.curriculum-pdf-sheet__face.is-blank::after{
   content:'End of book';
-  color:#b4aa9d;
+  color:#b1a99f;
   font-size:10px;
-  font-weight:800;
-  letter-spacing:.1em;
+  font-weight:850;
+  letter-spacing:.12em;
   text-transform:uppercase;
 }
 .curriculum-pdf-page__number{
   position:absolute;
-  bottom:5px;
+  bottom:6px;
   left:50%;
-  z-index:3;
-  color:#8e8579;
+  z-index:5;
+  color:#8d857c;
   font:700 9px/1 Arial,sans-serif;
   transform:translateX(-50%);
 }
 .curriculum-pdf-book__spine{
   position:absolute;
-  inset:-1px auto -1px 50%;
-  z-index:6;
-  width:18px;
+  inset:-2px auto -2px 50%;
+  z-index:18;
+  width:24px;
   pointer-events:none;
-  background:linear-gradient(90deg,transparent,rgba(50,34,22,.24) 44%,rgba(255,255,255,.28) 51%,rgba(50,34,22,.2) 58%,transparent);
-  transform:translateX(-50%);
+  background:linear-gradient(90deg,transparent,rgba(38,35,31,.18) 31%,rgba(38,35,31,.28) 46%,rgba(255,255,255,.46) 51%,rgba(38,35,31,.2) 58%,transparent);
+  filter:blur(.1px);
+  transform:translateX(-50%) translateZ(7px);
 }
-.curriculum-pdf-turn{
-  position:relative;
-  z-index:10;
+.curriculum-pdf-sheet{
+  position:absolute;
+  top:0;
+  z-index:14;
+  width:50%;
+  height:100%;
+  transform-style:preserve-3d;
+  will-change:transform;
+}
+.curriculum-pdf-sheet[hidden]{display:none}
+.curriculum-pdf-sheet--forward{left:50%;transform-origin:left center}
+.curriculum-pdf-sheet--backward{left:0;transform-origin:right center}
+.curriculum-pdf-sheet__face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.curriculum-pdf-sheet__back{transform:rotateY(180deg)}
+.curriculum-pdf-reader.is-turning-forward .curriculum-pdf-sheet__front{
+  border-radius:1px 5px 9px 1px;
+  background:linear-gradient(90deg,rgba(49,52,58,.12),transparent 8%),#fffefa;
+  box-shadow:inset 20px 0 28px -25px rgba(38,36,34,.72);
+}
+.curriculum-pdf-reader.is-turning-forward .curriculum-pdf-sheet__back{
+  border-radius:5px 1px 1px 9px;
+  background:linear-gradient(270deg,rgba(49,52,58,.12),transparent 8%),#fffefa;
+  box-shadow:inset -20px 0 28px -25px rgba(38,36,34,.72);
+}
+.curriculum-pdf-reader.is-turning-backward .curriculum-pdf-sheet__front{
+  border-radius:5px 1px 1px 9px;
+  background:linear-gradient(270deg,rgba(49,52,58,.12),transparent 8%),#fffefa;
+  box-shadow:inset -20px 0 28px -25px rgba(38,36,34,.72);
+}
+.curriculum-pdf-reader.is-turning-backward .curriculum-pdf-sheet__back{
+  border-radius:1px 5px 9px 1px;
+  background:linear-gradient(90deg,rgba(49,52,58,.12),transparent 8%),#fffefa;
+  box-shadow:inset 20px 0 28px -25px rgba(38,36,34,.72);
+}
+.curriculum-pdf-sheet__shade{
+  position:absolute;
+  inset:0;
+  z-index:5;
+  pointer-events:none;
+  opacity:calc(var(--pdf-turn-shadow) * .38);
+  background:linear-gradient(90deg,rgba(6,13,24,.76),transparent 26%,transparent 72%,rgba(6,13,24,.34));
+  backface-visibility:hidden;
+}
+.curriculum-pdf-sheet::after{
+  content:'';
+  position:absolute;
+  inset:0 -26px 0;
+  z-index:-1;
+  pointer-events:none;
+  opacity:calc(var(--pdf-turn-shadow) * .55);
+  background:radial-gradient(ellipse at center,rgba(10,20,34,.55),transparent 67%);
+  filter:blur(10px);
+}
+.curriculum-pdf-edge-turn{
+  position:absolute;
+  top:50%;
+  z-index:30;
   display:grid;
-  width:42px;
-  min-width:42px;
-  height:42px;
+  width:44px;
+  height:64px;
   padding:0;
   place-items:center;
-  border:1px solid rgba(255,255,255,.16);
-  border-radius:999px;
-  background:rgba(7,14,27,.72);
-  color:#fff;
-  box-shadow:0 12px 25px rgba(0,0,0,.26);
+  border:1px solid rgba(21,34,56,.11);
+  border-radius:16px;
+  background:rgba(255,255,255,.58);
+  color:#17243a;
+  box-shadow:0 12px 28px rgba(20,30,45,.13);
   cursor:pointer;
-  backdrop-filter:blur(10px);
-  transition:transform .18s ease,background .18s ease,opacity .18s ease;
+  opacity:.78;
+  backdrop-filter:blur(12px);
+  transform:translateY(-50%);
+  transition:background .18s ease,color .18s ease,opacity .18s ease,transform .18s ease;
 }
-.curriculum-pdf-turn:hover:not(:disabled){background:#ef7d16;transform:translateY(-1px) scale(1.04)}
-.curriculum-pdf-turn:disabled{opacity:.24;cursor:default}
-.curriculum-pdf-turn svg{width:20px;height:20px}
-.curriculum-pdf-reader.is-turning-forward .curriculum-pdf-page--right{animation:curriculumPdfTurnForward .38s ease-in-out both}
-.curriculum-pdf-reader.is-turning-backward .curriculum-pdf-page--left{animation:curriculumPdfTurnBackward .38s ease-in-out both}
-@keyframes curriculumPdfTurnForward{0%{transform:rotateY(-1deg)}48%{transform:rotateY(-66deg);filter:brightness(.82)}100%{transform:rotateY(-1deg);filter:brightness(1)}}
-@keyframes curriculumPdfTurnBackward{0%{transform:rotateY(1deg)}48%{transform:rotateY(66deg);filter:brightness(.82)}100%{transform:rotateY(1deg);filter:brightness(1)}}
+.curriculum-pdf-edge-turn--previous{left:20px}
+.curriculum-pdf-edge-turn--next{right:20px}
+.curriculum-pdf-edge-turn:hover:not(:disabled){background:#ef7d16;color:#fff;opacity:1;transform:translateY(-50%) scale(1.04)}
+.curriculum-pdf-edge-turn:disabled{opacity:0;pointer-events:none}
+.curriculum-pdf-edge-turn svg{width:21px;height:21px}
+.curriculum-pdf-drag-hint{
+  position:absolute;
+  left:50%;
+  bottom:12px;
+  z-index:28;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:7px 11px;
+  border:1px solid rgba(21,34,56,.1);
+  border-radius:999px;
+  background:rgba(255,255,255,.55);
+  color:#586376;
+  font-size:9px;
+  font-weight:800;
+  pointer-events:none;
+  backdrop-filter:blur(10px);
+  transform:translateX(-50%);
+  transition:opacity .18s ease;
+}
+.curriculum-pdf-drag-hint svg{width:13px;height:13px;color:#ef7d16}
+.curriculum-pdf-reader.is-dragging-page .curriculum-pdf-drag-hint,
+.curriculum-pdf-reader.is-preparing-turn .curriculum-pdf-drag-hint{opacity:0}
+.curriculum-pdf-tools{
+  position:relative;
+  z-index:45;
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  gap:16px;
+  min-width:0;
+  padding:7px 16px;
+  border-top:1px solid rgba(255,255,255,.09);
+  background:rgba(7,14,27,.96);
+  color:#fff;
+  box-shadow:0 -12px 30px rgba(10,19,32,.12);
+  backdrop-filter:blur(18px);
+}
+.curriculum-pdf-tools__group{display:inline-flex;align-items:center;gap:5px;justify-self:start}
+.curriculum-pdf-tools__navigation{justify-self:center}
+.curriculum-pdf-tools button{
+  display:grid;
+  width:38px;
+  height:38px;
+  padding:0;
+  place-items:center;
+  border:1px solid transparent;
+  border-radius:11px;
+  background:transparent;
+  color:#d8dee8;
+  cursor:pointer;
+  transition:background .16s ease,color .16s ease,border-color .16s ease,transform .16s ease;
+}
+.curriculum-pdf-tools button:hover:not(:disabled){border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.09);color:#fff;transform:translateY(-1px)}
+.curriculum-pdf-tools button:disabled{opacity:.28;cursor:default}
+.curriculum-pdf-tools button svg{width:17px;height:17px}
+.curriculum-pdf-tools__zoom{min-width:47px;color:#aeb8c7;font-size:10px;font-weight:800;text-align:center}
+.curriculum-pdf-tools__counter{display:inline-flex;align-items:center;gap:6px;min-width:104px;padding:8px 13px;justify-content:center;border:1px solid rgba(255,255,255,.11);border-radius:11px;background:rgba(255,255,255,.075);font-size:11px;font-variant-numeric:tabular-nums}
+.curriculum-pdf-tools__counter span{color:#697588}
+.curriculum-pdf-tools__counter strong:first-child{color:#fff}
+.curriculum-pdf-tools__counter strong:last-child{color:#aeb8c7}
+.curriculum-pdf-tools__fullscreen{justify-self:end}
+.curriculum-pdf-quick-status{
+  position:relative;
+  z-index:45;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-width:0;
+  padding:9px 16px;
+  border-top:1px solid rgba(255,255,255,.09);
+  background:rgba(7,14,27,.96);
+  color:#aeb8c7;
+  font-size:10px;
+  text-align:center;
+  backdrop-filter:blur(18px);
+}
+.curriculum-pdf-quick-status b{color:#fff}
+.curriculum-pdf-quick-status__spinner{width:14px;height:14px;flex:0 0 auto;border:2px solid rgba(255,255,255,.18);border-top-color:#ef7d16;border-radius:999px;animation:curriculumViewerSpin .8s linear infinite}
+.curriculum-pdf-reader--fast-preview .curriculum-pdf-book{cursor:default}
 @media(max-width:700px){
-  .curriculum-pdf-reader{grid-template-rows:44px minmax(0,1fr)}
-  .curriculum-pdf-reader__toolbar{padding:0 12px}
-  .curriculum-pdf-reader__title b{display:none}
-  .curriculum-pdf-reader__stage{gap:6px;padding:10px 6px}
-  .curriculum-pdf-turn{position:absolute;top:50%;width:36px;min-width:36px;height:36px;transform:translateY(-50%)}
-  .curriculum-pdf-turn:hover:not(:disabled){transform:translateY(-50%) scale(1.03)}
-  .curriculum-pdf-turn--previous{left:8px}
-  .curriculum-pdf-turn--next{right:8px}
-  .curriculum-pdf-book{border-width:5px}
+  .curriculum-pdf-reader{grid-template-rows:minmax(0,1fr) 52px}
+  .curriculum-pdf-reader__canvas{padding:30px 14px 42px}
+  .curriculum-pdf-book{border-width:5px;border-radius:9px 9px 12px 12px;box-shadow:0 27px 42px rgba(22,31,45,.29),0 8px 12px rgba(22,31,45,.18),0 6px 0 #0b1425}
+  .curriculum-pdf-book::before,.curriculum-pdf-book::after{bottom:-12px;height:20px}
+  .curriculum-pdf-page canvas,.curriculum-pdf-sheet__face canvas{max-width:calc(100% - 10px);max-height:calc(100% - 12px)}
+  .curriculum-pdf-page>img{max-width:calc(100% - 10px);max-height:calc(100% - 12px)}
+  .curriculum-pdf-book__spine{width:14px}
+  .curriculum-pdf-edge-turn{width:34px;height:46px;border-radius:12px}
+  .curriculum-pdf-edge-turn--previous{left:7px}
+  .curriculum-pdf-edge-turn--next{right:7px}
+  .curriculum-pdf-drag-hint{display:none}
+  .curriculum-pdf-tools{grid-template-columns:auto minmax(0,1fr) auto;gap:6px;padding:5px 7px}
+  .curriculum-pdf-tools button{width:34px;height:34px;border-radius:9px}
+  .curriculum-pdf-tools__group{gap:1px}
+  .curriculum-pdf-tools__zoom{display:none}
+  .curriculum-pdf-tools__navigation{justify-self:center}
+  .curriculum-pdf-tools__counter{min-width:82px;padding:7px 8px}
+  .curriculum-pdf-quick-status{padding:8px 10px;font-size:9px}
+  .curriculum-pdf-quick-status span:last-child{display:none}
 }
 @media(prefers-reduced-motion:reduce){
-  .curriculum-pdf-reader.is-turning-forward .curriculum-pdf-page--right,
-  .curriculum-pdf-reader.is-turning-backward .curriculum-pdf-page--left{animation:none}
+  .curriculum-pdf-book,
+  .curriculum-pdf-edge-turn,
+  .curriculum-pdf-tools button{transition:none}
 }

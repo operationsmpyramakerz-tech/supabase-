@@ -16501,14 +16501,30 @@ function _lmsCurriculumClientResource(resource = {}) {
   return safeResource;
 }
 
+function _lmsCurriculumPdfPreviewObjectPath(storagePath = "", pageNumber = 1) {
+  const cleanPath = String(storagePath || "").trim().replace(/^\/+/, "");
+  const cleanPage = Math.max(1, Math.min(2, Number(pageNumber) || 1));
+  return cleanPath ? `${cleanPath}.fast-preview-page-${cleanPage}.jpg` : "";
+}
+
+function _lmsCurriculumStoredObjectPaths(resource = {}) {
+  const storagePath = String(resource?.storage_path || "").trim();
+  if (!storagePath) return [];
+  return [
+    storagePath,
+    _lmsCurriculumPdfPreviewObjectPath(storagePath, 1),
+    _lmsCurriculumPdfPreviewObjectPath(storagePath, 2),
+  ].filter(Boolean);
+}
+
 async function _lmsCurriculumCleanupStoredResources(resources = []) {
   const pathsByBucket = new Map();
   (Array.isArray(resources) ? resources : []).forEach((resource) => {
-    const path = String(resource?.storage_path || "").trim();
-    if (!path) return;
+    const paths = _lmsCurriculumStoredObjectPaths(resource);
+    if (!paths.length) return;
     const bucket = String(resource?.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET || "lms-curriculum").trim() || "lms-curriculum";
     if (!pathsByBucket.has(bucket)) pathsByBucket.set(bucket, []);
-    pathsByBucket.get(bucket).push(path);
+    pathsByBucket.get(bucket).push(...paths);
   });
   for (const [bucketName, paths] of pathsByBucket.entries()) {
     for (let index = 0; index < paths.length; index += 100) {
@@ -16900,6 +16916,26 @@ app.post("/api/lms/curriculum/:id/grades/:gradeId/upload-ticket", async (req, re
     const cleanName = _lmsCurriculumSafeFileName(fileName);
     const objectPath = `curriculum/${curriculumId}/grades/${gradeId}/${resourceType}/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
     const ticket = await supabaseDb.createSignedUploadUrl(objectPath, { bucketName: LMS_CURRICULUM_STORAGE_BUCKET, upsert: false });
+    let previewUploads = [];
+    if (_lmsCurriculumPreviewKind(mimeType, fileName) === "pdf") {
+      const previewResults = await Promise.allSettled([1, 2].map(async (pageNumber) => {
+        const previewPath = _lmsCurriculumPdfPreviewObjectPath(objectPath, pageNumber);
+        const previewTicket = await supabaseDb.createSignedUploadUrl(previewPath, {
+          bucketName: LMS_CURRICULUM_STORAGE_BUCKET,
+          upsert: false,
+        });
+        return {
+          pageNumber,
+          signedUrl: previewTicket.signedUrl,
+          path: previewTicket.path,
+          bucket: previewTicket.bucket,
+          mimeType: "image/jpeg",
+        };
+      }));
+      previewUploads = previewResults
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value);
+    }
     const storageBaseUrl = String(supabaseDb.getConfig()?.url || "").trim().replace(/\/+$/, "");
     const resumableApiKey = String(
       process.env.SUPABASE_ANON_KEY ||
@@ -16922,6 +16958,7 @@ app.post("/api/lms/curriculum/:id/grades/:gradeId/upload-ticket", async (req, re
         fileName,
         fileSize,
         mimeType,
+        previewUploads,
       },
     });
   } catch (error) {
@@ -17010,7 +17047,11 @@ app.patch("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId", async
       });
     } catch (error) {
       if (hasReplacement) {
-        try { await supabaseDb.deleteStorageObjects([replacementPath], { bucketName: replacementBucket }); }
+        try {
+          await supabaseDb.deleteStorageObjects(_lmsCurriculumStoredObjectPaths({ storage_path: replacementPath }), {
+            bucketName: replacementBucket,
+          });
+        }
         catch (cleanupError) { console.warn("Curriculum replacement rollback failed:", cleanupError?.message || cleanupError); }
       }
       throw error;
@@ -17020,7 +17061,7 @@ app.patch("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId", async
 
     if (hasReplacement && existing.storage_path && existing.storage_path !== replacementPath) {
       try {
-        await supabaseDb.deleteStorageObjects([existing.storage_path], {
+        await supabaseDb.deleteStorageObjects(_lmsCurriculumStoredObjectPaths(existing), {
           bucketName: existing.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
         });
       } catch (storageError) {
@@ -17078,16 +17119,94 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/view-tick
       });
     }
     const streamUrl = `/api/lms/curriculum/${encodeURIComponent(curriculumId)}/grades/${encodeURIComponent(gradeId)}/resources/${encodeURIComponent(resourceId)}/stream`;
+    const previewUrls = previewKind === "pdf"
+      ? [1, 2].map((pageNumber) => `/api/lms/curriculum/${encodeURIComponent(curriculumId)}/grades/${encodeURIComponent(gradeId)}/resources/${encodeURIComponent(resourceId)}/fast-preview/${pageNumber}`)
+      : [];
     return res.json({
       ok: true,
       preview: {
         ...commonPreview,
         streamUrl,
+        previewUrls,
       },
     });
   } catch (error) {
     console.error("GET curriculum protected preview ticket error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to prepare protected preview." });
+  }
+});
+
+app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/fast-preview/:pageNumber", async (req, res) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, private",
+    Pragma: "no-cache",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Resource-Policy": "same-origin",
+  });
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    const resourceId = String(req.params?.resourceId || "").trim();
+    const pageNumber = Number(req.params?.pageNumber || 0);
+    if (
+      !/^\d+$/.test(curriculumId) ||
+      !/^\d+$/.test(gradeId) ||
+      !/^\d+$/.test(resourceId) ||
+      ![1, 2].includes(pageNumber)
+    ) {
+      return res.status(400).end();
+    }
+    const rows = await supabaseDb.request(`/lms_curriculum_resources?select=id,file_name,mime_type,storage_path,storage_bucket&id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}&limit=1`);
+    const resource = Array.isArray(rows) ? rows[0] : null;
+    if (!resource) return res.status(404).end();
+    const storagePath = String(resource.storage_path || "").trim();
+    if (!storagePath || _lmsCurriculumPreviewKind(resource.mime_type, resource.file_name) !== "pdf") {
+      return res.status(404).end();
+    }
+    const previewPath = _lmsCurriculumPdfPreviewObjectPath(storagePath, pageNumber);
+    const signed = await supabaseDb.createSignedDownloadUrl(previewPath, {
+      bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
+      expiresIn: 90,
+    });
+    const abortController = new AbortController();
+    const abortUpstream = () => abortController.abort();
+    if (typeof req.once === "function") req.once("aborted", abortUpstream);
+    if (typeof res.once === "function") res.once("close", abortUpstream);
+    const upstream = await fetch(signed.signedUrl, {
+      method: req.method === "HEAD" ? "HEAD" : "GET",
+      headers: { Accept: "image/jpeg", "Accept-Encoding": "identity" },
+      redirect: "follow",
+      signal: abortController.signal,
+    });
+    if (upstream.status === 404) {
+      try { await upstream.body?.cancel(); } catch {}
+      return res.status(404).end();
+    }
+    if (!upstream.ok || (req.method !== "HEAD" && !upstream.body)) {
+      try { await upstream.body?.cancel(); } catch {}
+      const error = new Error("Fast PDF preview storage did not return the requested page.");
+      error.status = upstream.status || 502;
+      throw error;
+    }
+    res.status(200);
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Disposition", `inline; filename="page-${pageNumber}.jpg"`);
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    if (req.method === "HEAD") return res.end();
+    const stream = Readable.fromWeb(upstream.body);
+    stream.on("error", (streamError) => {
+      if (streamError?.name !== "AbortError") console.error("Curriculum fast preview stream error:", streamError?.message || streamError);
+      if (!res.headersSent) res.status(502).end();
+      else res.destroy(streamError);
+    });
+    stream.pipe(res);
+  } catch (error) {
+    if (error?.status === 404) return res.status(404).end();
+    console.error("GET curriculum fast preview error:", error?.details || error?.body || error);
+    if (res.headersSent) return res.destroy(error);
+    return res.status(error?.status || 500).end();
   }
 });
 
@@ -17184,7 +17303,11 @@ app.delete("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId", asyn
     if (!resource) return res.status(404).json({ ok: false, error: "Curriculum file was not found." });
     await supabaseDb.request(`/lms_curriculum_resources?id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
     if (resource.storage_path) {
-      try { await supabaseDb.deleteStorageObjects([resource.storage_path], { bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET }); }
+      try {
+        await supabaseDb.deleteStorageObjects(_lmsCurriculumStoredObjectPaths(resource), {
+          bucketName: resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET,
+        });
+      }
       catch (storageError) { console.warn("Curriculum storage cleanup failed:", storageError?.message || storageError); }
     }
     return res.json({ ok: true });
