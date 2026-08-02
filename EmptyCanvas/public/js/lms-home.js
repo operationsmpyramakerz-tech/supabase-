@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     co_instructors: 'Co-Instructors', school_coordinators: 'School Coordinators', students: 'Students', parents: 'Parents'
   };
   const resourceLabels = {
-    teacher_guide: 'Teacher Guide', lesson_plan: 'Lesson Plan', presentation: 'Presentation', materials: 'Materials', exam: 'Exam'
+    book: 'Book', teacher_guide: 'Teacher Guide', lesson_plan: 'Lesson Plan', presentation: 'Presentation', materials: 'Materials', exam: 'Exam'
   };
   const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const n = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;

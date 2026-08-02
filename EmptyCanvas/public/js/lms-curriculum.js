@@ -2,6 +2,7 @@
   'use strict';
 
   const TYPES = {
+    book: { label: 'Book', icon: 'book-open' },
     teacher_guide: { label: 'Teacher Guide', icon: 'book' },
     lesson_plan: { label: 'Lesson Plan', icon: 'clipboard' },
     presentation: { label: 'Presentation', icon: 'monitor' },
@@ -48,7 +49,18 @@
   }
   function folderCard(item, kind) {
     const fallback = kind === 'theme' ? 'Theme folder' : 'Grade folder';
-    return `<button class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}"><div class="curriculum-folder-card__visual"><i data-feather="folder"></i></div><div class="curriculum-folder-card__body"><h3>${esc(item.name)}</h3><p>${esc(item.description || fallback)}</p><span><i data-feather="folder-open"></i> Open ${kind}</span></div></button>`;
+    const name = item.name || (kind === 'theme' ? 'Untitled Theme' : 'Untitled Grade');
+    const caption = item.description || fallback;
+    return `<button type="button" class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}" aria-label="Open ${esc(name)}">
+      <span class="curriculum-folder-card__figure" aria-hidden="true">
+        <span class="curriculum-folder-card__paper curriculum-folder-card__paper--left"></span>
+        <span class="curriculum-folder-card__paper curriculum-folder-card__paper--middle"></span>
+        <span class="curriculum-folder-card__paper curriculum-folder-card__paper--right"></span>
+      </span>
+      <span class="curriculum-folder-card__name" title="${esc(name)}">${esc(name)}</span>
+      <span class="curriculum-folder-card__caption">${esc(caption)}</span>
+      <span class="curriculum-folder-card__menu-dots" aria-hidden="true">•••</span>
+    </button>`;
   }
   function curriculumGroupCard(group) {
     const themes = Array.isArray(group.themes) ? group.themes : [];

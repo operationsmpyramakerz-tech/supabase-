@@ -16245,7 +16245,7 @@ app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
     ]);
     const roles = {};
     Object.keys(roleTables).forEach((key, index) => { roles[key] = roleRows[index]?.length || 0; });
-    const resourceTypes = { teacher_guide:0, lesson_plan:0, presentation:0, materials:0, exam:0 };
+    const resourceTypes = { book:0, teacher_guide:0, lesson_plan:0, presentation:0, materials:0, exam:0 };
     resources.forEach((row) => {
       const key = String(row?.resource_type || "").trim().toLowerCase();
       if (Object.prototype.hasOwnProperty.call(resourceTypes, key)) resourceTypes[key] += 1;
@@ -16481,6 +16481,7 @@ app.post("/api/lms/users-center/roles/:role", async (req, res) => {
 app.use("/api/lms/curriculum", requireAuth, requireLmsPageAccess("lms-curriculum"));
 
 const LMS_CURRICULUM_RESOURCE_TYPES = Object.freeze({
+  book: "Book",
   teacher_guide: "Teacher Guide",
   lesson_plan: "Lesson Plan",
   presentation: "Presentation",
