@@ -17136,6 +17136,45 @@ app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/view-tick
   }
 });
 
+app.post("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/fast-preview-upload-ticket", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    const resourceId = String(req.params?.resourceId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(gradeId) || !/^\d+$/.test(resourceId)) {
+      return res.status(400).json({ ok: false, error: "Invalid file ID." });
+    }
+    const rows = await supabaseDb.request(`/lms_curriculum_resources?select=id,file_name,mime_type,storage_path,storage_bucket&id=eq.${_sbRestFilterValue(resourceId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}&limit=1`);
+    const resource = Array.isArray(rows) ? rows[0] : null;
+    if (!resource) return res.status(404).json({ ok: false, error: "Curriculum file was not found." });
+    const storagePath = String(resource.storage_path || "").trim();
+    if (!storagePath || _lmsCurriculumPreviewKind(resource.mime_type, resource.file_name) !== "pdf") {
+      return res.status(409).json({ ok: false, error: "Fast page previews are only available for stored PDF files." });
+    }
+    const bucketName = resource.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET;
+    const results = await Promise.all([1, 2].map(async (pageNumber) => {
+      const previewPath = _lmsCurriculumPdfPreviewObjectPath(storagePath, pageNumber);
+      const previewTicket = await supabaseDb.createSignedUploadUrl(previewPath, {
+        bucketName,
+        upsert: true,
+      });
+      return {
+        pageNumber,
+        signedUrl: previewTicket.signedUrl,
+        path: previewTicket.path,
+        bucket: previewTicket.bucket,
+        mimeType: "image/jpeg",
+        upsert: true,
+      };
+    }));
+    return res.status(201).json({ ok: true, uploads: results });
+  } catch (error) {
+    console.error("POST curriculum fast preview upload ticket error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to prepare the fast page preview upload." });
+  }
+});
+
 app.get("/api/lms/curriculum/:id/grades/:gradeId/resources/:resourceId/fast-preview/:pageNumber", async (req, res) => {
   res.set({
     "Cache-Control": "no-store, no-cache, must-revalidate, private",
