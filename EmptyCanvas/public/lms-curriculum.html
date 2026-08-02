@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=lms-curriculum-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=lms-back-arrow-v10" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=lms-curriculum-v1" rel="stylesheet" />
-  <link href="/css/lms-curriculum.css?v=lms-curriculum-folders-v5" rel="stylesheet" />
+  <link href="/css/lms-curriculum.css?v=lms-curriculum-groups-v6" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-lms lms-curriculum-page" data-sidebar-open-scroll="instant">
@@ -37,14 +37,14 @@
 
       <main class="curriculum-shell">
         <section id="curriculumListView">
-          <div class="curriculum-toolbar"><div><span class="curriculum-kicker">LMS CONTENT</span><h1>Curriculum</h1><p>Create curriculum groups, then organize theme folders, grades, and learning files inside each group.</p></div><button id="addCurriculumBtn" class="curriculum-primary-btn"><i data-feather="folder-plus"></i><span>Add New Curriculum</span></button></div>
+          <div class="curriculum-toolbar"><div><h1>Curriculum</h1></div><button id="addCurriculumBtn" class="curriculum-primary-btn"><i data-feather="folder-plus"></i><span>Add New Curriculum</span></button></div>
           <section id="curriculumFolderGrid" class="curriculum-catalog-list" aria-live="polite"></section>
         </section>
 
         <section id="curriculumThemeView" hidden>
           <div class="curriculum-detail-toolbar curriculum-detail-toolbar--with-action">
             <button id="backToCurriculaBtn" class="curriculum-icon-btn" aria-label="Back to themes"><i data-feather="arrow-left"></i></button>
-            <div class="curriculum-detail-toolbar__copy"><span class="curriculum-kicker">THEME FOLDER</span><h1 id="curriculumThemeTitle">Theme</h1><p id="curriculumThemeDescription">Add grades inside this theme.</p></div>
+            <div class="curriculum-detail-toolbar__copy"><h1 id="curriculumThemeTitle">Theme</h1></div>
             <button id="addGradeBtn" class="curriculum-primary-btn"><i data-feather="folder-plus"></i><span>Add New Grade</span></button>
           </div>
           <section id="curriculumGradeGrid" class="curriculum-folder-grid curriculum-grade-grid" aria-live="polite"></section>
@@ -95,6 +95,6 @@
 
   <script>if(window.feather)feather.replace()</script>
   <script src="/js/common-ui.js?v=lms-logo-lock-v9"></script>
-  <script src="/js/lms-curriculum.js?v=lms-curriculum-folders-v5"></script>
+  <script src="/js/lms-curriculum.js?v=lms-curriculum-groups-v6"></script>
 </body>
 </html>

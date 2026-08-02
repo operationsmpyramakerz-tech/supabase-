@@ -16584,6 +16584,68 @@ app.post("/api/lms/curriculum/groups", async (req, res) => {
   }
 });
 
+app.patch("/api/lms/curriculum/groups/:groupId", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const groupId = String(req.params?.groupId || "").trim();
+    if (!/^\d+$/.test(groupId)) return res.status(400).json({ ok: false, error: "Invalid curriculum group ID." });
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const description = String(req.body?.description || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "Curriculum name is required." });
+    const rows = await supabaseDb.request(`/lms_curriculum_groups?id=eq.${_sbRestFilterValue(groupId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: { name, description, updated_at: new Date().toISOString() },
+    });
+    const curriculum = Array.isArray(rows) ? rows[0] : rows;
+    if (!curriculum?.id) return res.status(404).json({ ok: false, error: "Curriculum group was not found." });
+    return res.json({ ok: true, curriculum, group: curriculum });
+  } catch (error) {
+    console.error("PATCH curriculum group error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update curriculum." });
+  }
+});
+
+app.delete("/api/lms/curriculum/groups/:groupId", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const groupId = String(req.params?.groupId || "").trim();
+    if (!/^\d+$/.test(groupId)) return res.status(400).json({ ok: false, error: "Invalid curriculum group ID." });
+    const [groups, themes] = await Promise.all([
+      supabaseDb.request(`/lms_curriculum_groups?select=id,name&id=eq.${_sbRestFilterValue(groupId)}&limit=1`),
+      supabaseDb.request(`/lms_curricula?select=id&curriculum_group_id=eq.${_sbRestFilterValue(groupId)}&limit=10000`),
+    ]);
+    const group = Array.isArray(groups) ? groups[0] : null;
+    if (!group) return res.status(404).json({ ok: false, error: "Curriculum group was not found." });
+
+    const themeIds = (Array.isArray(themes) ? themes : [])
+      .map((theme) => String(theme?.id || "").trim())
+      .filter((id) => /^\d+$/.test(id));
+    let resources = [];
+    if (themeIds.length) {
+      const themeIdFilter = themeIds.join(",");
+      resources = await supabaseDb.request(`/lms_curriculum_resources?select=id,storage_path,storage_bucket&curriculum_id=in.(${themeIdFilter})&limit=10000`);
+      await supabaseDb.request(`/lms_curriculum_resources?curriculum_id=in.(${themeIdFilter})`, {
+        method: "DELETE", headers: { Prefer: "return=minimal" },
+      });
+      await supabaseDb.request(`/lms_curriculum_grades?curriculum_id=in.(${themeIdFilter})`, {
+        method: "DELETE", headers: { Prefer: "return=minimal" },
+      });
+      await supabaseDb.request(`/lms_curricula?curriculum_group_id=eq.${_sbRestFilterValue(groupId)}`, {
+        method: "DELETE", headers: { Prefer: "return=minimal" },
+      });
+    }
+    await supabaseDb.request(`/lms_curriculum_groups?id=eq.${_sbRestFilterValue(groupId)}`, {
+      method: "DELETE", headers: { Prefer: "return=minimal" },
+    });
+    await _lmsCurriculumCleanupStoredResources(resources);
+    return res.json({ ok: true, deleted: { groupId: Number(groupId), themeCount: themeIds.length } });
+  } catch (error) {
+    console.error("DELETE curriculum group error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete curriculum." });
+  }
+});
+
 app.post("/api/lms/curriculum/groups/:groupId/themes", async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
