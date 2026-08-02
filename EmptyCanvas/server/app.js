@@ -16489,6 +16489,26 @@ const LMS_CURRICULUM_RESOURCE_TYPES = Object.freeze({
   exam: "Exam",
 });
 
+async function _lmsCurriculumCleanupStoredResources(resources = []) {
+  const pathsByBucket = new Map();
+  (Array.isArray(resources) ? resources : []).forEach((resource) => {
+    const path = String(resource?.storage_path || "").trim();
+    if (!path) return;
+    const bucket = String(resource?.storage_bucket || LMS_CURRICULUM_STORAGE_BUCKET || "lms-curriculum").trim() || "lms-curriculum";
+    if (!pathsByBucket.has(bucket)) pathsByBucket.set(bucket, []);
+    pathsByBucket.get(bucket).push(path);
+  });
+  for (const [bucketName, paths] of pathsByBucket.entries()) {
+    for (let index = 0; index < paths.length; index += 100) {
+      try {
+        await supabaseDb.deleteStorageObjects(paths.slice(index, index + 100), { bucketName });
+      } catch (storageError) {
+        console.warn("Curriculum folder storage cleanup failed:", storageError?.message || storageError);
+      }
+    }
+  }
+}
+
 async function _lmsCurriculumCreateThemeRecord({ groupId, name, description = null, createdBy = null }) {
   const groups = await supabaseDb.request(`/lms_curriculum_groups?select=id&id=eq.${_sbRestFilterValue(groupId)}&limit=1`);
   if (!Array.isArray(groups) || !groups.length) {
@@ -16600,6 +16620,55 @@ app.post("/api/lms/curriculum", async (req, res) => {
   }
 });
 
+app.patch("/api/lms/curriculum/:id", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const id = String(req.params?.id || "").trim();
+    if (!/^\d+$/.test(id)) return res.status(400).json({ ok: false, error: "Invalid theme ID." });
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const description = String(req.body?.description || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "Theme name is required." });
+    const rows = await supabaseDb.request(`/lms_curricula?id=eq.${_sbRestFilterValue(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: { name, description, updated_at: new Date().toISOString() },
+    });
+    const theme = Array.isArray(rows) ? rows[0] : rows;
+    if (!theme?.id) return res.status(404).json({ ok: false, error: "Theme was not found." });
+    return res.json({ ok: true, theme, curriculum: theme });
+  } catch (error) {
+    console.error("PATCH /api/lms/curriculum/:id error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update theme." });
+  }
+});
+
+app.delete("/api/lms/curriculum/:id", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const id = String(req.params?.id || "").trim();
+    if (!/^\d+$/.test(id)) return res.status(400).json({ ok: false, error: "Invalid theme ID." });
+    const [themes, resources] = await Promise.all([
+      supabaseDb.request(`/lms_curricula?select=id&id=eq.${_sbRestFilterValue(id)}&limit=1`),
+      supabaseDb.request(`/lms_curriculum_resources?select=id,storage_path,storage_bucket&curriculum_id=eq.${_sbRestFilterValue(id)}&limit=10000`),
+    ]);
+    if (!Array.isArray(themes) || !themes.length) return res.status(404).json({ ok: false, error: "Theme was not found." });
+    await supabaseDb.request(`/lms_curriculum_resources?curriculum_id=eq.${_sbRestFilterValue(id)}`, {
+      method: "DELETE", headers: { Prefer: "return=minimal" },
+    });
+    await supabaseDb.request(`/lms_curriculum_grades?curriculum_id=eq.${_sbRestFilterValue(id)}`, {
+      method: "DELETE", headers: { Prefer: "return=minimal" },
+    });
+    await supabaseDb.request(`/lms_curricula?id=eq.${_sbRestFilterValue(id)}`, {
+      method: "DELETE", headers: { Prefer: "return=minimal" },
+    });
+    await _lmsCurriculumCleanupStoredResources(resources);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("DELETE /api/lms/curriculum/:id error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete theme." });
+  }
+});
+
 app.get("/api/lms/curriculum/:id", async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
@@ -16638,6 +16707,54 @@ app.post("/api/lms/curriculum/:id/grades", async (req, res) => {
   } catch (error) {
     console.error("POST /api/lms/curriculum/:id/grades error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create grade." });
+  }
+});
+
+app.patch("/api/lms/curriculum/:id/grades/:gradeId", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(gradeId)) return res.status(400).json({ ok: false, error: "Invalid grade ID." });
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const description = String(req.body?.description || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "Grade name is required." });
+    const rows = await supabaseDb.request(`/lms_curriculum_grades?id=eq.${_sbRestFilterValue(gradeId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: { name, description, updated_at: new Date().toISOString() },
+    });
+    const grade = Array.isArray(rows) ? rows[0] : rows;
+    if (!grade?.id) return res.status(404).json({ ok: false, error: "Grade was not found." });
+    return res.json({ ok: true, grade });
+  } catch (error) {
+    console.error("PATCH curriculum grade error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update grade." });
+  }
+});
+
+app.delete("/api/lms/curriculum/:id/grades/:gradeId", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const curriculumId = String(req.params?.id || "").trim();
+    const gradeId = String(req.params?.gradeId || "").trim();
+    if (!/^\d+$/.test(curriculumId) || !/^\d+$/.test(gradeId)) return res.status(400).json({ ok: false, error: "Invalid grade ID." });
+    const [grades, resources] = await Promise.all([
+      supabaseDb.request(`/lms_curriculum_grades?select=id&id=eq.${_sbRestFilterValue(gradeId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&limit=1`),
+      supabaseDb.request(`/lms_curriculum_resources?select=id,storage_path,storage_bucket&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}&limit=10000`),
+    ]);
+    if (!Array.isArray(grades) || !grades.length) return res.status(404).json({ ok: false, error: "Grade was not found." });
+    await supabaseDb.request(`/lms_curriculum_resources?curriculum_id=eq.${_sbRestFilterValue(curriculumId)}&grade_id=eq.${_sbRestFilterValue(gradeId)}`, {
+      method: "DELETE", headers: { Prefer: "return=minimal" },
+    });
+    await supabaseDb.request(`/lms_curriculum_grades?id=eq.${_sbRestFilterValue(gradeId)}&curriculum_id=eq.${_sbRestFilterValue(curriculumId)}`, {
+      method: "DELETE", headers: { Prefer: "return=minimal" },
+    });
+    await _lmsCurriculumCleanupStoredResources(resources);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("DELETE curriculum grade error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete grade." });
   }
 });
 

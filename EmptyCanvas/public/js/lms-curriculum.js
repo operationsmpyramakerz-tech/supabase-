@@ -23,6 +23,12 @@
   let currentTheme = null;
   let selectedResourceFile = null;
   let resourceUploadPending = false;
+  let editingThemeId = '';
+  let editingGradeId = '';
+  const folderItems = {
+    theme: new Map(),
+    grade: new Map(),
+  };
 
   function icons() { if (window.feather) window.feather.replace(); }
   function formatBytes(bytes) {
@@ -47,20 +53,36 @@
   function emptyFolders(title, text) {
     return `<div class="curriculum-empty"><div><i data-feather="folder"></i><h3>${esc(title)}</h3><p>${esc(text)}</p></div></div>`;
   }
+  function closeFolderActionMenus() {
+    document.querySelectorAll('.curriculum-folder-card-shell.is-actions-open').forEach((card) => {
+      card.classList.remove('is-actions-open');
+      card.querySelector('[data-folder-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    });
+  }
   function folderCard(item, kind) {
     const fallback = kind === 'theme' ? 'Theme folder' : 'Grade folder';
     const name = item.name || (kind === 'theme' ? 'Untitled Theme' : 'Untitled Grade');
     const caption = item.description || fallback;
-    return `<button type="button" class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}" aria-label="Open ${esc(name)}">
-      <span class="curriculum-folder-card__figure" aria-hidden="true">
-        <span class="curriculum-folder-card__paper curriculum-folder-card__paper--left"></span>
-        <span class="curriculum-folder-card__paper curriculum-folder-card__paper--middle"></span>
-        <span class="curriculum-folder-card__paper curriculum-folder-card__paper--right"></span>
-      </span>
-      <span class="curriculum-folder-card__name" title="${esc(name)}">${esc(name)}</span>
-      <span class="curriculum-folder-card__caption">${esc(caption)}</span>
-      <span class="curriculum-folder-card__menu-dots" aria-hidden="true">•••</span>
-    </button>`;
+    return `<div class="curriculum-folder-card-shell" data-folder-kind="${esc(kind)}">
+      <button type="button" class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}" aria-label="Open ${esc(name)}">
+        <span class="curriculum-folder-card__figure" aria-hidden="true">
+          <span class="curriculum-folder-card__paper curriculum-folder-card__paper--left"></span>
+          <span class="curriculum-folder-card__paper curriculum-folder-card__paper--middle"></span>
+          <span class="curriculum-folder-card__paper curriculum-folder-card__paper--right"></span>
+        </span>
+        <span class="curriculum-folder-card__name" title="${esc(name)}">${esc(name)}</span>
+        <span class="curriculum-folder-card__caption">${esc(caption)}</span>
+      </button>
+      <div class="curriculum-folder-actions">
+        <button type="button" class="curriculum-folder-menu-btn" data-folder-actions-toggle aria-label="Actions for ${esc(name)}" aria-expanded="false">
+          <span class="curriculum-folder-card__menu-dots" aria-hidden="true">•••</span>
+        </button>
+        <div class="curriculum-folder-actions__menu" role="menu">
+          <button type="button" data-folder-edit="${esc(item.id)}" data-folder-action-kind="${esc(kind)}" role="menuitem"><i data-feather="edit-3"></i><span>Edit</span></button>
+          <button type="button" class="is-danger" data-folder-delete="${esc(item.id)}" data-folder-action-kind="${esc(kind)}" role="menuitem"><i data-feather="trash-2"></i><span>Delete</span></button>
+        </div>
+      </div>
+    </div>`;
   }
   function curriculumGroupCard(group) {
     const themes = Array.isArray(group.themes) ? group.themes : [];
@@ -78,26 +100,70 @@
   }
   function renderCurriculumGroups(items) {
     const grid = $('curriculumFolderGrid');
+    folderItems.theme.clear();
     if (!items.length) {
       grid.innerHTML = emptyFolders('No curricula yet', 'Use Add New Curriculum to create the first curriculum group.');
       icons();
       return;
     }
+    items.forEach((group) => {
+      (Array.isArray(group.themes) ? group.themes : []).forEach((theme) => {
+        folderItems.theme.set(String(theme.id), { ...theme, curriculumGroupName: group.name || 'Curriculum' });
+      });
+    });
     grid.innerHTML = items.map(curriculumGroupCard).join('');
     grid.querySelectorAll('[data-add-theme-group-id]').forEach((button) => button.addEventListener('click', () => openThemeModal(button.dataset.addThemeGroupId, button.dataset.addThemeGroupName)));
-    grid.querySelectorAll('[data-theme-id]').forEach((item) => item.addEventListener('click', () => openTheme(item.dataset.themeId)));
+    bindFolderCards(grid, 'theme', openTheme);
     icons();
   }
   function renderGrades(items) {
     const grid = $('curriculumGradeGrid');
+    folderItems.grade.clear();
     if (!items.length) {
       grid.innerHTML = emptyFolders('No grades yet', 'Use Add New Grade to create the first grade inside this theme.');
       icons();
       return;
     }
+    items.forEach((grade) => folderItems.grade.set(String(grade.id), grade));
     grid.innerHTML = items.map((item) => folderCard(item, 'grade')).join('');
-    grid.querySelectorAll('[data-grade-id]').forEach((item) => item.addEventListener('click', () => openGrade(item.dataset.gradeId)));
+    bindFolderCards(grid, 'grade', openGrade);
     icons();
+  }
+
+  function bindFolderCards(container, kind, openFolder) {
+    container.querySelectorAll(`[data-${kind}-id]`).forEach((item) => item.addEventListener('click', () => openFolder(item.dataset[`${kind}Id`])));
+    container.querySelectorAll('[data-folder-actions-toggle]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const card = button.closest('.curriculum-folder-card-shell');
+        const willOpen = Boolean(card && !card.classList.contains('is-actions-open'));
+        closeFolderActionMenus();
+        if (!card) return;
+        card.classList.toggle('is-actions-open', willOpen);
+        button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      });
+    });
+    container.querySelectorAll('[data-folder-edit]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeFolderActionMenus();
+        const actionKind = button.dataset.folderActionKind;
+        const item = folderItems[actionKind]?.get(String(button.dataset.folderEdit || ''));
+        if (!item) return;
+        if (actionKind === 'theme') openThemeEditModal(item);
+        else if (actionKind === 'grade') openGradeEditModal(item);
+      });
+    });
+    container.querySelectorAll('[data-folder-delete]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeFolderActionMenus();
+        deleteFolder(button.dataset.folderActionKind, button.dataset.folderDelete);
+      });
+    });
   }
   async function loadCurriculumGroups() {
     const data = await jsonFetch('/api/lms/curriculum');
@@ -153,23 +219,67 @@
   function openCurriculumModal() { $('curriculumModal').hidden = false; $('curriculumModalError').textContent = ''; setTimeout(() => $('curriculumNameInput').focus(), 20); }
   function closeCurriculumModal() { $('curriculumModal').hidden = true; $('curriculumModalError').textContent = ''; }
   function openThemeModal(groupId, groupName) {
+    editingThemeId = '';
     activeCurriculumGroupId = String(groupId || '');
     activeCurriculumGroupName = String(groupName || 'Curriculum');
     $('themeNameInput').value = '';
     $('themeDescriptionInput').value = '';
     $('themeCurriculumTarget').textContent = `Curriculum: ${activeCurriculumGroupName}`;
+    $('themeModal').querySelector('.curriculum-kicker').textContent = 'NEW THEME FOLDER';
+    $('themeModal').querySelector('h2').textContent = 'Add New Theme';
+    $('saveThemeBtn').textContent = 'Create Theme';
     $('themeModalError').textContent = '';
     $('themeModal').hidden = false;
     setTimeout(() => $('themeNameInput').focus(), 20);
   }
+  function openThemeEditModal(item) {
+    editingThemeId = String(item?.id || '');
+    activeCurriculumGroupId = String(item?.curriculum_group_id || '');
+    activeCurriculumGroupName = String(item?.curriculumGroupName || 'Curriculum');
+    $('themeNameInput').value = item?.name || '';
+    $('themeDescriptionInput').value = item?.description || '';
+    $('themeCurriculumTarget').textContent = `Curriculum: ${activeCurriculumGroupName}`;
+    $('themeModal').querySelector('.curriculum-kicker').textContent = 'EDIT THEME FOLDER';
+    $('themeModal').querySelector('h2').textContent = 'Edit Theme';
+    $('saveThemeBtn').textContent = 'Save Changes';
+    $('themeModalError').textContent = '';
+    $('themeModal').hidden = false;
+    setTimeout(() => { $('themeNameInput').focus(); $('themeNameInput').select(); }, 20);
+  }
   function closeThemeModal() {
     $('themeModal').hidden = true;
     $('themeModalError').textContent = '';
+    editingThemeId = '';
     activeCurriculumGroupId = '';
     activeCurriculumGroupName = '';
   }
-  function openGradeModal() { $('gradeModal').hidden = false; $('gradeModalError').textContent = ''; setTimeout(() => $('gradeNameInput').focus(), 20); }
-  function closeGradeModal() { $('gradeModal').hidden = true; $('gradeModalError').textContent = ''; }
+  function openGradeModal() {
+    editingGradeId = '';
+    $('gradeNameInput').value = '';
+    $('gradeDescriptionInput').value = '';
+    $('gradeModal').querySelector('.curriculum-kicker').textContent = 'NEW GRADE FOLDER';
+    $('gradeModal').querySelector('h2').textContent = 'Add New Grade';
+    $('saveGradeBtn').textContent = 'Create Grade';
+    $('gradeModal').hidden = false;
+    $('gradeModalError').textContent = '';
+    setTimeout(() => $('gradeNameInput').focus(), 20);
+  }
+  function openGradeEditModal(item) {
+    editingGradeId = String(item?.id || '');
+    $('gradeNameInput').value = item?.name || '';
+    $('gradeDescriptionInput').value = item?.description || '';
+    $('gradeModal').querySelector('.curriculum-kicker').textContent = 'EDIT GRADE FOLDER';
+    $('gradeModal').querySelector('h2').textContent = 'Edit Grade';
+    $('saveGradeBtn').textContent = 'Save Changes';
+    $('gradeModal').hidden = false;
+    $('gradeModalError').textContent = '';
+    setTimeout(() => { $('gradeNameInput').focus(); $('gradeNameInput').select(); }, 20);
+  }
+  function closeGradeModal() {
+    $('gradeModal').hidden = true;
+    $('gradeModalError').textContent = '';
+    editingGradeId = '';
+  }
 
   function resetResourceUploadUi() {
     selectedResourceFile = null;
@@ -277,21 +387,35 @@
   }
   async function saveTheme() {
     const name = $('themeNameInput').value.trim();
-    if (!activeCurriculumGroupId) { $('themeModalError').textContent = 'Choose a curriculum group first.'; return; }
+    const editId = editingThemeId;
+    if (!editId && !activeCurriculumGroupId) { $('themeModalError').textContent = 'Choose a curriculum group first.'; return; }
     if (!name) { $('themeModalError').textContent = 'Theme name is required.'; return; }
     const button = $('saveThemeBtn');
     button.disabled = true;
     try {
+      if (editId) {
+        await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(editId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('themeDescriptionInput').value.trim() }) });
+        closeThemeModal();
+        await loadCurriculumGroups();
+        return;
+      }
       const data = await jsonFetch(`/api/lms/curriculum/groups/${encodeURIComponent(activeCurriculumGroupId)}/themes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('themeDescriptionInput').value.trim() }) });
       $('themeNameInput').value = ''; $('themeDescriptionInput').value = ''; closeThemeModal(); await loadCurriculumGroups(); if (data.theme?.id) await openTheme(data.theme.id);
     } catch (error) { $('themeModalError').textContent = error.message; } finally { button.disabled = false; }
   }
   async function saveGrade() {
     const name = $('gradeNameInput').value.trim();
+    const editId = editingGradeId;
     if (!name) { $('gradeModalError').textContent = 'Grade name is required.'; return; }
     const button = $('saveGradeBtn');
     button.disabled = true;
     try {
+      if (editId) {
+        await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(editId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('gradeDescriptionInput').value.trim() }) });
+        closeGradeModal();
+        await loadTheme();
+        return;
+      }
       const data = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('gradeDescriptionInput').value.trim() }) });
       $('gradeNameInput').value = ''; $('gradeDescriptionInput').value = ''; closeGradeModal(); await loadTheme(); if (data.grade?.id) await openGrade(data.grade.id);
     } catch (error) { $('gradeModalError').textContent = error.message; } finally { button.disabled = false; }
@@ -344,6 +468,36 @@
     try { await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(id)}`, { method: 'DELETE' }); await loadGrade(); }
     catch (error) { alert(error.message); }
   }
+  async function requestFolderDeleteConfirmation(kind, item) {
+    const isTheme = kind === 'theme';
+    const label = isTheme ? 'theme' : 'grade';
+    const name = item?.name || `this ${label}`;
+    const message = isTheme
+      ? `You’re going to permanently delete “${name}”, including every grade and file inside it. Uploaded files will also be removed from Supabase Storage.`
+      : `You’re going to permanently delete “${name}” and every file inside it. Uploaded files will also be removed from Supabase Storage.`;
+    return window.OpsDeleteConfirm
+      ? window.OpsDeleteConfirm.confirm({ title: `Delete ${label} folder?`, itemType: `${label} folder`, itemName: name, message })
+      : window.confirm(`Delete “${name}”? This action cannot be undone.`);
+  }
+  async function deleteFolder(kind, id) {
+    const cleanKind = kind === 'theme' ? 'theme' : kind === 'grade' ? 'grade' : '';
+    const cleanId = String(id || '');
+    const item = folderItems[cleanKind]?.get(cleanId);
+    if (!cleanKind || !cleanId || !item) return;
+    const confirmed = await requestFolderDeleteConfirmation(cleanKind, item);
+    if (!confirmed) return;
+    try {
+      if (cleanKind === 'theme') {
+        await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(cleanId)}`, { method: 'DELETE' });
+        await loadCurriculumGroups();
+      } else {
+        await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(cleanId)}`, { method: 'DELETE' });
+        await loadTheme();
+      }
+    } catch (error) {
+      alert(error.message);
+    }
+  }
   function parseRoute() {
     const parts = location.pathname.split('/').filter(Boolean);
     currentThemeId = parts[2] || '';
@@ -363,6 +517,8 @@
   document.querySelectorAll('[data-theme-close]').forEach((item) => item.addEventListener('click', closeThemeModal));
   document.querySelectorAll('[data-grade-close]').forEach((item) => item.addEventListener('click', closeGradeModal));
   document.querySelectorAll('[data-resource-close]').forEach((item) => item.addEventListener('click', closeResourceModal));
+  document.addEventListener('click', (event) => { if (!event.target.closest('.curriculum-folder-actions')) closeFolderActionMenus(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeFolderActionMenus(); });
   window.addEventListener('popstate', () => { parseRoute(); currentGradeId ? loadGrade().catch((error) => alert(error.message)) : currentThemeId ? loadTheme().catch((error) => alert(error.message)) : backToThemes(); });
 
   parseRoute();
