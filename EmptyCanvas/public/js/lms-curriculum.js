@@ -596,8 +596,11 @@
         message = String(parsed?.message || parsed?.error || message).trim();
       }
     } catch {}
-    if (/maximum allowed size|file size limit|entity too large/i.test(message)) {
-      return new Error('Supabase Storage is still limited below 500 MB. Apply the included Storage 500 MB configuration, then try again.');
+    if (/maximum size exceeded|maximum allowed size|file size (?:exceeds|limit)|entity too large/i.test(message)) {
+      return new Error('Supabase Storage is still globally limited below 500 MB. On the self-hosted server, apply the included Storage override, recreate the storage service, then try again.');
+    }
+    if (/response code:\s*413|status\s*413|http\s*413/i.test(message)) {
+      return new Error('The upload was rejected with HTTP 413. Verify the 500 MB global limit in the self-hosted Storage service and any reverse proxy in front of it.');
     }
     return new Error(message || 'The resumable upload failed.');
   }
