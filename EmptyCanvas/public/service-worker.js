@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-lms-pdf-book-sidebar-v1";
+const CACHE_NAME = "ops-cache-lms-pdf-cross-browser-upload-v2";
 
 const PRECACHE_URLS = [
   "/pwa-start",

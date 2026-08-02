@@ -23,6 +23,7 @@
   let currentTheme = null;
   let selectedResourceFile = null;
   let resourceUploadPending = false;
+  let activeResourceUpload = null;
   let editingCurriculumGroupId = '';
   let editingThemeId = '';
   let editingGradeId = '';
@@ -30,6 +31,7 @@
   let editingResourceItem = null;
   let viewerLoadToken = 0;
   let activePdfDocument = null;
+  let activePdfLoadingTask = null;
   let activePdfSpreadStart = 1;
   let pdfRenderToken = 0;
   let pdfResizeTimer = 0;
@@ -573,7 +575,7 @@
         else {
           let message = `Upload failed with status ${xhr.status}.`;
           try { const body = JSON.parse(xhr.responseText || '{}'); message = body.message || body.error || message; } catch {}
-          reject(new Error(message));
+          reject(storageUploadError(new Error(message)));
         }
       });
       xhr.addEventListener('error', () => reject(new Error('Network error while uploading the file.')));
@@ -583,6 +585,81 @@
       form.append('', file);
       xhr.send(form);
     });
+  }
+
+  function storageUploadError(error) {
+    let message = String(error?.message || 'The resumable upload failed.').trim();
+    try {
+      const body = error?.originalResponse?.getBody?.();
+      if (body) {
+        const parsed = JSON.parse(body);
+        message = String(parsed?.message || parsed?.error || message).trim();
+      }
+    } catch {}
+    if (/maximum allowed size|file size limit|entity too large/i.test(message)) {
+      return new Error('Supabase Storage is still limited below 500 MB. Apply the included Storage 500 MB configuration, then try again.');
+    }
+    return new Error(message || 'The resumable upload failed.');
+  }
+
+  function uploadFileResumable(uploadTicket, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const TusUpload = window.tus?.Upload;
+      const endpoint = String(uploadTicket?.resumableUrl || '').trim();
+      const signature = String(uploadTicket?.token || '').trim();
+      if (!TusUpload || !endpoint || !signature) {
+        reject(new Error('Resumable upload is not available.'));
+        return;
+      }
+      const headers = {
+        'x-signature': signature,
+        'x-upsert': 'false',
+      };
+      const apiKey = String(uploadTicket?.resumableApiKey || '').trim();
+      if (apiKey) headers.apikey = apiKey;
+      const uploader = new TusUpload(file, {
+        endpoint,
+        headers,
+        retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+        uploadDataDuringCreation: true,
+        chunkSize: 6 * 1024 * 1024,
+        storeFingerprintForResuming: false,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: String(uploadTicket?.bucket || ''),
+          objectName: String(uploadTicket?.path || ''),
+          contentType: file.type || 'application/octet-stream',
+          cacheControl: '3600',
+        },
+        onProgress(bytesUploaded, bytesTotal) {
+          const percent = bytesTotal > 0 ? Math.round((bytesUploaded / bytesTotal) * 100) : 0;
+          onProgress(Math.max(0, Math.min(100, percent)));
+        },
+        onError(error) {
+          activeResourceUpload = null;
+          reject(storageUploadError(error));
+        },
+        onSuccess() {
+          activeResourceUpload = null;
+          onProgress(100);
+          resolve();
+        },
+      });
+      activeResourceUpload = uploader;
+      uploader.start();
+    });
+  }
+
+  async function uploadResourceFile(uploadTicket, file, onProgress) {
+    const useResumable = uploadTicket?.mode === 'resumable'
+      && Boolean(window.tus?.Upload)
+      && Boolean(uploadTicket?.resumableUrl)
+      && Boolean(uploadTicket?.token);
+    if (useResumable) {
+      await uploadFileResumable(uploadTicket, file, onProgress);
+      return;
+    }
+    await uploadFileToSignedUrl(uploadTicket?.signedUrl, file, onProgress);
   }
 
   async function saveCurriculum() {
@@ -658,7 +735,7 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resourceType: activeResourceType, fileName: selectedResourceFile.name, fileSize: selectedResourceFile.size, mimeType: selectedResourceFile.type || 'application/octet-stream' }),
         });
         const upload = ticketData.upload || {};
-        await uploadFileToSignedUrl(upload.signedUrl, selectedResourceFile, (percent) => {
+        await uploadResourceFile(upload, selectedResourceFile, (percent) => {
           setUploadStatus('uploading', percent < 100 ? `Uploading ${selectedResourceFile.name}` : 'Finalizing upload…', percent);
         });
         Object.assign(payload, {
@@ -719,10 +796,10 @@
   }
   function clearViewerContent() {
     pdfRenderToken += 1;
-    if (activePdfDocument) {
-      try { activePdfDocument.destroy(); } catch {}
-      activePdfDocument = null;
-    }
+    const loadingTask = activePdfLoadingTask;
+    activePdfLoadingTask = null;
+    activePdfDocument = null;
+    try { loadingTask?.destroy?.().catch?.(() => {}); } catch {}
     activePdfSpreadStart = 1;
     $('resourceViewerContent').innerHTML = '';
     $('resourceViewerLoading').hidden = true;
@@ -736,8 +813,8 @@
   }
   function loadPdfJs() {
     if (!pdfJsPromise) {
-      pdfJsPromise = import('/js/vendor/pdfjs/pdf.min.mjs').then((pdfjs) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = '/js/vendor/pdfjs/pdf.worker.min.mjs';
+      pdfJsPromise = import('/js/vendor/pdfjs/pdf.min.mjs?v=legacy-6.2.108-1').then((pdfjs) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = '/js/vendor/pdfjs/pdf.worker.min.mjs?v=legacy-6.2.108-1';
         return pdfjs;
       });
     }
@@ -827,20 +904,55 @@
       window.setTimeout(() => root.classList.remove(turnClass), 190);
     }, 150);
   }
+  async function loadPdfDocument(pdfjs, streamUrl, token) {
+    let networkError = null;
+    let networkTask = null;
+    try {
+      networkTask = pdfjs.getDocument({
+        url: streamUrl,
+        withCredentials: true,
+        rangeChunkSize: 1024 * 1024,
+        disableAutoFetch: false,
+        disableRange: false,
+        disableStream: false,
+        isEvalSupported: false,
+      });
+      activePdfLoadingTask = networkTask;
+      return { documentRef: await networkTask.promise, loadingTask: networkTask };
+    } catch (error) {
+      networkError = error;
+      if (activePdfLoadingTask === networkTask) activePdfLoadingTask = null;
+      try { await networkTask?.destroy?.(); } catch {}
+    }
+    if (token !== viewerLoadToken) throw networkError;
+    const response = await fetch(streamUrl, {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: 'application/pdf' },
+      referrerPolicy: 'no-referrer',
+    });
+    if (!response.ok) throw networkError || new Error(`PDF request failed with status ${response.status}.`);
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (!data.length) throw networkError || new Error('The PDF is empty.');
+    const loadingTask = pdfjs.getDocument({ data, isEvalSupported: false });
+    activePdfLoadingTask = loadingTask;
+    try {
+      return { documentRef: await loadingTask.promise, loadingTask };
+    } catch (error) {
+      if (activePdfLoadingTask === loadingTask) activePdfLoadingTask = null;
+      try { await loadingTask.destroy?.(); } catch {}
+      throw error || networkError;
+    }
+  }
+
   async function renderPdfBook(streamUrl, ticket, token) {
     const content = $('resourceViewerContent');
     const pdfjs = await loadPdfJs();
     if (token !== viewerLoadToken) return;
-    const loadingTask = pdfjs.getDocument({
-      url: streamUrl,
-      withCredentials: true,
-      rangeChunkSize: 256 * 1024,
-      disableAutoFetch: false,
-      disableStream: true,
-    });
-    const documentRef = await loadingTask.promise;
+    const { documentRef, loadingTask } = await loadPdfDocument(pdfjs, streamUrl, token);
     if (token !== viewerLoadToken) {
-      try { documentRef.destroy(); } catch {}
+      if (activePdfLoadingTask === loadingTask) activePdfLoadingTask = null;
+      try { await loadingTask?.destroy?.(); } catch {}
       return;
     }
     activePdfDocument = documentRef;
