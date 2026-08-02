@@ -16,6 +16,8 @@
 
   let currentThemeId = '';
   let currentGradeId = '';
+  let activeCurriculumGroupId = '';
+  let activeCurriculumGroupName = '';
   let activeResourceType = '';
   let currentTheme = null;
   let selectedResourceFile = null;
@@ -48,14 +50,29 @@
     const fallback = kind === 'theme' ? 'Theme folder' : 'Grade folder';
     return `<button class="curriculum-folder-card" data-${kind}-id="${esc(item.id)}"><div class="curriculum-folder-card__visual"><i data-feather="folder"></i></div><div class="curriculum-folder-card__body"><h3>${esc(item.name)}</h3><p>${esc(item.description || fallback)}</p><span><i data-feather="folder-open"></i> Open ${kind}</span></div></button>`;
   }
-  function renderThemes(items) {
+  function curriculumGroupCard(group) {
+    const themes = Array.isArray(group.themes) ? group.themes : [];
+    const themeCount = themes.length;
+    return `<article class="curriculum-catalog-card" data-curriculum-group-id="${esc(group.id)}">
+      <header class="curriculum-catalog-card__header">
+        <div class="curriculum-catalog-card__identity">
+          <span class="curriculum-catalog-card__icon"><i data-feather="layers"></i></span>
+          <div><span class="curriculum-catalog-card__eyebrow">CURRICULUM GROUP</span><h2>${esc(group.name)}</h2><p>${esc(group.description || 'Curriculum group')}</p><span class="curriculum-catalog-card__count">${themeCount} theme${themeCount === 1 ? '' : 's'}</span></div>
+        </div>
+        <button type="button" class="curriculum-primary-btn curriculum-add-theme-btn" data-add-theme-group-id="${esc(group.id)}" data-add-theme-group-name="${esc(group.name)}"><i data-feather="folder-plus"></i><span>Add New Theme</span></button>
+      </header>
+      <div class="curriculum-theme-grid">${themes.length ? themes.map((item) => folderCard(item, 'theme')).join('') : `<div class="curriculum-theme-empty"><i data-feather="folder"></i><div><b>No themes yet</b><span>Use Add New Theme to create the first theme in this curriculum.</span></div></div>`}</div>
+    </article>`;
+  }
+  function renderCurriculumGroups(items) {
     const grid = $('curriculumFolderGrid');
     if (!items.length) {
-      grid.innerHTML = emptyFolders('No themes yet', 'Use Add New Theme to create the first theme.');
+      grid.innerHTML = emptyFolders('No curricula yet', 'Use Add New Curriculum to create the first curriculum group.');
       icons();
       return;
     }
-    grid.innerHTML = items.map((item) => folderCard(item, 'theme')).join('');
+    grid.innerHTML = items.map(curriculumGroupCard).join('');
+    grid.querySelectorAll('[data-add-theme-group-id]').forEach((button) => button.addEventListener('click', () => openThemeModal(button.dataset.addThemeGroupId, button.dataset.addThemeGroupName)));
     grid.querySelectorAll('[data-theme-id]').forEach((item) => item.addEventListener('click', () => openTheme(item.dataset.themeId)));
     icons();
   }
@@ -70,9 +87,9 @@
     grid.querySelectorAll('[data-grade-id]').forEach((item) => item.addEventListener('click', () => openGrade(item.dataset.gradeId)));
     icons();
   }
-  async function loadThemes() {
+  async function loadCurriculumGroups() {
     const data = await jsonFetch('/api/lms/curriculum');
-    renderThemes(data.curricula || []);
+    renderCurriculumGroups(data.groups || []);
   }
   function renderGroups(resources) {
     const grouped = {};
@@ -117,12 +134,28 @@
     $('curriculumGradeDescription').textContent = data.grade.description || `Learning files for ${data.curriculum.name || 'this theme'}.`;
     renderGroups(data.resources || []);
   }
-  function backToThemes() { currentThemeId = ''; currentGradeId = ''; history.pushState({}, '', '/lms/curriculum'); showView('list'); $('curriculumPageTitle').textContent = 'Curriculum'; loadThemes().catch(showListError); }
+  function backToThemes() { currentThemeId = ''; currentGradeId = ''; history.pushState({}, '', '/lms/curriculum'); showView('list'); $('curriculumPageTitle').textContent = 'Curriculum'; loadCurriculumGroups().catch(showListError); }
   function backToGrades() { currentGradeId = ''; history.pushState({}, '', `/lms/curriculum/${encodeURIComponent(currentThemeId)}`); loadTheme().catch((error) => alert(error.message)); }
-  function showListError(error) { $('curriculumFolderGrid').innerHTML = emptyFolders('Unable to load themes', error.message); icons(); }
+  function showListError(error) { $('curriculumFolderGrid').innerHTML = emptyFolders('Unable to load curricula', error.message); icons(); }
 
   function openCurriculumModal() { $('curriculumModal').hidden = false; $('curriculumModalError').textContent = ''; setTimeout(() => $('curriculumNameInput').focus(), 20); }
   function closeCurriculumModal() { $('curriculumModal').hidden = true; $('curriculumModalError').textContent = ''; }
+  function openThemeModal(groupId, groupName) {
+    activeCurriculumGroupId = String(groupId || '');
+    activeCurriculumGroupName = String(groupName || 'Curriculum');
+    $('themeNameInput').value = '';
+    $('themeDescriptionInput').value = '';
+    $('themeCurriculumTarget').textContent = `Curriculum: ${activeCurriculumGroupName}`;
+    $('themeModalError').textContent = '';
+    $('themeModal').hidden = false;
+    setTimeout(() => $('themeNameInput').focus(), 20);
+  }
+  function closeThemeModal() {
+    $('themeModal').hidden = true;
+    $('themeModalError').textContent = '';
+    activeCurriculumGroupId = '';
+    activeCurriculumGroupName = '';
+  }
   function openGradeModal() { $('gradeModal').hidden = false; $('gradeModalError').textContent = ''; setTimeout(() => $('gradeNameInput').focus(), 20); }
   function closeGradeModal() { $('gradeModal').hidden = true; $('gradeModalError').textContent = ''; }
 
@@ -220,15 +253,26 @@
     });
   }
 
-  async function saveTheme() {
+  async function saveCurriculum() {
     const name = $('curriculumNameInput').value.trim();
-    if (!name) { $('curriculumModalError').textContent = 'Theme name is required.'; return; }
+    if (!name) { $('curriculumModalError').textContent = 'Curriculum name is required.'; return; }
     const button = $('saveCurriculumBtn');
     button.disabled = true;
     try {
-      const data = await jsonFetch('/api/lms/curriculum', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('curriculumDescriptionInput').value.trim() }) });
-      $('curriculumNameInput').value = ''; $('curriculumDescriptionInput').value = ''; closeCurriculumModal(); await loadThemes(); if (data.curriculum?.id) await openTheme(data.curriculum.id);
+      await jsonFetch('/api/lms/curriculum/groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('curriculumDescriptionInput').value.trim() }) });
+      $('curriculumNameInput').value = ''; $('curriculumDescriptionInput').value = ''; closeCurriculumModal(); await loadCurriculumGroups();
     } catch (error) { $('curriculumModalError').textContent = error.message; } finally { button.disabled = false; }
+  }
+  async function saveTheme() {
+    const name = $('themeNameInput').value.trim();
+    if (!activeCurriculumGroupId) { $('themeModalError').textContent = 'Choose a curriculum group first.'; return; }
+    if (!name) { $('themeModalError').textContent = 'Theme name is required.'; return; }
+    const button = $('saveThemeBtn');
+    button.disabled = true;
+    try {
+      const data = await jsonFetch(`/api/lms/curriculum/groups/${encodeURIComponent(activeCurriculumGroupId)}/themes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description: $('themeDescriptionInput').value.trim() }) });
+      $('themeNameInput').value = ''; $('themeDescriptionInput').value = ''; closeThemeModal(); await loadCurriculumGroups(); if (data.theme?.id) await openTheme(data.theme.id);
+    } catch (error) { $('themeModalError').textContent = error.message; } finally { button.disabled = false; }
   }
   async function saveGrade() {
     const name = $('gradeNameInput').value.trim();
@@ -296,18 +340,20 @@
 
   $('addCurriculumBtn').addEventListener('click', openCurriculumModal);
   $('addGradeBtn').addEventListener('click', openGradeModal);
-  $('saveCurriculumBtn').addEventListener('click', saveTheme);
+  $('saveCurriculumBtn').addEventListener('click', saveCurriculum);
+  $('saveThemeBtn').addEventListener('click', saveTheme);
   $('saveGradeBtn').addEventListener('click', saveGrade);
   $('saveResourceBtn').addEventListener('click', saveResource);
   $('resourceFileInput').addEventListener('change', (event) => chooseResourceFile(event.target.files?.[0] || null));
   $('backToCurriculaBtn').addEventListener('click', backToThemes);
   $('backToGradesBtn').addEventListener('click', backToGrades);
   document.querySelectorAll('[data-curriculum-close]').forEach((item) => item.addEventListener('click', closeCurriculumModal));
+  document.querySelectorAll('[data-theme-close]').forEach((item) => item.addEventListener('click', closeThemeModal));
   document.querySelectorAll('[data-grade-close]').forEach((item) => item.addEventListener('click', closeGradeModal));
   document.querySelectorAll('[data-resource-close]').forEach((item) => item.addEventListener('click', closeResourceModal));
   window.addEventListener('popstate', () => { parseRoute(); currentGradeId ? loadGrade().catch((error) => alert(error.message)) : currentThemeId ? loadTheme().catch((error) => alert(error.message)) : backToThemes(); });
 
   parseRoute();
-  currentGradeId ? loadGrade().catch((error) => { alert(error.message); backToGrades(); }) : currentThemeId ? loadTheme().catch((error) => { alert(error.message); backToThemes(); }) : loadThemes().catch(showListError);
+  currentGradeId ? loadGrade().catch((error) => { alert(error.message); backToGrades(); }) : currentThemeId ? loadTheme().catch((error) => { alert(error.message); backToThemes(); }) : loadCurriculumGroups().catch(showListError);
   icons();
 })();

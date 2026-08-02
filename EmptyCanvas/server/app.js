@@ -16234,11 +16234,12 @@ app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
       students: "lms_students",
       parents: "lms_parents",
     };
-    const [schools, structures, curricula, recentCurricula, resources, ...roleRows] = await Promise.all([
+    const [schools, structures, curriculumGroups, recentCurricula, themes, resources, ...roleRows] = await Promise.all([
       readRows("b2b_schools"),
       readRows("lms_structures"),
-      readRows("lms_curricula"),
+      readRows("lms_curriculum_groups"),
       readRows("lms_curricula", "select=*&order=created_at.desc&limit=5"),
+      readRows("lms_curricula"),
       readRows("lms_curriculum_resources", "select=id,resource_type&limit=10000"),
       ...Object.values(roleTables).map((table) => readRows(table)),
     ]);
@@ -16254,7 +16255,8 @@ app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
         schools: schools.length,
         people: Object.values(roles).reduce((sum, value) => sum + Number(value || 0), 0),
         structures: structures.length,
-        curricula: curricula.length,
+        curricula: curriculumGroups.length,
+        themes: themes.length,
         resources: resources.length,
       },
       roles,
@@ -16475,7 +16477,7 @@ app.post("/api/lms/users-center/roles/:role", async (req, res) => {
   }
 });
 
-// LMS Curriculum — curriculum folders with grouped resource records.
+// LMS Curriculum — curriculum groups containing theme folders and grouped resource records.
 app.use("/api/lms/curriculum", requireAuth, requireLmsPageAccess("lms-curriculum"));
 
 const LMS_CURRICULUM_RESOURCE_TYPES = Object.freeze({
@@ -16486,17 +16488,100 @@ const LMS_CURRICULUM_RESOURCE_TYPES = Object.freeze({
   exam: "Exam",
 });
 
+async function _lmsCurriculumCreateThemeRecord({ groupId, name, description = null, createdBy = null }) {
+  const groups = await supabaseDb.request(`/lms_curriculum_groups?select=id&id=eq.${_sbRestFilterValue(groupId)}&limit=1`);
+  if (!Array.isArray(groups) || !groups.length) {
+    const error = new Error("Curriculum group was not found.");
+    error.status = 404;
+    throw error;
+  }
+  const rows = await supabaseDb.request('/lms_curricula', {
+    method: 'POST', headers: { Prefer: 'return=representation' },
+    body: { curriculum_group_id: Number(groupId), name, description, created_by: createdBy, metadata: {} },
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+async function _lmsCurriculumResolveLegacyGroupId(requestedGroupId, createdBy = null) {
+  const cleanId = String(requestedGroupId || "").trim();
+  if (/^\d+$/.test(cleanId)) return cleanId;
+  const groups = await supabaseDb.request('/lms_curriculum_groups?select=id&order=position.asc,created_at.asc&limit=1');
+  const existingId = String(Array.isArray(groups) ? (groups[0]?.id || "") : "").trim();
+  if (existingId) return existingId;
+  const rows = await supabaseDb.request('/lms_curriculum_groups', {
+    method: 'POST', headers: { Prefer: 'return=representation' },
+    body: { name: "General Curriculum", description: "Automatically created for existing themes.", created_by: createdBy, metadata: {} },
+  });
+  const createdId = String(Array.isArray(rows) ? (rows[0]?.id || "") : (rows?.id || "")).trim();
+  if (!createdId) throw new Error("The default curriculum group could not be created.");
+  return createdId;
+}
+
 app.get("/api/lms/curriculum", async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const rows = await supabaseDb.request('/lms_curricula?select=*&order=created_at.desc&limit=1000');
-    return res.json({ ok: true, curricula: Array.isArray(rows) ? rows : [] });
+    const [groupRows, themeRows] = await Promise.all([
+      supabaseDb.request('/lms_curriculum_groups?select=*&order=position.asc,created_at.desc&limit=1000'),
+      supabaseDb.request('/lms_curricula?select=*&order=created_at.desc&limit=5000'),
+    ]);
+    const groups = Array.isArray(groupRows) ? groupRows : [];
+    const themes = Array.isArray(themeRows) ? themeRows : [];
+    const themesByGroup = new Map();
+    themes.forEach((theme) => {
+      const groupId = String(theme?.curriculum_group_id || "").trim();
+      if (!groupId) return;
+      if (!themesByGroup.has(groupId)) themesByGroup.set(groupId, []);
+      themesByGroup.get(groupId).push(theme);
+    });
+    const groupedCurricula = groups.map((group) => {
+      const groupThemes = themesByGroup.get(String(group.id)) || [];
+      return { ...group, theme_count: groupThemes.length, themes: groupThemes };
+    });
+    return res.json({ ok: true, groups: groupedCurricula, curricula: themes });
   } catch (error) {
     console.error("GET /api/lms/curriculum error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load curricula." });
   }
 });
 
+app.post("/api/lms/curriculum/groups", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const description = String(req.body?.description || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "Curriculum name is required." });
+    const createdByRaw = String(req.session?.userSupabaseId || "").trim();
+    const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
+    const rows = await supabaseDb.request('/lms_curriculum_groups', {
+      method: 'POST', headers: { Prefer: 'return=representation' },
+      body: { name, description, created_by: createdBy, metadata: {} },
+    });
+    return res.status(201).json({ ok: true, curriculum: Array.isArray(rows) ? rows[0] : rows });
+  } catch (error) {
+    console.error("POST /api/lms/curriculum/groups error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create curriculum." });
+  }
+});
+
+app.post("/api/lms/curriculum/groups/:groupId/themes", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const groupId = String(req.params?.groupId || "").trim();
+    if (!/^\d+$/.test(groupId)) return res.status(400).json({ ok: false, error: "Invalid curriculum group ID." });
+    const name = String(req.body?.name || "").trim().slice(0, 240);
+    const description = String(req.body?.description || "").trim().slice(0, 2000) || null;
+    if (!name) return res.status(400).json({ ok: false, error: "Theme name is required." });
+    const createdByRaw = String(req.session?.userSupabaseId || "").trim();
+    const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
+    const theme = await _lmsCurriculumCreateThemeRecord({ groupId, name, description, createdBy });
+    return res.status(201).json({ ok: true, theme, curriculum: theme });
+  } catch (error) {
+    console.error("POST curriculum group theme error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create theme." });
+  }
+});
+
+// Backward-compatible theme creation for older cached clients.
 app.post("/api/lms/curriculum", async (req, res) => {
   res.set("Cache-Control", "no-store");
   try {
@@ -16505,11 +16590,9 @@ app.post("/api/lms/curriculum", async (req, res) => {
     if (!name) return res.status(400).json({ ok: false, error: "Theme name is required." });
     const createdByRaw = String(req.session?.userSupabaseId || "").trim();
     const createdBy = /^\d+$/.test(createdByRaw) ? Number(createdByRaw) : null;
-    const rows = await supabaseDb.request('/lms_curricula', {
-      method: 'POST', headers: { Prefer: 'return=representation' },
-      body: { name, description, created_by: createdBy, metadata: {} },
-    });
-    return res.status(201).json({ ok: true, curriculum: Array.isArray(rows) ? rows[0] : rows });
+    const groupId = await _lmsCurriculumResolveLegacyGroupId(req.body?.curriculumGroupId || req.body?.groupId, createdBy);
+    const theme = await _lmsCurriculumCreateThemeRecord({ groupId, name, description, createdBy });
+    return res.status(201).json({ ok: true, theme, curriculum: theme });
   } catch (error) {
     console.error("POST /api/lms/curriculum error:", error?.details || error?.body || error);
     return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create theme." });

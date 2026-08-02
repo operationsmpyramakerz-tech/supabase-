@@ -16,7 +16,7 @@
   <link href="/css/style.css?v=lms-curriculum-v1" rel="stylesheet" />
   <link href="/css/ui-redesign.css?v=lms-back-arrow-v10" rel="stylesheet" />
   <link href="/css/page-canvas-fix.css?v=lms-curriculum-v1" rel="stylesheet" />
-  <link href="/css/lms-curriculum.css?v=lms-storage-upload-v2" rel="stylesheet" />
+  <link href="/css/lms-curriculum.css?v=lms-curriculum-groups-v3" rel="stylesheet" />
   <script src="/js/vendor/feather-icons.min.js"></script>
 </head>
 <body class="permissions-loading page-lms lms-curriculum-page" data-sidebar-open-scroll="instant">
@@ -37,8 +37,8 @@
 
       <main class="curriculum-shell">
         <section id="curriculumListView">
-          <div class="curriculum-toolbar"><div><span class="curriculum-kicker">LMS CONTENT</span><h1>Curriculum</h1><p>Create theme folders, then organize grades and learning files inside each theme.</p></div><button id="addCurriculumBtn" class="curriculum-primary-btn"><i data-feather="folder-plus"></i><span>Add New Theme</span></button></div>
-          <section id="curriculumFolderGrid" class="curriculum-folder-grid" aria-live="polite"></section>
+          <div class="curriculum-toolbar"><div><span class="curriculum-kicker">LMS CONTENT</span><h1>Curriculum</h1><p>Create curriculum groups, then organize theme folders, grades, and learning files inside each group.</p></div><button id="addCurriculumBtn" class="curriculum-primary-btn"><i data-feather="folder-plus"></i><span>Add New Curriculum</span></button></div>
+          <section id="curriculumFolderGrid" class="curriculum-catalog-list" aria-live="polite"></section>
         </section>
 
         <section id="curriculumThemeView" hidden>
@@ -61,7 +61,9 @@
     </div>
   </div>
 
-  <div id="curriculumModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-curriculum-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-curriculum-close><i data-feather="x"></i></button><span class="curriculum-kicker">NEW THEME FOLDER</span><h2>Add New Theme</h2><label><span>Theme Name *</span><input id="curriculumNameInput" maxlength="240" placeholder="Example: Theme One" /></label><label><span>Description</span><textarea id="curriculumDescriptionInput" rows="4" maxlength="2000" placeholder="Optional short description"></textarea></label><div id="curriculumModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-curriculum-close>Cancel</button><button id="saveCurriculumBtn" class="curriculum-btn curriculum-btn--dark">Create Theme</button></div></section></div>
+  <div id="curriculumModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-curriculum-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-curriculum-close><i data-feather="x"></i></button><span class="curriculum-kicker">NEW CURRICULUM GROUP</span><h2>Add New Curriculum</h2><label><span>Curriculum Name *</span><input id="curriculumNameInput" maxlength="240" placeholder="Example: Robotics Curriculum" /></label><label><span>Description</span><textarea id="curriculumDescriptionInput" rows="4" maxlength="2000" placeholder="Optional short description"></textarea></label><div id="curriculumModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-curriculum-close>Cancel</button><button id="saveCurriculumBtn" class="curriculum-btn curriculum-btn--dark">Create Curriculum</button></div></section></div>
+
+  <div id="themeModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-theme-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-theme-close><i data-feather="x"></i></button><span class="curriculum-kicker">NEW THEME FOLDER</span><h2>Add New Theme</h2><p id="themeCurriculumTarget" class="curriculum-modal__context"></p><label><span>Theme Name *</span><input id="themeNameInput" maxlength="240" placeholder="Example: Theme One" /></label><label><span>Description</span><textarea id="themeDescriptionInput" rows="4" maxlength="2000" placeholder="Optional short description"></textarea></label><div id="themeModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-theme-close>Cancel</button><button id="saveThemeBtn" class="curriculum-btn curriculum-btn--dark">Create Theme</button></div></section></div>
 
   <div id="gradeModal" class="curriculum-modal" hidden><div class="curriculum-modal__backdrop" data-grade-close></div><section class="curriculum-modal__card"><button class="curriculum-modal__x" data-grade-close><i data-feather="x"></i></button><span class="curriculum-kicker">NEW GRADE FOLDER</span><h2>Add New Grade</h2><label><span>Grade Name *</span><input id="gradeNameInput" maxlength="240" placeholder="Example: Grade 5" /></label><label><span>Description</span><textarea id="gradeDescriptionInput" rows="4" maxlength="2000" placeholder="Optional short description"></textarea></label><div id="gradeModalError" class="curriculum-modal__error"></div><div class="curriculum-modal__actions"><button class="curriculum-btn curriculum-btn--light" data-grade-close>Cancel</button><button id="saveGradeBtn" class="curriculum-btn curriculum-btn--dark">Create Grade</button></div></section></div>
 
@@ -93,6 +95,6 @@
 
   <script>if(window.feather)feather.replace()</script>
   <script src="/js/common-ui.js?v=lms-logo-lock-v9"></script>
-  <script src="/js/lms-curriculum.js?v=lms-storage-upload-v2"></script>
+  <script src="/js/lms-curriculum.js?v=lms-curriculum-groups-v3"></script>
 </body>
 </html>
