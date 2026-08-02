@@ -42,11 +42,14 @@
   let pdfTurnPreparing = false;
   let pdfJsPromise = null;
   const pdfPageCache = new Map();
+  const viewerTicketCache = new Map();
   const PDF_MIN_ZOOM = 0.7;
   const PDF_MAX_ZOOM = 2.2;
   const PDF_ZOOM_STEP = 0.15;
   const PDF_PAGE_CACHE_LIMIT = 8;
-  const PDF_FAST_PREVIEW_WAIT_MS = 1600;
+  const PDF_FAST_PREVIEW_WAIT_MS = 900;
+  const VIEWER_TICKET_CACHE_MS = 60 * 1000;
+  const PDF_FULL_DOWNLOAD_FALLBACK_LIMIT = 12 * 1024 * 1024;
   let pdfFastPreviewBackfillScheduled = false;
   const curriculumGroupItems = new Map();
   const resourceItems = new Map();
@@ -291,9 +294,44 @@
       </div>
     </article>`;
   }
+
+  function viewerTicketCacheKey(id) {
+    return `${String(currentThemeId || '')}:${String(currentGradeId || '')}:${String(id || '')}`;
+  }
+
+  function fetchResourceViewTicket(id, { force = false } = {}) {
+    const cleanId = String(id || '').trim();
+    if (!cleanId) return Promise.reject(new Error('Invalid file ID.'));
+    const key = viewerTicketCacheKey(cleanId);
+    const now = Date.now();
+    const cached = viewerTicketCache.get(key);
+    if (!force && cached?.promise && Number(cached.expiresAt || 0) > now) return cached.promise;
+    const promise = jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(cleanId)}/view-ticket`)
+      .catch((error) => {
+        if (viewerTicketCache.get(key)?.promise === promise) viewerTicketCache.delete(key);
+        throw error;
+      });
+    viewerTicketCache.set(key, { promise, expiresAt: now + VIEWER_TICKET_CACHE_MS });
+    return promise;
+  }
+
+  function prefetchResourceViewer(id) {
+    const item = resourceItems.get(String(id || ''));
+    if (!item) return;
+    loadPdfJs().catch(() => {});
+    fetchResourceViewTicket(id).catch(() => {});
+  }
+
   function bindResourceCards(container) {
     container.querySelectorAll('[data-view-resource]').forEach((button) => {
       button.addEventListener('click', () => openResourceViewer(button.dataset.viewResource));
+      let hoverTimer = 0;
+      button.addEventListener('pointerenter', () => {
+        window.clearTimeout(hoverTimer);
+        hoverTimer = window.setTimeout(() => prefetchResourceViewer(button.dataset.viewResource), 120);
+      });
+      button.addEventListener('pointerleave', () => window.clearTimeout(hoverTimer));
+      button.addEventListener('focus', () => prefetchResourceViewer(button.dataset.viewResource));
     });
     container.querySelectorAll('[data-resource-actions-toggle]').forEach((button) => {
       button.addEventListener('click', (event) => {
@@ -328,6 +366,7 @@
   function renderGroups(resources) {
     const grouped = {};
     Object.keys(TYPES).forEach((key) => { grouped[key] = []; });
+    viewerTicketCache.clear();
     resourceItems.clear();
     (resources || []).forEach((item) => {
       if (!grouped[item.resource_type]) return;
@@ -921,8 +960,8 @@
   }
   function loadPdfJs() {
     if (!pdfJsPromise) {
-      pdfJsPromise = import('/js/vendor/pdfjs/pdf.min.mjs?v=legacy-6.2.108-1').then((pdfjs) => {
-        pdfjs.GlobalWorkerOptions.workerSrc = '/js/vendor/pdfjs/pdf.worker.min.mjs?v=legacy-6.2.108-1';
+      pdfJsPromise = import('/js/vendor/pdfjs/pdf.min.mjs?v=fast-open-v13').then((pdfjs) => {
+        pdfjs.GlobalWorkerOptions.workerSrc = '/js/vendor/pdfjs/pdf.worker.min.mjs?v=fast-open-v13';
         return pdfjs;
       });
     }
@@ -1390,41 +1429,65 @@
     updatePdfFullscreenButton();
     window.setTimeout(() => renderPdfSpread().catch(() => {}), 120);
   }
-  async function loadPdfDocument(pdfjs, streamUrl, token) {
-    let networkError = null;
-    let networkTask = null;
-    try {
-      networkTask = pdfjs.getDocument({
-        url: streamUrl,
-        withCredentials: true,
-        rangeChunkSize: 256 * 1024,
-        disableAutoFetch: true,
-        disableRange: false,
-        disableStream: true,
-        isEvalSupported: false,
-      });
-      networkTask.onProgress = () => {
-        if (token !== viewerLoadToken || activePdfDocument) return;
-        const label = $('resourceViewerLoading').querySelector('b');
-        if (label) label.textContent = 'Opening the first two pages…';
-      };
-      activePdfLoadingTask = networkTask;
-      return { documentRef: await networkTask.promise, loadingTask: networkTask };
-    } catch (error) {
-      networkError = error;
-      if (activePdfLoadingTask === networkTask) activePdfLoadingTask = null;
-      try { await networkTask?.destroy?.(); } catch {}
+  function pdfSourceUsesCredentials(url) {
+    try { return new URL(String(url || ''), window.location.href).origin === window.location.origin; }
+    catch { return true; }
+  }
+
+  async function loadPdfDocument(pdfjs, ticket, token) {
+    const directUrl = String(ticket?.streamUrl || '').trim();
+    const fallbackUrl = String(ticket?.fallbackStreamUrl || '').trim();
+    const sources = [];
+    [directUrl, fallbackUrl].forEach((url) => {
+      if (url && !sources.some((source) => source.url === url)) {
+        sources.push({ url, withCredentials: pdfSourceUsesCredentials(url) });
+      }
+    });
+    let lastError = null;
+
+    for (const source of sources) {
+      if (token !== viewerLoadToken) throw lastError || new Error('PDF loading was cancelled.');
+      let networkTask = null;
+      try {
+        networkTask = pdfjs.getDocument({
+          url: source.url,
+          withCredentials: source.withCredentials,
+          rangeChunkSize: 256 * 1024,
+          disableAutoFetch: false,
+          disableRange: false,
+          disableStream: true,
+          isEvalSupported: false,
+        });
+        networkTask.onProgress = () => {
+          if (token !== viewerLoadToken || activePdfDocument) return;
+          const label = $('resourceViewerLoading').querySelector('b');
+          if (label) label.textContent = 'Opening the interactive book…';
+        };
+        activePdfLoadingTask = networkTask;
+        return { documentRef: await networkTask.promise, loadingTask: networkTask };
+      } catch (error) {
+        lastError = error;
+        if (activePdfLoadingTask === networkTask) activePdfLoadingTask = null;
+        try { await networkTask?.destroy?.(); } catch {}
+      }
     }
-    if (token !== viewerLoadToken) throw networkError;
-    const response = await fetch(streamUrl, {
-      credentials: 'include',
+
+    if (token !== viewerLoadToken) throw lastError || new Error('PDF loading was cancelled.');
+    const fileSize = Math.max(0, Number(ticket?.fileSize || 0) || 0);
+    const downloadUrl = fallbackUrl || directUrl;
+    if (!downloadUrl || fileSize > PDF_FULL_DOWNLOAD_FALLBACK_LIMIT) {
+      throw lastError || new Error('The PDF range stream could not be opened.');
+    }
+
+    const response = await fetch(downloadUrl, {
+      credentials: pdfSourceUsesCredentials(downloadUrl) ? 'include' : 'omit',
       cache: 'no-store',
       headers: { Accept: 'application/pdf' },
       referrerPolicy: 'no-referrer',
     });
-    if (!response.ok) throw networkError || new Error(`PDF request failed with status ${response.status}.`);
+    if (!response.ok) throw lastError || new Error(`PDF request failed with status ${response.status}.`);
     const data = new Uint8Array(await response.arrayBuffer());
-    if (!data.length) throw networkError || new Error('The PDF is empty.');
+    if (!data.length) throw lastError || new Error('The PDF is empty.');
     const loadingTask = pdfjs.getDocument({ data, isEvalSupported: false });
     activePdfLoadingTask = loadingTask;
     try {
@@ -1432,18 +1495,19 @@
     } catch (error) {
       if (activePdfLoadingTask === loadingTask) activePdfLoadingTask = null;
       try { await loadingTask.destroy?.(); } catch {}
-      throw error || networkError;
+      throw error || lastError;
     }
   }
 
-  function loadFastPreviewImage(url) {
+
+  function loadFastPreviewImage(url, { priority = 'auto' } = {}) {
     return new Promise((resolve, reject) => {
       const image = new Image();
       image.alt = 'Fast PDF page preview';
       image.draggable = false;
       image.decoding = 'async';
       image.loading = 'eager';
-      image.fetchPriority = 'high';
+      image.fetchPriority = priority;
       image.referrerPolicy = 'no-referrer';
       image.addEventListener('load', () => resolve(image), { once: true });
       image.addEventListener('error', () => reject(new Error('Fast preview page is not available.')), { once: true });
@@ -1451,9 +1515,22 @@
     });
   }
 
+  async function loadFastPreviewWithFallback(primaryUrl, fallbackUrl, options = {}) {
+    const urls = [primaryUrl, fallbackUrl]
+      .map((value) => String(value || '').trim())
+      .filter((value, index, all) => value && all.indexOf(value) === index);
+    let lastError = null;
+    for (const url of urls) {
+      try { return await loadFastPreviewImage(url, options); }
+      catch (error) { lastError = error; }
+    }
+    throw lastError || new Error('Fast preview page is not available.');
+  }
+
   async function showPdfFastPreview(ticket, token) {
     const urls = Array.isArray(ticket?.previewUrls) ? ticket.previewUrls.slice(0, 2) : [];
-    if (!urls.some(Boolean)) return 0;
+    const fallbackUrls = Array.isArray(ticket?.fallbackPreviewUrls) ? ticket.fallbackPreviewUrls.slice(0, 2) : [];
+    if (![...urls, ...fallbackUrls].some(Boolean)) return 0;
     const content = $('resourceViewerContent');
     content.innerHTML = `<section class="curriculum-pdf-reader curriculum-pdf-reader--fast-preview" aria-label="Fast preview of the first two PDF pages" aria-busy="true">
       <div class="curriculum-pdf-reader__viewport">
@@ -1467,7 +1544,7 @@
           </div>
         </div>
       </div>
-      <div class="curriculum-pdf-quick-status"><span class="curriculum-pdf-quick-status__spinner"></span><b>Opening the first pages…</b><span>Preparing the interactive book in the background…</span></div>
+      <div class="curriculum-pdf-quick-status"><span class="curriculum-pdf-quick-status__spinner"></span><b>Opening the first page…</b><span>Preparing the interactive book in the background…</span></div>
     </section>`;
     const root = content.querySelector('.curriculum-pdf-reader');
     activePdfZoom = 1;
@@ -1486,15 +1563,14 @@
       };
       const waitTimer = window.setTimeout(() => finish(loadedCount), PDF_FAST_PREVIEW_WAIT_MS);
 
-      urls.forEach((url, index) => {
-        const slot = root.querySelector(`[data-fast-preview-page="${index + 1}"]`);
-        if (!url || !slot) {
-          settledCount += 1;
-          slot?.classList.add('is-blank');
-          if (settledCount === urls.length && loadedCount === 0) finish(0);
-          return;
-        }
-        loadFastPreviewImage(url).then((image) => {
+      const loadPage = async (index) => {
+        const pageNumber = index + 1;
+        const slot = root.querySelector(`[data-fast-preview-page="${pageNumber}"]`);
+        if (!slot) return;
+        try {
+          const image = await loadFastPreviewWithFallback(urls[index], fallbackUrls[index], {
+            priority: index === 0 ? 'high' : 'low',
+          });
           if (token !== viewerLoadToken || activePdfDocument || !content.contains(root)) return;
           slot.classList.remove('is-blank');
           slot.insertBefore(image, slot.firstChild);
@@ -1509,23 +1585,24 @@
           sizePdfBook(root);
           window.requestAnimationFrame(() => centerPdfStage(root));
           finish(loadedCount);
-        }).catch(() => {
+        } catch {
           if (content.contains(root)) slot.classList.add('is-blank');
-        }).finally(() => {
+        } finally {
           settledCount += 1;
-          if (settledCount !== urls.length) return;
-          if (loadedCount > 0) {
-            const label = root.querySelector('.curriculum-pdf-quick-status b');
-            if (label) label.textContent = loadedCount > 1 ? 'First pages ready' : 'First page ready';
-            finish(loadedCount);
-          } else {
+          if (settledCount === 2 && loadedCount === 0) {
             if (content.contains(root)) content.innerHTML = '';
             finish(0);
           }
-        });
-      });
+        }
+      };
+
+      // The first page gets the connection and bandwidth priority. The second
+      // page begins a moment later so it cannot delay the first visible paint.
+      loadPage(0);
+      window.setTimeout(() => loadPage(1), 140);
     });
   }
+
 
   function schedulePdfFastPreviewBackfill(ticket, token) {
     if (pdfFastPreviewBackfillScheduled || !activePdfDocument || !ticket?.id) return;
@@ -1568,7 +1645,7 @@
     let documentRef;
     let loadingTask;
     try {
-      ({ documentRef, loadingTask } = await loadPdfDocument(pdfjs, streamUrl, token));
+      ({ documentRef, loadingTask } = await loadPdfDocument(pdfjs, ticket, token));
     } catch (error) {
       const previewRoot = content.querySelector('.curriculum-pdf-reader--fast-preview');
       if (previewRoot?.querySelector('img')) {
@@ -1757,7 +1834,7 @@
     setViewerStatus('Preparing protected preview…');
     icons();
     try {
-      const data = await jsonFetch(`/api/lms/curriculum/${encodeURIComponent(currentThemeId)}/grades/${encodeURIComponent(currentGradeId)}/resources/${encodeURIComponent(cleanId)}/view-ticket`);
+      const data = await fetchResourceViewTicket(cleanId);
       if (token !== viewerLoadToken) return;
       const ticket = data.preview || {};
       fillViewerWatermark(`${ticket.viewerName || 'Authorized user'} · Confidential`);
