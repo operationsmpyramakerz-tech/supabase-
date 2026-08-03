@@ -34,8 +34,31 @@ try {
 }
 
 const app = express();
-// IMPORTANT for Vercel reverse proxy so secure cookies are honored
+
+// Per-process runtime state. PM2 cluster mode starts one independent Node.js
+// process per worker, so this state intentionally tracks only the current
+// worker. Shared user/session state continues to live in Redis/Supabase.
+const runtimeState = {
+  startedAt: Date.now(),
+  // Serverless platforms invoke the Express handler directly and do not run
+  // server/local.js, so they are ready as soon as this module is loaded.
+  ready: !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME),
+  draining: false,
+};
+app.locals.runtimeState = runtimeState;
+
+// IMPORTANT for Vercel/reverse proxies so secure cookies and client IPs work.
 app.set("trust proxy", 1);
+
+// A lightweight worker marker makes it easy to verify that PM2 is balancing
+// requests without exposing application data.
+app.use((req, res, next) => {
+  res.setHeader(
+    "X-ERP-Worker",
+    String(process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID ?? process.pid),
+  );
+  next();
+});
 // Initialize Notion Client using Env Vars
 const notion = new Client({ auth: process.env.Notion_API_Key });
 const componentsDatabaseId = process.env.Products_Database;
@@ -156,8 +179,30 @@ app.use(
 
 
 // --- Health FIRST (before session) so it works even if env is missing ---
+// /health is a liveness probe: the process is alive and can answer HTTP.
 app.get("/health", (req, res) => {
-  res.json({ ok: true, region: process.env.VERCEL_REGION || "unknown" });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    ok: true,
+    status: runtimeState.draining ? "draining" : "alive",
+    region: process.env.VERCEL_REGION || "unknown",
+    pid: process.pid,
+    worker: String(process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID ?? "standalone"),
+    uptimeSeconds: Math.floor(process.uptime()),
+  });
+});
+
+// /ready is a readiness probe: reverse proxies should send new traffic only
+// while this worker is fully listening and not performing a graceful shutdown.
+app.get("/ready", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const ready = runtimeState.ready && !runtimeState.draining;
+  return res.status(ready ? 200 : 503).json({
+    ok: ready,
+    status: ready ? "ready" : (runtimeState.draining ? "draining" : "starting"),
+    pid: process.pid,
+    worker: String(process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID ?? "standalone"),
+  });
 });
 
 

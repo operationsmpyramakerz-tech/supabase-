@@ -387,6 +387,24 @@ async function getUserAuthRevokedAt(userId) {
   }
 }
 
+async function closeSessionResources() {
+  if (!redisClient || !redisClient.isOpen) return;
+  try {
+    if (redisClient.isReady) {
+      await redisClient.quit();
+    } else {
+      redisClient.disconnect();
+    }
+  } catch (error) {
+    try {
+      redisClient.disconnect();
+    } catch {}
+    throw error;
+  } finally {
+    redisConnectPromise = null;
+  }
+}
+
 function getSessionDiagnostics() {
   return {
     storeType: sessionStoreType,
@@ -402,4 +420,13 @@ function getSessionDiagnostics() {
   };
 }
 
-module.exports = { sessionMiddleware, redisClient, cacheRedis, sessionStoreType, getSessionDiagnostics, setUserAuthRevokedAt, getUserAuthRevokedAt };
+module.exports = {
+  sessionMiddleware,
+  redisClient,
+  cacheRedis,
+  sessionStoreType,
+  getSessionDiagnostics,
+  setUserAuthRevokedAt,
+  getUserAuthRevokedAt,
+  closeSessionResources,
+};
