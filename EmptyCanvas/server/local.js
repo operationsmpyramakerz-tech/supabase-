@@ -5,6 +5,7 @@ const {
   getSessionDiagnostics,
   closeSessionResources,
 } = require("./session-redis");
+const { closeExportWorkers } = require("./exportWorkerPool");
 
 const PORT = Math.max(1, Number(process.env.PORT || 5000) || 5000);
 const HOST = String(process.env.HOST || "0.0.0.0").trim() || "0.0.0.0";
@@ -108,6 +109,12 @@ async function gracefulShutdown(signal = "shutdown") {
 
   // Stop taking new requests. Existing connections are allowed to complete.
   server.close(async (error) => {
+    try {
+      await closeExportWorkers();
+    } catch (closeError) {
+      console.error("[shutdown] Export worker close failed:", closeError?.message || closeError);
+    }
+
     try {
       await closeSessionResources();
     } catch (closeError) {

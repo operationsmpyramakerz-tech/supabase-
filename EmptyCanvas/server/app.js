@@ -13,6 +13,7 @@ const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport"
 const supabaseDb = require("./supabaseRest");
 const { createPageRouter } = require("./routes/pageRoutes");
 const LMS_ROLE_DIRECTORY_CONFIG = require("./config/lmsRoleDirectory");
+const { runExportTask, getExportWorkerDiagnostics } = require("./exportWorkerPool");
 
 // B2C formulas are evaluated through a local, dependency-free parser with a
 // closed grammar and function allow-list. This avoids executing user input as
@@ -204,6 +205,45 @@ app.get("/ready", (req, res) => {
     worker: String(process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID ?? "standalone"),
   });
 });
+
+
+function _safeDownloadFileName(value, fallback = "export.pdf") {
+  const name = String(value || fallback).replace(/[\r\n"]/g, "").trim();
+  return name || fallback;
+}
+
+async function _sendBackgroundExport(res, {
+  type,
+  payload,
+  fileName,
+  contentType = "application/pdf",
+}) {
+  const result = await runExportTask(type, payload || {});
+  if (res.destroyed || res.writableEnded) return result;
+
+  const safeName = _safeDownloadFileName(fileName, "export.pdf");
+  res.setHeader("Content-Type", contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+  );
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Length", String(result.buffer.length));
+  res.setHeader("X-ERP-Export-Mode", result.mode || "unknown");
+  res.setHeader("X-ERP-Export-Queue-Ms", String(Math.max(0, Number(result.queueMs) || 0)));
+  res.setHeader("X-ERP-Export-Render-Ms", String(Math.max(0, Number(result.renderMs) || 0)));
+  res.end(result.buffer);
+  return result;
+}
+
+function _exportErrorStatus(error) {
+  if (error?.code === "EXPORT_QUEUE_FULL") return 503;
+  if (error?.code === "EXPORT_JOB_TIMEOUT") return 504;
+  if (error?.code === "EXPORT_OUTPUT_TOO_LARGE") return 413;
+  if (error?.code === "EXPORT_WORKERS_CLOSING") return 503;
+  if (error?.code === "EXPORT_WORKER_UNAVAILABLE") return 503;
+  return Number(error?.status) || 500;
+}
 
 
 // Supabase connectivity test. This route is intentionally unauthenticated and
@@ -5591,29 +5631,29 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", colu
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
-  res.setHeader("Cache-Control", "no-store");
-  const { pipeDeliveryReceiptPDF } = require("./deliveryReceiptPdf");
-  await pipeDeliveryReceiptPDF({
-    orderId: payload.orderIdRange,
-    createdAt: payload.createdAt,
-    teamMember: payload.teamMember,
-    preparedBy: payload.groupReason,
-    rows: payload.rows,
-    grandQty: payload.grandQty,
-    grandTotal: payload.grandTotal,
-    metaLayout: "teamReasonFirst",
-    showReasonTagBar: false,
-    groupByReason: false,
-    headerColorKey: payload.groupReason,
-    showCosts: !hideCosts,
-    exportColumns: selectedExportColumns,
-    documentTitle: payload.receiptView.documentTitle,
-    recipientLabelLeft: payload.receiptView.recipientLabelLeft,
-    thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
-    signatureLabels: payload.receiptView.signatureLabels,
-  }, res);
+  await _sendBackgroundExport(res, {
+    type: "delivery-pdf",
+    fileName,
+    payload: {
+      orderId: payload.orderIdRange,
+      createdAt: payload.createdAt,
+      teamMember: payload.teamMember,
+      preparedBy: payload.groupReason,
+      rows: payload.rows,
+      grandQty: payload.grandQty,
+      grandTotal: payload.grandTotal,
+      metaLayout: "teamReasonFirst",
+      showReasonTagBar: false,
+      groupByReason: false,
+      headerColorKey: payload.groupReason,
+      showCosts: !hideCosts,
+      exportColumns: selectedExportColumns,
+      documentTitle: payload.receiptView.documentTitle,
+      recipientLabelLeft: payload.receiptView.recipientLabelLeft,
+      thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
+      signatureLabels: payload.receiptView.signatureLabels,
+    },
+  });
 }
 
 async function _sbBuildMaintenanceSparePartLookups() {
@@ -5696,26 +5736,26 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   }));
 
   const fileName = `maintenance_report_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
-  res.setHeader("Cache-Control", "no-store");
-  const { pipeMaintenanceReceiptPDF } = require("./maintenanceReceiptPdf");
-  await pipeMaintenanceReceiptPDF({
-    orderId: payload.orderIdRange,
-    createdAt: payload.createdAt,
-    requestedBy: payload.teamMember,
-    teamMember: payload.teamMember,
-    operationsBy: payload.operationsBy,
-    issueDescription: first.issueDescription || "—",
-    actualIssueDescription: first.actualIssueDescription || "—",
-    repairAction: first.repairAction || "—",
-    resolutionMethod: first.resolutionMethod || "—",
-    sparePartsReplacedList: first.sparePartsReplacedNames || [],
-    rows: payload.rows,
-    componentLogs,
-    maintenanceReceiptName: first.maintenanceReceiptName || "",
-    maintenanceReceiptUrl: first.maintenanceReceiptUrl || "",
-  }, res);
+  await _sendBackgroundExport(res, {
+    type: "maintenance-pdf",
+    fileName,
+    payload: {
+      orderId: payload.orderIdRange,
+      createdAt: payload.createdAt,
+      requestedBy: payload.teamMember,
+      teamMember: payload.teamMember,
+      operationsBy: payload.operationsBy,
+      issueDescription: first.issueDescription || "—",
+      actualIssueDescription: first.actualIssueDescription || "—",
+      repairAction: first.repairAction || "—",
+      resolutionMethod: first.resolutionMethod || "—",
+      sparePartsReplacedList: first.sparePartsReplacedNames || [],
+      rows: payload.rows,
+      componentLogs,
+      maintenanceReceiptName: first.maintenanceReceiptName || "",
+      maintenanceReceiptUrl: first.maintenanceReceiptUrl || "",
+    },
+  });
 }
 
 async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "" } = {}) {
@@ -11647,6 +11687,11 @@ function withTimeoutResult(promise, ms, fallbackValue) {
 app.get("/api/cache-diagnostics", requireAuth, (req, res) => {
   res.set("Cache-Control", "no-store");
   return res.json({ ok: true, cache: getAppCacheDiagnostics() });
+});
+
+app.get("/api/export-worker-diagnostics", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true, exports: getExportWorkerDiagnostics() });
 });
 
 app.post("/api/hard-refresh", requireAuth, async (req, res) => {
@@ -21293,33 +21338,21 @@ app.post(
 
       const fileName = `${receiptView.filePrefix}_${safeName}.pdf`;
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      );
-      res.setHeader("Cache-Control", "no-store");
-
-      // Generate a nicer PDF (logo + meta table + better signatures layout)
-      const { pipeDeliveryReceiptPDF } = require("./deliveryReceiptPdf");
-      await pipeDeliveryReceiptPDF(
-        {
+      await _sendBackgroundExport(res, {
+        type: "delivery-pdf",
+        fileName,
+        payload: {
           orderId: orderIdRange,
           createdAt,
           teamMember,
-          // For Current Orders: show the order Reason instead of "Prepared by"
           preparedBy: groupReason,
           rows,
           grandQty,
           grandTotal,
-          // Layout requested for Current Orders
           metaLayout: "teamReasonFirst",
-          // Remove the Reason bar above the table
           showReasonTagBar: false,
-          // Current Orders are already grouped by reason, keep a single table
           groupByReason: false,
           headerColorKey: groupReason,
-          // Hide unit/total columns for Received/Delivered exports
           showCosts: !hideCosts,
           exportColumns: selectedExportColumns,
           documentTitle: receiptView.documentTitle,
@@ -21327,12 +21360,11 @@ app.post(
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
           signatureLabels: receiptView.signatureLabels,
         },
-        res,
-      );
+      });
     } catch (e) {
       console.error("export requested pdf error:", e.body || e);
       try {
-        if (!res.headersSent) res.status(500).json({ error: "Failed to export PDF" });
+        if (!res.headersSent) res.status(_exportErrorStatus(e)).json({ error: e?.message || "Failed to export PDF" });
       } catch {}
     }
   },
@@ -21562,16 +21594,10 @@ app.post(
         .slice(0, 60);
       const fileName = `maintenance_receipt_${safeName}.pdf`;
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      );
-      res.setHeader("Cache-Control", "no-store");
-
-      const { pipeMaintenanceReceiptPDF } = require("./maintenanceReceiptPdf");
-      await pipeMaintenanceReceiptPDF(
-        {
+      await _sendBackgroundExport(res, {
+        type: "maintenance-pdf",
+        fileName,
+        payload: {
           orderId: orderIdRange,
           createdAt,
           requestedBy,
@@ -21587,12 +21613,11 @@ app.post(
           maintenanceReceiptUrl,
           maintenanceReceiptFiles,
         },
-        res,
-      );
+      });
     } catch (e) {
       console.error("export maintenance pdf error:", e?.body || e);
       try {
-        if (!res.headersSent) res.status(500).json({ error: "Failed to export maintenance PDF" });
+        if (!res.headersSent) res.status(_exportErrorStatus(e)).json({ error: e?.message || "Failed to export maintenance PDF" });
       } catch {}
     }
   },
@@ -22363,13 +22388,6 @@ app.post(
         .slice(0, 60);
       const fileName = `${receiptView.filePrefix}_${safeName}.pdf`;
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      );
-      res.setHeader("Cache-Control", "no-store");
-
       // Primary Reason for this order group (Current Orders are grouped by Reason)
       const reasonCounts = new Map();
       for (const r of rows) {
@@ -22379,24 +22397,19 @@ app.post(
       const groupReason =
         Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "No Reason";
 
-      const { pipeDeliveryReceiptPDF } = require("./deliveryReceiptPdf");
-      await pipeDeliveryReceiptPDF(
-        {
+      await _sendBackgroundExport(res, {
+        type: "delivery-pdf",
+        fileName,
+        payload: {
           orderId: orderIdRange,
           createdAt,
           teamMember,
-          // For Current Orders: show Reason instead of "Prepared by"
           preparedBy: groupReason,
           rows,
           grandQty,
           grandTotal,
-          // Requested PDF header table layout:
-          // Team member | Reason
-          // Order ID     | Date
           metaLayout: "teamReasonFirst",
-          // Remove the "Reason" bar above the table
           showReasonTagBar: false,
-          // Current Orders are already grouped by Reason in the UI
           groupByReason: false,
           headerColorKey: groupReason,
           documentTitle: receiptView.documentTitle,
@@ -22405,12 +22418,11 @@ app.post(
           signatureLabels: receiptView.signatureLabels,
           showFooterSignature: false,
         },
-        res,
-      );
+      });
     } catch (e) {
       console.error("export current pdf error:", e?.body || e);
       try {
-        if (!res.headersSent) res.status(500).json({ error: "Failed to export PDF" });
+        if (!res.headersSent) res.status(_exportErrorStatus(e)).json({ error: e?.message || "Failed to export PDF" });
       } catch {}
     }
   },
@@ -23989,13 +24001,14 @@ app.get('/api/events/:id/pdf', requireAuth, requirePage(['Event Calendar', 'Even
       .replace(/\s+/g, '_')
       .slice(0, 80);
     const fileName = `event_request_${safeName}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
-    const { pipeEventRequestPDF } = require('./eventRequestPdf');
-    await pipeEventRequestPDF(event, res);
+    await _sendBackgroundExport(res, {
+      type: 'event-request-pdf',
+      fileName,
+      payload: event,
+    });
   } catch (error) {
     console.error('GET /api/events/:id/pdf error:', error?.details || error);
-    try { if (!res.headersSent) res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) }); } catch {}
+    try { if (!res.headersSent) res.status(_exportErrorStatus(error)).json({ ok: false, error: error?.message || _eventsModuleMissingError(error) }); } catch {}
   }
 });
 
@@ -33567,31 +33580,20 @@ app.post("/api/sv-orders/actions/edit", requireAuth, requirePage("Orders Review"
   }
 });
 
-const generateExpensePDF = require("./pdfGenerator");
-
 app.post("/api/expenses/export/pdf", async (req, res) => {
   try {
-    const { userName, items, dateFrom, dateTo, userId } = req.body;
-
-    generateExpensePDF(
-      { userName, items, dateFrom, dateTo, userId },
-      (err, buffer) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).send("PDF generation failed");
-        }
-
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="${userName.replace(/[^a-z0-9]/gi, "_")}_expenses.pdf"`
-        );
-
-        res.send(buffer);
-      }
-    );
+    const { userName, items, dateFrom, dateTo, userId } = req.body || {};
+    const safeUserName = String(userName || "expenses").replace(/[^a-z0-9]/gi, "_") || "expenses";
+    await _sendBackgroundExport(res, {
+      type: "expense-pdf",
+      fileName: `${safeUserName}_expenses.pdf`,
+      payload: { userName, items, dateFrom, dateTo, userId },
+    });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error("expense PDF export error:", err?.message || err);
+    if (!res.headersSent) {
+      res.status(_exportErrorStatus(err)).json({ success: false, error: err?.message || "PDF generation failed" });
+    }
   }
 });
 
