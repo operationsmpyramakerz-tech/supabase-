@@ -601,12 +601,282 @@ document.addEventListener('DOMContentLoaded', () => {
   const _nativeFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
   const _apiCacheInflight = new Map();
 
+  // Current-page bootstrap bundles replace several simultaneous browser API
+  // calls with one request.  Original endpoints remain the automatic fallback.
+  const PAGE_BOOTSTRAP_NS = 'ops.page.bootstrap.v1';
+  const PAGE_BOOTSTRAP_PREFIX = `${PAGE_BOOTSTRAP_NS}:`;
+  const PAGE_BOOTSTRAP_MAX_STORAGE_CHARS = 1_800_000;
+  const PAGE_BOOTSTRAP_RULES = [
+    {
+      scope: 'events-new',
+      test: (path) => path === '/events/new',
+      apiTest: (url, state) => {
+        const path = String(url?.pathname || '');
+        if (path === '/api/events/types' || path === '/api/events' || path === '/api/events/governorate-rates') return true;
+        if (path === '/api/events/components') return String(url?.searchParams?.get('activeOnly') || '') === '1';
+        const edit = String(state?.cacheId || '').match(/[?&]edit=([^&]+)/)?.[1] || '';
+        return !!edit && path === `/api/events/${edit}`;
+      },
+    },
+    {
+      scope: 'events-components',
+      test: (path) => path === '/events/components',
+      apiTest: (url) => ['/api/events/components', '/api/events/component-categories'].includes(String(url?.pathname || '')),
+    },
+    {
+      scope: 'expenses',
+      test: (path) => path === '/expenses',
+      apiTest: (url) => ['/api/expenses', '/api/expenses/types', '/api/expenses/cash-in-from/options'].includes(String(url?.pathname || '')),
+    },
+  ];
+  const _pageBootstrapInflight = new Map();
+  let _pageBootstrapLinkPrefetchInstalled = false;
+  let _pageBootstrapState = {
+    rule: null,
+    cacheId: '',
+    entries: new Map(),
+    promise: Promise.resolve(),
+  };
+
   function cachePart(value) {
     return encodeURIComponent(String(value ?? '').trim() || '-');
   }
 
   function getApiCacheStorageKey(name, urlObj) {
     return `${APP_API_CACHE_PREFIX}${name}:${cachePart(urlObj.pathname + urlObj.search)}`;
+  }
+
+  function normalizedPageBootstrapPath(pathname) {
+    const raw = String(pathname || '/').replace(/\/+$/, '');
+    return raw || '/';
+  }
+
+  function pageBootstrapRuleForUrl(input) {
+    try {
+      const url = input instanceof URL ? input : new URL(String(input || ''), window.location.origin);
+      if (url.origin !== window.location.origin) return null;
+      const path = normalizedPageBootstrapPath(url.pathname);
+      return PAGE_BOOTSTRAP_RULES.find((rule) => {
+        try { return !!rule.test(path, url); } catch { return false; }
+      }) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function pageBootstrapCacheId(rule, pageUrl) {
+    if (!rule) return '';
+    const url = pageUrl instanceof URL ? pageUrl : new URL(String(pageUrl || window.location.href), window.location.origin);
+    const context = new URLSearchParams();
+    if (rule.scope === 'events-new') {
+      const edit = String(url.searchParams.get('edit') || '').trim();
+      if (edit) context.set('edit', edit);
+    }
+    const suffix = context.toString();
+    return suffix ? `${rule.scope}?${suffix}` : rule.scope;
+  }
+
+  function pageBootstrapEndpoint(rule, pageUrl) {
+    const url = pageUrl instanceof URL ? pageUrl : new URL(String(pageUrl || window.location.href), window.location.origin);
+    const params = new URLSearchParams({ scope: rule.scope });
+    if (rule.scope === 'events-new') {
+      const edit = String(url.searchParams.get('edit') || '').trim();
+      if (edit) params.set('edit', edit);
+    }
+    return `/api/page-bootstrap?${params.toString()}`;
+  }
+
+  function normalizePageBootstrapApiKey(input) {
+    try {
+      const url = input instanceof URL ? new URL(input.href) : new URL(String(input || ''), window.location.origin);
+      if (url.origin !== window.location.origin) return '';
+      ['_', '_ts', '_refresh'].forEach((key) => url.searchParams.delete(key));
+      url.searchParams.sort();
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return '';
+    }
+  }
+
+  function pageBootstrapSessionKey(cacheId) {
+    return `${PAGE_BOOTSTRAP_PREFIX}${cachePart(cacheId)}`;
+  }
+
+  function readPageBootstrapPayload(cacheId) {
+    try {
+      const raw = sessionStorage.getItem(pageBootstrapSessionKey(cacheId));
+      if (!raw) return null;
+      const payload = JSON.parse(raw);
+      const generatedAt = Number(payload?.clientSavedAt || payload?.generatedAt || payload?.savedAt || 0);
+      const resources = Array.isArray(payload?.resources) ? payload.resources : [];
+      const hasLiveResource = resources.some((resource) => {
+        const ttlMs = Math.max(1_000, Number(resource?.ttlMs) || 30_000);
+        return generatedAt > 0 && Date.now() <= generatedAt + ttlMs;
+      });
+      if (!hasLiveResource) {
+        sessionStorage.removeItem(pageBootstrapSessionKey(cacheId));
+        return null;
+      }
+      return payload;
+    } catch {
+      try { sessionStorage.removeItem(pageBootstrapSessionKey(cacheId)); } catch {}
+      return null;
+    }
+  }
+
+  function writePageBootstrapPayload(cacheId, payload) {
+    try {
+      if (!cacheId || !payload || !Array.isArray(payload.resources) || !payload.resources.length) return;
+      const raw = JSON.stringify(payload);
+      if (!raw || raw.length > PAGE_BOOTSTRAP_MAX_STORAGE_CHARS) return;
+      sessionStorage.setItem(pageBootstrapSessionKey(cacheId), raw);
+    } catch {}
+  }
+
+  function clearPageBootstrapCache() {
+    try {
+      const keys = [];
+      for (let i = 0; i < sessionStorage.length; i += 1) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith(PAGE_BOOTSTRAP_PREFIX)) keys.push(key);
+      }
+      keys.forEach((key) => {
+        try { sessionStorage.removeItem(key); } catch {}
+      });
+    } catch {}
+    _pageBootstrapState.entries.clear();
+    _pageBootstrapState.promise = Promise.resolve();
+  }
+
+  function pageBootstrapEntriesFromPayload(payload) {
+    const entries = new Map();
+    const generatedAt = Number(payload?.clientSavedAt || payload?.generatedAt || Date.now());
+    for (const resource of Array.isArray(payload?.resources) ? payload.resources : []) {
+      const key = normalizePageBootstrapApiKey(resource?.url);
+      if (!key) continue;
+      let bodyText = '';
+      try { bodyText = JSON.stringify(resource?.body ?? null); } catch { bodyText = ''; }
+      if (!bodyText) continue;
+      const ttlMs = Math.max(1_000, Number(resource?.ttlMs) || 30_000);
+      entries.set(key, {
+        status: Number(resource?.status || 200),
+        bodyText,
+        expiresAt: generatedAt + ttlMs,
+      });
+    }
+    return entries;
+  }
+
+  async function fetchPageBootstrapPayload(rule, pageUrl) {
+    if (!_nativeFetch || !rule) return null;
+    const cacheId = pageBootstrapCacheId(rule, pageUrl);
+    const cached = readPageBootstrapPayload(cacheId);
+    if (cached) return cached;
+    if (_pageBootstrapInflight.has(cacheId)) return _pageBootstrapInflight.get(cacheId);
+
+    const pending = (async () => {
+      try {
+        const response = await _nativeFetch(pageBootstrapEndpoint(rule, pageUrl), {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { Accept: 'application/json', 'X-Ops-Page-Bootstrap': '1' },
+        });
+        await handleApiAuthResponse(response, new URL(response.url || pageBootstrapEndpoint(rule, pageUrl), window.location.origin));
+        if (!response.ok) return null;
+        const payload = await response.json().catch(() => null);
+        if (!payload?.ok || !Array.isArray(payload?.resources) || !payload.resources.length) return null;
+        payload.clientSavedAt = Date.now();
+        writePageBootstrapPayload(cacheId, payload);
+        return payload;
+      } catch {
+        return null;
+      }
+    })();
+
+    _pageBootstrapInflight.set(cacheId, pending);
+    try {
+      return await pending;
+    } finally {
+      _pageBootstrapInflight.delete(cacheId);
+    }
+  }
+
+  function startCurrentPageBootstrap() {
+    try {
+      const pageUrl = new URL(window.location.href);
+      const rule = pageBootstrapRuleForUrl(pageUrl);
+      if (!rule || pageForcesFreshApiRequests()) {
+        _pageBootstrapState = { rule: null, cacheId: '', entries: new Map(), promise: Promise.resolve() };
+        return _pageBootstrapState.promise;
+      }
+
+      const cacheId = pageBootstrapCacheId(rule, pageUrl);
+      const state = { rule, cacheId, entries: new Map(), promise: null };
+      _pageBootstrapState = state;
+      state.promise = fetchPageBootstrapPayload(rule, pageUrl).then((payload) => {
+        if (_pageBootstrapState !== state || !payload) return null;
+        state.entries = pageBootstrapEntriesFromPayload(payload);
+        return payload;
+      }).catch(() => null);
+      return state.promise;
+    } catch {
+      return Promise.resolve(null);
+    }
+  }
+
+  async function pageBootstrapResponseFor(urlObj, method) {
+    const verb = String(method || 'GET').toUpperCase();
+    if (!['GET', 'HEAD'].includes(verb)) return null;
+    if (!_pageBootstrapState.rule) return null;
+    if (String(urlObj?.searchParams?.get('_fresh') || '') === '1' || pageForcesFreshApiRequests()) return null;
+    try {
+      if (typeof _pageBootstrapState.rule.apiTest === 'function' && !_pageBootstrapState.rule.apiTest(urlObj, _pageBootstrapState)) return null;
+    } catch {
+      return null;
+    }
+
+    try { await _pageBootstrapState.promise; } catch {}
+    const key = normalizePageBootstrapApiKey(urlObj);
+    const entry = key ? _pageBootstrapState.entries.get(key) : null;
+    if (!entry) return null;
+    if (Date.now() > Number(entry.expiresAt || 0)) {
+      _pageBootstrapState.entries.delete(key);
+      return null;
+    }
+    return new Response(verb === 'HEAD' ? null : entry.bodyText, {
+      status: Number(entry.status || 200),
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Ops-Page-Bootstrap': 'HIT',
+      },
+    });
+  }
+
+  function prefetchPageBootstrapForUrl(input) {
+    try {
+      const pageUrl = input instanceof URL ? input : new URL(String(input || ''), window.location.origin);
+      const rule = pageBootstrapRuleForUrl(pageUrl);
+      if (!rule || pageUrl.origin !== window.location.origin) return;
+      const cacheId = pageBootstrapCacheId(rule, pageUrl);
+      if (cacheId === _pageBootstrapState.cacheId || readPageBootstrapPayload(cacheId) || _pageBootstrapInflight.has(cacheId)) return;
+      void fetchPageBootstrapPayload(rule, pageUrl);
+    } catch {}
+  }
+
+  function installPageBootstrapLinkPrefetch() {
+    if (_pageBootstrapLinkPrefetchInstalled) return;
+    _pageBootstrapLinkPrefetchInstalled = true;
+    const prefetchFromEvent = (event) => {
+      const anchor = event.target?.closest?.('a[href]');
+      if (!anchor) return;
+      let url = null;
+      try { url = new URL(anchor.href, window.location.origin); } catch { return; }
+      if (url.origin !== window.location.origin || !pageBootstrapRuleForUrl(url)) return;
+      window.setTimeout(() => prefetchPageBootstrapForUrl(url), event.type === 'pointerdown' ? 0 : 80);
+    };
+    document.addEventListener('pointerover', prefetchFromEvent, { passive: true });
+    document.addEventListener('focusin', prefetchFromEvent);
+    document.addEventListener('pointerdown', prefetchFromEvent, { passive: true });
   }
 
   function clearAppApiCache() {
@@ -623,6 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try { sessionStorage.removeItem(key); } catch {}
       });
     } catch {}
+    try { clearPageBootstrapCache(); } catch {}
   }
 
   function clearKnownClientDataCaches() {
@@ -1193,28 +1464,14 @@ document.addEventListener('DOMContentLoaded', () => {
     await Promise.all(workers);
   }
 
-  function schedulePrefetchForAllowedPages(allowedPages) {
+  function schedulePrefetchForAllowedPages() {
+    // Previous versions fetched data for every allowed page immediately after
+    // login. On accounts with many permissions that created a burst of API and
+    // database traffic. Keep only the current page bundle warm and prefetch a
+    // supported next page when its link is hovered/focused.
     try {
-      const userKey = cachePart(localStorage.getItem('username') || 'user');
-      const permsKey = cachePart((allowedPages || []).join('|') || 'none');
-      const marker = `${APP_API_PRIME_PREFIX}${userKey}:${permsKey}`;
-      if (sessionStorage.getItem(marker) === '1') return;
-      sessionStorage.setItem(marker, '1');
-
-      const urls = buildPrefetchUrls(allowedPages);
-      if (!urls.length) return;
-
-      const run = () => {
-        prefetchApiUrls(urls, 2).catch(() => {
-          try { sessionStorage.removeItem(marker); } catch {}
-        });
-      };
-
-      if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(run, { timeout: 1500 });
-      } else {
-        window.setTimeout(run, 350);
-      }
+      installPageBootstrapLinkPrefetch();
+      if (!_pageBootstrapState.rule) startCurrentPageBootstrap();
     } catch {}
   }
 
@@ -1227,6 +1484,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const urlObj = new URL(typeof input === 'string' ? input : (req ? req.url : String(input || '')), window.location.origin);
       const method = String(init?.method || req?.method || 'GET').toUpperCase();
       const isApi = urlObj.origin === window.location.origin && urlObj.pathname.startsWith('/api/');
+
+      if (isApi && (method === 'GET' || method === 'HEAD')) {
+        const bootstrapResponse = await pageBootstrapResponseFor(urlObj, method);
+        if (bootstrapResponse) return bootstrapResponse;
+      }
 
       if (isApi && method !== 'GET' && method !== 'HEAD') {
         const response = await _nativeFetch(input, init);
@@ -1320,6 +1582,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   patchApiFetchCaching();
+  startCurrentPageBootstrap();
+  installPageBootstrapLinkPrefetch();
+  window.OpsPageBootstrap = {
+    refresh: startCurrentPageBootstrap,
+    clear: clearPageBootstrapCache,
+    prefetch: prefetchPageBootstrapForUrl,
+    diagnostics: () => ({
+      scope: _pageBootstrapState.rule?.scope || '',
+      cacheId: _pageBootstrapState.cacheId || '',
+      entries: Array.from(_pageBootstrapState.entries.keys()),
+      inflight: Array.from(_pageBootstrapInflight.keys()),
+    }),
+  };
 
   // =====================================================
   // Hard Refresh UX + cache clearing

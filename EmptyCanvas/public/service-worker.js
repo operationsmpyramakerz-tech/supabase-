@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-sidebar-boundaries-v15";
+const CACHE_NAME = "ops-cache-page-bootstrap-v16";
 
 const PRECACHE_URLS = [
   "/pwa-start",
@@ -40,6 +40,19 @@ async function networkFirstNavigation(request) {
     const cachedStart = await caches.match("/pwa-start.html");
     const cachedOffline = await caches.match("/pwa-offline.html");
     return cachedStart || cachedOffline || Response.error();
+  }
+}
+
+async function networkFirstStatic(request) {
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response && response.ok) {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
+    }
+    return response;
+  } catch {
+    return (await caches.match(request)) || Response.error();
   }
 }
 
@@ -83,6 +96,14 @@ self.addEventListener("fetch", (event) => {
     url.pathname === "/manifest.json";
 
   if (!isStatic) return;
+
+  // Shared runtime behavior changes frequently and must not wait for a second
+  // page load before the new deployment is used.
+  if (url.pathname === "/js/common-ui.js") {
+    event.respondWith(networkFirstStatic(req));
+    return;
+  }
+
   event.respondWith(staleWhileRevalidate(req));
 });
 

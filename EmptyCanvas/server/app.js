@@ -24111,6 +24111,196 @@ app.post('/api/events/:id/archive', requireAuth, requirePage('Event Requests'), 
 });
 
 
+// -----------------------------------------------------------------------------
+// Page bootstrap bundles
+// -----------------------------------------------------------------------------
+// A small number of data-heavy pages used to open several independent API
+// requests at the same time.  The browser now asks for one page bootstrap
+// bundle, while the server loads the same resources in parallel.  Each original
+// endpoint remains available as an automatic fallback, so a partial bundle can
+// never prevent a page from opening.
+function _pageBootstrapResource(url, body, ttlMs = 30_000) {
+  return {
+    url: String(url || "").trim(),
+    status: 200,
+    ttlMs: Math.max(1_000, Number(ttlMs) || 30_000),
+    body,
+  };
+}
+
+async function _pageBootstrapLoad(url, ttlMs, loader) {
+  try {
+    const body = await loader();
+    return { resource: _pageBootstrapResource(url, body, ttlMs) };
+  } catch (error) {
+    console.warn(`[page-bootstrap] ${url} omitted:`, error?.message || error);
+    return { error: { url: String(url || ""), code: String(error?.code || error?.status || "LOAD_FAILED") } };
+  }
+}
+
+function _pageBootstrapEventsList(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(_eventsSerializeRequest)
+    .filter((event) => !event.isArchived);
+}
+
+async function _pageBootstrapEventsNew(req) {
+  const loaders = [
+    _pageBootstrapLoad('/api/events/types', 5 * 60_000, async () => ({
+      ok: true,
+      types: await _eventsListTypeOptions(),
+    })),
+    _pageBootstrapLoad('/api/events/components?activeOnly=1', 2 * 60_000, async () => {
+      const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?select=*&order=is_active.desc,name.asc&limit=1000&is_active=eq.true`);
+      return { ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) };
+    }),
+    _pageBootstrapLoad('/api/events', 20_000, async () => {
+      const rows = await supabaseDb.selectAll(_sbEventsTable(), { limit: 2000, order: 'created_at.desc,event_code.desc' });
+      return { ok: true, events: _pageBootstrapEventsList(rows) };
+    }),
+    _pageBootstrapLoad('/api/events/governorate-rates?includeInactive=0', 60_000, async () => ({
+      ok: true,
+      rates: await _eventsListGovernorateRates({ includeInactive: false }),
+      canEdit: _hasEventRequestsAdminAccess(req) || _hasEventsGovernorateRatesAccess(req),
+    })),
+  ];
+
+  const editId = _eventsUuid(req.query?.edit || req.query?.eventId || req.query?.event_id);
+  if (editId) {
+    loaders.push(_pageBootstrapLoad(`/api/events/${encodeURIComponent(editId)}`, 15_000, async () => {
+      const row = await supabaseDb.selectById(_sbEventsTable(), editId);
+      if (!row) {
+        const error = new Error('Event request was not found.');
+        error.status = 404;
+        throw error;
+      }
+      return { ok: true, event: _eventsSerializeRequest(row) };
+    }));
+  }
+
+  return Promise.all(loaders);
+}
+
+async function _pageBootstrapEventsComponents() {
+  return Promise.all([
+    _pageBootstrapLoad('/api/events/components', 2 * 60_000, async () => {
+      const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?select=*&order=is_active.desc,name.asc&limit=1000`);
+      return { ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) };
+    }),
+    _pageBootstrapLoad('/api/events/component-categories', 5 * 60_000, async () => ({
+      ok: true,
+      categories: await _eventsListComponentCategoryOptions(),
+    })),
+  ]);
+}
+
+async function _pageBootstrapExpenses(req) {
+  if (!_sbExpensesEnabled()) return [];
+
+  // Reuse the exact Redis/memory cache keys used by the original routes. This
+  // keeps the one-request page bundle from increasing Supabase traffic and also
+  // warms the normal fallback endpoints for the same user.
+  const usernameKey = cacheKeySafe(req.session?.username || '');
+  const loaders = [
+    _pageBootstrapLoad('/api/expenses', 30_000, async () => cacheGetOrSet(
+      `cache:api:expenses:${usernameKey}:v4`,
+      2 * 60,
+      async () => {
+        const { rows } = await _sbSelectExpensesForCurrentUser(req);
+        const info = _sbLastSettledInfo(rows);
+        return {
+          success: true,
+          items: (Array.isArray(rows) ? rows : []).map(_sbSerializeExpenseRow),
+          lastSettledAt: info.lastSettledAt,
+          lastSettledDate: info.lastSettledDate,
+          source: 'supabase',
+        };
+      },
+    )),
+    _pageBootstrapLoad('/api/expenses/types', 5 * 60_000, async () => cacheGetOrSet(
+      'cache:api:expenses:types:v4',
+      20 * 60,
+      async () => ({
+        success: true,
+        options: await _sbExpensesTypesOptions(),
+        source: 'supabase',
+      }),
+    )),
+  ];
+
+  if (_sbTeamMembersEnabled()) {
+    loaders.push(_pageBootstrapLoad('/api/expenses/cash-in-from/options', 2 * 60_000, async () => cacheGetOrSet(
+      'cache:api:expenses:cash-in-from:v2',
+      20 * 60,
+      async () => {
+        const rows = await _sbSelectTeamMembersRows();
+        const options = (Array.isArray(rows) ? rows : []).map((row) => {
+          const id = _sbExpenseText(_sbGet(row, ['id', 'ID'])) ||
+            _sbExpenseText(_sbValueForLabel(row, 'Employee Code')) ||
+            _sbExpenseText(_sbValueForLabel(row, 'Name'));
+          const name = _sbExpenseText(_sbValueForLabel(row, 'Name')) || 'Unnamed';
+          return { id, name };
+        }).filter((item) => item.id && item.name);
+        return { success: true, options, source: 'supabase' };
+      },
+    )));
+  }
+
+  return Promise.all(loaders);
+}
+
+function _pageBootstrapHasPageAccess(req, pageName) {
+  if (pageName === 'Create New Order') {
+    const unlockUntil = Number(req.session?.adminCreateOrderUnlockUntil || 0);
+    if (unlockUntil && Date.now() < unlockUntil) return true;
+  }
+  return !!_sessionPageAccessLevel(req, pageName);
+}
+
+app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.set('Vary', 'Cookie');
+  const startedAt = Date.now();
+  const scope = String(req.query?.scope || '').trim().toLowerCase();
+
+  try {
+    let results = [];
+
+    if (scope === 'events-new') {
+      if (!_pageBootstrapHasPageAccess(req, 'Event Requests')) return _pageAccessDeniedResponse(req, res);
+      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
+      results = await _pageBootstrapEventsNew(req);
+    } else if (scope === 'events-components') {
+      if (!_pageBootstrapHasPageAccess(req, 'Event Components')) return _pageAccessDeniedResponse(req, res);
+      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
+      results = await _pageBootstrapEventsComponents(req);
+    } else if (scope === 'expenses') {
+      if (!_pageBootstrapHasPageAccess(req, 'Expenses')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapExpenses(req);
+    } else {
+      return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
+    }
+
+    const resources = results.map((item) => item?.resource).filter(Boolean);
+    const errors = results.map((item) => item?.error).filter(Boolean);
+    const durationMs = Date.now() - startedAt;
+    res.set('Server-Timing', `page-bootstrap;dur=${durationMs}`);
+    return res.json({
+      ok: true,
+      scope,
+      resources,
+      partial: errors.length > 0,
+      omitted: errors,
+      generatedAt: Date.now(),
+      durationMs,
+    });
+  } catch (error) {
+    console.error('GET /api/page-bootstrap error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: 'Unable to prepare page data.' });
+  }
+});
+
+
 // Products Management — requires Products page access
 app.get(
   "/api/products",
