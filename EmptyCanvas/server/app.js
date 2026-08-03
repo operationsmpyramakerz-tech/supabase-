@@ -368,7 +368,7 @@ app.get(["/api/supabase/status", "/api/supabase/team-members-test", "/api/supaba
 });
 
 // Sessions (Redis/Upstash) — added after /health
-const { sessionMiddleware, redisClient, getSessionDiagnostics, setUserAuthRevokedAt, getUserAuthRevokedAt } = require("./session-redis");
+const { sessionMiddleware, redisClient, cacheRedis, getSessionDiagnostics, setUserAuthRevokedAt, getUserAuthRevokedAt } = require("./session-redis");
 app.use(sessionMiddleware);
 
 // Public session diagnostics: exposes only configuration booleans, never secrets.
@@ -711,6 +711,14 @@ app.use(historyAuditMiddleware);
 
 const _CACHE_MEM = new Map();
 const _CACHE_INFLIGHT = new Map();
+const _CACHE_METRICS = {
+  memoryHits: 0,
+  redisHits: 0,
+  misses: 0,
+  writes: 0,
+  deletes: 0,
+  errors: 0,
+};
 
 function _now() {
   return Date.now();
@@ -731,12 +739,14 @@ function _memSet(key, val, ttlSeconds) {
 
 async function _redisGet(key) {
   try {
-    if (!redisClient || !redisClient.isReady) return null;
-    const raw = await redisClient.get(key);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    if (!cacheRedis || !cacheRedis.isConfigured()) return null;
+    const raw = await cacheRedis.get(key);
+    if (raw === null || raw === undefined || raw === "") return null;
+    if (typeof raw === "object") return raw;
+    return JSON.parse(String(raw));
   } catch (e) {
     // Don't break the request path on cache issues.
+    _CACHE_METRICS.errors += 1;
     console.warn("[cache] redis get failed", key, e?.message || e);
     return null;
   }
@@ -744,17 +754,28 @@ async function _redisGet(key) {
 
 async function _redisSet(key, val, ttlSeconds) {
   try {
-    if (!redisClient || !redisClient.isReady) return;
+    if (!cacheRedis || !cacheRedis.isConfigured()) return;
     const ttl = Math.max(1, Number(ttlSeconds) || 1);
-    await redisClient.set(key, JSON.stringify(val), { EX: ttl });
+    const serialized = JSON.stringify(val);
+    if (serialized === undefined) return;
+    await cacheRedis.set(key, serialized, { EX: ttl });
+    _CACHE_METRICS.writes += 1;
   } catch (e) {
+    _CACHE_METRICS.errors += 1;
     console.warn("[cache] redis set failed", key, e?.message || e);
   }
 }
 
-async function cacheGetOrSet(key, ttlSeconds, factoryFn) {
+async function cacheGetOrSet(key, ttlSeconds, factoryFn, options = {}) {
+  const memoryTtlSeconds = Math.max(
+    1,
+    Number(options?.memoryTtlSeconds ?? ttlSeconds) || Number(ttlSeconds) || 1,
+  );
   const mem = _memGet(key);
-  if (mem !== null && mem !== undefined) return mem;
+  if (mem !== null && mem !== undefined) {
+    _CACHE_METRICS.memoryHits += 1;
+    return mem;
+  }
 
   // De-dupe concurrent identical calls (avoid stampede)
   if (_CACHE_INFLIGHT.has(key)) return await _CACHE_INFLIGHT.get(key);
@@ -762,12 +783,14 @@ async function cacheGetOrSet(key, ttlSeconds, factoryFn) {
   const p = (async () => {
     const fromRedis = await _redisGet(key);
     if (fromRedis !== null && fromRedis !== undefined) {
-      _memSet(key, fromRedis, ttlSeconds);
+      _CACHE_METRICS.redisHits += 1;
+      _memSet(key, fromRedis, memoryTtlSeconds);
       return fromRedis;
     }
 
+    _CACHE_METRICS.misses += 1;
     const fresh = await factoryFn();
-    _memSet(key, fresh, ttlSeconds);
+    _memSet(key, fresh, memoryTtlSeconds);
     await _redisSet(key, fresh, ttlSeconds);
     return fresh;
   })();
@@ -787,11 +810,13 @@ async function cacheDel(key) {
     _CACHE_INFLIGHT.delete(key);
   } catch {}
   try {
-    if (redisClient && redisClient.isReady) {
-      await redisClient.del(key);
+    if (cacheRedis && cacheRedis.isConfigured()) {
+      await cacheRedis.del(key);
+      _CACHE_METRICS.deletes += 1;
     }
   } catch (e) {
     // don't fail the request because cache eviction failed
+    _CACHE_METRICS.errors += 1;
     console.warn("cacheDel failed:", e?.message || e);
   }
 }
@@ -805,65 +830,39 @@ function clearLocalAppCaches() {
   } catch {}
 }
 
+function getAppCacheDiagnostics() {
+  const totalLookups = _CACHE_METRICS.memoryHits + _CACHE_METRICS.redisHits + _CACHE_METRICS.misses;
+  const hitCount = _CACHE_METRICS.memoryHits + _CACHE_METRICS.redisHits;
+  return {
+    backend: cacheRedis?.backendType?.() || "memory-only",
+    persistent: !!(cacheRedis && cacheRedis.isConfigured()),
+    memoryEntries: _CACHE_MEM.size,
+    inflightLoads: _CACHE_INFLIGHT.size,
+    metrics: { ..._CACHE_METRICS },
+    hitRate: totalLookups ? Number((hitCount / totalLookups).toFixed(4)) : 0,
+  };
+}
+
 async function deleteRedisKeysByPattern(pattern, batchSize = 200) {
-  if (!pattern || !redisClient || !redisClient.isReady) return 0;
+  if (!pattern || !cacheRedis || !cacheRedis.isConfigured()) return 0;
 
   const normalizedBatchSize = Math.max(1, Number(batchSize) || 200);
   let deleted = 0;
-
-  const flush = async (keys) => {
-    const list = Array.isArray(keys) ? keys.filter(Boolean) : [];
-    if (!list.length) return;
-    if (list.length === 1) {
-      await redisClient.del(list[0]);
-    } else {
-      await redisClient.del(list);
-    }
-    deleted += list.length;
-  };
+  let cursor = "0";
 
   try {
-    if (typeof redisClient.scanIterator === "function") {
-      let batch = [];
-      for await (const key of redisClient.scanIterator({ MATCH: pattern, COUNT: normalizedBatchSize })) {
-        if (!key) continue;
-        batch.push(key);
-        if (batch.length >= normalizedBatchSize) {
-          await flush(batch);
-          batch = [];
-        }
+    do {
+      const reply = await cacheRedis.scan(cursor, { MATCH: pattern, COUNT: normalizedBatchSize });
+      cursor = String(reply?.cursor ?? "0");
+      const keys = Array.isArray(reply?.keys) ? reply.keys.filter(Boolean) : [];
+      if (keys.length) {
+        const deletedNow = Number(await cacheRedis.del(keys));
+        deleted += Number.isFinite(deletedNow) ? deletedNow : keys.length;
+        _CACHE_METRICS.deletes += keys.length;
       }
-      if (batch.length) await flush(batch);
-      return deleted;
-    }
-
-    if (typeof redisClient.scan === "function") {
-      let cursor = "0";
-      do {
-        let reply;
-        try {
-          reply = await redisClient.scan(cursor, { MATCH: pattern, COUNT: normalizedBatchSize });
-        } catch {
-          reply = await redisClient.scan(cursor, "MATCH", pattern, "COUNT", normalizedBatchSize);
-        }
-
-        if (Array.isArray(reply)) {
-          cursor = String(reply[0] || "0");
-          await flush(reply[1] || []);
-        } else {
-          cursor = String(reply?.cursor ?? "0");
-          await flush(reply?.keys || []);
-        }
-      } while (cursor !== "0");
-      return deleted;
-    }
-
-    if (typeof redisClient.keys === "function") {
-      const keys = await redisClient.keys(pattern);
-      await flush(keys);
-      return deleted;
-    }
+    } while (cursor !== "0");
   } catch (e) {
+    _CACHE_METRICS.errors += 1;
     console.warn("[cache] delete pattern failed", pattern, e?.message || e);
   }
 
@@ -892,12 +891,49 @@ async function clearAllAppCaches() {
     clearedMemory: true,
     deletedRedisKeys,
     deletedByPattern,
-    upstashConnected: !!(redisClient && redisClient.isReady),
+    upstashConnected: !!(cacheRedis && cacheRedis.isConfigured()),
+    cacheBackend: cacheRedis?.backendType?.() || "memory-only",
   };
 }
 
 function cacheKeySafe(value) {
   return encodeURIComponent(String(value ?? "").trim() || "-");
+}
+
+const SUPABASE_CACHE_TTL = Object.freeze({
+  APP_PAGES: 10 * 60,
+  MEMBER_PAGE_ACCESS: 45,
+  ALL_PAGE_ACCESS: 30,
+  DEPARTMENTS: 5 * 60,
+  ACCOUNT_WITH_ACCESS: 60,
+  LMS_PAGES: 10 * 60,
+  LMS_MEMBER_PAGE_ACCESS: 45,
+});
+
+const SUPABASE_CACHE_KEYS = Object.freeze({
+  appPages: (assignableOnly, activeOnly) => `cache:supabase:app-pages:a${assignableOnly ? 1 : 0}:x${activeOnly ? 1 : 0}:v1`,
+  pageAccessMember: (memberId) => `cache:supabase:page-access:member:${cacheKeySafe(memberId)}:v1`,
+  pageAccessAll: "cache:supabase:page-access:all:v1",
+  departments: "cache:supabase:user-access:departments:v1",
+  accountWithAccess: (memberId) => `cache:supabase:account-with-access:${cacheKeySafe(memberId)}:v1`,
+  lmsPages: (assignableOnly, activeOnly) => `cache:supabase:lms-pages:a${assignableOnly ? 1 : 0}:x${activeOnly ? 1 : 0}:v1`,
+  lmsPageAccessMember: (memberId) => `cache:supabase:lms-page-access:member:${cacheKeySafe(memberId)}:v1`,
+});
+
+async function clearSupabaseMemberAccessCaches(memberId, { includeLms = true, includeDirectory = true } = {}) {
+  const id = String(memberId || "").trim();
+  const tasks = [];
+  if (id) {
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.pageAccessMember(id)));
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.accountWithAccess(id)));
+    if (includeLms) tasks.push(cacheDel(SUPABASE_CACHE_KEYS.lmsPageAccessMember(id)));
+  }
+  if (includeDirectory) {
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.pageAccessAll));
+    tasks.push(cacheDel("cache:api:user-access:team-members:supabase:v1"));
+    tasks.push(cacheDel(USER_ACCESS_CACHE_KEY));
+  }
+  await Promise.allSettled(tasks);
 }
 
 
@@ -909,7 +945,14 @@ async function clearUserServerCaches(req, opts = {}) {
   const username = String(options.username || req.session?.username || "").trim();
   const usernameKey = cacheKeySafe(username || "");
   const normalizedUserId = normalizeNotionId(userId);
+  const supabaseUserId = String(options.supabaseUserId || req.session?.userSupabaseId || userId || "").trim();
   const department = String(options.department || req.session?.accountCache?.department || "").trim();
+
+  if (supabaseUserId) {
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.accountWithAccess(supabaseUserId)));
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.pageAccessMember(supabaseUserId)));
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.lmsPageAccessMember(supabaseUserId)));
+  }
 
   if (normalizedUserId) {
     tasks.push(cacheDel(`cache:api:account:${normalizedUserId}:v2`));
@@ -2396,18 +2439,30 @@ function _uaIsMissingDepartmentsTableError(error) {
 }
 
 async function _sbSelectDepartmentRows({ throwIfMissing = false } = {}) {
-  try {
-    const rows = await supabaseDb.selectAll(_sbTeamMemberDepartmentsTable(), { limit: 1000, order: "name.asc" });
-    return Array.isArray(rows) ? rows : [];
-  } catch (error) {
-    if (_uaIsMissingDepartmentsTableError(error) && !throwIfMissing) return [];
-    if (_uaIsMissingDepartmentsTableError(error)) {
-      const err = new Error("Department table is not installed. Run supabase_user_access_departments_migration.sql once, then try again.");
-      err.status = 500;
-      throw err;
+  const load = async () => {
+    try {
+      const rows = await supabaseDb.selectAll(_sbTeamMemberDepartmentsTable(), { limit: 1000, order: "name.asc" });
+      return Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      if (_uaIsMissingDepartmentsTableError(error) && !throwIfMissing) return [];
+      if (_uaIsMissingDepartmentsTableError(error)) {
+        const err = new Error("Department table is not installed. Run supabase_user_access_departments_migration.sql once, then try again.");
+        err.status = 500;
+        throw err;
+      }
+      throw error;
     }
-    throw error;
-  }
+  };
+
+  // A strict schema check must reach Supabase so a previously cached optional
+  // empty result cannot hide a missing-table installation error.
+  if (throwIfMissing) return await load();
+  return await cacheGetOrSet(
+    SUPABASE_CACHE_KEYS.departments,
+    SUPABASE_CACHE_TTL.DEPARTMENTS,
+    load,
+    { memoryTtlSeconds: 30 },
+  );
 }
 
 function _sbDepartmentNameFromRow(row = {}) {
@@ -2440,10 +2495,15 @@ async function _uaDepartmentOptionsForSupabase(rows = []) {
   return Array.from(names).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)));
 }
 
-async function _uaClearUserAccessCaches() {
+async function _uaClearUserAccessCaches(memberId = "") {
   await Promise.allSettled([
     cacheDel(USER_ACCESS_CACHE_KEY),
     cacheDel("cache:api:user-access:team-members:supabase:v1"),
+    cacheDel(SUPABASE_CACHE_KEYS.pageAccessAll),
+    cacheDel(SUPABASE_CACHE_KEYS.departments),
+    memberId ? cacheDel(SUPABASE_CACHE_KEYS.pageAccessMember(memberId)) : Promise.resolve(),
+    memberId ? cacheDel(SUPABASE_CACHE_KEYS.accountWithAccess(memberId)) : Promise.resolve(),
+    memberId ? cacheDel(SUPABASE_CACHE_KEYS.lmsPageAccessMember(memberId)) : Promise.resolve(),
   ]);
 }
 
@@ -2543,6 +2603,7 @@ async function _sbRenameUserAccessDepartment(departmentId = "", name = "") {
   }
 
   await _uaClearUserAccessCaches();
+  await Promise.allSettled(affectedIds.map((id) => clearSupabaseMemberAccessCaches(id, { includeLms: false, includeDirectory: false })));
   return _sbDepartmentPayload(clean, { count: affectedIds.length, isCustomDepartment: !!departmentRecord, departmentRecordId: _sbGet(departmentRecord || {}, ["id", "ID"]) });
 }
 
@@ -2594,7 +2655,7 @@ async function _sbMoveUserAccessTeamMember(memberId = "", departmentId = "") {
   }
   const targetName = await _sbResolveUserAccessDepartmentName(departmentId);
   const updated = await supabaseDb.updateById(_sbTeamMembersTable(), id, { [departmentColumn]: targetName || null });
-  await _uaClearUserAccessCaches();
+  await _uaClearUserAccessCaches(id);
   const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows || []), rows || []);
   return {
     member: _sbSerializeTeamMemberRow(updated || { ...member, [departmentColumn]: targetName || null }, editableFields),
@@ -2623,7 +2684,7 @@ async function _sbDeleteUserAccessTeamMember(memberId = "") {
     return [];
   });
   const deleted = await supabaseDb.deleteById(_sbTeamMembersTable(), id);
-  await _uaClearUserAccessCaches();
+  await _uaClearUserAccessCaches(id);
   return {
     id,
     name: _sbString(_sbValueForLabel(member, "Name")) || "Team member",
@@ -2674,6 +2735,7 @@ async function _sbDeleteUserAccessDepartment(departmentId = "") {
   }
 
   await _uaClearUserAccessCaches();
+  await Promise.allSettled(affectedIds.map((id) => clearSupabaseMemberAccessCaches(id, { includeLms: false, includeDirectory: false })));
   return {
     id: oldKey,
     movedMembers: affectedIds.length,
@@ -2971,7 +3033,7 @@ async function _sbSaveSvAccessForMember(memberId = "", members = []) {
     });
   }
 
-  await _uaClearUserAccessCaches();
+  await _uaClearUserAccessCaches(id);
   await clearSVOrdersRouteCaches({ session: { username: _sbString(_sbValueForLabel(target, "Name")) } }).catch(() => {});
   return _sbSvAccessPayloadForMember(id);
 }
@@ -3327,11 +3389,14 @@ function _sbSerializeAppPage(row = {}) {
 
 async function _sbSelectAppPages({ assignableOnly = true, activeOnly = true } = {}) {
   if (!_sbTeamMembersEnabled()) return [];
-  const params = ["select=*", "order=sort_order.asc", "limit=1000"];
-  if (activeOnly) params.push("is_active=eq.true");
-  if (assignableOnly) params.push("is_assignable=eq.true");
-  const rows = await supabaseDb.request(`/app_pages?${params.join("&")}`);
-  return (Array.isArray(rows) ? rows : []).map(_sbSerializeAppPage).filter((page) => page.id && page.pageKey && page.pageName);
+  const cacheKey = SUPABASE_CACHE_KEYS.appPages(assignableOnly, activeOnly);
+  return await cacheGetOrSet(cacheKey, SUPABASE_CACHE_TTL.APP_PAGES, async () => {
+    const params = ["select=*", "order=sort_order.asc", "limit=1000"];
+    if (activeOnly) params.push("is_active=eq.true");
+    if (assignableOnly) params.push("is_assignable=eq.true");
+    const rows = await supabaseDb.request(`/app_pages?${params.join("&")}`);
+    return (Array.isArray(rows) ? rows : []).map(_sbSerializeAppPage).filter((page) => page.id && page.pageKey && page.pageName);
+  }, { memoryTtlSeconds: 60 });
 }
 
 function _sbLegacyAllowedPagesFromAppPage(page = {}) {
@@ -3429,15 +3494,19 @@ async function _sbSelectPageAccessViewForMember(teamMemberId) {
 
 async function _sbSelectAllPageAccessView() {
   if (!_sbTeamMembersEnabled()) return [];
-  const rows = await supabaseDb.request('/team_member_page_access_view?select=*&order=sort_order.asc&limit=5000');
-  return Array.isArray(rows) ? rows : [];
+  return await cacheGetOrSet(SUPABASE_CACHE_KEYS.pageAccessAll, SUPABASE_CACHE_TTL.ALL_PAGE_ACCESS, async () => {
+    const rows = await supabaseDb.request('/team_member_page_access_view?select=*&order=sort_order.asc&limit=5000');
+    return Array.isArray(rows) ? rows : [];
+  }, { memoryTtlSeconds: 5 });
 }
 
 async function _sbSelectRawPageAccessForMember(teamMemberId) {
   const id = String(teamMemberId || "").trim();
   if (!_sbTeamMembersEnabled() || !id) return [];
-  const rows = await supabaseDb.request(`/team_member_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
-  return Array.isArray(rows) ? rows : [];
+  return await cacheGetOrSet(SUPABASE_CACHE_KEYS.pageAccessMember(id), SUPABASE_CACHE_TTL.MEMBER_PAGE_ACCESS, async () => {
+    const rows = await supabaseDb.request(`/team_member_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
+    return Array.isArray(rows) ? rows : [];
+  }, { memoryTtlSeconds: 5 });
 }
 
 async function _sbSelectResolvedPageAccessForMember(teamMemberId) {
@@ -3509,6 +3578,21 @@ async function _sbAccountPayloadWithAccess(row, fallbackUsername = "") {
   payload.allowedPages = allowedUI;
   payload.pageAccess = { pages: pageAccessRows.length ? pageAccessRows : _legacyPageAccessRowsFromAllowed(allowedNormalized) };
   return { accountPayload: payload, allowedNormalized, allowedUI, pageAccessRows: payload.pageAccess.pages };
+}
+
+async function _sbCachedAccountPayloadWithAccessForMember(memberId, fallbackUsername = "") {
+  const id = String(memberId || "").trim();
+  if (!id) return null;
+  return await cacheGetOrSet(
+    SUPABASE_CACHE_KEYS.accountWithAccess(id),
+    SUPABASE_CACHE_TTL.ACCOUNT_WITH_ACCESS,
+    async () => {
+      const row = await _sbFindTeamMemberById(id);
+      if (!row) return null;
+      return await _sbAccountPayloadWithAccess(row, fallbackUsername);
+    },
+    { memoryTtlSeconds: 5 },
+  );
 }
 
 function _sbGroupPageAccessRowsByMember(rows = []) {
@@ -3643,12 +3727,16 @@ async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemb
     headers: { Prefer: "return=minimal" },
   });
 
-  if (!writeRows.length) return [];
+  if (!writeRows.length) {
+    await clearSupabaseMemberAccessCaches(memberId, { includeLms: false, includeDirectory: true });
+    return [];
+  }
   const created = await supabaseDb.request('/team_member_page_access', {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: writeRows,
   });
+  await clearSupabaseMemberAccessCaches(memberId, { includeLms: false, includeDirectory: true });
   return Array.isArray(created) ? created : [];
 }
 
@@ -11310,9 +11398,12 @@ app.get("/api/account", requireAuth, async (req, res) => {
 
   if (_sbTeamMembersEnabled() && req.session?.userSupabaseId) {
     try {
-      const row = await _sbFindTeamMemberById(req.session.userSupabaseId);
-      if (row) {
-        const { accountPayload: data, allowedNormalized, pageAccessRows } = await _sbAccountPayloadWithAccess(row, req.session.username || "");
+      const accessBundle = await _sbCachedAccountPayloadWithAccessForMember(
+        req.session.userSupabaseId,
+        req.session.username || "",
+      );
+      if (accessBundle?.accountPayload) {
+        const { accountPayload: data, allowedNormalized, pageAccessRows } = accessBundle;
         try {
           req.session.username = data.username || req.session.username || "";
           req.session.allowedPages = allowedNormalized;
@@ -11508,6 +11599,11 @@ function withTimeoutResult(promise, ms, fallbackValue) {
   ]);
 }
 
+app.get("/api/cache-diagnostics", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true, cache: getAppCacheDiagnostics() });
+});
+
 app.post("/api/hard-refresh", requireAuth, async (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.set("Pragma", "no-cache");
@@ -11525,7 +11621,8 @@ app.post("/api/hard-refresh", requireAuth, async (req, res) => {
         clearedMemory: true,
         deletedRedisKeys: null,
         deletedByPattern: {},
-        upstashConnected: !!(redisClient && redisClient.isReady),
+        upstashConnected: !!(cacheRedis && cacheRedis.isConfigured()),
+        cacheBackend: cacheRedis?.backendType?.() || "memory-only",
         timedOut: true,
       }
     );
@@ -15809,8 +15906,7 @@ app.post(
         approved_team_member_id: memberId || null,
       });
 
-      await cacheDel(USER_ACCESS_CACHE_KEY);
-      await cacheDel('cache:api:user-access:team-members:supabase:v1');
+      await _uaClearUserAccessCaches(memberId);
 
       let emailWarning = '';
       try {
@@ -15969,18 +16065,23 @@ function _sbSerializeLmsPage(row = {}) {
 }
 
 async function _sbSelectLmsPages({ assignableOnly = true, activeOnly = true } = {}) {
-  const params = ["select=*", "order=sort_order.asc", "limit=1000"];
-  if (activeOnly) params.push("is_active=eq.true");
-  if (assignableOnly) params.push("is_assignable=eq.true");
-  const rows = await supabaseDb.request(`/lms_pages?${params.join("&")}`);
-  return (Array.isArray(rows) ? rows : []).map(_sbSerializeLmsPage).filter((page) => page.id && page.pageKey && page.pageName);
+  const cacheKey = SUPABASE_CACHE_KEYS.lmsPages(assignableOnly, activeOnly);
+  return await cacheGetOrSet(cacheKey, SUPABASE_CACHE_TTL.LMS_PAGES, async () => {
+    const params = ["select=*", "order=sort_order.asc", "limit=1000"];
+    if (activeOnly) params.push("is_active=eq.true");
+    if (assignableOnly) params.push("is_assignable=eq.true");
+    const rows = await supabaseDb.request(`/lms_pages?${params.join("&")}`);
+    return (Array.isArray(rows) ? rows : []).map(_sbSerializeLmsPage).filter((page) => page.id && page.pageKey && page.pageName);
+  }, { memoryTtlSeconds: 60 });
 }
 
 async function _sbSelectRawLmsPageAccessForMember(teamMemberId) {
   const id = String(teamMemberId || "").trim();
   if (!id) return [];
-  const rows = await supabaseDb.request(`/team_member_lms_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
-  return Array.isArray(rows) ? rows : [];
+  return await cacheGetOrSet(SUPABASE_CACHE_KEYS.lmsPageAccessMember(id), SUPABASE_CACHE_TTL.LMS_MEMBER_PAGE_ACCESS, async () => {
+    const rows = await supabaseDb.request(`/team_member_lms_page_access?select=*&team_member_id=eq.${_sbRestFilterValue(id)}&limit=1000`);
+    return Array.isArray(rows) ? rows : [];
+  }, { memoryTtlSeconds: 5 });
 }
 
 function requireLmsPageAccess(pageKey) {
@@ -15989,11 +16090,24 @@ function requireLmsPageAccess(pageKey) {
       if (_sessionIsBuiltInAdmin(req)) return next();
       const memberId = String(req.session?.userSupabaseId || "").trim();
       if (!memberId) return res.status(403).send("Access denied.");
-      const pages = await supabaseDb.request(`/lms_pages?select=id&page_key=eq.${_sbRestFilterValue(pageKey)}&is_active=eq.true&limit=1`);
-      const pageId = String(Array.isArray(pages) && pages[0]?.id ? pages[0].id : "").trim();
+
+      // The old guard made two Supabase requests on every LMS page opening.
+      // Reuse the cached page catalog and the member's short-lived permission
+      // matrix instead; permission saves explicitly invalidate both caches.
+      const [pages, accessRows] = await Promise.all([
+        _sbSelectLmsPages({ assignableOnly: false, activeOnly: true }),
+        _sbSelectRawLmsPageAccessForMember(memberId),
+      ]);
+      const wantedKey = String(pageKey || "").trim().toLowerCase();
+      const page = (pages || []).find((item) => String(item?.pageKey || "").trim().toLowerCase() === wantedKey);
+      const pageId = String(page?.pageId || page?.id || "").trim();
       if (!pageId) return res.status(403).send("LMS page is not available.");
-      const access = await supabaseDb.request(`/team_member_lms_page_access?select=id&team_member_id=eq.${_sbRestFilterValue(memberId)}&page_id=eq.${_sbRestFilterValue(pageId)}&is_enabled=eq.true&limit=1`);
-      if (!Array.isArray(access) || !access.length) return res.status(403).send("Access denied.");
+
+      const allowed = (accessRows || []).some((row) =>
+        String(_sbGet(row, ["page_id", "pageId"]) ?? "").trim() === pageId &&
+        _sbBool(_sbGet(row, ["is_enabled", "isEnabled"]), false)
+      );
+      if (!allowed) return res.status(403).send("Access denied.");
       return next();
     } catch (error) {
       console.error("LMS page access check failed:", error?.details || error?.body || error);
@@ -16066,12 +16180,16 @@ async function _sbSaveLmsPageAccessForMember(teamMemberId, entries = [], { teamM
     method: "DELETE",
     headers: { Prefer: "return=minimal" },
   });
-  if (!writeRows.length) return [];
+  if (!writeRows.length) {
+    await clearSupabaseMemberAccessCaches(memberId, { includeLms: true, includeDirectory: false });
+    return [];
+  }
   const created = await supabaseDb.request('/team_member_lms_page_access', {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: writeRows,
   });
+  await clearSupabaseMemberAccessCaches(memberId, { includeLms: true, includeDirectory: false });
   return Array.isArray(created) ? created : [];
 }
 
@@ -17418,8 +17536,7 @@ app.patch(
       const grantedBy = String(req.session?.username || "Admin").trim() || "Admin";
       await _sbSavePageAccessForMember(memberId, req.body?.pages || req.body?.access || [], { teamMemberName: memberName, grantedBy });
 
-      await cacheDel(USER_ACCESS_CACHE_KEY);
-      await cacheDel("cache:api:user-access:team-members:supabase:v1");
+      await clearSupabaseMemberAccessCaches(memberId, { includeLms: false, includeDirectory: true });
 
       const payload = await _sbPageAccessPayloadForMember(memberId);
       const currentSessionUserId = String(req.session?.userSupabaseId || "").trim();
@@ -17618,8 +17735,8 @@ app.post(
         if (!Object.keys(writeRow).length) return res.status(400).json({ ok: false, error: "No valid fields were provided." });
 
         const created = await supabaseDb.insert(_sbTeamMembersTable(), writeRow);
-        await cacheDel(USER_ACCESS_CACHE_KEY);
-        await cacheDel("cache:api:user-access:team-members:supabase:v1");
+        const createdId = String(_sbGet(created || {}, ["id", "ID"]) ?? "").trim();
+        await _uaClearUserAccessCaches(createdId);
         const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]), [...(rows || []), created || {}]);
         const member = _sbSerializeTeamMemberRow(created || writeRow, editableFields);
         return res.json({ ok: true, member, source: "supabase" });
@@ -17679,8 +17796,7 @@ app.patch(
         if ((updatesName && newName !== oldName) || (updatesPassword && newPassword !== oldPassword)) {
           await setUserAuthRevokedAt(pageId, Date.now());
         }
-        await cacheDel(USER_ACCESS_CACHE_KEY);
-        await cacheDel("cache:api:user-access:team-members:supabase:v1");
+        await _uaClearUserAccessCaches(pageId);
         const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows(rows || []), rows || []);
         const member = _sbSerializeTeamMemberRow(updated || { ...writeRow, id: pageId }, editableFields);
         return res.json({ ok: true, member, source: "supabase" });

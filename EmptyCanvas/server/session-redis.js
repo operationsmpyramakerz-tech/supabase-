@@ -15,6 +15,8 @@ const hasRest = !!(restUrl && restToken);
 let store = null;
 let redisClient = null;
 let sessionStoreType = "memory";
+let redisConnectPromise = null;
+let restCommandStore = null;
 
 function safeBool(value) {
   return !!value;
@@ -111,6 +113,15 @@ class UpstashRestSessionStore extends session.Store {
   }
 }
 
+if (hasRest) {
+  restCommandStore = new UpstashRestSessionStore({
+    url: restUrl,
+    token: restToken,
+    prefix: "op:sess:",
+    ttlSeconds: 60 * 60 * 24 * 30,
+  });
+}
+
 if (hasRedisUrl) {
   try {
     redisClient = createClient({
@@ -121,7 +132,10 @@ if (hasRedisUrl) {
     redisClient.on("connect", () => console.log("[Redis] connecting..."));
     redisClient.on("ready", () => console.log("[Redis] ready ✓"));
     // Connect lazily; do not block serverless cold start.
-    redisClient.connect().catch((e) => console.error("[Redis] connect failed:", e?.message || e));
+    redisConnectPromise = redisClient.connect().catch((e) => {
+      console.error("[Redis] connect failed:", e?.message || e);
+      return null;
+    });
     store = new RedisStore({ client: redisClient, prefix: "op:" });
     sessionStoreType = "upstash-redis-url";
   } catch (e) {
@@ -129,13 +143,8 @@ if (hasRedisUrl) {
   }
 }
 
-if (!store && hasRest) {
-  store = new UpstashRestSessionStore({
-    url: restUrl,
-    token: restToken,
-    prefix: "op:sess:",
-    ttlSeconds: 60 * 60 * 24 * 30,
-  });
+if (!store && restCommandStore) {
+  store = restCommandStore;
   sessionStoreType = "upstash-rest";
   console.log("[session-redis] Using Upstash REST session store ✓");
 }
@@ -148,6 +157,115 @@ if (!store) {
     UPSTASH_REDIS_REST_TOKEN: restToken ? "OK" : "MISSING",
   });
 }
+
+
+async function ensureRedisClientReady() {
+  if (!redisClient) return null;
+  if (redisClient.isReady) return redisClient;
+
+  try {
+    if (!redisClient.isOpen) {
+      if (!redisConnectPromise) {
+        redisConnectPromise = redisClient.connect().catch((error) => {
+          redisConnectPromise = null;
+          throw error;
+        });
+      }
+      await redisConnectPromise;
+    } else if (redisConnectPromise) {
+      await redisConnectPromise.catch(() => null);
+    }
+  } catch (error) {
+    console.error("[Redis] lazy connection failed:", error?.message || error);
+    return null;
+  }
+
+  return redisClient.isReady ? redisClient : null;
+}
+
+// Generic Redis adapter used by application caches. Session persistence already
+// supported both the normal Redis URL and Upstash REST, but the application
+// cache previously worked only when the normal Redis URL was present. This
+// adapter gives cache reads/writes the same REST fallback without exposing
+// tokens or coupling application code to the session-store implementation.
+const cacheRedis = {
+  isConfigured() {
+    return !!redisClient || !!restCommandStore;
+  },
+
+  backendType() {
+    if (redisClient && restCommandStore) return "redis-url+rest-fallback";
+    if (redisClient) return "redis-url";
+    if (restCommandStore) return "upstash-rest";
+    return "memory-only";
+  },
+
+  async get(key) {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) return null;
+
+    const client = await ensureRedisClientReady();
+    if (client) return await client.get(normalizedKey);
+    if (restCommandStore) {
+      return await restCommandStore._command(["GET", normalizedKey]);
+    }
+    return null;
+  },
+
+  async set(key, value, options = {}) {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) return null;
+    const rawTtl = Number(options?.EX || options?.ex || options?.ttl || 0) || 0;
+    const ttl = rawTtl > 0 ? Math.max(1, rawTtl) : 0;
+
+    const client = await ensureRedisClientReady();
+    if (client) {
+      return ttl
+        ? await client.set(normalizedKey, value, { EX: ttl })
+        : await client.set(normalizedKey, value);
+    }
+    if (restCommandStore) {
+      const command = ["SET", normalizedKey, value];
+      if (ttl) command.push("EX", ttl);
+      return await restCommandStore._command(command);
+    }
+    return null;
+  },
+
+  async del(keys) {
+    const list = (Array.isArray(keys) ? keys : [keys])
+      .map((key) => String(key || "").trim())
+      .filter(Boolean);
+    if (!list.length) return 0;
+
+    const client = await ensureRedisClientReady();
+    if (client) return await client.del(list);
+    if (restCommandStore) {
+      return Number(await restCommandStore._command(["DEL", ...list])) || 0;
+    }
+    return 0;
+  },
+
+  async scan(cursor = "0", options = {}) {
+    const match = String(options?.MATCH || options?.match || "*").trim() || "*";
+    const count = Math.max(1, Number(options?.COUNT || options?.count || 200) || 200);
+
+    const client = await ensureRedisClientReady();
+    if (client && typeof client.scan === "function") {
+      const reply = await client.scan(String(cursor || "0"), { MATCH: match, COUNT: count });
+      if (Array.isArray(reply)) return { cursor: String(reply[0] || "0"), keys: reply[1] || [] };
+      return { cursor: String(reply?.cursor ?? "0"), keys: reply?.keys || [] };
+    }
+
+    if (restCommandStore) {
+      const reply = await restCommandStore._command(["SCAN", String(cursor || "0"), "MATCH", match, "COUNT", count]);
+      if (Array.isArray(reply)) return { cursor: String(reply[0] || "0"), keys: reply[1] || [] };
+      return { cursor: "0", keys: [] };
+    }
+
+    return { cursor: "0", keys: [] };
+  },
+};
 
 const forceSecureCookie = String(process.env.FORCE_SECURE_COOKIE || "").toLowerCase() === "true";
 const secureCookie = forceSecureCookie ? true : "auto";
@@ -184,17 +302,19 @@ async function setUserAuthRevokedAt(userId, timestamp = Date.now()) {
 
   if (redisClient) {
     try {
-      if (!redisClient.isOpen) await redisClient.connect();
-      await redisClient.set(authRevocationKey(id), String(value));
-      return value;
+      const client = await ensureRedisClientReady();
+      if (client) {
+        await client.set(authRevocationKey(id), String(value));
+        return value;
+      }
     } catch (error) {
       console.error("[session-redis] Failed to persist auth revocation:", error?.message || error);
     }
   }
 
-  if (store instanceof UpstashRestSessionStore) {
+  if (restCommandStore) {
     try {
-      await store._command(["SET", authRevocationKey(id), String(value)]);
+      await restCommandStore._command(["SET", authRevocationKey(id), String(value)]);
       return value;
     } catch (error) {
       console.error("[session-redis] Failed to persist REST auth revocation:", error?.message || error);
@@ -210,17 +330,17 @@ async function getUserAuthRevokedAt(userId) {
 
   if (redisClient) {
     try {
-      if (!redisClient.isOpen) await redisClient.connect();
-      const raw = await redisClient.get(authRevocationKey(id));
+      const client = await ensureRedisClientReady();
+      const raw = client ? await client.get(authRevocationKey(id)) : null;
       if (raw !== null && raw !== undefined) return Number(raw) || 0;
     } catch (error) {
       console.error("[session-redis] Failed to read auth revocation:", error?.message || error);
     }
   }
 
-  if (store instanceof UpstashRestSessionStore) {
+  if (restCommandStore) {
     try {
-      const raw = await store._command(["GET", authRevocationKey(id)]);
+      const raw = await restCommandStore._command(["GET", authRevocationKey(id)]);
       if (raw !== null && raw !== undefined) return Number(raw) || 0;
     } catch (error) {
       console.error("[session-redis] Failed to read REST auth revocation:", error?.message || error);
@@ -240,7 +360,9 @@ function getSessionDiagnostics() {
     hasUpstashRestToken: safeBool(restToken),
     cookieName: process.env.SESSION_COOKIE_NAME || "op.sid",
     secureCookie,
+    cacheBackend: cacheRedis.backendType(),
+    cachePersistent: cacheRedis.isConfigured(),
   };
 }
 
-module.exports = { sessionMiddleware, redisClient, sessionStoreType, getSessionDiagnostics, setUserAuthRevokedAt, getUserAuthRevokedAt };
+module.exports = { sessionMiddleware, redisClient, cacheRedis, sessionStoreType, getSessionDiagnostics, setUserAuthRevokedAt, getUserAuthRevokedAt };
