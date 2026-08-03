@@ -924,6 +924,8 @@ body.curriculum-viewer-open{overflow:hidden}
 .curriculum-pdf-reader{
   --pdf-turn-progress:0;
   --pdf-turn-shadow:0;
+  --pdf-turn-fold:0;
+  --pdf-turn-edge:0;
   width:100%;
   height:100%;
   min-height:0;
@@ -1046,6 +1048,23 @@ body.curriculum-viewer-open{overflow:hidden}
   letter-spacing:.12em;
   text-transform:uppercase;
 }
+.curriculum-pdf-page--base::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  z-index:4;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .08s linear;
+}
+.curriculum-pdf-reader.is-turning-forward .curriculum-pdf-page--left::before{
+  opacity:calc(var(--pdf-turn-shadow) * .42);
+  background:linear-gradient(90deg,transparent 36%,rgba(15,23,36,.05) 63%,rgba(9,17,29,.34) 100%);
+}
+.curriculum-pdf-reader.is-turning-backward .curriculum-pdf-page--right::before{
+  opacity:calc(var(--pdf-turn-shadow) * .42);
+  background:linear-gradient(270deg,transparent 36%,rgba(15,23,36,.05) 63%,rgba(9,17,29,.34) 100%);
+}
 .curriculum-pdf-page__number{
   position:absolute;
   bottom:6px;
@@ -1072,12 +1091,16 @@ body.curriculum-viewer-open{overflow:hidden}
   width:50%;
   height:100%;
   transform-style:preserve-3d;
-  will-change:transform;
+  will-change:transform,filter;
+  backface-visibility:visible;
+  -webkit-backface-visibility:visible;
+  filter:drop-shadow(calc(var(--pdf-turn-shadow) * 10px) 10px calc(5px + var(--pdf-turn-shadow) * 12px) rgba(11,20,34,.22));
 }
+
 .curriculum-pdf-sheet[hidden]{display:none}
 .curriculum-pdf-sheet--forward{left:50%;transform-origin:left center}
 .curriculum-pdf-sheet--backward{left:0;transform-origin:right center}
-.curriculum-pdf-sheet__face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.curriculum-pdf-sheet__face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:preserve-3d;box-shadow:0 0 calc(4px + var(--pdf-turn-shadow) * 14px) rgba(12,20,32,.2)}
 .curriculum-pdf-sheet__back{transform:rotateY(180deg)}
 .curriculum-pdf-reader.is-turning-forward .curriculum-pdf-sheet__front{
   border-radius:1px 5px 9px 1px;
@@ -1104,9 +1127,36 @@ body.curriculum-viewer-open{overflow:hidden}
   inset:0;
   z-index:5;
   pointer-events:none;
-  opacity:calc(var(--pdf-turn-shadow) * .38);
-  background:linear-gradient(90deg,rgba(6,13,24,.76),transparent 26%,transparent 72%,rgba(6,13,24,.34));
+  opacity:calc(var(--pdf-turn-shadow) * .46);
+  background:
+    linear-gradient(90deg,rgba(6,13,24,.72),transparent 20%,transparent 69%,rgba(6,13,24,.42)),
+    radial-gradient(ellipse at 50% 48%,transparent 48%,rgba(255,255,255,.16) 76%,transparent 100%);
   backface-visibility:hidden;
+}
+.curriculum-pdf-sheet__curl{
+  position:absolute;
+  top:-1.5%;
+  bottom:-1.5%;
+  z-index:9;
+  width:38px;
+  opacity:calc(var(--pdf-turn-edge) * .92);
+  pointer-events:none;
+  filter:blur(.25px);
+  transform:translateZ(4px) scaleX(calc(.72 + var(--pdf-turn-fold) * .28));
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+}
+.curriculum-pdf-sheet--forward .curriculum-pdf-sheet__curl{
+  right:-8px;
+  border-radius:0 72% 72% 0/0 50% 50% 0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.72) 34%,rgba(37,43,50,.32) 68%,transparent);
+  box-shadow:8px 0 16px rgba(8,16,28,.24);
+}
+.curriculum-pdf-sheet--backward .curriculum-pdf-sheet__curl{
+  left:-8px;
+  border-radius:72% 0 0 72%/50% 0 0 50%;
+  background:linear-gradient(270deg,transparent,rgba(255,255,255,.72) 34%,rgba(37,43,50,.32) 68%,transparent);
+  box-shadow:-8px 0 16px rgba(8,16,28,.24);
 }
 .curriculum-pdf-sheet::after{
   content:'';
@@ -1114,9 +1164,9 @@ body.curriculum-viewer-open{overflow:hidden}
   inset:0 -26px 0;
   z-index:-1;
   pointer-events:none;
-  opacity:calc(var(--pdf-turn-shadow) * .55);
-  background:radial-gradient(ellipse at center,rgba(10,20,34,.55),transparent 67%);
-  filter:blur(10px);
+  opacity:calc(var(--pdf-turn-shadow) * .68);
+  background:radial-gradient(ellipse at center,rgba(10,20,34,.58),transparent 66%);
+  filter:blur(calc(8px + var(--pdf-turn-shadow) * 8px));
 }
 .curriculum-pdf-edge-turn{
   position:absolute;
