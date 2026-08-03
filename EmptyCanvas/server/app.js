@@ -26,6 +26,7 @@ const {
   markFileRedirect,
   getDiagnostics: getDirectStorageDiagnostics,
 } = require("./directStorage");
+const { createNextFrontendProxy, getNextFrontendDiagnostics } = require("./nextFrontendProxy");
 
 // B2C formulas are evaluated through a local, dependency-free parser with a
 // closed grammar and function allow-list. This avoids executing user input as
@@ -72,6 +73,10 @@ app.use((req, res, next) => {
   );
   next();
 });
+// Optional incremental Next.js frontend. It is mounted before body parsers so
+// the proxy can stream requests and responses without buffering. Existing ERP
+// pages and APIs remain untouched when the pilot is disabled.
+app.use(createNextFrontendProxy());
 // Initialize Notion Client using Env Vars
 const notion = new Client({ auth: process.env.Notion_API_Key });
 const componentsDatabaseId = process.env.Products_Database;
@@ -11922,6 +11927,11 @@ app.get("/api/cache-diagnostics", requireAuth, (req, res) => {
 app.get("/api/export-worker-diagnostics", requireAuth, (req, res) => {
   res.set("Cache-Control", "no-store");
   return res.json({ ok: true, exports: getExportWorkerDiagnostics() });
+});
+
+app.get("/api/next-frontend-diagnostics", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true, nextFrontend: getNextFrontendDiagnostics() });
 });
 
 app.post("/api/hard-refresh", requireAuth, async (req, res) => {
