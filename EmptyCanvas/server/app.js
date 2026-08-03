@@ -24547,6 +24547,76 @@ async function _pageBootstrapExpenses(req) {
   return Promise.all(loaders);
 }
 
+
+function _pageBootstrapRequestOrigin(req) {
+  const configured = String(process.env.PUBLIC_APP_ORIGIN || process.env.APP_ORIGIN || '').trim();
+  if (configured) {
+    try { return new URL(configured).origin; } catch (_) {}
+  }
+  const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'https';
+  const host = String(req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+  if (!host) return '';
+  return `${protocol}://${host}`;
+}
+
+async function _pageBootstrapFetchExistingRoute(req, pathname, timeoutMs = 10_000) {
+  const origin = _pageBootstrapRequestOrigin(req);
+  if (!origin) throw new Error('Could not resolve the ERP application origin.');
+  const target = new URL(String(pathname || '/'), origin);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(1_000, Number(timeoutMs) || 10_000));
+  try {
+    const response = await fetch(target, {
+      method: 'GET',
+      redirect: 'manual',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json',
+        cookie: String(req.headers.cookie || ''),
+        'x-operations-hub-bootstrap': 'home',
+      },
+    });
+    const contentType = String(response.headers.get('content-type') || '');
+    const body = contentType.includes('application/json')
+      ? await response.json().catch(() => null)
+      : null;
+    if (!response.ok) {
+      const error = new Error(body?.error || `Bootstrap resource failed with ${response.status}.`);
+      error.status = response.status;
+      throw error;
+    }
+    return body;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function _pageBootstrapHome(req) {
+  const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+  ];
+
+  if (_pageBootstrapHasPageAccess(req, 'Current Orders')) {
+    loaders.push(_pageBootstrapLoad('/api/orders', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders')));
+  }
+  if (_pageBootstrapHasPageAccess(req, 'Requested Orders') || _pageBootstrapHasPageAccess(req, 'Operations Orders') || _pageBootstrapHasPageAccess(req, 'Maintenance Orders')) {
+    loaders.push(_pageBootstrapLoad('/api/orders/requested', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested')));
+  }
+  if (_pageBootstrapHasPageAccess(req, 'Orders Review')) {
+    loaders.push(_pageBootstrapLoad('/api/sv-orders?tab=all', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all')));
+  }
+  if (_pageBootstrapHasPageAccess(req, 'Stocktaking')) {
+    loaders.push(_pageBootstrapLoad('/api/stock', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/stock')));
+  }
+  if (_pageBootstrapHasPageAccess(req, 'Expenses')) {
+    loaders.push(_pageBootstrapLoad('/api/expenses', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses')));
+  }
+
+  return Promise.all(loaders);
+}
+
 function _pageBootstrapHasPageAccess(req, pageName) {
   if (pageName === 'Create New Order') {
     const unlockUntil = Number(req.session?.adminCreateOrderUnlockUntil || 0);
@@ -24575,6 +24645,8 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'expenses') {
       if (!_pageBootstrapHasPageAccess(req, 'Expenses')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapExpenses(req);
+    } else if (scope === 'home') {
+      results = await _pageBootstrapHome(req);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }
