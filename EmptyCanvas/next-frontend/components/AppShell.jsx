@@ -19,7 +19,7 @@ function canSee(link, allowedPages) {
   return link.permissions.some((permission) => allowed.has(normalize(permission)));
 }
 
-export default function AppShell({ account, children }) {
+export default function AppShell({ account, children, title = "Home", eyebrow = "Incremental frontend migration" }) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
   const initials = String(account?.name || account?.username || "U")
@@ -53,8 +53,8 @@ export default function AppShell({ account, children }) {
       <main className="main-area">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Incremental frontend migration</p>
-            <h1>Home</h1>
+            <p className="eyebrow">{eyebrow}</p>
+            <h1>{title}</h1>
           </div>
           <a className="profile" href="/account">
             {account?.photoUrl ? <img src={account.photoUrl} alt="" /> : <span>{initials}</span>}
