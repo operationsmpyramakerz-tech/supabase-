@@ -139,12 +139,12 @@ export default async function HomePage() {
   ], bucketMaintenance, (row) => lower(row.orderType ?? row.order_type ?? row.type).includes("maintenance"));
 
   return (
-    <AppShell account={account} title="Home" eyebrow="Live ERP overview">
+    <AppShell account={account} title="Home" eyebrow="Live ERP overview" activePath="/next/home">
       <DashboardNotice omitted={response.data.omitted || []} />
       <section className="dashboard-overview">
         <div className="dashboard-title-row"><div><span className="overview-icon">⌁</span><h2>Overview</h2></div><a href="/home">Classic Home</a></div>
         <div className="dashboard-orders-grid">
-          <OrdersCard title="Current orders" href="/orders" {...current} />
+          <OrdersCard title="Current orders" href="/next/orders" {...current} />
           <OrdersCard title="Orders review" href="/orders/sv-orders" {...review} />
           <OrdersCard title="Operations orders" href="/orders/requested" {...operations} />
           <OrdersCard title="Maintenance orders" href="/orders/maintenance-orders" {...maintenance} />
