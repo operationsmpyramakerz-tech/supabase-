@@ -517,7 +517,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // 🔒 مهم: نخفي روابط السايدبار من البداية لتجنب "فلاش" كل الصفحات
   // لازم الـ body يبقى عليه الكلاس ده قبل ما الصلاحيات تتطبق.
   // هنضيفه هنا كـ safety (وكمان هنضيفه في الـ HTML body كـ default).
-  document.body.classList.add('permissions-loading');
+  if (!document.body.classList.contains('ops-server-shell-ready')) {
+    document.body.classList.add('permissions-loading');
+  }
 
   // Page-specific body class (used by CSS to tune some pages like Home/Notifications)
   // Examples: /home => page-home, /expenses/users => page-expenses-users
@@ -600,6 +602,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const LOGIN_SPLASH_BYPASS_MS = 90 * 1000;
   const _nativeFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
   const _apiCacheInflight = new Map();
+  const OPS_SERVER_BOOT_MAX_AGE_MS = 60 * 1000;
+
+  function readOpsServerBoot() {
+    try {
+      const boot = window.__OPS_SERVER_BOOT__;
+      if (!boot || typeof boot !== 'object') return null;
+      const generatedAt = Number(boot.generatedAt || 0);
+      if (!generatedAt || Date.now() - generatedAt > OPS_SERVER_BOOT_MAX_AGE_MS) return null;
+      return boot;
+    } catch {
+      return null;
+    }
+  }
+
+  function getOpsServerBootAccount() {
+    const account = readOpsServerBoot()?.account;
+    return account && typeof account === 'object' ? account : null;
+  }
+
+  function scheduleAfterFirstPaint(callback, delayMs = 1200) {
+    const run = () => {
+      try { callback(); } catch {}
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: Math.max(500, Number(delayMs) || 1200) });
+      return;
+    }
+    window.setTimeout(run, Math.max(250, Number(delayMs) || 1200));
+  }
 
   // Current-page bootstrap bundles replace several simultaneous browser API
   // calls with one request.  Original endpoints remain the automatic fallback.
@@ -774,14 +805,32 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cached) return cached;
     if (_pageBootstrapInflight.has(cacheId)) return _pageBootstrapInflight.get(cacheId);
 
+    const endpoint = pageBootstrapEndpoint(rule, pageUrl);
+    const early = window.__OPS_EARLY_PAGE_BOOTSTRAP__;
+    if (early && early.promise && String(early.url || '') === endpoint) {
+      const pending = Promise.resolve(early.promise).then((payload) => {
+        if (!payload?.ok || !Array.isArray(payload?.resources) || !payload.resources.length) return null;
+        payload.clientSavedAt = Date.now();
+        writePageBootstrapPayload(cacheId, payload);
+        return payload;
+      }).catch(() => null);
+      _pageBootstrapInflight.set(cacheId, pending);
+      try {
+        return await pending;
+      } finally {
+        _pageBootstrapInflight.delete(cacheId);
+        try { delete window.__OPS_EARLY_PAGE_BOOTSTRAP__; } catch {}
+      }
+    }
+
     const pending = (async () => {
       try {
-        const response = await _nativeFetch(pageBootstrapEndpoint(rule, pageUrl), {
+        const response = await _nativeFetch(endpoint, {
           credentials: 'same-origin',
           cache: 'no-store',
           headers: { Accept: 'application/json', 'X-Ops-Page-Bootstrap': '1' },
         });
-        await handleApiAuthResponse(response, new URL(response.url || pageBootstrapEndpoint(rule, pageUrl), window.location.origin));
+        await handleApiAuthResponse(response, new URL(response.url || endpoint, window.location.origin));
         if (!response.ok) return null;
         const payload = await response.json().catch(() => null);
         if (!payload?.ok || !Array.isArray(payload?.resources) || !payload.resources.length) return null;
@@ -3639,6 +3688,67 @@ if (document.querySelector('.sidebar')) {
     });
   } catch {}
 
+  function primeChromeFromServerBoot(){
+    const data = getOpsServerBootAccount();
+    if (!data) return false;
+
+    const name = String(data.name || data.username || '').trim();
+    const coverPhotoUrl = String(data.coverPhotoUrl || data.coverPhoto || '').trim();
+    applyUserSystemCover(coverPhotoUrl);
+
+    if (name) {
+      try { localStorage.setItem('username', name); } catch {}
+      renderGreeting(name);
+      renderSidebarProfile({
+        name,
+        position: data.position || '',
+        department: data.department || '',
+        photoUrl: data.photoUrl || '',
+      });
+      renderHeaderUser({ name, photoUrl: data.photoUrl || '' });
+    }
+
+    try {
+      window.__opsUserInfo = {
+        name: name || 'User',
+        position: data.position || '',
+        department: data.department || '',
+        photoUrl: data.photoUrl || '',
+        coverPhotoUrl,
+        email: data.email || '',
+        pageAccess: data.pageAccess || { pages: [] },
+      };
+      applyPageAccessRuntime(data || {});
+    } catch {}
+
+    const allowed = mergePageAccessIntoAllowedPages(
+      Array.isArray(data.allowedPages) ? data.allowedPages : [],
+      data.pageAccess || { pages: [] },
+    );
+
+    try { cacheAllowedPages(allowed); } catch {}
+    try { applyAllowedPages(allowed); } catch {}
+    try { window.__opsApplyMailAccess?.(allowed, data); } catch {}
+    try {
+      writeChromeCache({
+        name: name || 'User',
+        position: data.position || '',
+        department: data.department || '',
+        photoUrl: data.photoUrl || '',
+        coverPhotoUrl,
+        email: data.email || '',
+        allowedPages: allowed,
+        pageAccess: data.pageAccess || { pages: [] },
+      });
+    } catch {}
+
+    try {
+      document.body.classList.remove('permissions-loading');
+      document.body.classList.add('permissions-ready', 'ops-server-shell-ready');
+    } catch {}
+    return true;
+  }
+
   function primeChromeFromCache(){
     const cachedChrome = readChromeCache();
     const cachedCoverPhotoUrl = String(cachedChrome?.coverPhotoUrl || cachedChrome?.coverPhoto || '').trim();
@@ -4263,7 +4373,19 @@ if (document.querySelector('.sidebar')) {
       });
   }
 
-  async function ensureGreetingAndPages(){
+  async function ensureGreetingAndPages(options = {}){
+    const forceNetwork = options?.forceNetwork === true;
+    const serverBootAccount = getOpsServerBootAccount();
+    if (serverBootAccount && !forceNetwork && !window.__OPS_SERVER_BOOT_ACCOUNT_CONSUMED__) {
+      window.__OPS_SERVER_BOOT_ACCOUNT_CONSUMED__ = true;
+      scheduleAfterFirstPaint(() => {
+        ensureGreetingAndPages({ forceNetwork: true, reason: 'background-refresh' });
+      }, 1800);
+      markFreshLoadAccountReady();
+      markFreshLoadChromeReady();
+      return;
+    }
+
     const cachedChrome = readChromeCache();
     const cachedCoverPhotoUrl = String(cachedChrome?.coverPhotoUrl || cachedChrome?.coverPhoto || '').trim();
     applyUserSystemCover(cachedCoverPhotoUrl);
@@ -4592,7 +4714,8 @@ if (document.querySelector('.sidebar')) {
   // Apply cached chrome immediately so Hard Refresh does not show a different
   // header/sidebar while /api/account is still loading. The server response below
   // still refreshes the permissions, so added/removed pages continue to take effect.
-  primeChromeFromCache();
+  const __opsServerChromePrimed = primeChromeFromServerBoot();
+  if (!__opsServerChromePrimed) primeChromeFromCache();
 
   syncMobileDockStructure();
   reorderSidebarNav();
@@ -4606,7 +4729,7 @@ if (document.querySelector('.sidebar')) {
 
   window.addEventListener('user:updated', () => {
     // Refresh name + sidebar profile + permissions from the server
-    ensureGreetingAndPages();
+    ensureGreetingAndPages({ forceNetwork: true, reason: 'user-updated' });
   });
 
   let resizeTimer;

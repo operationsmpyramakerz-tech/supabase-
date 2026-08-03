@@ -2,6 +2,7 @@
 
 const express = require("express");
 const path = require("path");
+const { createPageHtmlRenderer } = require("../pageHtmlRenderer");
 
 function requireFunction(name, value) {
   if (typeof value !== "function") {
@@ -51,7 +52,9 @@ function createPageRouter(options = {}) {
   );
 
   const router = express.Router();
+  const pageHtmlRenderer = createPageHtmlRenderer({ publicDir: resolvedPublicDir });
   const sendPublicFile = (res, filename) => res.sendFile(path.join(resolvedPublicDir, filename));
+  const sendAppPage = (req, res, filename) => pageHtmlRenderer.render(req, res, filename);
   const disableBrowserCache = (res) => {
     res.set("Cache-Control", "no-cache, no-store, must-revalidate");
   };
@@ -84,48 +87,48 @@ function createPageRouter(options = {}) {
   });
 
   router.get("/dashboard", auth, (req, res) => res.redirect("/home"));
-  router.get("/home", auth, (req, res) => sendPublicFile(res, "home.html"));
-  router.get("/lms", auth, (req, res) => sendPublicFile(res, "lms.html"));
+  router.get("/home", auth, (req, res) => sendAppPage(req, res, "home.html"));
+  router.get("/lms", auth, (req, res) => sendAppPage(req, res, "lms.html"));
 
   router.get("/user-access", auth, pageAccess(userAccessPageAliases), (req, res) =>
-    sendPublicFile(res, "user-access.html"),
+    sendAppPage(req, res, "user-access.html"),
   );
 
   router.get("/lms/user-access", auth, lmsPageAccess("lms-users-center"), (req, res) =>
-    sendPublicFile(res, "lms-user-access.html"),
+    sendAppPage(req, res, "lms-user-access.html"),
   );
 
   router.get(
     "/lms/user-access/:role(supervisors|team-leaders|instructors|co-instructors|school-coordinators|students|parents)",
     auth,
     lmsPageAccess("lms-users-center"),
-    (req, res) => sendPublicFile(res, "lms-role-directory.html"),
+    (req, res) => sendAppPage(req, res, "lms-role-directory.html"),
   );
 
   router.get(
     ["/lms/curriculum", "/lms/curriculum/:id", "/lms/curriculum/:id/grade/:gradeId"],
     auth,
     lmsPageAccess("lms-curriculum"),
-    (req, res) => sendPublicFile(res, "lms-curriculum.html"),
+    (req, res) => sendAppPage(req, res, "lms-curriculum.html"),
   );
 
   router.get("/orders", auth, pageAccess("Current Orders"), (req, res) =>
-    sendPublicFile(res, "current-orders.html"),
+    sendAppPage(req, res, "current-orders.html"),
   );
 
   router.get("/orders/tracking", auth, pageAccess("Current Orders"), (req, res) =>
-    sendPublicFile(res, "order-tracking.html"),
+    sendAppPage(req, res, "order-tracking.html"),
   );
 
   router.get("/orders/requested", auth, pageAccess("Requested Orders"), (req, res) =>
-    sendPublicFile(res, "requested-orders.html"),
+    sendAppPage(req, res, "requested-orders.html"),
   );
 
   router.get(
     "/orders/maintenance-orders",
     auth,
     pageAccess("Maintenance Orders"),
-    (req, res) => sendPublicFile(res, "maintenance-orders.html"),
+    (req, res) => sendAppPage(req, res, "maintenance-orders.html"),
   );
 
   router.get("/orders/new", auth, pageAccess("Create New Order"), (req, res) => {
@@ -138,7 +141,7 @@ function createPageRouter(options = {}) {
     "/orders/new/products",
     auth,
     pageAccess("Create New Order"),
-    (req, res) => sendPublicFile(res, "create-order-products.html"),
+    (req, res) => sendAppPage(req, res, "create-order-products.html"),
   );
 
   router.get(
@@ -149,15 +152,15 @@ function createPageRouter(options = {}) {
   );
 
   router.get("/events/requests", auth, pageAccess("Event Requests"), (req, res) =>
-    sendPublicFile(res, "events.html"),
+    sendAppPage(req, res, "events.html"),
   );
 
   router.get("/events/calendar", auth, pageAccess("Event Calendar"), (req, res) =>
-    sendPublicFile(res, "events-calendar.html"),
+    sendAppPage(req, res, "events-calendar.html"),
   );
 
   router.get("/events/new", auth, pageAccess("Event Requests"), (req, res) =>
-    sendPublicFile(res, "events-new.html"),
+    sendAppPage(req, res, "events-new.html"),
   );
 
   router.get(
@@ -168,12 +171,12 @@ function createPageRouter(options = {}) {
       if (!canCreateEventComponent(req)) {
         return res.redirect("/events/components?adminAuthorization=required");
       }
-      return sendPublicFile(res, "events-components-new.html");
+      return sendAppPage(req, res, "events-components-new.html");
     },
   );
 
   router.get("/events/components", auth, pageAccess("Event Components"), (req, res) =>
-    sendPublicFile(res, "events-components.html"),
+    sendAppPage(req, res, "events-components.html"),
   );
 
   router.get(
@@ -184,31 +187,31 @@ function createPageRouter(options = {}) {
   );
 
   router.get("/b2c/database", auth, pageAccess("Customer Database"), (req, res) =>
-    sendPublicFile(res, "b2c-database.html"),
+    sendAppPage(req, res, "b2c-database.html"),
   );
 
   router.get("/b2c/database/:id", auth, pageAccess("Customer Database"), (req, res) =>
-    sendPublicFile(res, "b2c-table.html"),
+    sendAppPage(req, res, "b2c-table.html"),
   );
 
   router.get("/b2c/form", auth, pageAccess("Customer Form"), (req, res) =>
-    sendPublicFile(res, "b2c-form.html"),
+    sendAppPage(req, res, "b2c-form.html"),
   );
 
   router.get("/stocktaking", auth, pageAccess("Stocktaking"), (req, res) =>
-    sendPublicFile(res, "stocktaking.html"),
+    sendAppPage(req, res, "stocktaking.html"),
   );
 
   router.get("/products", auth, pageAccess("Products"), (req, res) =>
-    sendPublicFile(res, "products.html"),
+    sendAppPage(req, res, "products.html"),
   );
 
   router.get("/proposals", auth, pageAccess(["Proposals", "Products"]), (req, res) =>
-    sendPublicFile(res, "proposals.html"),
+    sendAppPage(req, res, "proposals.html"),
   );
 
   router.get("/kits", auth, pageAccess(["Kits", "Products"]), (req, res) =>
-    sendPublicFile(res, "kits.html"),
+    sendAppPage(req, res, "kits.html"),
   );
 
   router.get(
@@ -219,33 +222,33 @@ function createPageRouter(options = {}) {
   );
 
   router.get("/task-management/all-tasks", auth, pageAccess("All Tasks"), (req, res) =>
-    sendPublicFile(res, "task-management.html"),
+    sendAppPage(req, res, "task-management.html"),
   );
 
   router.get("/task-management/my-tasks", auth, pageAccess("My Tasks"), (req, res) =>
-    sendPublicFile(res, "task-management.html"),
+    sendAppPage(req, res, "task-management.html"),
   );
 
   router.get(
     "/task-management/delegated-tasks",
     auth,
     pageAccess("Delegated Tasks"),
-    (req, res) => sendPublicFile(res, "task-management.html"),
+    (req, res) => sendAppPage(req, res, "task-management.html"),
   );
 
   router.get("/kpis", auth, pageAccess("KPIs"), (req, res) =>
-    sendPublicFile(res, "kpis.html"),
+    sendAppPage(req, res, "kpis.html"),
   );
 
   router.get(
     ["/lms/b2b", "/lms/b2b/new", "/lms/b2b/edit/:id"],
     auth,
     lmsPageAccess("lms-b2b"),
-    (req, res) => sendPublicFile(res, "lms-b2b.html"),
+    (req, res) => sendAppPage(req, res, "lms-b2b.html"),
   );
 
   router.get("/lms/b2b/school/:id", auth, lmsPageAccess("lms-b2b"), (req, res) =>
-    sendPublicFile(res, "lms-b2b-school.html"),
+    sendAppPage(req, res, "lms-b2b-school.html"),
   );
 
   // Preserve legacy B2B bookmarks after moving the module into LMS.
@@ -258,20 +261,20 @@ function createPageRouter(options = {}) {
     res.redirect(`/lms/b2b/school/${encodeURIComponent(req.params.id)}`),
   );
 
-  router.get("/account", auth, (req, res) => sendPublicFile(res, "account.html"));
+  router.get("/account", auth, (req, res) => sendAppPage(req, res, "account.html"));
   router.get("/history", auth, pageAccess("History"), (req, res) =>
-    sendPublicFile(res, "history.html"),
+    sendAppPage(req, res, "history.html"),
   );
   router.get("/backup", auth, pageAccess("Backup"), (req, res) =>
-    sendPublicFile(res, "backup.html"),
+    sendAppPage(req, res, "backup.html"),
   );
-  router.get("/how-it-works", auth, (req, res) => sendPublicFile(res, "how-it-works.html"));
+  router.get("/how-it-works", auth, (req, res) => sendAppPage(req, res, "how-it-works.html"));
   router.get("/notifications", auth, (req, res) => res.redirect("/home"));
   router.get("/expenses", auth, pageAccess("Expenses"), (req, res) =>
-    sendPublicFile(res, "expenses.html"),
+    sendAppPage(req, res, "expenses.html"),
   );
   router.get("/expenses/users", auth, pageAccess("Expenses Users"), (req, res) =>
-    sendPublicFile(res, "expenses-users.html"),
+    sendAppPage(req, res, "expenses-users.html"),
   );
 
   return router;

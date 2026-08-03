@@ -288,6 +288,12 @@ const sessionMiddleware = session({
 });
 
 const authRevocationMemory = new Map();
+const authRevocationReadCache = new Map();
+const authRevocationInflight = new Map();
+const AUTH_REVOCATION_READ_TTL_MS = Math.min(
+  5000,
+  Math.max(250, Number(process.env.AUTH_REVOCATION_READ_TTL_MS || 2000) || 2000),
+);
 const AUTH_REVOCATION_PREFIX = "op:auth-revoked:";
 
 function authRevocationKey(userId) {
@@ -299,6 +305,7 @@ async function setUserAuthRevokedAt(userId, timestamp = Date.now()) {
   if (!id) return 0;
   const value = Number(timestamp) || Date.now();
   authRevocationMemory.set(id, value);
+  authRevocationReadCache.set(id, { value, expiresAt: Date.now() + AUTH_REVOCATION_READ_TTL_MS });
 
   if (redisClient) {
     try {
@@ -328,26 +335,56 @@ async function getUserAuthRevokedAt(userId) {
   const id = String(userId || "").trim();
   if (!id) return 0;
 
-  if (redisClient) {
-    try {
-      const client = await ensureRedisClientReady();
-      const raw = client ? await client.get(authRevocationKey(id)) : null;
-      if (raw !== null && raw !== undefined) return Number(raw) || 0;
-    } catch (error) {
-      console.error("[session-redis] Failed to read auth revocation:", error?.message || error);
-    }
+  const cached = authRevocationReadCache.get(id);
+  if (cached && Number(cached.expiresAt || 0) > Date.now()) {
+    return Number(cached.value || 0);
+  }
+  if (cached) authRevocationReadCache.delete(id);
+
+  if (authRevocationInflight.has(id)) {
+    return await authRevocationInflight.get(id);
   }
 
-  if (restCommandStore) {
-    try {
-      const raw = await restCommandStore._command(["GET", authRevocationKey(id)]);
-      if (raw !== null && raw !== undefined) return Number(raw) || 0;
-    } catch (error) {
-      console.error("[session-redis] Failed to read REST auth revocation:", error?.message || error);
-    }
-  }
+  const pending = (async () => {
+    let value = Number(authRevocationMemory.get(id) || 0);
 
-  return Number(authRevocationMemory.get(id) || 0);
+    let resolvedFromRemote = false;
+    if (redisClient) {
+      try {
+        const client = await ensureRedisClientReady();
+        const raw = client ? await client.get(authRevocationKey(id)) : null;
+        if (raw !== null && raw !== undefined) {
+          value = Number(raw) || 0;
+          resolvedFromRemote = true;
+        }
+      } catch (error) {
+        console.error("[session-redis] Failed to read auth revocation:", error?.message || error);
+      }
+    }
+
+    if (!resolvedFromRemote && restCommandStore) {
+      try {
+        const raw = await restCommandStore._command(["GET", authRevocationKey(id)]);
+        if (raw !== null && raw !== undefined) value = Number(raw) || 0;
+      } catch (error) {
+        console.error("[session-redis] Failed to read REST auth revocation:", error?.message || error);
+      }
+    }
+
+    authRevocationMemory.set(id, value);
+    authRevocationReadCache.set(id, {
+      value,
+      expiresAt: Date.now() + AUTH_REVOCATION_READ_TTL_MS,
+    });
+    return value;
+  })();
+
+  authRevocationInflight.set(id, pending);
+  try {
+    return await pending;
+  } finally {
+    authRevocationInflight.delete(id);
+  }
 }
 
 function getSessionDiagnostics() {
