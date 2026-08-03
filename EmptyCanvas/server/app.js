@@ -24593,6 +24593,13 @@ async function _pageBootstrapFetchExistingRoute(req, pathname, timeoutMs = 10_00
   }
 }
 
+async function _pageBootstrapCurrentOrders(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/orders', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders', 20_000)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24647,6 +24654,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapExpenses(req);
     } else if (scope === 'home') {
       results = await _pageBootstrapHome(req);
+    } else if (scope === 'current-orders') {
+      if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapCurrentOrders(req);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }
