@@ -532,9 +532,15 @@
     const output = [];
     for (const file of Array.from(files || [])) {
       if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB.`);
-      const dataUrl = await fileToDataUrl(file);
-      const payload = await api('/api/b2c/upload', { method: 'POST', body: JSON.stringify({ dataUrl, filename: file.name, mime: file.type }) });
-      if (payload.file) output.push(payload.file);
+      const fallback = async () => {
+        const dataUrl = await fileToDataUrl(file);
+        const payload = await api('/api/b2c/upload', { method: 'POST', body: JSON.stringify({ dataUrl, filename: file.name, mime: file.type, size: file.size }) });
+        return payload.file || null;
+      };
+      const uploaded = window.ERPDirectStorage?.uploadFile
+        ? await window.ERPDirectStorage.uploadFile({ scope: 'b2c', file, fallback })
+        : await fallback();
+      if (uploaded?.url) output.push(uploaded);
     }
     return output;
   }

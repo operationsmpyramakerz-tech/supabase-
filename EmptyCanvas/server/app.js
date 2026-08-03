@@ -14,6 +14,18 @@ const supabaseDb = require("./supabaseRest");
 const { createPageRouter } = require("./routes/pageRoutes");
 const LMS_ROLE_DIRECTORY_CONFIG = require("./config/lmsRoleDirectory");
 const { runExportTask, getExportWorkerDiagnostics } = require("./exportWorkerPool");
+const {
+  createFileReference,
+  verifyFileReference,
+  createUploadReference,
+  verifyUploadReference,
+  fileUrl: directStorageFileUrl,
+  signedDownloadUrl: directStorageSignedDownloadUrl,
+  verifyCompletedUpload,
+  markUploadTicketCreated,
+  markFileRedirect,
+  getDiagnostics: getDirectStorageDiagnostics,
+} = require("./directStorage");
 
 // B2C formulas are evaluated through a local, dependency-free parser with a
 // closed grammar and function allow-list. This avoids executing user input as
@@ -167,7 +179,7 @@ app.use(
       // Shared navigation and page-access behavior must always refresh after a
       // deployment; otherwise a browser can keep an older sidebar script even
       // after a user receives a newly enabled page permission.
-      if (["common-ui.js", "ui-redesign.css", "lms-curriculum.js", "lms-curriculum.css"].some((name) => filePath.endsWith(name))) {
+      if (["common-ui.js", "direct-storage-upload.js", "ui-redesign.css", "lms-curriculum.js", "lms-curriculum.css"].some((name) => filePath.endsWith(name))) {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       }
       if (filePath.endsWith("manifest.webmanifest") || filePath.endsWith("manifest.json")) {
@@ -9596,6 +9608,224 @@ function _b2cAccessibleSubpages(req) {
 function _b2cPreferredRoute(req) {
   return _b2cAccessibleSubpages(req)[0]?.routePath || "/home";
 }
+
+// Direct Supabase Storage ------------------------------------------------------
+// Large/high-frequency files are uploaded from the browser straight to a short-
+// lived Supabase signed URL. Node only issues the ticket, verifies the completed
+// object, and redirects authenticated readers to Storage; file bytes no longer
+// pass through Express or the PM2 workers.
+const DIRECT_STORAGE_POLICIES = Object.freeze({
+  "task-management": Object.freeze({
+    pages: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"],
+    prefix: "task-management/attachments",
+    maxSize: 10 * 1024 * 1024,
+  }),
+  b2c: Object.freeze({
+    pages: ["Customer Database", "Customer Form", "B2C"],
+    prefix: "b2c/customer-files",
+    maxSize: 10 * 1024 * 1024,
+  }),
+  "kpi-evidence": Object.freeze({
+    pages: ["KPIs"],
+    prefix: "kpi-evidence",
+    maxSize: 15 * 1024 * 1024,
+  }),
+});
+
+function _directStoragePolicy(scope) {
+  return DIRECT_STORAGE_POLICIES[String(scope || "").trim().toLowerCase()] || null;
+}
+
+function _directStorageOwner(req) {
+  return String(
+    req.session?.userSupabaseId ||
+    req.session?.userNotionId ||
+    req.session?.username ||
+    "",
+  ).trim();
+}
+
+function _directStoragePayloadMatchesPolicy(payload, policy) {
+  const pathValue = String(payload?.path || "").replace(/^\/+/, "");
+  const prefix = String(policy?.prefix || "").replace(/^\/+|\/+$/g, "");
+  return Boolean(prefix && (pathValue === prefix || pathValue.startsWith(`${prefix}/`)));
+}
+
+function _directStorageAuthorize(req, res, policy, { write = false } = {}) {
+  const accessLevel = _sessionPageAccessLevel(req, policy?.pages || []);
+  if (!accessLevel) {
+    _pageAccessDeniedResponse(req, res);
+    return false;
+  }
+  if (write && accessLevel === PAGE_ACCESS_LEVELS.VIEW) {
+    _pageAccessDeniedResponse(req, res, {
+      code: "VIEW_ONLY_ACCESS",
+      error: "View-only access: you are not authorized to upload files on this page.",
+    });
+    return false;
+  }
+  return true;
+}
+
+function _directStorageSafeFileName(value) {
+  const original = String(value || "attachment").replace(/[\r\n\0]/g, "").trim().slice(0, 500) || "attachment";
+  const clean = original
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(-220) || `attachment-${Date.now()}`;
+  return { original, clean };
+}
+
+function _directStorageObjectPath(policy, cleanName) {
+  const now = new Date();
+  const year = String(now.getUTCFullYear());
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const random = crypto.randomBytes(12).toString("hex");
+  return `${policy.prefix}/${year}/${month}/${Date.now()}-${random}-${cleanName}`;
+}
+
+function _directStorageErrorResponse(res, error, fallbackMessage) {
+  const status = Number(error?.status || error?.statusCode) || 500;
+  const code = String(error?.code || "DIRECT_STORAGE_ERROR");
+  const unavailable = [
+    "SUPABASE_STORAGE_NOT_CONFIGURED",
+    "DIRECT_STORAGE_SECRET_MISSING",
+    "SUPABASE_NOT_CONFIGURED",
+  ].includes(code);
+  return res.status(status >= 400 && status <= 599 ? status : 500).json({
+    ok: false,
+    code: unavailable ? "DIRECT_STORAGE_UNAVAILABLE" : code,
+    fallbackAllowed: unavailable,
+    error: error?.message || fallbackMessage,
+  });
+}
+
+app.post("/api/storage/upload-ticket", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const scope = String(req.body?.scope || "").trim().toLowerCase();
+    const policy = _directStoragePolicy(scope);
+    if (!policy) return res.status(400).json({ ok: false, code: "DIRECT_STORAGE_SCOPE_INVALID", error: "Unsupported upload area." });
+    if (!_directStorageAuthorize(req, res, policy, { write: true })) return;
+
+    const owner = _directStorageOwner(req);
+    if (!owner) return res.status(401).json({ ok: false, code: "AUTH_REQUIRED", error: "Login is required before uploading files." });
+
+    const { original, clean } = _directStorageSafeFileName(req.body?.filename || req.body?.name);
+    const size = Math.max(0, Number(req.body?.size) || 0);
+    const type = String(req.body?.mime || req.body?.type || "application/octet-stream")
+      .replace(/[\r\n\0]/g, "")
+      .trim()
+      .slice(0, 180) || "application/octet-stream";
+    if (!size) return res.status(400).json({ ok: false, code: "DIRECT_STORAGE_FILE_EMPTY", error: "The selected file is empty." });
+    if (size > policy.maxSize) {
+      return res.status(413).json({ ok: false, code: "DIRECT_STORAGE_FILE_TOO_LARGE", error: `The selected file must be ${Math.round(policy.maxSize / 1024 / 1024)} MB or less.` });
+    }
+
+    const cfg = supabaseDb.getConfig();
+    const bucket = String(cfg?.storageBucket || "").trim();
+    if (!supabaseDb.isConfigured() || !bucket) {
+      const unavailable = new Error("Supabase Storage is not configured for direct uploads.");
+      unavailable.code = "SUPABASE_STORAGE_NOT_CONFIGURED";
+      unavailable.status = 503;
+      throw unavailable;
+    }
+
+    const objectPath = _directStorageObjectPath(policy, clean);
+    const uploadTicket = await supabaseDb.createSignedUploadUrl(objectPath, {
+      bucketName: bucket,
+      upsert: false,
+    });
+    const uploadRef = createUploadReference({
+      bucket,
+      path: objectPath,
+      name: original,
+      type,
+      size,
+      maxSize: policy.maxSize,
+      scope,
+      owner,
+    });
+    markUploadTicketCreated();
+
+    return res.status(201).json({
+      ok: true,
+      direct: true,
+      upload: {
+        method: "PUT",
+        signedUrl: uploadTicket.signedUrl,
+        headers: {
+          "Content-Type": type,
+          "x-upsert": "false",
+        },
+      },
+      uploadRef,
+      expiresInSeconds: 600,
+    });
+  } catch (error) {
+    console.error("POST /api/storage/upload-ticket error:", error?.details || error?.message || error);
+    return _directStorageErrorResponse(res, error, "Failed to prepare the direct upload.");
+  }
+});
+
+app.post("/api/storage/upload-complete", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const payload = verifyUploadReference(req.body?.uploadRef || req.body?.reference);
+    const policy = _directStoragePolicy(payload.scope);
+    if (!policy || !_directStoragePayloadMatchesPolicy(payload, policy)) {
+      return res.status(400).json({ ok: false, code: "DIRECT_STORAGE_SCOPE_INVALID", error: "Unsupported upload area." });
+    }
+    if (!_directStorageAuthorize(req, res, policy, { write: true })) return;
+    if (!_directStorageOwner(req) || _directStorageOwner(req) !== String(payload.owner || "")) {
+      return res.status(403).json({ ok: false, code: "DIRECT_STORAGE_OWNER_MISMATCH", error: "This upload ticket belongs to another session." });
+    }
+
+    const verified = await verifyCompletedUpload(supabaseDb, payload);
+    const reference = createFileReference(verified);
+    return res.status(201).json({
+      ok: true,
+      direct: true,
+      file: {
+        name: verified.name,
+        url: `${directStorageFileUrl(reference)}?name=${encodeURIComponent(verified.name)}`,
+        type: verified.type,
+        size: verified.size,
+        storagePath: verified.path,
+        storageBucket: verified.bucket,
+        directStorage: true,
+      },
+    });
+  } catch (error) {
+    console.error("POST /api/storage/upload-complete error:", error?.details || error?.message || error);
+    return _directStorageErrorResponse(res, error, "Failed to verify the uploaded file.");
+  }
+});
+
+app.get("/api/storage/file/:reference", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "private, no-store, max-age=0");
+  res.set("Referrer-Policy", "no-referrer");
+  try {
+    const payload = verifyFileReference(req.params.reference);
+    const policy = _directStoragePolicy(payload.scope);
+    if (!policy || !_directStoragePayloadMatchesPolicy(payload, policy)) return res.status(404).send("File link is no longer available.");
+    if (!_directStorageAuthorize(req, res, policy)) return;
+    const signedUrl = await directStorageSignedDownloadUrl(supabaseDb, payload, {
+      download: ["1", "true", "yes"].includes(String(req.query?.download || "").toLowerCase()),
+    });
+    markFileRedirect();
+    return res.redirect(302, signedUrl);
+  } catch (error) {
+    console.error("GET /api/storage/file/:reference error:", error?.details || error?.message || error);
+    const status = Number(error?.status || error?.statusCode) || 500;
+    return res.status(status >= 400 && status <= 599 ? status : 500).send(error?.message || "Failed to open the stored file.");
+  }
+});
+
+app.get("/api/storage/direct-diagnostics", requireAuth, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true, storage: getDirectStorageDiagnostics() });
+});
 
 // --- Page Serving Routes --- //
 // Browser pages are isolated from the API implementation. The router receives
@@ -35388,7 +35618,7 @@ function _b2cConditionPass(condition, values = {}) {
 function _b2cSafeFileEntry(value) {
   if (!value || typeof value !== "object") return null;
   const url = _b2cText(value.url || value.href || value.publicUrl, 3000);
-  if (!/^https:\/\//i.test(url)) return null;
+  if (!/^https:\/\//i.test(url) && !/^\/api\/storage\/file\/[A-Za-z0-9._~-]+(?:[?&].*)?$/i.test(url)) return null;
   return { name: _b2cText(value.name || value.filename || "Attachment", 240) || "Attachment", url, type: _b2cText(value.type || value.mime || "", 120), size: Math.max(0, Math.min(100 * 1024 * 1024, Number(value.size) || 0)) };
 }
 function _b2cSanitizeValues(rawValues, fields = [], { partial = false, formMode = false } = {}) {
@@ -35864,7 +36094,8 @@ function _tmDate(value) {
 function _tmAttachment(value = {}) {
   if (!value || typeof value !== "object") return null;
   const url = _tmText(value.url || value.attachmentUrl || value.attachment_url, 4000);
-  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const isProtectedStorageUrl = /^\/api\/storage\/file\/[A-Za-z0-9._~-]+(?:[?&].*)?$/i.test(url);
+  if (!url || (!/^https?:\/\//i.test(url) && !isProtectedStorageUrl)) return null;
   return {
     name: _tmText(value.name || value.filename || value.attachmentName || value.attachment_name, 500) || "Attachment",
     url,

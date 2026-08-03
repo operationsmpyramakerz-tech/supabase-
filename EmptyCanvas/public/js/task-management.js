@@ -94,6 +94,26 @@
     reader.readAsDataURL(file);
   });
 
+  async function uploadTaskManagementFile(file, onProgress) {
+    const fallback = async () => {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
+        method: 'POST',
+        body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size },
+      });
+      return result.file || null;
+    };
+    if (window.ERPDirectStorage?.uploadFile) {
+      return await window.ERPDirectStorage.uploadFile({
+        scope: 'task-management',
+        file,
+        onProgress,
+        fallback,
+      });
+    }
+    return await fallback();
+  }
+
   const pathname = String(window.location?.pathname || '');
   const TASK_VIEW = /^\/task-management\/delegated-tasks(?:\/|$)/.test(pathname)
     ? 'delegated'
@@ -1508,12 +1528,13 @@
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
         if (progressLabel) progressLabel.textContent = `Uploading ${index + 1} of ${selectedFiles.length}…`;
-        const dataUrl = await readFileAsDataUrl(file);
-        const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
-          method: 'POST',
-          body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size },
+        const uploadedFile = await uploadTaskManagementFile(file, ({ percent, stage }) => {
+          if (!progressLabel) return;
+          progressLabel.textContent = stage === 'verify'
+            ? `Verifying ${index + 1} of ${selectedFiles.length}…`
+            : `Uploading ${index + 1} of ${selectedFiles.length}… ${percent || 0}%`;
         });
-        if (result.file?.url) uploaded.push(result.file);
+        if (uploadedFile?.url) uploaded.push(uploadedFile);
       }
       state.blockDraftAttachments = attachmentList([...existing, ...uploaded]);
       renderBlockAttachmentPreview();
@@ -2461,11 +2482,12 @@
       errorEl.textContent = '';
       try {
         for (const file of files) {
-          const dataUrl = await readFileAsDataUrl(file);
-          const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
-            method: 'POST', body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size }
+          const uploadedFile = await uploadTaskManagementFile(file, ({ percent, stage }) => {
+            if (progress) progress.setAttribute('data-progress', String(percent || 0));
+            if (stage === 'verify') errorEl.textContent = 'Verifying uploaded file…';
+            if (stage === 'complete') errorEl.textContent = '';
           });
-          if (result.file?.url) uploadedFiles.push(result.file);
+          if (uploadedFile?.url) uploadedFiles.push(uploadedFile);
         }
         renderFiles();
       } catch (error) {
@@ -3719,12 +3741,11 @@ function openTeamTaskDetails(assignmentId, sectionId = '') {
     if (input) input.disabled = true;
     if (progress) progress.hidden = false;
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const result = await api(`/api/task-management/upload?view=${encodeURIComponent(state.view)}`, {
-        method: 'POST',
-        body: { dataUrl, filename: file.name, mime: file.type || '', size: file.size },
+      state.workFile = await uploadTaskManagementFile(file, ({ percent, stage }) => {
+        if (progress) progress.setAttribute('data-progress', String(percent || 0));
+        if (errorEl && stage === 'verify') errorEl.textContent = 'Verifying uploaded file…';
+        if (errorEl && stage === 'complete') errorEl.textContent = '';
       });
-      state.workFile = result.file || null;
       renderWorkFilePreview();
     } catch (error) {
       if (errorEl) errorEl.textContent = error.message || 'Failed to upload work file.';

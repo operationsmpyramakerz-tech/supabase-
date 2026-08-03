@@ -1257,7 +1257,10 @@
     const text = String(value || '').trim();
     if (!text) return 'No evidence uploaded';
     try {
-      const url = new URL(text);
+      const url = new URL(text, window.location.origin);
+      const explicitName = String(url.searchParams.get('name') || '').trim();
+      if (explicitName) return explicitName;
+      if (/^\/api\/storage\/file\//i.test(url.pathname || '')) return 'Evidence file';
       const name = decodeURIComponent((url.pathname || '').split('/').filter(Boolean).pop() || 'Evidence file');
       return name || 'Evidence file';
     } catch {
@@ -1269,7 +1272,7 @@
     const text = String(value || '').trim();
     if (!text) return '<div><span>Evidence</span><p>—</p></div>';
     const label = evidenceFileName(text);
-    if (/^https?:\/\//i.test(text)) {
+    if (/^https?:\/\//i.test(text) || /^\/api\/storage\/file\//i.test(text)) {
       return `<div><span>Evidence</span><a class="kpis-evidence-link" href="${esc(text)}" target="_blank" rel="noopener"><i data-feather="paperclip"></i><strong>${esc(label)}</strong></a></div>`;
     }
     return `<div><span>Evidence</span><p>${esc(label)}</p></div>`;
@@ -1288,12 +1291,18 @@
     if (!file) throw new Error('Choose an evidence file first.');
     const maxSize = 15 * 1024 * 1024;
     if (file.size > maxSize) throw new Error('Evidence file must be 15 MB or smaller.');
-    const dataUrl = await readFileAsDataUrl(file);
-    const data = await api('/api/kpis/evidence-upload', {
-      method: 'POST',
-      body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size, dataUrl }),
-    });
-    return data?.file?.url || '';
+    const fallback = async () => {
+      const dataUrl = await readFileAsDataUrl(file);
+      const data = await api('/api/kpis/evidence-upload', {
+        method: 'POST',
+        body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size, dataUrl }),
+      });
+      return data?.file || null;
+    };
+    const uploaded = window.ERPDirectStorage?.uploadFile
+      ? await window.ERPDirectStorage.uploadFile({ scope: 'kpi-evidence', file, fallback })
+      : await fallback();
+    return uploaded?.url || '';
   }
 
   function bindEvidenceUploadControls(wrapper) {

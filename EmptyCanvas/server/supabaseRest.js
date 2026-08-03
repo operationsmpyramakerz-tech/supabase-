@@ -227,6 +227,40 @@ function encodeStoragePath(objectPath) {
     .join('/');
 }
 
+async function storageFetch(endpoint, options = {}, action = 'storage') {
+  const configuredTimeout = Number(process.env.SUPABASE_STORAGE_TIMEOUT_MS || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 20000);
+  const timeoutMs = Math.max(1000, Math.min(120000, Number(options.timeoutMs || configuredTimeout) || 20000));
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener?.('abort', abortFromExternal, { once: true });
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+  try {
+    const fetchOptions = { ...options, signal: controller.signal };
+    delete fetchOptions.timeoutMs;
+    const response = await fetch(endpoint, fetchOptions);
+    const slowMs = Math.max(250, Number(process.env.SUPABASE_STORAGE_SLOW_MS || process.env.SUPABASE_SLOW_QUERY_MS || 1200) || 1200);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= slowMs && String(process.env.SUPABASE_LOG_SLOW_QUERIES || 'true').toLowerCase() !== 'false') {
+      console.warn(`[supabase-storage] slow ${String(action || 'request')} ${elapsed}ms`);
+    }
+    return response;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error(`Supabase Storage request timed out after ${timeoutMs} ms.`);
+      timeoutError.code = 'SUPABASE_STORAGE_TIMEOUT';
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener?.('abort', abortFromExternal);
+  }
+}
+
 function storagePublicUrl(objectPath, bucketName = null) {
   const { url, storageBucket } = getConfig();
   const bucket = String(bucketName || storageBucket || '').trim();
@@ -250,7 +284,7 @@ async function uploadStorageObject(objectPath, buffer, { contentType = 'applicat
     throw err;
   }
 
-  const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`, {
+  const res = await storageFetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`, {
     method: 'POST',
     headers: {
       apikey: key,
@@ -259,7 +293,7 @@ async function uploadStorageObject(objectPath, buffer, { contentType = 'applicat
       'x-upsert': upsert ? 'true' : 'false',
     },
     body: buffer,
-  });
+  }, 'upload object');
 
   const text = await res.text();
   let data = null;
@@ -299,7 +333,7 @@ async function createSignedUploadUrl(objectPath, { bucketName = null, upsert = f
   }
 
   const endpoint = `${url}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`;
-  const res = await fetch(endpoint, {
+  const res = await storageFetch(endpoint, {
     method: 'POST',
     headers: {
       apikey: key,
@@ -308,7 +342,7 @@ async function createSignedUploadUrl(objectPath, { bucketName = null, upsert = f
       'x-upsert': upsert ? 'true' : 'false',
     },
     body: JSON.stringify({}),
-  });
+  }, 'create signed upload URL');
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -361,7 +395,7 @@ async function createSignedDownloadUrl(objectPath, { bucketName = null, expiresI
   }
 
   const endpoint = `${url}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`;
-  const res = await fetch(endpoint, {
+  const res = await storageFetch(endpoint, {
     method: 'POST',
     headers: {
       apikey: key,
@@ -369,7 +403,7 @@ async function createSignedDownloadUrl(objectPath, { bucketName = null, expiresI
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ expiresIn: safeExpiresIn }),
-  });
+  }, 'create signed download URL');
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -414,7 +448,7 @@ async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}
     throw err;
   }
 
-  const res = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
+  const res = await storageFetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
     method: 'DELETE',
     headers: {
       apikey: key,
@@ -422,7 +456,7 @@ async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ prefixes }),
-  });
+  }, 'delete objects');
 
   const text = await res.text();
   let data = null;
