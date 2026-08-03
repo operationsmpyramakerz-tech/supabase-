@@ -1,5 +1,5 @@
 const MODULE_LINKS = [
-  { label: "Current Orders", href: "/orders", permissions: ["Current Orders"] },
+  { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
   { label: "Requested Orders", href: "/orders/requested", permissions: ["Requested Orders"] },
   { label: "Events", href: "/events", permissions: ["Event Calendar", "Event Requests", "Event Components"] },
   { label: "Products", href: "/products", permissions: ["Products"] },
@@ -19,7 +19,19 @@ function canSee(link, allowedPages) {
   return link.permissions.some((permission) => allowed.has(normalize(permission)));
 }
 
-export default function AppShell({ account, children, title = "Home", eyebrow = "Incremental frontend migration" }) {
+function isActive(activePath, href) {
+  const current = String(activePath || "").replace(/\/$/, "") || "/";
+  const target = String(href || "").replace(/\/$/, "") || "/";
+  return current === target || (target !== "/" && current.startsWith(`${target}/`));
+}
+
+export default function AppShell({
+  account,
+  children,
+  title = "Home",
+  eyebrow = "Incremental frontend migration",
+  activePath = "/next/home",
+}) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
   const initials = String(account?.name || account?.username || "U")
@@ -38,14 +50,19 @@ export default function AppShell({ account, children, title = "Home", eyebrow = 
         </a>
 
         <nav className="navigation" aria-label="Main navigation">
-          <a className="nav-link active" href="/next/home"><span>Home</span><em>Pilot</em></a>
+          <a className={`nav-link ${isActive(activePath, "/next/home") ? "active" : ""}`} href="/next/home">
+            <span>Home</span><em>Pilot</em>
+          </a>
           {visibleLinks.map((link) => (
-            <a className="nav-link" href={link.href} key={link.href}>{link.label}</a>
+            <a className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href} key={link.href}>
+              <span>{link.label}</span>
+              {link.href.startsWith("/next/") ? <em>Pilot</em> : null}
+            </a>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <a href="/home">Open current interface</a>
+          <a href={activePath === "/next/orders" ? "/orders" : "/home"}>Open current interface</a>
           <a href="/next/migration-status">Migration status</a>
         </div>
       </aside>
