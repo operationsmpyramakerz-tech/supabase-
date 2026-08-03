@@ -11,6 +11,8 @@ const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
 const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
 const supabaseDb = require("./supabaseRest");
+const { createPageRouter } = require("./routes/pageRoutes");
+const LMS_ROLE_DIRECTORY_CONFIG = require("./config/lmsRoleDirectory");
 
 // B2C formulas are evaluated through a local, dependency-free parser with a
 // closed grammar and function allow-list. This avoids executing user input as
@@ -9314,270 +9316,22 @@ function _b2cPreferredRoute(req) {
 }
 
 // --- Page Serving Routes --- //
-
-// Public PWA start URL used by manifest.start_url.
-// It must not require authentication; otherwise Chrome may treat the site as a
-// shortcut-only page instead of an installable PWA. The page immediately routes
-// the user to /home, where normal authentication/redirect logic continues.
-app.get("/pwa-start", (req, res) => {
-  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.sendFile(path.join(__dirname, "..", "public", "pwa-start.html"));
-});
-
-app.get("/pwa-offline", (req, res) => {
-  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.sendFile(path.join(__dirname, "..", "public", "pwa-offline.html"));
-});
-
-app.get("/manifest.json", (req, res) => {
-  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.type("application/manifest+json");
-  res.sendFile(path.join(__dirname, "..", "public", "manifest.json"));
-});
-
-app.get("/login", (req, res) => {
-  // ✅ Home is the default landing for all authenticated users
-  if (req.session?.authenticated) return res.redirect("/home");
-  res.sendFile(path.join(__dirname, "..", "public", "login.html"));
-});
-
-app.get("/", (req, res) => {
-  // ✅ Home is the default landing for all authenticated users
-  if (req.session?.authenticated) return res.redirect("/home");
-  res.sendFile(path.join(__dirname, "..", "public", "login.html"));
-});
-
-app.get("/dashboard", requireAuth, (req, res) => {
-  // ✅ Keep /dashboard as a stable redirect target
-  res.redirect("/home");
-});
-
-// Home (visible for all authenticated users)
-app.get("/home", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "home.html"));
-});
-
-// LMS workspace shell (available for every authenticated user)
-app.get("/lms", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "lms.html"));
-});
-
-app.get("/user-access", requireAuth, requirePage(USER_ACCESS_PAGE_ALIASES), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "user-access.html"));
-});
-
-app.get("/lms/user-access", requireAuth, requireLmsPageAccess("lms-users-center"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "lms-user-access.html"));
-});
-
-const LMS_ROLE_DIRECTORY_CONFIG = Object.freeze({
-  supervisors: { table: "lms_supervisors", label: "Supervisor", plural: "Supervisors", icon: "shield" },
-  "team-leaders": { table: "lms_team_leaders", label: "Team Leader", plural: "Team Leaders", icon: "award" },
-  instructors: { table: "lms_instructors", label: "Instructor", plural: "Instructors", icon: "user" },
-  "co-instructors": { table: "lms_co_instructors", label: "Co-Instructor", plural: "Co-Instructors", icon: "users" },
-  "school-coordinators": { table: "lms_school_coordinators", label: "School Coordinator", plural: "School Coordinators", icon: "clipboard" },
-  students: { table: "lms_students", label: "Student", plural: "Students", icon: "book-open" },
-  parents: { table: "lms_parents", label: "Parent", plural: "Parents", icon: "heart" },
-});
-
-app.get("/lms/user-access/:role(supervisors|team-leaders|instructors|co-instructors|school-coordinators|students|parents)", requireAuth, requireLmsPageAccess("lms-users-center"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "lms-role-directory.html"));
-});
-
-app.get(["/lms/curriculum", "/lms/curriculum/:id", "/lms/curriculum/:id/grade/:gradeId"], requireAuth, requireLmsPageAccess("lms-curriculum"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "lms-curriculum.html"));
-});
-
-
-app.get("/orders", requireAuth, requirePage("Current Orders"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "current-orders.html"));
-});
-
-app.get("/orders/tracking", requireAuth, requirePage("Current Orders"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "order-tracking.html"));
-});
-
-app.get(
-  "/orders/requested",
-  requireAuth,
-  requirePage("Requested Orders"),
-  (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "public", "requested-orders.html"));
-  },
+// Browser pages are isolated from the API implementation. The router receives
+// the existing auth/access middleware by dependency injection, so this refactor
+// changes structure only and preserves the current permission behavior.
+app.use(
+  createPageRouter({
+    publicDir: path.join(__dirname, "..", "public"),
+    requireAuth,
+    requirePage,
+    requireLmsPageAccess,
+    userAccessPageAliases: USER_ACCESS_PAGE_ALIASES,
+    eventsPreferredRoute: _eventsPreferredRoute,
+    hasEventsComponentCreateAccess: _hasEventsComponentCreateAccess,
+    b2cPreferredRoute: _b2cPreferredRoute,
+    taskManagementPreferredRoute: _taskManagementPreferredRoute,
+  }),
 );
-
-app.get(
-  "/orders/maintenance-orders",
-  requireAuth,
-  requirePage("Maintenance Orders"),
-  (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "public", "maintenance-orders.html"));
-  },
-);
-// 3-step order pages
-
-app.get(
-  "/orders/new",
-  requireAuth,
-  requirePage("Create New Order"),
-  (req, res) => {
-    const queryIndex = String(req.originalUrl || '').indexOf('?');
-    const query = queryIndex >= 0 ? String(req.originalUrl || '').slice(queryIndex) : '';
-    return res.redirect(`/orders/new/products${query}`);
-  }
-);
-
-app.get(
-  "/orders/new/products",
-  requireAuth,
-  requirePage("Create New Order"),
-  (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "public", "create-order-products.html"));
-  },
-);
-
-// Events module — three separately protected child pages under one sidebar icon.
-app.get("/events", requireAuth, requirePage(["Event Calendar", "Event Requests", "Event Components"]), (req, res) => {
-  return res.redirect(_eventsPreferredRoute(req));
-});
-
-app.get("/events/requests", requireAuth, requirePage("Event Requests"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "events.html"));
-});
-
-app.get("/events/calendar", requireAuth, requirePage("Event Calendar"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "events-calendar.html"));
-});
-
-app.get("/events/new", requireAuth, requirePage("Event Requests"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "events-new.html"));
-});
-
-app.get("/events/components/new", requireAuth, requirePage("Event Components"), (req, res) => {
-  // Edit users reach this screen only after the one-time Admin authorization.
-  // Event Components Admins are admitted immediately.
-  if (!_hasEventsComponentCreateAccess(req)) {
-    return res.redirect("/events/components?adminAuthorization=required");
-  }
-  return res.sendFile(path.join(__dirname, "..", "public", "events-components-new.html"));
-});
-
-app.get("/events/components", requireAuth, requirePage("Event Components"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "events-components.html"));
-});
-
-// B2C module — two independently protected child pages under one sidebar icon.
-app.get("/b2c", requireAuth, requirePage(["Customer Database", "Customer Form", "B2C"]), (req, res) => {
-  return res.redirect(_b2cPreferredRoute(req));
-});
-
-app.get("/b2c/database", requireAuth, requirePage("Customer Database"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2c-database.html"));
-});
-
-// Each B2C table opens in its own dedicated database view.
-app.get("/b2c/database/:id", requireAuth, requirePage("Customer Database"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2c-table.html"));
-});
-
-app.get("/b2c/form", requireAuth, requirePage("Customer Form"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "b2c-form.html"));
-});
-
-app.get("/stocktaking", requireAuth, requirePage("Stocktaking"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "stocktaking.html"));
-});
-
-app.get("/products", requireAuth, requirePage("Products"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "products.html"));
-});
-
-app.get("/proposals", requireAuth, requirePage(["Proposals", "Products"]), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "proposals.html"));
-});
-
-app.get("/kits", requireAuth, requirePage(["Kits", "Products"]), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "kits.html"));
-});
-
-
-// Department task management — cross-department tickets and ordered workflow sections.
-// Task Management module — three independently protected child pages under one sidebar icon.
-app.get("/task-management", requireAuth, requirePage(["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"]), (req, res) => {
-  return res.redirect(_taskManagementPreferredRoute(req));
-});
-
-app.get("/task-management/all-tasks", requireAuth, requirePage("All Tasks"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
-});
-
-app.get("/task-management/my-tasks", requireAuth, requirePage("My Tasks"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
-});
-
-app.get("/task-management/delegated-tasks", requireAuth, requirePage("Delegated Tasks"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "task-management.html"));
-});
-
-app.get("/kpis", requireAuth, requirePage("KPIs"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "kpis.html"));
-});
-
-// B2B is now part of the LMS workspace and uses the LMS page-access catalogue.
-app.get(["/lms/b2b", "/lms/b2b/new", "/lms/b2b/edit/:id"], requireAuth, requireLmsPageAccess("lms-b2b"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "lms-b2b.html"));
-});
-
-app.get("/lms/b2b/school/:id", requireAuth, requireLmsPageAccess("lms-b2b"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "lms-b2b-school.html"));
-});
-
-// Preserve old bookmarks while moving users into the LMS workspace.
-app.get(["/b2b", "/b2b/new", "/b2b/edit/:id"], requireAuth, (req, res) => {
-  const suffix = req.path.replace(/^\/b2b/, "");
-  res.redirect(`/lms/b2b${suffix}`);
-});
-app.get("/b2b/school/:id", requireAuth, (req, res) => res.redirect(`/lms/b2b/school/${encodeURIComponent(req.params.id)}`));
-
-// Account page
-app.get("/account", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "account.html"));
-});
-
-// History page — available from the top-right user menu
-app.get("/history", requireAuth, requirePage("History"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "history.html"));
-});
-
-// Database page — available from the top-right user menu under History
-app.get("/backup", requireAuth, requirePage("Backup"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "backup.html"));
-});
-
-// How it works (help page — available for all authenticated users)
-app.get("/how-it-works", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "how-it-works.html"));
-});
-
-// Notifications are shown as a dropdown window (bell icon) on every page.
-// Keep this route for backward compatibility and redirect to Home.
-app.get("/notifications", requireAuth, (req, res) => {
-  res.redirect("/home");
-});
-// Expenses page 
-app.get("/expenses", requireAuth, requirePage("Expenses"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "expenses.html"));
-});
-
-// Expenses Users page (admin view)
-app.get(
-  "/expenses/users",
-  requireAuth,
-  requirePage("Expenses Users"),   // ✅ دي الصح
-  (req, res) => {
-    res.sendFile(path.join(__dirname, "..", "public", "expenses-users.html"));
-  }
-);;
 
 // --- API Routes ---
 
