@@ -4680,23 +4680,69 @@ body.sidebar-collapsed.page-lms .lms-sidebar-back{width:52px;padding:0}
 /* =========================================================
    LMS workspace navigation polish
    ========================================================= */
-/* Divider after Home + LMS, making them a distinct workspace group. */
-.sidebar .nav-list > li.sidebar-workspace-boundary{
+/*
+ * Main-sidebar workspace boundaries.
+ *
+ * Route-based :has() selectors render the separators as soon as the matching
+ * link exists, without waiting for the async account/permission request. The
+ * JS classes remain as a compatibility fallback. Because each line belongs to
+ * the same <li> as its page, display:none from permissions hides the line too.
+ */
+body:not(.page-lms) .sidebar .nav-list > li:is(
+  .sidebar-workspace-boundary,
+  :has(> a.nav-link[href="/lms"])
+){
   position:relative;
   margin-bottom:18px!important;
   padding-bottom:18px!important;
 }
-.sidebar .nav-list > li.sidebar-workspace-boundary::after{
+body:not(.page-lms) .sidebar .nav-list > li:is(
+  .sidebar-workspace-boundary,
+  :has(> a.nav-link[href="/lms"])
+)::after{
   content:"";
   position:absolute;
   left:12px;
   right:12px;
   bottom:0;
   height:1px;
+  border-radius:999px;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.28) 18%,rgba(255,255,255,.28) 82%,transparent);
   pointer-events:none;
 }
-body.sidebar-collapsed .sidebar .nav-list > li.sidebar-workspace-boundary::after{
+
+/* The Users Center divider is owned by Users Center itself. If permissions
+   remove/hide that page, this separator disappears with it automatically. */
+body:not(.page-lms) .sidebar .nav-list > li:is(
+  .sidebar-users-boundary,
+  :has(> a.nav-link[href="/user-access"])
+){
+  position:relative;
+  margin-top:18px!important;
+  padding-top:18px!important;
+}
+body:not(.page-lms) .sidebar .nav-list > li:is(
+  .sidebar-users-boundary,
+  :has(> a.nav-link[href="/user-access"])
+)::before{
+  content:"";
+  position:absolute;
+  left:12px;
+  right:12px;
+  top:0;
+  height:1px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.28) 18%,rgba(255,255,255,.28) 82%,transparent);
+  pointer-events:none;
+}
+body.sidebar-collapsed:not(.page-lms) .sidebar .nav-list > li:is(
+  .sidebar-workspace-boundary,
+  :has(> a.nav-link[href="/lms"])
+)::after,
+body.sidebar-collapsed:not(.page-lms) .sidebar .nav-list > li:is(
+  .sidebar-users-boundary,
+  :has(> a.nav-link[href="/user-access"])
+)::before{
   left:9px;
   right:9px;
 }

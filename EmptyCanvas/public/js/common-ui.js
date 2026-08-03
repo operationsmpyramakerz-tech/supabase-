@@ -2171,10 +2171,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Visually separate the two workspace switches (Home + LMS) from ERP pages.
-    const lmsLink = document.querySelector('.sidebar a[href="/lms"]');
-    const lmsItem = lmsLink?.closest('li');
-    if (lmsItem) lmsItem.classList.add('sidebar-workspace-boundary');
+    // Keep the main-sidebar group boundaries synchronized immediately.
+    // This runs before/after permission hydration, so the LMS divider does not
+    // appear late and the Users Center divider follows that item's visibility.
+    syncMainSidebarBoundaries();
 
     // Replace the "Dashboard" title with the company orange logo.
     // (Do not rely on editing every HTML page.)
@@ -3415,6 +3415,8 @@ if (document.querySelector('.sidebar')) {
       a.href = href;
       a.innerHTML = `<i data-feather="${icon}"></i><span class="nav-label">${label}</span>`;
       li.appendChild(a);
+      li.classList.toggle('sidebar-workspace-boundary', href === '/lms');
+      li.classList.toggle('sidebar-users-boundary', href === '/user-access');
 
       // Insert position controls
       const before = beforeHref ? nav.querySelector(`a[href="${beforeHref}"]`)?.closest('li') : null;
@@ -3426,6 +3428,7 @@ if (document.querySelector('.sidebar')) {
         nav.appendChild(li);
       }
 
+      syncMainSidebarBoundaries(nav);
       hydratePendingFeatherIcons();
     }
 
@@ -3509,12 +3512,39 @@ if (document.querySelector('.sidebar')) {
     return nav.querySelector(':scope > .mobile-dock-pages-clip') || nav;
   }
 
+  function syncMainSidebarBoundaries(root = document){
+    if (document.body?.classList?.contains('page-lms')) return;
+    try {
+      const nav = root?.querySelector?.('.sidebar .sidebar-nav') || document.querySelector('.sidebar .sidebar-nav');
+      if (!nav) return;
+
+      // Remove only our main-sidebar boundary classes before resolving the
+      // current route owners. This prevents a rebuilt/reordered list from
+      // leaving a divider attached to the wrong item.
+      nav.querySelectorAll('li.sidebar-workspace-boundary, li.sidebar-users-boundary').forEach((li) => {
+        li.classList.remove('sidebar-workspace-boundary', 'sidebar-users-boundary');
+      });
+
+      const lmsItem = nav.querySelector('a.nav-link[href="/lms"]')?.closest('li');
+      if (lmsItem) lmsItem.classList.add('sidebar-workspace-boundary');
+
+      const usersItem = nav.querySelector('a.nav-link[href="/user-access"]')?.closest('li');
+      if (usersItem) usersItem.classList.add('sidebar-users-boundary');
+    } catch {}
+  }
+
   function normalizeSidebarLink(link, item){
     if (!link || !item) return;
     try {
       link.setAttribute('href', item.href);
       link.setAttribute('title', item.label);
       link.setAttribute('aria-label', item.label);
+
+      const ownerItem = link.closest('li');
+      if (ownerItem) {
+        ownerItem.classList.toggle('sidebar-workspace-boundary', item.href === '/lms');
+        ownerItem.classList.toggle('sidebar-users-boundary', item.href === '/user-access');
+      }
 
       let label = link.querySelector('.nav-label');
       if (!label) {
@@ -3705,6 +3735,7 @@ if (document.querySelector('.sidebar')) {
       OPS_SIDEBAR_ORDER.forEach((item) => {
         ensureLink({ href: item.href, label: item.label, icon: item.icon });
       });
+      syncMainSidebarBoundaries();
     } catch {}
   }
 
@@ -3752,6 +3783,7 @@ if (document.querySelector('.sidebar')) {
         }
       });
 
+      syncMainSidebarBoundaries(nav);
       syncSidebarActiveState();
       hydratePendingFeatherIcons(nav);
     } catch {}
