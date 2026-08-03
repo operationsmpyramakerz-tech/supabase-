@@ -59,27 +59,53 @@ async function request(path, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${url}/rest/v1${path}`, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const configuredTimeout = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000);
+  const timeoutMs = Math.max(1000, Math.min(120000, Number(options.timeoutMs || configuredTimeout) || 15000));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
 
-  const text = await res.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  try {
+    const res = await fetch(`${url}/rest/v1${path}`, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: options.signal || controller.signal,
+    });
 
-  if (!res.ok) {
-    const message = data && typeof data === 'object'
-      ? (data.message || data.details || data.hint || JSON.stringify(data))
-      : (text || `Supabase request failed with status ${res.status}`);
-    const err = new Error(message);
-    err.status = res.status;
-    err.details = data;
-    throw err;
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+    if (!res.ok) {
+      const message = data && typeof data === 'object'
+        ? (data.message || data.details || data.hint || JSON.stringify(data))
+        : (text || `Supabase request failed with status ${res.status}`);
+      const err = new Error(message);
+      err.status = res.status;
+      err.details = data;
+      throw err;
+    }
+
+    const slowMs = Math.max(250, Number(process.env.SUPABASE_SLOW_QUERY_MS || 1200) || 1200);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= slowMs && String(process.env.SUPABASE_LOG_SLOW_QUERIES || 'true').toLowerCase() !== 'false') {
+      const safePath = String(path || '').replace(/([?&](?:password|token|apikey|authorization)=)[^&]*/gi, '$1[redacted]');
+      console.warn(`[supabase] slow ${String(options.method || 'GET').toUpperCase()} ${elapsed}ms ${safePath.slice(0, 500)}`);
+    }
+
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const err = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+      err.code = 'SUPABASE_TIMEOUT';
+      err.status = 504;
+      throw err;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return data;
 }
 
 function buildQuery(params = {}) {
@@ -108,6 +134,28 @@ async function selectById(table, id) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+function postgrestInValue(value) {
+  const raw = String(value ?? '').trim();
+  if (/^-?\d+(?:\.\d+)?$/.test(raw)) return raw;
+  return `\"${raw.replace(/\\/g, '\\\\').replace(/\"/g, '\\\"')}\"`;
+}
+
+async function selectByIds(table, ids = [], { idColumn = 'id', select: selectExpr = '*', order = null, limit = 5000 } = {}) {
+  const clean = Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => String(id ?? '').trim())
+    .filter(Boolean)));
+  if (!clean.length) return [];
+  const safeLimit = Math.min(5000, Math.max(clean.length, Number(limit) || 5000));
+  const params = {
+    select: selectExpr,
+    [String(idColumn || 'id')]: `in.(${clean.map(postgrestInValue).join(',')})`,
+    limit: safeLimit,
+  };
+  if (order) params.order = order;
+  const rows = await select(table, params);
+  return Array.isArray(rows) ? rows : [];
+}
+
 async function insert(table, row) {
   const rows = await request(`/${encodeTableName(table)}`, {
     method: 'POST',
@@ -115,6 +163,17 @@ async function insert(table, row) {
     body: row,
   });
   return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function insertMany(table, rows = []) {
+  const list = (Array.isArray(rows) ? rows : []).filter((row) => row && typeof row === 'object');
+  if (!list.length) return [];
+  const data = await request(`/${encodeTableName(table)}`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: list,
+  });
+  return Array.isArray(data) ? data : [];
 }
 
 async function updateById(table, id, row) {
@@ -127,12 +186,12 @@ async function updateById(table, id, row) {
 }
 
 async function updateByIds(table, ids = [], row = {}) {
-  const clean = (Array.isArray(ids) ? ids : [])
-    .map((id) => String(id || '').trim())
-    .filter(Boolean);
+  const clean = Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => String(id ?? '').trim())
+    .filter(Boolean)));
   if (!clean.length) return [];
-  const inList = clean.map((id) => `"${String(id).replace(/"/g, '\"')}"`).join(',');
-  const rows = await request(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+  const query = buildQuery({ id: `in.(${clean.map(postgrestInValue).join(',')})` });
+  const rows = await request(`/${encodeTableName(table)}${query}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=representation' },
     body: row,
@@ -149,12 +208,12 @@ async function deleteById(table, id) {
 }
 
 async function deleteByIds(table, ids = []) {
-  const clean = (Array.isArray(ids) ? ids : [])
-    .map((id) => String(id || '').trim())
-    .filter(Boolean);
+  const clean = Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => String(id ?? '').trim())
+    .filter(Boolean)));
   if (!clean.length) return [];
-  const inList = clean.map((id) => `"${String(id).replace(/"/g, '\"')}"`).join(',');
-  const rows = await request(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+  const query = buildQuery({ id: `in.(${clean.map(postgrestInValue).join(',')})` });
+  const rows = await request(`/${encodeTableName(table)}${query}`, {
     method: 'DELETE',
     headers: { Prefer: 'return=representation' },
   });
@@ -382,4 +441,4 @@ async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}
   return { deleted: prefixes.length, data };
 }
 
-module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds, deleteById, deleteByIds, uploadStorageObject, createSignedUploadUrl, createSignedDownloadUrl, deleteStorageObjects, storagePublicUrl };
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, selectByIds, insert, insertMany, updateById, updateByIds, deleteById, deleteByIds, uploadStorageObject, createSignedUploadUrl, createSignedDownloadUrl, deleteStorageObjects, storagePublicUrl };

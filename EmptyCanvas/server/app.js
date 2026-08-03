@@ -3068,8 +3068,24 @@ async function _sbSelectTeamMembersRows() {
 }
 
 async function _sbFindTeamMemberByName(name) {
-  const wanted = norm(String(name || ""));
+  const rawName = String(name || "").trim();
+  const wanted = norm(rawName);
   if (!wanted) return null;
+
+  // Fast path: let PostgreSQL use the indexed name lookup instead of downloading
+  // the complete Team Members table for every login/account lookup. Older or
+  // customized schemas still fall back to the compatibility scan below.
+  try {
+    const rows = await supabaseDb.select(_sbTeamMembersTable(), {
+      select: "*",
+      name: _sbPostgrestIlike(rawName, { contains: false }),
+      limit: 5,
+    });
+    const exact = (Array.isArray(rows) ? rows : [])
+      .find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted);
+    if (exact) return exact;
+  } catch {}
+
   const rows = await _sbSelectTeamMembersRows();
   return (rows || []).find((row) => norm(_sbString(_sbValueForLabel(row, "Name"))) === wanted) || null;
 }
@@ -3264,6 +3280,13 @@ function _sbBool(value, fallback = false) {
 
 function _sbRestFilterValue(value) {
   return encodeURIComponent(String(value ?? ""));
+}
+
+function _sbPostgrestIlike(value, { contains = false } = {}) {
+  // PostgREST accepts * as the ILIKE wildcard. Strip user-provided wildcard
+  // characters so a name or email cannot accidentally broaden the query.
+  const clean = String(value ?? "").trim().replace(/[*%]/g, "");
+  return `ilike.${contains ? `*${clean}*` : clean}`;
 }
 
 function _sbRestStringList(values = []) {
@@ -4008,6 +4031,54 @@ async function _sbSelectExpensesRows({ limit = 5000 } = {}) {
 async function _sbSelectExpensesForCurrentUser(req) {
   const member = await _sbCurrentExpenseMember(req);
   if (!member) return { member: null, rows: [] };
+
+  // Query only this user's rows at PostgreSQL level. The previous implementation
+  // downloaded up to 5,000 expenses and filtered them in Node.js on every cache
+  // miss. Each query is isolated so legacy tables missing one optional identity
+  // column do not break the endpoint.
+  const querySpecs = [];
+  const name = String(member.name || "").trim();
+  const userId = String(member.code || member.id || "").trim();
+  const email = String(member.email || "").trim();
+  if (name) {
+    querySpecs.push(["team_member_name", _sbPostgrestIlike(name, { contains: true })]);
+    querySpecs.push(["team_member_raw", _sbPostgrestIlike(name, { contains: true })]);
+  }
+  if (userId) querySpecs.push(["user_id", `eq.${userId}`]);
+  if (email) querySpecs.push(["email", _sbPostgrestIlike(email, { contains: false })]);
+
+  if (querySpecs.length) {
+    const settled = await Promise.allSettled(querySpecs.map(([column, filter]) => (
+      supabaseDb.select(_sbExpensesTable(), {
+        select: "*",
+        [column]: filter,
+        order: "expense_date.desc,notion_created_time.desc,id.desc",
+        limit: 5000,
+      })
+    )));
+    const successful = settled.filter((entry) => entry.status === "fulfilled");
+    if (successful.length) {
+      const merged = new Map();
+      for (const entry of successful) {
+        for (const row of Array.isArray(entry.value) ? entry.value : []) {
+          const id = String(_sbExpenseGet(row, ["id", "ID"]) ?? "");
+          const key = id || JSON.stringify(row);
+          if (!merged.has(key)) merged.set(key, row);
+        }
+      }
+      const rows = Array.from(merged.values())
+        .filter((row) => _sbExpenseMatchesMember(row, member))
+        .sort((a, b) => {
+          const ad = new Date(_sbExpenseGet(a, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+          const bd = new Date(_sbExpenseGet(b, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+          if (Number.isFinite(ad) && Number.isFinite(bd) && ad !== bd) return bd - ad;
+          return Number(_sbExpenseGet(b, ["id"]) || 0) - Number(_sbExpenseGet(a, ["id"]) || 0);
+        });
+      return { member, rows };
+    }
+  }
+
+  // Compatibility fallback for old/custom tables without the canonical columns.
   const rows = await _sbSelectExpensesRows();
   return { member, rows: rows.filter((row) => _sbExpenseMatchesMember(row, member)) };
 }
@@ -4487,6 +4558,19 @@ function _sbSerializeOrderRow(row = {}) {
 }
 
 async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
+  if (approvedOnly) {
+    try {
+      const rows = await supabaseDb.select(_sbOrdersTable(), {
+        select: "*",
+        sv_approval: _sbPostgrestIlike("approved", { contains: true }),
+        order: "notion_created_time.desc,id.desc",
+        limit: 5000,
+      });
+      return (Array.isArray(rows) ? rows : [])
+        .filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
+    } catch {}
+  }
+
   const rows = await supabaseDb.selectAll(_sbOrdersTable(), {
     limit: 5000,
     order: "notion_created_time.desc,id.desc",
@@ -4522,7 +4606,13 @@ async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
     .filter(Boolean)
     .filter((x) => /^\d+$/.test(x));
   if (!ids.length) return [];
-  return await Promise.all(ids.map((id) => supabaseDb.updateById(_sbOrdersTable(), id, patch)));
+  try {
+    return await supabaseDb.updateByIds(_sbOrdersTable(), ids, patch);
+  } catch {
+    // Preserve compatibility with unusual legacy schemas while keeping the
+    // normal path to one PATCH request instead of one request per order.
+    return await Promise.all(ids.map((id) => supabaseDb.updateById(_sbOrdersTable(), id, patch)));
+  }
 }
 
 
@@ -4793,17 +4883,7 @@ async function _sbCreateRepeatOrderFromDeliveredRows(orderIds = [], {
       maintenance_receipt: null,
     });
 
-    try {
-      createdRows.push(await supabaseDb.insert(_sbOrdersTable(), row));
-    } catch (firstErr) {
-      // Some older Supabase imports may not have optional receipt columns. Retry with
-      // the core order columns only so the Create Withdrawal action remains reliable.
-      const fallbackRow = { ...row };
-      delete fallbackRow.order_receipt;
-      delete fallbackRow.receipt_number;
-      delete fallbackRow.maintenance_receipt;
-      createdRows.push(await supabaseDb.insert(_sbOrdersTable(), fallbackRow));
-    }
+    createdRows.push(row);
   }
 
   if (!createdRows.length) {
@@ -4812,12 +4892,33 @@ async function _sbCreateRepeatOrderFromDeliveredRows(orderIds = [], {
     throw err;
   }
 
+  let insertedRows = [];
+  try {
+    insertedRows = await supabaseDb.insertMany(_sbOrdersTable(), createdRows);
+  } catch {
+    // Older imports can miss optional receipt columns. Retry the whole batch with
+    // only the core order fields before falling back to individual inserts.
+    const fallbackRows = createdRows.map((row) => {
+      const next = { ...row };
+      delete next.order_receipt;
+      delete next.receipt_number;
+      delete next.maintenance_receipt;
+      return next;
+    });
+    try {
+      insertedRows = await supabaseDb.insertMany(_sbOrdersTable(), fallbackRows);
+    } catch {
+      insertedRows = [];
+      for (const row of fallbackRows) insertedRows.push(await supabaseDb.insert(_sbOrdersTable(), row));
+    }
+  }
+
   await _sbInvalidateOrdersCaches();
 
   return {
     success: true,
     source: "supabase",
-    createdCount: createdRows.length,
+    createdCount: insertedRows.length || createdRows.length,
     orderIdNumber: Number.isFinite(Number(orderNumber)) ? Number(orderNumber) : null,
     message: successMessage,
   };
@@ -4834,10 +4935,15 @@ function _sbOrderExportIds(ids = []) {
 async function _sbOrderRowsByIds(ids = []) {
   const cleanIds = _sbOrderExportIds(ids);
   if (!cleanIds.length) return [];
-  const rows = await Promise.all(
-    cleanIds.map((id) => supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null)),
-  );
-  const byId = new Map(rows.filter(Boolean).map((row) => [String(row.id), row]));
+  let rows = [];
+  try {
+    rows = await supabaseDb.selectByIds(_sbOrdersTable(), cleanIds, { limit: cleanIds.length });
+  } catch {
+    rows = await Promise.all(
+      cleanIds.map((id) => supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null)),
+    );
+  }
+  const byId = new Map((rows || []).filter(Boolean).map((row) => [String(row.id), row]));
   return cleanIds.map((id) => byId.get(String(id))).filter(Boolean);
 }
 
@@ -7882,9 +7988,12 @@ async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") 
       person_received_by_operations: null,
     });
   }
-  const created = [];
-  for (const row of rows) {
-    created.push(await supabaseDb.insert(_sbOrdersTable(), row));
+  let created = [];
+  try {
+    created = await supabaseDb.insertMany(_sbOrdersTable(), rows);
+  } catch {
+    // Compatibility fallback; the optimized path is one POST for the full cart.
+    for (const row of rows) created.push(await supabaseDb.insert(_sbOrdersTable(), row));
   }
   await _sbInvalidateOrdersCaches();
   return created.map(_sbSerializeOrderRow);
