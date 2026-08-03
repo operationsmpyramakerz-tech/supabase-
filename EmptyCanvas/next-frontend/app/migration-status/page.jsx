@@ -5,10 +5,10 @@ import { fetchLegacyJson } from "../../lib/legacy-api";
 export const dynamic = "force-dynamic";
 
 const steps = [
-  ["Foundation", "Completed", "Shared cookie authentication, reverse proxy, PM2 process, and legacy API adapter."],
-  ["Home pilot", "Completed", "A server-rendered Next.js page is available without changing the current Home page."],
-  ["Selected module", "Next", "Move one low-risk module after comparing loading time and behavior with the current page."],
-  ["Progressive rollout", "Planned", "Replace approved pages individually while preserving legacy fallbacks."],
+  ["Foundation", "Completed", "Shared cookie authentication, Vercel proxy routing, and the legacy API adapter are operational."],
+  ["Home dashboard", "Completed", "The live Home overview is rendered with Next.js while the classic Home remains available."],
+  ["Current Orders", "Completed", "The first interactive list module now includes tabs, search, order details, and protected order actions."],
+  ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
 ];
 
 export default async function MigrationStatusPage() {
@@ -17,7 +17,7 @@ export default async function MigrationStatusPage() {
   if (!accountResponse.ok || !accountResponse.data) redirect("/home");
 
   return (
-    <AppShell account={accountResponse.data}>
+    <AppShell account={accountResponse.data} activePath="/next/migration-status">
       <section className="status-page">
         <article className="wide-card status-intro">
           <div>
