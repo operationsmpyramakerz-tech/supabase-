@@ -24703,6 +24703,15 @@ async function _pageBootstrapProducts(req) {
   ]);
 }
 
+async function _pageBootstrapKpis(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/kpis/meta', 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/kpis/meta', 25_000)),
+    _pageBootstrapLoad('/api/kpis/reviews', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/kpis/reviews', 25_000)),
+    _pageBootstrapLoad('/api/kpis/graph', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/kpis/graph', 25_000)),
+  ]);
+}
+
 async function _pageBootstrapTaskManagement(req, view) {
   const cleanView = _taskManagementSubpageByView(view)?.view || '';
   if (!cleanView) {
@@ -24809,6 +24818,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'products') {
       if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProducts(req);
+    } else if (scope === 'kpis') {
+      if (!_pageBootstrapHasPageAccess(req, 'KPIs')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapKpis(req);
     } else if (scope === 'task-management') {
       const view = _taskManagementSubpageByView(req.query?.view || '')?.view || '';
       const pageName = _taskManagementViewAccessPage(view);
@@ -30890,7 +30902,8 @@ app.patch("/api/kpis/reviews/:id/scores", requireAuth, requirePage("KPIs"), asyn
     const summary = _kpiSummary((Array.isArray(summaryRows) ? summaryRows[0] : null) || {});
     const currentUser = await _kpiCurrentUserContext(req);
     if (summary.reviewId && !_kpiReviewVisibleForAccess(req, summary, currentUser)) {
-      return res.status(403).json({ ok: false, message: "You are not authorized to update this KPI review." });
+      const adminCheck = await _kpiVerifyAdminPasswordFromReq(req);
+      if (!adminCheck.ok) return res.status(adminCheck.status).json({ ok: false, message: adminCheck.message || "You are not authorized to update this KPI review." });
     }
     for (const score of (Array.isArray(body.scores) ? body.scores : [])) {
       const scoreId = String(score.scoreId || score.score_id || "").trim();
