@@ -24702,6 +24702,21 @@ async function _pageBootstrapProducts(req) {
   ]);
 }
 
+async function _pageBootstrapTaskManagement(req, view) {
+  const cleanView = _taskManagementSubpageByView(view)?.view || '';
+  if (!cleanView) {
+    const error = new Error('A valid Task Management view is required.');
+    error.status = 400;
+    throw error;
+  }
+  const query = `view=${encodeURIComponent(cleanView)}`;
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad(`/api/task-management/meta?${query}`, 30_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management/meta?${query}`, 20_000)),
+    _pageBootstrapLoad(`/api/task-management?${query}`, 10_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management?${query}`, 35_000)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24776,6 +24791,14 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'products') {
       if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProducts(req);
+    } else if (scope === 'task-management') {
+      const view = _taskManagementSubpageByView(req.query?.view || '')?.view || '';
+      const pageName = _taskManagementViewAccessPage(view);
+      if (!view || !pageName) return res.status(400).json({ ok: false, error: 'A valid Task Management view is required.' });
+      if (!_pageBootstrapHasPageAccess(req, pageName) && !_pageBootstrapHasPageAccess(req, 'Task Management')) {
+        return _pageAccessDeniedResponse(req, res);
+      }
+      results = await _pageBootstrapTaskManagement(req, view);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }
