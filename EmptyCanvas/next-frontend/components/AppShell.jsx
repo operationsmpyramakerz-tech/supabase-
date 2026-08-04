@@ -1,7 +1,7 @@
 const MODULE_LINKS = [
   { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", classicHref: "/orders/sv-orders", permissions: ["Orders Review"] },
-  { label: "Requested Orders", href: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
+  { label: "Operations Orders", href: "/next/operations-orders", classicHref: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Events", href: "/events", permissions: ["Event Calendar", "Event Requests", "Event Components"] },
   { label: "Products", href: "/products", permissions: ["Products"] },
   { label: "Task Management", href: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
@@ -35,6 +35,8 @@ export default function AppShell({
 }) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
+  const activeLink = MODULE_LINKS.find((link) => isActive(activePath, link.href));
+  const classicHref = activeLink?.classicHref || (activePath === "/next/home" ? "/home" : "/home");
   const initials = String(account?.name || account?.username || "U")
     .split(/\s+/)
     .filter(Boolean)
@@ -63,7 +65,7 @@ export default function AppShell({
         </nav>
 
         <div className="sidebar-footer">
-          <a href={activePath === "/next/orders" ? "/orders" : activePath === "/next/orders-review" ? "/orders/sv-orders" : "/home"}>Open current interface</a>
+          <a href={classicHref}>Open current interface</a>
           <a href="/next/migration-status">Migration status</a>
         </div>
       </aside>

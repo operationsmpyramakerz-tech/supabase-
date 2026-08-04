@@ -19447,7 +19447,7 @@ app.post(
 app.post(
   "/api/orders/requested/archive",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders"]),
   async (req, res) => {
     try {
       const { orderIds, adminPassword } = req.body || {};
@@ -19532,7 +19532,7 @@ app.post(
 app.post(
   "/api/orders/requested/unarchive",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders"]),
   async (req, res) => {
     try {
       const { orderIds } = req.body || {};
@@ -19613,7 +19613,7 @@ app.post(
 app.post(
   "/api/orders/operations/approval",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders"]),
   async (req, res) => {
     try {
       if (!_sbOrdersEnabled()) {
@@ -20737,7 +20737,7 @@ app.get(
 app.post(
   "/api/orders/requested/create-withdrawal",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders"]),
   async (req, res) => {
     try {
       const { orderIds } = req.body || {};
@@ -20938,7 +20938,7 @@ app.post(
 app.post(
   "/api/orders/requested/create-delivery",
   requireAuth,
-  requirePage("Requested Orders"),
+  requirePage(["Requested Orders", "Operations Orders"]),
   async (req, res) => {
     try {
       const { orderIds } = req.body || {};
@@ -24608,6 +24608,13 @@ async function _pageBootstrapOrdersReview(req) {
   ]);
 }
 
+async function _pageBootstrapOperationsOrders(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24668,6 +24675,11 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'orders-review') {
       if (!_pageBootstrapHasPageAccess(req, 'Orders Review')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapOrdersReview(req);
+    } else if (scope === 'operations-orders') {
+      const canAccessOperations = _pageBootstrapHasPageAccess(req, 'Requested Orders') ||
+        _pageBootstrapHasPageAccess(req, 'Operations Orders');
+      if (!canAccessOperations) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapOperationsOrders(req);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }

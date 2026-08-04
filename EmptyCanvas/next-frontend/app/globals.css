@@ -474,3 +474,62 @@ a { color: inherit; text-decoration: none; }
   .review-editor-list label { align-items: stretch; flex-direction: column; }
   .review-editor-list select { width: 100%; }
 }
+
+/* Stage 13: Operations Orders migration */
+.next-operations-page .next-orders-toolbar { border-color: #d8e7ff; background: rgba(245, 249, 255, .95); }
+.operations-order-card { display: grid; gap: 12px; }
+.operations-order-card .next-order-card__reason { margin: 0; }
+.operations-card-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.operations-card-meta > span { min-width: 0; display: grid; gap: 4px; padding: 9px 10px; border: 1px solid #edf0f5; border-radius: 10px; background: #fafbfc; }
+.operations-card-meta small { color: #98a2b3; text-transform: uppercase; letter-spacing: .08em; font-size: 8px; font-weight: 900; }
+.operations-card-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.status-remaining { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.operations-progress .order-progress__step.is-complete { color: #175cd3; }
+.operations-progress .order-progress__step.is-complete > span { border-color: #2e90fa; background: #2e90fa; }
+.operations-progress .order-progress__step.is-complete::after { background: #2e90fa; }
+.operations-order-modal { width: min(1000px, 100%); }
+.operations-rejection-banner { margin: 16px 24px 0; display: grid; gap: 5px; padding: 12px 14px; border: 1px solid #fecdd6; border-radius: 12px; background: #fff1f3; color: #c01048; }
+.operations-rejection-banner strong { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.operations-rejection-banner span { white-space: pre-wrap; font-size: 11px; line-height: 1.55; }
+.operations-modal-meta { grid-template-columns: 1.4fr .65fr .9fr 1fr 1fr; }
+.operations-receipts { margin: 0 24px 18px; display: grid; gap: 10px; padding: 13px 14px; border: 1px solid #d1e9ff; border-radius: 13px; background: #eff8ff; }
+.operations-receipts > strong { color: #175cd3; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.operations-receipts > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.operations-receipts a { min-height: 30px; display: inline-flex; align-items: center; padding: 0 10px; border: 1px solid #84caff; border-radius: 9px; background: #fff; color: #175cd3; font-size: 9px; font-weight: 900; }
+.operations-order-item .next-order-item__body p { margin: 5px 0 0; color: #667085; font-size: 9px; line-height: 1.5; }
+.operations-order-item .next-order-item__body p b { color: #344054; }
+.operations-order-item .item-rejection-reason { color: #b42318 !important; }
+.operations-modal-actions { gap: 7px; }
+.operations-modal-actions > * { text-decoration: none; }
+.operations-text-modal textarea { width: 100%; min-height: 120px; resize: vertical; padding: 11px 12px; border: 1px solid #d0d5dd; border-radius: 11px; outline: none; font: inherit; }
+.operations-text-modal textarea:focus { border-color: #d92d20; box-shadow: 0 0 0 4px rgba(217,45,32,.1); }
+.operations-action-modal { width: min(760px, 100%); max-height: min(860px, calc(100vh - 40px)); overflow: auto; border-radius: 22px; background: #fff; box-shadow: 0 30px 90px rgba(15,23,42,.34); }
+.operations-action-modal > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px; border-bottom: 1px solid #eef0f3; background: rgba(255,255,255,.97); }
+.operations-action-modal h2 { margin: 10px 0 4px; }
+.operations-action-modal header p { margin: 0; color: #667085; font-size: 11px; line-height: 1.5; }
+.operations-action-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 20px 22px 10px; }
+.operations-action-fields label { display: grid; gap: 6px; }
+.operations-action-fields label > span { color: #344054; font-size: 10px; font-weight: 800; }
+.operations-action-fields input { min-height: 42px; padding: 0 11px; border: 1px solid #d0d5dd; border-radius: 10px; outline: none; font: inherit; }
+.operations-action-fields input:focus, .operations-quantity-list input:focus { border-color: #2e90fa; box-shadow: 0 0 0 4px rgba(46,144,250,.1); }
+.operations-quantity-list { display: grid; gap: 8px; padding: 10px 22px 20px; }
+.operations-quantity-list label { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid #e4e7ec; border-radius: 12px; background: #fafafa; }
+.operations-quantity-list label > span { min-width: 0; display: grid; gap: 4px; }
+.operations-quantity-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.operations-quantity-list small { color: #667085; font-size: 9px; }
+.operations-quantity-list input { width: 110px; min-height: 38px; padding: 0 9px; border: 1px solid #d0d5dd; border-radius: 9px; outline: none; font: inherit; }
+.operations-action-modal > .form-error { margin: 0 22px; }
+.operations-action-modal > footer { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 9px; padding: 16px 22px; border-top: 1px solid #eef0f3; background: rgba(255,255,255,.97); }
+
+@media (max-width: 900px) {
+  .operations-modal-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .operations-card-meta { grid-template-columns: 1fr; }
+  .operations-rejection-banner, .operations-receipts { margin-left: 18px; margin-right: 18px; }
+  .operations-action-modal { align-self: end; max-height: 92vh; border-radius: 22px 22px 0 0; }
+  .operations-action-fields { grid-template-columns: 1fr; }
+  .operations-quantity-list label { align-items: stretch; flex-direction: column; }
+  .operations-quantity-list input { width: 100%; }
+  .operations-action-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }
+}
