@@ -147,7 +147,7 @@ export default async function HomePage() {
           <OrdersCard title="Current orders" href="/next/orders" {...current} />
           <OrdersCard title="Orders review" href="/next/orders-review" {...review} />
           <OrdersCard title="Operations orders" href="/next/operations-orders" {...operations} />
-          <OrdersCard title="Maintenance orders" href="/orders/maintenance-orders" {...maintenance} />
+          <OrdersCard title="Maintenance orders" href="/next/maintenance-orders" {...maintenance} />
         </div>
         <div className="dashboard-lower-grid">
           <StockCard summary={stockSummary(stockRows)} />

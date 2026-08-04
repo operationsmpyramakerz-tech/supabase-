@@ -24615,6 +24615,14 @@ async function _pageBootstrapOperationsOrders(req) {
   ]);
 }
 
+async function _pageBootstrapMaintenanceOrders(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)),
+    _pageBootstrapLoad('/api/orders/requested/maintenance-form-options', 5 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested/maintenance-form-options', 20_000)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24680,6 +24688,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
         _pageBootstrapHasPageAccess(req, 'Operations Orders');
       if (!canAccessOperations) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapOperationsOrders(req);
+    } else if (scope === 'maintenance-orders') {
+      if (!_pageBootstrapHasPageAccess(req, 'Maintenance Orders')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapMaintenanceOrders(req);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }

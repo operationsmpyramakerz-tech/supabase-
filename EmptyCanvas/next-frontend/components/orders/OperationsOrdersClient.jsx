@@ -462,7 +462,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           {canReview ? <button type="button" className="review-approve-button" onClick={() => onAction("approve", group)} disabled={busy}>Approve</button> : null}
           {canReview ? <button type="button" className="review-reject-button" onClick={() => onAction("reject", group)} disabled={busy}>Reject</button> : null}
           {canReceive ? <button type="button" className="primary-button" onClick={() => onAction("receive", group)} disabled={busy}>Received by operations</button> : null}
-          {maintenance && group.stage < 4 && !archived ? <a className="secondary-button" href={`/orders/maintenance-orders?tab=${shipping ? "in-progress" : "not-started"}`}>Open maintenance workflow</a> : null}
+          {maintenance && group.stage < 4 && !archived ? <a className="secondary-button" href={`/next/maintenance-orders?tab=${shipping ? "in-progress" : "not-started"}`}>Open maintenance workflow</a> : null}
           {shipping ? <button type="button" className="primary-button" onClick={() => onAction("deliver", group)} disabled={busy}>Mark delivered</button> : null}
           {delivered && orderTypeKey(group.orderType) === "requestproducts" ? <button type="button" className="secondary-button" onClick={() => onAction("withdrawal", group)} disabled={busy}>Create Withdrawal</button> : null}
           {delivered && orderTypeKey(group.orderType) === "withdrawproducts" ? <button type="button" className="secondary-button" onClick={() => onAction("delivery", group)} disabled={busy}>Create Delivery</button> : null}
