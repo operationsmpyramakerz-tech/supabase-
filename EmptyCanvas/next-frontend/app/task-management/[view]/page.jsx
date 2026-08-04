@@ -43,7 +43,7 @@ function allowedViews(account = {}) {
 export default async function TaskManagementViewPage({ params }) {
   const resolvedParams = await params;
   const config = VIEW_MAP[String(resolvedParams?.view || "")];
-  if (!config) redirect("/next/task-management");
+  if (!config) redirect("/task-management");
 
   const response = await fetchLegacyJson(`/api/page-bootstrap?scope=task-management&view=${encodeURIComponent(config.key)}`, { timeoutMs: 45000 });
   if (response.status === 401) redirect(`/login?next=/next/task-management/${resolvedParams.view}`);
