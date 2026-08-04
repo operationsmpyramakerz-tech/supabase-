@@ -145,7 +145,7 @@ export default async function HomePage() {
         <div className="dashboard-title-row"><div><span className="overview-icon">⌁</span><h2>Overview</h2></div><a href="/home">Classic Home</a></div>
         <div className="dashboard-orders-grid">
           <OrdersCard title="Current orders" href="/next/orders" {...current} />
-          <OrdersCard title="Orders review" href="/orders/sv-orders" {...review} />
+          <OrdersCard title="Orders review" href="/next/orders-review" {...review} />
           <OrdersCard title="Operations orders" href="/orders/requested" {...operations} />
           <OrdersCard title="Maintenance orders" href="/orders/maintenance-orders" {...maintenance} />
         </div>

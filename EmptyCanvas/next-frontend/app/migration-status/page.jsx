@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 const steps = [
   ["Foundation", "Completed", "Shared cookie authentication, Vercel proxy routing, and the legacy API adapter are operational."],
   ["Home dashboard", "Completed", "The live Home overview is rendered with Next.js while the classic Home remains available."],
-  ["Current Orders", "Completed", "The first interactive list module now includes tabs, search, order details, and protected order actions."],
+  ["Current Orders", "Completed", "The first interactive list module includes tabs, search, order details, and protected order actions."],
+  ["Orders Review", "Completed", "Supervisor review now supports filters, approval decisions, quantity overrides, protected editing, and archive controls in Next.js."],
   ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
 ];
 
