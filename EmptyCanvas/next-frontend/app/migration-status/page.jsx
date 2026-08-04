@@ -19,6 +19,7 @@ const steps = [
   ["Event Components", "Completed", "The reusable event catalogue now includes category and status filters, cost summaries, compressed photos, custom categories, protected create/edit actions, and Admin-only deletion in Next.js."],
   ["Event Calendar", "Completed", "The monthly schedule now includes date navigation, selected-day conflicts, upcoming and past lists, full event details, PDF access, and protected event creation links in Next.js."],
   ["KPIs", "Completed", "Employee performance now includes monthly score trends, review filters, KPI standards, protected standard/review creation, evidence files, score editing, and PDF reports in Next.js."],
+  ["Users Center", "Completed", "Team directories, account records, department management, sign up approvals, page-access matrices, and Orders Review visibility now run in the protected Next.js workspace."],
   ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
 ];
 
