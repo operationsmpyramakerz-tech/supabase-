@@ -16575,18 +16575,18 @@ async function _sbSaveLmsPageAccessForMember(teamMemberId, entries = [], { teamM
 
 
 // LMS Home overview — aggregate LMS-only data for the LMS dashboard.
-app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
-  const readRows = async (table, query = "select=id&limit=10000") => {
-    try {
-      const rows = await supabaseDb.request(`/${table}?${query}`);
-      return Array.isArray(rows) ? rows : [];
-    } catch (error) {
-      console.warn(`LMS Home: unable to read ${table}:`, error?.details || error?.body || error?.message || error);
-      return [];
-    }
-  };
+async function _sbLmsHomeOverviewPayload({ force = false } = {}) {
+  const load = async () => {
+    const readRows = async (table, query = "select=id&limit=10000") => {
+      try {
+        const rows = await supabaseDb.request(`/${table}?${query}`);
+        return Array.isArray(rows) ? rows : [];
+      } catch (error) {
+        console.warn(`LMS Home: unable to read ${table}:`, error?.details || error?.body || error?.message || error);
+        return [];
+      }
+    };
 
-  try {
     const roleTables = {
       supervisors: "lms_supervisors",
       team_leaders: "lms_team_leaders",
@@ -16607,12 +16607,13 @@ app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
     ]);
     const roles = {};
     Object.keys(roleTables).forEach((key, index) => { roles[key] = roleRows[index]?.length || 0; });
-    const resourceTypes = { book:0, teacher_guide:0, lesson_plan:0, presentation:0, materials:0, exam:0 };
+    const resourceTypes = { book: 0, teacher_guide: 0, lesson_plan: 0, presentation: 0, materials: 0, exam: 0 };
     resources.forEach((row) => {
       const key = String(row?.resource_type || "").trim().toLowerCase();
       if (Object.prototype.hasOwnProperty.call(resourceTypes, key)) resourceTypes[key] += 1;
     });
-    res.json({
+    return {
+      ok: true,
       counts: {
         schools: schools.length,
         people: Object.values(roles).reduce((sum, value) => sum + Number(value || 0), 0),
@@ -16624,10 +16625,64 @@ app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
       roles,
       resourceTypes,
       recentCurricula,
-    });
+    };
+  };
+
+  if (force) return load();
+  return cacheGetOrSet("cache:api:lms-home:overview:v2", 60, load, { memoryTtlSeconds: 15 });
+}
+
+async function _sbLmsSessionAccessPayload(req) {
+  const pages = await _sbSelectLmsPages({ assignableOnly: false, activeOnly: true });
+  const isBuiltInAdmin = _sessionIsBuiltInAdmin(req);
+  const memberId = String(req.session?.userSupabaseId || "").trim();
+  let accessRows = [];
+  if (!isBuiltInAdmin && memberId) {
+    accessRows = await _sbSelectRawLmsPageAccessForMember(memberId).catch(() => []);
+  }
+  const byPageId = new Map((accessRows || []).map((row) => [String(_sbGet(row, ["page_id", "pageId"]) ?? ""), row]));
+  const visiblePages = (pages || []).map((page) => {
+    const access = byPageId.get(String(page.pageId || page.id));
+    const isEnabled = isBuiltInAdmin || (access && _sbBool(_sbGet(access, ["is_enabled", "isEnabled"]), false));
+    return {
+      ...page,
+      isEnabled: !!isEnabled,
+      accessLevel: isBuiltInAdmin
+        ? PAGE_ACCESS_LEVELS.ADMIN
+        : _sbNormalizePageAccessLevel(_sbGet(access || {}, ["access_level", "accessLevel"]) || PAGE_ACCESS_LEVELS.VIEW),
+    };
+  }).filter((page) => page.isEnabled);
+
+  return {
+    ok: true,
+    source: "supabase",
+    isBuiltInAdmin,
+    pages: visiblePages,
+    summary: {
+      accessCount: visiblePages.length,
+      adminCount: visiblePages.filter((page) => page.accessLevel === PAGE_ACCESS_LEVELS.ADMIN).length,
+    },
+  };
+}
+
+app.get("/api/lms/home/overview", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const payload = await _sbLmsHomeOverviewPayload({ force: String(req.query?._fresh || "") === "1" });
+    return res.json(payload);
   } catch (error) {
     console.error("GET /api/lms/home/overview error:", error?.details || error?.body || error);
-    res.status(500).json({ error: "Unable to load LMS overview." });
+    return res.status(error?.status || 500).json({ ok: false, error: "Unable to load LMS overview." });
+  }
+});
+
+app.get("/api/lms/session-access", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    return res.json(await _sbLmsSessionAccessPayload(req));
+  } catch (error) {
+    console.error("GET /api/lms/session-access error:", error?.details || error?.body || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Unable to load LMS access." });
   }
 });
 
@@ -24742,6 +24797,14 @@ async function _pageBootstrapEvents(req) {
   ]);
 }
 
+async function _pageBootstrapLmsHome(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/lms/home/overview', 60_000, () => _sbLmsHomeOverviewPayload()),
+    _pageBootstrapLoad('/api/lms/session-access', 20_000, () => _sbLmsSessionAccessPayload(req)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24806,6 +24869,8 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapExpenses(req);
     } else if (scope === 'home') {
       results = await _pageBootstrapHome(req);
+    } else if (scope === 'lms-home') {
+      results = await _pageBootstrapLmsHome(req);
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);
