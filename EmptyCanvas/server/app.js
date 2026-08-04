@@ -24717,6 +24717,13 @@ async function _pageBootstrapTaskManagement(req, view) {
   ]);
 }
 
+async function _pageBootstrapEvents(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/events', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/events', 25_000)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24766,6 +24773,12 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       if (!_pageBootstrapHasPageAccess(req, 'Event Components')) return _pageAccessDeniedResponse(req, res);
       if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
       results = await _pageBootstrapEventsComponents(req);
+    } else if (scope === 'events') {
+      const canAccessEvents = _pageBootstrapHasPageAccess(req, 'Event Requests') ||
+        _pageBootstrapHasPageAccess(req, 'Event Calendar');
+      if (!canAccessEvents) return _pageAccessDeniedResponse(req, res);
+      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
+      results = await _pageBootstrapEvents(req);
     } else if (scope === 'expenses') {
       if (!_pageBootstrapHasPageAccess(req, 'Expenses')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapExpenses(req);
