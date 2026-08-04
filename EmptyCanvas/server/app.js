@@ -24712,6 +24712,14 @@ async function _pageBootstrapKpis(req) {
   ]);
 }
 
+async function _pageBootstrapUsersCenter(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/user-access/team-members', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/user-access/team-members', 35_000)),
+    _pageBootstrapLoad('/api/user-access/signup-requests?status=pending', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/user-access/signup-requests?status=pending', 20_000)),
+  ]);
+}
+
 async function _pageBootstrapTaskManagement(req, view) {
   const cleanView = _taskManagementSubpageByView(view)?.view || '';
   if (!cleanView) {
@@ -24821,6 +24829,10 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'kpis') {
       if (!_pageBootstrapHasPageAccess(req, 'KPIs')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapKpis(req);
+    } else if (scope === 'users-center') {
+      const canAccessUsersCenter = USER_ACCESS_PAGE_ALIASES.some((pageName) => _pageBootstrapHasPageAccess(req, pageName));
+      if (!canAccessUsersCenter) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapUsersCenter(req);
     } else if (scope === 'task-management') {
       const view = _taskManagementSubpageByView(req.query?.view || '')?.view || '';
       const pageName = _taskManagementViewAccessPage(view);
