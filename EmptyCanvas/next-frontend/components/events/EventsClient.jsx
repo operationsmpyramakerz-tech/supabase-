@@ -539,7 +539,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
         </div>
         <div className="next-events-title-actions">
           <a href="/events" className="secondary">Classic Events</a>
-          {canOpenCalendar ? <a href="/events/calendar" className="secondary">Calendar</a> : null}
+          {canOpenCalendar ? <a href="/next/events-calendar" className="secondary">Calendar</a> : null}
           {canOpenComponents ? <a href="/next/event-components" className="secondary">Components</a> : null}
           {canRequestActions ? <a href="/events/new" className="primary">+ New event</a> : null}
         </div>

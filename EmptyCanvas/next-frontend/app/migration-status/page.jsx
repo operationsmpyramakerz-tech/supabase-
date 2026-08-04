@@ -17,6 +17,7 @@ const steps = [
   ["Task Management", "Completed", "All Tasks, My Tasks, and Delegated Tasks now include workflow filters, calendar agenda, project details, project creation/editing, department work, team assignments, attachments, archive controls, and delivery actions in Next.js."],
   ["Events", "Completed", "Event Requests now include status tabs, type filters, request details, creator profiles, protected workflow transitions, Edit/Cancel authorization, PDF download, and direct links to the calendar and component catalogue."],
   ["Event Components", "Completed", "The reusable event catalogue now includes category and status filters, cost summaries, compressed photos, custom categories, protected create/edit actions, and Admin-only deletion in Next.js."],
+  ["Event Calendar", "Completed", "The monthly schedule now includes date navigation, selected-day conflicts, upcoming and past lists, full event details, PDF access, and protected event creation links in Next.js."],
   ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
 ];
 

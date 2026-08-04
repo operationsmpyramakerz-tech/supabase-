@@ -689,7 +689,7 @@ export default function EventComponentsClient({ account, initialComponents, init
         </div>
         <div className="next-events-title-actions">
           <a href="/next/events" className="secondary">Event Requests</a>
-          <a href="/events/calendar" className="secondary">Calendar</a>
+          <a href="/next/events-calendar" className="secondary">Calendar</a>
           <a href="/events/components" className="secondary">Classic</a>
           {canEdit ? <button type="button" className="primary-button" onClick={() => requestForm("create")}>Add Event Component</button> : null}
         </div>
