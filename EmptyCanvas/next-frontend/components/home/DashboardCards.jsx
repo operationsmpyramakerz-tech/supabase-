@@ -63,7 +63,7 @@ export function OrdersCard({ title, href, total, totalCost, buckets = [], tone =
 
 export function StockCard({ summary }) {
   return (
-    <a className="dashboard-card stock-card" href="/stocktaking">
+    <a className="dashboard-card stock-card" href="/next/stocktaking">
       <div className="card-heading"><h2>Stocktaking</h2><span className="analysis-chip analysis-chip--green">Analysis</span></div>
       <div className="stock-metrics">
         <div><span>Total components</span><strong>{summary.quantity}</strong></div>

@@ -11,6 +11,7 @@ const steps = [
   ["Orders Review", "Completed", "Supervisor review now supports filters, approval decisions, quantity overrides, protected editing, and archive controls in Next.js."],
   ["Operations Orders", "Completed", "Operations fulfilment now includes live workflow tabs, receipt quantities, approve/reject decisions, delivery controls, exports, and archive actions."],
   ["Maintenance Orders", "Completed", "The technical workflow now includes maintenance logs per component, spare-part tracking, signed report uploads, completion controls, and exports."],
+  ["Stocktaking", "Completed", "The live inventory view now includes grouped and table modes, instant search, stock-value summaries, and protected PDF/Excel exports."],
   ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
 ];
 

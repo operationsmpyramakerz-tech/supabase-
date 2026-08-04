@@ -24623,6 +24623,13 @@ async function _pageBootstrapMaintenanceOrders(req) {
   ]);
 }
 
+async function _pageBootstrapStocktaking(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/stock', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/stock', 25_000)),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24691,6 +24698,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'maintenance-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Maintenance Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapMaintenanceOrders(req);
+    } else if (scope === 'stocktaking') {
+      if (!_pageBootstrapHasPageAccess(req, 'Stocktaking')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapStocktaking(req);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }
