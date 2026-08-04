@@ -24805,6 +24805,40 @@ async function _pageBootstrapLmsHome(req) {
   ]);
 }
 
+async function _pageBootstrapLmsUsersCenter(req) {
+  const access = await _sbLmsSessionAccessPayload(req);
+  const canAccess = access?.isBuiltInAdmin || (Array.isArray(access?.pages) && access.pages.some((page) =>
+    String(page?.pageKey || page?.page_key || '').trim().toLowerCase() === 'lms-users-center'
+  ));
+  if (!canAccess) {
+    const error = new Error('Your account does not have access to LMS Users Center.');
+    error.status = 403;
+    throw error;
+  }
+
+  const roleRoutes = [
+    'supervisors',
+    'team-leaders',
+    'instructors',
+    'co-instructors',
+    'school-coordinators',
+    'students',
+    'parents',
+  ];
+
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/lms/session-access', 20_000, () => access),
+    _pageBootstrapLoad('/api/lms/structures', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/lms/structures', 25_000)),
+    _pageBootstrapLoad('/api/lms/structures/schools', 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/lms/structures/schools', 25_000)),
+    ...roleRoutes.map((role) => _pageBootstrapLoad(
+      `/api/lms/users-center/roles/${role}`,
+      20_000,
+      () => _pageBootstrapFetchExistingRoute(req, `/api/lms/users-center/roles/${role}`, 25_000),
+    )),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24871,6 +24905,8 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapHome(req);
     } else if (scope === 'lms-home') {
       results = await _pageBootstrapLmsHome(req);
+    } else if (scope === 'lms-users-center') {
+      results = await _pageBootstrapLmsUsersCenter(req);
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);
