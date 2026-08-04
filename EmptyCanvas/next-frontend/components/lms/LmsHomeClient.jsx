@@ -26,7 +26,7 @@ const QUICK_LINKS = [
     key: "lms-users-center",
     title: "Users Center",
     description: "Manage LMS roles, directories, structures, and page permissions.",
-    href: "/lms/user-access",
+    href: "/next/lms/users-center",
     icon: "UC",
   },
   {
