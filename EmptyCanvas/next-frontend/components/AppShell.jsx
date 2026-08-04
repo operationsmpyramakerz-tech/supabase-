@@ -12,7 +12,7 @@ const MODULE_LINKS = [
   { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
   { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
   { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
-  { label: "LMS", href: "/lms", permissions: ["LMS", "lms-curriculum", "lms-users-center", "lms-b2b"] },
+  { label: "LMS", href: "/next/lms", classicHref: "/lms", permissions: ["LMS", "lms-curriculum", "lms-users-center", "lms-b2b"] },
 ];
 
 function normalize(value) {
