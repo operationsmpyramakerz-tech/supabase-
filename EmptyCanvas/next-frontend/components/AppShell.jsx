@@ -5,7 +5,7 @@ const MODULE_LINKS = [
   { label: "Maintenance Orders", href: "/next/maintenance-orders", classicHref: "/orders/maintenance-orders", permissions: ["Maintenance Orders"] },
   { label: "Stocktaking", href: "/next/stocktaking", classicHref: "/stocktaking", permissions: ["Stocktaking"] },
   { label: "Events", href: "/next/events", classicHref: "/events", permissions: ["Event Calendar", "Event Requests"] },
-  { label: "Event Components", href: "/events/components", permissions: ["Event Components"] },
+  { label: "Event Components", href: "/next/event-components", classicHref: "/events/components", permissions: ["Event Components"] },
   { label: "Products", href: "/next/products", classicHref: "/products", permissions: ["Products"] },
   { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
   { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },

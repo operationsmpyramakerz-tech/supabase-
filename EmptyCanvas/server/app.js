@@ -24529,8 +24529,9 @@ async function _pageBootstrapEventsNew(req) {
   return Promise.all(loaders);
 }
 
-async function _pageBootstrapEventsComponents() {
+async function _pageBootstrapEventsComponents(req) {
   return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
     _pageBootstrapLoad('/api/events/components', 2 * 60_000, async () => {
       const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?select=*&order=is_active.desc,name.asc&limit=1000`);
       return { ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) };
