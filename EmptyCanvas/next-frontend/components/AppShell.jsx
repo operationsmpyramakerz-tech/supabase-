@@ -11,6 +11,7 @@ const MODULE_LINKS = [
   { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
   { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
   { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
+  { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
   { label: "LMS", href: "/lms", permissions: ["LMS", "lms-curriculum", "lms-users-center", "lms-b2b"] },
 ];
 
