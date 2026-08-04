@@ -1,4 +1,5 @@
 const MODULE_LINKS = [
+  { label: "LMS", href: "/next/lms", classicHref: "/lms", permissions: [], alwaysVisible: true },
   { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", classicHref: "/orders/sv-orders", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", classicHref: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
@@ -12,7 +13,6 @@ const MODULE_LINKS = [
   { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
   { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
   { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
-  { label: "LMS", href: "/next/lms", classicHref: "/lms", permissions: ["LMS", "lms-curriculum", "lms-users-center", "lms-b2b"] },
 ];
 
 function normalize(value) {
@@ -20,6 +20,7 @@ function normalize(value) {
 }
 
 function canSee(link, allowedPages) {
+  if (link?.alwaysVisible) return true;
   const allowed = new Set((Array.isArray(allowedPages) ? allowedPages : []).map(normalize));
   if (!allowed.size) return false;
   return link.permissions.some((permission) => allowed.has(normalize(permission)));
@@ -37,11 +38,12 @@ export default function AppShell({
   title = "Home",
   eyebrow = "Incremental frontend migration",
   activePath = "/next/home",
+  classicHrefOverride = "",
 }) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
   const activeLink = MODULE_LINKS.find((link) => isActive(activePath, link.href));
-  const classicHref = activeLink?.classicHref || (activePath === "/next/home" ? "/home" : "/home");
+  const classicHref = classicHrefOverride || activeLink?.classicHref || (activePath === "/next/home" ? "/home" : "/home");
   const initials = String(account?.name || account?.username || "U")
     .split(/\s+/)
     .filter(Boolean)
