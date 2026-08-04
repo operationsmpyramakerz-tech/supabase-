@@ -6150,7 +6150,56 @@ async function _sbCreateProductUnit(name) {
     if (_sbIsMissingTableError(error)) { const err = new Error("Product units table is not created yet. Please run products_units_migration.sql in Supabase first."); err.status = 400; throw err; }
     throw error;
   });
+  await _sbInvalidateProductsCaches();
   return { name: _sbProductText(_sbGet(created || row, ["name", "unit", "Name", "Unit"])) || clean, alreadyExists: false };
+}
+
+async function _sbProductsCatalogPayload({ force = false } = {}) {
+  const load = async () => {
+    const [productRows, savedTags, unitRows] = await Promise.all([
+      _sbSelectProductsRows(),
+      _sbProductTagsTableList({ required: false }),
+      supabaseDb.selectAll(_sbProductUnitsTable(), { limit: 1000, order: "name.asc" }).catch((error) => {
+        if (_sbIsMissingTableError(error)) return [];
+        throw error;
+      }),
+    ]);
+
+    const products = (Array.isArray(productRows) ? productRows : [])
+      .map(_sbSerializeProductRow)
+      .filter((product) => product && product.id && product.name);
+
+    const tags = new Map();
+    const units = new Map();
+    const addTag = (value) => {
+      const clean = _sbProductText(value).trim();
+      if (clean && !tags.has(normKey(clean))) tags.set(normKey(clean), clean);
+    };
+    const addUnit = (value) => {
+      const clean = _sbProductText(value).trim();
+      if (clean && !units.has(normKey(clean))) units.set(normKey(clean), clean);
+    };
+
+    for (const value of Array.isArray(savedTags) ? savedTags : []) addTag(value);
+    for (const value of ["Piece", "Pack", "Kilogram", "Metre", "Inch"]) addUnit(value);
+    for (const row of Array.isArray(unitRows) ? unitRows : []) addUnit(_sbGet(row, ["name", "unit", "Name", "Unit"]));
+    for (const product of products) {
+      addTag(firstProductTagForServer(product));
+      addUnit(product?.unit);
+    }
+
+    return {
+      ok: true,
+      source: "supabase",
+      products,
+      tagsCatalog: Array.from(tags.values()).sort((a, b) => String(a).localeCompare(String(b))),
+      unitsCatalog: Array.from(units.values()).sort((a, b) => String(a).localeCompare(String(b))),
+    };
+  };
+
+  return force
+    ? load()
+    : cacheGetOrSet("cache:api:products:catalog:v2", 2 * 60, load);
 }
 
 function _sbProductNullableText(value) {
@@ -8192,6 +8241,7 @@ async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") 
 async function _sbInvalidateProductsCaches() {
   await Promise.all([
     cacheDel("cache:api:components:supabase:v1"),
+    cacheDel("cache:api:products:catalog:v2"),
   ]);
 }
 
@@ -24645,6 +24695,13 @@ async function _pageBootstrapStocktaking(req) {
   ]);
 }
 
+async function _pageBootstrapProducts(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24716,6 +24773,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'stocktaking') {
       if (!_pageBootstrapHasPageAccess(req, 'Stocktaking')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapStocktaking(req);
+    } else if (scope === 'products') {
+      if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapProducts(req);
     } else {
       return res.status(400).json({ ok: false, error: 'Unknown page bootstrap scope.' });
     }
@@ -24751,10 +24811,10 @@ app.get(
       if (!_sbProductsEnabled()) {
         return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
       }
-      const rows = await _sbProductsList();
-      const tagsCatalog = await _sbProductsTagCatalogList().catch(() => []);
-      const unitsCatalog = await _sbProductUnitsList().catch(() => ["Piece", "Pack", "Kilogram", "Metre", "Inch"]);
-      return res.json({ ok: true, source: "supabase", products: rows, tagsCatalog, unitsCatalog });
+      const payload = await _sbProductsCatalogPayload({
+        force: String(req.query?._fresh || "") === "1",
+      });
+      return res.json(payload);
     } catch (error) {
       console.error("GET /api/products error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load products." });
