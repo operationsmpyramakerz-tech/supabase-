@@ -24493,13 +24493,25 @@ async function _pageBootstrapEventsComponents() {
 }
 
 async function _pageBootstrapExpenses(req) {
-  if (!_sbExpensesEnabled()) return [];
+  const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+  ];
+
+  if (!_sbExpensesEnabled()) {
+    loaders.push(
+      _pageBootstrapLoad('/api/expenses', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses', 25_000)),
+      _pageBootstrapLoad('/api/expenses/types', 5 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses/types')),
+      _pageBootstrapLoad('/api/expenses/cash-in-from/options', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses/cash-in-from/options')),
+      _pageBootstrapLoad('/api/expenses/orders/options', 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses/orders/options', 20_000)),
+    );
+    return Promise.all(loaders);
+  }
 
   // Reuse the exact Redis/memory cache keys used by the original routes. This
   // keeps the one-request page bundle from increasing Supabase traffic and also
   // warms the normal fallback endpoints for the same user.
   const usernameKey = cacheKeySafe(req.session?.username || '');
-  const loaders = [
+  loaders.push(
     _pageBootstrapLoad('/api/expenses', 30_000, async () => cacheGetOrSet(
       `cache:api:expenses:${usernameKey}:v4`,
       2 * 60,
@@ -24524,7 +24536,8 @@ async function _pageBootstrapExpenses(req) {
         source: 'supabase',
       }),
     )),
-  ];
+    _pageBootstrapLoad('/api/expenses/orders/options', 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses/orders/options', 20_000)),
+  );
 
   if (_sbTeamMembersEnabled()) {
     loaders.push(_pageBootstrapLoad('/api/expenses/cash-in-from/options', 2 * 60_000, async () => cacheGetOrSet(
@@ -24542,6 +24555,8 @@ async function _pageBootstrapExpenses(req) {
         return { success: true, options, source: 'supabase' };
       },
     )));
+  } else {
+    loaders.push(_pageBootstrapLoad('/api/expenses/cash-in-from/options', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses/cash-in-from/options')));
   }
 
   return Promise.all(loaders);

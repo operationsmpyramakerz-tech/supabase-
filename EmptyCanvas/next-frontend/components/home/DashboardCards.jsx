@@ -77,7 +77,7 @@ export function StockCard({ summary }) {
 export function ExpensesCard({ summary }) {
   const max = Math.max(1, ...summary.months.map((month) => Math.abs(month.value)));
   return (
-    <a className="dashboard-card expenses-card" href="/expenses">
+    <a className="dashboard-card expenses-card" href="/next/expenses">
       <div className="expenses-head"><div><span>Monthly overview</span><h2>Expenses by month</h2></div><strong>{summary.year}</strong></div>
       <div className="expense-chart" aria-label="Monthly expense chart">
         {summary.months.map((month) => (

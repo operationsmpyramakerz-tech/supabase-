@@ -7,7 +7,7 @@ const MODULE_LINKS = [
   { label: "Events", href: "/events", permissions: ["Event Calendar", "Event Requests", "Event Components"] },
   { label: "Products", href: "/products", permissions: ["Products"] },
   { label: "Task Management", href: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
-  { label: "Expenses", href: "/expenses", permissions: ["Expenses"] },
+  { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
   { label: "KPIs", href: "/kpis", permissions: ["KPIs"] },
   { label: "LMS", href: "/lms", permissions: ["LMS", "lms-curriculum", "lms-users-center", "lms-b2b"] },
 ];
