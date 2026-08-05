@@ -131,6 +131,7 @@ export default function AppShell({
         </nav>
 
         <div className="sidebar-footer">
+          <a className={isActive(activePath, "/next/account") ? "active" : ""} href="/next/account">My account</a>
           <a href={classicHref}>Open current interface</a>
           <a href="/next/migration-status">Migration status</a>
         </div>
@@ -142,7 +143,7 @@ export default function AppShell({
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
           </div>
-          <a className="profile" href="/account">
+          <a className={`profile ${isActive(activePath, "/next/account") ? "active" : ""}`} href="/next/account">
             {account?.photoUrl ? <img src={account.photoUrl} alt="" /> : <span>{initials}</span>}
             <b>{account?.name || account?.username || "User"}</b>
           </a>
