@@ -748,7 +748,7 @@ export default function ProposalsClient({
           <div>
             <button type="button" className="next-proposals-btn primary" onClick={() => setNameDialog({ mode: "create", value: "" })}>＋ Create New Proposal</button>
             <a className="next-proposals-btn secondary" href="/next/products">Open Product Catalogue</a>
-            <a className="next-proposals-btn secondary" href="/kits">Open Classic Kits</a>
+            <a className="next-proposals-btn secondary" href="/next/kits">Open Kits</a>
           </div>
         </div>
         <aside>

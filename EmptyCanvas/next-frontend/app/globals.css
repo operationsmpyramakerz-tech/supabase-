@@ -945,3 +945,16 @@ a { color: inherit; text-decoration: none; }
 @media(max-width:900px){.next-proposals-hero,.next-proposals-detail-hero{grid-template-columns:1fr}.next-proposals-hero>aside{min-height:150px}.next-proposals-stats,.next-proposals-detail-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.next-proposals-detail-hero>aside{min-width:0}.next-proposals-combine-bar{grid-template-columns:1fr 1fr}.next-proposals-combine-bar>div{grid-column:1/-1}.next-proposals-product-picker{grid-template-columns:1fr}.next-proposals-loading__stats{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:680px){.next-proposals-page{gap:14px}.next-proposals-hero{padding:21px}.next-proposals-hero h2{font-size:27px}.next-proposals-hero>div>div{display:grid;grid-template-columns:1fr}.next-proposals-stats,.next-proposals-detail-stats{grid-template-columns:1fr 1fr}.next-proposals-toolbar{grid-template-columns:1fr}.next-proposals-grid{grid-template-columns:1fr}.next-proposals-combine-bar{grid-template-columns:1fr}.next-proposals-combine-bar>div{grid-column:auto}.next-proposals-modal{align-items:end;padding:0}.next-proposals-modal__card,.next-proposals-modal__card.is-wide{max-height:95vh;border-radius:22px 22px 0 0}.next-proposals-form-grid{grid-template-columns:1fr}.next-proposals-form__actions{display:grid;grid-template-columns:1fr 1fr}.next-proposals-detail-hero{padding:20px}.next-proposals-detail-hero>aside{grid-template-columns:1fr 1fr}.next-proposals-results-line{align-items:flex-start;flex-direction:column}.next-proposals-loading__grid{grid-template-columns:1fr}.next-proposals-loading__grid span:nth-child(n+4){display:none}}
 @media(max-width:440px){.next-proposals-stats,.next-proposals-detail-stats{grid-template-columns:1fr}.next-proposals-detail-hero>aside{grid-template-columns:1fr}.next-proposals-segmented{grid-template-columns:1fr}.next-proposals-segmented button{border-right:0;border-bottom:1px solid #dce2e9}.next-proposals-segmented button:last-child{border-bottom:0}.next-proposals-form__actions{grid-template-columns:1fr}.next-proposals-loading__stats{grid-template-columns:1fr}.next-proposals-loading__stats span:nth-child(n+3){display:none}}
+
+/* ========================================================================== 
+   Next.js Kits
+   ========================================================================== */
+.next-kits-hero{background:linear-gradient(145deg,#fff,#f7fbff)}
+.next-kits-hero:before{background:radial-gradient(circle,rgba(14,165,233,.16),transparent 68%)}
+.next-kits-detail-hero{background:linear-gradient(145deg,#fff,#f5fbff)}
+.next-kit-card .next-proposal-card__body>span,.next-kits-page .next-proposals-chip{color:#0879a8}
+.next-kit-folder-icon>b{background:linear-gradient(145deg,#0e7490,#0ea5e9)!important;color:#fff!important}
+.next-kit-owner-badge{align-self:center;padding:5px 8px;border-radius:999px;background:#eff8ff;color:#0879a8;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}
+.next-kits-page .next-proposals-btn.primary{background:linear-gradient(135deg,#0f7895,#0ea5e9)}
+.next-kits-page .next-proposals-btn.dark{display:flex;align-items:center;justify-content:center;text-decoration:none}
+@media(max-width:680px){.next-kit-owner-badge{justify-self:start}.next-kits-page .next-proposals-detail-actions{flex-wrap:wrap}}

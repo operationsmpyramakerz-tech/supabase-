@@ -24853,6 +24853,18 @@ async function _pageBootstrapProposals(req) {
   ]);
 }
 
+async function _pageBootstrapKits(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
+    _pageBootstrapLoad('/api/products/kits', 30_000, async () => ({
+      ok: true,
+      source: 'supabase',
+      kits: await _sbProductsKitsList(req),
+    })),
+  ]);
+}
+
 async function _pageBootstrapKpis(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25139,6 +25151,12 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
         _pageBootstrapHasPageAccess(req, 'Products');
       if (!canAccessProposals) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProposals(req);
+    } else if (scope === 'kits') {
+      const canAccessKits = _pageBootstrapHasPageAccess(req, 'Kits') ||
+        _pageBootstrapHasPageAccess(req, 'Proposals') ||
+        _pageBootstrapHasPageAccess(req, 'Products');
+      if (!canAccessKits) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapKits(req);
     } else if (scope === 'products') {
       if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProducts(req);
