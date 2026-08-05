@@ -29,6 +29,7 @@ const steps = [
   ["Users Center", "Completed", "Team directories, account records, department management, sign up approvals, page-access matrices, and Orders Review visibility now run in the protected Next.js workspace."],
   ["My Account", "Completed", "Personal details, password changes, profile and cover images, shared files, access summaries, protected profile updates, and sign-out controls now run in Next.js."],
   ["System History", "Completed", "The audit trail now includes live summaries, search and multi-field filters, action details, linked team-member profiles, technical request metadata, refresh controls, and protected full-history deletion in Next.js."],
+  ["Database Backup", "Completed", "The protected database workspace now includes a searchable Supabase table catalogue, individual CSV and full ZIP exports, schema-validated CSV restores, automatic export-before-delete safeguards, and audited table or database clearing in Next.js."],
   ["LMS Home", "Completed", "The learning overview now includes live school, role, structure, curriculum, and resource analytics with permission-aware links to each LMS workspace."],
   ["LMS Users Center", "Completed", "Learning structures and all seven LMS role directories now run in a permission-aware Next.js workspace with a visual workflow builder."],
   ["LMS Schools", "Completed", "School folders, contract and contact data, academic coverage, capacity metrics, Stocktaking links, protected create/edit/delete actions, and contract uploads now run in Next.js."],

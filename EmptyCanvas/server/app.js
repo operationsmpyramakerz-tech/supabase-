@@ -24794,6 +24794,24 @@ async function _pageBootstrapHistory(req) {
   ]);
 }
 
+async function _pageBootstrapBackup(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/backup/tables', 60_000, async () => ({
+      ok: true,
+      tables: _backupCatalog().map((item) => ({
+        key: item.key,
+        pageName: item.pageName,
+        tableName: item.tableName,
+        moduleName: item.moduleName,
+        icon: item.icon,
+        description: item.description,
+        sensitive: !!item.sensitive,
+      })),
+    })),
+  ]);
+}
+
 async function _pageBootstrapCurrentOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25172,6 +25190,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'history') {
       if (!_pageBootstrapHasPageAccess(req, 'History')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapHistory(req);
+    } else if (scope === 'backup') {
+      if (!_pageBootstrapHasPageAccess(req, 'Backup')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapBackup(req);
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);

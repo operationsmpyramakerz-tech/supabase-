@@ -470,7 +470,7 @@ export default function AccountClient({ initialAccount }) {
             <header><span>WORKSPACE</span><h3>Account shortcuts</h3></header>
             <a href="/how-it-works"><div><strong>How it works</strong><small>Guides and operating instructions</small></div><b>→</b></a>
             {access.history ? <a href="/next/history"><div><strong>System history</strong><small>Review recorded ERP actions</small></div><b>→</b></a> : null}
-            {access.backup ? <a href="/backup"><div><strong>Database backup</strong><small>Export and restore system data</small></div><b>→</b></a> : null}
+            {access.backup ? <a href="/next/backup"><div><strong>Database backup</strong><small>Export and restore system data</small></div><b>→</b></a> : null}
             <a href="/account"><div><strong>Classic profile</strong><small>Open the previous account interface</small></div><b>↗</b></a>
           </article>
 

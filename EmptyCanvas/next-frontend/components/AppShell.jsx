@@ -20,6 +20,7 @@ const MODULE_LINKS = [
   { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
   { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
   { label: "System History", href: "/next/history", classicHref: "/history", permissions: ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"] },
+  { label: "Database Backup", href: "/next/backup", classicHref: "/backup", permissions: ["Backup", "Back Up", "Database", "System Database", "System Backup", "Data Backup", "/backup"] },
 ];
 
 const LMS_LINKS = [
