@@ -40,7 +40,7 @@ const QUICK_LINKS = [
     key: "lms-curriculum",
     title: "Curriculum",
     description: "Browse curriculum folders, grades, books, and learning resources.",
-    href: "/lms/curriculum",
+    href: "/next/lms/curriculum",
     icon: "CR",
   },
 ];
@@ -195,11 +195,11 @@ export default function LmsHomeClient({ initialOverview, access, omitted = [] })
         </article>
 
         <article className="next-lms-panel next-lms-panel--recent">
-          <header><div><span className="next-lms-kicker">Recent content</span><h3>Latest curricula</h3></div>{allowedKeys.has("lms-curriculum") || access?.isBuiltInAdmin ? <a href="/lms/curriculum">Open all</a> : null}</header>
+          <header><div><span className="next-lms-kicker">Recent content</span><h3>Latest curricula</h3></div>{allowedKeys.has("lms-curriculum") || access?.isBuiltInAdmin ? <a href="/next/lms/curriculum">Open all</a> : null}</header>
           <div className="next-lms-recent-list">
             {Array.isArray(overview?.recentCurricula) && overview.recentCurricula.length ? overview.recentCurricula.slice(0, 5).map((item, index) => {
               const id = curriculumId(item);
-              const href = id && (allowedKeys.has("lms-curriculum") || access?.isBuiltInAdmin) ? `/lms/curriculum/${encodeURIComponent(id)}` : "";
+              const href = id && (allowedKeys.has("lms-curriculum") || access?.isBuiltInAdmin) ? `/next/lms/curriculum?theme=${encodeURIComponent(id)}` : "";
               const content = <><span className="next-lms-folder">F</span><div><strong>{curriculumTitle(item)}</strong><small>{formatDate(item?.created_at || item?.createdAt)}</small></div></>;
               return href ? <a href={href} key={id || index}>{content}</a> : <div className="next-lms-recent-static" key={id || index}>{content}</div>;
             }) : <p className="next-lms-empty-copy">No curriculum folders yet.</p>}

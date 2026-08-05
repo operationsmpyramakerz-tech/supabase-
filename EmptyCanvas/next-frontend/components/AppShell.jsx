@@ -19,7 +19,7 @@ const LMS_LINKS = [
   { label: "Overview", href: "/next/lms", key: "", alwaysVisible: true },
   { label: "Users Center", href: "/next/lms/users-center", key: "lms-users-center" },
   { label: "Schools", href: "/next/lms/schools", key: "lms-b2b" },
-  { label: "Curriculum", href: "/lms/curriculum", key: "lms-curriculum", classic: true },
+  { label: "Curriculum", href: "/next/lms/curriculum", key: "lms-curriculum" },
 ];
 
 function normalize(value) {

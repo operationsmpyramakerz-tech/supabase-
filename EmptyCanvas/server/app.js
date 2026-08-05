@@ -24887,6 +24887,24 @@ async function _pageBootstrapLmsUsersCenter(req) {
   ]);
 }
 
+async function _pageBootstrapLmsCurriculum(req) {
+  const access = await _sbLmsSessionAccessPayload(req);
+  const canAccess = access?.isBuiltInAdmin || (Array.isArray(access?.pages) && access.pages.some((page) =>
+    String(page?.pageKey || page?.page_key || '').trim().toLowerCase() === 'lms-curriculum'
+  ));
+  if (!canAccess) {
+    const error = new Error('Your account does not have access to LMS Curriculum.');
+    error.status = 403;
+    throw error;
+  }
+
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/lms/session-access', 20_000, () => access),
+    _pageBootstrapLoad('/api/lms/curriculum', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/lms/curriculum', 35_000)),
+  ]);
+}
+
 async function _pageBootstrapLmsSchools(req) {
   const access = await _sbLmsSessionAccessPayload(req);
   const canAccess = access?.isBuiltInAdmin || (Array.isArray(access?.pages) && access.pages.some((page) =>
@@ -24986,6 +25004,8 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapLmsUsersCenter(req);
     } else if (scope === 'lms-schools') {
       results = await _pageBootstrapLmsSchools(req);
+    } else if (scope === 'lms-curriculum') {
+      results = await _pageBootstrapLmsCurriculum(req);
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);

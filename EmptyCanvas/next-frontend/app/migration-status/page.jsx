@@ -23,6 +23,7 @@ const steps = [
   ["LMS Home", "Completed", "The learning overview now includes live school, role, structure, curriculum, and resource analytics with permission-aware links to each LMS workspace."],
   ["LMS Users Center", "Completed", "Learning structures and all seven LMS role directories now run in a permission-aware Next.js workspace with a visual workflow builder."],
   ["LMS Schools", "Completed", "School folders, contract and contact data, academic coverage, capacity metrics, Stocktaking links, protected create/edit/delete actions, and contract uploads now run in Next.js."],
+  ["LMS Curriculum", "Completed", "Curriculum groups, theme and grade folders, protected learning files, direct Storage uploads, resource management, and the in-system preview viewer now run in Next.js."],
   ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
 ];
 
