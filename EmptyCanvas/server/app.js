@@ -24831,6 +24831,28 @@ async function _pageBootstrapProducts(req) {
   ]);
 }
 
+async function _pageBootstrapProposals(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
+    _pageBootstrapLoad('/api/products/proposals', 20_000, async () => ({
+      ok: true,
+      source: 'supabase',
+      proposals: await _sbProductsProposalsList(req),
+    })),
+    _pageBootstrapLoad('/api/products/kits', 30_000, async () => ({
+      ok: true,
+      source: 'supabase',
+      kits: await _sbProductsKitsList(req),
+    })),
+    _pageBootstrapLoad('/api/products/proposals/team-members', 2 * 60_000, async () => ({
+      ok: true,
+      source: 'supabase',
+      members: await _sbProposalTeamMembersList(),
+    })),
+  ]);
+}
+
 async function _pageBootstrapKpis(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25112,6 +25134,11 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'stocktaking') {
       if (!_pageBootstrapHasPageAccess(req, 'Stocktaking')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapStocktaking(req);
+    } else if (scope === 'proposals') {
+      const canAccessProposals = _pageBootstrapHasPageAccess(req, 'Proposals') ||
+        _pageBootstrapHasPageAccess(req, 'Products');
+      if (!canAccessProposals) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapProposals(req);
     } else if (scope === 'products') {
       if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProducts(req);

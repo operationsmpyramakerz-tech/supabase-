@@ -10,6 +10,7 @@ const MODULE_LINKS = [
   { label: "Event Calendar", href: "/next/events-calendar", classicHref: "/events/calendar", permissions: ["Event Calendar"] },
   { label: "Event Components", href: "/next/event-components", classicHref: "/events/components", permissions: ["Event Components"] },
   { label: "Products", href: "/next/products", classicHref: "/products", permissions: ["Products"] },
+  { label: "Proposals", href: "/next/proposals", classicHref: "/proposals", permissions: ["Proposals", "Products"] },
   { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
   { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
   { label: "Expenses Users", href: "/next/expenses/users", classicHref: "/expenses/users", permissions: ["Expenses Users"] },
