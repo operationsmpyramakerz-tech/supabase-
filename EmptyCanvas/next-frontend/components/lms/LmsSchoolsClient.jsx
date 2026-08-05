@@ -372,7 +372,7 @@ function SchoolDetailsModal({ school, onClose, onEdit }) {
         <header><div className="next-lms-school-details-mark">{initials(school.name)}</div><div><span>LMS school record</span><h2>{school.name}</h2><p>{[school.governorate, school.solutionType].filter(Boolean).join(" • ") || "School operational profile"}</p></div><button type="button" onClick={onClose} aria-label="Close">×</button></header>
         <div className="next-lms-school-details-actions">
           <button className="primary-button" type="button" onClick={onEdit}>Edit record</button>
-          <a className="secondary-button" href={`/lms/b2b/school/${encodeURIComponent(school.id)}`}>Open school workspace</a>
+          <a className="secondary-button" href={`/next/lms/schools/${encodeURIComponent(school.id)}`}>Open school workspace</a>
           {school.location ? <a className="secondary-button" href={school.location} target="_blank" rel="noreferrer">Open map</a> : null}
           {fields.contract_file ? <a className="secondary-button" href={fields.contract_file} target="_blank" rel="noreferrer">Open contract</a> : null}
         </div>
@@ -507,7 +507,7 @@ export default function LmsSchoolsClient({ initialSchools, initialStocktakingCol
               <header><div className="next-lms-school-card-mark">{initials(school.name)}</div><div><span>{school.contractStatus || "School folder"}</span><h3>{school.name}</h3><p>{[school.governorate, school.solutionType].filter(Boolean).join(" • ") || "Open the school profile"}</p></div></header>
               <div className="next-lms-school-card-tags">{school.educationSystem.slice(0, 3).map((item) => <span key={item}>{item}</span>)}{grades.slice(0, 4).map((item) => <span key={item}>{item}</span>)}{grades.length > 4 ? <span>+{grades.length - 4}</span> : null}</div>
               <div className="next-lms-school-card-metrics"><div><small>Students</small><strong>{formatNumber(school.fields.total_student_population)}</strong></div><div><small>Instructors</small><strong>{formatNumber(school.fields.number_of_instructor)}</strong></div><div><small>Classes</small><strong>{formatNumber(school.fields.number_of_class)}</strong></div></div>
-              <footer><button type="button" onClick={() => setDetailsSchool(school)}>View details</button><a href={`/lms/b2b/school/${encodeURIComponent(school.id)}`}>Open workspace</a>{canManage ? <button type="button" onClick={() => openEdit(school)}>Edit</button> : null}</footer>
+              <footer><button type="button" onClick={() => setDetailsSchool(school)}>View details</button><a href={`/next/lms/schools/${encodeURIComponent(school.id)}`}>Open workspace</a>{canManage ? <button type="button" onClick={() => openEdit(school)}>Edit</button> : null}</footer>
             </article>
           );
         }) : <div className="next-lms-schools-empty"><strong>No schools match the current filters</strong><span>Clear one or more filters or search for another school.</span><button type="button" onClick={() => { setQuery(""); setGovernorate(""); setSolution(""); setContractStatus(""); }}>Clear filters</button></div>}

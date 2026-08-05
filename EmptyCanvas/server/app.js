@@ -24905,6 +24905,44 @@ async function _pageBootstrapLmsCurriculum(req) {
   ]);
 }
 
+async function _pageBootstrapLmsSchool(req, schoolId) {
+  const id = String(schoolId || '').trim();
+  if (!id) {
+    const error = new Error('A school id is required.');
+    error.status = 400;
+    throw error;
+  }
+
+  const access = await _sbLmsSessionAccessPayload(req);
+  const canAccess = access?.isBuiltInAdmin || (Array.isArray(access?.pages) && access.pages.some((page) =>
+    String(page?.pageKey || page?.page_key || '').trim().toLowerCase() === 'lms-b2b'
+  ));
+  if (!canAccess) {
+    const error = new Error('Your account does not have access to LMS Schools.');
+    error.status = 403;
+    throw error;
+  }
+
+  const encodedId = encodeURIComponent(id);
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/lms/session-access', 20_000, () => access),
+    _pageBootstrapLoad(`/api/b2b/schools/${encodedId}`, 30_000, async () => {
+      const school = await _getB2BSchoolById(id);
+      if (!school) {
+        const error = new Error('School not found.');
+        error.status = 404;
+        throw error;
+      }
+      return school;
+    }),
+    _pageBootstrapLoad(`/api/b2b/schools/${encodedId}/stock`, 30_000, async () => {
+      const payload = await _getB2BSchoolStocktakingPayload(id);
+      return payload && typeof payload === 'object' ? payload : { meta: {}, items: [] };
+    }),
+  ]);
+}
+
 async function _pageBootstrapLmsSchools(req) {
   const access = await _sbLmsSessionAccessPayload(req);
   const canAccess = access?.isBuiltInAdmin || (Array.isArray(access?.pages) && access.pages.some((page) =>
@@ -25002,6 +25040,10 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapLmsHome(req);
     } else if (scope === 'lms-users-center') {
       results = await _pageBootstrapLmsUsersCenter(req);
+    } else if (scope === 'lms-school') {
+      const schoolId = String(req.query?.id || '').trim();
+      if (!schoolId) return res.status(400).json({ ok: false, error: 'A school id is required.' });
+      results = await _pageBootstrapLmsSchool(req, schoolId);
     } else if (scope === 'lms-schools') {
       results = await _pageBootstrapLmsSchools(req);
     } else if (scope === 'lms-curriculum') {
