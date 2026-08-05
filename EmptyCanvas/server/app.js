@@ -24865,6 +24865,13 @@ async function _pageBootstrapKits(req) {
   ]);
 }
 
+async function _pageBootstrapB2cDatabase(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/b2c/databases', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/b2c/databases', 35_000)),
+  ]);
+}
+
 async function _pageBootstrapKpis(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25157,6 +25164,11 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
         _pageBootstrapHasPageAccess(req, 'Products');
       if (!canAccessKits) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapKits(req);
+    } else if (scope === 'b2c-database') {
+      const canAccessB2cDatabase = _pageBootstrapHasPageAccess(req, 'Customer Database') ||
+        _pageBootstrapHasPageAccess(req, 'B2C');
+      if (!canAccessB2cDatabase) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapB2cDatabase(req);
     } else if (scope === 'products') {
       if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProducts(req);
