@@ -66,6 +66,7 @@ const NEXT_ROUTE_MAP = [
   ["/orders/sv-orders", "/next/orders-review"],
   ["/orders/requested", "/next/operations-orders"],
   ["/orders/new", "/next/orders/new"],
+  ["/events/new", "/next/events/new"],
   ["/events/components", "/next/event-components"],
   ["/events/calendar", "/next/events-calendar"],
   ["/expenses/users", "/next/expenses/users"],
