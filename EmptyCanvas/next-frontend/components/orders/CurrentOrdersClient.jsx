@@ -489,7 +489,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
 
       if (action === "edit") {
         const editKey = writeEditTransfer(data, group);
-        const editUrl = new URL("/orders/new/products", window.location.origin);
+        const editUrl = new URL("/next/orders/new", window.location.origin);
         editUrl.searchParams.set("edit", "1");
         if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
         if (editKey) editUrl.searchParams.set("editKey", editKey);

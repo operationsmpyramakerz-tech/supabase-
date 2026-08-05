@@ -4,6 +4,7 @@ const MODULE_LINKS = [
   { label: "Orders Review", href: "/next/orders-review", classicHref: "/orders/sv-orders", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", classicHref: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Maintenance Orders", href: "/next/maintenance-orders", classicHref: "/orders/maintenance-orders", permissions: ["Maintenance Orders"] },
+  { label: "Shopping Cart", href: "/next/orders/new", classicHref: "/orders/new", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
   { label: "Stocktaking", href: "/next/stocktaking", classicHref: "/stocktaking", permissions: ["Stocktaking"] },
   { label: "Events", href: "/next/events", classicHref: "/events", permissions: ["Event Requests"] },
   { label: "Event Calendar", href: "/next/events-calendar", classicHref: "/events/calendar", permissions: ["Event Calendar"] },
@@ -48,7 +49,17 @@ function visibleLmsLinks(access) {
 function isActive(activePath, href) {
   const current = String(activePath || "").replace(/\/$/, "") || "/";
   const target = String(href || "").replace(/\/$/, "") || "/";
-  return current === target || (target !== "/" && current.startsWith(`${target}/`));
+  if (current === target) return true;
+  if (target === "/" || !current.startsWith(`${target}/`)) return false;
+
+  // Do not mark a parent module active when a more specific sidebar route owns
+  // the current path (for example /next/orders versus /next/orders/new).
+  const moreSpecificOwner = MODULE_LINKS.some((link) => {
+    const candidate = String(link?.href || "").replace(/\/$/, "") || "/";
+    return candidate !== target && candidate.startsWith(`${target}/`) &&
+      (current === candidate || current.startsWith(`${candidate}/`));
+  });
+  return !moreSpecificOwner;
 }
 
 export default function AppShell({

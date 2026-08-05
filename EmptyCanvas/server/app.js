@@ -24972,6 +24972,22 @@ async function _pageBootstrapLmsSchools(req) {
   ]);
 }
 
+async function _pageBootstrapShoppingCart(req) {
+  const requestedType = String(req.query?.type || '').trim();
+  const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/order-types', 10 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/order-types', 25_000)),
+    _pageBootstrapLoad('/api/components', 20 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/components', 35_000)),
+  ];
+
+  if (requestedType) {
+    const draftUrl = `/api/order-draft?orderType=${encodeURIComponent(requestedType)}`;
+    loaders.push(_pageBootstrapLoad(draftUrl, 10_000, () => _pageBootstrapFetchExistingRoute(req, draftUrl, 15_000)));
+  }
+
+  return Promise.all(loaders);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25062,6 +25078,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'maintenance-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Maintenance Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapMaintenanceOrders(req);
+    } else if (scope === 'shopping-cart') {
+      if (!_pageBootstrapHasPageAccess(req, 'Create New Order')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapShoppingCart(req);
     } else if (scope === 'stocktaking') {
       if (!_pageBootstrapHasPageAccess(req, 'Stocktaking')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapStocktaking(req);
