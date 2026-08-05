@@ -24787,6 +24787,13 @@ async function _pageBootstrapFetchExistingRoute(req, pathname, timeoutMs = 10_00
   }
 }
 
+async function _pageBootstrapHistory(req) {
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/history?limit=1000', 10_000, () => _pageBootstrapFetchExistingRoute(req, '/api/history?limit=1000', 35_000)),
+  ]);
+}
+
 async function _pageBootstrapCurrentOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25162,6 +25169,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapLmsSchools(req);
     } else if (scope === 'lms-curriculum') {
       results = await _pageBootstrapLmsCurriculum(req);
+    } else if (scope === 'history') {
+      if (!_pageBootstrapHasPageAccess(req, 'History')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapHistory(req);
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);

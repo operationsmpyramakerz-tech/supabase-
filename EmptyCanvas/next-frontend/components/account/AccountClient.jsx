@@ -334,7 +334,7 @@ export default function AccountClient({ initialAccount }) {
       adminCount: Array.isArray(account?.pageAccess?.pages)
         ? account.pageAccess.pages.filter((page) => lower(page?.accessLevel || page?.access_level) === "admin" && page?.isEnabled !== false).length
         : 0,
-      history: ["history", "system history", "/history"].some((name) => allowed.has(name)),
+      history: ["history", "system history", "audit history", "audit log", "system audit", "/history"].some((name) => allowed.has(name)),
       backup: ["backup", "back up", "database", "system database", "system backup", "/backup"].some((name) => allowed.has(name)),
     };
   }, [account]);
@@ -469,7 +469,7 @@ export default function AccountClient({ initialAccount }) {
           <article className="next-account-shortcuts">
             <header><span>WORKSPACE</span><h3>Account shortcuts</h3></header>
             <a href="/how-it-works"><div><strong>How it works</strong><small>Guides and operating instructions</small></div><b>→</b></a>
-            {access.history ? <a href="/history"><div><strong>System history</strong><small>Review recorded ERP actions</small></div><b>→</b></a> : null}
+            {access.history ? <a href="/next/history"><div><strong>System history</strong><small>Review recorded ERP actions</small></div><b>→</b></a> : null}
             {access.backup ? <a href="/backup"><div><strong>Database backup</strong><small>Export and restore system data</small></div><b>→</b></a> : null}
             <a href="/account"><div><strong>Classic profile</strong><small>Open the previous account interface</small></div><b>↗</b></a>
           </article>

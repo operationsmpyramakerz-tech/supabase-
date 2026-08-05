@@ -19,6 +19,7 @@ const MODULE_LINKS = [
   { label: "Expenses Users", href: "/next/expenses/users", classicHref: "/expenses/users", permissions: ["Expenses Users"] },
   { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
   { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
+  { label: "System History", href: "/next/history", classicHref: "/history", permissions: ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"] },
 ];
 
 const LMS_LINKS = [
