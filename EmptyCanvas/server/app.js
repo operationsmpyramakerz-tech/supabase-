@@ -24716,6 +24716,31 @@ async function _pageBootstrapExpenses(req) {
   return Promise.all(loaders);
 }
 
+async function _pageBootstrapExpensesUsers(req) {
+  const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+  ];
+
+  if (_sbExpensesEnabled()) {
+    loaders.push(_pageBootstrapLoad('/api/expenses/users', 2 * 60_000, async () => cacheGetOrSet(
+      'cache:api:expenses:users:v2',
+      2 * 60,
+      async () => ({
+        success: true,
+        users: await _sbExpensesUsersSummary(),
+        source: 'supabase',
+      }),
+      { memoryTtlSeconds: 10 },
+    )));
+  } else {
+    loaders.push(_pageBootstrapLoad('/api/expenses/users', 2 * 60_000, () =>
+      _pageBootstrapFetchExistingRoute(req, '/api/expenses/users', 30_000)
+    ));
+  }
+
+  return Promise.all(loaders);
+}
+
 
 function _pageBootstrapRequestOrigin(req) {
   const configured = String(process.env.PUBLIC_APP_ORIGIN || process.env.APP_ORIGIN || '').trim();
@@ -25050,6 +25075,9 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'expenses') {
       if (!_pageBootstrapHasPageAccess(req, 'Expenses')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapExpenses(req);
+    } else if (scope === 'expenses-users') {
+      if (!_pageBootstrapHasPageAccess(req, 'Expenses Users')) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapExpensesUsers(req);
     } else if (scope === 'home') {
       results = await _pageBootstrapHome(req);
     } else if (scope === 'lms-home') {

@@ -14,6 +14,7 @@ const steps = [
   ["Shopping Cart", "Completed", "Create New Order now supports product requests, stock withdrawals, maintenance reports, per-type drafts, live catalogue selection, order editing, password confirmation, and submission through the existing ERP workflow."],
   ["Stocktaking", "Completed", "The live inventory view now includes grouped and table modes, instant search, stock-value summaries, and protected PDF/Excel exports."],
   ["Expenses", "Completed", "Cash-flow analytics, transaction filters, Cash in/out forms, settlement, receipts, and PDF/Excel exports now run in the Next.js interface."],
+  ["Expenses Users", "Completed", "Team-wide balance cards, settlement-aware histories, date and type filters, receipt viewing, protected corrections, deletion, and per-user PDF/Excel exports now run in Next.js."],
   ["Products", "Completed", "The product catalogue now includes tag filters, search, grid/table views, product images, pricing, supplier links, and full product/tag/unit management in Next.js."],
   ["Task Management", "Completed", "All Tasks, My Tasks, and Delegated Tasks now include workflow filters, calendar agenda, project details, project creation/editing, department work, team assignments, attachments, archive controls, and delivery actions in Next.js."],
   ["Events", "Completed", "Event Requests now include status tabs, type filters, request details, creator profiles, protected workflow transitions, Edit/Cancel authorization, PDF download, and direct links to the calendar and component catalogue."],
