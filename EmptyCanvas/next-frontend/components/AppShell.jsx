@@ -15,6 +15,13 @@ const MODULE_LINKS = [
   { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
 ];
 
+const LMS_LINKS = [
+  { label: "Overview", href: "/next/lms", key: "", alwaysVisible: true },
+  { label: "Users Center", href: "/next/lms/users-center", key: "lms-users-center" },
+  { label: "Schools", href: "/next/lms/schools", key: "lms-b2b" },
+  { label: "Curriculum", href: "/lms/curriculum", key: "lms-curriculum", classic: true },
+];
+
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -24,6 +31,18 @@ function canSee(link, allowedPages) {
   const allowed = new Set((Array.isArray(allowedPages) ? allowedPages : []).map(normalize));
   if (!allowed.size) return false;
   return link.permissions.some((permission) => allowed.has(normalize(permission)));
+}
+
+function lmsAccessKeys(access) {
+  return new Set((Array.isArray(access?.pages) ? access.pages : [])
+    .filter((page) => page?.isEnabled !== false)
+    .map((page) => normalize(page?.pageKey || page?.page_key))
+    .filter(Boolean));
+}
+
+function visibleLmsLinks(access) {
+  const keys = lmsAccessKeys(access);
+  return LMS_LINKS.filter((link) => link.alwaysVisible || access?.isBuiltInAdmin || keys.has(link.key));
 }
 
 function isActive(activePath, href) {
@@ -39,6 +58,7 @@ export default function AppShell({
   eyebrow = "Incremental frontend migration",
   activePath = "/next/home",
   classicHrefOverride = "",
+  lmsAccess = null,
 }) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
@@ -50,6 +70,13 @@ export default function AppShell({
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "U";
+  const inLmsWorkspace = isActive(activePath, "/next/lms");
+  const effectiveLmsAccess = lmsAccess || account?.lmsAccess || null;
+  const permittedLmsLinks = visibleLmsLinks(effectiveLmsAccess);
+  const lmsLinks = inLmsWorkspace
+    ? permittedLmsLinks
+    : permittedLmsLinks.filter((link) => !link.alwaysVisible);
+  const showLmsSubmenu = lmsLinks.length > 0;
 
   return (
     <div className="app-shell">
@@ -64,10 +91,26 @@ export default function AppShell({
             <span>Home</span><em>Pilot</em>
           </a>
           {visibleLinks.map((link) => (
-            <a className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href} key={link.href}>
-              <span>{link.label}</span>
-              {link.href.startsWith("/next/") ? <em>Pilot</em> : null}
-            </a>
+            <div className={`nav-entry ${link.href === "/next/lms" && showLmsSubmenu ? "nav-entry-open" : ""}`} key={link.href}>
+              <a className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href}>
+                <span>{link.label}</span>
+                {link.href.startsWith("/next/") ? <em>Pilot</em> : null}
+              </a>
+              {link.href === "/next/lms" && showLmsSubmenu ? (
+                <div className="nav-submenu" aria-label="LMS pages">
+                  {lmsLinks.map((child) => (
+                    <a
+                      className={`nav-sublink ${activePath === child.href || (!child.classic && isActive(activePath, child.href) && child.href !== "/next/lms") ? "active" : ""}`}
+                      href={child.href}
+                      key={child.href}
+                    >
+                      <span>{child.label}</span>
+                      {child.classic ? <em>Classic</em> : null}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
         </nav>
 

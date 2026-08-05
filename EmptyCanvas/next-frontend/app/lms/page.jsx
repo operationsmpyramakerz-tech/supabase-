@@ -56,7 +56,7 @@ export default async function LmsHomePage() {
   });
 
   return (
-    <AppShell account={account} title="LMS" eyebrow="Learning management overview" activePath="/next/lms">
+    <AppShell account={account} title="LMS" eyebrow="Learning management overview" activePath="/next/lms" lmsAccess={access}>
       <LmsHomeClient
         initialOverview={overview}
         access={access}

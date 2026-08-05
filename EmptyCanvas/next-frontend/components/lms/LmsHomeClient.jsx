@@ -33,7 +33,7 @@ const QUICK_LINKS = [
     key: "lms-b2b",
     title: "Schools",
     description: "Open school records, stock, contacts, and operational details.",
-    href: "/lms/b2b",
+    href: "/next/lms/schools",
     icon: "SC",
   },
   {

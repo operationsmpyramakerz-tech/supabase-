@@ -86,6 +86,7 @@ export default async function LmsUsersCenterPage() {
       eyebrow="Learning teams and structures"
       activePath="/next/lms/users-center"
       classicHrefOverride="/lms/user-access"
+      lmsAccess={getResource(resources, "/api/lms/session-access", { ok: true, pages: [] })}
     >
       <LmsUsersCenterClient
         initialStructures={getResource(resources, "/api/lms/structures", { ok: true, structures: [] })}

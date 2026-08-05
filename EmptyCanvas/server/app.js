@@ -11755,6 +11755,24 @@ app.get("/api/account", requireAuth, async (req, res) => {
 
   res.set("Cache-Control", "no-store");
   const ACCOUNT_CACHE_TTL_MS = 2 * 60 * 1000;
+  const withLmsAccess = async (payload) => {
+    try {
+      const cachedAccess = req.session?.lmsAccessCache;
+      const cachedAt = Number(req.session?.lmsAccessCacheTs || 0);
+      if (cachedAccess && cachedAt && Date.now() - cachedAt < 30_000) {
+        return { ...(payload || {}), lmsAccess: cachedAccess };
+      }
+      const lmsAccess = await _sbLmsSessionAccessPayload(req);
+      try {
+        req.session.lmsAccessCache = lmsAccess;
+        req.session.lmsAccessCacheTs = Date.now();
+      } catch {}
+      return { ...(payload || {}), lmsAccess };
+    } catch (error) {
+      console.warn("Account LMS access summary unavailable:", error?.details || error?.message || error);
+      return payload;
+    }
+  };
   try {
     const cached = req.session?.accountCache;
     const ts = Number(req.session?.accountCacheTs || 0);
@@ -11762,7 +11780,7 @@ app.get("/api/account", requireAuth, async (req, res) => {
     // refresh them so a permission granted in Users Center appears immediately
     // instead of waiting for the previous two-minute account-cache window.
     if (!(_sbTeamMembersEnabled() && req.session?.userSupabaseId) && cached && ts && Date.now() - ts < ACCOUNT_CACHE_TTL_MS && Array.isArray(cached.filesMedia) && cached.pageAccess) {
-      return res.json(cached);
+      return res.json(await withLmsAccess(cached));
     }
   } catch {}
 
@@ -11781,7 +11799,7 @@ app.get("/api/account", requireAuth, async (req, res) => {
           req.session.accountCache = data;
           req.session.accountCacheTs = Date.now();
         } catch {}
-        return res.json(data);
+        return res.json(await withLmsAccess(data));
       }
     } catch (error) {
       console.error("Error fetching account from Supabase:", error?.details || error);
@@ -11824,7 +11842,7 @@ app.get("/api/account", requireAuth, async (req, res) => {
       req.session.accountCacheTs = Date.now();
     } catch {}
 
-    return res.json(data);
+    return res.json(await withLmsAccess(data));
   } catch (error) {
     console.error("Error fetching account:", error.body || error);
     res.status(500).json({ error: "Failed to fetch account info." });
@@ -13873,7 +13891,10 @@ app.get(
     }
     res.set("Cache-Control", "no-store");
     try {
-      const list = await _getB2BSchoolsList();
+      const wantsDetail = String(req.query?.detail || '').trim() === '1';
+      const list = wantsDetail && _sbB2BSchoolsEnabled()
+        ? (await _sbB2BSchoolsRows()).map((row) => _sbSerializeB2BSchoolRow(row, { detail: true }))
+        : await _getB2BSchoolsList();
       return res.json(Array.isArray(list) ? list : []);
     } catch (e) {
       const notionBody = e?.body || null;
@@ -14182,6 +14203,33 @@ app.post(
     } catch (e) {
       console.error("Error verifying Admin password:", e?.body || e);
       return res.status(500).json({ error: "Failed to verify password." });
+    }
+  },
+);
+
+app.post(
+  "/api/b2b/upload-file",
+  requireAuth,
+  requireLmsPageAccess("lms-b2b"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!(await _requireB2BAdminPassword(req, res))) return;
+      const dataUrl = String(req.body?.dataUrl || "");
+      const filename = String(req.body?.filename || "contract-file").trim() || "contract-file";
+      const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) return res.status(400).json({ ok: false, error: "Invalid contract file." });
+      const estimatedSize = Math.floor((match[2].length * 3) / 4);
+      if (!estimatedSize) return res.status(400).json({ ok: false, error: "The selected file is empty." });
+      if (estimatedSize > 10 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: "The contract file must be 10 MB or less." });
+      }
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "contract-file";
+      const url = await uploadToBlobFromBase64(dataUrl, `lms-b2b/contracts/${Date.now()}-${safeName}`);
+      return res.status(201).json({ ok: true, url, publicUrl: url, filename });
+    } catch (error) {
+      console.error("POST /api/b2b/upload-file error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to upload contract file." });
     }
   },
 );
@@ -24839,6 +24887,35 @@ async function _pageBootstrapLmsUsersCenter(req) {
   ]);
 }
 
+async function _pageBootstrapLmsSchools(req) {
+  const access = await _sbLmsSessionAccessPayload(req);
+  const canAccess = access?.isBuiltInAdmin || (Array.isArray(access?.pages) && access.pages.some((page) =>
+    String(page?.pageKey || page?.page_key || '').trim().toLowerCase() === 'lms-b2b'
+  ));
+  if (!canAccess) {
+    const error = new Error('Your account does not have access to LMS Schools.');
+    error.status = 403;
+    throw error;
+  }
+
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/lms/session-access', 20_000, () => access),
+    _pageBootstrapLoad('/api/b2b/schools', 30_000, async () => {
+      if (_sbB2BSchoolsEnabled()) {
+        const rows = await _sbB2BSchoolsRows();
+        return (Array.isArray(rows) ? rows : []).map((row) => _sbSerializeB2BSchoolRow(row, { detail: true }));
+      }
+      return _getB2BSchoolsList();
+    }),
+    _pageBootstrapLoad('/api/b2b/stocktaking-columns', 2 * 60_000, async () => ({
+      ok: true,
+      columns: _sbStocktakingEnabled() ? await _uaStocktakingSchoolOptions() : [],
+      source: 'supabase',
+    })),
+  ]);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -24907,6 +24984,8 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       results = await _pageBootstrapLmsHome(req);
     } else if (scope === 'lms-users-center') {
       results = await _pageBootstrapLmsUsersCenter(req);
+    } else if (scope === 'lms-schools') {
+      results = await _pageBootstrapLmsSchools(req);
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);
