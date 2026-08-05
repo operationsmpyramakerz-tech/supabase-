@@ -327,7 +327,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     const params = new URLSearchParams({ startDate: selectedKey });
     const codes = Array.from(new Set(overlapping.map((event) => text(event.eventCode)).filter(Boolean)));
     if (codes.length) params.set("conflictCodes", codes.join(","));
-    window.location.href = `/events/new?${params.toString()}`;
+    window.location.href = `/next/events/new?${params.toString()}`;
   }
 
   return (

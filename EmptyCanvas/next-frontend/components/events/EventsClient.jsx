@@ -463,7 +463,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
       if (!isWorkflow && authorization.value === "edit") {
         const editId = authorization.eventId;
         setAuthorization(null);
-        window.location.href = `/events/new?edit=${encodeURIComponent(editId)}`;
+        window.location.href = `/next/events/new?edit=${encodeURIComponent(editId)}`;
         return;
       }
 
@@ -541,7 +541,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
           <a href="/events" className="secondary">Classic Events</a>
           {canOpenCalendar ? <a href="/next/events-calendar" className="secondary">Calendar</a> : null}
           {canOpenComponents ? <a href="/next/event-components" className="secondary">Components</a> : null}
-          {canRequestActions ? <a href="/events/new" className="primary">+ New event</a> : null}
+          {canRequestActions ? <a href="/next/events/new" className="primary">+ New event</a> : null}
         </div>
       </div>
 
