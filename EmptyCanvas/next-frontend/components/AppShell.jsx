@@ -10,6 +10,7 @@ const MODULE_LINKS = [
   { label: "Shopping Cart", href: "/next/orders/new", classicHref: "/orders/new", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
   { label: "Stocktaking", href: "/next/stocktaking", classicHref: "/stocktaking", permissions: ["Stocktaking"] },
   { label: "Events", href: "/next/events", classicHref: "/events", permissions: ["Event Requests"] },
+  { label: "New Event Request", href: "/next/events/new", classicHref: "/events/new", permissions: ["Event Requests"] },
   { label: "Event Calendar", href: "/next/events-calendar", classicHref: "/events/calendar", permissions: ["Event Calendar"] },
   { label: "Event Components", href: "/next/event-components", classicHref: "/events/components", permissions: ["Event Components"] },
   { label: "Products", href: "/next/products", classicHref: "/products", permissions: ["Products"] },
