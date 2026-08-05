@@ -24597,6 +24597,7 @@ function _pageBootstrapEventsList(rows = []) {
 
 async function _pageBootstrapEventsNew(req) {
   const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
     _pageBootstrapLoad('/api/events/types', 5 * 60_000, async () => ({
       ok: true,
       types: await _eventsListTypeOptions(),
