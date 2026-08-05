@@ -338,7 +338,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
           <p>Each table keeps its own schema, records, linked forms, and record-number sequence while the current Express APIs remain responsible for all business rules.</p>
           <div className="next-b2c-hero__actions">
             <button type="button" className="next-b2c-btn primary" onClick={() => setDialog({ mode: "create" })}>+ New Table</button>
-            <a className="next-b2c-btn secondary" href="/b2c/form">Open Forms</a>
+            <a className="next-b2c-btn secondary" href="/next/b2c/forms">Open Forms</a>
             <button type="button" className="next-b2c-btn secondary" onClick={() => refresh()} disabled={busy === "refresh"}>{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
           </div>
         </div>

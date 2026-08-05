@@ -456,7 +456,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
     } finally { setBusy(""); }
   };
 
-  const formHref = database?.defaultFormId ? `/b2c/form?form=${encodeURIComponent(database.defaultFormId)}` : `/b2c/form?database=${encodeURIComponent(databaseId)}`;
+  const formHref = database?.defaultFormId ? `/next/b2c/forms?form=${encodeURIComponent(database.defaultFormId)}` : `/next/b2c/forms?database=${encodeURIComponent(databaseId)}`;
   const exportHref = `/api/b2c/databases/${encodeURIComponent(databaseId)}/export.xlsx`;
 
   return (

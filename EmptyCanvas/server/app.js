@@ -24872,6 +24872,21 @@ async function _pageBootstrapB2cDatabase(req) {
   ]);
 }
 
+async function _pageBootstrapB2cForms(req) {
+  const formId = String(req.query?.form || req.query?.formId || '').trim();
+  const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/b2c/forms', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/b2c/forms', 35_000)),
+  ];
+
+  if (formId) {
+    const formUrl = `/api/b2c/forms/${encodeURIComponent(formId)}`;
+    loaders.push(_pageBootstrapLoad(formUrl, 15_000, () => _pageBootstrapFetchExistingRoute(req, formUrl, 35_000)));
+  }
+
+  return Promise.all(loaders);
+}
+
 async function _pageBootstrapB2cTable(req, databaseId) {
   const cleanId = String(databaseId || '').trim();
   if (!cleanId) {
@@ -25178,6 +25193,12 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
         _pageBootstrapHasPageAccess(req, 'Products');
       if (!canAccessKits) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapKits(req);
+    } else if (scope === 'b2c-forms') {
+      const canAccessB2cForms = _pageBootstrapHasPageAccess(req, 'Customer Form') ||
+        _pageBootstrapHasPageAccess(req, 'Customer Database') ||
+        _pageBootstrapHasPageAccess(req, 'B2C');
+      if (!canAccessB2cForms) return _pageAccessDeniedResponse(req, res);
+      results = await _pageBootstrapB2cForms(req);
     } else if (scope === 'b2c-database') {
       const canAccessB2cDatabase = _pageBootstrapHasPageAccess(req, 'Customer Database') ||
         _pageBootstrapHasPageAccess(req, 'B2C');
