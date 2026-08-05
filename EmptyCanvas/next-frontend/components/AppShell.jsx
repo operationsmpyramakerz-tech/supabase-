@@ -1,5 +1,8 @@
+import NotificationsBell from "./notifications/NotificationsBell";
+
 const MODULE_LINKS = [
   { label: "LMS", href: "/next/lms", classicHref: "/lms", permissions: [], alwaysVisible: true },
+  { label: "Notifications", href: "/next/notifications", classicHref: "/home", permissions: [], alwaysVisible: true },
   { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", classicHref: "/orders/sv-orders", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", classicHref: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
@@ -145,10 +148,13 @@ export default function AppShell({
             <p className="eyebrow">{eyebrow}</p>
             <h1>{title}</h1>
           </div>
-          <a className={`profile ${isActive(activePath, "/next/account") ? "active" : ""}`} href="/next/account">
-            {account?.photoUrl ? <img src={account.photoUrl} alt="" /> : <span>{initials}</span>}
-            <b>{account?.name || account?.username || "User"}</b>
-          </a>
+          <div className="topbar-actions">
+            <NotificationsBell />
+            <a className={`profile ${isActive(activePath, "/next/account") ? "active" : ""}`} href="/next/account">
+              {account?.photoUrl ? <img src={account.photoUrl} alt="" /> : <span>{initials}</span>}
+              <b>{account?.name || account?.username || "User"}</b>
+            </a>
+          </div>
         </header>
         {children}
       </main>

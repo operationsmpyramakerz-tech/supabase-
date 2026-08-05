@@ -25108,6 +25108,42 @@ async function _pageBootstrapShoppingCart(req) {
   return Promise.all(loaders);
 }
 
+async function _pageBootstrapNotifications(req) {
+  const loaders = [
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+  ];
+
+  loaders.push(_pageBootstrapLoad('/api/notifications?limit=80', 5_000, async () => {
+    const userId = await _resolveNotificationUserId(req);
+    if (!userId) {
+      const error = new Error('User not found.');
+      error.status = 404;
+      throw error;
+    }
+
+    await _runSupabaseNotificationsScan({ force: false }).catch((error) => {
+      console.warn('[notifications] bootstrap scan skipped/failed:', error?.message || error);
+    });
+
+    const data = await _loadUserNotifications(userId);
+    const allItems = Array.isArray(data?.items) ? data.items : [];
+    const items = allItems
+      .slice()
+      .sort((a, b) => (Number(b?.ts || 0) - Number(a?.ts || 0)))
+      .slice(0, 80);
+    const unreadCount = allItems.reduce((count, item) => count + (item && !item.read ? 1 : 0), 0);
+
+    return {
+      success: true,
+      source: _sbNotificationsEnabled() ? 'supabase' : 'fallback',
+      items,
+      unreadCount,
+    };
+  }));
+
+  return Promise.all(loaders);
+}
+
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25173,6 +25209,8 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'expenses-users') {
       if (!_pageBootstrapHasPageAccess(req, 'Expenses Users')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapExpensesUsers(req);
+    } else if (scope === 'notifications') {
+      results = await _pageBootstrapNotifications(req);
     } else if (scope === 'home') {
       results = await _pageBootstrapHome(req);
     } else if (scope === 'lms-home') {
@@ -35839,7 +35877,7 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
               type: "expense",
               title: "Expense updated",
               body: reason,
-              url: "/expenses",
+              url: "/next/expenses",
               ts,
               read: false,
             });
@@ -35883,7 +35921,7 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
           type: "orders",
           title: "Orders updated",
           body: `${ordersChangedCount} change(s) detected`,
-          url: "/dashboard",
+          url: "/next/home",
           ts: Date.now(),
           read: false,
         });
@@ -35913,7 +35951,7 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
           type: "stock",
           title: "Stocktaking updated",
           body: `${stockChangedCount} change(s) detected`,
-          url: "/stocktaking",
+          url: "/next/stocktaking",
           ts: Date.now(),
           read: false,
         });
@@ -35938,7 +35976,7 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
         const out = await _sendPushToUser(uid, {
           title: "Operations updates",
           body: parts.slice(0, 3).join(", ") || "New updates available",
-          url: "/dashboard",
+          url: "/next/home",
         });
         if (out.ok) pushUsers += 1;
       }
@@ -38612,7 +38650,7 @@ app.get("/api/notifications/test", requireAuth, async (req, res) => {
       type: "test",
       title: "Test notification",
       body: "This is a test notification from the server ✅",
-      url: "/home",
+      url: "/next/home",
       ts: Date.now(),
       read: false,
     };
@@ -38622,7 +38660,7 @@ app.get("/api/notifications/test", requireAuth, async (req, res) => {
     const push = await _sendPushToUser(userId, {
       title: "Operations",
       body: "✅ Push notifications working (test)",
-      url: "/home",
+      url: "/next/home",
     });
 
     res.json({ success: true, notif, push });
