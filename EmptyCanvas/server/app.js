@@ -24872,6 +24872,20 @@ async function _pageBootstrapB2cDatabase(req) {
   ]);
 }
 
+async function _pageBootstrapB2cTable(req, databaseId) {
+  const cleanId = String(databaseId || '').trim();
+  if (!cleanId) {
+    const error = new Error('A B2C database id is required.');
+    error.status = 400;
+    throw error;
+  }
+  const recordsUrl = `/api/b2c/databases/${encodeURIComponent(cleanId)}/records`;
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad(recordsUrl, 15_000, () => _pageBootstrapFetchExistingRoute(req, recordsUrl, 45_000)),
+  ]);
+}
+
 async function _pageBootstrapKpis(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25169,6 +25183,13 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
         _pageBootstrapHasPageAccess(req, 'B2C');
       if (!canAccessB2cDatabase) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapB2cDatabase(req);
+    } else if (scope === 'b2c-table') {
+      const canAccessB2cTable = _pageBootstrapHasPageAccess(req, 'Customer Database') ||
+        _pageBootstrapHasPageAccess(req, 'B2C');
+      if (!canAccessB2cTable) return _pageAccessDeniedResponse(req, res);
+      const databaseId = String(req.query?.id || '').trim();
+      if (!databaseId) return res.status(400).json({ ok: false, error: 'A B2C database id is required.' });
+      results = await _pageBootstrapB2cTable(req, databaseId);
     } else if (scope === 'products') {
       if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapProducts(req);

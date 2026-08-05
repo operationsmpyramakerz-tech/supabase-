@@ -174,7 +174,7 @@ function DeleteModal({ database, busy, onClose, onConfirm }) {
 }
 
 function DatabaseCard({ database, busy, onEdit, onCopy, onDelete }) {
-  const openUrl = `/b2c/database/${encodeURIComponent(database.id)}`;
+  const openUrl = `/next/b2c/database/${encodeURIComponent(database.id)}`;
   const exportUrl = `/api/b2c/databases/${encodeURIComponent(database.id)}/export.xlsx`;
 
   return (
@@ -284,7 +284,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
       await refresh({ silent: true });
       notify(isEdit ? `“${name}” was updated.` : `“${name}” was created.`);
       if (!isEdit && payload?.database?.id) {
-        window.location.href = `/b2c/database/${encodeURIComponent(payload.database.id)}`;
+        window.location.href = `/next/b2c/database/${encodeURIComponent(payload.database.id)}`;
       }
     } finally {
       setBusy("");
@@ -408,7 +408,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
       </section>
 
       <section className="next-b2c-rollout-note">
-        <div><strong>Incremental migration</strong><span>The database folder library now runs in Next.js. Individual table workspaces and the form builder remain on the classic interface until their dedicated migration stages.</span></div>
+        <div><strong>Incremental migration</strong><span>The database library and individual table workspaces now run in Next.js. The customer Form Builder remains on the classic interface until its dedicated migration stage.</span></div>
         <a href="/b2c/database">Classic Database</a>
       </section>
 
