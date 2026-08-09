@@ -65,6 +65,7 @@ export default async function CurrentOrdersPage() {
       title="Current Orders"
       eyebrow="Live order portfolio"
       activePath="/next/orders"
+      bodyClass="order-modal-fit-screen current-orders-page"
     >
       <CurrentOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}

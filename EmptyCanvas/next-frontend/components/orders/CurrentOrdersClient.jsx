@@ -1,43 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ClassicOrderIcon from "./ClassicOrderIcon";
 
 const STATUS_TABS = [
-  { key: "all", label: "All", icon: "▦" },
-  { key: "under-supervision", label: "Under S.V", icon: "◉" },
-  { key: "approved", label: "Approved", icon: "✓" },
-  { key: "rejected", label: "Rejected", icon: "×" },
-  { key: "shipped", label: "Shipping", icon: "➜" },
-  { key: "arrived", label: "Arrived", icon: "⌂" },
-  { key: "archive", label: "Archive", icon: "▣" },
+  { key: "all", label: "All", icon: "layers" },
+  { key: "under-supervision", label: "Under S.V", icon: "eye" },
+  { key: "approved", label: "Approved", icon: "check-circle" },
+  { key: "rejected", label: "Rejected", icon: "x-circle" },
+  { key: "shipped", label: "Shipping", icon: "truck" },
+  { key: "arrived", label: "Arrived", icon: "check-circle" },
+  { key: "archive", label: "Archive", icon: "archive" },
 ];
 
 const ACTIONS = {
   edit: {
     title: "Edit order",
-    description: "Enter the Current Orders admin password to open this order in the existing editor.",
+    description: "Enter admin password to edit this order.",
     button: "Continue",
     endpoint: "/api/orders/current/edit/init",
+    icon: "edit-2",
   },
   archive: {
     title: "Archive order",
-    description: "Enter the Current Orders admin password to move this order to Archive.",
+    description: "Enter admin password to move this order to the Archive tab.",
     button: "Archive",
     endpoint: "/api/orders/current/archive",
+    icon: "archive",
   },
   unarchive: {
     title: "UnArchive order",
-    description: "Enter the Current Orders admin password to restore this order to In progress.",
+    description: "Enter admin password to restore this order from Archive.",
     button: "UnArchive",
     endpoint: "/api/orders/current/unarchive",
+    icon: "rotate-ccw",
   },
   delete: {
     title: "Delete order",
-    description: "This permanently deletes every component in this order. Enter the admin password to continue.",
-    button: "Delete permanently",
+    description: "Enter admin password to permanently delete this order.",
+    button: "Delete",
     endpoint: "/api/orders/current/delete",
+    icon: "trash-2",
     danger: true,
   },
+};
+
+const STATUS_COLORS = {
+  "under-supervision": { bg: "#FFEDD5", fg: "#9A3412", bd: "#FED7AA" },
+  approved: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  rejected: { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" },
+  shipped: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
+  arrived: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  archive: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
 };
 
 function text(value) {
@@ -87,12 +101,43 @@ function orderTypeKey(value) {
   return lower(value).replace(/[^a-z0-9]/g, "");
 }
 
-function orderTypeMeta(value) {
+function notionColorVars(value) {
+  const map = {
+    default: { bg: "#E5E7EB", fg: "#374151", bd: "#D1D5DB" },
+    gray: { bg: "#E5E7EB", fg: "#374151", bd: "#D1D5DB" },
+    brown: { bg: "#F3E8E2", fg: "#6B4F3A", bd: "#E7D3C8" },
+    orange: { bg: "#FFEDD5", fg: "#9A3412", bd: "#FED7AA" },
+    yellow: { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
+    green: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+    blue: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
+    purple: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
+    pink: { bg: "#FCE7F3", fg: "#BE185D", bd: "#FBCFE8" },
+    red: { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" },
+  };
+  const key = lower(value).replace(/_background$/i, "") || "default";
+  return map[key] || map.default;
+}
+
+function orderTypeMeta(value, color) {
   const key = orderTypeKey(value);
-  if (key === "requestproducts") return { label: "Request Products", icon: "▤", className: "type-request" };
-  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "↗", className: "type-withdraw" };
-  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "⌘", className: "type-maintenance" };
-  return { label: text(value) || "Order", icon: "□", className: "type-default" };
+  if (key === "requestproducts") return { label: "Request Products", icon: "shopping-cart", bg: "#DCFCE7", fg: "#166534", bd: "#86EFAC" };
+  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "log-out", bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" };
+  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" };
+  const fallback = notionColorVars(color);
+  return { label: text(value) || "Order", icon: "package", ...fallback };
+}
+
+function orderTypeHeaderTitle(value, color, fallback = "Order") {
+  const key = orderTypeKey(value);
+  if (key === "requestproducts") return "Request";
+  if (key === "withdrawproducts") return "Withdrawal";
+  if (key === "requestmaintenance") return "Maintenance";
+  const label = orderTypeMeta(value, color).label;
+  return label && label !== "Order" ? label : fallback;
+}
+
+function isMaintenanceOrder(value) {
+  return orderTypeKey(value) === "requestmaintenance";
 }
 
 function statusIndex(value) {
@@ -129,7 +174,15 @@ function statusTabForItem(item) {
 }
 
 function statusLabel(tab) {
-  return STATUS_TABS.find((item) => item.key === tab)?.label || "Order";
+  const labels = {
+    "under-supervision": "Under Supervision",
+    approved: "Approved",
+    rejected: "Rejected",
+    shipped: "Shipping",
+    arrived: "Arrived",
+    archive: "Archive",
+  };
+  return labels[tab] || "Order";
 }
 
 function groupKey(item) {
@@ -142,7 +195,6 @@ function groupKey(item) {
 function orderIdLabel(items) {
   const explicit = [...new Set(items.map((item) => text(item?.orderId)).filter(Boolean))];
   if (explicit.length === 1) return explicit[0];
-
   const numbers = [...new Set(items.map((item) => Number(item?.orderIdNumber)).filter(Number.isFinite))].sort((a, b) => a - b);
   if (numbers.length === 1) return `ORD-${numbers[0]}`;
   if (numbers.length > 1) return `ORD-${numbers[0]} : ORD-${numbers[numbers.length - 1]}`;
@@ -160,6 +212,11 @@ function dominantStatus(items) {
   return "under-supervision";
 }
 
+function hasMixedApprovedRejected(items) {
+  const tabs = items.map(statusTabForItem);
+  return tabs.includes("approved") && tabs.includes("rejected");
+}
+
 function buildGroups(rows) {
   const sorted = [...(Array.isArray(rows) ? rows : [])].sort((a, b) => dateValue(b?.createdTime) - dateValue(a?.createdTime));
   const map = new Map();
@@ -173,6 +230,7 @@ function buildGroups(rows) {
         items: [],
         latestCreated: item?.createdTime,
         orderType: item?.orderType,
+        orderTypeColor: item?.orderTypeColor,
         createdByName: item?.createdByName,
       });
     }
@@ -183,6 +241,7 @@ function buildGroups(rows) {
       group.representativeId = text(item?.id);
     }
     if (!group.orderType && item?.orderType) group.orderType = item.orderType;
+    if (!group.orderTypeColor && item?.orderTypeColor) group.orderTypeColor = item.orderTypeColor;
     if (!group.createdByName && item?.createdByName) group.createdByName = item.createdByName;
   }
 
@@ -211,11 +270,9 @@ function groupSearchText(group) {
   ].map(text).join(" ").toLowerCase();
 }
 
-function statusProgress(tab) {
-  if (tab === "arrived") return 4;
-  if (tab === "shipped") return 3;
-  if (tab === "approved") return 2;
-  return 1;
+function progressIndex(group) {
+  const indexes = group.items.map((item) => Math.min(4, statusIndex(item?.status)));
+  return Math.max(1, ...indexes);
 }
 
 function writeEditTransfer(data, group) {
@@ -246,146 +303,266 @@ function writeEditTransfer(data, group) {
   }
 }
 
-function OrderCard({ group, onOpen }) {
-  const type = orderTypeMeta(group.orderType);
+function useClassicHeaderSearch(query, setQuery, placeholder) {
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    const previousPlaceholder = input.getAttribute("placeholder") || "Search";
+    const previousLabel = input.getAttribute("aria-label") || "Search";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder.replace(/\.{3}$/, ""));
+    input.value = query;
+    const listener = (event) => setQuery(String(event.target?.value || ""));
+    input.addEventListener("input", listener);
+    return () => {
+      input.removeEventListener("input", listener);
+      input.placeholder = previousPlaceholder;
+      input.setAttribute("aria-label", previousLabel);
+    };
+  }, [placeholder, setQuery]);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (input && input.value !== query) input.value = query;
+  }, [query]);
+}
+
+function TypeFilter({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!wrapRef.current?.contains(event.target)) setOpen(false);
+    };
+    const key = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
   return (
-    <button type="button" className="next-order-card" onClick={() => onOpen(group)}>
-      <div className="next-order-card__top">
-        <span className={`next-order-type ${type.className}`} aria-hidden="true">{type.icon}</span>
-        <span className="next-order-card__title">
-          <strong>{group.orderIdLabel}</strong>
-          <small>{formatDate(group.latestCreated)}</small>
-        </span>
-        <span className="next-order-card__count">×{group.items.length}</span>
-      </div>
-      <div className="next-order-card__reason">{group.reason}</div>
-      <div className="next-order-card__bottom">
-        <span><small>Estimate total</small><strong>{formatMoney(group.total)}</strong></span>
-        <span className={`order-status status-${group.status}`}>{statusLabel(group.status)}</span>
-      </div>
-    </button>
+    <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""} ${value !== "all" ? "is-filtered" : ""}`}>
+      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}>
+        <span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter" /></span>
+        <span className="orders-type-filter__button-label">Filter</span>
+        {value !== "all" ? <span className="orders-type-filter__button-dot" /> : null}
+      </button>
+      {open ? (
+        <div className="orders-type-filter__panel" role="menu" aria-label="Filter current orders by type">
+          <div className="orders-type-filter__panel-head">
+            <span className="orders-type-filter__panel-title">Order type</span>
+            <span className="orders-type-filter__panel-sub">Choose one</span>
+          </div>
+          <div className="orders-type-filter__options">
+            <button type="button" className={`orders-type-filter__option ${value === "all" ? "is-active" : ""}`} onClick={() => { onChange("all"); setOpen(false); }}>
+              <span className="orders-type-filter__option-icon"><ClassicOrderIcon name="layers" /></span>
+              <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">All order types</span><span className="orders-type-filter__option-sub">Show every order type</span></span>
+              <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
+            </button>
+            {options.map((option) => {
+              const meta = orderTypeMeta(option.raw, option.color);
+              const style = { "--otf-icon-bg": meta.bg, "--otf-icon-fg": meta.fg, "--otf-icon-border": meta.bd };
+              return (
+                <button type="button" className={`orders-type-filter__option ${value === option.key ? "is-active" : ""}`} onClick={() => { onChange(option.key); setOpen(false); }} key={option.key}>
+                  <span className="orders-type-filter__option-icon" style={style}><ClassicOrderIcon name={meta.icon} /></span>
+                  <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{option.count} order{option.count === 1 ? "" : "s"}</span></span>
+                  <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function OrderDetailsModal({ group, onClose, onAction }) {
+function MixedStatusPill() {
+  return (
+    <span className="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected">
+      <span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span>
+      <span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span>
+    </span>
+  );
+}
+
+function StatusPill({ status, className = "co-status-btn", reason = "", onReason }) {
+  const vars = STATUS_COLORS[status] || notionColorVars("default");
+  const style = { "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd };
+  if (status === "rejected" && reason && onReason) {
+    return <button type="button" className={`${className} rejected-reason-trigger`} style={style} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onReason(reason); }}>{statusLabel(status)}</button>;
+  }
+  return <span className={className} style={style}>{statusLabel(status)}</span>;
+}
+
+function OrderCard({ group, activeTab, onOpen, onReason }) {
+  const type = orderTypeMeta(group.orderType, group.orderTypeColor);
+  const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
+  const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
+  const mixed = activeTab === "all" && hasMixedApprovedRejected(group.items);
+
+  return (
+    <article className="co-card" role="button" tabIndex={0} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+      <div className="co-top">
+        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
+        <div className="co-main">
+          <div className="co-title">{group.orderIdLabel}</div>
+          <div className="co-sub">{formatDate(group.latestCreated)}</div>
+        </div>
+        <div className="co-qty">x{group.items.length}</div>
+      </div>
+      <div className="co-divider" />
+      <div className="co-bottom">
+        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div></div>
+        <div className="co-actions">
+          {mixed ? <MixedStatusPill /> : <StatusPill status={group.status} reason={reasons} onReason={onReason} />}
+          <span className="co-right-ico" aria-hidden="true"><ClassicOrderIcon name="percent" /></span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ProgressTrack({ value }) {
+  const icons = ["eye", "activity", "truck", "home"];
+  const safe = Math.min(4, Math.max(1, Number(value) || 1));
+  return (
+    <div className="co-track-pill" role="img" aria-label="Order progress">
+      {icons.map((icon, index) => {
+        const step = index + 1;
+        return (
+          <span className="next-classic-track-fragment" key={icon}>
+            <span className={`co-track-step ${step <= safe ? "is-active" : ""} ${step === safe ? "is-current" : ""}`}><ClassicOrderIcon name={icon} /></span>
+            {step < 4 ? <span className={`co-track-conn ${step < safe ? "is-active" : ""}`} /> : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function OrderDetailsModal({ group, onClose, onAction, onReason }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+
   useEffect(() => {
     if (!group) return undefined;
     const onKey = (event) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    document.body.classList.add("next-modal-open");
+    document.body.classList.add("co-modal-open");
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.classList.remove("next-modal-open");
+      document.body.classList.remove("co-modal-open");
     };
   }, [group, onClose]);
 
+  useEffect(() => setMoreOpen(false), [group?.key]);
   if (!group) return null;
+
   const archived = group.status === "archive";
-  const progress = statusProgress(group.status);
-  const rejected = group.items.map(rejectedReason).filter(Boolean);
+  const maintenance = isMaintenanceOrder(group.orderType);
+  const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
+  const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
+
+  const menuAction = (action) => {
+    setMoreOpen(false);
+    onAction(action, group);
+  };
 
   return (
-    <div className="next-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="next-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} details`}>
-        <header className="next-order-modal__header">
-          <div>
-            <span className={`order-status status-${group.status}`}>{statusLabel(group.status)}</span>
-            <h2>{group.orderIdLabel}</h2>
-            <p>{formatDate(group.latestCreated)} · {orderTypeMeta(group.orderType).label}</p>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
-        {archived ? (
-          <div className="archive-banner">This order is archived.</div>
-        ) : (
-          <div className="order-progress" aria-label="Order progress">
-            {["Under S.V", "Approved", "Shipping", "Arrived"].map((label, index) => (
-              <div className={`order-progress__step ${index + 1 <= progress ? "is-complete" : ""}`} key={label}>
-                <span>{index + 1 <= progress ? "✓" : index + 1}</span><small>{label}</small>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="next-order-modal__meta">
-          <span><small>Reason</small><strong>{group.reason}</strong></span>
-          <span><small>Created by</small><strong>{group.createdByName || "—"}</strong></span>
-          <span><small>Components</small><strong>{group.items.length}</strong></span>
-          <span><small>Estimate</small><strong>{formatMoney(group.total)}</strong></span>
+    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} details`}>
+        <div className="co-modal-more">
+          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
+          {moreOpen ? (
+            <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
+              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+              {archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+              <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button>
+            </div>
+          ) : null}
         </div>
+        <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
 
-        {rejected.length ? (
-          <div className="rejected-reason-box"><strong>Rejected reason</strong><p>{[...new Set(rejected)].join("\n")}</p></div>
-        ) : null}
+        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
+        <ProgressTrack value={archived ? 4 : progressIndex(group)} />
 
-        <div className="next-order-items">
-          {group.items.map((item, index) => {
-            const itemStatus = statusTabForItem(item);
-            return (
-              <article className="next-order-item" key={`${item?.id || index}`}>
-                <div className="next-order-item__image">
-                  {item?.imageUrl ? <img src={item.imageUrl} alt="" /> : <span>{text(item?.productName).slice(0, 1).toUpperCase() || "P"}</span>}
+        <div className="co-modal-body">
+          {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
+          <div className="co-modal-items">
+            {items.length ? items.map((item, index) => {
+              const qtyRequested = finite(item?.quantityRequested ?? item?.quantity);
+              const qtyEditedRaw = item?.quantityEditedBySupervisor ?? item?.quantityProgress;
+              const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
+              const qty = effectiveQuantity(item);
+              const itemStatus = statusTabForItem(item);
+              const itemReason = rejectedReason(item);
+              const safeUrl = text(item?.productUrl);
+              return (
+                <div className="co-item" key={text(item?.id) || index}>
+                  <div className="co-item-left">
+                    <div className="co-item-title">
+                      <div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>
+                      {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><ClassicOrderIcon name="external-link" /></a> : null}
+                    </div>
+                    {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}
+                  </div>
+                  <div className="co-item-right">
+                    {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {hasEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{qtyRequested}</span><strong className="sv-qty-new">{qty}</strong></span> : <strong>{qtyRequested}</strong>}</div>}
+                    <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
+                  </div>
                 </div>
-                <div className="next-order-item__body">
-                  <strong>{text(item?.productName) || "Unnamed component"}</strong>
-                  <small>Qty {effectiveQuantity(item)} · {formatMoney(item?.unitPrice)}</small>
-                  {text(item?.issueDescription) ? <p>{text(item.issueDescription)}</p> : null}
-                </div>
-                <div className="next-order-item__aside">
-                  <span className={`order-status status-${itemStatus}`}>{statusLabel(itemStatus)}</span>
-                  <strong>{formatMoney(itemTotal(item))}</strong>
-                </div>
-              </article>
-            );
-          })}
+              );
+            }) : <div className="muted">No items.</div>}
+          </div>
         </div>
-
-        <footer className="next-order-modal__actions">
-          <a className="secondary-button" href={`/next/orders/tracking?groupId=${encodeURIComponent(group.representativeId)}`}>Track order</a>
-          {!archived ? <button type="button" className="secondary-button" onClick={() => onAction("edit", group)}>Edit</button> : null}
-          {!archived ? <button type="button" className="secondary-button" onClick={() => onAction("archive", group)}>Archive</button> : null}
-          {archived ? <button type="button" className="secondary-button" onClick={() => onAction("unarchive", group)}>UnArchive</button> : null}
-          <button type="button" className="danger-button" onClick={() => onAction("delete", group)}>Delete</button>
-          <button type="button" className="primary-button" onClick={onClose}>Done</button>
-        </footer>
-      </section>
+      </div>
     </div>
   );
 }
 
 function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
   const [password, setPassword] = useState("");
-
   useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
   if (!state) return null;
   const config = ACTIONS[state.action];
-
   return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="next-password-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-        <span className={`password-modal-icon ${config.danger ? "is-danger" : ""}`}>{config.danger ? "!" : "⌁"}</span>
-        <h2>{config.title}</h2>
-        <p>{config.description}</p>
-        <label>
-          <span>Admin password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoFocus
-            autoComplete="current-password"
-            disabled={busy}
-          />
-        </label>
-        {error ? <div className="form-error">{error}</div> : null}
-        <div className="next-password-modal__actions">
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className={config.danger ? "danger-button" : "primary-button"} disabled={busy || !password.trim()}>
-            {busy ? "Working…" : config.button}
-          </button>
+    <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false">
+      <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
+        <div className="co-submodal-header req-edit-header">
+          <div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`} aria-hidden="true"><ClassicOrderIcon name={config.icon || "shield"} /></div>
+          <div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div>
+        </div>
+        <div className="co-submodal-body">
+          <label className="co-submodal-label" htmlFor="current-order-admin-password">Admin password</label>
+          <input id="current-order-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy} />
+          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+        </div>
+        <div className="co-submodal-actions">
+          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function RejectedReasonModal({ reason, onClose }) {
+  if (!reason) return null;
+  return (
+    <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" aria-label="Rejected reason">
+        <button type="button" className="co-submodal-close" onClick={onClose} aria-label="Close rejected reason" />
+        <div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger" aria-hidden="true"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Reason saved with this rejected component.</div></div></div>
+        <div className="co-submodal-body"><div className="rejected-reason-view-text">{reason}</div></div>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onClose}>Done</button></div>
+      </div>
     </div>
   );
 }
@@ -400,7 +577,9 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(36);
+  const [reasonView, setReasonView] = useState("");
+
+  useClassicHeaderSearch(query, setQuery, "Search orders by reason...");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -419,21 +598,16 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-    setVisibleLimit(36);
   }, [tab, type, query]);
 
-  const statusRows = useMemo(() => {
-    if (tab === "all") return orders;
-    return orders.filter((item) => statusTabForItem(item) === tab);
-  }, [orders, tab]);
-
+  const statusRows = useMemo(() => tab === "all" ? orders : orders.filter((item) => statusTabForItem(item) === tab), [orders, tab]);
   const statusGroups = useMemo(() => buildGroups(statusRows), [statusRows]);
   const typeOptions = useMemo(() => {
     const map = new Map();
     for (const group of statusGroups) {
       const key = orderTypeKey(group.orderType) || "other";
-      const meta = orderTypeMeta(group.orderType);
-      const current = map.get(key) || { key, label: meta.label, count: 0 };
+      const meta = orderTypeMeta(group.orderType, group.orderTypeColor);
+      const current = map.get(key) || { key, raw: group.orderType, color: group.orderTypeColor, label: meta.label, count: 0 };
       current.count += 1;
       map.set(key, current);
     }
@@ -447,12 +621,6 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
       return !needle || groupSearchText(group).includes(needle);
     });
   }, [statusGroups, type, query]);
-
-  const tabCounts = useMemo(() => {
-    const counts = { all: buildGroups(orders).length };
-    for (const item of STATUS_TABS.slice(1)) counts[item.key] = buildGroups(orders.filter((row) => statusTabForItem(row) === item.key)).length;
-    return counts;
-  }, [orders]);
 
   async function refreshOrders() {
     const response = await fetch("/api/orders?_fresh=1", { credentials: "include", cache: "no-store" });
@@ -476,7 +644,6 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     const config = ACTIONS[action];
     setBusy(true);
     setActionError("");
-
     try {
       const response = await fetch(config.endpoint, {
         method: "POST",
@@ -511,76 +678,36 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   }
 
   return (
-    <section className="next-orders-page">
-      {bootstrapWarnings.length ? (
-        <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders?classic=1">Classic page</a></div>
-      ) : null}
-      {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
+    <section className="next-classic-orders-parity">
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders?classic=1">Classic page</a></div> : null}
+      {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="next-orders-toolbar">
-        <div className="next-orders-tabs" role="tablist" aria-label="Current Orders status">
-          {STATUS_TABS.map((item) => (
-            <button
-              type="button"
-              className={tab === item.key ? "is-active" : ""}
-              onClick={() => setTab(item.key)}
-              role="tab"
-              aria-selected={tab === item.key}
-              key={item.key}
-            >
-              <span>{item.icon}</span><b>{item.label}</b><em>{tabCounts[item.key] || 0}</em>
-            </button>
-          ))}
-        </div>
-
-        <div className="next-orders-tools">
-          <label className="next-orders-search">
-            <span>⌕</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, reason or component…" />
-            {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}
-          </label>
-          <select value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter by order type">
-            <option value="all">All order types</option>
-            {typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}
-          </select>
-          <a className="classic-page-link" href="/orders?classic=1">Classic</a>
-        </div>
-      </div>
-
-      <div className="next-orders-summary">
-        <span><strong>{visibleGroups.length}</strong> visible orders</span>
-        <span><strong>{statusRows.length}</strong> components in this status</span>
-        <span><strong>{formatMoney(visibleGroups.reduce((sum, group) => sum + group.total, 0))}</strong> estimated total</span>
-      </div>
-
-      {visibleGroups.length ? (
-        <>
-          <div className="next-orders-grid">
-            {visibleGroups.slice(0, visibleLimit).map((group) => <OrderCard group={group} onOpen={setSelected} key={group.key} />)}
+      <div className="orders-toolbar" aria-label="Current orders tools">
+        <div className="orders-toolbar__scroll">
+          <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Current Orders status">
+            {STATUS_TABS.map((item) => (
+              <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}>
+                <span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon} /></span>
+                <span className="order-status-tab__label">{item.label}</span>
+              </button>
+            ))}
           </div>
-          {visibleGroups.length > visibleLimit ? (
-            <button className="load-more-button" type="button" onClick={() => setVisibleLimit((value) => value + 36)}>
-              Show more orders
-            </button>
-          ) : null}
-        </>
-      ) : (
-        <div className="next-orders-empty">
-          <span>⌕</span>
-          <h2>No orders found</h2>
-          <p>Try another status, order type, or search phrase.</p>
-          <button type="button" className="secondary-button" onClick={() => { setTab("all"); setType("all"); setQuery(""); }}>Clear filters</button>
         </div>
-      )}
+        <div className="orders-toolbar__divider" aria-hidden="true" />
+        <TypeFilter value={type} options={typeOptions} onChange={setType} />
+      </div>
 
-      <OrderDetailsModal group={selected} onClose={() => setSelected(null)} onAction={beginAction} />
-      <PasswordModal
-        state={actionState}
-        busy={busy}
-        error={actionError}
-        onCancel={() => { if (!busy) { setActionState(null); setActionError(""); } }}
-        onSubmit={submitAction}
-      />
+      <section className="card" id="current-orders">
+        <div className="co-cards" id="orders-list">
+          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={setSelected} onReason={setReasonView} key={group.key} />) : (
+            <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
+          )}
+        </div>
+      </section>
+
+      <OrderDetailsModal group={selected} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} />
+      <PasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { if (!busy) { setActionState(null); setActionError(""); } }} onSubmit={submitAction} />
+      <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")} />
     </section>
   );
 }

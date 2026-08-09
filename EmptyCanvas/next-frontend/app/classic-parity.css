@@ -265,3 +265,249 @@ body.next-classic-shell-active .next-classic-home-loading .next-classic-loading-
     animation: none;
   }
 }
+
+/* Stage 2B — Current Orders + Orders Review Classic parity ------------------ */
+body.current-orders-page .next-classic-orders-parity,
+body.orders-review-page .next-classic-orders-parity {
+  width: 100%;
+  min-width: 0;
+}
+
+body.current-orders-page .next-classic-orders-parity .tab-portfolio,
+body.orders-review-page .next-classic-orders-parity .tab-portfolio,
+body.current-orders-page .next-classic-orders-parity .orders-type-filter__option,
+body.orders-review-page .next-classic-orders-parity .orders-type-filter__option {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio,
+body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+  border: 0;
+}
+
+body.current-orders-page .next-classic-orders-parity #current-orders,
+body.orders-review-page .next-classic-orders-parity #sv-orders {
+  margin: 0;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-card,
+body.orders-review-page .next-classic-orders-parity .co-card {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-status-btn.rejected-reason-trigger,
+body.orders-review-page .next-classic-orders-parity .co-item-status.sv-rejected-reason-trigger {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-classic-track-fragment,
+body.orders-review-page .next-classic-orders-parity .next-classic-track-fragment {
+  display: contents;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-submodal-overlay.is-open,
+body.orders-review-page .next-classic-orders-parity .co-submodal-overlay.is-open {
+  z-index: 1250;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-submodal-overlay.is-open + .co-submodal-overlay.is-open,
+body.orders-review-page .next-classic-orders-parity .co-submodal-overlay.is-open + .co-submodal-overlay.is-open {
+  z-index: 1300;
+}
+
+.orders-parity-success {
+  position: sticky;
+  top: 10px;
+  z-index: 45;
+  width: fit-content;
+  max-width: min(620px, 100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #A7F3D0;
+  border-radius: 14px;
+  background: rgba(236, 253, 245, .96);
+  color: #065F46;
+  box-shadow: 0 12px 30px rgba(6, 95, 70, .09);
+  font-size: 13px;
+  font-weight: 850;
+  backdrop-filter: blur(10px);
+}
+.orders-parity-success svg { width: 17px; height: 17px; flex: 0 0 auto; }
+
+/* React keeps the same native dropdown visual language while replacing the
+   legacy JS-generated options. */
+.next-classic-orders-parity .orders-type-filter__option {
+  color: inherit;
+  font: inherit;
+}
+.next-classic-orders-parity .orders-type-filter__option-icon svg,
+.next-classic-orders-parity .orders-type-filter__option-check svg {
+  display: block;
+}
+
+/* Inline quantity editor used by the React review modal. The Classic page
+   opens the same controls in a small popover; keeping them inside the item
+   avoids viewport clipping while preserving the exact controls and styling. */
+.next-classic-qty-editor {
+  width: min(230px, 100%);
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  margin-left: auto;
+  padding: 10px;
+  border: 1px solid #E5E7EB;
+  border-radius: 15px;
+  background: #FFFFFF;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .10);
+}
+.next-classic-qty-editor .sv-qty-input {
+  width: 100%;
+  min-height: 38px;
+}
+.next-classic-qty-editor .sv-qty-actions {
+  align-items: center;
+}
+.next-classic-qty-editor .sv-qty-actions .ro-action-btn {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.next-classic-review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.next-classic-review-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.next-classic-review-actions .btn svg { width: 15px; height: 15px; }
+.next-classic-review-actions .btn-success {
+  background: #DCFCE7;
+  color: #166534;
+  border: 1px solid #BBF7D0;
+}
+.next-classic-review-actions .btn-success:hover { background: #D1FAE5; }
+
+/* Lightweight React version of the Classic Created By profile popover. */
+.next-classic-creator-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.next-classic-creator-fields > div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, .88);
+}
+.next-classic-creator-fields span {
+  color: #6B7280;
+  font-size: 12px;
+  font-weight: 750;
+}
+.next-classic-creator-fields strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+/* The classic shell has one global search input. Stage 2B makes that input the
+   functional page search, so the duplicate pilot toolbar search is removed. */
+body.current-orders-page .classic-app-shell .main-header .searchbar,
+body.orders-review-page .classic-app-shell .main-header .searchbar {
+  display: flex;
+}
+
+/* Keep modal status/action positions stable when the React menu is rendered. */
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog {
+  isolation: isolate;
+}
+
+@media (max-width: 640px) {
+  .orders-parity-success { width: 100%; }
+  .next-classic-qty-editor { width: 100%; }
+  .next-classic-review-actions { justify-content: stretch; }
+  .next-classic-review-actions .btn { flex: 1 1 auto; }
+  .next-classic-creator-fields > div { grid-template-columns: 1fr; gap: 3px; }
+}
+
+/* Stage 2B loading state: keep the Classic shell/order-card geometry visible
+   while server data is resolving so navigation never flashes back to Pilot UI. */
+.next-classic-orders-loading .next-classic-loading-nav { pointer-events: none; }
+.next-classic-orders-loading .next-classic-loading-menu { cursor: default; }
+.next-classic-orders-loading .orders-toolbar { pointer-events: none; }
+.next-classic-orders-loading-section { margin-top: 14px; }
+.next-classic-orders-loading-section .co-cards { min-height: 360px; }
+
+.next-classic-order-loading-line,
+.next-classic-order-loading-qty,
+.next-classic-order-loading-pill,
+.next-classic-order-loading-circle,
+.next-classic-order-loading-tab-icon,
+.next-classic-order-loading-tab-label,
+.next-classic-order-loading-filter,
+.next-classic-order-loading-thumb {
+  position: relative;
+  overflow: hidden;
+  background: #EEF1F5;
+}
+.next-classic-order-loading-line::after,
+.next-classic-order-loading-qty::after,
+.next-classic-order-loading-pill::after,
+.next-classic-order-loading-circle::after,
+.next-classic-order-loading-tab-icon::after,
+.next-classic-order-loading-tab-label::after,
+.next-classic-order-loading-filter::after,
+.next-classic-order-loading-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.82), transparent);
+  animation: nextClassicOrderShimmer 1.35s infinite;
+}
+@keyframes nextClassicOrderShimmer { to { transform: translateX(100%); } }
+
+.next-classic-order-loading-thumb { border-radius: inherit; }
+.next-classic-order-loading-line { display: block; border-radius: 999px; }
+.next-classic-order-loading-line--title { width: min(210px, 72%); height: 13px; margin: 3px 0 9px; }
+.next-classic-order-loading-line--sub { width: min(138px, 52%); height: 9px; }
+.next-classic-order-loading-line--total { width: 92px; height: 10px; }
+.next-classic-order-loading-qty { width: 48px; height: 26px; border-radius: 999px; }
+.next-classic-order-loading-pill { width: 88px; height: 28px; border-radius: 999px; }
+.next-classic-order-loading-circle { width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto; }
+.next-classic-order-loading-tab-icon { display: inline-block; width: 17px; height: 17px; border-radius: 5px; flex: 0 0 auto; }
+.next-classic-order-loading-tab-label { display: inline-block; width: 54px; height: 9px; border-radius: 999px; }
+.next-classic-order-loading-filter { min-width: 112px; min-height: 37px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .next-classic-order-loading-line::after,
+  .next-classic-order-loading-qty::after,
+  .next-classic-order-loading-pill::after,
+  .next-classic-order-loading-circle::after,
+  .next-classic-order-loading-tab-icon::after,
+  .next-classic-order-loading-tab-label::after,
+  .next-classic-order-loading-filter::after,
+  .next-classic-order-loading-thumb::after {
+    animation: none;
+  }
+}

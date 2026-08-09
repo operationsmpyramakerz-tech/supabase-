@@ -73,6 +73,7 @@ export default async function OrdersReviewPage() {
       title="Orders Review"
       eyebrow="Supervisor approval workspace"
       activePath="/next/orders-review"
+      bodyClass="order-modal-fit-screen orders-review-page"
     >
       <OrdersReviewClient
         initialOrders={orders}
