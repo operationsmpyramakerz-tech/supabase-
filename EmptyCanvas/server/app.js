@@ -11736,12 +11736,19 @@ app.get("/api/app-download-links", requireAuth, (req, res) => {
     ""
   );
 
+  const nextFrontendEnabled = ["1", "true", "yes", "on"].includes(
+    String(process.env.ENABLE_NEXT_FRONTEND || "").trim().toLowerCase(),
+  );
+  const pwaStartPath = nextFrontendEnabled ? "/next/pwa-start" : "/pwa-start";
+  const installPagePath = nextFrontendEnabled ? "/next/app-install" : "/pwa-start";
+
   res.json({
     androidUrl,
     windowsUrl,
-    pwaUrl: origin ? `${origin}/pwa-start` : "/pwa-start",
+    pwaUrl: origin ? `${origin}${pwaStartPath}` : pwaStartPath,
     manifestUrl: origin ? `${origin}/manifest.webmanifest` : "/manifest.webmanifest",
-    pwaStartUrl: origin ? `${origin}/pwa-start` : "/pwa-start",
+    pwaStartUrl: origin ? `${origin}${pwaStartPath}` : pwaStartPath,
+    installPageUrl: origin ? `${origin}${installPagePath}` : installPagePath,
     installMode: "pwa",
   });
 });

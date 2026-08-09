@@ -139,6 +139,7 @@ export default function AppShell({
 
         <div className="sidebar-footer">
           <a className={isActive(activePath, "/next/account") ? "active" : ""} href="/next/account">My account</a>
+          <a className={isActive(activePath, "/next/app-install") ? "active" : ""} href="/next/app-install">Install App</a>
           <a href={classicHref}>Open current interface</a>
           <a href="/next/migration-status">Migration status</a>
         </div>

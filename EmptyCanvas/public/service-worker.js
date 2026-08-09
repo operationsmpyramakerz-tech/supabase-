@@ -1,9 +1,8 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-direct-storage-v18";
+const CACHE_NAME = "ops-cache-next-pwa-v19";
 
 const PRECACHE_URLS = [
-  "/pwa-start",
   "/pwa-start.html",
   "/pwa-offline.html",
   "/manifest.webmanifest",
@@ -37,9 +36,11 @@ async function networkFirstNavigation(request) {
     const fresh = await fetch(request);
     return fresh;
   } catch {
-    const cachedStart = await caches.match("/pwa-start.html");
+    // Prefer the purpose-built offline shell. The old start page immediately
+    // redirects and can create a retry loop when there is no network.
     const cachedOffline = await caches.match("/pwa-offline.html");
-    return cachedStart || cachedOffline || Response.error();
+    const cachedStart = await caches.match("/pwa-start.html");
+    return cachedOffline || cachedStart || Response.error();
   }
 }
 
@@ -124,7 +125,7 @@ self.addEventListener("push", (event) => {
 
   const title = data.title || "Operations";
   const body = data.body || "New update available";
-  const url = data.url || "/home";
+  const url = data.url || "/next/notifications";
   const tag = data.tag || data.id || `ops-${Date.now()}`;
 
   const options = {
@@ -143,7 +144,7 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification?.data?.url || "/home";
+  const url = event.notification?.data?.url || "/next/notifications";
 
   event.waitUntil(
     (async () => {

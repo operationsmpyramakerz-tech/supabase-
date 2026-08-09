@@ -62,11 +62,13 @@ function createPageRouter(options = {}) {
   // Public PWA entry points must remain before all authenticated page routes.
   router.get("/pwa-start", (req, res) => {
     disableBrowserCache(res);
+    if (nextFrontendEnabled() && !wantsClassicLogin(req)) return res.redirect("/next/pwa-start");
     return sendPublicFile(res, "pwa-start.html");
   });
 
   router.get("/pwa-offline", (req, res) => {
     disableBrowserCache(res);
+    if (nextFrontendEnabled() && !wantsClassicLogin(req)) return res.redirect("/next/pwa-offline");
     return sendPublicFile(res, "pwa-offline.html");
   });
 

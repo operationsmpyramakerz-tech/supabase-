@@ -1278,3 +1278,95 @@ a { color: inherit; text-decoration: none; }
 }
 .expense-order-link-group, .next-expense-users-order-link-group { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .expense-order-links .receipt-link, .next-expense-users-order-links .receipt-link { border-style: dashed; background: #fff7ed; color: #9a3412; }
+
+/* Stage 45: App Install / PWA center */
+.next-app-install-page { display: grid; gap: 18px; }
+.next-app-install-hero { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0,1fr) 250px; gap: 28px; align-items: center; padding: 30px; border: 1px solid rgba(15,23,42,.08); border-radius: 28px; background: radial-gradient(circle at 92% 10%, rgba(234,112,45,.22), transparent 30%), linear-gradient(135deg,#fff,#fff8f3); box-shadow: 0 18px 54px rgba(15,23,42,.055); }
+.next-app-install-hero__copy > span, .next-app-install-panel header span { display: block; margin-bottom: 8px; color: #d65f1e; font-size: .72rem; font-weight: 950; letter-spacing: .11em; }
+.next-app-install-hero__copy h2 { max-width: 780px; margin: 0 0 10px; color: #101828; font-size: clamp(1.7rem,3vw,2.65rem); line-height: 1.06; letter-spacing: -.035em; }
+.next-app-install-hero__copy p { max-width: 780px; margin: 0; color: #667085; font-weight: 650; line-height: 1.7; }
+.next-app-install-hero__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.next-app-install-hero__actions button, .next-app-install-hero__actions a { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid #111827; border-radius: 13px; background: #111827; color: #fff; text-decoration: none; font: inherit; font-weight: 900; cursor: pointer; }
+.next-app-install-hero__actions a, .next-app-install-hero__actions .is-secondary { border-color: #e0e4eb; background: #fff; color: #111827; }
+.next-app-install-hero__actions button:disabled { opacity: .62; cursor: wait; }
+.next-app-install-device { width: 100%; min-height: 210px; display: grid; justify-items: center; align-content: center; gap: 7px; padding: 22px; border: 1px solid rgba(234,112,45,.18); border-radius: 28px; background: rgba(255,255,255,.82); box-shadow: 0 22px 50px rgba(15,23,42,.08); text-align: center; }
+.next-app-install-device img { width: 78px; height: 78px; border-radius: 23px; box-shadow: 0 14px 30px rgba(15,23,42,.14); }
+.next-app-install-device strong { margin-top: 5px; color: #101828; font-size: 1.08rem; }
+.next-app-install-device span { color: #7b8190; font-size: .82rem; font-weight: 800; }
+.next-app-install-device em { margin-top: 7px; padding: 7px 10px; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: .72rem; font-style: normal; font-weight: 900; }
+.next-app-install-device em.is-ready { background: #fff7ed; color: #c2410c; }
+.next-app-install-device em.is-good { background: #ecfdf3; color: #027a48; }
+.next-app-install-notice { padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 15px; background: #f8fafc; color: #475467; font-weight: 800; }
+.next-app-install-notice.is-success { border-color: #a6f4c5; background: #ecfdf3; color: #027a48; }
+.next-app-install-notice.is-warning { border-color: #fedf89; background: #fffaeb; color: #b54708; }
+.next-app-install-notice.is-error { border-color: #fecdca; background: #fef3f2; color: #b42318; }
+.next-app-install-status-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; }
+.next-app-install-status-grid article { min-width: 0; padding: 18px; border: 1px solid rgba(15,23,42,.08); border-radius: 20px; background: #fff; box-shadow: 0 10px 28px rgba(15,23,42,.04); }
+.next-app-install-status-grid article > span { color: #98a2b3; font-size: .68rem; font-weight: 950; letter-spacing: .08em; }
+.next-app-install-status-grid strong { display: block; margin: 8px 0 5px; color: #101828; font-size: 1.18rem; }
+.next-app-install-status-grid p { margin: 0; color: #7b8190; font-size: .8rem; font-weight: 650; line-height: 1.5; }
+.next-app-install-layout { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(320px,.65fr); gap: 18px; align-items: start; }
+.next-app-install-panel { min-width: 0; padding: 24px; border: 1px solid rgba(15,23,42,.08); border-radius: 24px; background: #fff; box-shadow: 0 14px 36px rgba(15,23,42,.045); }
+.next-app-install-panel header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.next-app-install-panel header h3 { margin: 0; color: #101828; font-size: 1.18rem; }
+.next-app-install-panel header button { min-height: 39px; padding: 0 13px; border: 1px solid #e0e4eb; border-radius: 11px; background: #fff; color: #344054; font: inherit; font-size: .8rem; font-weight: 850; cursor: pointer; }
+.next-app-install-panel header button:disabled { opacity: .6; cursor: wait; }
+.next-app-install-panel > ol { display: grid; gap: 10px; margin: 0; padding-left: 23px; color: #475467; line-height: 1.65; font-weight: 650; }
+.next-app-install-panel > ol li::marker { color: #ea702d; font-weight: 900; }
+.next-app-install-tech { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-top: 22px; }
+.next-app-install-tech > div { min-width: 0; padding: 14px; border: 1px solid #eaecf0; border-radius: 16px; background: #fbfcfe; }
+.next-app-install-tech small { display: block; color: #98a2b3; font-weight: 850; }
+.next-app-install-tech strong { display: block; margin: 5px 0; overflow: hidden; color: #101828; text-overflow: ellipsis; white-space: nowrap; }
+.next-app-install-tech span { display: block; overflow-wrap: anywhere; color: #7b8190; font-size: .75rem; font-weight: 650; line-height: 1.45; }
+.next-app-install-downloads > p { margin: -3px 0 15px; color: #667085; line-height: 1.55; font-weight: 650; }
+.next-app-install-downloads > a { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; margin-top: 9px; padding: 13px; border: 1px solid #e5e7eb; border-radius: 15px; color: inherit; text-decoration: none; }
+.next-app-install-downloads > a:hover { border-color: #f4b187; background: #fffaf6; }
+.next-app-install-downloads > a > span { min-width: 72px; padding: 7px 9px; border-radius: 10px; background: #f2f4f7; color: #475467; text-align: center; font-size: .68rem; font-weight: 950; }
+.next-app-install-downloads > a strong, .next-app-install-downloads > a small { display: block; }
+.next-app-install-downloads > a strong { color: #101828; font-size: .9rem; }
+.next-app-install-downloads > a small { margin-top: 2px; color: #98a2b3; font-size: .72rem; font-weight: 700; }
+.next-app-install-downloads > a > b { color: #667085; }
+.next-app-install-empty { display: grid; gap: 5px; padding: 16px; border: 1px dashed #d0d5dd; border-radius: 16px; background: #fbfcfe; }
+.next-app-install-empty strong { color: #344054; }
+.next-app-install-empty span { color: #7b8190; font-size: .8rem; line-height: 1.5; }
+.next-app-install-manifest-link { margin-top: 14px !important; }
+.app-install-loading { display: grid; gap: 18px; padding: 24px; }
+.app-install-loading > article { height: 270px; }
+.app-install-loading > div { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; }
+.app-install-loading article { display: grid; align-content: center; gap: 12px; padding: 22px; border: 1px solid #eceef2; border-radius: 24px; background: #fff; }
+.app-install-loading article span, .app-install-loading article b, .app-install-loading article em { display: block; height: 16px; border-radius: 999px; background: #eef0f4; }
+.app-install-loading article span { width: 90px; }
+.app-install-loading article b { width: 70%; height: 28px; }
+.app-install-loading article em { width: 85%; }
+
+.next-pwa-gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 85% 10%, rgba(234,112,45,.18), transparent 32%), #fffaf7; color: #101828; }
+.next-pwa-gate.is-offline { background: radial-gradient(circle at 15% 90%, rgba(71,84,103,.12), transparent 32%), #f8fafc; }
+.next-pwa-gate__card { width: min(94vw, 480px); display: grid; justify-items: center; padding: 34px; border: 1px solid rgba(15,23,42,.09); border-radius: 30px; background: rgba(255,255,255,.93); box-shadow: 0 28px 90px rgba(15,23,42,.14); text-align: center; }
+.next-pwa-gate__card img { width: 78px; height: 78px; border-radius: 24px; box-shadow: 0 14px 34px rgba(15,23,42,.14); }
+.next-pwa-gate__pill { margin-top: 17px; padding: 6px 9px; border-radius: 999px; background: #fff7ed; color: #c2410c; font-size: .68rem; font-weight: 950; letter-spacing: .08em; }
+.next-pwa-gate__pill.is-online { background: #ecfdf3; color: #027a48; }
+.next-pwa-gate__card h1 { margin: 12px 0 8px; font-size: clamp(1.8rem,5vw,2.45rem); letter-spacing: -.04em; }
+.next-pwa-gate__card p { margin: 0; max-width: 390px; color: #667085; font-weight: 650; line-height: 1.65; }
+.next-pwa-gate__loader { width: 44px; height: 44px; margin: 24px 0; border: 4px solid rgba(234,112,45,.18); border-top-color: #ea702d; border-radius: 50%; animation: next-pwa-spin .75s linear infinite; }
+.next-pwa-gate__card button { min-height: 45px; min-width: 180px; padding: 0 17px; border: 0; border-radius: 13px; background: #111827; color: #fff; font: inherit; font-weight: 900; cursor: pointer; }
+.next-pwa-gate__card a { margin-top: 13px; color: #c04f1b; font-size: .82rem; font-weight: 850; text-decoration: none; }
+@keyframes next-pwa-spin { to { transform: rotate(360deg); } }
+@media (max-width: 1000px) {
+  .next-app-install-hero { grid-template-columns: 1fr; }
+  .next-app-install-device { max-width: 340px; justify-self: start; }
+  .next-app-install-status-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .next-app-install-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .next-app-install-hero { padding: 21px; border-radius: 22px; }
+  .next-app-install-device { max-width: none; }
+  .next-app-install-status-grid { grid-template-columns: 1fr; }
+  .next-app-install-panel { padding: 18px; border-radius: 20px; }
+  .next-app-install-panel header { flex-direction: column; }
+  .next-app-install-tech { grid-template-columns: 1fr; }
+  .app-install-loading > div { grid-template-columns: 1fr; }
+  .next-pwa-gate__card { padding: 26px 20px; border-radius: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-pwa-gate__loader { animation-duration: 2s; }
+}
