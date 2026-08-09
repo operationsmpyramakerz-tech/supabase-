@@ -174,6 +174,66 @@ app.use(express.urlencoded({ extended: true }));
 // CSV imports in the Database page can send the CSV as the raw request body.
 // Keep JSON support below in the import route for backwards compatibility.
 app.use(express.text({ type: ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'], limit: '30mb' }));
+
+// Canonicalize direct requests for legacy HTML documents before express.static
+// can serve them. All browser workspaces now have route-level authentication
+// and a Next.js replacement, while ?classic=1 remains available through the
+// canonical route. This closes the old `/home.html`-style bypass without
+// deleting the classic files that are still used by the rollback renderer.
+const LEGACY_HTML_ROUTE_ALIASES = Object.freeze({
+  'index.html': '/',
+  'login.html': '/login',
+  'home.html': '/home',
+  'lms.html': '/lms',
+  'user-access.html': '/user-access',
+  'lms-user-access.html': '/lms/user-access',
+  'lms-role-directory.html': '/lms/user-access',
+  'lms-curriculum.html': '/lms/curriculum',
+  'current-orders.html': '/orders',
+  'sv-orders.html': '/orders/sv-orders',
+  'requested-orders.html': '/orders/requested',
+  'maintenance-orders.html': '/orders/maintenance-orders',
+  'create-order-products.html': '/orders/new/products',
+  'events.html': '/events/requests',
+  'events-calendar.html': '/events/calendar',
+  'events-new.html': '/events/new',
+  'events-components.html': '/events/components',
+  'events-components-new.html': '/events/components/new',
+  'b2c-database.html': '/b2c/database',
+  'b2c-table.html': '/b2c/database',
+  'b2c-form.html': '/b2c/form',
+  'stocktaking.html': '/stocktaking',
+  'products.html': '/products',
+  'proposals.html': '/proposals',
+  'kits.html': '/kits',
+  'task-management.html': '/task-management',
+  'kpis.html': '/kpis',
+  'lms-b2b.html': '/lms/b2b',
+  'lms-b2b-school.html': '/lms/b2b',
+  'b2b.html': '/lms/b2b',
+  'b2b-school.html': '/lms/b2b',
+  'account.html': '/account',
+  'history.html': '/history',
+  'backup.html': '/backup',
+  'how-it-works.html': '/how-it-works',
+  'notifications.html': '/notifications',
+  'expenses.html': '/expenses',
+  'expenses-users.html': '/expenses/users',
+});
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const key = String(req.path || '').replace(/^\/+/, '').toLowerCase();
+  const target = LEGACY_HTML_ROUTE_ALIASES[key];
+  if (!target) return next();
+
+  const original = String(req.originalUrl || '');
+  const queryIndex = original.indexOf('?');
+  const suffix = queryIndex >= 0 ? original.slice(queryIndex) : '';
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return res.redirect(302, `${target}${suffix}`);
+});
+
 app.use(
   express.static(path.join(__dirname, "..", "public"), {
     setHeaders(res, filePath) {
@@ -33989,12 +34049,6 @@ async function _sbSVOrderRowIfAllowed(req, id) {
   const visible = await _sbVisibleSVInfo(req);
   return { row, allowed: _sbOrderVisibleToSV(row, visible) };
 }
-
-
-// ====== Page route: Orders Review ======
-app.get("/orders/sv-orders", requireAuth, requirePage("Orders Review"), (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "sv-orders.html"));
-});
 
 
     // ====== API: update quantity (number only) ======

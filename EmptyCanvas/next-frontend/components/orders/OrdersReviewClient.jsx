@@ -676,7 +676,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
 
   return (
     <section className="next-orders-page next-review-page">
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/sv-orders">Classic page</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/sv-orders?classic=1">Classic page</a></div> : null}
       {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
 
       <div className="next-orders-toolbar">
@@ -690,7 +690,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
         <div className="next-orders-tools">
           <label className="next-orders-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, reason, creator or component…" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}</label>
           <select value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter by order type"><option value="all">All order types</option>{typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}</select>
-          <a className="classic-page-link" href="/orders/sv-orders">Classic</a>
+          <a className="classic-page-link" href="/orders/sv-orders?classic=1">Classic</a>
         </div>
       </div>
 

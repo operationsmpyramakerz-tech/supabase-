@@ -45,7 +45,7 @@ export default async function OrdersReviewPage() {
           <h1>The new Orders Review page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/orders/sv-orders">Open classic Orders Review</a>
+            <a className="primary-button" href="/orders/sv-orders?classic=1">Open classic Orders Review</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

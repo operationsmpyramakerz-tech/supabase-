@@ -293,6 +293,13 @@ function createPageRouter(options = {}) {
     serveMigratedPage(req, res, "/next/orders", "current-orders.html"),
   );
 
+  // Orders Review was historically registered late in app.js, outside this
+  // browser-page router. Keep it here with the rest of the migrated pages so
+  // the production cutover and ?classic=1 rollback behave consistently.
+  router.get("/orders/sv-orders", auth, pageAccess("Orders Review"), (req, res) =>
+    serveMigratedPage(req, res, "/next/orders-review", "sv-orders.html"),
+  );
+
   router.get("/orders/tracking", auth, pageAccess("Current Orders"), (req, res) => {
     // The legacy repository no longer contains order-tracking.html. Keep old
     // bookmarks valid by routing them to the migrated tracker whenever the
