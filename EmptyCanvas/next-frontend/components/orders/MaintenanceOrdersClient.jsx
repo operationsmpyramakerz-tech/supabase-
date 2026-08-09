@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ClassicOrderIcon from "./ClassicOrderIcon";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "▦" },
@@ -15,6 +16,26 @@ function text(value) {
 
 function lower(value) {
   return text(value).toLowerCase();
+}
+
+function finite(value, fallback = 0) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 2 }).format(finite(value));
+}
+
+function effectiveQuantity(item) {
+  const edited = item?.quantityEditedBySupervisor ?? item?.quantityProgress;
+  if (edited !== null && edited !== undefined && edited !== "") return finite(edited);
+  return finite(item?.quantityRequested ?? item?.quantity);
+}
+
+function itemTotal(item) {
+  return Math.abs(effectiveQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
 }
 
 function dateValue(value) {
@@ -163,6 +184,7 @@ function buildGroups(rows) {
         items: [],
         latestCreated: item?.createdTime,
         createdByName: item?.createdByName,
+        createdById: item?.createdById ?? item?.teamMemberId,
         operationsByName: item?.operationsByName,
       });
     }
@@ -170,6 +192,7 @@ function buildGroups(rows) {
     group.items.push(item);
     if (dateValue(item?.createdTime) > dateValue(group.latestCreated)) group.latestCreated = item?.createdTime;
     if (!group.createdByName && item?.createdByName) group.createdByName = item.createdByName;
+    if (!group.createdById && (item?.createdById ?? item?.teamMemberId)) group.createdById = item?.createdById ?? item?.teamMemberId;
     if (!group.operationsByName && item?.operationsByName) group.operationsByName = item.operationsByName;
   });
 
@@ -201,6 +224,7 @@ function buildGroups(rows) {
       receiptEntries,
       receiptNumbers,
       spareParts,
+      total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
     };
   }).filter((group) => group.stage < 5);
 }
@@ -246,6 +270,35 @@ async function postJson(url, body) {
   return data;
 }
 
+function useClassicHeaderSearch(query, setQuery, placeholder) {
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    const previousPlaceholder = input.getAttribute("placeholder") || "Search";
+    const previousLabel = input.getAttribute("aria-label") || "Search";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder.replace(/\.{3}$/, ""));
+    input.value = query;
+    const listener = (event) => setQuery(String(event.target?.value || ""));
+    input.addEventListener("input", listener);
+    return () => { input.removeEventListener("input", listener); input.placeholder = previousPlaceholder; input.setAttribute("aria-label", previousLabel); };
+  }, [placeholder, setQuery]);
+  useEffect(() => { const input = document.querySelector(".classic-app-shell .main-header .searchbar input"); if (input && input.value !== query) input.value = query; }, [query]);
+}
+
+function MaintenanceFilter() {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => { if (!wrapRef.current?.contains(event.target)) setOpen(false); };
+    const key = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", close, true); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", close, true); document.removeEventListener("keydown", key); };
+  }, [open]);
+  return <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""}`}><button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}><span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter"/></span><span className="orders-type-filter__button-label">Filter</span></button>{open ? <div className="orders-type-filter__panel" role="menu" aria-label="Filter maintenance orders by type"><div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Order type</span><span className="orders-type-filter__panel-sub">Maintenance</span></div><div className="orders-type-filter__options"><button type="button" className="orders-type-filter__option is-active" onClick={() => setOpen(false)}><span className="orders-type-filter__option-icon" style={{ "--otf-icon-bg": "#FEF3C7", "--otf-icon-fg": "#92400E", "--otf-icon-border": "#FDE68A" }}><ClassicOrderIcon name="tool"/></span><span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">Request Maintenance</span><span className="orders-type-filter__option-sub">Maintenance orders only</span></span><span className="orders-type-filter__option-check"><ClassicOrderIcon name="check"/></span></button></div></div> : null}</div>;
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -263,128 +316,24 @@ function reportFileName(group, extension) {
 }
 
 function Progress({ state }) {
-  const steps = ["Not started", "In progress", "Done"];
-  return (
-    <div className="maintenance-progress" aria-label={`Maintenance status: ${state.label}`}>
-      {steps.map((label, index) => (
-        <div className={`maintenance-progress__step ${index + 1 <= state.step ? "is-complete" : ""}`} key={label}>
-          <span>{index + 1}</span>
-          <small>{label}</small>
-        </div>
-      ))}
-    </div>
-  );
+  const icons = ["eye", "activity", "check-circle"];
+  return <div className="co-track-pill maintenance-track-pill" role="img" aria-label={`Maintenance status: ${state.label}`}>{icons.map((icon, index) => { const step=index+1; return <span className="next-classic-track-fragment" key={icon}><span className={`co-track-step ${step <= state.step ? "is-active" : ""} ${step === state.step ? "is-current" : ""}`}><ClassicOrderIcon name={icon}/></span>{step < 3 ? <span className={`co-track-conn ${step < state.step ? "is-active" : ""}`}/> : null}</span>; })}</div>;
 }
 
 function MaintenanceCard({ group, onOpen }) {
-  return (
-    <button type="button" className="next-order-card maintenance-order-card" onClick={() => onOpen(group)}>
-      <div className="next-order-card__top">
-        <span className="order-type-badge type-maintenance"><b>⌘</b>Request Maintenance</span>
-        <span className={`order-status ${group.state.className}`}>{group.state.label}</span>
-      </div>
-      <h3>{group.orderIdLabel}</h3>
-      <p className="next-order-card__reason maintenance-card-issue">{group.issueSummary}</p>
-      <div className="maintenance-card-meta">
-        <span><small>Components</small><strong>{group.items.length}</strong></span>
-        <span><small>Created by</small><strong>{group.createdByName || "Unknown"}</strong></span>
-        <span><small>Technician</small><strong>{group.operationsByName || "Not assigned"}</strong></span>
-        <span><small>Signed reports</small><strong>{group.receiptEntries.length}</strong></span>
-      </div>
-      <div className="next-order-card__bottom">
-        <span><small>Date</small><strong>{formatDate(group.latestCreated)}</strong></span>
-        <span><small>Spare parts</small><strong>{group.spareParts.length || "None"}</strong></span>
-      </div>
-    </button>
-  );
+  const vars = MAINTENANCE_STATUS_COLORS[group.state.key] || MAINTENANCE_STATUS_COLORS["not-started"];
+  const thumbStyle = { "--co-thumb-bg": "#FEF3C7", "--co-thumb-fg": "#92400E", "--co-thumb-border": "#FDE68A" };
+  return <article className="co-card" role="button" tabIndex={0} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}><div className="co-top"><div className="co-thumb co-thumb--order-type" style={thumbStyle} title="Request Maintenance"><ClassicOrderIcon name="tool"/></div><div className="co-main"><div className="co-title">{group.orderIdLabel}</div><div className="co-sub">{formatDate(group.latestCreated)}</div><div className="co-createdby">{group.createdByName || "—"}</div></div><div className="co-qty">x{group.items.length}</div></div><div className="co-divider"/><div className="co-bottom"><div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div>{group.operationsByName ? <div className="co-received-by">Received by: {group.operationsByName}</div> : null}</div><div className="co-actions"><span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span><span className="co-right-ico" aria-hidden="true"><ClassicOrderIcon name="tool"/></span></div></div></article>;
 }
 
 function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport }) {
-  useEffect(() => {
-    if (!group) return undefined;
-    document.body.classList.add("next-modal-open");
-    const onKey = (event) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.classList.remove("next-modal-open");
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [group, onClose]);
-
+  useEffect(() => { if (!group) return undefined; document.body.classList.add("co-modal-open"); const onKey=(event)=>{ if(event.key==="Escape") onClose(); }; window.addEventListener("keydown",onKey); return ()=>{ document.body.classList.remove("co-modal-open"); window.removeEventListener("keydown",onKey); }; }, [group,onClose]);
   if (!group) return null;
   const canLog = group.state.key === "not-started";
   const canDone = group.state.key === "in-progress";
   const canDownload = ["in-progress", "done"].includes(group.state.key);
-
-  return (
-    <div className="next-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="next-order-modal maintenance-order-modal" role="dialog" aria-modal="true" aria-labelledby="maintenance-order-title">
-        <header className="next-order-modal__header">
-          <div>
-            <span className="order-type-badge type-maintenance"><b>⌘</b>Request Maintenance</span>
-            <h2 id="maintenance-order-title">{group.orderIdLabel}</h2>
-            <p>{formatDate(group.latestCreated)} · {group.createdByName || "Unknown creator"}</p>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
-        <Progress state={group.state} />
-
-        <div className="next-order-modal__meta maintenance-modal-meta">
-          <span><small>Components</small><strong>{group.items.length}</strong></span>
-          <span><small>Technician</small><strong>{group.operationsByName || "—"}</strong></span>
-          <span><small>Receipt numbers</small><strong>{group.receiptNumbers.join(", ") || "—"}</strong></span>
-          <span><small>Signed reports</small><strong>{group.receiptEntries.length}</strong></span>
-        </div>
-
-        {group.receiptEntries.length ? (
-          <div className="maintenance-reports">
-            <strong>Signed maintenance reports</strong>
-            <div>
-              {group.receiptEntries.map((entry, index) => (
-                <a href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}>{entry.name}</a>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="next-order-items maintenance-order-items">
-          {group.items.map((item, index) => {
-            const spares = normalizeSpareEntries(item);
-            return (
-              <article className="next-order-item maintenance-order-item" key={text(item?.id)}>
-                <span className="next-order-item__image">{text(item?.productName).slice(0, 1).toUpperCase() || "M"}</span>
-                <div className="next-order-item__body">
-                  <strong>{text(item?.productName) || `Component ${index + 1}`}</strong>
-                  <p className="maintenance-issue"><b>Issue:</b> {issueText(item)}</p>
-                  {text(item?.resolutionMethod) ? <p><b>Resolution:</b> {text(item.resolutionMethod)}</p> : null}
-                  {text(item?.actualIssueDescription) ? <p><b>Actual issue:</b> {text(item.actualIssueDescription)}</p> : null}
-                  {text(item?.repairAction) ? <p><b>Repair action:</b> {text(item.repairAction)}</p> : null}
-                  {spares.length ? (
-                    <p><b>Spare parts:</b> {spares.map((part) => `${part.name || part.id}${part.qty > 1 ? ` ×${part.qty}` : ""}`).join(", ")}</p>
-                  ) : null}
-                </div>
-                <div className="next-order-item__aside">
-                  <span className={`order-status ${itemHasMaintenanceLog(item) ? "status-in-progress" : "status-not-started"}`}>
-                    {itemHasMaintenanceLog(item) ? "Logged" : "Pending log"}
-                  </span>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-
-        <footer className="next-order-modal__actions maintenance-modal-actions">
-          {canLog ? <button type="button" className="primary-button" onClick={() => onLog(group)} disabled={busy}>Log Maintenance</button> : null}
-          {canDone ? <button type="button" className="primary-button" onClick={() => onDone(group)} disabled={busy}>Mark Done</button> : null}
-          {canDownload ? <button type="button" className="secondary-button" onClick={() => onExport("pdf", group)} disabled={busy}>Maintenance PDF</button> : null}
-          {canDownload ? <button type="button" className="secondary-button" onClick={() => onExport("excel", group)} disabled={busy}>Excel</button> : null}
-          <a className="secondary-button" href={`/orders/maintenance-orders?tab=${encodeURIComponent(group.state.key)}&classic=1`}>Classic workflow</a>
-          <button type="button" className="primary-button" onClick={onClose}>Done</button>
-        </footer>
-      </section>
-    </div>
-  );
+  const vars = MAINTENANCE_STATUS_COLORS[group.state.key] || MAINTENANCE_STATUS_COLORS["not-started"];
+  return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event)=>{ if(event.target===event.currentTarget) onClose(); }}><div className="co-modal-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} maintenance details`}><button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details"/><div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Maintenance</div><div className="co-modal-status-sub">{group.orderIdLabel}</div></div></div><Progress state={group.state}/><div className="co-modal-body"><div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Issue</span><strong>{group.issueSummary}</strong></div><div className="co-meta-row"><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div><div className="co-meta-row"><span>Products</span><strong>{group.items.length}</strong></div><div className="co-meta-row"><span>Estimated cost</span><strong>{formatMoney(group.total)}</strong></div><div className="co-meta-row"><span>Status</span><strong><span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span></strong></div>{group.operationsByName ? <div className="co-meta-row"><span>Technician</span><strong>{group.operationsByName}</strong></div> : null}{group.receiptNumbers.length ? <div className="co-meta-row"><span>Store Receipt Number</span><strong>{group.receiptNumbers.join(", ")}</strong></div> : null}</div><div className="co-modal-actions ro-actions ro-actions--right">{canDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport("pdf",group)} disabled={busy}><ClassicOrderIcon name="download"/>Download PDF</button> : null}{canDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport("excel",group)} disabled={busy}><ClassicOrderIcon name="download"/>Excel</button> : null}{canLog ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard"/>Log Maintenance</button> : null}{canDone ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle"/>Mark as Delivered</button> : null}</div>{group.receiptEntries.length ? <div className="next-classic-receipt-list"><div className="co-submodal-label">Signed reports</div><div>{group.receiptEntries.map((entry,index)=><a className="ro-action-btn ro-action-btn--light" href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}><ClassicOrderIcon name="image"/>{entry.name}</a>)}</div></div> : null}<div className="co-modal-items">{group.items.map((item,index)=>{ const issue=issueText(item); const spares=normalizeSpareEntries(item); return <div className="co-item" key={text(item?.id)||index}><div className="co-item-left"><div className="co-item-title"><div className="co-item-name">{text(item?.productName)||"Component"}</div></div><div className="co-item-sub">Qty: {effectiveQuantity(item)} · {formatMoney(itemTotal(item))}</div>{issue ? <div className="co-item-issue-desc">{issue}</div> : null}{text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}{text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}{spares.length ? <div className="co-item-issue-desc"><b>Spare parts:</b> {spares.map((part)=>`${part.name || "Part"} x${part.qty || 1}`).join(", ")}</div> : null}</div><div className="co-item-right"><span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span></div></div>; })}</div></div></div></div>;
 }
 
 function emptyLogForItem(item) {
@@ -462,68 +411,27 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }
   }
 
   return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="maintenance-log-modal" onSubmit={submit}>
-        <header>
-          <div>
-            <span className="pill">Maintenance log</span>
-            <h2>{group.orderIdLabel}</h2>
-            <p>Record the diagnosis and repair details for each component. Spare parts are optional.</p>
+    <div className="co-submodal-overlay is-open next-classic-wide-submodal" aria-hidden="false">
+      <form className="co-submodal-dialog req-maintenance-log-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close" />
+        <div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div><div className="co-submodal-sub">Save the maintenance work details for {group.orderIdLabel}. Spare parts are optional.</div></div></div>
+        <div className="co-submodal-body req-maintenance-log-body">
+          <div className="req-maintenance-log-items">
+            {logs.map((entry, logIndex) => (
+              <article className="req-maintenance-log-card next-classic-maintenance-log-card" key={entry.orderId || logIndex}>
+                <div className="req-maintenance-log-card__head"><div><div className="req-maintenance-log-card__label">Component {logIndex + 1}</div><div className="req-maintenance-log-card__title">{entry.productName}</div><div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div></div></div>
+                <div className="maintenance-log-grid req-maintenance-log-card__fields">
+                  <label><span>Resolution method</span><select value={entry.resolutionMethod} onChange={(event) => patchLog(logIndex, { resolutionMethod: event.target.value })} disabled={busy}><option value="">Select method</option>{resolutionMethods.map((option) => <option value={text(option?.name)} key={text(option?.name)}>{text(option?.name)}</option>)}</select></label>
+                  <label><span>Actual issue description</span><textarea value={entry.actualIssueDescription} onChange={(event) => patchLog(logIndex, { actualIssueDescription: event.target.value })} disabled={busy} rows={3}/></label>
+                  <label className="maintenance-log-grid__wide"><span>Repair action</span><textarea value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={3}/></label>
+                </div>
+                <div className="maintenance-spares"><div className="maintenance-spares__heading"><strong>Spare parts replaced</strong><button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => addSpare(logIndex)} disabled={busy}>+ Add spare part</button></div>{entry.spareParts.map((part, spareIndex) => <div className="maintenance-spare-row" key={`${logIndex}-${spareIndex}`}><select value={part.id || part.name} onChange={(event) => { const value=event.target.value; const selected=spareOptions.find((option)=>text(option?.id)===value); patchSpare(logIndex,spareIndex,{id:selected?value:"",name:selected?text(selected?.name):value}); }} disabled={busy}><option value="">Select component</option>{part.name && !part.id ? <option value={part.name}>{part.name}</option> : null}{spareOptions.map((option)=><option value={text(option?.id)} key={text(option?.id)}>{text(option?.name)}</option>)}</select><input type="number" min="1" step="1" value={part.qty} onChange={(event)=>patchSpare(logIndex,spareIndex,{qty:event.target.value})} disabled={busy} aria-label="Spare part quantity"/><button type="button" onClick={()=>removeSpare(logIndex,spareIndex)} disabled={busy || entry.spareParts.length <= 1} aria-label="Remove spare part">×</button></div>)}</div>
+              </article>
+            ))}
           </div>
-          <button type="button" className="icon-button" onClick={onCancel} disabled={busy}>×</button>
-        </header>
-
-        <div className="maintenance-log-list">
-          {logs.map((entry, logIndex) => (
-            <article className="maintenance-log-card" key={entry.orderId || logIndex}>
-              <div className="maintenance-log-card__head">
-                <div><small>Component {logIndex + 1}</small><strong>{entry.productName}</strong></div>
-                <p>{entry.issueDescription}</p>
-              </div>
-              <div className="maintenance-log-grid">
-                <label>
-                  <span>Resolution method</span>
-                  <select value={entry.resolutionMethod} onChange={(event) => patchLog(logIndex, { resolutionMethod: event.target.value })} disabled={busy}>
-                    <option value="">Select method</option>
-                    {resolutionMethods.map((option) => <option value={text(option?.name)} key={text(option?.name)}>{text(option?.name)}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>Actual issue description</span>
-                  <textarea value={entry.actualIssueDescription} onChange={(event) => patchLog(logIndex, { actualIssueDescription: event.target.value })} disabled={busy} rows={3} />
-                </label>
-                <label className="maintenance-log-grid__wide">
-                  <span>Repair action</span>
-                  <textarea value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={3} />
-                </label>
-              </div>
-              <div className="maintenance-spares">
-                <div className="maintenance-spares__heading"><strong>Spare parts replaced</strong><button type="button" onClick={() => addSpare(logIndex)} disabled={busy}>+ Add spare part</button></div>
-                {entry.spareParts.map((part, spareIndex) => (
-                  <div className="maintenance-spare-row" key={`${logIndex}-${spareIndex}`}>
-                    <select value={part.id || part.name} onChange={(event) => {
-                      const value = event.target.value;
-                      const selected = spareOptions.find((option) => text(option?.id) === value);
-                      patchSpare(logIndex, spareIndex, { id: selected ? value : "", name: selected ? text(selected?.name) : value });
-                    }} disabled={busy}>
-                      <option value="">Select component</option>
-                      {part.name && !part.id ? <option value={part.name}>{part.name}</option> : null}
-                      {spareOptions.map((option) => <option value={text(option?.id)} key={text(option?.id)}>{text(option?.name)}</option>)}
-                    </select>
-                    <input type="number" min="1" step="1" value={part.qty} onChange={(event) => patchSpare(logIndex, spareIndex, { qty: event.target.value })} disabled={busy} aria-label="Spare part quantity" />
-                    <button type="button" onClick={() => removeSpare(logIndex, spareIndex)} disabled={busy || entry.spareParts.length <= 1} aria-label="Remove spare part">×</button>
-                  </div>
-                ))}
-              </div>
-            </article>
-          ))}
+          <div className="co-submodal-error" role="alert">{error}</div>
         </div>
-
-        {error ? <div className="form-error">{error}</div> : null}
-        <footer>
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save Maintenance Log"}</button>
-        </footer>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Saving…" : "Confirm"}</button></div>
       </form>
     </div>
   );
@@ -586,28 +494,16 @@ function MarkDoneModal({ group, busy, error, onCancel, onSubmit }) {
   }
 
   return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="next-password-modal maintenance-done-modal" onSubmit={submit}>
-        <span className="password-modal-icon">✓</span>
-        <h2>Complete maintenance order</h2>
-        <p>Upload at least one image of the signed maintenance report. Images are optimized before upload.</p>
-        {requiresReceiptNumbers ? (
-          <label>
-            <span>Store receipt numbers</span>
-            <textarea value={receiptNumbers} onChange={(event) => setReceiptNumbers(event.target.value)} placeholder="One number per line or separated by commas" disabled={busy} rows={3} />
-            <small>Required because spare parts were replaced.</small>
-          </label>
-        ) : null}
-        <label className="maintenance-file-field">
-          <span>Signed report images</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files || []).slice(0, 4))} disabled={busy} />
-          <small>{files.length ? `${files.length} image${files.length === 1 ? "" : "s"} selected` : "PNG, JPG or WEBP · up to 4 images"}</small>
-        </label>
-        {error ? <div className="form-error">{error}</div> : null}
-        <div className="next-password-modal__actions">
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className="primary-button" disabled={busy || !files.length}>{busy ? "Uploading…" : "Mark Done"}</button>
+    <div className="co-submodal-overlay is-open" aria-hidden="false">
+      <form className="co-submodal-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close" />
+        <div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="upload-cloud" /></div><div><div className="co-submodal-title">Upload Signed Maintenance Report</div><div className="co-submodal-sub">Upload the signed maintenance report images before marking this order as delivered.</div></div></div>
+        <div className="co-submodal-body">
+          {requiresReceiptNumbers ? <label className="co-submodal-field"><span className="co-submodal-label">Store Receipt Number</span><textarea className="co-submodal-input next-classic-textarea" value={receiptNumbers} onChange={(event) => setReceiptNumbers(event.target.value)} placeholder="One number per line or separated by commas" disabled={busy} rows={3}/><small>Required because spare parts were replaced.</small></label> : null}
+          <label className="co-submodal-field next-classic-upload-field"><span className="co-submodal-label">Signed maintenance report images</span><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files || []).slice(0,4))} disabled={busy}/><small>{files.length ? `${files.length} image${files.length === 1 ? "" : "s"} selected` : "PNG, JPG or WEBP · up to 4 images"}</small></label>
+          <div className="co-submodal-error" role="alert">{error}</div>
         </div>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !files.length}>{busy ? "Uploading…" : "Confirm"}</button></div>
       </form>
     </div>
   );
@@ -624,7 +520,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(36);
+
+  useClassicHeaderSearch(query, setQuery, "Search by issue, product, or user...");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -639,7 +536,6 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-    setVisibleLimit(36);
   }, [tab, query]);
 
   const groups = useMemo(() => buildGroups(orders), [orders]);
@@ -793,68 +689,20 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   return (
-    <section className="next-orders-page next-maintenance-page">
-      {bootstrapWarnings.length ? (
-        <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/maintenance-orders?classic=1">Classic page</a></div>
-      ) : null}
-      {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
+    <section className="next-classic-orders-parity next-classic-maintenance-parity">
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/maintenance-orders?classic=1">Classic page</a></div> : null}
+      {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="next-orders-toolbar maintenance-toolbar">
-        <div className="next-order-tabs" role="tablist" aria-label="Maintenance order status">
-          {STATUS_TABS.map((item) => (
-            <button type="button" className={tab === item.key ? "active" : ""} onClick={() => setTab(item.key)} key={item.key}>
-              <b>{item.icon}</b><span>{item.label}</span><em>{tabCounts[item.key] || 0}</em>
-            </button>
-          ))}
-        </div>
-        <label className="next-orders-search">
-          <span>⌕</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search issue, component, technician, or receipt…" />
-        </label>
+      <div className="orders-toolbar" aria-label="Maintenance orders tools">
+        <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Maintenance Orders status">{STATUS_TABS.map((item)=><button type="button" className={`tab-portfolio order-status-tab ${tab===item.key?"active":""}`} onClick={()=>setTab(item.key)} role="tab" aria-selected={tab===item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__label">{item.label}</span></button>)}</div></div>
+        <div className="orders-toolbar__divider" aria-hidden="true"/><MaintenanceFilter/>
       </div>
 
-      <div className="orders-page-summary maintenance-page-summary">
-        <span><small>Visible orders</small><strong>{visibleGroups.length}</strong></span>
-        <span><small>Components</small><strong>{visibleGroups.reduce((sum, group) => sum + group.items.length, 0)}</strong></span>
-        <span><small>In progress</small><strong>{tabCounts["in-progress"] || 0}</strong></span>
-        <a href="/orders/maintenance-orders?classic=1">Open classic Maintenance Orders</a>
-      </div>
+      <section className="card"><div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group)=><MaintenanceCard group={group} onOpen={setSelected} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
 
-      {visibleGroups.length ? (
-        <div className="next-orders-grid">
-          {visibleGroups.slice(0, visibleLimit).map((group) => <MaintenanceCard group={group} onOpen={setSelected} key={group.key} />)}
-        </div>
-      ) : (
-        <div className="next-orders-empty"><span>⌘</span><h2>No maintenance orders found</h2><p>Try another status or search term.</p></div>
-      )}
-
-      {visibleLimit < visibleGroups.length ? (
-        <button type="button" className="orders-load-more" onClick={() => setVisibleLimit((value) => value + 36)}>Load more orders</button>
-      ) : null}
-
-      <MaintenanceDetailsModal
-        group={selected}
-        busy={busy}
-        onClose={() => setSelected(null)}
-        onLog={openLog}
-        onDone={(group) => { setActionError(""); setDoneGroup(group); }}
-        onExport={exportOrder}
-      />
-      <MaintenanceLogModal
-        group={logGroup}
-        options={options}
-        busy={busy}
-        error={actionError}
-        onCancel={() => { setLogGroup(null); setActionError(""); }}
-        onSubmit={saveLog}
-      />
-      <MarkDoneModal
-        group={doneGroup}
-        busy={busy}
-        error={actionError}
-        onCancel={() => { setDoneGroup(null); setActionError(""); }}
-        onSubmit={markDone}
-      />
+      <MaintenanceDetailsModal group={selected} busy={busy} onClose={()=>setSelected(null)} onLog={openLog} onDone={(group)=>{ setActionError(""); setDoneGroup(group); }} onExport={exportOrder}/>
+      <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={()=>{ setLogGroup(null); setActionError(""); }} onSubmit={saveLog}/>
+      <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={()=>{ setDoneGroup(null); setActionError(""); }} onSubmit={markDone}/>
     </section>
   );
 }

@@ -511,3 +511,157 @@ body.orders-review-page .next-classic-orders-parity .co-modal-dialog {
     animation: none;
   }
 }
+
+/* Stage 2C — Operations Orders + Maintenance Orders Classic parity ---------- */
+body.operations-orders-page .next-classic-orders-parity,
+body.page-maintenance-orders .next-classic-orders-parity {
+  width: 100%;
+  min-width: 0;
+}
+
+body.operations-orders-page .next-classic-orders-parity .tab-portfolio,
+body.page-maintenance-orders .next-classic-orders-parity .tab-portfolio,
+body.operations-orders-page .next-classic-orders-parity .orders-type-filter__option,
+body.page-maintenance-orders .next-classic-orders-parity .orders-type-filter__option {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio,
+body.page-maintenance-orders .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+  border: 0;
+}
+
+body.operations-orders-page .next-classic-orders-parity #requested-list,
+body.page-maintenance-orders .next-classic-orders-parity #requested-list {
+  margin: 0;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-card,
+body.page-maintenance-orders .next-classic-orders-parity .co-card {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-right-ico,
+body.page-maintenance-orders .next-classic-orders-parity .co-right-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-status-btn,
+body.operations-orders-page .next-classic-orders-parity .co-item-status,
+body.page-maintenance-orders .next-classic-orders-parity .co-status-btn,
+body.page-maintenance-orders .next-classic-orders-parity .co-item-status {
+  background: var(--tag-bg, #e5e7eb);
+  color: var(--tag-fg, #374151);
+  border-color: var(--tag-border, #d1d5db);
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-classic-track-fragment,
+body.page-maintenance-orders .next-classic-orders-parity .next-classic-track-fragment {
+  display: contents;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-modal-overlay.is-open,
+body.page-maintenance-orders .next-classic-orders-parity .co-modal-overlay.is-open,
+body.operations-orders-page .next-classic-orders-parity .co-submodal-overlay.is-open,
+body.page-maintenance-orders .next-classic-orders-parity .co-submodal-overlay.is-open {
+  display: flex;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-submodal-overlay.is-open,
+body.page-maintenance-orders .next-classic-orders-parity .co-submodal-overlay.is-open {
+  z-index: 1300;
+}
+
+.next-classic-textarea {
+  min-height: 110px;
+  resize: vertical;
+  padding-top: 12px;
+}
+
+.next-classic-wide-submodal .co-submodal-dialog {
+  width: min(920px, calc(100vw - 28px));
+  max-width: 920px;
+  max-height: min(88vh, 820px);
+}
+
+.next-classic-wide-submodal .co-submodal-body {
+  overflow: auto;
+}
+
+.next-classic-wide-submodal .req-maintenance-log-dialog {
+  width: min(760px, 94vw);
+  max-height: min(88dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.next-classic-wide-submodal .req-maintenance-log-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+
+.next-classic-receipt-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.next-classic-receipt-list > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.next-classic-receipt-list a {
+  text-decoration: none;
+}
+
+.maintenance-track-pill {
+  grid-template-columns: auto 1fr auto 1fr auto;
+}
+
+.next-classic-maintenance-log-card input,
+.next-classic-maintenance-log-card select,
+.next-classic-maintenance-log-card textarea,
+.next-classic-upload-field input {
+  font: inherit;
+}
+
+.next-classic-maintenance-log-card .maintenance-spares__heading .ro-action-btn {
+  width: auto;
+}
+
+.next-classic-upload-field {
+  display: grid;
+  gap: 8px;
+}
+
+.next-classic-upload-field input[type="file"] {
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed #d1d5db;
+  border-radius: 14px;
+  background: #f9fafb;
+}
+
+@media (max-width: 720px) {
+  .next-classic-wide-submodal .co-submodal-dialog {
+    width: min(100% - 16px, 920px);
+    max-height: 92vh;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-bottom,
+  body.page-maintenance-orders .next-classic-orders-parity .co-bottom {
+    align-items: flex-end;
+  }
+}
+

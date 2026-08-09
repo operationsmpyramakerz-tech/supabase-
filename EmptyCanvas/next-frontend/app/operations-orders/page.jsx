@@ -64,6 +64,7 @@ export default async function OperationsOrdersPage() {
       account={account}
       title="Operations Orders"
       eyebrow="Operations fulfilment workspace"
+      bodyClass="order-modal-fit-screen operations-orders-page"
       activePath="/next/operations-orders"
     >
       <OperationsOrdersClient

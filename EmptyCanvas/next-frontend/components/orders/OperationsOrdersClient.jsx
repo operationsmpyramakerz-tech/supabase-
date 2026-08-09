@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ClassicOrderIcon from "./ClassicOrderIcon";
 
 const STATUS_TABS = [
-  { key: "all", label: "All", icon: "▦" },
-  { key: "approved", label: "Approved", icon: "✓" },
-  { key: "rejected", label: "Rejected", icon: "×" },
-  { key: "remaining", label: "Remaining", icon: "◷" },
-  { key: "received", label: "Shipping", icon: "➜" },
-  { key: "delivered", label: "Delivered", icon: "⌂" },
-  { key: "archive", label: "Archive", icon: "▣" },
+  { key: "all", label: "All", icon: "layers" },
+  { key: "approved", label: "Approved", icon: "check-circle" },
+  { key: "rejected", label: "Rejected", icon: "x-circle" },
+  { key: "remaining", label: "Remaining", icon: "pause-circle" },
+  { key: "received", label: "Shipping", icon: "truck" },
+  { key: "delivered", label: "Delivered", icon: "check-circle" },
+  { key: "archive", label: "Archive", icon: "archive" },
 ];
+
+const STATUS_COLORS = {
+  "under-supervision": { bg: "#FFEDD5", fg: "#9A3412", bd: "#FED7AA" },
+  approved: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  rejected: { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" },
+  remaining: { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
+  received: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
+  shipped: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
+  delivered: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  arrived: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  archive: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
+  mixed: { bg: "#F3F4F6", fg: "#374151", bd: "#D1D5DB" },
+};
 
 function text(value) {
   return String(value ?? "").trim();
@@ -60,10 +74,10 @@ function orderTypeKey(value) {
 
 function orderTypeMeta(value) {
   const key = orderTypeKey(value);
-  if (key === "requestproducts") return { label: "Request Products", icon: "▤", className: "type-request" };
-  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "↗", className: "type-withdraw" };
-  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "⌘", className: "type-maintenance" };
-  return { label: text(value) || "Order", icon: "□", className: "type-default" };
+  if (key === "requestproducts") return { label: "Request Products", icon: "shopping-cart", bg: "#DCFCE7", fg: "#166534", bd: "#86EFAC" };
+  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "log-out", bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" };
+  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" };
+  return { label: text(value) || "Order", icon: "package", bg: "#E5E7EB", fg: "#374151", bd: "#D1D5DB" };
 }
 
 function isMaintenance(value) {
@@ -180,14 +194,18 @@ function buildGroups(rows) {
         items: [],
         latestCreated: item?.createdTime,
         orderType: item?.orderType,
+        orderTypeColor: item?.orderTypeColor,
         createdByName: item?.createdByName,
+        createdById: item?.createdById ?? item?.teamMemberId,
       });
     }
     const group = map.get(key);
     group.items.push(item);
     if (dateValue(item?.createdTime) > dateValue(group.latestCreated)) group.latestCreated = item?.createdTime;
     if (!group.orderType && item?.orderType) group.orderType = item.orderType;
+    if (!group.orderTypeColor && item?.orderTypeColor) group.orderTypeColor = item.orderTypeColor;
     if (!group.createdByName && item?.createdByName) group.createdByName = item.createdByName;
+    if (!group.createdById && (item?.createdById ?? item?.teamMemberId)) group.createdById = item?.createdById ?? item?.teamMemberId;
   });
 
   return [...map.values()].map((group) => {
@@ -329,6 +347,94 @@ async function postJson(url, body) {
   return data;
 }
 
+function useClassicHeaderSearch(query, setQuery, placeholder) {
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    const previousPlaceholder = input.getAttribute("placeholder") || "Search";
+    const previousLabel = input.getAttribute("aria-label") || "Search";
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder.replace(/\.{3}$/, ""));
+    input.value = query;
+    const listener = (event) => setQuery(String(event.target?.value || ""));
+    input.addEventListener("input", listener);
+    return () => {
+      input.removeEventListener("input", listener);
+      input.placeholder = previousPlaceholder;
+      input.setAttribute("aria-label", previousLabel);
+    };
+  }, [placeholder, setQuery]);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (input && input.value !== query) input.value = query;
+  }, [query]);
+}
+
+function TypeFilter({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => { if (!wrapRef.current?.contains(event.target)) setOpen(false); };
+    const key = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""} ${value !== "all" ? "is-filtered" : ""}`}>
+      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}>
+        <span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter" /></span>
+        <span className="orders-type-filter__button-label">Filter</span>
+        {value !== "all" ? <span className="orders-type-filter__button-dot" /> : null}
+      </button>
+      {open ? (
+        <div className="orders-type-filter__panel" role="menu" aria-label="Filter operations orders by type">
+          <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Order type</span><span className="orders-type-filter__panel-sub">Choose one</span></div>
+          <div className="orders-type-filter__options">
+            <button type="button" className={`orders-type-filter__option ${value === "all" ? "is-active" : ""}`} onClick={() => { onChange("all"); setOpen(false); }}>
+              <span className="orders-type-filter__option-icon"><ClassicOrderIcon name="layers" /></span>
+              <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">All order types</span><span className="orders-type-filter__option-sub">Show every order type</span></span>
+              <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
+            </button>
+            {options.map((option) => {
+              const meta = orderTypeMeta(option.raw || option.label);
+              const style = { "--otf-icon-bg": meta.bg, "--otf-icon-fg": meta.fg, "--otf-icon-border": meta.bd };
+              return (
+                <button type="button" className={`orders-type-filter__option ${value === option.key ? "is-active" : ""}`} onClick={() => { onChange(option.key); setOpen(false); }} key={option.key}>
+                  <span className="orders-type-filter__option-icon" style={style}><ClassicOrderIcon name={meta.icon} /></span>
+                  <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{option.count} order{option.count === 1 ? "" : "s"}</span></span>
+                  <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function statusVars(group) {
+  if (group.hasRejected && group.hasApproved && group.stage <= 2) return STATUS_COLORS.mixed;
+  return STATUS_COLORS[group.state] || STATUS_COLORS["under-supervision"];
+}
+
+function StatusPill({ group, className = "co-status-btn" }) {
+  const vars = statusVars(group);
+  return <span className={className} style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{statusLabel(group)}</span>;
+}
+
+function MixedStatusPill() {
+  return <span className="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected"><span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span><span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span></span>;
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -342,40 +448,49 @@ function downloadBlob(blob, filename) {
 
 function OperationsOrderCard({ group, tab, onOpen }) {
   const type = orderTypeMeta(group.orderType);
+  const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
+  const displayItems = tab === "remaining"
+    ? group.items.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9)
+    : tab === "received"
+      ? group.items.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9)
+      : group.items;
   const value = tab === "remaining" ? group.remainingTotal : tab === "received" ? group.receivedTotal : group.total;
   return (
-    <button type="button" className="next-order-card operations-order-card" onClick={() => onOpen(group)}>
-      <div className="next-order-card__top">
-        <span className={`next-order-type ${type.className}`} aria-hidden="true">{type.icon}</span>
-        <span className="next-order-card__title">
-          <strong>{group.orderIdLabel}</strong>
-          <small>{formatDate(group.latestCreated)}</small>
-        </span>
-        <span className="next-order-card__count">×{group.items.length}</span>
+    <article className="co-card" role="button" tabIndex={0} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+      <div className="co-top">
+        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
+        <div className="co-main">
+          <div className="co-title">{group.orderIdLabel}</div>
+          <div className="co-sub">{formatDate(group.latestCreated)}</div>
+          <div className="co-createdby">{group.createdByName || "—"}</div>
+        </div>
+        <div className="co-qty">x{displayItems.length}</div>
       </div>
-      <div className="next-order-card__reason">{group.reason}</div>
-      <div className="operations-card-meta">
-        <span><small>Created by</small><strong>{group.createdByName || "—"}</strong></span>
-        <span><small>{tab === "remaining" ? "Remaining value" : tab === "received" ? "Received value" : "Estimate total"}</small><strong>{formatMoney(value)}</strong></span>
+      <div className="co-divider" />
+      <div className="co-bottom">
+        <div className="co-est">
+          <div className="co-est-label">Estimate Total</div>
+          <div className="co-est-value">{formatMoney(value)}</div>
+          {group.operationsByName ? <div className="co-received-by">Received by: {group.operationsByName}</div> : null}
+        </div>
+        <div className="co-actions">
+          {tab === "all" && group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} />}
+          <span className="co-right-ico" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`}><ClassicOrderIcon name="user" /></span>
+        </div>
       </div>
-      <div className="next-order-card__bottom">
-        <span><small>Operations</small><strong>{group.operationsByName || "Not assigned"}</strong></span>
-        <span className={`order-status ${statusClass(group)}`}>{statusLabel(group)}</span>
-      </div>
-    </button>
+    </article>
   );
 }
 
 function Progress({ stage }) {
-  const labels = ["Supervision", "In progress", "Shipping", "Delivered"];
-  const progress = Math.min(4, Math.max(1, stage >= 5 ? 4 : stage));
+  const icons = ["eye", "activity", "truck", "home"];
+  const safe = Math.min(4, Math.max(1, stage >= 5 ? 4 : stage));
   return (
-    <div className="order-progress operations-progress" aria-label="Order progress">
-      {labels.map((label, index) => (
-        <div className={`order-progress__step ${index + 1 <= progress ? "is-complete" : ""}`} key={label}>
-          <span>{index + 1}</span><small>{label}</small>
-        </div>
-      ))}
+    <div className="co-track-pill" role="img" aria-label="Order progress">
+      {icons.map((icon, index) => {
+        const step = index + 1;
+        return <span className="next-classic-track-fragment" key={icon}><span className={`co-track-step ${step <= safe ? "is-active" : ""} ${step === safe ? "is-current" : ""}`}><ClassicOrderIcon name={icon} /></span>{step < 4 ? <span className={`co-track-conn ${step < safe ? "is-active" : ""}`} /> : null}</span>;
+      })}
     </div>
   );
 }
@@ -383,13 +498,10 @@ function Progress({ stage }) {
 function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   useEffect(() => {
     if (!group) return undefined;
-    document.body.classList.add("next-modal-open");
+    document.body.classList.add("co-modal-open");
     const onKey = (event) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.classList.remove("next-modal-open");
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => { document.body.classList.remove("co-modal-open"); window.removeEventListener("keydown", onKey); };
   }, [group, onClose]);
 
   if (!group) return null;
@@ -400,80 +512,53 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const shipping = group.stage === 3;
   const canReceive = group.stage === 2 && group.hasApproved && !maintenance;
   const canReview = group.stage <= 2 && !archived;
+  const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
 
   return (
-    <div className="next-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="next-order-modal operations-order-modal" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
-        <header className="next-order-modal__header">
-          <div>
-            <span className={`order-type-badge ${type.className}`}><b>{type.icon}</b>{type.label}</span>
-            <h2 id="operations-order-title">{group.orderIdLabel}</h2>
-            <p>{formatDate(group.latestCreated)} · {group.createdByName || "Unknown creator"}</p>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
+    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
+        <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
+        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub">{group.orderIdLabel}</div></div></div>
         <Progress stage={group.stage} />
-        {archived ? <div className="archive-banner">This order is currently archived.</div> : null}
-        {group.rejectedReason ? <div className="operations-rejection-banner"><strong>Rejected reason</strong><span>{group.rejectedReason}</span></div> : null}
-
-        <div className="next-order-modal__meta operations-modal-meta">
-          <span><small>Reason</small><strong>{group.reason}</strong></span>
-          <span><small>Components</small><strong>{group.items.length}</strong></span>
-          <span><small>Total value</small><strong>{formatMoney(group.total)}</strong></span>
-          <span><small>Received by</small><strong>{group.operationsByName || "—"}</strong></span>
-          <span><small>Receipt numbers</small><strong>{group.receiptNumber || "—"}</strong></span>
-        </div>
-
-        {group.receiptEntries.length ? (
-          <div className="operations-receipts">
-            <strong>Receipt photos</strong>
-            <div>{group.receiptEntries.map((entry, index) => <a href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}>{entry.name}</a>)}</div>
+        <div className="co-modal-body">
+          <div className="co-modal-meta">
+            <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+            <div className="co-meta-row"><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+            <div className="co-meta-row"><span>Products</span><strong>{group.items.length}</strong></div>
+            <div className="co-meta-row"><span>Estimated cost</span><strong>{formatMoney(group.total)}</strong></div>
+            {group.receiptNumber ? <div className="co-meta-row"><span>Store Receipt Number</span><strong>{group.receiptNumber}</strong></div> : null}
+            {group.operationsByName ? <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div> : null}
+            {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
           </div>
-        ) : null}
 
-        <div className="next-order-items">
-          {group.items.map((item) => {
-            const state = itemStatus(item);
-            const base = baseQuantity(item);
-            const received = receivedQuantity(item);
-            const remaining = remainingQuantity(item);
-            return (
-              <article className="next-order-item operations-order-item" key={text(item?.id)}>
-                <span className="next-order-item__image">{text(item?.productName).slice(0, 1).toUpperCase() || "P"}</span>
-                <div className="next-order-item__body">
-                  <strong>{text(item?.productName) || "Product"}</strong>
-                  <small>Requested: {formatQuantity(base)} · Received: {formatQuantity(received)} · Remaining: {formatQuantity(remaining)}</small>
-                  {text(item?.issueDescription) ? <p>{text(item.issueDescription)}</p> : null}
-                  {text(item?.actualIssueDescription) ? <p><b>Actual issue:</b> {text(item.actualIssueDescription)}</p> : null}
-                  {text(item?.repairAction) ? <p><b>Repair:</b> {text(item.repairAction)}</p> : null}
-                  {itemRejectedReason(item) ? <p className="item-rejection-reason">{itemRejectedReason(item)}</p> : null}
-                </div>
-                <div className="next-order-item__aside">
-                  <span className={`order-status ${state.className}`}>{state.label}</span>
-                  <strong>{formatMoney(itemTotal(item))}</strong>
-                </div>
-              </article>
-            );
-          })}
+          <div className="co-modal-actions ro-actions ro-actions--right">
+            {canReview ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("approve", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Approve</button> : null}
+            {canReview ? <button type="button" className="ro-action-btn ro-action-btn--danger" onClick={() => onAction("reject", group)} disabled={busy}><ClassicOrderIcon name="x-circle" />Reject</button> : null}
+            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", group)} disabled={busy}><ClassicOrderIcon name="package" />Received by operations</button> : null}
+            {maintenance && group.stage < 4 && !archived ? <a className="ro-action-btn ro-action-btn--light" href={`/next/maintenance-orders?tab=${shipping ? "in-progress" : "not-started"}`}><ClassicOrderIcon name="tool" />Open maintenance</a> : null}
+            {shipping ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
+            {delivered && orderTypeKey(group.orderType) === "requestproducts" ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("withdrawal", group)} disabled={busy}>Create Withdrawal</button> : null}
+            {delivered && orderTypeKey(group.orderType) === "withdrawproducts" ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("delivery", group)} disabled={busy}>Create Delivery</button> : null}
+            {!archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("archive", group)} disabled={busy}><ClassicOrderIcon name="archive" />Archive</button> : null}
+            {archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("unarchive", group)} disabled={busy}><ClassicOrderIcon name="rotate-ccw" />UnArchive</button> : null}
+            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport("pdf", group, tab)} disabled={busy}><ClassicOrderIcon name="download" />PDF</button>
+            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport("excel", group, tab)} disabled={busy}><ClassicOrderIcon name="download" />Excel</button>
+          </div>
+
+          {group.receiptEntries.length ? <div className="next-classic-receipt-list"><div className="co-submodal-label">Receipt photos</div><div>{group.receiptEntries.map((entry, index) => <a className="ro-action-btn ro-action-btn--light" href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}><ClassicOrderIcon name="image" />{entry.name}</a>)}</div></div> : null}
+
+          <div className="co-modal-items">
+            {items.map((item, index) => {
+              const state = itemStatus(item);
+              const base = baseQuantity(item);
+              const received = receivedQuantity(item);
+              const remaining = remainingQuantity(item);
+              const vars = STATUS_COLORS[state.className.replace(/^status-/, "")] || STATUS_COLORS["under-supervision"];
+              return <div className="co-item" key={text(item?.id) || index}><div className="co-item-left"><div className="co-item-title"><div className="co-item-name">{text(item?.productName) || "Product"}</div></div><div className="co-item-sub">Requested: {formatQuantity(base)} · Received: {formatQuantity(received)} · Remaining: {formatQuantity(remaining)}</div>{text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}{text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}{text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}</div><div className="co-item-right"><div className="co-item-total">{formatMoney(itemTotal(item))}</div><span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span></div></div>;
+            })}
+          </div>
         </div>
-
-        <footer className="next-order-modal__actions operations-modal-actions">
-          {canReview ? <button type="button" className="review-approve-button" onClick={() => onAction("approve", group)} disabled={busy}>Approve</button> : null}
-          {canReview ? <button type="button" className="review-reject-button" onClick={() => onAction("reject", group)} disabled={busy}>Reject</button> : null}
-          {canReceive ? <button type="button" className="primary-button" onClick={() => onAction("receive", group)} disabled={busy}>Received by operations</button> : null}
-          {maintenance && group.stage < 4 && !archived ? <a className="secondary-button" href={`/next/maintenance-orders?tab=${shipping ? "in-progress" : "not-started"}`}>Open maintenance workflow</a> : null}
-          {shipping ? <button type="button" className="primary-button" onClick={() => onAction("deliver", group)} disabled={busy}>Mark delivered</button> : null}
-          {delivered && orderTypeKey(group.orderType) === "requestproducts" ? <button type="button" className="secondary-button" onClick={() => onAction("withdrawal", group)} disabled={busy}>Create Withdrawal</button> : null}
-          {delivered && orderTypeKey(group.orderType) === "withdrawproducts" ? <button type="button" className="secondary-button" onClick={() => onAction("delivery", group)} disabled={busy}>Create Delivery</button> : null}
-          {!archived ? <button type="button" className="secondary-button" onClick={() => onAction("archive", group)} disabled={busy}>Archive</button> : null}
-          {archived ? <button type="button" className="secondary-button" onClick={() => onAction("unarchive", group)} disabled={busy}>UnArchive</button> : null}
-          <button type="button" className="secondary-button" onClick={() => onExport("pdf", group, tab)} disabled={busy}>PDF</button>
-          <button type="button" className="secondary-button" onClick={() => onExport("excel", group, tab)} disabled={busy}>Excel</button>
-          <a className="secondary-button" href={`/orders/requested?tab=${encodeURIComponent(tab)}&classic=1`}>Classic workflow</a>
-          <button type="button" className="primary-button" onClick={onClose}>Done</button>
-        </footer>
-      </section>
+      </div>
     </div>
   );
 }
@@ -482,42 +567,14 @@ function RejectModal({ state, busy, error, onCancel, onSubmit }) {
   const [reason, setReason] = useState("");
   useEffect(() => setReason(""), [state?.group?.key]);
   if (!state) return null;
-  return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="next-password-modal operations-text-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}>
-        <span className="password-modal-icon is-danger">!</span>
-        <h2>Reject operations order</h2>
-        <p>Enter the reason that will be saved for every selected component in this order.</p>
-        <label><span>Rejected reason</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy} /></label>
-        {error ? <div className="form-error">{error}</div> : null}
-        <div className="next-password-modal__actions">
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className="danger-button" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button>
-        </div>
-      </form>
-    </div>
-  );
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Reject operations order</div><div className="co-submodal-sub">Enter the reason that will be saved for every selected component.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Rejected reason</label><textarea className="co-submodal-input next-classic-textarea" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--danger" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button></div></form></div>;
 }
 
 function ArchiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [password, setPassword] = useState("");
   useEffect(() => setPassword(""), [state?.group?.key]);
   if (!state) return null;
-  return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="next-password-modal" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-        <span className="password-modal-icon">▣</span>
-        <h2>Archive operations order</h2>
-        <p>Enter the Operations Orders admin password to move this order to Archive.</p>
-        <label><span>Admin password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy} /></label>
-        {error ? <div className="form-error">{error}</div> : null}
-        <div className="next-password-modal__actions">
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className="primary-button" disabled={busy || !password.trim()}>{busy ? "Archiving…" : "Archive"}</button>
-        </div>
-      </form>
-    </div>
-  );
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="archive" /></div><div><div className="co-submodal-title">Archive operations order</div><div className="co-submodal-sub">Enter the Operations Orders admin password to move this order to Archive.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Archiving…" : "Archive"}</button></div></form></div>;
 }
 
 function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
@@ -525,61 +582,18 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [receiptNumber, setReceiptNumber] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
   const [quantities, setQuantities] = useState({});
-
-  useEffect(() => {
-    if (!group) return;
-    const initial = {};
-    group.items.forEach((item) => { initial[text(item?.id)] = formatQuantity(Math.abs(remainingQuantity(item))); });
-    setQuantities(initial);
-    setReceiptNumber("");
-    setIssueDescription("");
-  }, [group]);
-
+  useEffect(() => { if (!group) return; const initial = {}; group.items.forEach((item) => { initial[text(item?.id)] = formatQuantity(Math.abs(remainingQuantity(item))); }); setQuantities(initial); setReceiptNumber(""); setIssueDescription(""); }, [group]);
   if (!group) return null;
-  return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="operations-action-modal" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
-        <header><div><span className="pill">Operations receipt</span><h2>Receive components</h2><p>Enter how much is being received now. The backend stores the resulting absolute received quantity.</p></div><button type="button" className="icon-button" onClick={onCancel}>×</button></header>
-        <div className="operations-action-fields">
-          <label><span>Receipt number (optional)</span><input value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="One or more receipt numbers" /></label>
-          <label><span>Issue description (optional)</span><input value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Shared note for received components" /></label>
-        </div>
-        <div className="operations-quantity-list">
-          {group.items.map((item) => {
-            const id = text(item?.id);
-            return <label key={id}><span><strong>{text(item?.productName) || "Product"}</strong><small>Already received {formatQuantity(receivedQuantity(item))} · Remaining {formatQuantity(remainingQuantity(item))}</small></span><input type="number" min="0" step="any" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} /></label>;
-          })}
-        </div>
-        {error ? <div className="form-error">{error}</div> : null}
-        <footer><button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? "Receiving…" : "Confirm receipt"}</button></footer>
-      </form>
-    </div>
-  );
+  return <div className="co-submodal-overlay is-open next-classic-wide-submodal" aria-hidden="false"><form className="co-submodal-dialog req-ops-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="package" /></div><div><div className="co-submodal-title">Receive components</div><div className="co-submodal-sub">Enter how much is being received now.</div></div></div><div className="co-submodal-body"><div className="co-submodal-fields"><label className="co-submodal-field"><span className="co-submodal-label">Receipt number (optional)</span><input className="co-submodal-input" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="One or more receipt numbers"/></label><label className="co-submodal-field"><span className="co-submodal-label">Issue description (optional)</span><input className="co-submodal-input" value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Shared note for received components"/></label><div className="co-submodal-field"><span className="co-submodal-label">Received quantities</span><div className="req-ops-edit-qty-list">{group.items.map((item) => { const id=text(item?.id); return <label className="req-ops-edit-qty-row" key={id}><span className="req-ops-edit-qty-info"><span className="req-ops-edit-qty-name">{text(item?.productName) || "Product"}</span><span className="req-ops-edit-qty-sub">Already received {formatQuantity(receivedQuantity(item))} · Remaining {formatQuantity(remainingQuantity(item))}</span></span><input className="co-submodal-input req-ops-edit-qty-input" type="number" min="0" step="any" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))}/></label>; })}</div></div></div><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Receiving…" : "Confirm receipt"}</button></div></form></div>;
 }
 
 function ConfirmModal({ state, busy, error, onCancel, onSubmit }) {
   const [receiptNumbers, setReceiptNumbers] = useState("");
   useEffect(() => setReceiptNumbers(""), [state?.action, state?.group?.key]);
   if (!state) return null;
-  const configs = {
-    approve: ["Approve operations order", "Every component in this order will be approved by Operations.", "Approve"],
-    deliver: ["Mark order delivered", "The order will move to Delivered and Supabase stocktaking synchronization will run.", "Mark delivered"],
-    unarchive: ["Restore archived order", "The order will return to Approved/In progress.", "UnArchive"],
-    withdrawal: ["Create withdrawal order", "A new withdrawal order will be created from delivered quantities.", "Create Withdrawal"],
-    delivery: ["Create delivery order", "A new delivery order will be created from delivered quantities.", "Create Delivery"],
-  };
-  const config = configs[state.action] || ["Confirm action", "Continue with this operation?", "Continue"];
-  return (
-    <div className="next-modal-backdrop next-modal-backdrop--front" role="presentation">
-      <form className="next-password-modal" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumbers }); }}>
-        <span className="password-modal-icon">⌁</span>
-        <h2>{config[0]}</h2><p>{config[1]}</p>
-        {state.action === "deliver" ? <label><span>Receipt numbers (optional)</span><input value={receiptNumbers} onChange={(event) => setReceiptNumbers(event.target.value)} placeholder="Separate values with commas" /></label> : null}
-        {error ? <div className="form-error">{error}</div> : null}
-        <div className="next-password-modal__actions"><button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? "Working…" : config[2]}</button></div>
-      </form>
-    </div>
-  );
+  const configs = { approve: ["Approve operations order", "Every component in this order will be approved by Operations.", "Approve", "check-circle"], deliver: ["Mark order delivered", "The order will move to Delivered and stocktaking synchronization will run.", "Mark delivered", "check-circle"], unarchive: ["Restore archived order", "The order will return to the active workflow.", "UnArchive", "rotate-ccw"], withdrawal: ["Create withdrawal order", "A new withdrawal order will be created from delivered quantities.", "Create Withdrawal", "log-out"], delivery: ["Create delivery order", "A new delivery order will be created from delivered quantities.", "Create Delivery", "package"] };
+  const config = configs[state.action] || ["Confirm action", "Continue with this operation?", "Continue", "check-circle"];
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumbers }); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name={config[3]} /></div><div><div className="co-submodal-title">{config[0]}</div><div className="co-submodal-sub">{config[1]}</div></div></div><div className="co-submodal-body">{state.action === "deliver" ? <label className="co-submodal-field"><span className="co-submodal-label">Receipt numbers (optional)</span><input className="co-submodal-input" value={receiptNumbers} onChange={(event) => setReceiptNumbers(event.target.value)} placeholder="Separate values with commas"/></label> : null}<div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Working…" : config[2]}</button></div></form></div>;
 }
 
 export default function OperationsOrdersClient({ initialOrders = [], bootstrapWarnings = [] }) {
@@ -592,7 +606,8 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(36);
+
+  useClassicHeaderSearch(query, setQuery, "Search by reason or user...");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -609,7 +624,6 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
-    setVisibleLimit(36);
   }, [tab, type, query]);
 
   const groups = useMemo(() => buildGroups(orders), [orders]);
@@ -619,7 +633,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     tabGroups.forEach((group) => {
       const key = orderTypeKey(group.orderType) || "other";
       const meta = orderTypeMeta(group.orderType);
-      const current = map.get(key) || { key, label: meta.label, count: 0 };
+      const current = map.get(key) || { key, raw: group.orderType, label: meta.label, count: 0 };
       current.count += 1;
       map.set(key, current);
     });
@@ -754,39 +768,25 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   }
 
   return (
-    <section className="next-orders-page next-operations-page">
+    <section className="next-classic-orders-parity next-classic-operations-parity">
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/requested?classic=1">Classic page</a></div> : null}
-      {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
+      {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="next-orders-toolbar">
-        <div className="next-orders-tabs" role="tablist" aria-label="Operations Orders status">
-          {STATUS_TABS.map((item) => (
-            <button type="button" className={tab === item.key ? "is-active" : ""} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}>
-              <span>{item.icon}</span><b>{item.label}</b><em>{tabCounts[item.key] || 0}</em>
-            </button>
-          ))}
+      <div className="orders-toolbar" aria-label="Operations orders tools">
+        <div className="orders-toolbar__scroll">
+          <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
+            {STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__label">{item.label}</span></button>)}
+          </div>
         </div>
-        <div className="next-orders-tools">
-          <label className="next-orders-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, reason, user, receipt or component…" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}</label>
-          <select value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter by order type"><option value="all">All order types</option>{typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}</select>
-          <a className="classic-page-link" href={`/orders/requested?tab=${encodeURIComponent(tab)}&classic=1`}>Classic</a>
-        </div>
+        <div className="orders-toolbar__divider" aria-hidden="true" />
+        <TypeFilter value={type} options={typeOptions} onChange={setType} />
       </div>
 
-      <div className="next-orders-summary">
-        <span><strong>{visibleGroups.length}</strong> visible orders</span>
-        <span><strong>{visibleGroups.reduce((sum, group) => sum + group.items.length, 0)}</strong> components</span>
-        <span><strong>{formatMoney(visibleGroups.reduce((sum, group) => sum + (tab === "remaining" ? group.remainingTotal : tab === "received" ? group.receivedTotal : group.total), 0))}</strong> selected value</span>
-      </div>
-
-      {visibleGroups.length ? (
-        <>
-          <div className="next-orders-grid">{visibleGroups.slice(0, visibleLimit).map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} key={group.key} />)}</div>
-          {visibleGroups.length > visibleLimit ? <button type="button" className="load-more-button" onClick={() => setVisibleLimit((value) => value + 36)}>Load more ({visibleGroups.length - visibleLimit})</button> : null}
-        </>
-      ) : (
-        <div className="next-orders-empty"><span>⌕</span><h2>No operations orders found</h2><p>Try a different status, order type, or search term.</p><a className="secondary-button" href="/orders/requested?classic=1">Open classic Operations Orders</a></div>
-      )}
+      <section className="card">
+        <div className="co-cards" id="requested-list">
+          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
+        </div>
+      </section>
 
       <OrderModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onExport={exportOrder} />
       <RejectModal state={actionState?.action === "reject" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
