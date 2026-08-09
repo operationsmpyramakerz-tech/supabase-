@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   modernNotificationUrl,
   notificationText,
@@ -25,13 +26,15 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-export default function NotificationsBell() {
+export default function NotificationsBell({ classic = false }) {
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const rootRef = useRef(null);
+  const panelRef = useRef(null);
+  const [panelStyle, setPanelStyle] = useState({});
 
   const preview = useMemo(() => items.slice(0, 7), [items]);
 
@@ -69,7 +72,8 @@ export default function NotificationsBell() {
 
   useEffect(() => {
     function closeOutside(event) {
-      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+      if (rootRef.current?.contains(event.target) || panelRef.current?.contains(event.target)) return;
+      setOpen(false);
     }
     function closeEscape(event) {
       if (event.key === "Escape") setOpen(false);
@@ -81,6 +85,33 @@ export default function NotificationsBell() {
       document.removeEventListener("keydown", closeEscape);
     };
   }, []);
+
+  useEffect(() => {
+    if (!classic || !open) return undefined;
+
+    let frame = 0;
+    function positionPanel() {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const button = rootRef.current?.querySelector?.(".notif-bell-btn");
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
+        const top = Math.round(rect.bottom + 12);
+        const right = Math.max(14, Math.round(window.innerWidth - rect.right));
+        const maxHeight = Math.max(240, Math.round(window.innerHeight - top - 16));
+        setPanelStyle({ top: `${top}px`, right: `${right}px`, left: "auto", maxHeight: `${maxHeight}px` });
+      });
+    }
+
+    positionPanel();
+    window.addEventListener("resize", positionPanel);
+    window.addEventListener("scroll", positionPanel, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", positionPanel);
+      window.removeEventListener("scroll", positionPanel, true);
+    };
+  }, [classic, open]);
 
   async function markRead(item) {
     const id = notificationText(item?.id);
@@ -116,6 +147,84 @@ export default function NotificationsBell() {
     setOpen(false);
     const target = modernNotificationUrl(item?.url);
     if (target) window.location.href = target;
+  }
+
+  if (classic) {
+    const panel = open ? (
+      <section
+        ref={panelRef}
+        className="notif-panel notif-panel--portal is-open"
+        aria-label="Notifications preview"
+        style={panelStyle}
+      >
+        <div className="notif-center-shell">
+          <div className="notif-center-card">
+            <div className="notif-center-head">
+              <div className="notif-center-title">Notification</div>
+              <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all as read</button>
+            </div>
+
+            <div className="notif-center-tabs" role="tablist" aria-label="Notification filters">
+              <button type="button" className="notif-tab is-active" role="tab" aria-selected="true">Today</button>
+              <button type="button" className="notif-tab" role="tab" aria-selected="false">This Week</button>
+              <button type="button" className="notif-tab" role="tab" aria-selected="false">Earlier</button>
+            </div>
+
+            <div className="notif-panel__list">
+              {loading && !items.length ? <div className="notif-empty">Loading…</div> : null}
+              {error && !items.length ? <div className="notif-empty">{error}</div> : null}
+              {!loading && !error && !items.length ? <div className="notif-empty">No notifications yet.</div> : null}
+              {preview.map((item) => (
+                <button
+                  type="button"
+                  className={`notif-row ${item?.read ? "" : "is-unread"}`}
+                  key={notificationText(item?.id) || `${item?.title}-${item?.ts}`}
+                  onClick={() => openItem(item)}
+                >
+                  <span className="notif-row__ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+                  </span>
+                  <span className="notif-row__content">
+                    <span className="notif-row__title">{notificationText(item?.title) || "Notification"}<span className={`notif-dot ${item?.read ? "is-hidden" : ""}`} /></span>
+                    <span className="notif-row__body">{notificationText(item?.body) || "Open this update for details."}</span>
+                  </span>
+                  <time className="notif-row__time">{notificationTimeAgo(item?.ts)}</time>
+                </button>
+              ))}
+            </div>
+
+            <div className="notif-center-footer">
+              <a className="notif-center-seeall" href="/next/notifications">See All</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    ) : null;
+
+    return (
+      <>
+        <div className="notif-wrap" ref={rootRef}>
+          <button
+            type="button"
+            className="notif-bell-btn"
+            aria-label={unreadCount ? `${unreadCount} unread notifications` : "Notifications"}
+            aria-expanded={open}
+            onClick={() => {
+              const nextOpen = !open;
+              setOpen(nextOpen);
+              if (nextOpen) load({ quiet: items.length > 0 });
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+              <path d="M10 21h4" />
+            </svg>
+            {unreadCount > 0 ? <span className="notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span> : null}
+          </button>
+        </div>
+        {panel && typeof document !== "undefined" ? createPortal(panel, document.body) : null}
+      </>
+    );
   }
 
   return (

@@ -1,0 +1,267 @@
+/*
+ * Stage 2 visual parity bridge.
+ *
+ * The authenticated Next.js shell intentionally reuses the current Classic
+ * Operations Hub styles through /css/style.css + /css/ui-redesign.css.  These
+ * small rules only neutralize pilot-specific globals and restore the few login
+ * declarations that live inline in public/login.html rather than login.css.
+ */
+
+body.next-classic-shell-active .classic-app-shell .sidebar {
+  padding: 0 !important;
+  gap: 0 !important;
+  color: #f8f9ff;
+}
+
+body.next-classic-shell-active .classic-app-shell .sidebar-brand-toggle {
+  border: 0;
+  background: transparent;
+}
+
+body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-link {
+  font-size: 14px;
+  text-decoration: none;
+}
+
+body.next-classic-shell-active .classic-app-shell .main-content {
+  color: #0f172a;
+}
+
+body.next-classic-shell-active .classic-app-shell .next-classic-page-content {
+  width: 100%;
+}
+
+body.next-classic-shell-active .classic-app-shell .notif-center-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+body.next-classic-shell-active .classic-app-shell .notif-center-footer button,
+body.next-classic-shell-active .classic-app-shell .notif-center-footer a {
+  cursor: pointer;
+}
+
+/* Login declarations copied from the inline Classic login page. */
+body.next-classic-login-active .login-card {
+  animation: classicLoginCardSlideUp .8s ease-out forwards;
+}
+
+@keyframes classicLoginCardSlideUp {
+  from { opacity: 0; transform: translateY(50px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+body.next-classic-login-active .login-logo {
+  animation: classicLoginLogoFloat 3s infinite ease-in-out;
+}
+
+@keyframes classicLoginLogoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+body.next-classic-login-active .input-with-icon {
+  position: relative;
+}
+
+body.next-classic-login-active .input-with-icon .input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+body.next-classic-login-active .input-with-icon .input-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+body.next-classic-login-active .input-with-icon input {
+  padding-left: 2.65rem;
+}
+
+body.next-classic-login-active .input-with-icon:focus-within .input-icon {
+  color: #d97706;
+}
+
+body.next-classic-login-active .login-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all .4s ease;
+}
+
+body.next-classic-login-active .login-btn:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(102,126,234,.3);
+}
+
+body.next-classic-login-active .toggle-password {
+  transition: all .3s ease;
+}
+
+body.next-classic-login-active .toggle-password:hover {
+  background: rgba(0,0,0,.05);
+  border-radius: 50%;
+}
+
+body.next-classic-login-active .error-message {
+  animation: classicLoginShake .6s ease-in-out;
+}
+
+@keyframes classicLoginShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-10px); }
+  40%, 80% { transform: translateX(10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.next-classic-login-active .login-card,
+  body.next-classic-login-active .login-logo,
+  body.next-classic-login-active .error-message {
+    animation: none !important;
+  }
+}
+
+/* Keep route loading states inside the same Classic visual language. */
+.next-classic-login-loading-card {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+.next-classic-login-loading-form {
+  display: grid;
+  gap: 14px;
+}
+
+.next-classic-login-loading-field,
+.next-classic-login-loading-button,
+.next-classic-login-loading-link,
+.next-classic-loading-line,
+.next-classic-loading-nav-icon,
+.next-classic-loading-circle,
+.next-classic-loading-avatar,
+.next-classic-loading-title,
+.next-classic-loading-analysis,
+.next-classic-loading-kpi,
+.next-classic-loading-panel {
+  position: relative;
+  overflow: hidden;
+  background: #eef1f5;
+}
+
+.next-classic-login-loading-field::after,
+.next-classic-login-loading-button::after,
+.next-classic-loading-link::after,
+.next-classic-loading-line::after,
+.next-classic-loading-nav-icon::after,
+.next-classic-loading-circle::after,
+.next-classic-loading-avatar::after,
+.next-classic-loading-title::after,
+.next-classic-loading-analysis::after,
+.next-classic-loading-kpi::after,
+.next-classic-loading-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+  animation: nextClassicShimmer 1.35s infinite;
+}
+
+@keyframes nextClassicShimmer {
+  100% { transform: translateX(100%); }
+}
+
+.next-classic-login-loading-field { height: 48px; border-radius: 10px; }
+.next-classic-login-loading-link { width: 92px; height: 12px; border-radius: 999px; justify-self: end; }
+.next-classic-login-loading-button { height: 48px; border-radius: 10px; }
+
+body.next-classic-shell-active .next-classic-home-loading .next-classic-loading-brand {
+  cursor: default;
+}
+
+body.next-classic-shell-active .next-classic-home-loading .next-classic-loading-nav {
+  pointer-events: none;
+}
+
+body.next-classic-shell-active .next-classic-home-loading .next-classic-loading-nav-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.19);
+}
+
+body.next-classic-shell-active .next-classic-home-loading .next-classic-loading-menu {
+  cursor: default;
+}
+
+.next-classic-loading-search {
+  min-width: 180px;
+}
+
+.next-classic-loading-line {
+  display: block;
+  width: 88px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.next-classic-loading-circle,
+.next-classic-loading-avatar {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.next-classic-loading-circle { width: 38px; height: 38px; }
+.next-classic-loading-avatar { width: 42px; height: 42px; }
+.next-classic-loading-title { width: 132px; height: 22px; border-radius: 7px; }
+.next-classic-loading-analysis { width: 112px; height: 38px; border-radius: 10px; }
+
+.next-classic-loading-kpis {
+  min-height: 280px;
+}
+
+.next-classic-loading-kpi {
+  min-height: 210px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.next-classic-loading-grid {
+  margin-top: 18px;
+}
+
+.next-classic-loading-panel {
+  min-height: 250px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .next-classic-login-loading-field::after,
+  .next-classic-login-loading-button::after,
+  .next-classic-login-loading-link::after,
+  .next-classic-loading-line::after,
+  .next-classic-loading-nav-icon::after,
+  .next-classic-loading-circle::after,
+  .next-classic-loading-avatar::after,
+  .next-classic-loading-title::after,
+  .next-classic-loading-analysis::after,
+  .next-classic-loading-kpi::after,
+  .next-classic-loading-panel::after {
+    animation: none;
+  }
+}

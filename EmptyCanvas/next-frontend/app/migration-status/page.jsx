@@ -5,7 +5,7 @@ import { fetchLegacyJson } from "../../lib/legacy-api";
 export const dynamic = "force-dynamic";
 
 const steps = [
-  ["Foundation", "Integration", "The Next.js Vercel pilot now uses the existing Express ERP as its API/session source through same-origin proxy routing. Production verification is still required."],
+  ["Foundation", "Verified", "The separate Next.js Vercel pilot is connected to the existing Express ERP through same-origin proxy routing, and the production pilot integration has been verified."],
   ["Authentication & Login", "Functional", "The public sign-in entry, password recovery, sign-up requests, session-aware redirects, and classic-login fallback now run through the Next.js frontend."],
   ["Home dashboard", "Functional", "The live Home overview is rendered with Next.js while the classic Home remains available."],
   ["Current Orders", "Functional", "The first interactive list module includes tabs, search, order details, and protected order actions."],
@@ -45,8 +45,8 @@ const steps = [
   ["Legacy URL cutover", "Code ready", "Classic ERP URLs now prefer their migrated Next.js workspaces while preserving query parameters, dynamic deep links, permission checks, and a durable ?classic=1 rollback path."],
   ["Legacy route hardening", "Code ready", "The remaining Orders Review browser route now participates in the Next.js cutover, classic links use the explicit rollback flag, and direct legacy .html requests are canonicalized through authenticated application routes instead of bypassing the router."],
   ["Classic rollback normalization", "Code ready", "Every explicit classic-interface link in the migrated frontend now carries ?classic=1 directly, including dynamic workspaces and filtered order views, so rollback no longer depends on browser Referer behavior during the production cutover."],
-  ["Visual parity with Classic", "Pending", "Every migrated page must match the approved classic interface for layout, typography, spacing, colors, cards, tables, forms, modals, navigation, states, and interactions before it is considered complete."],
-  ["Responsive parity", "Pending", "Desktop, tablet, and mobile behavior must be compared with the classic interface and corrected page by page."],
+  ["Visual parity with Classic", "In progress", "Stage 2 has started with the Classic Login, authenticated global shell (sidebar/header/notifications), Home dashboard, and matching route loading states. Remaining modules will be matched page by page."],
+  ["Responsive parity", "In progress", "The Stage 2 shell and Login/Home reuse the Classic responsive styles, but tablet/mobile behavior still requires page-by-page visual QA before approval."],
   ["Page-by-page QA", "Pending", "Each module must pass functional, permissions, data, visual, responsive, and rollback checks before production approval."],
   ["Progressive rollout", "Not started", "The Next.js pilot remains isolated until Vercel integration and page-by-page visual QA are approved. Classic pages remain the production fallback."],
 ];

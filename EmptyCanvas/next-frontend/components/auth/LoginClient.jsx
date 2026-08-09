@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const MODES = Object.freeze({ LOGIN: "login", RECOVERY: "recovery", SIGNUP: "signup" });
 
@@ -44,21 +44,39 @@ async function readJson(response) {
 }
 
 function FieldIcon({ type }) {
-  if (type === "lock") return <span aria-hidden="true">⌁</span>;
-  if (type === "mail") return <span aria-hidden="true">@</span>;
-  if (type === "phone") return <span aria-hidden="true">☎</span>;
-  if (type === "code") return <span aria-hidden="true">#</span>;
-  return <span aria-hidden="true">◎</span>;
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  if (type === "lock") return <svg {...common}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+  if (type === "mail") return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="2" ry="2"/><path d="m3 7 9 6 9-6"/></svg>;
+  if (type === "phone") return <svg {...common}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.35 1.89.68 2.78a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.11-.45c.89.33 1.82.55 2.78.68A2 2 0 0 1 22 16.92z"/></svg>;
+  if (type === "code") return <svg {...common}><path d="M4 7h16"/><path d="M10 11h4"/><rect x="4" y="3" width="16" height="18" rx="2"/></svg>;
+  return <svg {...common}><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>;
+}
+
+function EyeIcon({ off = false }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  if (off) return <svg className="icon-eye-off" width="20" height="20" {...common}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/><path d="M1 1l22 22"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/></svg>;
+  return <svg className="icon-eye" width="20" height="20" {...common}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
 export default function LoginClient({ requestedNext = "/next/home", backendAvailable = true, classicLoginHref = "/login?classic=1" }) {
   const [mode, setMode] = useState(MODES.LOGIN);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [notice, setNotice] = useState(null);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const destination = useMemo(() => safeDestination(requestedNext), [requestedNext]);
+
+  useEffect(() => {
+    const body = document.body;
+    body.classList.add("next-classic-login-active");
+    body.classList.toggle("auth-signup-mode", mode === MODES.SIGNUP);
+    body.classList.toggle("auth-recovery-mode", mode === MODES.RECOVERY);
+    body.classList.toggle("login-inline-success-active", loginSuccess);
+    return () => {
+      body.classList.remove("next-classic-login-active", "auth-signup-mode", "auth-recovery-mode", "login-success-active", "login-inline-success-active");
+    };
+  }, [mode, loginSuccess]);
+
 
   function switchMode(nextMode) {
     if (busy) return;
@@ -101,6 +119,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
       }
 
       redirecting = true;
+      const transitionStartedAt = Date.now();
       setLoginSuccess(true);
       try {
         const accountResponse = await fetch(`/api/account?_next_login_check=${Date.now()}`, {
@@ -110,7 +129,10 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
         if (accountResponse.ok) warmAccountCache(await readJson(accountResponse), username);
       } catch {}
 
-      window.setTimeout(() => window.location.replace(destination), 620);
+      // Match the current Classic login: keep the user on the card long enough
+      // for the pulse transition to finish before opening the requested page.
+      const remaining = Math.max(0, 1950 - (Date.now() - transitionStartedAt));
+      window.setTimeout(() => window.location.replace(destination), remaining);
     } catch (error) {
       console.error("Next login error:", error);
       showError("Network error. Please check your connection and try again.");
@@ -193,100 +215,98 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
   }
 
   return (
-    <main className={`next-login-page ${loginSuccess ? "is-success" : ""}`}>
-      <section className="next-login-shell">
-        <aside className="next-login-brand-panel">
-          <div className="next-login-brand-visual">
-            <span className="next-login-orbit orbit-one" aria-hidden="true" />
-            <span className="next-login-orbit orbit-two" aria-hidden="true" />
-            <div className="next-login-brand-mark">
-              <img src="/images/logo.png" alt="Pyramakerz" />
-            </div>
+    <>
+      <link rel="stylesheet" href="/css/login.css?v=concept-2-pulse-settle-v1" />
+      <div className="login-container">
+        <div className="login-card" aria-live="polite">
+          <div className="login-header">
+            <span className="signup-logo-burst" aria-hidden="true">
+              <i /><i /><i /><i /><i /><i /><i /><i />
+            </span>
+            <span className={`login-logo-stage ${loginSuccess ? "is-running" : ""}`} id="loginLogoStage" data-logo-animation="pulse">
+              <img src="/images/logo.png" alt="Logo" className="login-logo" />
+              <span className="login-inline-logo-pieces" aria-hidden="true">
+                <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.00s" }} />
+                <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.16s" }} />
+                <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.32s" }} />
+              </span>
+              <span className="login-inline-logo-ring" aria-hidden="true" />
+              <span className="login-inline-logo-flare login-inline-logo-flare--one" aria-hidden="true" />
+              <span className="login-inline-logo-flare login-inline-logo-flare--two" aria-hidden="true" />
+            </span>
+            <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
+            <h1 className="login-brand-title">Pyramakerz</h1>
+            <p className="login-subtitle" aria-hidden="true" />
           </div>
-          <div className="next-login-brand-copy">
-            <span className="next-login-kicker">Operations Hub</span>
-            <h1>One secure workspace for your daily operations.</h1>
-            <p>Orders, inventory, events, tasks, finance, LMS, KPIs, and customer workflows — all from the same account.</p>
-          </div>
-          <div className="next-login-capabilities" aria-label="Operations Hub capabilities">
-            <span>ERP</span><span>LMS</span><span>Workflows</span><span>Analytics</span>
-          </div>
-        </aside>
-
-        <section className="next-login-card" aria-live="polite">
-          <div className="next-login-mobile-brand">
-            <img src="/images/logo.png" alt="" />
-            <div><strong>Pyramakerz</strong><small>Operations Hub</small></div>
-          </div>
-
-          <div className="next-login-card-heading">
-            <span>{mode === MODES.LOGIN ? "Welcome back" : mode === MODES.RECOVERY ? "Account recovery" : "New account request"}</span>
-            <h2>{mode === MODES.LOGIN ? "Sign in" : mode === MODES.RECOVERY ? "Recover your password" : "Request access"}</h2>
-            <p>
-              {mode === MODES.LOGIN
-                ? "Use the same Operations Hub credentials you already use."
-                : mode === MODES.RECOVERY
-                  ? "Enter the email saved on your employee account."
-                  : "Send your details to the admin team for approval."}
-            </p>
-          </div>
-
-          {!backendAvailable ? (
-            <div className="next-login-notice warning">The ERP service did not answer the initial session check. You can still try to sign in.</div>
-          ) : null}
-          {notice ? <div className={`next-login-notice ${notice.kind}`}>{notice.text}</div> : null}
 
           {mode === MODES.LOGIN ? (
-            <form className="next-login-form" onSubmit={handleLogin}>
-              <label>
-                <span>Username</span>
-                <div className="next-login-field"><FieldIcon type="user" /><input name="username" autoComplete="username" required placeholder="Enter your username" /></div>
-              </label>
-              <label>
-                <span>Password</span>
-                <div className="next-login-field"><FieldIcon type="lock" /><input name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required placeholder="Enter your password" /><button className="next-login-show-password" type="button" onClick={() => setShowPassword((value) => !value)}>{showPassword ? "Hide" : "Show"}</button></div>
-              </label>
-              <div className="next-login-form-links"><button type="button" onClick={() => switchMode(MODES.RECOVERY)}>Forgot password?</button></div>
-              <button className="next-login-submit" type="submit" disabled={busy || loginSuccess}>{loginSuccess ? "Opening Operations Hub…" : busy ? "Signing in…" : "Sign in"}</button>
-              <button className="next-login-secondary-action" type="button" onClick={() => switchMode(MODES.SIGNUP)} disabled={busy}>Don&apos;t have an account? <strong>Sign up</strong></button>
+            <form className="login-form" onSubmit={handleLogin}>
+              <div className="form-group">
+                <div className="input-with-icon">
+                  <span className="input-icon" aria-hidden="true"><FieldIcon type="user" /></span>
+                  <input type="text" name="username" required placeholder="Username" autoComplete="username" />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <div className="password-wrapper input-with-icon">
+                  <span className="input-icon" aria-hidden="true"><FieldIcon type="lock" /></span>
+                  <input type={showPassword ? "text" : "password"} name="password" required placeholder="Password" autoComplete="current-password" />
+                  <button type="button" className="toggle-password" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>
+                    <EyeIcon off={showPassword} />
+                  </button>
+                </div>
+              </div>
+
+              <button type="button" className="forgot-password-link" onClick={() => switchMode(MODES.RECOVERY)} disabled={busy}>Forgot password?</button>
+              <button type="submit" className={`login-btn ${busy || loginSuccess ? "loading" : ""}`} disabled={busy || loginSuccess}>
+                <span>{loginSuccess ? "Opening Operations Hub..." : busy ? "Signing In..." : "Sign In"}</span>
+              </button>
+              <button type="button" className="signup-inline-prompt" onClick={() => switchMode(MODES.SIGNUP)} disabled={busy}>
+                <span className="signup-prompt-text">Don&apos;t have an account?</span>
+                <span className="signup-prompt-action">Sign up</span>
+              </button>
             </form>
           ) : null}
 
           {mode === MODES.RECOVERY ? (
-            <form className="next-login-form" onSubmit={handleRecovery}>
-              <label>
-                <span>Registered email</span>
-                <div className="next-login-field"><FieldIcon type="mail" /><input name="email" type="email" autoComplete="email" required placeholder="name@company.com" /></div>
-              </label>
-              <button className="next-login-submit" type="submit" disabled={busy}>{busy ? "Sending…" : "Send password"}</button>
-              <button className="next-login-secondary-action" type="button" onClick={() => switchMode(MODES.LOGIN)} disabled={busy}>Back to sign in</button>
+            <form className="login-form forgot-form" onSubmit={handleRecovery}>
+              <div className="forgot-copy">
+                <h2>Password Recovery</h2>
+                <p>Enter your registered email and we will send the saved password to your inbox.</p>
+              </div>
+              <div className="form-group">
+                <div className="input-with-icon">
+                  <span className="input-icon" aria-hidden="true"><FieldIcon type="mail" /></span>
+                  <input type="email" name="email" required placeholder="Enter your email" autoComplete="email" />
+                </div>
+              </div>
+              <button type="submit" className={`login-btn recovery-btn ${busy ? "loading" : ""}`} disabled={busy}><span>{busy ? "Sending..." : "Send Password"}</span></button>
+              <button type="button" className="back-login-link" onClick={() => switchMode(MODES.LOGIN)} disabled={busy}>Back to login</button>
             </form>
           ) : null}
 
           {mode === MODES.SIGNUP ? (
-            <form className="next-login-form next-login-signup-form" onSubmit={handleSignup}>
-              <label><span>Username</span><div className="next-login-field"><FieldIcon type="user" /><input name="username" autoComplete="username" required placeholder="Your name / username" /></div></label>
-              <div className="next-login-form-grid">
-                <label><span>Password</span><div className="next-login-field"><FieldIcon type="lock" /><input name="password" type={showSignupPassword ? "text" : "password"} autoComplete="new-password" minLength={4} required placeholder="Minimum 4 characters" /></div></label>
-                <label><span>Repeat password</span><div className="next-login-field"><FieldIcon type="lock" /><input name="repeatPassword" type={showSignupPassword ? "text" : "password"} autoComplete="new-password" minLength={4} required placeholder="Repeat password" /></div></label>
+            <form className="login-form signup-form" onSubmit={handleSignup}>
+              <div className="forgot-copy signup-copy">
+                <h2>Sign Up Request</h2>
+                <p>Send your account details to the admin team for approval.</p>
               </div>
-              <button className="next-login-password-toggle" type="button" onClick={() => setShowSignupPassword((value) => !value)}>{showSignupPassword ? "Hide passwords" : "Show passwords"}</button>
-              <label><span>Employee code</span><div className="next-login-field"><FieldIcon type="code" /><input name="employeeCode" required placeholder="Employee code" /></div></label>
-              <div className="next-login-form-grid">
-                <label><span>Phone</span><div className="next-login-field"><FieldIcon type="phone" /><input name="phone" type="tel" autoComplete="tel" required placeholder="Phone number" /></div></label>
-                <label><span>Email</span><div className="next-login-field"><FieldIcon type="mail" /><input name="email" type="email" autoComplete="email" required placeholder="Email address" /></div></label>
-              </div>
-              <button className="next-login-submit" type="submit" disabled={busy}>{busy ? "Sending request…" : "Send sign up request"}</button>
-              <button className="next-login-secondary-action" type="button" onClick={() => switchMode(MODES.LOGIN)} disabled={busy}>Back to sign in</button>
+              <div className="form-group"><div className="input-with-icon"><span className="input-icon" aria-hidden="true"><FieldIcon type="user" /></span><input type="text" name="username" required placeholder="Username" autoComplete="username" /></div></div>
+              <div className="form-group signup-password-grid"><div className="input-with-icon"><span className="input-icon" aria-hidden="true"><FieldIcon type="lock" /></span><input type="password" name="password" required minLength={4} placeholder="Password" autoComplete="new-password" /></div></div>
+              <div className="form-group"><div className="input-with-icon"><span className="input-icon" aria-hidden="true"><FieldIcon type="lock" /></span><input type="password" name="repeatPassword" required minLength={4} placeholder="Repeat password" autoComplete="new-password" /></div></div>
+              <div className="form-group"><div className="input-with-icon"><span className="input-icon" aria-hidden="true"><FieldIcon type="code" /></span><input type="text" name="employeeCode" required placeholder="Employee code" autoComplete="off" /></div></div>
+              <div className="form-group"><div className="input-with-icon"><span className="input-icon" aria-hidden="true"><FieldIcon type="phone" /></span><input type="tel" name="phone" required placeholder="Phone" autoComplete="tel" /></div></div>
+              <div className="form-group"><div className="input-with-icon"><span className="input-icon" aria-hidden="true"><FieldIcon type="mail" /></span><input type="email" name="email" required placeholder="Email" autoComplete="email" /></div></div>
+              <button type="submit" className={`login-btn signup-submit-btn ${busy ? "loading" : ""}`} disabled={busy}><span>{busy ? "Sending request..." : "Send sign up request"}</span></button>
+              <button type="button" className="back-login-link" onClick={() => switchMode(MODES.LOGIN)} disabled={busy}>Back to login</button>
             </form>
           ) : null}
 
-          <div className="next-login-footer">
-            <span>Secure session authentication</span>
-            <a href={classicLoginHref}>Use classic sign in</a>
-          </div>
-        </section>
-      </section>
-    </main>
+          {!backendAvailable && !notice ? <div className="error-message">The ERP service did not answer the initial session check. You can still try to sign in.</div> : null}
+          {notice ? <div className={notice.kind === "success" ? "success-message" : "error-message"}>{notice.text}</div> : null}
+        </div>
+      </div>
+    </>
   );
 }
