@@ -510,7 +510,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
   return (
     <section className="next-expenses-page">
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some expense options could not refresh.</strong><span>The loaded transactions remain available, and the classic page can be used as a fallback.</span><a href="/expenses">Open classic Expenses</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some expense options could not refresh.</strong><span>The loaded transactions remain available, and the classic page can be used as a fallback.</span><a href="/expenses?classic=1">Open classic Expenses</a></div> : null}
       {toast ? <div className={`next-toast next-toast--${toast.type}`} role="status"><span>{toast.type === "success" ? "✓" : toast.type === "error" ? "!" : "i"}</span><strong>{toast.message}</strong><button onClick={() => setToast(null)}>×</button></div> : null}
 
       <div className="expenses-summary-grid">
@@ -538,7 +538,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
         <header><div><span>Transactions</span><h2>Expense details</h2></div><div className="expenses-ledger-actions"><button type="button" onClick={() => setModal("export")}>Export</button><button type="button" onClick={() => setModal("all")}>View all</button></div></header>
         <div className="expenses-toolbar"><div className="expenses-filter-tabs">{[["recent", "Recent"], ["cash-in", "Cash in"], ["cash-out", "Cash out"]].map(([key, label]) => <button className={filter === key ? "active" : ""} type="button" onClick={() => setFilter(key)} key={key}>{label}</button>)}</div><label><span>⌕</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transactions…" />{search ? <button onClick={() => setSearch("")} type="button">×</button> : null}</label></div>
         <div className="expense-transaction-list">{filteredItems.length ? filteredItems.slice(0, 12).map((item) => <TransactionCard item={item} key={text(item?.id) || `${transactionTime(item)}-${displayReason(item)}`} onScreenshots={setScreenshotTransaction} />) : <div className="expense-empty-state"><span>∅</span><h3>No matching transactions</h3><p>Try another filter or search phrase.</p></div>}</div>
-        <footer><span>{filteredItems.length} matching transaction{filteredItems.length === 1 ? "" : "s"}</span><a href="/expenses">Open classic Expenses</a></footer>
+        <footer><span>{filteredItems.length} matching transaction{filteredItems.length === 1 ? "" : "s"}</span><a href="/expenses?classic=1">Open classic Expenses</a></footer>
       </section>
 
       {modal === "cash-in" ? <CashInModal options={cashInFromOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}

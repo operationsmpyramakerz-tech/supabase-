@@ -379,7 +379,7 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
           {canDone ? <button type="button" className="primary-button" onClick={() => onDone(group)} disabled={busy}>Mark Done</button> : null}
           {canDownload ? <button type="button" className="secondary-button" onClick={() => onExport("pdf", group)} disabled={busy}>Maintenance PDF</button> : null}
           {canDownload ? <button type="button" className="secondary-button" onClick={() => onExport("excel", group)} disabled={busy}>Excel</button> : null}
-          <a className="secondary-button" href={`/orders/maintenance-orders?tab=${encodeURIComponent(group.state.key)}`}>Classic workflow</a>
+          <a className="secondary-button" href={`/orders/maintenance-orders?tab=${encodeURIComponent(group.state.key)}&classic=1`}>Classic workflow</a>
           <button type="button" className="primary-button" onClick={onClose}>Done</button>
         </footer>
       </section>
@@ -795,7 +795,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   return (
     <section className="next-orders-page next-maintenance-page">
       {bootstrapWarnings.length ? (
-        <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/maintenance-orders">Classic page</a></div>
+        <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/maintenance-orders?classic=1">Classic page</a></div>
       ) : null}
       {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
 
@@ -817,7 +817,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         <span><small>Visible orders</small><strong>{visibleGroups.length}</strong></span>
         <span><small>Components</small><strong>{visibleGroups.reduce((sum, group) => sum + group.items.length, 0)}</strong></span>
         <span><small>In progress</small><strong>{tabCounts["in-progress"] || 0}</strong></span>
-        <a href="/orders/maintenance-orders">Open classic Maintenance Orders</a>
+        <a href="/orders/maintenance-orders?classic=1">Open classic Maintenance Orders</a>
       </div>
 
       {visibleGroups.length ? (

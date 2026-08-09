@@ -44,6 +44,7 @@ const steps = [
   ["LMS School Workspace", "Completed", "Individual school profiles now include live grouped stocktaking, protected inventory sessions, debounced Inventory and Defected updates, mismatch monitoring, and PDF/Excel exports in Next.js."],
   ["Legacy URL cutover", "Completed", "Classic ERP URLs now prefer their migrated Next.js workspaces while preserving query parameters, dynamic deep links, permission checks, and a durable ?classic=1 rollback path."],
   ["Legacy route hardening", "Completed", "The remaining Orders Review browser route now participates in the Next.js cutover, classic links use the explicit rollback flag, and direct legacy .html requests are canonicalized through authenticated application routes instead of bypassing the router."],
+  ["Classic rollback normalization", "Completed", "Every explicit classic-interface link in the migrated frontend now carries ?classic=1 directly, including dynamic workspaces and filtered order views, so rollback no longer depends on browser Referer behavior during the production cutover."],
   ["Progressive rollout", "Monitoring", "The migrated frontend is now the default browser experience; classic pages remain available as a controlled fallback while production behavior is monitored."],
 ];
 

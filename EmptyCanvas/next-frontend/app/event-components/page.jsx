@@ -45,7 +45,7 @@ export default async function EventComponentsPage({ searchParams }) {
           <h1>The new Event Components page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/events/components">Open classic Event Components</a>
+            <a className="primary-button" href="/events/components?classic=1">Open classic Event Components</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

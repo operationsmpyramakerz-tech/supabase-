@@ -40,7 +40,7 @@ export default async function B2cFormsPage({ searchParams }) {
           <p>Your account does not have access to Customer Form or Customer Database.</p>
           <div className="actions">
             <a className="primary-button" href="/next/home">Return to Home</a>
-            <a className="secondary-button" href="/b2c/form">Open classic Forms</a>
+            <a className="secondary-button" href="/b2c/form?classic=1">Open classic Forms</a>
           </div>
         </section>
       </main>
@@ -55,7 +55,7 @@ export default async function B2cFormsPage({ searchParams }) {
           <h1>The new B2C Forms page could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/b2c/form">Open classic Forms</a>
+            <a className="primary-button" href="/b2c/form?classic=1">Open classic Forms</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

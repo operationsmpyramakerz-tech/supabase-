@@ -45,7 +45,7 @@ export default async function ExpensesPage() {
           <h1>The new Expenses page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/expenses">Open classic Expenses</a>
+            <a className="primary-button" href="/expenses?classic=1">Open classic Expenses</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

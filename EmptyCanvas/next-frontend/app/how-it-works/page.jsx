@@ -28,7 +28,7 @@ export default async function HowItWorksPage() {
           <h1>The new How it works page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/how-it-works">Open classic guide</a>
+            <a className="primary-button" href="/how-it-works?classic=1">Open classic guide</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

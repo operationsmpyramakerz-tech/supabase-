@@ -45,7 +45,7 @@ export default async function EventsCalendarPage() {
           <h1>The new Event Calendar could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/events/calendar">Open classic Calendar</a>
+            <a className="primary-button" href="/events/calendar?classic=1">Open classic Calendar</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

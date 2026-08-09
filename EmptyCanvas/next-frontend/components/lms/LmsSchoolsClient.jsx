@@ -481,10 +481,10 @@ export default function LmsSchoolsClient({ initialSchools, initialStocktakingCol
   return (
     <main className="next-lms-schools-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some school support data could not load.</strong><span>The available school records are shown below.</span><a href="/lms/b2b">Open classic Schools</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some school support data could not load.</strong><span>The available school records are shown below.</span><a href="/lms/b2b?classic=1">Open classic Schools</a></div> : null}
 
       <section className="next-lms-schools-hero">
-        <div><span className="next-lms-kicker">LMS school operations</span><h2>Schools workspace</h2><p>Manage school contracts, academic coverage, contacts, capacity, and Stocktaking links from one protected workspace.</p><div><a href="/next/lms">LMS Overview</a><a href="/lms/b2b">Classic Schools</a></div></div>
+        <div><span className="next-lms-kicker">LMS school operations</span><h2>Schools workspace</h2><p>Manage school contracts, academic coverage, contacts, capacity, and Stocktaking links from one protected workspace.</p><div><a href="/next/lms">LMS Overview</a><a href="/lms/b2b?classic=1">Classic Schools</a></div></div>
         <div className="next-lms-schools-hero-actions"><button type="button" onClick={refresh} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh"}</button>{canManage ? <button type="button" onClick={() => setFormSchool(null)}>+ Add School</button> : null}</div>
       </section>
 

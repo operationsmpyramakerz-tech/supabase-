@@ -420,7 +420,7 @@ export default function ExpensesUsersClient({ account, initialUsersPayload, boot
   return (
     <section className="next-expense-users-page">
       <section className="next-expense-users-hero">
-        <div><span className="pill">Team expenses control</span><h2>Review each team member’s balance, receipts, routes, and settlement history.</h2><p>Open any user to inspect recent and past transactions, export filtered reports, and perform password-protected corrections without leaving the Next.js workspace.</p><div><button className="primary-button" type="button" onClick={refresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh balances"}</button><a className="secondary-button" href="/next/expenses">My Expenses</a><a className="secondary-button" href="/expenses/users">Classic Expenses Users</a></div></div>
+        <div><span className="pill">Team expenses control</span><h2>Review each team member’s balance, receipts, routes, and settlement history.</h2><p>Open any user to inspect recent and past transactions, export filtered reports, and perform password-protected corrections without leaving the Next.js workspace.</p><div><button className="primary-button" type="button" onClick={refresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh balances"}</button><a className="secondary-button" href="/next/expenses">My Expenses</a><a className="secondary-button" href="/expenses/users?classic=1">Classic Expenses Users</a></div></div>
         <aside><span>Visible users</span><strong>{users.length}</strong><small>{stats.transactions} total transactions</small></aside>
       </section>
 

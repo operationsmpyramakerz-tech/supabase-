@@ -343,11 +343,11 @@ export default function LmsUsersCenterClient({ initialStructures, initialSchools
     <main className="next-lms-users-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some LMS directory data could not load.</strong><span>The available structures and roles are shown below.</span><a href="/lms/user-access">Open classic Users Center</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some LMS directory data could not load.</strong><span>The available structures and roles are shown below.</span><a href="/lms/user-access?classic=1">Open classic Users Center</a></div> : null}
 
       <section className="next-lms-users-hero">
         <div><span className="next-lms-kicker">LMS Users Center</span><h2>Learning teams, directories, and school structures</h2><p>Build the learning hierarchy for every school and maintain the role folders used across the LMS workspace.</p></div>
-        <div className="next-lms-users-hero-actions"><a href="/next/lms">LMS Overview</a><a href="/lms/user-access">Classic Users Center</a>{canEdit ? <button type="button" onClick={() => setBuilderOpen(true)}>Add Structure</button> : null}</div>
+        <div className="next-lms-users-hero-actions"><a href="/next/lms">LMS Overview</a><a href="/lms/user-access?classic=1">Classic Users Center</a>{canEdit ? <button type="button" onClick={() => setBuilderOpen(true)}>Add Structure</button> : null}</div>
       </section>
 
       <section className="next-lms-users-summary" aria-label="LMS Users Center summary">

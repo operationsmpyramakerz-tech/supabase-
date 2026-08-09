@@ -6,9 +6,9 @@ import { fetchLegacyJson } from "../../../lib/legacy-api";
 export const dynamic = "force-dynamic";
 
 const VIEW_MAP = {
-  "all-tasks": { key: "all", title: "All Tasks", classic: "/task-management/all-tasks" },
-  "my-tasks": { key: "my", title: "My Tasks", classic: "/task-management/my-tasks" },
-  "delegated-tasks": { key: "delegated", title: "Delegated Tasks", classic: "/task-management/delegated-tasks" },
+  "all-tasks": { key: "all", title: "All Tasks", classic: "/task-management/all-tasks?classic=1" },
+  "my-tasks": { key: "my", title: "My Tasks", classic: "/task-management/my-tasks?classic=1" },
+  "delegated-tasks": { key: "delegated", title: "Delegated Tasks", classic: "/task-management/delegated-tasks?classic=1" },
 };
 
 function resourceMap(bundle) {

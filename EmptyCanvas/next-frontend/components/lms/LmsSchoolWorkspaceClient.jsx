@@ -488,7 +488,7 @@ export default function LmsSchoolWorkspaceClient({ schoolId, initialSchool, init
   return (
     <main className="next-lms-school-page">
       <Toast value={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some school data could not be included in the first load.</strong><span>The available data is shown below; use Refresh to retry.</span><a href={`/lms/b2b/school/${encodeURIComponent(schoolId)}`}>Open classic workspace</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some school data could not be included in the first load.</strong><span>The available data is shown below; use Refresh to retry.</span><a href={`/lms/b2b/school/${encodeURIComponent(schoolId)}?classic=1`}>Open classic workspace</a></div> : null}
 
       <section className="next-lms-school-hero">
         <div className="next-lms-school-hero-copy">
@@ -505,7 +505,7 @@ export default function LmsSchoolWorkspaceClient({ schoolId, initialSchool, init
         </div>
         <div className="next-lms-school-hero-actions">
           <a href="/next/lms/schools">← Schools</a>
-          <a href={`/lms/b2b/school/${encodeURIComponent(schoolId)}`}>Classic workspace</a>
+          <a href={`/lms/b2b/school/${encodeURIComponent(schoolId)}?classic=1`}>Classic workspace</a>
           <button type="button" onClick={refreshAll} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh"}</button>
         </div>
       </section>

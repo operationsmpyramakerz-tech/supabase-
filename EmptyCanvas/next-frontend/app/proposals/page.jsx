@@ -45,7 +45,7 @@ export default async function ProposalsPage() {
           <h1>The new Proposals page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/proposals">Open classic Proposals</a>
+            <a className="primary-button" href="/proposals?classic=1">Open classic Proposals</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

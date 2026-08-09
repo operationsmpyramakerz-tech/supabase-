@@ -104,7 +104,7 @@ export default async function HomePage() {
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=home", { timeoutMs: 25000 });
   if (response.status === 401 || response.status === 403) redirect("/login?next=/next/home");
   if (!response.ok || !response.data?.ok) {
-    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Home could not load</h1><p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p><a className="primary-button" href="/home">Open classic Home</a></section></main>;
+    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Home could not load</h1><p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p><a className="primary-button" href="/home?classic=1">Open classic Home</a></section></main>;
   }
 
   const resources = resourceMap(response.data);
@@ -142,7 +142,7 @@ export default async function HomePage() {
     <AppShell account={account} title="Home" eyebrow="Live ERP overview" activePath="/next/home">
       <DashboardNotice omitted={response.data.omitted || []} />
       <section className="dashboard-overview">
-        <div className="dashboard-title-row"><div><span className="overview-icon">⌁</span><h2>Overview</h2></div><a href="/home">Classic Home</a></div>
+        <div className="dashboard-title-row"><div><span className="overview-icon">⌁</span><h2>Overview</h2></div><a href="/home?classic=1">Classic Home</a></div>
         <div className="dashboard-orders-grid">
           <OrdersCard title="Current orders" href="/next/orders" {...current} />
           <OrdersCard title="Orders review" href="/next/orders-review" {...review} />

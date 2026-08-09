@@ -394,7 +394,7 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
 
       <section className="next-users-toolbar">
         <label><span>Search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={selectedDepartment ? "Search inside this department..." : "Search departments, names, emails..."} /></label>
-        <div><button type="button" className="secondary-button" disabled={busy} onClick={() => refresh()}>{busy ? "Refreshing..." : "Refresh"}</button><a className="secondary-button" href="/user-access">Classic view</a></div>
+        <div><button type="button" className="secondary-button" disabled={busy} onClick={() => refresh()}>{busy ? "Refreshing..." : "Refresh"}</button><a className="secondary-button" href="/user-access?classic=1">Classic view</a></div>
       </section>
 
       {!selectedDepartment ? (

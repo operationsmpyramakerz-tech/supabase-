@@ -472,7 +472,7 @@ export default function AccountClient({ initialAccount }) {
             <a href="/next/app-install"><div><strong>Install Operations Hub</strong><small>PWA installation and device app status</small></div><b>→</b></a>
             {access.history ? <a href="/next/history"><div><strong>System history</strong><small>Review recorded ERP actions</small></div><b>→</b></a> : null}
             {access.backup ? <a href="/next/backup"><div><strong>Database backup</strong><small>Export and restore system data</small></div><b>→</b></a> : null}
-            <a href="/account"><div><strong>Classic profile</strong><small>Open the previous account interface</small></div><b>↗</b></a>
+            <a href="/account?classic=1"><div><strong>Classic profile</strong><small>Open the previous account interface</small></div><b>↗</b></a>
           </article>
 
           <button type="button" className="next-account-logout" onClick={logout} disabled={busyAction === "logout"}>{busyAction === "logout" ? "Signing out…" : "Sign out"}</button>

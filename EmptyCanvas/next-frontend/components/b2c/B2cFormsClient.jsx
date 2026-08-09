@@ -569,7 +569,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       {bootstrapWarnings.length ? (
-        <div className="next-b2c-forms-warning" role="status"><strong>Some B2C resources did not finish loading.</strong><span>Refresh the page or use the classic form library while the service recovers.</span><a href="/b2c/form">Open classic Forms</a></div>
+        <div className="next-b2c-forms-warning" role="status"><strong>Some B2C resources did not finish loading.</strong><span>Refresh the page or use the classic form library while the service recovers.</span><a href="/b2c/form?classic=1">Open classic Forms</a></div>
       ) : null}
 
       <section className="next-b2c-forms-hero">

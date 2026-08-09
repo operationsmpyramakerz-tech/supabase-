@@ -45,7 +45,7 @@ export default async function StocktakingPage() {
           <h1>The new Stocktaking page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/stocktaking">Open classic Stocktaking</a>
+            <a className="primary-button" href="/stocktaking?classic=1">Open classic Stocktaking</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

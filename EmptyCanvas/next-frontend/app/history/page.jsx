@@ -45,7 +45,7 @@ export default async function HistoryPage() {
           <h1>The new History page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/history">Open classic History</a>
+            <a className="primary-button" href="/history?classic=1">Open classic History</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

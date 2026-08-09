@@ -462,7 +462,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   return (
     <section className="next-b2c-table-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="next-b2c-table-warning"><strong>Some workspace resources were delayed.</strong><span>Refresh the table or use the classic workspace while the service recovers.</span><a href={`/b2c/database/${encodeURIComponent(databaseId)}`}>Classic workspace</a></div> : null}
+      {bootstrapWarnings.length ? <div className="next-b2c-table-warning"><strong>Some workspace resources were delayed.</strong><span>Refresh the table or use the classic workspace while the service recovers.</span><a href={`/b2c/database/${encodeURIComponent(databaseId)}?classic=1`}>Classic workspace</a></div> : null}
 
       <section className="next-b2c-table-hero">
         <div>
@@ -512,7 +512,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
         {pageCount > 1 ? <footer className="next-b2c-table-pagination"><span>Page {safePage} of {pageCount}</span><div><button type="button" onClick={() => setPage(1)} disabled={safePage === 1}>First</button><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1}>Previous</button><button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={safePage === pageCount}>Next</button><button type="button" onClick={() => setPage(pageCount)} disabled={safePage === pageCount}>Last</button></div></footer> : null}
       </section>
 
-      <section className="next-b2c-table-rollout"><div><strong>Workspace migrated</strong><span>Records, property configuration, formulas, file editing, search, pagination, and Excel exports now run in Next.js. The customer Form Builder remains on the classic interface for the next migration stage.</span></div><a href={`/b2c/database/${encodeURIComponent(databaseId)}`}>Classic workspace</a></section>
+      <section className="next-b2c-table-rollout"><div><strong>Workspace migrated</strong><span>Records, property configuration, formulas, file editing, search, pagination, and Excel exports now run in Next.js. The customer Form Builder remains on the classic interface for the next migration stage.</span></div><a href={`/b2c/database/${encodeURIComponent(databaseId)}?classic=1`}>Classic workspace</a></section>
 
       {editor ? <RecordEditor record={editor} fields={fields} busy={busy === "record"} onClose={() => setEditor(null)} onSave={saveRecord} /> : null}
       {deleteTarget ? <DeleteRecordModal record={deleteTarget} busy={busy === "delete-record"} onClose={() => setDeleteTarget(null)} onConfirm={deleteRecord} /> : null}

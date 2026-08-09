@@ -796,7 +796,7 @@ function TicketDetails({ ticket, view, meta, onClose, onEdit, onRefresh, onWork,
             </div>
           ))}
         </div>
-        <footer className="next-task-modal-footer"><a href={`/task-management/${view === "all" ? "all-tasks" : view === "my" ? "my-tasks" : "delegated-tasks"}`}>Open classic workflow builder</a><button type="button" onClick={onClose}>Close</button></footer>
+        <footer className="next-task-modal-footer"><a href={`/task-management/${view === "all" ? "all-tasks" : view === "my" ? "my-tasks" : "delegated-tasks"}?classic=1`}>Open classic workflow builder</a><button type="button" onClick={onClose}>Close</button></footer>
       </section>
     </div>
   );

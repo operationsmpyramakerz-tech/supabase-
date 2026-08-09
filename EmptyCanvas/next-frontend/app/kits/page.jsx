@@ -45,7 +45,7 @@ export default async function KitsPage() {
           <h1>The new Kits page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/kits">Open classic Kits</a>
+            <a className="primary-button" href="/kits?classic=1">Open classic Kits</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

@@ -513,7 +513,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   return (
     <section className="next-orders-page">
       {bootstrapWarnings.length ? (
-        <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders">Classic page</a></div>
+        <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders?classic=1">Classic page</a></div>
       ) : null}
       {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
 
@@ -543,7 +543,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
             <option value="all">All order types</option>
             {typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}
           </select>
-          <a className="classic-page-link" href="/orders">Classic</a>
+          <a className="classic-page-link" href="/orders?classic=1">Classic</a>
         </div>
       </div>
 

@@ -437,7 +437,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
       <div className="next-events-calendar-footer-actions">
         {canOpenRequests ? <a className="secondary-button" href="/next/events">Event Requests</a> : null}
         {canOpenComponents ? <a className="secondary-button" href="/next/event-components">Event Components</a> : null}
-        <a className="secondary-button" href="/events/calendar">Open classic Calendar</a>
+        <a className="secondary-button" href="/events/calendar?classic=1">Open classic Calendar</a>
       </div>
 
       <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} onClose={() => setActiveEvent(null)} />

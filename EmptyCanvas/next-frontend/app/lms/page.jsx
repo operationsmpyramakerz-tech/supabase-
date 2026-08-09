@@ -32,7 +32,7 @@ export default async function LmsHomePage() {
           <span className="status-dot warning" />
           <h1>The LMS overview could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <a className="primary-button" href="/lms">Open classic LMS</a>
+          <a className="primary-button" href="/lms?classic=1">Open classic LMS</a>
         </section>
       </main>
     );

@@ -45,7 +45,7 @@ export default async function EventsPage() {
           <h1>The new Events page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/events">Open classic Events</a>
+            <a className="primary-button" href="/events?classic=1">Open classic Events</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

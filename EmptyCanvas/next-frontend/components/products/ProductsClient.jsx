@@ -507,7 +507,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
 
   return (
     <section className="next-products-page">
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The classic Products page remains available while the resource recovers.</span><a href="/products">Open classic Products</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The classic Products page remains available while the resource recovers.</span><a href="/products?classic=1">Open classic Products</a></div> : null}
 
       <section className="products-next-hero">
         <div><span className="pill">Product master data</span><h2>Catalogue, pricing, tags, and supplier links</h2><p>Manage the product records used by orders, stocktaking, kits, and quotations from one fast workspace.</p><div className="products-next-hero__actions"><button className="primary-button" type="button" onClick={() => setModal({ product: null, tag: activeTag })}>+ Add product</button><button className="secondary-button" type="button" onClick={() => setTagModal({ mode: "create", tag: "" })}>+ Add tag</button><a className="secondary-button" href="/next/proposals">Open proposals</a></div></div>
@@ -526,7 +526,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
         {tags.map((tag) => <button className={activeTag === tag ? "active" : ""} type="button" onClick={() => setActiveTag(tag)} key={tag}><span>{tag}</span><b>{tagCounts.get(tag) || 0}</b></button>)}
       </section>
 
-      <div className="products-next-results-line"><span>{filteredProducts.length.toLocaleString("en-EG")} of {products.length.toLocaleString("en-EG")} products</span><div>{activeTag !== "__all__" ? <><button type="button" onClick={() => setTagModal({ mode: "edit", tag: activeTag })}>Rename tag</button>{lower(activeTag) !== "uncategorized" ? <button className="danger-link" type="button" onClick={deleteTag}>Delete tag</button> : null}</> : null}<a href="/products">Open classic Products</a></div></div>
+      <div className="products-next-results-line"><span>{filteredProducts.length.toLocaleString("en-EG")} of {products.length.toLocaleString("en-EG")} products</span><div>{activeTag !== "__all__" ? <><button type="button" onClick={() => setTagModal({ mode: "edit", tag: activeTag })}>Rename tag</button>{lower(activeTag) !== "uncategorized" ? <button className="danger-link" type="button" onClick={deleteTag}>Delete tag</button> : null}</> : null}<a href="/products?classic=1">Open classic Products</a></div></div>
 
       {!filteredProducts.length ? (
         <div className="products-next-empty"><span>□</span><h2>No matching products</h2><p>{search ? "Try another name, code, tag, or supplier link." : "This tag does not contain products yet."}</p><button className="primary-button" type="button" onClick={() => setModal({ product: null, tag: activeTag })}>Add product</button></div>

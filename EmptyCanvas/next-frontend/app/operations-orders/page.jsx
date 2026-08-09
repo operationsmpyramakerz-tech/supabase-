@@ -45,7 +45,7 @@ export default async function OperationsOrdersPage() {
           <h1>The new Operations Orders page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/orders/requested">Open classic Operations Orders</a>
+            <a className="primary-button" href="/orders/requested?classic=1">Open classic Operations Orders</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

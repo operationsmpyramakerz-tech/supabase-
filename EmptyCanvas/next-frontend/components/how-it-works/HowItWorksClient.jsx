@@ -309,7 +309,7 @@ export default function HowItWorksClient({ account }) {
           <span className="pill">Permission-aware operations guide</span>
           <h2>How the Operations Hub works for {account?.name || account?.username || "your account"}</h2>
           <p>This guide keeps the original S.O.P content, but now it is rendered inside the Next.js workspace and filtered to the pages currently assigned to your account.</p>
-          <div className="next-sop-hero-actions"><a href="/next/home" className="primary-button">Open Home</a><a href="/next/account" className="secondary-button">My Account</a><a href="/how-it-works" className="secondary-button">Classic guide</a></div>
+          <div className="next-sop-hero-actions"><a href="/next/home" className="primary-button">Open Home</a><a href="/next/account" className="secondary-button">My Account</a><a href="/how-it-works?classic=1" className="secondary-button">Classic guide</a></div>
         </div>
         <div className="next-sop-kpis">
           <article><strong>{modules.length}</strong><span>Visible sections</span></article>

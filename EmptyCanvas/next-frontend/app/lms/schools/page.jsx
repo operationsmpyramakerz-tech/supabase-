@@ -48,7 +48,7 @@ export default async function LmsSchoolsPage({ searchParams }) {
           <h1>The new LMS Schools page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/lms/b2b">Open classic Schools</a>
+            <a className="primary-button" href="/lms/b2b?classic=1">Open classic Schools</a>
             <a className="secondary-button" href="/next/lms">Return to LMS</a>
           </div>
         </section>

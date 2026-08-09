@@ -811,7 +811,7 @@ export default function LmsCurriculumClient({ initialCatalog, access, initialThe
   return (
     <main className="next-lms-curriculum-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some Curriculum support data could not load.</strong><span>The available folders are shown below.</span><a href="/lms/curriculum">Open classic Curriculum</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some Curriculum support data could not load.</strong><span>The available folders are shown below.</span><a href="/lms/curriculum?classic=1">Open classic Curriculum</a></div> : null}
       {loadError ? <div className="dashboard-notice is-warning" role="alert"><strong>Curriculum data needs attention.</strong><span>{loadError}</span><button type="button" onClick={refreshCurrent}>Try again</button></div> : null}
 
       <section className="next-lms-curriculum-hero">
@@ -827,7 +827,7 @@ export default function LmsCurriculumClient({ initialCatalog, access, initialThe
         </div>
         <div className="next-lms-curriculum-hero-actions">
           <a href="/next/lms">LMS Overview</a>
-          <a href="/lms/curriculum">Classic Curriculum</a>
+          <a href="/lms/curriculum?classic=1">Classic Curriculum</a>
           <button type="button" onClick={refreshCurrent} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh"}</button>
           {canManage && currentView === "catalog" ? <button type="button" onClick={() => setEntityModal({ kind: "group" })}>+ Add Curriculum</button> : null}
           {canManage && currentView === "theme" ? <button type="button" onClick={() => setEntityModal({ kind: "grade" })}>+ Add Grade</button> : null}

@@ -327,7 +327,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
         <div className="next-b2c-warning" role="status">
           <strong>Some B2C resources did not finish loading.</strong>
           <span>Refresh this page or open the classic interface while the service recovers.</span>
-          <a href="/b2c/database">Open classic Database</a>
+          <a href="/b2c/database?classic=1">Open classic Database</a>
         </div>
       ) : null}
 
@@ -409,7 +409,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
 
       <section className="next-b2c-rollout-note">
         <div><strong>Incremental migration</strong><span>The database library and individual table workspaces now run in Next.js. The customer Form Builder remains on the classic interface until its dedicated migration stage.</span></div>
-        <a href="/b2c/database">Classic Database</a>
+        <a href="/b2c/database?classic=1">Classic Database</a>
       </section>
 
       {dialog ? <DatabaseFormModal dialog={dialog} busy={Boolean(busy)} onClose={() => setDialog(null)} onSubmit={saveDatabase} /> : null}

@@ -69,7 +69,7 @@ export default async function OrderTrackingPage({ searchParams }) {
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
             <a className="primary-button" href="/next/orders">Return to Current Orders</a>
-            <a className="secondary-button" href="/orders">Open classic Current Orders</a>
+            <a className="secondary-button" href="/orders?classic=1">Open classic Current Orders</a>
           </div>
         </section>
       </main>

@@ -45,7 +45,7 @@ export default async function B2cDatabasePage() {
           <h1>The new B2C Database page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/b2c/database">Open classic Database</a>
+            <a className="primary-button" href="/b2c/database?classic=1">Open classic Database</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

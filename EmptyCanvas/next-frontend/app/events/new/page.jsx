@@ -40,7 +40,7 @@ export default async function NewEventRequestPage({ searchParams }) {
           <p>Your account does not have access to create or edit event requests.</p>
           <div className="actions">
             <a className="primary-button" href="/next/home">Return to Home</a>
-            <a className="secondary-button" href="/events/new">Open classic form</a>
+            <a className="secondary-button" href="/events/new?classic=1">Open classic form</a>
           </div>
         </section>
       </main>
@@ -55,7 +55,7 @@ export default async function NewEventRequestPage({ searchParams }) {
           <h1>The new Event Request form could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={editId ? `/events/new?edit=${encodeURIComponent(editId)}` : "/events/new"}>Open classic form</a>
+            <a className="primary-button" href={editId ? `/events/new?edit=${encodeURIComponent(editId)}&classic=1` : "/events/new?classic=1"}>Open classic form</a>
             <a className="secondary-button" href="/next/events">Return to Events</a>
           </div>
         </section>

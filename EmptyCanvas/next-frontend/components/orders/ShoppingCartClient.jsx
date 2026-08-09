@@ -712,7 +712,7 @@ export default function ShoppingCartClient({
   if (!selectedType) {
     return (
       <section className="next-cart-page">
-        {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial initial data</strong><span>One Shopping Cart resource was not available.</span><a href="/orders/new">Classic page</a></div> : null}
+        {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial initial data</strong><span>One Shopping Cart resource was not available.</span><a href="/orders/new?classic=1">Classic page</a></div> : null}
         <TypeSelection orderTypes={orderTypes} onChoose={chooseType} />
         <Toast notice={notice} onClose={() => setNotice(null)} />
       </section>
@@ -721,7 +721,7 @@ export default function ShoppingCartClient({
 
   return (
     <section className={`next-cart-page is-${meta.className}`}>
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial initial data</strong><span>One Shopping Cart resource was not available.</span><a href="/orders/new">Classic page</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial initial data</strong><span>One Shopping Cart resource was not available.</span><a href="/orders/new?classic=1">Classic page</a></div> : null}
 
       <section className="next-cart-hero">
         <div>
@@ -732,7 +732,7 @@ export default function ShoppingCartClient({
         </div>
         <div className="next-cart-hero-actions">
           <span className={`next-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
-          <a href="/orders/new">Classic page</a>
+          <a href="/orders/new?classic=1">Classic page</a>
           <button type="button" className="secondary-button" onClick={() => setPicker({ item: null })}>+ Add product</button>
         </div>
       </section>

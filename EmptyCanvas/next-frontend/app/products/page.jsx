@@ -45,7 +45,7 @@ export default async function ProductsPage() {
           <h1>The new Products page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/products">Open classic Products</a>
+            <a className="primary-button" href="/products?classic=1">Open classic Products</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

@@ -53,7 +53,7 @@ export default async function B2cTableWorkspacePage({ params }) {
           <h1>The B2C table workspace could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={`/b2c/database/${encodedId}`}>Open classic workspace</a>
+            <a className="primary-button" href={`/b2c/database/${encodedId}?classic=1`}>Open classic workspace</a>
             <a className="secondary-button" href="/next/b2c/database">Return to Databases</a>
           </div>
         </section>

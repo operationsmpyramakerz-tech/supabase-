@@ -38,7 +38,7 @@ export default async function ShoppingCartPage({ searchParams }) {
           <p>Your account does not have access to Create New Order.</p>
           <div className="actions">
             <a className="primary-button" href="/next/home">Return to Home</a>
-            <a className="secondary-button" href="/orders/new">Open classic page</a>
+            <a className="secondary-button" href="/orders/new?classic=1">Open classic page</a>
           </div>
         </section>
       </main>
@@ -53,7 +53,7 @@ export default async function ShoppingCartPage({ searchParams }) {
           <h1>The new Shopping Cart could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/orders/new">Open classic Shopping Cart</a>
+            <a className="primary-button" href="/orders/new?classic=1">Open classic Shopping Cart</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

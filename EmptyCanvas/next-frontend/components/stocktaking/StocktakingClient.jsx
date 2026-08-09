@@ -241,7 +241,7 @@ export default function StocktakingClient({ initialStock = [], bootstrapWarnings
         <div className="dashboard-notice" role="status">
           <strong>Some stocktaking data may be temporarily unavailable.</strong>
           <span>The classic Stocktaking page remains available while the resource recovers.</span>
-          <a href="/stocktaking">Open classic Stocktaking</a>
+          <a href="/stocktaking?classic=1">Open classic Stocktaking</a>
         </div>
       ) : null}
 
@@ -267,7 +267,7 @@ export default function StocktakingClient({ initialStock = [], bootstrapWarnings
 
       <div className="stock-results-line">
         <span>{filteredRows.length} of {rows.length} components</span>
-        <a href="/stocktaking">Open classic Stocktaking</a>
+        <a href="/stocktaking?classic=1">Open classic Stocktaking</a>
       </div>
 
       {!filteredRows.length ? (

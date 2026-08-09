@@ -451,7 +451,7 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
         </div>
         <div className="next-history-hero-actions">
           <button type="button" className="secondary" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
-          <a href="/history">Classic History</a>
+          <a href="/history?classic=1">Classic History</a>
           <button type="button" className="danger" onClick={() => setShowClear(true)}>Clear all</button>
         </div>
       </section>

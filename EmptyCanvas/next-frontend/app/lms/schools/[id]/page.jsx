@@ -52,7 +52,7 @@ export default async function LmsSchoolWorkspacePage({ params }) {
           <h1>The school workspace could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={`/lms/b2b/school/${encodeURIComponent(schoolId)}`}>Open classic workspace</a>
+            <a className="primary-button" href={`/lms/b2b/school/${encodeURIComponent(schoolId)}?classic=1`}>Open classic workspace</a>
             <a className="secondary-button" href="/next/lms/schools">Return to Schools</a>
           </div>
         </section>

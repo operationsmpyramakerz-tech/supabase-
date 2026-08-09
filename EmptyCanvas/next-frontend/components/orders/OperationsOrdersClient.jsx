@@ -470,7 +470,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           {archived ? <button type="button" className="secondary-button" onClick={() => onAction("unarchive", group)} disabled={busy}>UnArchive</button> : null}
           <button type="button" className="secondary-button" onClick={() => onExport("pdf", group, tab)} disabled={busy}>PDF</button>
           <button type="button" className="secondary-button" onClick={() => onExport("excel", group, tab)} disabled={busy}>Excel</button>
-          <a className="secondary-button" href={`/orders/requested?tab=${encodeURIComponent(tab)}`}>Classic workflow</a>
+          <a className="secondary-button" href={`/orders/requested?tab=${encodeURIComponent(tab)}&classic=1`}>Classic workflow</a>
           <button type="button" className="primary-button" onClick={onClose}>Done</button>
         </footer>
       </section>
@@ -755,7 +755,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
 
   return (
     <section className="next-orders-page next-operations-page">
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/requested">Classic page</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/requested?classic=1">Classic page</a></div> : null}
       {notice ? <div className="orders-success-notice">✓ {notice}</div> : null}
 
       <div className="next-orders-toolbar">
@@ -769,7 +769,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         <div className="next-orders-tools">
           <label className="next-orders-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, reason, user, receipt or component…" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}</label>
           <select value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter by order type"><option value="all">All order types</option>{typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}</select>
-          <a className="classic-page-link" href={`/orders/requested?tab=${encodeURIComponent(tab)}`}>Classic</a>
+          <a className="classic-page-link" href={`/orders/requested?tab=${encodeURIComponent(tab)}&classic=1`}>Classic</a>
         </div>
       </div>
 
@@ -785,7 +785,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
           {visibleGroups.length > visibleLimit ? <button type="button" className="load-more-button" onClick={() => setVisibleLimit((value) => value + 36)}>Load more ({visibleGroups.length - visibleLimit})</button> : null}
         </>
       ) : (
-        <div className="next-orders-empty"><span>⌕</span><h2>No operations orders found</h2><p>Try a different status, order type, or search term.</p><a className="secondary-button" href="/orders/requested">Open classic Operations Orders</a></div>
+        <div className="next-orders-empty"><span>⌕</span><h2>No operations orders found</h2><p>Try a different status, order type, or search term.</p><a className="secondary-button" href="/orders/requested?classic=1">Open classic Operations Orders</a></div>
       )}
 
       <OrderModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onExport={exportOrder} />
