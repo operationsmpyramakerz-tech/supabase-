@@ -5,6 +5,19 @@ import { useEffect, useMemo, useState } from "react";
 const SETTLEMENT_KEY = "settledmyaccount";
 
 function text(value) { return String(value ?? "").trim(); }
+function modernTrackingHref(order) {
+  const groupId = text(order?.trackingGroupId);
+  if (groupId) return `/next/orders/tracking?groupId=${encodeURIComponent(groupId)}`;
+  const raw = text(order?.trackingUrl);
+  if (!raw) return "";
+  const match = raw.match(/[?&]groupId=([^&#]+)/i);
+  if (match?.[1]) {
+    let decoded = match[1];
+    try { decoded = decodeURIComponent(decoded); } catch {}
+    return `/next/orders/tracking?groupId=${encodeURIComponent(decoded)}`;
+  }
+  return raw.replace(/^\/orders\/tracking(?=\?|$)/i, "/next/orders/tracking");
+}
 function lower(value) { return text(value).toLowerCase(); }
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function normalized(value) { return lower(value).replace(/[^a-z0-9\u0600-\u06ff]+/g, ""); }
@@ -231,7 +244,10 @@ function TransactionRow({ item, onReceipt, onEdit, onDelete }) {
       <div className="next-expense-users-transaction__main">
         <header><div><strong>{text(item?.reason) || text(item?.fundsType) || (cashIn ? "Cash in" : "Cash out")}</strong><span>{text(item?.fundsType) || (cashIn ? "Cash in" : "Cash out")}</span></div><b>{money(value, { signed: true })}</b></header>
         <div className="next-expense-users-transaction__meta"><span>{formatDate(item?.date)}</span><span>{from} → {to}</span>{number(item?.kilometer) > 0 ? <span>{number(item.kilometer)} km</span> : null}</div>
-        {orders.length ? <div className="next-expense-users-order-links">{orders.map((order, index) => <a href={text(order?.trackingUrl) || `/orders/tracking?groupId=${encodeURIComponent(text(order?.trackingGroupId))}`} target="_blank" rel="noreferrer" key={text(order?.key || order?.orderId) || index}>{text(order?.label || order?.orderId) || "Linked order"}</a>)}</div> : null}
+        {orders.length ? <div className="next-expense-users-order-links">{orders.map((order, index) => {
+          const href = modernTrackingHref(order) || "/next/orders";
+          return <a href={href} target="_blank" rel="noreferrer" key={text(order?.key || order?.orderId) || index}>{text(order?.label || order?.orderId) || "Linked order"}</a>;
+        })}</div> : null}
       </div>
       <div className="next-expense-users-transaction__actions">
         <button type="button" disabled={!shots.length} onClick={() => onReceipt(item)} title="Receipts">▧<span>{shots.length || ""}</span></button>

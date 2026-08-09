@@ -15,6 +15,19 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const OTHER_SCOPE_ID = "__expense_other_reason__";
 
 function text(value) { return String(value ?? "").trim(); }
+function modernTrackingHref(order) {
+  const groupId = text(order?.trackingGroupId);
+  if (groupId) return `/next/orders/tracking?groupId=${encodeURIComponent(groupId)}`;
+  const raw = text(order?.trackingUrl);
+  if (!raw) return "";
+  const match = raw.match(/[?&]groupId=([^&#]+)/i);
+  if (match?.[1]) {
+    let decoded = match[1];
+    try { decoded = decodeURIComponent(decoded); } catch {}
+    return `/next/orders/tracking?groupId=${encodeURIComponent(decoded)}`;
+  }
+  return raw.replace(/^\/orders\/tracking(?=\?|$)/i, "/next/orders/tracking");
+}
 function lower(value) { return text(value).toLowerCase(); }
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function typeKey(value) { return lower(value).replace(/[^a-z0-9\u0600-\u06ff]+/g, ""); }
@@ -396,7 +409,10 @@ function TransactionCard({ item, onScreenshots }) {
       <div className="expense-transaction__main">
         <div className="expense-transaction__title"><strong>{displayReason(item)}</strong><time>{formatDate(item?.date || item?.createdTime)}</time></div>
         <div className="expense-transaction__meta"><span>{text(item?.fundsType) || "Other"}</span><span>{route.from}</span><i>→</i><span>{route.to}</span></div>
-        {orders.length ? <div className="expense-order-links">{orders.map((order, index) => order?.trackingUrl ? <a href={order.trackingUrl} target="_blank" rel="noreferrer" key={`${order?.key || order?.label}-${index}`}>{text(order?.orderId || order?.label) || "Order"}</a> : <span key={`${order?.key || order?.label}-${index}`}>{text(order?.orderId || order?.label) || "Order"}</span>)}</div> : null}
+        {orders.length ? <div className="expense-order-links">{orders.map((order, index) => {
+          const href = modernTrackingHref(order);
+          return href ? <a href={href} target="_blank" rel="noreferrer" key={`${order?.key || order?.label}-${index}`}>{text(order?.orderId || order?.label) || "Order"}</a> : <span key={`${order?.key || order?.label}-${index}`}>{text(order?.orderId || order?.label) || "Order"}</span>;
+        })}</div> : null}
       </div>
       <div className="expense-transaction__amount"><strong>{ownCar && !value ? `${number(item?.kilometer)} km` : money(value, { signed: true })}</strong>{shots.length ? <button type="button" onClick={() => onScreenshots(item)}>Receipt {shots.length > 1 ? `(${shots.length})` : ""}</button> : <span>No receipt</span>}</div>
     </article>

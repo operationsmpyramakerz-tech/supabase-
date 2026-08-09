@@ -15974,18 +15974,74 @@ app.get(
     res.set("Cache-Control", "no-store");
 
     try {
-      if (_sbOrdersEnabled() && /^\d+$/.test(groupIdRaw)) {
-        const baseRow = await supabaseDb.selectById(_sbOrdersTable(), groupIdRaw);
+      // Supabase links historically used three different references for the same
+      // order group: a numeric row id, `ord:<order number>`, and `ORD-<order number>`.
+      // Accept all of them so existing Expenses/notifications links keep working.
+      // The result is scoped to the signed-in user just like the legacy Notion path.
+      const supabaseOrderRef = groupIdRaw.match(/^(?:ord(?:er)?[:\-]?)?(\d+)$/i);
+      if (_sbOrdersEnabled() && supabaseOrderRef) {
+        const allRows = await _sbSelectOrdersRows({ approvedOnly: false });
+        const username = norm(req.session?.username || "");
+        const scopedRows = username
+          ? (allRows || []).filter((row) => {
+              const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
+              return !by || by.includes(username) || username.includes(by);
+            })
+          : (allRows || []);
+
+        const explicitOrderNumber = /^(?:ord(?:er)?[:\-]?)/i.test(groupIdRaw)
+          ? Number(supabaseOrderRef[1])
+          : null;
+        let baseRow = null;
+        let targetOrderNumber = Number.isFinite(explicitOrderNumber) ? explicitOrderNumber : null;
+
+        if (!Number.isFinite(targetOrderNumber) && /^\d+$/.test(groupIdRaw)) {
+          baseRow = scopedRows.find((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "") === groupIdRaw) || null;
+          if (baseRow) {
+            targetOrderNumber = _sbOrderNum(_sbOrderGet(baseRow, ["order_number", "Order - ID", "Order ID"]));
+          }
+        }
+
+        if (!baseRow && Number.isFinite(targetOrderNumber)) {
+          baseRow = scopedRows.find((row) => {
+            const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+            return Number.isFinite(n) && Number(n) === Number(targetOrderNumber);
+          }) || null;
+        }
+
+        // A bare number can also be an order number when an old row id is no
+        // longer present. This fallback keeps copied tracking links durable.
+        if (!baseRow && /^\d+$/.test(groupIdRaw)) {
+          const fallbackOrderNumber = Number(groupIdRaw);
+          baseRow = scopedRows.find((row) => {
+            const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+            return Number.isFinite(n) && Number(n) === fallbackOrderNumber;
+          }) || null;
+          if (baseRow) targetOrderNumber = fallbackOrderNumber;
+        }
+
         if (!baseRow) return res.status(404).json({ error: "Order not found." });
         const base = _sbSerializeOrderRow(baseRow);
-        const allRows = await _sbSelectOrdersRows({ approvedOnly: false });
-        const rows = allRows.filter((row) => {
+        if (!Number.isFinite(targetOrderNumber)) targetOrderNumber = base.orderIdNumber;
+
+        const groupRows = scopedRows.filter((row) => {
           const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
-          return Number.isFinite(n) && Number.isFinite(base.orderIdNumber)
-            ? Number(n) === Number(base.orderIdNumber)
-            : String(_sbOrderGet(row, ["id", "ID"]) ?? "") === groupIdRaw;
+          return Number.isFinite(n) && Number.isFinite(targetOrderNumber)
+            ? Number(n) === Number(targetOrderNumber)
+            : String(_sbOrderGet(row, ["id", "ID"]) ?? "") === String(_sbOrderGet(baseRow, ["id", "ID"]) ?? "");
         });
-        const items = (rows.length ? rows : [baseRow]).map(_sbSerializeOrderRow);
+
+        const productNameMap = await _sbProductsMapByName().catch(() => new Map());
+        const items = (groupRows.length ? groupRows : [baseRow]).map((row) => {
+          const item = _sbSerializeOrderRow(row);
+          const product = productNameMap.get(normKey(item.productName || "")) || null;
+          return {
+            ...item,
+            productImage: item.productImage || product?.imageUrl || null,
+            productUrl: item.productUrl || product?.url || null,
+            unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : (Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null),
+          };
+        });
         const reason = base.reason || "No Reason";
         const createdTime = base.createdTime;
         const allArrived = items.length > 0 && items.every((i) => /(arrived|delivered|received)/i.test(String(i.status || "")));
@@ -15993,7 +16049,12 @@ app.get(
         const estimateTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
         const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
         return res.json({
-          groupId: groupIdRaw,
+          groupId: String(_sbOrderGet(baseRow, ["id", "ID"]) ?? groupIdRaw),
+          requestedGroupId: groupIdRaw,
+          orderId: base.orderId || (Number.isFinite(targetOrderNumber) ? `ORD-${targetOrderNumber}` : null),
+          orderNumber: Number.isFinite(targetOrderNumber) ? targetOrderNumber : null,
+          orderType: base.orderType || null,
+          createdByName: base.createdByName || null,
           reason,
           createdTime,
           stage,
@@ -24820,6 +24881,20 @@ async function _pageBootstrapCurrentOrders(req) {
   ]);
 }
 
+async function _pageBootstrapOrderTracking(req, groupId) {
+  const cleanGroupId = String(groupId || '').trim();
+  if (!cleanGroupId) {
+    const error = new Error('An order tracking reference is required.');
+    error.status = 400;
+    throw error;
+  }
+  const trackingUrl = `/api/orders/tracking?groupId=${encodeURIComponent(cleanGroupId)}`;
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad(trackingUrl, 10_000, () => _pageBootstrapFetchExistingRoute(req, trackingUrl, 25_000)),
+  ]);
+}
+
 async function _pageBootstrapOrdersReview(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25235,6 +25310,11 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'current-orders') {
       if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapCurrentOrders(req);
+    } else if (scope === 'order-tracking') {
+      if (!_pageBootstrapHasPageAccess(req, 'Current Orders')) return _pageAccessDeniedResponse(req, res);
+      const groupId = String(req.query?.groupId || req.query?.group || '').trim();
+      if (!groupId) return res.status(400).json({ ok: false, error: 'An order tracking reference is required.' });
+      results = await _pageBootstrapOrderTracking(req, groupId);
     } else if (scope === 'orders-review') {
       if (!_pageBootstrapHasPageAccess(req, 'Orders Review')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapOrdersReview(req);

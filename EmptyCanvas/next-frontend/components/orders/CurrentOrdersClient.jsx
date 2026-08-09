@@ -342,6 +342,7 @@ function OrderDetailsModal({ group, onClose, onAction }) {
         </div>
 
         <footer className="next-order-modal__actions">
+          <a className="secondary-button" href={`/next/orders/tracking?groupId=${encodeURIComponent(group.representativeId)}`}>Track order</a>
           {!archived ? <button type="button" className="secondary-button" onClick={() => onAction("edit", group)}>Edit</button> : null}
           {!archived ? <button type="button" className="secondary-button" onClick={() => onAction("archive", group)}>Archive</button> : null}
           {archived ? <button type="button" className="secondary-button" onClick={() => onAction("unarchive", group)}>UnArchive</button> : null}
