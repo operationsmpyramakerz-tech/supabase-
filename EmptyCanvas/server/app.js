@@ -31913,6 +31913,16 @@ app.get(
   requirePage(["Expenses", "Expenses Users"]),
   async (req, res) => {
     try {
+      const envEnabled = (value) => ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+      const nextFrontendEnabled = envEnabled(process.env.ENABLE_NEXT_FRONTEND);
+      const configuredCutover = String(process.env.ENABLE_NEXT_ROUTE_CUTOVER || "").trim();
+      const nextRouteCutoverEnabled = configuredCutover ? envEnabled(configuredCutover) : nextFrontendEnabled;
+      if (nextRouteCutoverEnabled && !envEnabled(req.query?.classic)) {
+        const params = new URLSearchParams();
+        const ids = String(req.query?.ids || "").trim();
+        if (ids) params.set("ids", ids);
+        return res.redirect(`/next/orders/receipt-viewer${params.toString() ? `?${params.toString()}` : ""}`);
+      }
       const payload = await _loadOrderReceiptViewerItems(req.query?.ids || "");
       const items = payload.items || [];
 

@@ -382,7 +382,7 @@ function SchoolDetailsModal({ school, onClose, onEdit }) {
   );
 }
 
-export default function LmsSchoolsClient({ initialSchools, initialStocktakingColumns, access, bootstrapWarnings = [] }) {
+export default function LmsSchoolsClient({ initialSchools, initialStocktakingColumns, initialCreate = false, initialEditId = "", access, bootstrapWarnings = [] }) {
   const [schools, setSchools] = useState(() => (Array.isArray(initialSchools) ? initialSchools : []).map(normalizeSchool));
   const [stocktakingColumns, setStocktakingColumns] = useState(() => {
     const raw = Array.isArray(initialStocktakingColumns?.columns) ? initialStocktakingColumns.columns : [];
@@ -393,7 +393,13 @@ export default function LmsSchoolsClient({ initialSchools, initialStocktakingCol
   const [solution, setSolution] = useState("");
   const [contractStatus, setContractStatus] = useState("");
   const [sort, setSort] = useState("name");
-  const [formSchool, setFormSchool] = useState(undefined);
+  const [formSchool, setFormSchool] = useState(() => {
+    if (initialCreate) return null;
+    const requestedId = text(initialEditId);
+    if (!requestedId) return undefined;
+    const source = (Array.isArray(initialSchools) ? initialSchools : []).map(normalizeSchool);
+    return source.find((school) => school.id === requestedId);
+  });
   const [detailsSchool, setDetailsSchool] = useState(null);
   const [toast, setToast] = useState(null);
   const [refreshing, setRefreshing] = useState(false);

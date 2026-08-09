@@ -30,7 +30,7 @@ function getResource(map, prefix, fallback = null) {
   return fallback;
 }
 
-export default async function LmsUsersCenterPage() {
+export default async function LmsUsersCenterPage({ searchParams }) {
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=lms-users-center", { timeoutMs: 45000 });
 
   if (response.status === 401) redirect("/login?next=/next/lms/users-center");
@@ -66,6 +66,10 @@ export default async function LmsUsersCenterPage() {
     );
   }
 
+  const params = await Promise.resolve(searchParams || {});
+  const requestedTab = String(params?.tab || "").trim().toLowerCase();
+  const initialTab = requestedTab === "structures" || ROLE_KEYS.includes(requestedTab) ? requestedTab : "structures";
+
   const resources = resourceMap(response.data);
   const account = getResource(resources, "/api/account");
   if (!account) redirect("/login?next=/next/lms/users-center");
@@ -92,6 +96,7 @@ export default async function LmsUsersCenterPage() {
         initialStructures={getResource(resources, "/api/lms/structures", { ok: true, structures: [] })}
         initialSchools={getResource(resources, "/api/lms/structures/schools", { ok: true, schools: [] })}
         initialRoles={rolePayloads}
+        initialTab={initialTab}
         access={getResource(resources, "/api/lms/session-access", { ok: true, pages: [] })}
         bootstrapWarnings={response.data.omitted || []}
       />

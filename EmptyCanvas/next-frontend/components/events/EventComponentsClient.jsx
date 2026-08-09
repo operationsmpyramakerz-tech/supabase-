@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const STANDARD_CATEGORIES = [
   { code: "project", label: "Project Resource" },
@@ -426,7 +426,7 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
   );
 }
 
-export default function EventComponentsClient({ account, initialComponents, initialCategories, bootstrapWarnings = [] }) {
+export default function EventComponentsClient({ account, initialComponents, initialCategories, initialCreate = false, bootstrapWarnings = [] }) {
   const [components, setComponents] = useState(Array.isArray(initialComponents) ? initialComponents : []);
   const [categories, setCategories] = useState(normalizeCategories(initialCategories));
   const [query, setQuery] = useState("");
@@ -446,6 +446,7 @@ export default function EventComponentsClient({ account, initialComponents, init
   const [deleteError, setDeleteError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const initialCreateHandled = useRef(false);
 
   const accessLevel = useMemo(() => pageAccessLevel(account), [account]);
   const canEdit = ["edit", "admin"].includes(accessLevel);
@@ -660,6 +661,12 @@ export default function EventComponentsClient({ account, initialComponents, init
       setFormBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!initialCreate || initialCreateHandled.current) return;
+    initialCreateHandled.current = true;
+    requestForm("create");
+  }, [initialCreate]);
 
   async function deleteComponent() {
     if (!deleteTarget || deleteBusy || !canDelete) return;

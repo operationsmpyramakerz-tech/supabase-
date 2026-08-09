@@ -278,11 +278,14 @@ function StructureBuilder({ schools, onClose, onSaved }) {
   );
 }
 
-export default function LmsUsersCenterClient({ initialStructures, initialSchools, initialRoles, access, bootstrapWarnings = [] }) {
+export default function LmsUsersCenterClient({ initialStructures, initialSchools, initialRoles, initialTab = "structures", access, bootstrapWarnings = [] }) {
   const [structures, setStructures] = useState(() => (Array.isArray(initialStructures?.structures) ? initialStructures.structures : []).map(normalizeStructure));
   const [schools] = useState(() => (Array.isArray(initialSchools?.schools) ? initialSchools.schools : []).map((school) => ({ id: text(school?.id), name: text(school?.name) || "Untitled school" })).filter((school) => school.id));
   const [roleItems, setRoleItems] = useState(() => Object.fromEntries(ROLE_DEFINITIONS.map((role) => [role.key, (Array.isArray(initialRoles?.[role.key]?.items) ? initialRoles[role.key].items : []).map(normalizeRoleItem)])));
-  const [activeTab, setActiveTab] = useState("structures");
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = lower(initialTab);
+    return requested === "structures" || ROLE_DEFINITIONS.some((role) => role.key === requested) ? requested : "structures";
+  });
   const [query, setQuery] = useState("");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [roleModal, setRoleModal] = useState(null);
@@ -324,6 +327,18 @@ export default function LmsUsersCenterClient({ initialStructures, initialSchools
     notify("The LMS role record was added successfully.");
   }
 
+  function selectTab(tab) {
+    const next = lower(tab) || "structures";
+    setActiveTab(next);
+    setQuery("");
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (next === "structures") url.searchParams.delete("tab");
+      else url.searchParams.set("tab", next);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }
+
   return (
     <main className="next-lms-users-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
@@ -344,8 +359,8 @@ export default function LmsUsersCenterClient({ initialStructures, initialSchools
 
       <section className="next-lms-users-workspace">
         <div className="next-lms-users-tabs" role="tablist" aria-label="LMS Users Center directories">
-          <button type="button" className={activeTab === "structures" ? "active" : ""} onClick={() => { setActiveTab("structures"); setQuery(""); }}><span>WF</span><b>Learning Structures</b><em>{structures.length}</em></button>
-          {ROLE_DEFINITIONS.map((role) => <button type="button" className={activeTab === role.key ? "active" : ""} onClick={() => { setActiveTab(role.key); setQuery(""); }} key={role.key}><span>{role.mark}</span><b>{role.plural}</b><em>{roleItems[role.key]?.length || 0}</em></button>)}
+          <button type="button" className={activeTab === "structures" ? "active" : ""} onClick={() => selectTab("structures")}><span>WF</span><b>Learning Structures</b><em>{structures.length}</em></button>
+          {ROLE_DEFINITIONS.map((role) => <button type="button" className={activeTab === role.key ? "active" : ""} onClick={() => selectTab(role.key)} key={role.key}><span>{role.mark}</span><b>{role.plural}</b><em>{roleItems[role.key]?.length || 0}</em></button>)}
         </div>
 
         <div className="next-lms-users-toolbar">

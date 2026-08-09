@@ -20,7 +20,7 @@ function getResource(map, prefix, fallback = null) {
   return fallback;
 }
 
-export default async function EventComponentsPage() {
+export default async function EventComponentsPage({ searchParams }) {
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=events-components", { timeoutMs: 35000 });
 
   if (response.status === 401) redirect("/login?next=/next/event-components");
@@ -53,6 +53,9 @@ export default async function EventComponentsPage() {
     );
   }
 
+  const params = await Promise.resolve(searchParams || {});
+  const initialCreate = ["1", "true", "yes", "on"].includes(String(params?.create || "").trim().toLowerCase());
+
   const resources = resourceMap(response.data);
   const account = getResource(resources, "/api/account", null);
   const componentsPayload = getResource(resources, "/api/events/components", { ok: true, components: [] });
@@ -66,6 +69,7 @@ export default async function EventComponentsPage() {
         account={account}
         initialComponents={Array.isArray(componentsPayload?.components) ? componentsPayload.components : []}
         initialCategories={Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []}
+        initialCreate={initialCreate}
         bootstrapWarnings={response.data.omitted || []}
       />
     </AppShell>

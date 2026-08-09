@@ -58,6 +58,17 @@ function visibleLmsLinks(access) {
   return LMS_LINKS.filter((link) => link.alwaysVisible || access?.isBuiltInAdmin || keys.has(link.key));
 }
 
+
+function withClassicFlag(value) {
+  const raw = String(value || "").trim() || "/home";
+  const hashIndex = raw.indexOf("#");
+  const beforeHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
+  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
+  if (/(?:\?|&)classic=(?:1|true|yes|on)(?:&|$)/i.test(beforeHash)) return raw;
+  const separator = beforeHash.includes("?") ? "&" : "?";
+  return `${beforeHash}${separator}classic=1${hash}`;
+}
+
 function isActive(activePath, href) {
   const current = String(activePath || "").replace(/\/$/, "") || "/";
   const target = String(href || "").replace(/\/$/, "") || "/";
@@ -86,7 +97,7 @@ export default function AppShell({
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
   const activeLink = MODULE_LINKS.find((link) => isActive(activePath, link.href));
-  const classicHref = classicHrefOverride || activeLink?.classicHref || (activePath === "/next/home" ? "/home" : "/home");
+  const classicHref = withClassicFlag(classicHrefOverride || activeLink?.classicHref || "/home");
   const initials = String(account?.name || account?.username || "U")
     .split(/\s+/)
     .filter(Boolean)

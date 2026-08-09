@@ -42,7 +42,8 @@ const steps = [
   ["LMS Schools", "Completed", "School folders, contract and contact data, academic coverage, capacity metrics, Stocktaking links, protected create/edit/delete actions, and contract uploads now run in Next.js."],
   ["LMS Curriculum", "Completed", "Curriculum groups, theme and grade folders, protected learning files, direct Storage uploads, resource management, and the in-system preview viewer now run in Next.js."],
   ["LMS School Workspace", "Completed", "Individual school profiles now include live grouped stocktaking, protected inventory sessions, debounced Inventory and Defected updates, mismatch monitoring, and PDF/Excel exports in Next.js."],
-  ["Progressive rollout", "In progress", "Continue replacing approved list pages individually while preserving legacy fallbacks."],
+  ["Legacy URL cutover", "Completed", "Classic ERP URLs now prefer their migrated Next.js workspaces while preserving query parameters, dynamic deep links, permission checks, and a durable ?classic=1 rollback path."],
+  ["Progressive rollout", "Monitoring", "The migrated frontend is now the default browser experience; classic pages remain available as a controlled fallback while production behavior is monitored."],
 ];
 
 export default async function MigrationStatusPage() {

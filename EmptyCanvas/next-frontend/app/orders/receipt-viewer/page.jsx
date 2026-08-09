@@ -65,7 +65,7 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
           <span className="status-dot warning" />
           <h1>The receipt viewer could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions"><a className="primary-button" href={`/orders/order-receipt-viewer?ids=${encodeURIComponent(ids)}`}>Open classic viewer</a><a className="secondary-button" href="/next/home">Return Home</a></div>
+          <div className="actions"><a className="primary-button" href={`/orders/order-receipt-viewer?ids=${encodeURIComponent(ids)}&classic=1`}>Open classic viewer</a><a className="secondary-button" href="/next/home">Return Home</a></div>
         </section>
       </main>
     );

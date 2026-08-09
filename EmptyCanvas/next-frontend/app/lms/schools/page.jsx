@@ -20,7 +20,7 @@ function getResource(map, prefix, fallback = null) {
   return fallback;
 }
 
-export default async function LmsSchoolsPage() {
+export default async function LmsSchoolsPage({ searchParams }) {
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=lms-schools", { timeoutMs: 45000 });
 
   if (response.status === 401) redirect("/login?next=/next/lms/schools");
@@ -56,6 +56,10 @@ export default async function LmsSchoolsPage() {
     );
   }
 
+  const params = await Promise.resolve(searchParams || {});
+  const initialCreate = String(params?.action || "").trim().toLowerCase() === "new";
+  const initialEditId = String(params?.edit || "").trim();
+
   const resources = resourceMap(response.data);
   const account = getResource(resources, "/api/account");
   if (!account) redirect("/login?next=/next/lms/schools");
@@ -73,6 +77,8 @@ export default async function LmsSchoolsPage() {
       <LmsSchoolsClient
         initialSchools={getResource(resources, "/api/b2b/schools", [])}
         initialStocktakingColumns={getResource(resources, "/api/b2b/stocktaking-columns", { ok: true, columns: [] })}
+        initialCreate={initialCreate}
+        initialEditId={initialEditId}
         access={access}
         bootstrapWarnings={response.data.omitted || []}
       />
