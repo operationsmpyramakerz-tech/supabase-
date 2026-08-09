@@ -65,6 +65,7 @@ export default async function StocktakingPage() {
       title="Stocktaking"
       eyebrow="Live inventory overview"
       activePath="/next/stocktaking"
+      bodyClass="stocktaking-page"
     >
       <StocktakingClient
         initialStock={Array.isArray(stock) ? stock : []}

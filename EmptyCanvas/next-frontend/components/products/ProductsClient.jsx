@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_UNITS = ["Piece", "Pack", "Kilogram", "Metre", "Inch"];
 
@@ -154,6 +154,30 @@ async function prepareProductImage(file) {
   }
 }
 
+function ClassicIcon({ name }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  const paths = {
+    filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></>,
+    tag: <><path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></>,
+    plus: <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>,
+    "plus-circle": <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></>,
+    check: <polyline points="20 6 9 17 4 12" />,
+    chevron: <polyline points="6 9 12 15 18 9" />,
+    layers: <><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></>,
+    more: <><circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" /></>,
+    package: <><path d="M16.5 9.4L7.5 4.2" /><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></>,
+    external: <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.07.07l2-2A5 5 0 0 0 12 4l-1.15 1.15" /><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15" /></>,
+    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+    trash: <><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" /></>,
+    box: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></>,
+    unit: <><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></>,
+    upload: <><path d="M16 16l-4-4-4 4" /><path d="M12 12v9" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /><polyline points="16 16 12 12 8 16" /></>,
+    eye: <><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></>,
+  };
+  return <svg {...common}>{paths[name] || paths.package}</svg>;
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -165,19 +189,9 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function ProductImage({ product, onOpen }) {
-  if (!product.imageUrl) {
-    return <div className="next-product-image next-product-image--empty"><span>▧</span><small>No image</small></div>;
-  }
-  return (
-    <button className="next-product-image" type="button" onClick={() => onOpen(product.imageUrl, product.name)} aria-label={`Open ${product.name} image`}>
-      <img src={product.imageUrl} alt="" loading="lazy" />
-    </button>
-  );
-}
-
 function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUnitAdded }) {
   const isEdit = !!product?.id;
+  const lockTag = !isEdit && activeTag !== "__all__";
   const [form, setForm] = useState(() => ({
     name: product?.name || "",
     idCode: product?.displayId || "",
@@ -196,6 +210,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
   }));
   const [newUnit, setNewUnit] = useState("");
   const [showUnitInput, setShowUnitInput] = useState(false);
+  const [openSelect, setOpenSelect] = useState("");
   const [busy, setBusy] = useState(false);
   const [imageBusy, setImageBusy] = useState(false);
   const [error, setError] = useState("");
@@ -211,10 +226,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
     setError("");
     try {
       const prepared = await prepareProductImage(file);
-      setImage((current) => {
-        if (current.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(current.previewUrl);
-        return { ...prepared, removed: false };
-      });
+      setImage({ ...prepared, removed: false });
     } catch (imageError) {
       setError(imageError?.message || "The image could not be prepared.");
     } finally {
@@ -223,10 +235,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
   };
 
   const removeImage = () => {
-    setImage((current) => {
-      if (current.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(current.previewUrl);
-      return { dataUrl: "", previewUrl: "", name: "", type: "", size: 0, removed: !!product?.imageUrl };
-    });
+    setImage({ dataUrl: "", previewUrl: "", name: "", type: "", size: 0, removed: !!product?.imageUrl });
   };
 
   const addUnit = async () => {
@@ -244,6 +253,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
       update("unit", savedUnit);
       setNewUnit("");
       setShowUnitInput(false);
+      setOpenSelect("");
     } catch (unitError) {
       setError(unitError?.message || "The unit could not be added.");
     } finally {
@@ -288,36 +298,76 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
   };
 
   return (
-    <div className="next-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
-      <form className="next-product-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="product-form-title">
-        <header>
-          <div><span className="pill">Product catalogue</span><h2 id="product-form-title">{isEdit ? "Edit product" : "Add product"}</h2><p>{isEdit ? "Update the selected product record." : "Create a new item in the product catalogue."}</p></div>
-          <button className="next-modal-close" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</button>
-        </header>
-
-        <div className="next-product-modal__body">
-          <div className="next-product-form-grid">
-            <label className="product-field product-field--wide"><span>Product name <em>*</em></span><input value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Example: Arduino Nano Type-C USB" autoFocus /></label>
-            <label className="product-field"><span>ID code</span><input value={form.idCode} onChange={(event) => update("idCode", event.target.value)} placeholder="A100217" /></label>
-            <label className="product-field"><span>Unit price</span><div className="product-price-field"><input type="number" min="0" step="0.01" value={form.unitPrice} onChange={(event) => update("unitPrice", event.target.value)} placeholder="0.00" /><b>EGP</b></div></label>
-            <label className="product-field"><span>Tag</span><select value={form.tag} onChange={(event) => update("tag", event.target.value)}><option value="">Uncategorized</option>{tags.map((tag) => <option value={tag} key={tag}>{tag}</option>)}</select></label>
-            <div className="product-field"><span>Unit of measurement</span><div className="product-unit-row"><select value={form.unit} onChange={(event) => update("unit", event.target.value)}><option value="">No unit</option>{units.map((unit) => <option value={unit} key={unit}>{unit}</option>)}</select><button type="button" onClick={() => setShowUnitInput((value) => !value)} aria-label="Add unit">+</button></div>{showUnitInput ? <div className="product-new-unit"><input value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="New unit" /><button type="button" onClick={addUnit} disabled={busy || !text(newUnit)}>Add</button></div> : null}</div>
-            <label className="product-field product-field--wide"><span>Product URL</span><input type="url" value={form.url} onChange={(event) => update("url", event.target.value)} placeholder="https://supplier.com/product" /></label>
-          </div>
-
-          <div className="product-image-editor">
-            <div><span>Product image</span><small>Images are compressed before upload to keep the page fast.</small></div>
-            <div className="product-image-editor__content">
-              {image.previewUrl ? <img src={image.previewUrl} alt="Product preview" /> : <span className="product-image-placeholder">▧</span>}
-              <div><strong>{image.name || "No image selected"}</strong><small>{imageBusy ? "Preparing image…" : image.size ? `${image.type} · ${fileSize(image.size)}` : image.previewUrl ? "Saved image" : "PNG, JPG or WEBP · maximum 10 MB"}</small><div className="product-image-actions"><button type="button" onClick={() => fileRef.current?.click()} disabled={busy || imageBusy}>{image.previewUrl ? "Replace" : "Choose image"}</button>{image.previewUrl ? <button className="danger-link" type="button" onClick={removeImage} disabled={busy}>Remove</button> : null}</div></div>
-              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} hidden />
-            </div>
-          </div>
-
-          {error ? <p className="form-error">{error}</p> : null}
+    <div className="products-modal-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+      <form className="products-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="product-form-title">
+        <button type="button" className="products-modal__close" onClick={onClose} disabled={busy} aria-label="Close product form"><span aria-hidden="true">×</span></button>
+        <div className="products-modal__header">
+          <div className="products-modal__icon"><ClassicIcon name="box" /></div>
+          <div><h2 id="product-form-title">{isEdit ? "Edit Product" : "Product"}</h2><p>{isEdit ? "Update the selected product record." : "Add a product to this catalogue group."}</p></div>
         </div>
 
-        <footer><button className="secondary-button" type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" type="submit" disabled={busy || imageBusy}>{busy ? "Saving…" : isEdit ? "Save changes" : "Add product"}</button></footer>
+        <div className="products-form-grid">
+          <label className="products-field products-field--wide"><span>Product Name <em>*</em></span><input value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="Example: Arduino Nano Type-C USB" autoFocus /></label>
+          <label className="products-field"><span>ID Code</span><input value={form.idCode} onChange={(event) => update("idCode", event.target.value)} placeholder="A100217" /></label>
+          <label className="products-field"><span>Unit Price</span><span className="products-price-input"><input type="number" min="0" step="0.01" value={form.unitPrice} onChange={(event) => update("unitPrice", event.target.value)} placeholder="0.00" /><strong>EGP</strong></span></label>
+
+          <div className="products-field products-unit-field">
+            <span>Unit of Measurement</span>
+            <button type="button" className="products-modern-select" aria-expanded={openSelect === "unit"} onClick={() => setOpenSelect((value) => value === "unit" ? "" : "unit")}>
+              <span className="products-modern-select__icon"><ClassicIcon name="unit" /></span>
+              <span className="products-modern-select__label">{form.unit || "Select unit"}</span>
+              <ClassicIcon name="chevron" />
+            </button>
+            <div className="products-modern-select__menu" hidden={openSelect !== "unit"}>
+              <button type="button" className={`products-modern-select__option ${!form.unit ? "is-selected" : ""}`} onClick={() => { update("unit", ""); setOpenSelect(""); }}><span>No unit</span>{!form.unit ? <ClassicIcon name="check" /> : null}</button>
+              {units.map((unit) => <button type="button" className={`products-modern-select__option ${form.unit === unit ? "is-selected" : ""}`} onClick={() => { update("unit", unit); setOpenSelect(""); }} key={unit}><span>{unit}</span>{form.unit === unit ? <ClassicIcon name="check" /> : null}</button>)}
+              <button type="button" className="products-modern-select__option products-modern-select__option--add" onClick={() => { setShowUnitInput(true); setOpenSelect(""); }}><span><ClassicIcon name="plus-circle" /> Add new unit</span></button>
+            </div>
+            <div className="products-unit-add" hidden={!showUnitInput}><input value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Example: Box" /><button type="button" onClick={addUnit} disabled={busy || !text(newUnit)}><ClassicIcon name="plus" /><span>Add</span></button></div>
+          </div>
+
+          {!lockTag ? (
+            <div className="products-field products-tag-field">
+              <span>Tag</span>
+              <button type="button" className="products-modern-select" aria-expanded={openSelect === "tag"} onClick={() => setOpenSelect((value) => value === "tag" ? "" : "tag")}>
+                <span className="products-modern-select__icon"><ClassicIcon name="tag" /></span>
+                <span className="products-modern-select__label">{form.tag || "Select tag"}</span>
+                <ClassicIcon name="chevron" />
+              </button>
+              <div className="products-modern-select__menu" hidden={openSelect !== "tag"}>
+                <button type="button" className={`products-modern-select__option ${!form.tag ? "is-selected" : ""}`} onClick={() => { update("tag", ""); setOpenSelect(""); }}><span>Select tag</span>{!form.tag ? <ClassicIcon name="check" /> : null}</button>
+                {tags.map((tag) => <button type="button" className={`products-modern-select__option ${form.tag === tag ? "is-selected" : ""}`} onClick={() => { update("tag", tag); setOpenSelect(""); }} key={tag}><span>{tag}</span>{form.tag === tag ? <ClassicIcon name="check" /> : null}</button>)}
+              </div>
+            </div>
+          ) : <input type="hidden" value={form.tag} readOnly />}
+
+          <label className="products-field products-field--wide"><span>Product URL</span><input type="url" value={form.url} onChange={(event) => update("url", event.target.value)} placeholder="https://supplier.com/product" /></label>
+
+          <div className="products-field products-field--wide">
+            <span>Product Image</span>
+            {!image.previewUrl ? (
+              <div className="products-upload-field">
+                <input ref={fileRef} className="products-upload-field__input" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} />
+                <button type="button" className="products-upload-field__picker" onClick={() => fileRef.current?.click()} disabled={busy || imageBusy}>
+                  <span className="products-upload-field__icon"><ClassicIcon name="upload" /></span>
+                  <span className="products-upload-field__copy"><b>{imageBusy ? "Preparing image…" : "Choose product image"}</b><small>PNG, JPG or WEBP · maximum 10 MB</small></span>
+                  <span className="products-upload-field__action">Browse</span>
+                </button>
+              </div>
+            ) : (
+              <div className="products-upload-file">
+                <span className="products-upload-file__thumb"><img src={image.previewUrl} alt="Product preview" /></span>
+                <span className="products-upload-file__info"><b>{image.name || "Product image"}</b><small>{image.size ? `${image.type} · ${fileSize(image.size)}` : "Saved image"}</small></span>
+                <button type="button" className="products-upload-file__open" onClick={() => window.open(image.previewUrl, "_blank", "noopener,noreferrer")} aria-label="Open image"><ClassicIcon name="eye" /></button>
+                <button type="button" className="products-upload-file__remove" onClick={removeImage} disabled={busy} aria-label="Remove image">×</button>
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} hidden />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="products-form-error">{error}</div>
+        <div className="products-modal__actions"><button className="products-btn products-btn--light" type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="products-btn products-btn--dark" type="submit" disabled={busy || imageBusy}>{busy ? "Saving..." : "Save Product"}</button></div>
       </form>
     </div>
   );
@@ -350,24 +400,42 @@ function TagModal({ mode, tag, onClose, onSaved }) {
   };
 
   return (
-    <div className="next-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
-      <form className="next-tag-modal" onSubmit={submit} role="dialog" aria-modal="true">
-        <header><div><span className="pill">Product tag</span><h2>{mode === "edit" ? "Rename tag" : "Add tag"}</h2><p>{mode === "edit" ? `All products under “${tag}” will move to the new name.` : "Create a new product group."}</p></div><button className="next-modal-close" type="button" onClick={onClose} disabled={busy}>×</button></header>
-        <div className="next-tag-modal__body"><label className="product-field"><span>Tag name <em>*</em></span><input value={name} onChange={(event) => setName(event.target.value)} autoFocus /></label>{error ? <p className="form-error">{error}</p> : null}</div>
-        <footer><button className="secondary-button" type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : mode === "edit" ? "Rename tag" : "Add tag"}</button></footer>
+    <div className="products-modal-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
+      <form className="products-modal products-tag-modal" onSubmit={submit} role="dialog" aria-modal="true">
+        <button type="button" className="products-modal__close" onClick={onClose} disabled={busy} aria-label="Close"><span>×</span></button>
+        <div className="products-modal__header"><div className="products-modal__icon"><ClassicIcon name="tag" /></div><div><h2>{mode === "edit" ? "Edit Tag" : "Add Tag"}</h2><p>{mode === "edit" ? `Rename “${tag}” across its products.` : "Create a new product group."}</p></div></div>
+        <label className="products-field"><span>Tag Name <em>*</em></span><input value={name} onChange={(event) => setName(event.target.value)} autoFocus /></label>
+        <div className="products-form-error">{error}</div>
+        <div className="products-modal__actions"><button className="products-btn products-btn--light" type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="products-btn products-btn--dark" type="submit" disabled={busy}>{busy ? "Saving..." : mode === "edit" ? "Save Tag" : "Add Tag"}</button></div>
       </form>
     </div>
   );
 }
 
-function ProductCard({ product, onEdit, onDelete, onImage }) {
+function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
+  const image = !!product.imageUrl;
   return (
-    <article className="next-product-card">
-      <ProductImage product={product} onOpen={onImage} />
-      <div className="next-product-card__body">
-        <div className="next-product-card__title"><div><span>{product.displayId || "No ID code"}</span><h3>{product.name}</h3></div><div className="next-product-card__actions"><button type="button" onClick={() => onEdit(product)} title="Edit product">✎</button><button className="danger" type="button" onClick={() => onDelete(product)} title="Delete product">×</button></div></div>
-        <div className="next-product-card__meta"><span>{product.unit || "No unit"}</span><strong>{formatMoney(product.unitPrice)}</strong></div>
-        <footer>{product.url ? <a href={product.url} target="_blank" rel="noreferrer">Open supplier link ↗</a> : <span>No supplier link</span>}<em>{firstTag(product)}</em></footer>
+    <article className="product-card">
+      <button type="button" className={`product-card__media ${image ? "" : "is-fallback"}`} onClick={() => image && onImage(product.imageUrl, product.name)} disabled={!image} aria-label={image ? `Open ${product.name} image` : "No product image"}>
+        {image ? <img className="product-card__image" src={product.imageUrl} alt={product.name} loading="lazy" /> : null}
+        <div className="product-card__image-fallback"><ClassicIcon name="package" /></div>
+      </button>
+      <div className="product-card__content">
+        <div className="product-card__headline">
+          <h4 title={product.name}>{product.name}</h4>
+          <div className="product-card__menu-wrap" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="product-card__menu-btn" onClick={() => onMenu(product.id)} aria-label="Product actions" aria-expanded={menuOpen}><ClassicIcon name="more" /></button>
+            <div className="product-card__menu" hidden={!menuOpen}>
+              <button type="button" onClick={() => onEdit(product)}><ClassicIcon name="edit" /><span>Edit</span></button>
+              <button type="button" className="is-danger" onClick={() => onDelete(product)}><ClassicIcon name="trash" /><span>Delete</span></button>
+            </div>
+          </div>
+        </div>
+        <div className="product-card__details"><span className="product-card__code">{product.displayId || "No ID"}</span></div>
+        <div className="product-card__bottom">
+          <div className="product-card__price-wrap"><strong className="product-card__price">{formatMoney(product.unitPrice)}</strong>{product.unit ? <span className="product-card__unit"><ClassicIcon name="unit" />{product.unit}</span> : null}</div>
+          {product.url ? <a className="product-card__url" href={product.url} target="_blank" rel="noopener noreferrer" aria-label="Open product URL" title="Open product URL"><ClassicIcon name="external" /></a> : <span className="product-card__url is-disabled" title="No product URL"><ClassicIcon name="link" /></span>}
+        </div>
       </div>
     </article>
   );
@@ -379,18 +447,40 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
   const [unitCatalog, setUnitCatalog] = useState(() => mergeUnique([...(initialCatalog?.unitsCatalog || []), ...DEFAULT_UNITS]));
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState("__all__");
-  const [view, setView] = useState("grid");
-  const [sort, setSort] = useState("name");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [productMenu, setProductMenu] = useState("");
+  const [groupMenu, setGroupMenu] = useState("");
   const [modal, setModal] = useState(null);
   const [tagModal, setTagModal] = useState(null);
   const [imageViewer, setImageViewer] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const filterRef = useRef(null);
 
-  const tags = useMemo(() => mergeUnique([
-    ...tagCatalog,
-    ...products.map(firstTag),
-  ]), [tagCatalog, products]);
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search products...";
+    const handle = (event) => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.value = "";
+      input.placeholder = "Search";
+    };
+  }, []);
+
+  useEffect(() => {
+    const closeMenus = (event) => {
+      if (!event.target.closest(".products-tag-filter-wrap")) setFilterOpen(false);
+      if (!event.target.closest(".product-card__menu-wrap")) setProductMenu("");
+      if (!event.target.closest(".products-group-menu-wrap")) setGroupMenu("");
+    };
+    document.addEventListener("click", closeMenus);
+    return () => document.removeEventListener("click", closeMenus);
+  }, []);
+
+  const tags = useMemo(() => mergeUnique([...tagCatalog, ...products.map(firstTag)]), [tagCatalog, products]);
 
   const tagCounts = useMemo(() => {
     const map = new Map(tags.map((tag) => [tag, 0]));
@@ -400,18 +490,12 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
 
   const filteredProducts = useMemo(() => {
     const query = lower(search);
-    const list = products.filter((product) => {
+    return products.filter((product) => {
       if (activeTag !== "__all__" && firstTag(product) !== activeTag) return false;
       if (!query) return true;
       return lower([product.name, product.displayId, product.unit, product.unitPrice, product.url, firstTag(product)].join(" ")).includes(query);
-    });
-    return [...list].sort((a, b) => {
-      if (sort === "price-high") return number(b.unitPrice) - number(a.unitPrice) || a.name.localeCompare(b.name);
-      if (sort === "price-low") return number(a.unitPrice) - number(b.unitPrice) || a.name.localeCompare(b.name);
-      if (sort === "id") return (a.displayId || "zzzz").localeCompare(b.displayId || "zzzz") || a.name.localeCompare(b.name);
-      return a.name.localeCompare(b.name);
-    });
-  }, [activeTag, products, search, sort]);
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeTag, products, search]);
 
   const groupedProducts = useMemo(() => {
     const map = new Map();
@@ -424,31 +508,9 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
     return [...map.entries()].map(([tag, items]) => ({ tag, items })).sort((a, b) => a.tag.localeCompare(b.tag));
   }, [activeTag, filteredProducts, search, tags]);
 
-  const stats = useMemo(() => {
-    const priced = products.filter((product) => Number.isFinite(Number(product.unitPrice)) && product.unitPrice !== null);
-    const imageCount = products.filter((product) => product.imageUrl).length;
-    const average = priced.length ? priced.reduce((sum, product) => sum + number(product.unitPrice), 0) / priced.length : 0;
-    return { total: products.length, tags: tags.length, imageCount, average };
-  }, [products, tags]);
-
   const notify = (type, message) => {
     setToast({ type, title: "Products", message });
     window.setTimeout(() => setToast(null), 4200);
-  };
-
-  const refresh = async () => {
-    setRefreshing(true);
-    try {
-      const body = await requestJson(`/api/products?_fresh=1&_ts=${Date.now()}`);
-      setProducts((Array.isArray(body.products) ? body.products : []).map(normalizeProduct));
-      setTagCatalog(mergeUnique(body.tagsCatalog || []));
-      setUnitCatalog(mergeUnique([...(body.unitsCatalog || []), ...DEFAULT_UNITS]));
-      notify("success", "Product catalogue refreshed.");
-    } catch (error) {
-      notify("error", error?.message || "The product catalogue could not be refreshed.");
-    } finally {
-      setRefreshing(false);
-    }
   };
 
   const productSaved = (savedProduct, isEdit) => {
@@ -460,12 +522,12 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
       next[index] = normalized;
       return next;
     });
-    const savedTag = firstTag(normalized);
-    setTagCatalog((current) => mergeUnique([...current, savedTag]));
+    setTagCatalog((current) => mergeUnique([...current, firstTag(normalized)]));
     notify("success", isEdit ? "Product updated successfully." : "Product added successfully.");
   };
 
   const deleteProduct = async (product) => {
+    setProductMenu("");
     if (!window.confirm(`Delete “${product.name}”? This action cannot be undone.`)) return;
     try {
       await requestJson(`/api/products/${encodeURIComponent(product.id)}`, { method: "DELETE" });
@@ -490,55 +552,76 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
     }
   };
 
-  const deleteTag = async () => {
-    if (activeTag === "__all__" || lower(activeTag) === "uncategorized") return;
-    if (!window.confirm(`Delete the tag “${activeTag}”? Products in this tag will move to Uncategorized.`)) return;
-    const removedTag = activeTag;
+  const deleteTag = async (tag) => {
+    setGroupMenu("");
+    if (!tag || lower(tag) === "uncategorized") return;
+    if (!window.confirm(`Delete the tag “${tag}”? Products in this tag will move to Uncategorized.`)) return;
     try {
-      await requestJson("/api/products/tags", { method: "DELETE", body: JSON.stringify({ tag: removedTag }) });
-      setProducts((current) => current.map((product) => firstTag(product) === removedTag ? { ...product, tags: ["Uncategorized"] } : product));
-      setTagCatalog((current) => mergeUnique(current.filter((item) => lower(item) !== lower(removedTag)).concat("Uncategorized")));
-      setActiveTag("__all__");
+      await requestJson("/api/products/tags", { method: "DELETE", body: JSON.stringify({ tag }) });
+      setProducts((current) => current.map((product) => firstTag(product) === tag ? { ...product, tags: ["Uncategorized"] } : product));
+      setTagCatalog((current) => mergeUnique(current.filter((item) => lower(item) !== lower(tag)).concat("Uncategorized")));
+      if (activeTag === tag) setActiveTag("__all__");
       notify("success", "Tag deleted and products moved to Uncategorized.");
     } catch (error) {
       notify("error", error?.message || "The tag could not be deleted.");
     }
   };
 
+  const activeLabel = activeTag === "__all__" ? "All Products" : activeTag;
+  const activeCount = activeTag === "__all__" ? products.length : (tagCounts.get(activeTag) || 0);
+
   return (
-    <section className="next-products-page">
+    <section className="products-shell next-products-classic-parity">
       {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The classic Products page remains available while the resource recovers.</span><a href="/products?classic=1">Open classic Products</a></div> : null}
 
-      <section className="products-next-hero">
-        <div><span className="pill">Product master data</span><h2>Catalogue, pricing, tags, and supplier links</h2><p>Manage the product records used by orders, stocktaking, kits, and quotations from one fast workspace.</p><div className="products-next-hero__actions"><button className="primary-button" type="button" onClick={() => setModal({ product: null, tag: activeTag })}>+ Add product</button><button className="secondary-button" type="button" onClick={() => setTagModal({ mode: "create", tag: "" })}>+ Add tag</button><a className="secondary-button" href="/next/proposals">Open proposals</a></div></div>
-        <div className="products-next-stats"><article><span>Products</span><strong>{stats.total.toLocaleString("en-EG")}</strong><small>Catalogue records</small></article><article><span>Tags</span><strong>{stats.tags.toLocaleString("en-EG")}</strong><small>Product groups</small></article><article><span>Images</span><strong>{stats.imageCount.toLocaleString("en-EG")}</strong><small>Products with photos</small></article><article><span>Average price</span><strong>{formatMoney(stats.average)}</strong><small>Priced products</small></article></div>
+      <section className="products-filter-panel" aria-label="Product tag filter">
+        <div className="products-tag-filter-wrap" ref={filterRef} onClick={(event) => event.stopPropagation()}>
+          <button type="button" className="products-tag-filter-btn" aria-expanded={filterOpen} onClick={() => setFilterOpen((value) => !value)}>
+            <span className="products-tag-filter-btn__icon"><ClassicIcon name="filter" /></span>
+            <span className="products-tag-filter-btn__copy"><small>Filter by tag</small><strong>{activeLabel}</strong></span>
+            <span className="products-tag-filter-btn__count">{activeCount}</span>
+            <span className="products-tag-filter-btn__chevron"><ClassicIcon name="chevron" /></span>
+          </button>
+          <div className="products-tags" hidden={!filterOpen}>
+            <button type="button" className="products-tag-option products-tag-option--add" onClick={() => { setFilterOpen(false); setTagModal({ mode: "create", tag: "" }); }}>
+              <span className="products-tag-option__icon"><ClassicIcon name="plus-circle" /></span><span><strong>Add New Tag</strong><small>Create a new product group</small></span><ClassicIcon name="plus" />
+            </button>
+            <button type="button" className={`products-tag-option ${activeTag === "__all__" ? "is-active" : ""}`} onClick={() => { setActiveTag("__all__"); setFilterOpen(false); }}>
+              <span className="products-tag-option__icon"><ClassicIcon name="layers" /></span><span><strong>All Products</strong><small>{products.length.toLocaleString("en-EG")} products</small></span>{activeTag === "__all__" ? <ClassicIcon name="check" /> : null}
+            </button>
+            {tags.map((tag) => <button type="button" className={`products-tag-option ${activeTag === tag ? "is-active" : ""}`} onClick={() => { setActiveTag(tag); setFilterOpen(false); }} key={tag}><span className="products-tag-option__icon"><ClassicIcon name="tag" /></span><span><strong>{tag}</strong><small>{(tagCounts.get(tag) || 0).toLocaleString("en-EG")} products</small></span>{activeTag === tag ? <ClassicIcon name="check" /> : null}</button>)}
+          </div>
+        </div>
       </section>
 
-      <section className="products-next-toolbar">
-        <label className="products-next-search"><span>⌕</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products, IDs, tags, units, or supplier links…" />{search ? <button type="button" onClick={() => setSearch("")} aria-label="Clear search">×</button> : null}</label>
-        <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort products"><option value="name">Sort: Name</option><option value="id">Sort: ID code</option><option value="price-low">Price: Low to high</option><option value="price-high">Price: High to low</option></select>
-        <div className="products-next-view"><button className={view === "grid" ? "active" : ""} type="button" onClick={() => setView("grid")}>Grid</button><button className={view === "table" ? "active" : ""} type="button" onClick={() => setView("table")}>Table</button></div>
-        <button className="secondary-button" type="button" onClick={refresh} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh"}</button>
+      <section className="products-results" aria-live="polite">
+        {!groupedProducts.length ? (
+          <div className="products-empty"><strong>Sorry, No data available</strong><span>{search ? "No products match your search." : "Create a tag first, then add products to it."}</span></div>
+        ) : groupedProducts.map((group) => (
+          <section className="products-group" key={group.tag}>
+            <header className="products-group__head">
+              <div className="products-group__title"><span className="products-group__icon"><ClassicIcon name="layers" /></span><div><h3 title={group.tag}>{group.tag}</h3></div></div>
+              <div className="products-group__metrics">
+                <button type="button" className="products-group-add-product" onClick={() => setModal({ product: null, tag: group.tag })}><ClassicIcon name="plus-circle" /><span>Add Product</span></button>
+                <div className="products-group-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                  <button type="button" className="products-group-menu-btn" onClick={() => setGroupMenu((value) => value === group.tag ? "" : group.tag)} aria-label="Tag actions" aria-expanded={groupMenu === group.tag}><ClassicIcon name="more" /></button>
+                  <div className="products-group-menu" hidden={groupMenu !== group.tag}>
+                    <button type="button" onClick={() => { setGroupMenu(""); setTagModal({ mode: "edit", tag: group.tag }); }}><ClassicIcon name="edit" /><span>Edit Tag</span></button>
+                    {lower(group.tag) !== "uncategorized" ? <button type="button" className="is-danger" onClick={() => deleteTag(group.tag)}><ClassicIcon name="trash" /><span>Delete Tag</span></button> : null}
+                  </div>
+                </div>
+              </div>
+            </header>
+            <div className={`products-grid ${group.items.length ? "" : "is-empty"}`}>
+              {group.items.length ? group.items.map((product) => <ProductCard product={product} menuOpen={productMenu === product.id} onMenu={(id) => setProductMenu((value) => value === id ? "" : id)} onEdit={(item) => { setProductMenu(""); setModal({ product: item, tag: firstTag(item) }); }} onDelete={deleteProduct} onImage={(url, name) => setImageViewer({ url, name })} key={product.id} />) : <div className="products-group-empty"><span className="products-group-empty__icon"><ClassicIcon name="package" /></span><div><strong>No products in this tag yet</strong><small>Use Add Product to create the first product in this group.</small></div></div>}
+            </div>
+          </section>
+        ))}
       </section>
-
-      <section className="products-next-tags" aria-label="Product tag filter">
-        <button className={activeTag === "__all__" ? "active" : ""} type="button" onClick={() => setActiveTag("__all__")}><span>All products</span><b>{products.length}</b></button>
-        {tags.map((tag) => <button className={activeTag === tag ? "active" : ""} type="button" onClick={() => setActiveTag(tag)} key={tag}><span>{tag}</span><b>{tagCounts.get(tag) || 0}</b></button>)}
-      </section>
-
-      <div className="products-next-results-line"><span>{filteredProducts.length.toLocaleString("en-EG")} of {products.length.toLocaleString("en-EG")} products</span><div>{activeTag !== "__all__" ? <><button type="button" onClick={() => setTagModal({ mode: "edit", tag: activeTag })}>Rename tag</button>{lower(activeTag) !== "uncategorized" ? <button className="danger-link" type="button" onClick={deleteTag}>Delete tag</button> : null}</> : null}<a href="/products?classic=1">Open classic Products</a></div></div>
-
-      {!filteredProducts.length ? (
-        <div className="products-next-empty"><span>□</span><h2>No matching products</h2><p>{search ? "Try another name, code, tag, or supplier link." : "This tag does not contain products yet."}</p><button className="primary-button" type="button" onClick={() => setModal({ product: null, tag: activeTag })}>Add product</button></div>
-      ) : view === "table" ? (
-        <div className="products-next-table-wrap"><table className="products-next-table"><thead><tr><th>Product</th><th>ID code</th><th>Tag</th><th>Unit</th><th className="number-cell">Unit price</th><th>Supplier</th><th aria-label="Actions" /></tr></thead><tbody>{filteredProducts.map((product) => <tr key={product.id}><td><div className="products-next-table-product">{product.imageUrl ? <button type="button" onClick={() => setImageViewer({ url: product.imageUrl, name: product.name })}><img src={product.imageUrl} alt="" /></button> : <span>▧</span>}<strong>{product.name}</strong></div></td><td>{product.displayId || "—"}</td><td><em>{firstTag(product)}</em></td><td>{product.unit || "—"}</td><td className="number-cell"><strong>{formatMoney(product.unitPrice)}</strong></td><td>{product.url ? <a href={product.url} target="_blank" rel="noreferrer">Open ↗</a> : "—"}</td><td><div className="products-next-row-actions"><button type="button" onClick={() => setModal({ product, tag: firstTag(product) })}>Edit</button><button className="danger" type="button" onClick={() => deleteProduct(product)}>Delete</button></div></td></tr>)}</tbody></table></div>
-      ) : (
-        <div className="products-next-groups">{groupedProducts.map((group) => <section className="products-next-group" key={group.tag}><header><div><span>Tag</span><h3>{group.tag}</h3></div><div><b>{group.items.length.toLocaleString("en-EG")} products</b><button type="button" onClick={() => setModal({ product: null, tag: group.tag })}>+ Add product</button></div></header>{group.items.length ? <div className="products-next-grid">{group.items.map((product) => <ProductCard product={product} onEdit={(item) => setModal({ product: item, tag: firstTag(item) })} onDelete={deleteProduct} onImage={(url, name) => setImageViewer({ url, name })} key={product.id} />)}</div> : <div className="products-next-group-empty"><span>No products in this tag.</span><button type="button" onClick={() => setModal({ product: null, tag: group.tag })}>Add first product</button></div>}</section>)}</div>
-      )}
 
       {modal ? <ProductModal product={modal.product} activeTag={modal.tag || activeTag} tags={tags} units={unitCatalog} onClose={() => setModal(null)} onSaved={productSaved} onUnitAdded={(unit) => setUnitCatalog((current) => mergeUnique([...current, unit]))} /> : null}
       {tagModal ? <TagModal mode={tagModal.mode} tag={tagModal.tag} onClose={() => setTagModal(null)} onSaved={tagSaved} /> : null}
-      {imageViewer ? <div className="next-modal-backdrop product-image-viewer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setImageViewer(null)}><section role="dialog" aria-modal="true"><header><strong>{imageViewer.name}</strong><button type="button" onClick={() => setImageViewer(null)}>×</button></header><img src={imageViewer.url} alt={imageViewer.name} /></section></div> : null}
+      {imageViewer ? <div className="products-modal-overlay next-products-image-viewer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setImageViewer(null)}><section role="dialog" aria-modal="true"><header><strong>{imageViewer.name}</strong><button type="button" onClick={() => setImageViewer(null)}>×</button></header><img src={imageViewer.url} alt={imageViewer.name} /></section></div> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </section>
   );

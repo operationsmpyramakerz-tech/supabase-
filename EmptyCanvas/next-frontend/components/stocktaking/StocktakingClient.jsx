@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const EXPORT_COLUMNS = [
   { value: "stock", label: "Stock", checked: true },
@@ -12,16 +12,16 @@ const EXPORT_COLUMNS = [
 ];
 
 const TAG_TONES = {
-  gray: { background: "#f2f4f7", color: "#344054", border: "#d0d5dd" },
-  brown: { background: "#f4f0ec", color: "#7a2e0e", border: "#e8d7cb" },
-  orange: { background: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
-  yellow: { background: "#fffaeb", color: "#b54708", border: "#fedf89" },
-  green: { background: "#ecfdf3", color: "#067647", border: "#abefc6" },
-  blue: { background: "#eff8ff", color: "#175cd3", border: "#b2ddff" },
-  purple: { background: "#f4f3ff", color: "#5925dc", border: "#d9d6fe" },
-  pink: { background: "#fdf2fa", color: "#c11574", border: "#fcceee" },
-  red: { background: "#fff1f3", color: "#c01048", border: "#fecdd6" },
-  default: { background: "#f2f4f7", color: "#344054", border: "#d0d5dd" },
+  gray: { background: "#F3F4F6", color: "#374151", border: "#E5E7EB" },
+  brown: { background: "#EFEBE9", color: "#4E342E", border: "#D7CCC8" },
+  orange: { background: "#FFF7ED", color: "#9A3412", border: "#FED7AA" },
+  yellow: { background: "#FEFCE8", color: "#854D0E", border: "#FDE68A" },
+  green: { background: "#ECFDF5", color: "#065F46", border: "#A7F3D0" },
+  blue: { background: "#EFF6FF", color: "#1E40AF", border: "#BFDBFE" },
+  purple: { background: "#F5F3FF", color: "#5B21B6", border: "#DDD6FE" },
+  pink: { background: "#FDF2F8", color: "#9D174D", border: "#FBCFE8" },
+  red: { background: "#FEF2F2", color: "#991B1B", border: "#FECACA" },
+  default: { background: "#F3F4F6", color: "#111827", border: "#E5E7EB" },
 };
 
 function text(value) {
@@ -35,14 +35,6 @@ function lower(value) {
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function money(value) {
-  return new Intl.NumberFormat("en-EG", {
-    style: "currency",
-    currency: "EGP",
-    maximumFractionDigits: 2,
-  }).format(number(value));
 }
 
 function normalizedUrl(value) {
@@ -61,21 +53,16 @@ function tagColor(name, fallback) {
 }
 
 function normalizedRow(row, index) {
-  const quantity = number(row?.quantity);
-  const unitPrice = number(row?.unitPrice);
   const tagName = text(row?.tag?.name) || "Untagged";
-  const color = tagColor(tagName, text(row?.tag?.color));
   return {
     ...row,
     key: text(row?.id) || `${text(row?.name)}-${index}`,
     name: text(row?.name) || "Untitled component",
     idCode: text(row?.idCode),
-    quantity,
-    oneKitQuantity: number(row?.oneKitQuantity),
-    unitPrice,
-    totalPrice: quantity * unitPrice,
+    quantity: number(row?.quantity),
+    unitPrice: number(row?.unitPrice),
     url: normalizedUrl(row?.url),
-    tag: { name: tagName, color },
+    tag: { name: tagName, color: tagColor(tagName, text(row?.tag?.color)) },
   };
 }
 
@@ -88,12 +75,7 @@ function groupRows(rows) {
   });
 
   return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      items: [...group.items].sort((a, b) => a.name.localeCompare(b.name)),
-      quantity: group.items.reduce((sum, item) => sum + item.quantity, 0),
-      value: group.items.reduce((sum, item) => sum + item.totalPrice, 0),
-    }))
+    .map((group) => ({ ...group, items: [...group.items].sort((a, b) => a.name.localeCompare(b.name)) }))
     .sort((a, b) => {
       const aUntagged = lower(a.name) === "untagged" || a.name === "-";
       const bUntagged = lower(b.name) === "untagged" || b.name === "-";
@@ -124,11 +106,28 @@ function responseFileName(response, fallback) {
   }
 }
 
+function Icon({ name }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  const paths = {
+    download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>,
+    chevron: <polyline points="6 9 12 15 18 9" />,
+    check: <polyline points="20 6 9 17 4 12" />,
+  };
+  return <svg {...common}>{paths[name] || paths.download}</svg>;
+}
+
 function ExportModal({ onClose }) {
   const [fileType, setFileType] = useState("pdf");
   const [columns, setColumns] = useState(() => EXPORT_COLUMNS.filter((column) => column.checked).map((column) => column.value));
+  const [fileTypeOpen, setFileTypeOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    document.body.classList.add("modal-open");
+    return () => document.body.classList.remove("modal-open");
+  }, []);
 
   const toggleColumn = (value) => {
     setColumns((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
@@ -137,7 +136,7 @@ function ExportModal({ onClose }) {
 
   const runExport = async () => {
     if (!columns.length) {
-      setError("Choose at least one column.");
+      setError("Please choose at least one column.");
       return;
     }
     setBusy(true);
@@ -168,45 +167,39 @@ function ExportModal({ onClose }) {
   };
 
   return (
-    <div className="next-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="stock-export-modal" role="dialog" aria-modal="true" aria-labelledby="stock-export-title">
-        <header>
-          <div>
-            <span className="pill">Stocktaking export</span>
-            <h2 id="stock-export-title">Download stock file</h2>
-            <p>Choose the file type and the columns that should appear.</p>
-          </div>
-          <button className="next-modal-close" type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
-        <div className="stock-export-body">
-          <fieldset>
-            <legend>File type</legend>
-            <div className="stock-export-types">
-              <button className={fileType === "pdf" ? "active" : ""} type="button" onClick={() => setFileType("pdf")}>PDF</button>
-              <button className={fileType === "excel" ? "active" : ""} type="button" onClick={() => setFileType("excel")}>Excel</button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Columns</legend>
-            <div className="stock-export-columns">
-              {EXPORT_COLUMNS.map((column) => (
-                <label key={column.value}>
-                  <input type="checkbox" checked={columns.includes(column.value)} onChange={() => toggleColumn(column.value)} />
-                  <span>{column.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          {error ? <p className="form-error">{error}</p> : null}
+    <div className="b2b-export-modal next-stock-export-modal">
+      <div className="b2b-export-modal__backdrop" onClick={!busy ? onClose : undefined} />
+      <div className="b2b-export-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="stockExportTitle">
+        <div className="b2b-export-modal__header">
+          <div className="b2b-export-modal__icon" aria-hidden="true"><Icon name="download" /></div>
+          <div><h3 className="b2b-export-modal__title" id="stockExportTitle">Download stock file</h3><p className="b2b-export-modal__hint">Choose the file type and the columns that should appear in the file.</p></div>
+          <button className="b2b-export-modal__close" type="button" aria-label="Close" onClick={onClose} disabled={busy}>×</button>
         </div>
+        <div className="b2b-export-modal__body">
+          <div className="b2b-export-field b2b-export-filetype">
+            <span className="b2b-export-field__label">File type</span>
+            <button className={`b2b-export-picker-button ${fileTypeOpen ? "is-open" : ""}`} type="button" aria-expanded={fileTypeOpen} onClick={() => { setFileTypeOpen((value) => !value); setColumnsOpen(false); }}><span>{fileType === "excel" ? "Excel" : "PDF"}</span><Icon name="chevron" /></button>
+            <div className="b2b-export-filetype__panel b2b-export-floating-panel" role="listbox" aria-label="File type" hidden={!fileTypeOpen}>
+              {["pdf", "excel"].map((value) => <button className={`b2b-export-option ${fileType === value ? "is-selected" : ""}`} type="button" role="option" aria-selected={fileType === value} onClick={() => { setFileType(value); setFileTypeOpen(false); }} key={value}><span>{value === "excel" ? "Excel" : "PDF"}</span>{fileType === value ? <Icon name="check" /> : <Icon name="check" />}</button>)}
+            </div>
+          </div>
 
-        <footer>
-          <button className="secondary-button" type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="primary-button" type="button" onClick={runExport} disabled={busy}>{busy ? "Preparing…" : `Download ${fileType === "excel" ? "Excel" : "PDF"}`}</button>
-        </footer>
-      </section>
+          <div className="b2b-export-field b2b-export-multiselect">
+            <span className="b2b-export-field__label">Columns</span>
+            <button className={`b2b-export-multiselect__button ${columnsOpen ? "is-open" : ""}`} type="button" aria-expanded={columnsOpen} onClick={() => { setColumnsOpen((value) => !value); setFileTypeOpen(false); }}><span>{columns.length} columns selected</span><Icon name="chevron" /></button>
+            <div className="b2b-export-multiselect__panel b2b-export-floating-panel" role="listbox" aria-label="Columns" hidden={!columnsOpen}>
+              <div className="b2b-export-columns">
+                {EXPORT_COLUMNS.map((column) => <label className="b2b-export-check" role="option" key={column.value}><input type="checkbox" value={column.value} checked={columns.includes(column.value)} onChange={() => toggleColumn(column.value)} /><span>{column.label}</span></label>)}
+              </div>
+            </div>
+          </div>
+          <div className="b2b-export-modal__error next-stock-export-error" hidden={!error}>{error}</div>
+        </div>
+        <div className="b2b-export-modal__footer">
+          <button className="btn btn--light" type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className={`btn b2b-export-confirm ${busy ? "is-busy" : ""}`} type="button" onClick={runExport} disabled={busy}><Icon name="download" /><span>{busy ? "Preparing…" : "Download"}</span></button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -214,7 +207,20 @@ function ExportModal({ onClose }) {
 export default function StocktakingClient({ initialStock = [], bootstrapWarnings = [] }) {
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
-  const [view, setView] = useState("groups");
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search components...";
+    const handle = (event) => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.value = "";
+      input.placeholder = "Search";
+    };
+  }, []);
 
   const rows = useMemo(() => (Array.isArray(initialStock) ? initialStock : [])
     .map(normalizedRow)
@@ -223,111 +229,39 @@ export default function StocktakingClient({ initialStock = [], bootstrapWarnings
   const filteredRows = useMemo(() => {
     const query = lower(search);
     if (!query) return rows;
-    return rows.filter((row) => lower([row.name, row.idCode, row.tag.name, row.quantity, row.unitPrice].join(" ")).includes(query));
+    return rows.filter((row) => lower([row.name, row.idCode, row.tag.name, row.quantity].join(" ")).includes(query));
   }, [rows, search]);
 
   const groups = useMemo(() => groupRows(filteredRows), [filteredRows]);
-  const totals = useMemo(() => ({
-    records: rows.length,
-    units: rows.reduce((sum, row) => sum + row.quantity, 0),
-    positive: rows.filter((row) => row.quantity > 0).length,
-    negative: rows.filter((row) => row.quantity < 0).length,
-    value: rows.reduce((sum, row) => sum + row.totalPrice, 0),
-  }), [rows]);
 
   return (
-    <section className="next-stock-page">
-      {bootstrapWarnings.length ? (
-        <div className="dashboard-notice" role="status">
-          <strong>Some stocktaking data may be temporarily unavailable.</strong>
-          <span>The classic Stocktaking page remains available while the resource recovers.</span>
-          <a href="/stocktaking?classic=1">Open classic Stocktaking</a>
-        </div>
-      ) : null}
+    <section className="next-stocktaking-classic-parity">
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some stocktaking data may be temporarily unavailable.</strong><span>The classic Stocktaking page remains available while the resource recovers.</span><a href="/stocktaking?classic=1">Open classic Stocktaking</a></div> : null}
 
-      <div className="stock-summary-grid">
-        <article><span>Component records</span><strong>{totals.records}</strong><small>Non-zero stock rows</small></article>
-        <article><span>Net units</span><strong className={totals.units < 0 ? "negative" : ""}>{totals.units.toLocaleString("en-EG")}</strong><small>Across all visible records</small></article>
-        <article><span>Positive / withdrawal</span><strong>{totals.positive} <em>/</em> {totals.negative}</strong><small>Movement direction</small></article>
-        <article><span>Estimated stock value</span><strong>{money(totals.value)}</strong><small>Quantity × unit price</small></article>
-      </div>
-
-      <div className="stock-toolbar">
-        <label className="stock-search">
-          <span aria-hidden="true">⌕</span>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search components, IDs, or tags…" type="search" />
-          {search ? <button type="button" onClick={() => setSearch("")} aria-label="Clear search">×</button> : null}
-        </label>
-        <div className="stock-view-toggle" aria-label="View type">
-          <button className={view === "groups" ? "active" : ""} type="button" onClick={() => setView("groups")}>Groups</button>
-          <button className={view === "table" ? "active" : ""} type="button" onClick={() => setView("table")}>Table</button>
-        </div>
-        <button className="primary-button stock-download-button" type="button" onClick={() => setExportOpen(true)}>Download</button>
-      </div>
-
-      <div className="stock-results-line">
-        <span>{filteredRows.length} of {rows.length} components</span>
-        <a href="/stocktaking?classic=1">Open classic Stocktaking</a>
-      </div>
-
-      {!filteredRows.length ? (
-        <div className="stock-empty-state">
-          <span>∅</span>
-          <h2>No matching stock records</h2>
-          <p>{search ? "Try another component name, ID code, or tag." : "There are no non-zero stock rows for this account."}</p>
-        </div>
-      ) : view === "table" ? (
-        <div className="stock-flat-table-wrap">
-          <table className="stock-flat-table">
-            <thead><tr><th>Component</th><th>ID code</th><th>Tag</th><th className="number-cell">In stock</th><th className="number-cell">Unit price</th><th className="number-cell">Total value</th></tr></thead>
-            <tbody>
-              {filteredRows.map((row) => {
-                const tone = TAG_TONES[row.tag.color] || TAG_TONES.default;
-                return (
-                  <tr key={row.key}>
-                    <td>{row.url ? <a href={row.url} target="_blank" rel="noreferrer">{row.name}</a> : <strong>{row.name}</strong>}</td>
-                    <td>{row.idCode || "—"}</td>
-                    <td><span className="stock-tag" style={{ backgroundColor: tone.background, color: tone.color, borderColor: tone.border }}>{row.tag.name}</span></td>
-                    <td className={`number-cell ${row.quantity < 0 ? "stock-negative" : ""}`}>{row.quantity.toLocaleString("en-EG")}</td>
-                    <td className="number-cell">{row.unitPrice ? money(row.unitPrice) : "—"}</td>
-                    <td className={`number-cell ${row.totalPrice < 0 ? "stock-negative" : ""}`}>{row.unitPrice ? money(row.totalPrice) : "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="stock-group-grid">
-          {groups.map((group) => {
+      <section className="card">
+        <div className="card-toolbar"><button className="btn b2b-download-primary" type="button" onClick={() => setExportOpen(true)}><Icon name="download" /><span>Download</span></button></div>
+        <div className="groups-grid" aria-live="polite">
+          {!groups.length ? (
+            <div className="empty-block empty-block--no-data">Sorry, No data available</div>
+          ) : groups.map((group) => {
             const tone = TAG_TONES[group.color] || TAG_TONES.default;
             return (
-              <article className="stock-group-card" key={group.key} style={{ "--stock-accent": tone.color, "--stock-accent-soft": tone.background, "--stock-accent-border": tone.border }}>
-                <header>
-                  <div><span>Tag</span><strong>{group.name}</strong></div>
-                  <div className="stock-group-totals"><span>{group.items.length} items</span><b>{group.quantity.toLocaleString("en-EG")} units</b></div>
-                </header>
-                <div className="stock-group-table-wrap">
-                  <table>
-                    <thead><tr><th>Component</th><th>ID code</th><th className="number-cell">In stock</th><th className="number-cell">Value</th></tr></thead>
-                    <tbody>
-                      {group.items.map((row) => (
-                        <tr key={row.key}>
-                          <td>{row.url ? <a href={row.url} target="_blank" rel="noreferrer">{row.name}</a> : <strong>{row.name}</strong>}</td>
-                          <td>{row.idCode || "—"}</td>
-                          <td className={`number-cell ${row.quantity < 0 ? "stock-negative" : ""}`}>{row.quantity.toLocaleString("en-EG")}</td>
-                          <td className={`number-cell ${row.totalPrice < 0 ? "stock-negative" : ""}`}>{row.unitPrice ? money(row.totalPrice) : "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
+              <section className="card card--elevated group-card" style={{ "--group-accent-bg": tone.background, "--group-accent-text": tone.color, "--group-accent-border": tone.border }} key={group.key}>
+                <div className="group-card__head">
+                  <div className="group-head-left"><span className="group-title">Tag</span><span className="group-tag"><span className={`tag-pill tag--${group.color}`}>{group.name}</span></span></div>
+                  <div className="group-head-right"><span className="group-count">{group.items.length} items</span></div>
+                </div>
+                <div className="group-table-wrap">
+                  <table className="group-table">
+                    <thead><tr><th>Component</th><th className="col-num">In Stock</th></tr></thead>
+                    <tbody>{group.items.map((row) => <tr key={row.key}><td style={{ fontWeight: 600 }}>{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td><td className="col-num">{row.quantity}</td></tr>)}</tbody>
                   </table>
                 </div>
-                <footer><span>Estimated group value</span><strong>{money(group.value)}</strong></footer>
-              </article>
+              </section>
             );
           })}
         </div>
-      )}
+      </section>
 
       {exportOpen ? <ExportModal onClose={() => setExportOpen(false)} /> : null}
     </section>

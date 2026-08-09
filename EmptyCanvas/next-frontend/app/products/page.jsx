@@ -65,7 +65,14 @@ export default async function ProductsPage() {
   if (!account) redirect("/login?next=/next/products");
 
   return (
-    <AppShell account={account} title="Products" eyebrow="Live product catalogue" activePath="/next/products">
+    <AppShell
+      account={account}
+      title="Products"
+      eyebrow="Live product catalogue"
+      activePath="/next/products"
+      bodyClass="products-page"
+      classicStyles={["/css/products.css?v=products-manual-image-v1"]}
+    >
       <ProductsClient
         initialCatalog={catalog || { ok: true, products: [], tagsCatalog: [], unitsCatalog: [] }}
         bootstrapWarnings={response.data.omitted || []}

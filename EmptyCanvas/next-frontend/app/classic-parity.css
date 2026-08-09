@@ -829,3 +829,190 @@ button.classic-cart-thumb{cursor:zoom-in}
 @media(max-width:900px){.classic-cart-order-step-header{flex-direction:column}.classic-cart-order-type-tabs{grid-template-columns:1fr}.classic-cart-order-type-btn{min-height:104px}}
 @media(max-width:640px){.classic-cart-page,.classic-cart-loading-page{padding-left:.5rem;padding-right:.5rem;padding-bottom:calc(8rem + env(safe-area-inset-bottom,0px))}.classic-cart-order-type-step{padding:1rem;border-radius:24px}.classic-cart-order-type-btn{padding:.9rem;border-radius:20px}.classic-cart-order-type-icon{width:54px;height:54px;border-radius:18px}.classic-cart-type-pill{padding:.9rem}.classic-cart-body{gap:.72rem;padding:.78rem}.classic-cart-row{padding:.82rem;border-radius:20px;gap:.78rem}.classic-cart-card-main{gap:.72rem}.classic-cart-thumb{width:60px;height:60px;border-radius:16px;font-size:1rem}.classic-cart-prod-meta>strong{font-size:.98rem}.classic-cart-prod-meta>small{font-size:.8rem}.classic-cart-card-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.classic-cart-card-metric{padding:.7rem .78rem;gap:.34rem}.classic-cart-card-metric--qty{border-bottom:1px solid #edf2f7}.classic-cart-card-metric:nth-child(2){border-left:1px solid #edf2f7;border-bottom:1px solid #edf2f7}.classic-cart-card-metric:nth-child(3){grid-column:1/-1;border-left:0}.classic-cart-card-metric>strong{font-size:.95rem}.classic-cart-note{padding:.72rem .78rem}.classic-cart-note>strong{font-size:.88rem}.classic-cart-card-actions{gap:.58rem}.classic-cart-action{height:42px;font-size:.86rem}.classic-cart-modal-overlay{align-items:flex-end;padding:0}.classic-cart-modal-card{width:100%;max-height:94vh;border-radius:22px 22px 0 0;padding:1rem}.classic-cart-modal-grid{grid-template-columns:1fr}.classic-cart-modal-grid .full{grid-column:auto}.classic-cart-selected-product{grid-template-columns:48px 1fr}.classic-cart-selected-product>div:last-child{grid-column:1/-1;text-align:left}.classic-cart-modal-actions{display:grid;grid-template-columns:1fr 1fr}.classic-cart-btn-ghost,.classic-cart-btn-solid{width:100%}.classic-cart-toast{right:16px;top:16px}.classic-cart-save-state{width:100%;margin-left:46px}}
 @media(max-width:420px){.classic-cart-thumb{width:56px;height:56px}.classic-cart-card-metrics{grid-template-columns:1fr}.classic-cart-card-metric,.classic-cart-card-metric+.classic-cart-card-metric,.classic-cart-card-metric:nth-child(3){grid-column:auto;border-left:0;border-bottom:1px solid #edf2f7}.classic-cart-card-metric:last-child{border-bottom:0}.classic-cart-qty-control{width:100%;min-width:0}.classic-cart-card-qty-unit-row{align-items:stretch;flex-direction:column}.classic-cart-unit-badge{max-width:none;width:100%}}
+
+/* ========================================================================== */
+/* Stage 2E — Products + Stocktaking Classic visual parity                    */
+/* ========================================================================== */
+body.products-page .classic-app-shell .next-classic-page-content {
+  padding: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+body.products-page .next-products-classic-parity .dashboard-notice,
+body.stocktaking-page .next-stocktaking-classic-parity .dashboard-notice {
+  margin-bottom: 16px;
+}
+body.products-page .next-products-classic-parity .products-filter-panel {
+  position: relative;
+  z-index: 90;
+}
+body.products-page .next-products-classic-parity .products-results {
+  position: relative;
+  z-index: 1;
+}
+body.products-page .next-products-classic-parity .products-tag-filter-btn__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+body.products-page .next-products-classic-parity .products-tag-filter-btn__chevron svg {
+  width: 18px;
+  height: 18px;
+}
+body.products-page .next-products-classic-parity .products-upload-field__picker {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+body.products-page .next-products-classic-parity .products-upload-file__remove {
+  font-size: 18px;
+  font-weight: 900;
+}
+body.products-page .next-products-classic-parity .products-modern-select > svg {
+  width: 18px;
+  height: 18px;
+}
+body.products-page .next-products-image-viewer {
+  z-index: 5600;
+}
+body.products-page .next-products-image-viewer > section {
+  width: min(980px, 94vw);
+  max-height: 92vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .75);
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 32px 90px rgba(15, 23, 42, .34);
+}
+body.products-page .next-products-image-viewer header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+}
+body.products-page .next-products-image-viewer header strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.products-page .next-products-image-viewer header button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(15, 23, 42, .09);
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 22px;
+  cursor: pointer;
+}
+body.products-page .next-products-image-viewer img {
+  width: 100%;
+  max-height: calc(92vh - 66px);
+  object-fit: contain;
+  background: #f8fafc;
+}
+
+body.stocktaking-page .next-stocktaking-classic-parity > .card {
+  margin: 0;
+}
+body.stocktaking-page .next-stocktaking-classic-parity .component-link {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: none;
+}
+body.stocktaking-page .next-stocktaking-classic-parity .component-link:hover {
+  color: #ea580c;
+  text-decoration: underline;
+}
+body.stocktaking-page .next-stock-export-modal .b2b-export-field {
+  position: relative;
+}
+body.stocktaking-page .next-stock-export-modal .b2b-export-floating-panel {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: calc(100% + 8px) !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-height: 280px;
+  z-index: 6600;
+}
+body.stocktaking-page .next-stock-export-modal .b2b-export-option svg {
+  opacity: 0;
+}
+body.stocktaking-page .next-stock-export-modal .b2b-export-option.is-selected svg {
+  opacity: 1;
+}
+body.stocktaking-page .next-stock-export-error:not([hidden]) {
+  display: block !important;
+}
+
+.next-inventory-shimmer {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  background: #eef1f4 !important;
+  border-color: #e7eaee !important;
+}
+.next-inventory-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.82), transparent);
+  animation: nextInventoryParityShimmer 1.2s infinite;
+}
+@keyframes nextInventoryParityShimmer { 100% { transform: translateX(100%); } }
+.next-classic-inventory-loading .products-tag-filter-btn.next-inventory-shimmer {
+  min-height: 76px;
+}
+.next-inventory-loading-product-group .products-group__head {
+  min-height: 66px;
+}
+.next-inventory-loading-title {
+  width: 145px;
+  height: 24px;
+  border-radius: 9px;
+}
+.next-inventory-loading-action {
+  width: 128px;
+  height: 40px;
+  border-radius: 13px;
+}
+.next-inventory-loading-product {
+  min-height: 82px;
+  border-radius: 14px;
+}
+.next-inventory-loading-download {
+  width: 120px;
+  height: 42px;
+  border-radius: 16px;
+}
+.next-inventory-loading-count {
+  width: 72px;
+  height: 30px;
+  border-radius: 999px;
+}
+.next-inventory-loading-stock-card {
+  min-height: 260px;
+}
+.next-inventory-loading-table {
+  display: grid;
+  gap: 1px;
+  padding: 10px 14px 16px;
+}
+.next-inventory-loading-table > span {
+  height: 38px;
+  border-radius: 8px;
+}
+@media (max-width: 680px) {
+  body.products-page .classic-app-shell .next-classic-page-content { padding: 0 !important; }
+  body.stocktaking-page .next-stock-export-modal .b2b-export-floating-panel { max-height: 220px; }
+  .next-inventory-loading-action { width: 96px; }
+}
