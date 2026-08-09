@@ -11,18 +11,51 @@ function cookieHeader(cookieStore) {
     .join("; ");
 }
 
-function backendOrigin() {
-  const configured = String(process.env.LEGACY_BACKEND_INTERNAL_ORIGIN || "http://127.0.0.1:5000").trim();
+function normalizeHttpOrigin(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
   try {
-    return new URL(configured).origin;
+    const parsed = new URL(raw);
+    if (!/^https?:$/.test(parsed.protocol)) return "";
+    parsed.pathname = "/";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
   } catch {
-    return "http://127.0.0.1:5000";
+    return "";
   }
 }
 
+function backendOrigin() {
+  const configured = normalizeHttpOrigin(
+    process.env.LEGACY_BACKEND_ORIGIN ||
+    process.env.LEGACY_BACKEND_INTERNAL_ORIGIN ||
+    process.env.LEGACY_BACKEND_PUBLIC_ORIGIN ||
+    "",
+  );
+  if (configured) return configured;
+
+  // The old PM2/self-hosted topology still works without an explicit value.
+  // On Vercel, however, 127.0.0.1 points to the Next deployment itself and
+  // would only produce timeouts, so fail fast with a useful 503 instead.
+  if (String(process.env.VERCEL || "").trim() === "1") return "";
+  return "http://127.0.0.1:5000";
+}
+
 export async function fetchLegacyJson(pathname, options = {}) {
+  const origin = backendOrigin();
+  if (!origin) {
+    return {
+      ok: false,
+      status: 503,
+      data: null,
+      location: "",
+      error: "The ERP backend connection is not configured for this Next.js deployment.",
+    };
+  }
+
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
-  const url = new URL(String(pathname || "/"), backendOrigin());
+  const url = new URL(String(pathname || "/"), origin);
   const controller = new AbortController();
   const timeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -37,7 +70,7 @@ export async function fetchLegacyJson(pathname, options = {}) {
         accept: "application/json",
         cookie: cookieHeader(cookieStore),
         "x-forwarded-host": headerStore.get("host") || "",
-        "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "http",
+        "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
         "x-operations-hub-frontend": "next-pilot",
         ...(options.headers || {}),
       },

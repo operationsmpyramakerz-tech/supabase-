@@ -5,14 +5,58 @@ The current application remains the source of truth for authentication,
 permissions, APIs, Supabase access, Redis sessions, uploads, exports, and all
 business rules.
 
+
+## Production topology used by this repository on Vercel
+
+The production setup can use two Vercel projects connected to the same Git
+repository:
+
+1. The existing Express ERP project keeps `EmptyCanvas` as its application root.
+2. The Next.js pilot project uses `EmptyCanvas/next-frontend` as its Root Directory.
+3. The Next.js project keeps `basePath=/next`. Opening the pilot project root `/`
+   redirects to `/next/login`.
+4. The Next.js project must define `LEGACY_BACKEND_ORIGIN` with the public HTTPS
+   origin of the existing Express ERP project. Example only:
+   `https://operations-pro-pyramakerz.vercel.app`
+5. Requests that do not belong to the Next application (for example `/api/*`,
+   classic rollback URLs, and legacy static assets) are proxied by Next.js to the
+   existing Express ERP through a fallback rewrite. This keeps browser requests
+   same-origin on the pilot domain and allows the Express session cookie to be
+   reused by the Next.js server-side adapter.
+
+After changing `LEGACY_BACKEND_ORIGIN`, redeploy the Next.js Vercel project
+because routing configuration is evaluated when the Next build is created.
+
+Do not enable the legacy URL cutover until login, session persistence, account
+loading, protected API calls, uploads/downloads, and classic rollback links have
+all passed the pilot smoke test.
+
+## Completion rule: visual parity is mandatory
+
+A page is no longer considered migrated merely because its API calls work. Each
+page must pass all of the following before production approval:
+
+1. Functional parity and permissions.
+2. Data and error-state parity.
+3. Classic UI parity: layout, navigation, typography, spacing, colors, cards,
+   tables, forms, modals, buttons, menus, badges, loading and empty states.
+4. Interaction parity: filters, dropdowns, pagination, three-dot menus, hover,
+   focus, disabled states, loaders, and transitions.
+5. Responsive parity on desktop, tablet, and mobile.
+6. Page-by-page QA with `?classic=1` kept as the rollback path.
+
+Visual redesign or modernization should be a separate project after the Classic
+interface has been reproduced and approved in Next.js.
+
 ## What is available
 
+- The functional Next.js page set lives below `/next/*`.
 - Next.js pilot home: `/next/home`
 - Migration status: `/next/migration-status`
 - Next process health: `/next/api/health`
 - Express-side proxy diagnostics after login: `/api/next-frontend-diagnostics`
-- Automatic fallback message when the pilot process is unavailable
-- Existing pages and APIs are unchanged
+- Classic pages remain available with `?classic=1` during migration.
+- Existing Express APIs remain the source of truth; database/business logic is not duplicated in Next.js.
 
 ## One-time installation
 
