@@ -78,6 +78,7 @@ export default async function ShoppingCartPage({ searchParams }) {
       eyebrow="Create, withdraw, or maintain products"
       activePath="/next/orders/new"
       classicHrefOverride="/orders/new"
+      bodyClass="shopping-cart-page"
     >
       <ShoppingCartClient
         initialOrderTypes={Array.isArray(orderTypesPayload) ? orderTypesPayload : orderTypesPayload?.options || []}

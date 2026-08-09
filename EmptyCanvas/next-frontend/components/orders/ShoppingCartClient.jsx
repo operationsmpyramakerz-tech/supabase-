@@ -8,23 +8,23 @@ const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
 const TYPE_META = {
   requestproducts: {
     label: "Request Products",
-    icon: "▣",
+    icon: "shopping-cart",
     className: "request",
-    description: "Request new products or supplies and send the order for supervision.",
+    description: "Add new products or supplies and send them as a stock request.",
     checkout: "Checkout Now",
   },
   withdrawproducts: {
     label: "Withdraw Products",
-    icon: "↗",
+    icon: "log-out",
     className: "withdraw",
-    description: "Withdraw available products from stock through the outgoing workflow.",
+    description: "Withdraw available items from stock with a dedicated outgoing flow.",
     checkout: "Withdraw Now",
   },
   requestmaintenance: {
     label: "Request Maintenance",
-    icon: "⚙",
+    icon: "tool",
     className: "maintenance",
-    description: "Report a product issue and create a maintenance request for the technical team.",
+    description: "Report issues for products and create a maintenance request quickly.",
     checkout: "Submit Maintenance",
   },
 };
@@ -109,7 +109,7 @@ function normalizeDraft(items) {
 function orderTypeMeta(type) {
   return TYPE_META[key(type)] || {
     label: text(type) || "Shopping Cart",
-    icon: "▦",
+    icon: "grid",
     className: "default",
     description: "Open this order workflow and add products to the cart.",
     checkout: "Checkout Now",
@@ -230,10 +230,26 @@ function clearEditTransfer() {
   }
 }
 
+function CartSvgIcon({ name, size = 18 }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", width: size, height: size, "aria-hidden": true };
+  const icons = {
+    "shopping-cart": <><circle cx="9" cy="20" r="1"/><circle cx="20" cy="20" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></>,
+    "log-out": <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+    tool: <><path d="M14.7 6.3a4 4 0 0 0-5-5L7.4 3.6l3 3 2.3-2.3a4 4 0 0 0 2 5"/><path d="M5 13L2 16l6 6 3-3"/><path d="M12 12l8.6 8.6"/></>,
+    grid: <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
+    layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
+    "arrow-right": <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
+    "arrow-left": <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+    "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
+    plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+  };
+  return <svg {...common}>{icons[name] || icons.grid}</svg>;
+}
+
 function Toast({ notice, onClose }) {
   if (!notice) return null;
   return (
-    <div className={`next-cart-toast is-${notice.type || "info"}`} role="status">
+    <div className={`classic-cart-toast is-${notice.type || "info"}`} role="status">
       <div><strong>{notice.title || "Shopping Cart"}</strong><span>{notice.message}</span></div>
       <button type="button" onClick={onClose} aria-label="Close">×</button>
     </div>
@@ -242,200 +258,142 @@ function Toast({ notice, onClose }) {
 
 function TypeSelection({ orderTypes, onChoose }) {
   return (
-    <section className="next-cart-type-step">
-      <header>
-        <span className="pill">Order workflow</span>
-        <h2>What would you like to do?</h2>
-        <p>Select the workflow first. Each order type keeps its own draft until you submit or clear it.</p>
-      </header>
-      <div className="next-cart-type-grid">
-        {orderTypes.map((type) => {
+    <section className="classic-cart-order-type-step" aria-label="Choose order type">
+      <div className="classic-cart-order-step-header">
+        <div>
+          <div className="classic-cart-order-step-kicker"><CartSvgIcon name="layers" size={16}/><span>Shopping flow</span></div>
+          <h2 className="classic-cart-order-type-title">Choose Order Type</h2>
+        </div>
+      </div>
+      <div className="classic-cart-order-type-tabs">
+        {orderTypes.length ? orderTypes.map((type) => {
           const meta = orderTypeMeta(type);
+          const themeClass = meta.className === "request" ? "theme-request-products" : meta.className === "withdraw" ? "theme-withdraw-products" : meta.className === "maintenance" ? "theme-request-maintenance" : "theme-default";
           return (
-            <button className={`next-cart-type-card is-${meta.className}`} type="button" key={type} onClick={() => onChoose(type)}>
-              <span className="next-cart-type-icon" aria-hidden="true">{meta.icon}</span>
-              <span className="next-cart-type-copy"><strong>{type}</strong><small>{meta.description}</small></span>
-              <span className="next-cart-type-arrow" aria-hidden="true">→</span>
+            <button className={`classic-cart-order-type-btn ${themeClass}`} type="button" key={type} onClick={() => onChoose(type)}>
+              <span className="classic-cart-order-type-icon"><CartSvgIcon name={meta.icon} size={24}/></span>
+              <span className="classic-cart-order-type-copy"><strong>{type}</strong><small>{meta.description}</small></span>
+              <span className="classic-cart-order-type-arrow"><CartSvgIcon name="arrow-right" size={18}/></span>
             </button>
           );
-        })}
+        }) : <div className="classic-cart-order-type-loading"><span/><strong>No order types found.</strong></div>}
       </div>
     </section>
   );
 }
 
-function ProductThumb({ product }) {
-  if (!product?.imageUrl) return <span className="next-cart-product-placeholder" aria-hidden="true">▧</span>;
-  return <img src={product.imageUrl} alt="" loading="lazy" />;
-}
-
 function ProductPicker({ products, type, item, onClose, onSave }) {
   const maintenance = isMaintenance(type);
-  const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(text(item?.id));
   const [qty, setQty] = useState(item?.quantity || 1);
   const [issueDescription, setIssueDescription] = useState(text(item?.issueDescription));
   const [error, setError] = useState("");
-  const searchRef = useRef(null);
-
-  useEffect(() => { searchRef.current?.focus?.(); }, []);
-
-  const filtered = useMemo(() => {
-    const needle = text(search).toLowerCase();
-    if (!needle) return products;
-    return products.filter((product) => [
-      product.name,
-      product.displayId,
-      product.unit,
-      ...product.tags,
-    ].join(" ").toLowerCase().includes(needle));
-  }, [products, search]);
 
   const selected = products.find((product) => product.id === selectedId) || null;
 
   const submit = () => {
-    if (!selected) {
-      setError("Select a product first.");
-      return;
-    }
-    if (maintenance && !text(issueDescription)) {
-      setError("Issue Description is required for maintenance requests.");
-      return;
-    }
-    if (!maintenance && quantity(qty, 0) <= 0) {
-      setError("Quantity must be greater than zero.");
-      return;
-    }
-    onSave({
-      id: selected.id,
-      quantity: maintenance ? 1 : quantity(qty, 1),
-      issueDescription: maintenance ? text(issueDescription) : "",
-      schoolId: text(item?.schoolId),
-    });
+    if (!selected) return setError("Select a product first.");
+    if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
+    if (!maintenance && quantity(qty, 0) <= 0) return setError("Quantity must be greater than zero.");
+    onSave({ id: selected.id, quantity: maintenance ? 1 : quantity(qty, 1), issueDescription: maintenance ? text(issueDescription) : "", schoolId: text(item?.schoolId) });
   };
 
   return (
-    <div className="next-cart-modal" role="presentation">
-      <button className="next-cart-modal-backdrop" type="button" aria-label="Close" onClick={onClose} />
-      <section className="next-cart-modal-card" role="dialog" aria-modal="true" aria-labelledby="cart-product-modal-title">
-        <header>
-          <div>
-            <span>{item ? "Update cart item" : "Add product"}</span>
-            <h3 id="cart-product-modal-title">{maintenance ? "Choose a product to maintain" : "Choose a product"}</h3>
-            <p>{maintenance ? "Select the affected product and explain the issue." : "Search the live product catalogue and define the requested quantity."}</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
-        <div className="next-cart-modal-body">
-          <label className="next-cart-picker-search">
-            <span>Search catalogue</span>
-            <input ref={searchRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product name, ID code, tag, or unit" />
+    <div className="classic-cart-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="classic-cart-modal-card" role="dialog" aria-modal="true" aria-labelledby="classic-cart-modal-title">
+        <h3 className="classic-cart-modal-title" id="classic-cart-modal-title">{isWithdraw(type) ? "Update Withdraw Cart" : "Update Cart"}</h3>
+        <div className={`classic-cart-modal-grid ${maintenance ? "is-maintenance" : ""}`}>
+          <label className="classic-cart-mfield full">
+            <span>Product <em>*</em></span>
+            <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setError(""); }} aria-label="Product">
+              <option value="">Select product...</option>
+              {products.map((product) => <option value={product.id} key={product.id}>{product.name}{product.displayId ? ` · ${product.displayId}` : ""}{product.unit ? ` · ${product.unit}` : ""}</option>)}
+            </select>
           </label>
-
-          <div className="next-cart-picker-layout">
-            <div className="next-cart-picker-list" role="listbox" aria-label="Products">
-              {filtered.length ? filtered.map((product) => (
-                <button
-                  className={selectedId === product.id ? "selected" : ""}
-                  type="button"
-                  role="option"
-                  aria-selected={selectedId === product.id}
-                  key={product.id}
-                  onClick={() => { setSelectedId(product.id); setError(""); }}
-                >
-                  <span className="next-cart-picker-thumb"><ProductThumb product={product} /></span>
-                  <span><strong>{product.name}</strong><small>{product.displayId || "No ID code"} · {product.unit}</small></span>
-                  <b>{formatMoney(product.unitPrice)}</b>
-                </button>
-              )) : <div className="next-cart-picker-empty"><strong>No matching products</strong><span>Try a different name, ID code, or tag.</span></div>}
-            </div>
-
-            <aside className="next-cart-picker-details">
-              {selected ? (
-                <>
-                  <div className="next-cart-picker-preview"><ProductThumb product={selected} /></div>
-                  <strong>{selected.name}</strong>
-                  <span>{selected.displayId || "No ID code"}</span>
-                  <dl>
-                    <div><dt>Unit price</dt><dd>{formatMoney(selected.unitPrice)}</dd></div>
-                    <div><dt>Unit</dt><dd>{selected.unit}</dd></div>
-                    <div><dt>Tag</dt><dd>{selected.tags[0] || "Uncategorized"}</dd></div>
-                  </dl>
-                  {selected.url ? <a href={selected.url} target="_blank" rel="noreferrer">Open supplier link ↗</a> : null}
-                </>
-              ) : <div className="next-cart-picker-details-empty"><span>▦</span><strong>Select a product</strong><small>Product details will appear here.</small></div>}
-            </aside>
-          </div>
-
-          {maintenance ? (
-            <label className="next-cart-modal-field is-wide">
-              <span>Issue Description <em>*</em></span>
-              <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} rows={4} placeholder="Explain the issue, symptoms, and any troubleshooting already completed." />
-            </label>
-          ) : (
-            <label className="next-cart-modal-field">
-              <span>Quantity <em>*</em></span>
-              <div className="next-cart-quantity-input">
-                <button type="button" onClick={() => setQty((current) => Math.max(0.01, quantity(current, 1) - 1))}>−</button>
+          {!maintenance ? (
+            <label className="classic-cart-mfield">
+              <span>Qty <em>*</em></span>
+              <div className="classic-cart-qty-input-with-unit">
                 <input type="number" min="0.01" step="0.01" value={qty} onChange={(event) => setQty(event.target.value)} />
-                <button type="button" onClick={() => setQty((current) => quantity(current, 1) + 1)}>+</button>
-                <span>{selected?.unit || "Unit"}</span>
+                <b className={!selected?.unit ? "is-placeholder" : ""}>{selected?.unit || "Unit"}</b>
               </div>
             </label>
+          ) : (
+            <label className="classic-cart-mfield full">
+              <span>Issue Description <em>*</em></span>
+              <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Describe the issue..." rows={4} />
+            </label>
           )}
-
-          {error ? <p className="next-cart-modal-error">{error}</p> : null}
+          {error ? <p className="classic-cart-modal-error full">{error}</p> : null}
         </div>
-
-        <footer>
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" onClick={submit}>{item ? "Save changes" : "Add to cart"}</button>
-        </footer>
+        <div className="classic-cart-modal-actions">
+          <button className="classic-cart-btn-ghost" type="button" onClick={onClose}>Close</button>
+          <button className="classic-cart-btn-solid" type="button" onClick={submit}>{item ? "Update" : "Add"}</button>
+        </div>
       </section>
     </div>
   );
 }
 
-function CartItem({ item, product, type, onEdit, onDelete, onQuantityChange }) {
+function CartThumb({ product, index }) {
+  if (!product?.imageUrl) return <span className="classic-cart-thumb">{index + 1}</span>;
+  return (
+    <button className="classic-cart-thumb has-image" type="button" title="Open image full screen" aria-label={`Open ${product.name} image`} onClick={(event) => { event.stopPropagation(); const w = window.open(product.imageUrl, "_blank", "noopener,noreferrer"); if (w) w.opener = null; }}>
+      <img src={product.imageUrl} alt={product.name} loading="lazy" />
+    </button>
+  );
+}
+
+function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChange }) {
   const maintenance = isMaintenance(type);
   const withdraw = isWithdraw(type);
-  const total = product.unitPrice * quantity(item.quantity, 1) * (withdraw ? -1 : 1);
+  const qty = quantity(item.quantity, 1);
+  const total = product.unitPrice * qty * (withdraw ? -1 : 1);
+  const excludedTags = new Set(DEFAULT_ORDER_TYPES.map(key));
+  const tags = product.tags.filter((tag) => !excludedTags.has(key(tag))).slice(0, 2);
+
+  if (maintenance) {
+    return (
+      <article className="classic-cart-row classic-cart-row--maintenance-card">
+        <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
+          <CartThumb product={product} index={index}/>
+          <span className="classic-cart-prod-meta"><strong>{product.name}</strong>{product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}</span>
+        </div>
+        <button className="classic-cart-note classic-cart-note--editable" type="button" onClick={() => onEdit(item)}>
+          <span>Issue Description</span><strong className={!item.issueDescription ? "is-empty" : ""}>{item.issueDescription || "—"}</strong>
+        </button>
+        <div className="classic-cart-card-actions">
+          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer"><CartSvgIcon name="external-link" size={16}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled><CartSvgIcon name="external-link" size={16}/><span>Open</span></button>}
+          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)}>Delete</button>
+        </div>
+      </article>
+    );
+  }
 
   return (
-    <article className={`next-cart-item ${maintenance ? "is-maintenance" : ""}`}>
-      <div className="next-cart-item-product">
-        <span className="next-cart-item-thumb"><ProductThumb product={product} /></span>
-        <div><strong>{product.name}</strong><small>{product.displayId || "No ID code"} · {product.unit}</small></div>
+    <article className="classic-cart-row classic-cart-row--request-card">
+      <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
+        <CartThumb product={product} index={index}/>
+        <span className="classic-cart-prod-meta"><strong>{product.name}</strong>{tags.length ? <small>{tags.join(" • ")}</small> : null}{product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}</span>
       </div>
-
-      {maintenance ? (
-        <div className="next-cart-item-issue"><small>Issue Description</small><p>{item.issueDescription || "—"}</p></div>
-      ) : (
-        <>
-          <div className="next-cart-item-link">
-            {product.url ? <a href={product.url} target="_blank" rel="noreferrer">Open ↗</a> : <span>No URL</span>}
+      <div className="classic-cart-card-metrics">
+        <div className="classic-cart-card-metric classic-cart-card-metric--qty">
+          <span>Qty</span>
+          <div className="classic-cart-card-qty-unit-row">
+            <div className="classic-cart-qty-control">
+              <button type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, qty - 1))}>−</button>
+              <b>{withdraw ? `-${formatQuantity(qty)}` : formatQuantity(qty)}</b>
+              <button type="button" onClick={() => onQuantityChange(item.id, qty + 1)}>+</button>
+            </div>
+            <strong className="classic-cart-unit-badge" title={product.unit}>{product.unit}</strong>
           </div>
-          <div className="next-cart-inline-qty">
-            <button type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, quantity(item.quantity, 1) - 1))}>−</button>
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={formatQuantity(item.quantity)}
-              onChange={(event) => onQuantityChange(item.id, event.target.value, { save: false })}
-              onBlur={(event) => onQuantityChange(item.id, event.target.value, { save: true })}
-            />
-            <button type="button" onClick={() => onQuantityChange(item.id, quantity(item.quantity, 1) + 1)}>+</button>
-            <span>{product.unit}</span>
-          </div>
-          <div className={`next-cart-item-total ${withdraw ? "is-withdraw" : ""}`}><small>Line total</small><strong>{formatMoney(total)}</strong></div>
-        </>
-      )}
-
-      <div className="next-cart-item-actions">
-        <button type="button" onClick={() => onEdit(item)}>Edit</button>
-        <button type="button" className="danger" onClick={() => onDelete(item)}>Delete</button>
+        </div>
+        <div className="classic-cart-card-metric"><span>Unit Price</span><strong>{formatMoney(product.unitPrice)}</strong></div>
+        <div className="classic-cart-card-metric"><span>Total</span><strong>{formatMoney(total)}</strong></div>
+      </div>
+      <div className="classic-cart-card-actions">
+        {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer"><CartSvgIcon name="external-link" size={16}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled><CartSvgIcon name="external-link" size={16}/><span>Open</span></button>}
+        <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)}>Delete</button>
       </div>
     </article>
   );
@@ -481,6 +439,18 @@ export default function ShoppingCartClient({
   const maintenance = isMaintenance(selectedType);
   const withdraw = isWithdraw(selectedType);
   const itemCount = cart.length;
+
+  useEffect(() => {
+    const heading = selectedType
+      ? (isWithdraw(selectedType) ? "Withdraw Products" : isMaintenance(selectedType) ? "Request Maintenance" : "Shopping Cart")
+      : "Shopping Cart";
+    const titleEl = document.querySelector(".classic-app-shell .dash-title");
+    const searchEl = document.querySelector(".classic-app-shell .searchbar input");
+    if (titleEl) titleEl.textContent = editMode && selectedType ? `Edit ${heading}` : heading;
+    if (searchEl) searchEl.setAttribute("placeholder", `Search in ${heading}`);
+    document.title = `${editMode && selectedType ? "Edit " : ""}${heading}`;
+  }, [selectedType, editMode]);
+
   const total = cart.reduce((sum, item) => {
     const product = productMap.get(item.id);
     if (!product || maintenance) return sum;
@@ -711,101 +681,130 @@ export default function ShoppingCartClient({
 
   if (!selectedType) {
     return (
-      <section className="next-cart-page">
-        {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial initial data</strong><span>One Shopping Cart resource was not available.</span><a href="/orders/new?classic=1">Classic page</a></div> : null}
+      <section className="classic-cart-page">
+        {bootstrapWarnings.length ? (
+          <div className="dashboard-notice">
+            <strong>Partial initial data</strong>
+            <span>One Shopping Cart resource was not available.</span>
+            <a href="/orders/new?classic=1">Classic page</a>
+          </div>
+        ) : null}
         <TypeSelection orderTypes={orderTypes} onChoose={chooseType} />
         <Toast notice={notice} onClose={() => setNotice(null)} />
       </section>
     );
   }
 
+  const typeTheme = meta.className === "request"
+    ? "theme-request-products"
+    : meta.className === "withdraw"
+      ? "theme-withdraw-products"
+      : meta.className === "maintenance"
+        ? "theme-request-maintenance"
+        : "theme-default";
+
   return (
-    <section className={`next-cart-page is-${meta.className}`}>
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial initial data</strong><span>One Shopping Cart resource was not available.</span><a href="/orders/new?classic=1">Classic page</a></div> : null}
-
-      <section className="next-cart-hero">
-        <div>
-          <button className="next-cart-back" type="button" onClick={backToTypes}>← {editMode ? "Back to Current Orders" : "Change order type"}</button>
-          <span className={`next-cart-type-pill is-${meta.className}`}><i>{meta.icon}</i>{selectedType}</span>
-          <h2>{editMode ? `Edit ${meta.label}` : meta.label}</h2>
-          <p>{editMode ? "Update the selected order products and submit the changes using your password." : meta.description}</p>
-        </div>
-        <div className="next-cart-hero-actions">
-          <span className={`next-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
+    <section className={`classic-cart-page ${maintenance ? "is-maintenance" : ""}`}>
+      {bootstrapWarnings.length ? (
+        <div className="dashboard-notice">
+          <strong>Partial initial data</strong>
+          <span>One Shopping Cart resource was not available.</span>
           <a href="/orders/new?classic=1">Classic page</a>
-          <button type="button" className="secondary-button" onClick={() => setPicker({ item: null })}>+ Add product</button>
         </div>
-      </section>
+      ) : null}
 
-      <section className="next-cart-summary-strip">
-        <article><small>Cart items</small><strong>{itemCount}</strong><span>{maintenance ? "Products to inspect" : "Product lines"}</span></article>
-        <article><small>Catalogue</small><strong>{products.length}</strong><span>Available products</span></article>
-        <article><small>{maintenance ? "Workflow" : "Estimated total"}</small><strong>{maintenance ? "Technical" : formatMoney(total)}</strong><span>{withdraw ? "Outgoing stock value" : maintenance ? "Maintenance request" : "Before approval"}</span></article>
-        <article><small>Mode</small><strong>{editMode ? "Edit" : "New"}</strong><span>{editMode ? "Existing order" : "New submission"}</span></article>
-      </section>
+      <div className="classic-cart-type-pill">
+        <button className="classic-cart-back-btn" type="button" onClick={backToTypes} aria-label={editMode ? "Back to Current Orders" : "Back to order types"}>
+          <CartSvgIcon name="arrow-left" size={16}/>
+        </button>
+        <span className={`classic-cart-type-value ${typeTheme}`}>
+          <span className="classic-cart-type-value-icon"><CartSvgIcon name={meta.icon} size={16}/></span>
+          <span>{selectedType}</span>
+        </span>
+        <span className={`classic-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
+      </div>
 
-      <div className="next-cart-layout">
-        <main className="next-cart-list-card">
-          <header>
-            <div><span>Order products</span><h3>{maintenance ? "Products and reported issues" : "Shopping cart"}</h3></div>
-            <div><button type="button" onClick={() => setPicker({ item: null })}>+ Add product</button><button type="button" className="ghost-danger" onClick={clearCart} disabled={!cart.length}>Clear cart</button></div>
-          </header>
+      <div className="classic-cart-grid">
+        <section className="classic-cart-main">
+          <div className="classic-cart-card" aria-label="Shopping cart items">
+            {loadingDraft ? (
+              <div className="classic-cart-loading" role="status" aria-live="polite">
+                <span className="classic-cart-loading-spinner" aria-hidden="true"/>
+                <strong>Loading products...</strong>
+              </div>
+            ) : cart.length ? (
+              <div className={`classic-cart-body ${maintenance ? "classic-cart-body--maintenance-cards" : "classic-cart-body--request-cards"}`}>
+                {cart.map((item, index) => {
+                  const product = productMap.get(item.id) || normalizeProduct({ id: item.id, name: "Unavailable product" });
+                  return (
+                    <CartItem
+                      key={item.id}
+                      item={item}
+                      product={product}
+                      type={selectedType}
+                      index={index}
+                      onEdit={(selected) => setPicker({ item: selected })}
+                      onDelete={deleteItem}
+                      onQuantityChange={updateQuantity}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="classic-cart-empty">
+                <strong>Sorry, No data available</strong>
+              </div>
+            )}
 
-          {loadingDraft ? (
-            <div className="next-cart-draft-loading"><span /><strong>Loading saved draft…</strong></div>
-          ) : cart.length ? (
-            <div className="next-cart-items">
-              {cart.map((item) => {
-                const product = productMap.get(item.id) || normalizeProduct({ id: item.id, name: "Unavailable product" });
-                return (
-                  <CartItem
-                    key={item.id}
-                    item={item}
-                    product={product}
-                    type={selectedType}
-                    onEdit={(selected) => setPicker({ item: selected })}
-                    onDelete={deleteItem}
-                    onQuantityChange={updateQuantity}
-                  />
-                );
-              })}
+            <div className="classic-cart-footer">
+              <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
+                {withdraw ? "Update Withdraw Cart" : "Update Cart"}
+              </button>
             </div>
-          ) : (
-            <div className="next-cart-empty">
-              <span aria-hidden="true">🛒</span>
-              <strong>{maintenance ? "No maintenance products yet" : "Your cart is empty"}</strong>
-              <p>{maintenance ? "Add each affected product and describe its issue." : "Add products from the live catalogue to continue."}</p>
-              <button type="button" onClick={() => setPicker({ item: null })}>Add first product</button>
+          </div>
+        </section>
+
+        <aside className="classic-cart-summary" aria-label="Order summary">
+          <div className="classic-cart-summary-card">
+            <div className="classic-cart-summary-title">{withdraw ? "Withdrawal Summary" : "Order Summary"}</div>
+
+            <div className="classic-cart-summary-lines">
+              <div><span>Entry count</span><strong>{itemCount}</strong></div>
+              {!maintenance ? <div className="classic-cart-summary-total"><span>Total</span><strong>{formatMoney(total)}</strong></div> : null}
             </div>
-          )}
-        </main>
 
-        <aside className="next-cart-checkout-card">
-          <header><span>{withdraw ? "Withdrawal Summary" : maintenance ? "Maintenance Summary" : "Order Summary"}</span><h3>Ready to submit?</h3></header>
+            {!maintenance ? (
+              <label className="classic-cart-summary-field">
+                <span>Reason</span>
+                <input
+                  value={reason}
+                  onChange={(event) => updateReason(event.target.value)}
+                  placeholder="Reason..."
+                  autoComplete="off"
+                />
+              </label>
+            ) : null}
 
-          {!maintenance ? (
-            <label className="next-cart-checkout-field">
-              <span>{withdraw ? "Withdrawal reason" : "Order reason"} <em>*</em></span>
-              <textarea value={reason} onChange={(event) => updateReason(event.target.value)} rows={5} placeholder={withdraw ? "Why are these products being withdrawn?" : "Why are these products required?"} autoComplete="off" />
+            <label className="classic-cart-voucher-row">
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    checkout();
+                  }
+                }}
+                placeholder="Your password"
+                autoComplete="new-password"
+              />
             </label>
-          ) : (
-            <div className="next-cart-maintenance-note"><strong>Issue descriptions are saved per product.</strong><span>Open Edit on any item to update the reported problem.</span></div>
-          )}
 
-          <dl className="next-cart-checkout-totals">
-            <div><dt>Product lines</dt><dd>{itemCount}</dd></div>
-            {!maintenance ? <div><dt>Estimated total</dt><dd className={withdraw ? "is-withdraw" : ""}>{formatMoney(total)}</dd></div> : null}
-          </dl>
-
-          <label className="next-cart-checkout-field">
-            <span>Account password <em>*</em></span>
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); checkout(); } }} autoComplete="new-password" placeholder="Confirm with your password" />
-          </label>
-
-          <button className={`next-cart-checkout-button is-${meta.className}`} type="button" onClick={checkout} disabled={busy || loadingDraft}>
-            {busy ? "Submitting…" : editMode ? "Save Order Changes" : meta.checkout}
-          </button>
-          <small className="next-cart-security-note">Your password is checked by the existing ERP order API before the workflow is completed.</small>
+            <button className="classic-cart-checkout-btn" type="button" onClick={checkout} disabled={busy || loadingDraft}>
+              {busy ? (editMode ? "Saving..." : "Submitting...") : editMode ? "Save Order Changes" : withdraw ? "Withdraw Now" : "Checkout Now"}
+            </button>
+          </div>
         </aside>
       </div>
 
@@ -818,6 +817,16 @@ export default function ShoppingCartClient({
           onSave={savePickerItem}
         />
       ) : null}
+
+      {busy ? (
+        <div className="classic-cart-saving-overlay" aria-live="polite">
+          <div className="classic-cart-saving-box">
+            <span className="classic-cart-saving-spinner" aria-hidden="true"/>
+            <strong>{editMode ? "Saving..." : "Saving..."}</strong>
+          </div>
+        </div>
+      ) : null}
+
       <Toast notice={notice} onClose={() => setNotice(null)} />
     </section>
   );
