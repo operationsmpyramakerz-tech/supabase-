@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const steps = [
   ["Foundation", "Completed", "Shared cookie authentication, Vercel proxy routing, and the legacy API adapter are operational."],
+  ["Authentication & Login", "Completed", "The public sign-in entry, password recovery, sign-up requests, session-aware redirects, and classic-login fallback now run through the Next.js frontend."],
   ["Home dashboard", "Completed", "The live Home overview is rendered with Next.js while the classic Home remains available."],
   ["Current Orders", "Completed", "The first interactive list module includes tabs, search, order details, and protected order actions."],
   ["Order Tracking", "Completed", "Current Orders now has a dedicated Next.js delivery journey with durable order references, live stage refresh, component status, totals, product imagery, share/print controls, and migrated links from Expenses."],

@@ -1056,3 +1056,138 @@ a { color: inherit; text-decoration: none; }
 @media(max-width:1050px){.next-sop-hero{grid-template-columns:1fr}.next-sop-summary-grid{grid-template-columns:1fr 1fr}.next-sop-summary-grid article:last-child{grid-column:1/-1}}
 @media(max-width:720px){.next-sop-hero{padding:21px}.next-sop-kpis{grid-template-columns:1fr 1fr}.next-sop-toolbar{grid-template-columns:1fr}.next-sop-toolbar>div{padding:0}.next-sop-module{padding:17px}.next-sop-module-head{grid-template-columns:1fr}.next-sop-route-wrap{justify-items:start}.next-sop-summary-grid{grid-template-columns:1fr}.next-sop-summary-grid article:last-child{grid-column:auto}.next-sop-rules{grid-template-columns:1fr}.next-sop-flow-card>header{display:grid}.next-sop-flow-card>header em{text-align:left}.next-sop-hero-actions{display:grid;grid-template-columns:1fr 1fr}.next-sop-hero-actions>*{width:100%}.next-sop-hero-actions>*:last-child{grid-column:1/-1}}
 @media(max-width:480px){.next-sop-kpis{grid-template-columns:1fr}.next-sop-hero-actions{grid-template-columns:1fr}.next-sop-hero-actions>*:last-child{grid-column:auto}.next-sop-module-title{display:grid;grid-template-columns:auto 1fr}.next-sop-module-title p{grid-column:1/-1}.next-sop-flow-track,.next-sop-steps{grid-template-columns:1fr}}
+
+/* --------------------------------------------------------------------------
+   Stage 43 — Next.js authentication entry
+   -------------------------------------------------------------------------- */
+.next-login-page {
+  min-height: 100svh;
+  padding: clamp(18px, 4vw, 48px);
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(234,112,45,.17), transparent 33%),
+    radial-gradient(circle at 92% 88%, rgba(49,46,129,.12), transparent 34%),
+    #f7f8fb;
+  color: #121426;
+  overflow: hidden;
+}
+.next-login-shell {
+  width: min(1180px, 100%);
+  min-height: min(760px, calc(100svh - 48px));
+  display: grid;
+  grid-template-columns: minmax(0, 1.03fr) minmax(420px, .97fr);
+  border: 1px solid rgba(20, 24, 44, .08);
+  border-radius: 34px;
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 30px 100px rgba(25, 28, 48, .14);
+  overflow: hidden;
+  backdrop-filter: blur(18px);
+}
+.next-login-brand-panel {
+  position: relative;
+  padding: clamp(36px, 6vw, 76px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+  color: #fff;
+  background:
+    linear-gradient(145deg, rgba(11,13,32,.98), rgba(33,35,73,.96)),
+    #17192e;
+  overflow: hidden;
+}
+.next-login-brand-panel::after {
+  content: "";
+  position: absolute;
+  width: 380px;
+  height: 380px;
+  right: -170px;
+  bottom: -180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(234,112,45,.32), rgba(234,112,45,0) 70%);
+  pointer-events: none;
+}
+.next-login-brand-visual { position: relative; width: 124px; height: 124px; display: grid; place-items: center; }
+.next-login-brand-mark {
+  position: relative;
+  z-index: 3;
+  width: 94px;
+  height: 94px;
+  display: grid;
+  place-items: center;
+  border-radius: 28px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 20px 60px rgba(0,0,0,.26), inset 0 0 0 1px rgba(255,255,255,.7);
+}
+.next-login-brand-mark img { width: 72px; height: 72px; object-fit: contain; }
+.next-login-orbit { position: absolute; inset: 4px; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; animation: next-login-spin 10s linear infinite; }
+.next-login-orbit::after { content: ""; position: absolute; top: 9px; left: 18px; width: 9px; height: 9px; background: #f28b4d; border-radius: 50%; box-shadow: 0 0 16px rgba(242,139,77,.9); }
+.next-login-orbit.orbit-two { inset: -12px; border-style: dashed; opacity: .55; animation-direction: reverse; animation-duration: 15s; }
+.next-login-brand-copy { position: relative; z-index: 2; max-width: 520px; }
+.next-login-kicker { display: inline-flex; margin-bottom: 16px; color: #f6a06d; font-size: 12px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+.next-login-brand-copy h1 { margin: 0; max-width: 500px; font-size: clamp(38px, 5vw, 62px); line-height: .98; letter-spacing: -.045em; }
+.next-login-brand-copy p { margin: 22px 0 0; max-width: 500px; color: rgba(255,255,255,.7); font-size: 16px; line-height: 1.75; }
+.next-login-capabilities { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; }
+.next-login-capabilities span { padding: 8px 11px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.82); font-size: 12px; font-weight: 800; }
+.next-login-card { padding: clamp(32px, 6vw, 72px); display: flex; flex-direction: column; justify-content: center; background: #fff; }
+.next-login-mobile-brand { display: none; align-items: center; gap: 12px; margin-bottom: 26px; }
+.next-login-mobile-brand img { width: 44px; height: 44px; object-fit: contain; }
+.next-login-mobile-brand strong, .next-login-mobile-brand small { display: block; }
+.next-login-mobile-brand small { margin-top: 2px; color: #7a7f92; }
+.next-login-card-heading > span { color: #d65f1e; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.next-login-card-heading h2 { margin: 9px 0 0; font-size: clamp(32px, 4vw, 48px); line-height: 1; letter-spacing: -.035em; color: #17192e; }
+.next-login-card-heading p { margin: 13px 0 0; color: #73788b; line-height: 1.65; }
+.next-login-form { margin-top: 30px; display: grid; gap: 17px; }
+.next-login-form label { display: grid; gap: 8px; color: #34384c; font-size: 13px; font-weight: 850; }
+.next-login-field { min-height: 54px; display: flex; align-items: center; gap: 11px; padding: 0 13px; border: 1px solid #dfe2ea; border-radius: 15px; background: #fafbfc; transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+.next-login-field:focus-within { border-color: #ea702d; background: #fff; box-shadow: 0 0 0 4px rgba(234,112,45,.11); }
+.next-login-field > span { width: 22px; color: #9297a8; text-align: center; font-size: 15px; font-weight: 900; }
+.next-login-field input { flex: 1; min-width: 0; height: 50px; padding: 0; border: 0; outline: 0; background: transparent; color: #17192e; font: inherit; }
+.next-login-field input::placeholder { color: #a7abba; }
+.next-login-show-password, .next-login-form-links button, .next-login-secondary-action, .next-login-password-toggle { border: 0; background: none; color: #d65f1e; font: inherit; font-weight: 850; cursor: pointer; }
+.next-login-show-password { padding: 8px 3px; font-size: 12px; }
+.next-login-form-links { display: flex; justify-content: flex-end; margin-top: -4px; }
+.next-login-form-links button { padding: 3px; font-size: 12px; }
+.next-login-submit { min-height: 54px; border: 0; border-radius: 15px; background: linear-gradient(135deg, #ea702d, #f28a4d); color: #fff; font: inherit; font-weight: 900; cursor: pointer; box-shadow: 0 15px 34px rgba(234,112,45,.25); transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
+.next-login-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(234,112,45,.32); }
+.next-login-submit:disabled { cursor: wait; opacity: .72; }
+.next-login-secondary-action { min-height: 38px; color: #7a7f92; font-size: 13px; }
+.next-login-secondary-action strong { color: #d65f1e; }
+.next-login-notice { margin-top: 20px; padding: 12px 14px; border-radius: 13px; font-size: 13px; font-weight: 750; line-height: 1.5; }
+.next-login-notice.error { border: 1px solid #fecaca; background: #fff1f2; color: #b42318; }
+.next-login-notice.success { border: 1px solid #a7f3d0; background: #ecfdf3; color: #067647; }
+.next-login-notice.warning { border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; }
+.next-login-footer { margin-top: 30px; padding-top: 18px; border-top: 1px solid #eceef3; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #979baa; font-size: 11px; font-weight: 750; }
+.next-login-footer a { color: #686d80; text-decoration: none; }
+.next-login-footer a:hover { color: #d65f1e; }
+.next-login-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.next-login-password-toggle { justify-self: start; margin-top: -8px; padding: 0; font-size: 11px; }
+.next-login-page.is-success .next-login-brand-mark { animation: next-login-success-pulse .62s ease both; }
+.next-login-page.is-success .next-login-submit { background: linear-gradient(135deg, #079455, #12b76a); }
+@keyframes next-login-spin { to { transform: rotate(360deg); } }
+@keyframes next-login-success-pulse { 45% { transform: scale(1.14); box-shadow: 0 0 0 18px rgba(18,183,106,.12), 0 20px 60px rgba(0,0,0,.26); } 100% { transform: scale(1); } }
+.next-login-page-loading .next-login-shell { min-height: 620px; }
+.next-login-skeleton { position: relative; overflow: hidden; background: #eef0f5; }
+.next-login-skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent); animation: next-login-shimmer 1.2s infinite; }
+.next-login-skeleton-line { width: 62%; height: 18px; border-radius: 10px; margin-bottom: 14px; }
+.next-login-skeleton-line.wide { width: 82%; height: 30px; }
+.next-login-skeleton-field { height: 54px; border-radius: 15px; margin: 10px 0; }
+.next-login-skeleton-button { height: 54px; border-radius: 15px; margin-top: 16px; }
+@keyframes next-login-shimmer { to { transform: translateX(100%); } }
+@media (max-width: 900px) {
+  .next-login-page { padding: 0; place-items: stretch; background: #fff; }
+  .next-login-shell { width: 100%; min-height: 100svh; grid-template-columns: 1fr; border: 0; border-radius: 0; box-shadow: none; }
+  .next-login-brand-panel { display: none; }
+  .next-login-card { padding: 34px clamp(22px, 7vw, 54px); }
+  .next-login-mobile-brand { display: flex; }
+}
+@media (max-width: 560px) {
+  .next-login-card { justify-content: flex-start; padding-top: 24px; }
+  .next-login-card-heading h2 { font-size: 36px; }
+  .next-login-form-grid { grid-template-columns: 1fr; }
+  .next-login-footer { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-login-orbit, .next-login-page.is-success .next-login-brand-mark, .next-login-skeleton::after { animation: none !important; }
+}

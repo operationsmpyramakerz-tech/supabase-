@@ -76,13 +76,32 @@ function createPageRouter(options = {}) {
     return sendPublicFile(res, "manifest.json");
   });
 
+  function nextFrontendEnabled() {
+    const value = String(process.env.ENABLE_NEXT_FRONTEND || "").trim().toLowerCase();
+    return ["1", "true", "yes", "on"].includes(value);
+  }
+
+  function loginQuerySuffix(req) {
+    const original = String(req.originalUrl || "");
+    const index = original.indexOf("?");
+    return index >= 0 ? original.slice(index) : "";
+  }
+
+  function wantsClassicLogin(req) {
+    return ["1", "true", "yes", "on"].includes(String(req.query?.classic || "").trim().toLowerCase());
+  }
+
   router.get("/login", (req, res) => {
-    if (req.session?.authenticated) return res.redirect("/home");
+    if (req.session?.authenticated) return res.redirect(nextFrontendEnabled() ? "/next/home" : "/home");
+    if (nextFrontendEnabled() && !wantsClassicLogin(req)) {
+      return res.redirect(`/next/login${loginQuerySuffix(req)}`);
+    }
     return sendPublicFile(res, "login.html");
   });
 
   router.get("/", (req, res) => {
-    if (req.session?.authenticated) return res.redirect("/home");
+    if (req.session?.authenticated) return res.redirect(nextFrontendEnabled() ? "/next/home" : "/home");
+    if (nextFrontendEnabled()) return res.redirect("/next/login");
     return sendPublicFile(res, "login.html");
   });
 
