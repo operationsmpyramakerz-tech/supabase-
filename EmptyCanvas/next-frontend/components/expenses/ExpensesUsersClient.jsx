@@ -18,6 +18,12 @@ function modernTrackingHref(order) {
   }
   return raw.replace(/^\/orders\/tracking(?=\?|$)/i, "/next/orders/tracking");
 }
+function modernReceiptViewerHref(order) {
+  const raw = text(order?.receiptViewerUrl);
+  if (raw) return raw.replace(/^\/orders\/order-receipt-viewer(?=\?|$)/i, "/next/orders/receipt-viewer");
+  const ids = (Array.isArray(order?.relationIds) ? order.relationIds : []).map((value) => text(value)).filter(Boolean);
+  return ids.length ? `/next/orders/receipt-viewer?ids=${encodeURIComponent(ids.join(","))}` : "";
+}
 function lower(value) { return text(value).toLowerCase(); }
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function normalized(value) { return lower(value).replace(/[^a-z0-9\u0600-\u06ff]+/g, ""); }
@@ -246,7 +252,8 @@ function TransactionRow({ item, onReceipt, onEdit, onDelete }) {
         <div className="next-expense-users-transaction__meta"><span>{formatDate(item?.date)}</span><span>{from} → {to}</span>{number(item?.kilometer) > 0 ? <span>{number(item.kilometer)} km</span> : null}</div>
         {orders.length ? <div className="next-expense-users-order-links">{orders.map((order, index) => {
           const href = modernTrackingHref(order) || "/next/orders";
-          return <a href={href} target="_blank" rel="noreferrer" key={text(order?.key || order?.orderId) || index}>{text(order?.label || order?.orderId) || "Linked order"}</a>;
+          const receiptHref = modernReceiptViewerHref(order);
+          return <span className="next-expense-users-order-link-group" key={text(order?.key || order?.orderId) || index}><a href={href} target="_blank" rel="noreferrer">{text(order?.label || order?.orderId) || "Linked order"}</a>{receiptHref ? <a className="receipt-link" href={receiptHref} target="_blank" rel="noreferrer">Receipts</a> : null}</span>;
         })}</div> : null}
       </div>
       <div className="next-expense-users-transaction__actions">

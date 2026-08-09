@@ -64,6 +64,7 @@ export function notificationTone(item = {}) {
 const NEXT_ROUTE_MAP = [
   ["/how-it-works", "/next/how-it-works"],
   ["/orders/maintenance-orders", "/next/maintenance-orders"],
+  ["/orders/order-receipt-viewer", "/next/orders/receipt-viewer"],
   ["/orders/sv-orders", "/next/orders-review"],
   ["/orders/requested", "/next/operations-orders"],
   ["/orders/new", "/next/orders/new"],

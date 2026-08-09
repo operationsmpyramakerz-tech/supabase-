@@ -28,6 +28,12 @@ function modernTrackingHref(order) {
   }
   return raw.replace(/^\/orders\/tracking(?=\?|$)/i, "/next/orders/tracking");
 }
+function modernReceiptViewerHref(order) {
+  const raw = text(order?.receiptViewerUrl);
+  if (raw) return raw.replace(/^\/orders\/order-receipt-viewer(?=\?|$)/i, "/next/orders/receipt-viewer");
+  const ids = (Array.isArray(order?.relationIds) ? order.relationIds : []).map((value) => text(value)).filter(Boolean);
+  return ids.length ? `/next/orders/receipt-viewer?ids=${encodeURIComponent(ids.join(","))}` : "";
+}
 function lower(value) { return text(value).toLowerCase(); }
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function typeKey(value) { return lower(value).replace(/[^a-z0-9\u0600-\u06ff]+/g, ""); }
@@ -411,7 +417,9 @@ function TransactionCard({ item, onScreenshots }) {
         <div className="expense-transaction__meta"><span>{text(item?.fundsType) || "Other"}</span><span>{route.from}</span><i>→</i><span>{route.to}</span></div>
         {orders.length ? <div className="expense-order-links">{orders.map((order, index) => {
           const href = modernTrackingHref(order);
-          return href ? <a href={href} target="_blank" rel="noreferrer" key={`${order?.key || order?.label}-${index}`}>{text(order?.orderId || order?.label) || "Order"}</a> : <span key={`${order?.key || order?.label}-${index}`}>{text(order?.orderId || order?.label) || "Order"}</span>;
+          const receiptHref = modernReceiptViewerHref(order);
+          const label = text(order?.orderId || order?.label) || "Order";
+          return <span className="expense-order-link-group" key={`${order?.key || order?.label}-${index}`}>{href ? <a href={href} target="_blank" rel="noreferrer">{label}</a> : <span>{label}</span>}{receiptHref ? <a className="receipt-link" href={receiptHref} target="_blank" rel="noreferrer">Receipts</a> : null}</span>;
         })}</div> : null}
       </div>
       <div className="expense-transaction__amount"><strong>{ownCar && !value ? `${number(item?.kilometer)} km` : money(value, { signed: true })}</strong>{shots.length ? <button type="button" onClick={() => onScreenshots(item)}>Receipt {shots.length > 1 ? `(${shots.length})` : ""}</button> : <span>No receipt</span>}</div>

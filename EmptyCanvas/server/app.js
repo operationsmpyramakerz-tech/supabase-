@@ -24849,6 +24849,14 @@ async function _pageBootstrapFetchExistingRoute(req, pathname, timeoutMs = 10_00
   }
 }
 
+async function _pageBootstrapOrderReceipts(req, ids) {
+  const encodedIds = encodeURIComponent(String(ids || ""));
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad(`/api/orders/order-receipts?ids=${encodedIds}`, 15_000, () => _loadOrderReceiptViewerItems(ids)),
+  ]);
+}
+
 async function _pageBootstrapHistory(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
@@ -25315,6 +25323,12 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       const groupId = String(req.query?.groupId || req.query?.group || '').trim();
       if (!groupId) return res.status(400).json({ ok: false, error: 'An order tracking reference is required.' });
       results = await _pageBootstrapOrderTracking(req, groupId);
+    } else if (scope === 'order-receipts') {
+      const canAccessReceipts = _pageBootstrapHasPageAccess(req, 'Expenses') || _pageBootstrapHasPageAccess(req, 'Expenses Users');
+      if (!canAccessReceipts) return _pageAccessDeniedResponse(req, res);
+      const ids = String(req.query?.ids || '').trim();
+      if (!ids) return res.status(400).json({ ok: false, error: 'Order ids are required.' });
+      results = await _pageBootstrapOrderReceipts(req, ids);
     } else if (scope === 'orders-review') {
       if (!_pageBootstrapHasPageAccess(req, 'Orders Review')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapOrdersReview(req);
@@ -31751,53 +31765,149 @@ app.get(
   },
 );
 
+function _normalizeOrderReceiptViewerIds(rawIds) {
+  return Array.from(
+    new Set(
+      String(rawIds || "")
+        .split(",")
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value)),
+    ),
+  );
+}
+
+function _orderReceiptEntryType(entry = {}) {
+  const name = String(entry?.name || "").trim();
+  const url = String(entry?.url || "").trim();
+  const probe = `${name} ${url}`.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|\s|$)/i.test(probe) || /^data:image\//i.test(url)) return "image";
+  if (/\.pdf(\?|#|\s|$)/i.test(probe)) return "pdf";
+  return "file";
+}
+
+async function _loadOrderReceiptViewerItems(rawIds) {
+  const ids = _normalizeOrderReceiptViewerIds(rawIds);
+  if (!ids.length) {
+    const error = new Error("Missing order ids");
+    error.status = 400;
+    throw error;
+  }
+
+  const items = [];
+  const seen = new Set();
+  const pushEntries = (entries = [], sourceId = "") => {
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      const url = String(entry?.url || "").trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const item = {
+        name: String(entry?.name || "Order receipt").trim() || "Order receipt",
+        url,
+        sourceId: String(sourceId || ""),
+      };
+      item.type = _orderReceiptEntryType(item);
+      items.push(item);
+    }
+  };
+
+  let receiptPropName = null;
+  try {
+    receiptPropName = await detectOrderReceiptFilesPropName();
+  } catch (error) {
+    console.warn("Order receipt property detection failed:", error?.body || error?.message || error);
+  }
+
+  for (const rawId of ids) {
+    const pageId = String(rawId || "").trim();
+    let loaded = false;
+
+    if (_sbOrdersEnabled()) {
+      const candidates = [];
+      const direct = pageId.match(/^\d+$/) ? pageId : "";
+      const ord = pageId.match(/^ord:(\d+)$/i) || pageId.match(/^ord[-\s]?(\d+)$/i);
+      if (direct) candidates.push({ mode: "id", value: direct });
+      if (ord?.[1]) candidates.push({ mode: "order", value: ord[1] });
+
+      for (const candidate of candidates) {
+        try {
+          if (candidate.mode === "id") {
+            const row = await supabaseDb.selectById(_sbOrdersTable(), candidate.value).catch(() => null);
+            if (row) {
+              const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
+              const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
+              pushEntries(_sbNormalizeOrderReceiptEntries(orderReceiptRaw || maintenanceReceiptRaw, "Order receipt"), pageId);
+              loaded = true;
+            }
+          } else {
+            const rows = await _sbSelectOrdersRows({ approvedOnly: false });
+            const matching = (Array.isArray(rows) ? rows : []).filter((row) => {
+              const serialized = _sbSerializeOrderRow(row);
+              return String(serialized?.orderIdNumber || "") === String(candidate.value);
+            });
+            if (matching.length) {
+              for (const row of matching) {
+                const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
+                const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
+                pushEntries(_sbNormalizeOrderReceiptEntries(orderReceiptRaw || maintenanceReceiptRaw, "Order receipt"), pageId);
+              }
+              loaded = true;
+            }
+          }
+        } catch (error) {
+          console.warn("Supabase order receipt viewer load failed:", pageId, error?.message || error);
+        }
+        if (loaded) break;
+      }
+    }
+
+    if (loaded) continue;
+
+    try {
+      const notionId = looksLikeNotionId(pageId) ? toHyphenatedUUID(pageId) : pageId;
+      const orderPage = await notion.pages.retrieve({ page_id: notionId });
+      const props = orderPage?.properties || {};
+      pushEntries(
+        getOrderReceiptEntries(
+          receiptPropName ? props?.[receiptPropName] : null,
+          receiptPropName || "Order receipt",
+        ),
+        pageId,
+      );
+    } catch (pageErr) {
+      console.warn("Order receipt viewer page load failed:", pageId, pageErr?.body || pageErr?.message || pageErr);
+    }
+  }
+
+  return { ok: true, items, ids, count: items.length };
+}
+
+app.get(
+  "/api/orders/order-receipts",
+  requireAuth,
+  requirePage(["Expenses", "Expenses Users"]),
+  async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const payload = await _loadOrderReceiptViewerItems(req.query?.ids || "");
+      return res.json(payload);
+    } catch (error) {
+      return res.status(error?.status || 500).json({
+        ok: false,
+        error: error?.status === 400 ? "Missing order ids" : "Failed to load order receipts",
+      });
+    }
+  },
+);
+
 app.get(
   "/orders/order-receipt-viewer",
   requireAuth,
   requirePage(["Expenses", "Expenses Users"]),
   async (req, res) => {
     try {
-      const rawIds = String(req.query?.ids || "").trim();
-      const ids = Array.from(
-        new Set(
-          rawIds
-            .split(',')
-            .map((value) => String(value || '').trim())
-            .filter(Boolean)
-            .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value)),
-        ),
-      );
-
-      if (!ids.length) {
-        return res.status(400).send("Missing order ids");
-      }
-
-      const receiptPropName = await detectOrderReceiptFilesPropName();
-      const items = [];
-      const seen = new Set();
-
-      for (const pageId of ids) {
-        try {
-          const orderPage = await notion.pages.retrieve({ page_id: pageId });
-          const props = orderPage?.properties || {};
-          const receiptEntries = getOrderReceiptEntries(
-            receiptPropName ? props?.[receiptPropName] : null,
-            receiptPropName || 'Order receipt',
-          );
-
-          for (const entry of receiptEntries) {
-            const url = String(entry?.url || '').trim();
-            if (!url || seen.has(url)) continue;
-            seen.add(url);
-            items.push({
-              name: String(entry?.name || 'Order receipt').trim() || 'Order receipt',
-              url,
-            });
-          }
-        } catch (pageErr) {
-          console.warn('Order receipt viewer page load failed:', pageId, pageErr?.body || pageErr?.message || pageErr);
-        }
-      }
+      const payload = await _loadOrderReceiptViewerItems(req.query?.ids || "");
+      const items = payload.items || [];
 
       if (!items.length) {
         const html = `<!doctype html>
@@ -31820,19 +31930,19 @@ app.get(
   </div>
 </body>
 </html>`;
-        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader("Cache-Control", "no-store");
         return res.status(404).send(html);
       }
 
       if (items.length === 1) {
-        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader("Cache-Control", "no-store");
         return res.redirect(items[0].url);
       }
 
       const galleryHtml = items.map((item, index) => {
         const safeUrl = escapeHtml(item.url);
         const safeName = escapeHtml(item.name || `Receipt ${index + 1}`);
-        const isImage = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(item.url);
+        const isImage = item.type === "image";
         return `
           <a class="receipt-card" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
             <div class="receipt-card__preview">${isImage ? `<img src="${safeUrl}" alt="${safeName}" loading="lazy" />` : `<span>${safeName}</span>`}</div>
@@ -31842,7 +31952,7 @@ app.get(
             </div>
           </a>
         `;
-      }).join('');
+      }).join("");
 
       const html = `<!doctype html>
 <html lang="en">
@@ -31874,11 +31984,11 @@ app.get(
 </body>
 </html>`;
 
-      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader("Cache-Control", "no-store");
       return res.send(html);
     } catch (err) {
-      console.error('/orders/order-receipt-viewer error:', err?.body || err);
-      return res.status(500).send('Failed to open order receipt');
+      console.error("/orders/order-receipt-viewer error:", err?.body || err);
+      return res.status(err?.status || 500).send(err?.status === 400 ? "Missing order ids" : "Failed to open order receipt");
     }
   },
 );
@@ -32828,7 +32938,7 @@ app.get("/api/expenses", cachedJsonRoute(2 * 60, (req) => `cache:api:expenses:${
           }
 
           group.receiptViewerUrl = group.relationIds.length
-            ? `/orders/order-receipt-viewer?ids=${encodeURIComponent(group.relationIds.join(','))}`
+            ? `/next/orders/receipt-viewer?ids=${encodeURIComponent(group.relationIds.join(','))}`
             : '';
         }
       }
@@ -33248,7 +33358,7 @@ app.get(
             }
 
             group.receiptViewerUrl = group.relationIds.length
-              ? `/orders/order-receipt-viewer?ids=${encodeURIComponent(group.relationIds.join(','))}`
+              ? `/next/orders/receipt-viewer?ids=${encodeURIComponent(group.relationIds.join(','))}`
               : '';
           }
         }
@@ -34720,7 +34830,7 @@ app.post("/api/expenses/export/excel", async (req, res) => {
 
       let hyperlink = "";
       if (relationIds.length) {
-        hyperlink = `${baseUrl}/orders/order-receipt-viewer?ids=${encodeURIComponent(relationIds.join(','))}`;
+        hyperlink = `${baseUrl}/next/orders/receipt-viewer?ids=${encodeURIComponent(relationIds.join(','))}`;
       } else {
         const firstOrder = orders.find((order) => String(order?.receiptViewerUrl || order?.trackingUrl || "").trim()) || null;
         hyperlink = firstOrder

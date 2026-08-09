@@ -10,6 +10,7 @@ const steps = [
   ["Home dashboard", "Completed", "The live Home overview is rendered with Next.js while the classic Home remains available."],
   ["Current Orders", "Completed", "The first interactive list module includes tabs, search, order details, and protected order actions."],
   ["Order Tracking", "Completed", "Current Orders now has a dedicated Next.js delivery journey with durable order references, live stage refresh, component status, totals, product imagery, share/print controls, and migrated links from Expenses."],
+  ["Order Receipt Viewer", "Completed", "Expense-linked order receipts now open in a protected Next.js gallery with image previews, PDF/file handling, search and type filters, refresh, print/share controls, and compatibility with both Supabase and legacy Notion order references."],
   ["Orders Review", "Completed", "Supervisor review now supports filters, approval decisions, quantity overrides, protected editing, and archive controls in Next.js."],
   ["Operations Orders", "Completed", "Operations fulfilment now includes live workflow tabs, receipt quantities, approve/reject decisions, delivery controls, exports, and archive actions."],
   ["Maintenance Orders", "Completed", "The technical workflow now includes maintenance logs per component, spare-part tracking, signed report uploads, completion controls, and exports."],
