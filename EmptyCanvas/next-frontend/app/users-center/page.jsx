@@ -61,7 +61,14 @@ export default async function UsersCenterPage() {
   if (!account) redirect("/login?next=/next/users-center");
 
   return (
-    <AppShell account={account} title="Users Center" eyebrow="Team access and account administration" activePath="/next/users-center">
+    <AppShell
+      account={account}
+      title="Users Center"
+      eyebrow="Manage team access and member records"
+      activePath="/next/users-center"
+      bodyClass="user-access-page"
+      classicStyles={["/css/user-access.css?v=next-stage-2m-users-center"]}
+    >
       <UsersCenterClient
         initialDirectory={directory}
         initialSignupRequests={signup}

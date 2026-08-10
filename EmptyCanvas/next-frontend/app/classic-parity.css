@@ -2667,3 +2667,289 @@ body.kpis-page .next-kpi-score-notes a{color:#c2410c;font-weight:950}
   body.kpis-page .next-kpi-score-readonly{grid-template-columns:1fr}
   body.kpis-page .next-classic-kpi-user-select{width:100%;align-items:stretch;flex-direction:column}
 }
+
+
+/* ==========================================================================
+   Stage 2M — Users Center Classic parity
+   The page now reuses public/css/user-access.css. These bridge rules only
+   cover React-specific wrappers, modal layering, loading placeholders, and
+   small integration details that do not exist in the legacy HTML.
+   ========================================================================== */
+.user-access-page .next-classic-page-content {
+  padding-bottom: 36px;
+}
+
+.next-ua-workspace {
+  width: 100%;
+}
+
+.next-ua-bootstrap-warning {
+  margin: 0;
+}
+
+.next-ua-modal-layer {
+  isolation: isolate;
+}
+
+.next-ua-modal-backdrop,
+.next-ua-submodal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.next-ua-modal-layer > .ua-modal {
+  z-index: 1;
+}
+
+.next-ua-modal--extra-wide {
+  width: min(980px, 96vw);
+}
+
+.next-ua-form,
+.next-ua-member-form {
+  display: grid;
+  gap: 16px;
+}
+
+.next-ua-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.next-ua-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0 2px;
+}
+
+.next-ua-profile-head > div {
+  min-width: 0;
+}
+
+.next-ua-profile-head strong,
+.next-ua-profile-head small {
+  display: block;
+}
+
+.next-ua-profile-head strong {
+  color: #0b1220;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.next-ua-profile-head small {
+  margin-top: 4px;
+  color: #7b8494;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.next-ua-avatar--large {
+  width: 72px;
+  height: 72px;
+  font-size: 20px;
+}
+
+.next-ua-file-field {
+  position: relative;
+}
+
+.next-ua-file-pick {
+  position: relative;
+  cursor: pointer;
+}
+
+.next-ua-hidden-file {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.next-ua-access-managers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.next-ua-footer-summary {
+  margin-right: auto;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.next-ua-page-group {
+  display: grid;
+  gap: 8px;
+}
+
+.next-ua-page-group + .next-ua-page-group {
+  margin-top: 12px;
+}
+
+.next-ua-page-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px 0;
+  color: #0b1220;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.next-ua-page-group-title span {
+  color: #8b95a6;
+  font-size: 11px;
+}
+
+.next-ua-request-list {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.next-ua-submodal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10010;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(7, 11, 26, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.next-ua-submodal {
+  position: relative;
+  z-index: 1;
+}
+
+.user-access-page .ua-folder__open {
+  border: 0;
+  cursor: pointer;
+}
+
+.user-access-page .ua-member-card__actions {
+  grid-template-columns: 1fr;
+}
+
+.user-access-page .ua-member-menu-btn[aria-expanded="true"] {
+  background: #0b1220;
+  color: #fff;
+}
+
+.user-access-page .ua-folder-actions .ua-refresh,
+.user-access-page .ua-members-actions .ua-refresh {
+  min-height: 46px;
+  height: 46px;
+  border-radius: 16px;
+}
+
+.user-access-page .ua-signup-request-avatar {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.user-access-page .ua-signup-request-status {
+  white-space: nowrap;
+}
+
+.next-classic-users-loading .ua-folder {
+  cursor: default;
+  pointer-events: none;
+}
+
+.next-ua-loading-actions {
+  width: 100%;
+}
+
+.next-ua-loading-pill,
+.next-ua-loading-button,
+.next-ua-loading-square,
+.next-ua-loading-copy i {
+  display: block;
+  background: linear-gradient(90deg, #eef1f5, #f8fafc, #eef1f5);
+  background-size: 200% 100%;
+  animation: nextClassicUaShimmer 1.35s linear infinite;
+}
+
+.next-ua-loading-pill {
+  width: 86px;
+  height: 34px;
+  border-radius: 999px;
+}
+
+.next-ua-loading-button {
+  width: 150px;
+  height: 46px;
+  border-radius: 16px;
+}
+
+.next-ua-loading-square {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+}
+
+.next-ua-loading-copy {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 8px;
+}
+
+.next-ua-loading-copy i {
+  width: 72%;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.next-ua-loading-copy i + i {
+  width: 48%;
+  height: 9px;
+}
+
+@keyframes nextClassicUaShimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (max-width: 760px) {
+  .next-ua-access-managers {
+    grid-template-columns: 1fr;
+  }
+
+  .next-ua-inline-actions {
+    flex-direction: column-reverse;
+  }
+
+  .next-ua-inline-actions .ua-btn {
+    width: 100%;
+  }
+
+  .next-ua-footer-summary {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 4px;
+  }
+
+  .ua-modal__actions:has(.next-ua-footer-summary) {
+    flex-wrap: wrap;
+  }
+
+  .next-ua-profile-head {
+    align-items: flex-start;
+  }
+}
