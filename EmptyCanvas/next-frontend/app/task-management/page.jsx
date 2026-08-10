@@ -14,8 +14,8 @@ export default async function TaskManagementIndexPage() {
 
   const allowed = new Set((Array.isArray(response.data.allowedPages) ? response.data.allowedPages : []).map(normalize));
   const broad = allowed.has("task management") || allowed.has("taskmanagement") || allowed.has("department tickets");
-  if (broad || allowed.has("all tasks")) redirect("/task-management/all-tasks");
-  if (allowed.has("my tasks")) redirect("/task-management/my-tasks");
-  if (allowed.has("delegated tasks")) redirect("/task-management/delegated-tasks");
+  if (broad || allowed.has("all tasks")) redirect("/next/task-management/all-tasks");
+  if (allowed.has("my tasks")) redirect("/next/task-management/my-tasks");
+  if (allowed.has("delegated tasks")) redirect("/next/task-management/delegated-tasks");
   redirect("/home");
 }

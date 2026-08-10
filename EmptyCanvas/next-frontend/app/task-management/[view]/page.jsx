@@ -87,10 +87,12 @@ export default async function TaskManagementViewPage({ params }) {
   if (!account) redirect(`/login?next=/next/task-management/${resolvedParams.view}`);
 
   return (
-    <AppShell
+    <>
+      <link rel="stylesheet" href="/css/task-management.css?v=next-stage-2j" />
+      <AppShell
       account={account}
       title={config.title}
-      eyebrow="Cross-department workflow control"
+      eyebrow="Task Management"
       activePath={`/next/task-management/${resolvedParams.view}`}
     >
       <TaskManagementClient
@@ -102,6 +104,7 @@ export default async function TaskManagementViewPage({ params }) {
         classicHref={config.classic}
         bootstrapWarnings={response.data.omitted || []}
       />
-    </AppShell>
+      </AppShell>
+    </>
   );
 }

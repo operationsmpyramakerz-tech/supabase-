@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BodyClassSync } from "../ClassicShellControls";
 
 const STATUS_OPTIONS = [
   ["all", "All"],
@@ -222,12 +223,12 @@ function Toast({ toast, onClose }) {
 }
 
 function StatusPill({ status, archived = false }) {
-  if (archived) return <span className="next-task-pill next-task-pill--archived">Archive</span>;
-  return <span className={`next-task-pill next-task-pill--${text(status)}`}>{statusLabel(status)}</span>;
+  if (archived) return <span className="next-task-pill next-task-pill--archived tm-status-pill tm-status--cancelled">Archive</span>;
+  return <span className={`next-task-pill next-task-pill--${text(status)} tm-status-pill tm-status--${text(status)}`}>{statusLabel(status)}</span>;
 }
 
 function PriorityPill({ priority }) {
-  return <span className={`next-task-priority next-task-priority--${priorityKey(priority)}`}>{text(priority) || "Normal"}</span>;
+  return <span className={`next-task-priority next-task-priority--${priorityKey(priority)} tm-priority tm-priority--${priorityKey(priority)}`}>{text(priority) || "Normal"}</span>;
 }
 
 function AttachmentLinks({ attachments, empty = null }) {
@@ -257,18 +258,18 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
   const selectedTasks = tickets.filter((ticket) => dateKey(ticket?.dueDate) === selectedDate);
   const selected = dateFromKey(selectedDate) || new Date();
   return (
-    <aside className="next-task-agenda">
-      <section className="next-task-panel next-task-calendar">
-        <div className="next-task-calendar-head">
-          <div><span>Task agenda</span><h3>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3></div>
+    <aside className="next-task-agenda tm-agenda-column">
+      <section className="next-task-panel next-task-calendar tm-agenda-card tm-calendar-card">
+        <div className="next-task-calendar-head tm-calendar-head">
+          <div><span className="tm-agenda-eyebrow">◷ Task agenda</span><h3>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h3></div>
           <div>
             <button type="button" onClick={() => { const now = new Date(); onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1)); onSelectDate(todayKey()); }}>Today</button>
             <button type="button" aria-label="Previous month" onClick={() => onMonthChange(new Date(year, monthIndex - 1, 1))}>‹</button>
             <button type="button" aria-label="Next month" onClick={() => onMonthChange(new Date(year, monthIndex + 1, 1))}>›</button>
           </div>
         </div>
-        <div className="next-task-weekdays">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div>
-        <div className="next-task-calendar-grid">
+        <div className="next-task-weekdays tm-calendar-weekdays">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div>
+        <div className="next-task-calendar-grid tm-calendar-grid">
           {Array.from({ length: 42 }, (_, index) => {
             const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
             const key = dateKey(date);
@@ -277,7 +278,7 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
               <button
                 type="button"
                 key={key}
-                className={`${date.getMonth() !== monthIndex ? "outside" : ""} ${count ? "busy" : ""} ${key === selectedDate ? "selected" : ""} ${key === todayKey() ? "today" : ""}`}
+                className={`tm-calendar-day ${date.getMonth() !== monthIndex ? "outside is-outside" : ""} ${count ? "busy has-tasks" : ""} ${key === selectedDate ? "selected is-selected" : ""} ${key === todayKey() ? "today is-today" : ""}`}
                 onClick={() => onSelectDate(key)}
                 title={`${date.toLocaleDateString()}${count ? ` · ${count} task${count === 1 ? "" : "s"}` : ""}`}
               >{date.getDate()}</button>
@@ -285,20 +286,20 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
           })}
         </div>
       </section>
-      <section className="next-task-panel next-task-day-list">
-        <div className="next-task-day-head">
-          <div><b>{selected.getDate()}</b><span>{selected.toLocaleDateString(undefined, { weekday: "long" })}</span></div>
-          <div><small>{selectedDate === todayKey() ? "Today" : selected.toLocaleDateString(undefined, { month: "short", year: "numeric" })}</small><h3>{selectedDate === todayKey() ? "Today tasks" : "Scheduled tasks"}</h3></div>
-          <strong>{selectedTasks.length}</strong>
+      <section className="next-task-panel next-task-day-list tm-agenda-card tm-day-tasks-card">
+        <div className="next-task-day-head tm-day-tasks-head">
+          <div className="tm-day-date-block"><b>{selected.getDate()}</b><span>{selected.toLocaleDateString(undefined, { weekday: "long" })}</span></div>
+          <div className="tm-day-tasks-title"><span>{selectedDate === todayKey() ? "Today" : selected.toLocaleDateString(undefined, { month: "short", year: "numeric" })}</span><h2>{selectedDate === todayKey() ? "Today tasks" : "Scheduled tasks"}</h2></div>
+          <strong className="tm-day-tasks-count">{selectedTasks.length}</strong>
         </div>
-        <div className="next-task-day-items">
+        <div className="next-task-day-items tm-day-task-list">
           {selectedTasks.length ? selectedTasks.map((ticket) => {
             const stats = ticketStats(ticket, "all");
             return (
-              <button type="button" onClick={() => onOpenTicket(ticket)} key={ticket.id}>
-                <i className={`priority-${priorityKey(ticket.priority)}`} />
-                <span><small>{ticket.ticketCode}</small><b>{ticket.title}</b><em>{stats.progress}% complete</em></span>
-                <strong>{stats.progress}%</strong>
+              <button type="button" className="tm-agenda-task" onClick={() => onOpenTicket(ticket)} key={ticket.id}>
+                <i className={`tm-agenda-task__priority tm-agenda-task__priority--${priorityKey(ticket.priority)} priority-${priorityKey(ticket.priority)}`} />
+                <span className="tm-agenda-task__body"><small>{ticket.ticketCode}</small><b>{ticket.title}</b><em>{stats.progress}% complete</em></span>
+                <strong className="tm-agenda-task__progress"><b>{stats.progress}%</b></strong>
               </button>
             );
           }) : <div className="next-task-empty-mini"><span>○</span><b>No tasks on this date</b><small>Select another highlighted day.</small></div>}
@@ -311,14 +312,14 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
 function ProjectCard({ ticket, view, onOpen }) {
   const stats = ticketStats(ticket, view);
   return (
-    <button type="button" className={`next-task-card next-task-card--${text(ticket.status)} ${ticket.isArchived ? "archived" : ""}`} onClick={() => onOpen(ticket)}>
-      <div className="next-task-card-top">
-        <span className={`next-task-card-icon priority-${priorityKey(ticket.priority)}`}>⌁</span>
-        <div><small>{ticket.ticketCode}</small><h3>{ticket.title}</h3></div>
+    <button type="button" className={`next-task-card tm-ticket-card next-task-card--${text(ticket.status)} ${ticket.isArchived ? "archived" : ""}`} onClick={() => onOpen(ticket)}>
+      <div className="next-task-card-top tm-ticket-card__top">
+        <span className={`next-task-card-icon tm-ticket-thumb tm-ticket-thumb--${priorityKey(ticket.priority)} priority-${priorityKey(ticket.priority)}`}>⌁</span>
+        <div className="tm-ticket-main"><small className="tm-ticket-code">{ticket.ticketCode}</small><h2>{ticket.title}</h2></div>
         <StatusPill status={ticket.status} archived={ticket.isArchived} />
       </div>
       <p>{ticket.description || "No project description."}</p>
-      <div className="next-task-departments">
+      <div className="next-task-departments tm-department-chips">
         {ticketDepartments(ticket).slice(0, 4).map((department) => <span key={department}>{department}</span>)}
         {ticketDepartments(ticket).length > 4 ? <span>+{ticketDepartments(ticket).length - 4}</span> : null}
       </div>
@@ -327,7 +328,7 @@ function ProjectCard({ ticket, view, onOpen }) {
         <span><b>{stats.completed}/{stats.total}</b><small>{view === "my" ? "Tasks" : "Blocks"}</small></span>
         <span><b>{ticket.createdByName || "—"}</b><small>Created by</small></span>
       </div>
-      <div className="next-task-progress"><div><span>{stats.progress}% complete</span><b>{stats.progress}%</b></div><i><em style={{ width: `${stats.progress}%` }} /></i></div>
+      <div className="next-task-progress tm-progress"><div className="tm-progress__head"><span>{stats.progress}% complete</span><b>{stats.progress}%</b></div><i className="tm-progress__rail"><em style={{ width: `${stats.progress}%` }} /></i></div>
     </button>
   );
 }
@@ -454,27 +455,27 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   };
 
   return (
-    <div className="next-task-modal-layer" role="dialog" aria-modal="true">
-      <button className="next-task-backdrop" type="button" onClick={onClose} aria-label="Close" />
-      <form className="next-task-modal next-task-project-editor" onSubmit={save}>
+    <div className="next-task-modal-layer tm-overlay" role="dialog" aria-modal="true">
+      <button className="next-task-backdrop tm-overlay__backdrop" type="button" onClick={onClose} aria-label="Close" />
+      <form className="next-task-modal next-task-project-editor tm-dialog tm-dialog--form" onSubmit={save}>
         <header><div><span>{draft.id ? "Protected project editing" : "New delegated project"}</span><h2>{draft.id ? `Edit ${draft.ticketCode || "project"}` : "Create Project"}</h2></div><button type="button" onClick={onClose}>×</button></header>
-        <div className="next-task-form-grid">
-          <label className="wide"><span>Project title *</span><input value={draft.title} onChange={(event) => update("title", event.target.value)} maxLength={500} /></label>
+        <div className="next-task-form-grid tm-form-grid">
+          <label className="wide tm-field--wide"><span>Project title *</span><input value={draft.title} onChange={(event) => update("title", event.target.value)} maxLength={500} /></label>
           <label><span>Priority *</span><select value={draft.priority} onChange={(event) => update("priority", event.target.value)}>{PRIORITIES.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label><span>Target date *</span><input type="date" value={draft.dueDate} onChange={(event) => update("dueDate", event.target.value)} /></label>
-          <label className="wide"><span>Description</span><textarea rows="3" value={draft.description} onChange={(event) => update("description", event.target.value)} /></label>
-          {draft.id ? <label className="wide"><span>Admin password *</span><input type="password" autoComplete="current-password" value={draft.adminPassword || ""} onChange={(event) => update("adminPassword", event.target.value)} /></label> : null}
+          <label className="wide tm-field--wide"><span>Description</span><textarea rows="3" value={draft.description} onChange={(event) => update("description", event.target.value)} /></label>
+          {draft.id ? <label className="wide tm-field--wide"><span>Admin password *</span><input type="password" autoComplete="current-password" value={draft.adminPassword || ""} onChange={(event) => update("adminPassword", event.target.value)} /></label> : null}
         </div>
-        <div className="next-task-editor-head"><div><span>Workflow structure</span><h3>Department blocks</h3><p>Use “Starts after” to keep sequential and parallel dependencies.</p></div><button type="button" onClick={addSection}>＋ Add block</button></div>
-        <div className="next-task-section-editors">
+        <div className="next-task-editor-head tm-sections-head"><div><span>Workflow structure</span><h3>Department blocks</h3><p>Use “Starts after” to keep sequential and parallel dependencies.</p></div><button type="button" onClick={addSection}>＋ Add block</button></div>
+        <div className="next-task-section-editors tm-section-editor-list">
           {draft.sections.map((section, index) => (
-            <article key={section.clientId}>
+            <article className="tm-section-editor" key={section.clientId}>
               <header><span>{index + 1}</span><div><b>Workflow block</b><small>{section.department || "Department not selected"}</small></div><button type="button" onClick={() => removeSection(section.clientId)} disabled={draft.sections.length === 1}>Remove</button></header>
-              <div className="next-task-form-grid">
+              <div className="next-task-form-grid tm-form-grid">
                 <label><span>Department *</span><select value={section.department} onChange={(event) => updateSection(section.clientId, "department", event.target.value)}><option value="">Select department</option>{(meta.departments || []).map((department) => <option key={department}>{department}</option>)}</select></label>
                 <label><span>Delivery date *</span><input type="date" max={draft.dueDate || undefined} value={section.deliveryDate} onChange={(event) => updateSection(section.clientId, "deliveryDate", event.target.value)} /></label>
-                <label className="wide"><span>Requested action *</span><textarea rows="2" value={section.request} onChange={(event) => updateSection(section.clientId, "request", event.target.value)} /></label>
-                <label className="wide"><span>Details</span><textarea rows="3" value={section.details} onChange={(event) => updateSection(section.clientId, "details", event.target.value)} /></label>
+                <label className="wide tm-field--wide"><span>Requested action *</span><textarea rows="2" value={section.request} onChange={(event) => updateSection(section.clientId, "request", event.target.value)} /></label>
+                <label className="wide tm-field--wide"><span>Details</span><textarea rows="3" value={section.details} onChange={(event) => updateSection(section.clientId, "details", event.target.value)} /></label>
               </div>
               <DependenciesEditor item={section} items={draft.sections} onChange={(value) => updateSection(section.clientId, "dependsOn", value)} />
               <div className="next-task-upload-row"><label><input type="file" multiple hidden onChange={(event) => { chooseFiles(section.clientId, event.target.files); event.target.value = ""; }} /><span>{uploading === section.clientId ? "Uploading…" : "＋ Attach files"}</span></label><small>Up to 10 MB per file</small></div>
@@ -483,7 +484,7 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
             </article>
           ))}
         </div>
-        {error ? <p className="next-task-form-error">{error}</p> : null}
+        {error ? <p className="next-task-form-error tm-form-error">{error}</p> : null}
         <footer><button type="button" onClick={onClose}>Cancel</button><button className="primary" type="submit" disabled={busy || !!uploading}>{busy ? "Saving…" : draft.id ? "Save project" : "Create project"}</button></footer>
       </form>
     </div>
@@ -535,20 +536,20 @@ function WorkEditor({ target, view, onClose, onSaved, notify }) {
     }
   };
   return (
-    <div className="next-task-modal-layer" role="dialog" aria-modal="true">
-      <button className="next-task-backdrop" type="button" onClick={onClose} aria-label="Close" />
-      <form className="next-task-modal next-task-work-editor" onSubmit={save}>
+    <div className="next-task-modal-layer tm-overlay" role="dialog" aria-modal="true">
+      <button className="next-task-backdrop tm-overlay__backdrop" type="button" onClick={onClose} aria-label="Close" />
+      <form className="next-task-modal next-task-work-editor tm-dialog tm-dialog--update" onSubmit={save}>
         <header><div><span>{target.targetType === "assignment" ? "Team-member task" : "Department task"}</span><h2>Update work</h2><p>{target.task || target.request}</p></div><button type="button" onClick={onClose}>×</button></header>
-        <div className="next-task-form-grid">
+        <div className="next-task-form-grid tm-form-grid">
           <label><span>Status *</span><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>{WORK_STATUS_OPTIONS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           <label><span>Work link</span><input type="url" placeholder="https://..." value={form.workLink} onChange={(event) => setForm((current) => ({ ...current, workLink: event.target.value }))} /></label>
-          <label className="wide"><span>Work report</span><textarea rows="7" value={form.workReport} onChange={(event) => setForm((current) => ({ ...current, workReport: event.target.value }))} /></label>
-          {form.status === "rejected" ? <label className="wide"><span>Rejected reason *</span><textarea rows="3" value={form.rejectionReason} onChange={(event) => setForm((current) => ({ ...current, rejectionReason: event.target.value }))} /></label> : null}
+          <label className="wide tm-field--wide"><span>Work report</span><textarea rows="7" value={form.workReport} onChange={(event) => setForm((current) => ({ ...current, workReport: event.target.value }))} /></label>
+          {form.status === "rejected" ? <label className="wide tm-field--wide"><span>Rejected reason *</span><textarea rows="3" value={form.rejectionReason} onChange={(event) => setForm((current) => ({ ...current, rejectionReason: event.target.value }))} /></label> : null}
         </div>
         <div className="next-task-upload-row"><label><input type="file" multiple hidden onChange={(event) => { choose(event.target.files); event.target.value = ""; }} /><span>{uploading ? "Uploading…" : "＋ Add work files"}</span></label><small>Up to 10 MB per file</small></div>
         <AttachmentLinks attachments={form.workFiles} empty="No work files uploaded." />
         {form.workFiles.length ? <button type="button" className="next-task-clear-files" onClick={() => setForm((current) => ({ ...current, workFiles: [] }))}>Remove all work files</button> : null}
-        {error ? <p className="next-task-form-error">{error}</p> : null}
+        {error ? <p className="next-task-form-error tm-form-error">{error}</p> : null}
         <footer><button type="button" onClick={onClose}>Cancel</button><button className="primary" type="submit" disabled={busy || uploading}>{busy ? "Saving…" : "Save work"}</button></footer>
       </form>
     </div>
@@ -670,26 +671,26 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   };
 
   return (
-    <div className="next-task-modal-layer" role="dialog" aria-modal="true">
-      <button className="next-task-backdrop" type="button" onClick={onClose} aria-label="Close" />
-      <section className="next-task-modal next-task-team-modal">
+    <div className="next-task-modal-layer tm-overlay" role="dialog" aria-modal="true">
+      <button className="next-task-backdrop tm-overlay__backdrop" type="button" onClick={onClose} aria-label="Close" />
+      <section className="next-task-modal next-task-team-modal tm-dialog tm-dialog--workflow">
         <header><div><span>{section.department}</span><h2>Team workflow</h2><p>{section.request}</p></div><button type="button" onClick={onClose}>×</button></header>
         {busy ? <div className="next-task-modal-loading">Loading team tasks…</div> : null}
         {!busy && error && !workflow ? <div className="next-task-error-box"><b>Could not load team workflow</b><p>{error}</p><button type="button" onClick={load}>Retry</button></div> : null}
         {!busy && workflow ? (
           <>
             <div className="next-task-team-summary"><span><b>{draft.length}</b><small>Team tasks</small></span><span><b>{draft.filter((item) => item.status === "completed").length}</b><small>Completed</small></span><span><b>{formatDate(section.deliveryDate)}</b><small>Department target</small></span></div>
-            {canManage ? <div className="next-task-editor-head"><div><span>Department manager controls</span><h3>Assign team members</h3></div><button type="button" onClick={add}>＋ Add person task</button></div> : null}
+            {canManage ? <div className="next-task-editor-head tm-sections-head"><div><span>Department manager controls</span><h3>Assign team members</h3></div><button type="button" onClick={add}>＋ Add person task</button></div> : null}
             <div className="next-task-assignment-list">
               {draft.length ? draft.map((assignment, index) => (
                 <article key={assignment.clientId} className={assignment.status === "cancelled" ? "archived" : ""}>
                   <header><span>{index + 1}</span><div><b>{assignment.assigneeName || "Unassigned task"}</b><small>{statusLabel(assignment.status)}</small></div><StatusPill status={assignment.status} archived={assignment.status === "cancelled"} /></header>
                   {canManage ? (
-                    <div className="next-task-form-grid">
+                    <div className="next-task-form-grid tm-form-grid">
                       <label><span>Team member *</span><select value={assignment.assigneeId || ""} onChange={(event) => { const member = (workflow.members || []).find((item) => text(item.id) === event.target.value); update(assignment.clientId, "assigneeId", event.target.value); update(assignment.clientId, "assigneeName", member?.name || ""); }}><option value="">Select team member</option>{(workflow.members || []).map((member) => <option value={member.id} key={member.id}>{member.name}{member.position ? ` · ${member.position}` : ""}</option>)}</select></label>
                       <label><span>Delivery date *</span><input type="date" max={section.deliveryDate || undefined} value={assignment.deliveryDate || ""} onChange={(event) => update(assignment.clientId, "deliveryDate", event.target.value)} /></label>
-                      <label className="wide"><span>Assigned task *</span><textarea rows="2" value={assignment.task || ""} onChange={(event) => update(assignment.clientId, "task", event.target.value)} /></label>
-                      <label className="wide"><span>Details</span><textarea rows="2" value={assignment.details || ""} onChange={(event) => update(assignment.clientId, "details", event.target.value)} /></label>
+                      <label className="wide tm-field--wide"><span>Assigned task *</span><textarea rows="2" value={assignment.task || ""} onChange={(event) => update(assignment.clientId, "task", event.target.value)} /></label>
+                      <label className="wide tm-field--wide"><span>Details</span><textarea rows="2" value={assignment.details || ""} onChange={(event) => update(assignment.clientId, "details", event.target.value)} /></label>
                     </div>
                   ) : <div className="next-task-assignment-copy"><h4>{assignment.task}</h4><p>{assignment.details || "No extra details."}</p></div>}
                   {canManage ? <DependenciesEditor item={assignment} items={draft} onChange={(value) => update(assignment.clientId, "dependsOn", value)} /> : null}
@@ -705,8 +706,8 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
                 </article>
               )) : <div className="next-task-empty-mini"><span>○</span><b>No team tasks yet</b><small>{canManage ? "Add a person task to start the team workflow." : "Your department manager has not assigned team tasks yet."}</small></div>}
             </div>
-            {error ? <p className="next-task-form-error">{error}</p> : null}
-            <footer className="next-task-modal-footer"><button type="button" onClick={onClose}>Close</button>{canManage ? <button className="primary" type="button" onClick={save} disabled={saving || !!uploading}>{saving ? "Saving…" : "Save team workflow"}</button> : null}</footer>
+            {error ? <p className="next-task-form-error tm-form-error">{error}</p> : null}
+            <footer className="next-task-modal-footer tm-dialog__actions"><button type="button" onClick={onClose}>Close</button>{canManage ? <button className="primary" type="button" onClick={save} disabled={saving || !!uploading}>{saving ? "Saving…" : "Save team workflow"}</button> : null}</footer>
           </>
         ) : null}
       </section>
@@ -753,9 +754,9 @@ function TicketDetails({ ticket, view, meta, onClose, onEdit, onRefresh, onWork,
     }
   };
   return (
-    <div className="next-task-modal-layer" role="dialog" aria-modal="true">
-      <button className="next-task-backdrop" type="button" onClick={onClose} aria-label="Close" />
-      <section className="next-task-modal next-task-details-modal">
+    <div className="next-task-modal-layer tm-overlay" role="dialog" aria-modal="true">
+      <button className="next-task-backdrop tm-overlay__backdrop" type="button" onClick={onClose} aria-label="Close" />
+      <section className="next-task-modal next-task-details-modal tm-dialog tm-dialog--workflow">
         <header className="next-task-details-head">
           <div><span>{live.ticketCode}</span><h2>{live.title}</h2><p>{live.description || "No project description."}</p></div>
           <div><StatusPill status={live.status} archived={live.isArchived} /><PriorityPill priority={live.priority} /><button type="button" onClick={onClose}>×</button></div>
@@ -774,12 +775,12 @@ function TicketDetails({ ticket, view, meta, onClose, onEdit, onRefresh, onWork,
           <button type="button" onClick={refreshDetail} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
         </div>
         <div className="next-task-workflow-heading"><div><span>Visual workflow</span><h3>Department execution stages</h3></div><small>{(live.sections || []).length} blocks · {(live.edges || []).length} dependencies</small></div>
-        <div className="next-task-workflow">
+        <div className="next-task-workflow tm-flow">
           {sectionGroups.map(([stage, sections], groupIndex) => (
-            <div className="next-task-workflow-stage" key={stage}>
-              {groupIndex ? <div className="next-task-workflow-arrow">→</div> : null}
+            <div className="next-task-workflow-stage tm-flow-step" key={stage}>
+              {groupIndex ? <div className="next-task-workflow-arrow tm-flow-connector"><span>→</span></div> : null}
               <div className="next-task-workflow-stage-body"><small>Stage {stage}</small>{sections.map((section) => (
-                <article key={section.id} className={`next-task-workflow-card next-task-workflow-card--${section.status}`}>
+                <article key={section.id} className={`next-task-workflow-card tm-workflow-card tm-status--${section.status} next-task-workflow-card--${section.status}`}>
                   <header><span>{section.department || "Department"}</span><StatusPill status={section.status} /></header>
                   <h4>{section.request}</h4>
                   <p>{section.details || "No extra details."}</p>
@@ -796,7 +797,7 @@ function TicketDetails({ ticket, view, meta, onClose, onEdit, onRefresh, onWork,
             </div>
           ))}
         </div>
-        <footer className="next-task-modal-footer"><a href={`/task-management/${view === "all" ? "all-tasks" : view === "my" ? "my-tasks" : "delegated-tasks"}?classic=1`}>Open classic workflow builder</a><button type="button" onClick={onClose}>Close</button></footer>
+        <footer className="next-task-modal-footer tm-dialog__actions"><a href={`/task-management/${view === "all" ? "all-tasks" : view === "my" ? "my-tasks" : "delegated-tasks"}?classic=1`}>Open classic workflow builder</a><button type="button" onClick={onClose}>Close</button></footer>
       </section>
     </div>
   );
@@ -968,7 +969,8 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   };
 
   return (
-    <section className="next-task-page">
+    <section className="next-task-page task-management-page">
+      <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some Task Management resources loaded through fallback.</strong><span>The page remains usable while those resources recover.</span><a href={classicHref}>Open classic page</a></div> : null}
       <div className="next-task-viewbar">
@@ -982,12 +984,12 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
         <article><span>Due in 7 days</span><strong>{summary.dueSoon}</strong><small>Needs attention</small></article>
         <article><span>Completed</span><strong>{summary.completed}</strong><small>Delivered projects</small></article>
       </div>
-      <div className="next-task-layout">
+      <div className="next-task-layout tm-agenda-layout">
         <CalendarAgenda tickets={agendaTickets} selectedDate={selectedDate} onSelectDate={setSelectedDate} month={month} onMonthChange={setMonth} onOpenTicket={setSelectedTicket} />
-        <div className="next-task-main-list">
-          <div className="next-task-toolbar">
-            <div className="next-task-status-tabs">
-              {STATUS_OPTIONS.map(([value, label]) => <button type="button" className={status === value ? "active" : ""} onClick={() => setStatus(value)} key={value}><span>{label}</span><b>{counts[value] || 0}</b></button>)}
+        <div className="next-task-main-list tm-tasks-column">
+          <div className="next-task-toolbar tm-toolbar tm-orders-toolbar">
+            <div className="next-task-status-tabs tm-tabs tm-tabs--orders">
+              {STATUS_OPTIONS.map(([value, label]) => <button type="button" className={`tm-tab ${status === value ? "active is-active" : ""}`} onClick={() => setStatus(value)} key={value}><span>{label}</span><b>{counts[value] || 0}</b></button>)}
             </div>
             <div className="next-task-filters">
               <label><span>Search</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Project, department, creator…" /></label>
@@ -997,7 +999,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
             </div>
           </div>
           <div className="next-task-results-head"><span>{activeTickets.length} project{activeTickets.length === 1 ? "" : "s"}</span><small>{status === "archived" ? "Personal archive for this page" : "Live Supabase workflow data"}</small></div>
-          <div className="next-task-grid">
+          <div className="next-task-grid tm-ticket-grid">
             {activeTickets.length ? activeTickets.map((ticket) => <ProjectCard ticket={ticket} view={view} onOpen={setSelectedTicket} key={ticket.id} />) : <div className="next-task-empty"><span>⌁</span><h3>{copy.empty}</h3><p>Adjust the filters or open the classic page if you need the previous workflow builder.</p>{canCreate ? <button type="button" onClick={() => setEditor(editorFromTicket())}>Create Project</button> : <a href={classicHref}>Open classic page</a>}</div>}
           </div>
         </div>
