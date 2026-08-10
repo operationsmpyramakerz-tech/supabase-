@@ -43,6 +43,117 @@ body.next-classic-shell-active .classic-app-shell .notif-center-footer a {
   cursor: pointer;
 }
 
+
+
+/* -------------------------------------------------------------------------
+ * Global Classic shell stabilization (Stage 2 shell hotfix)
+ *
+ * The legacy ui-redesign.css positions the sidebar against the browser
+ * viewport.  Inside the Next pilot the black dashboard frame is a bounded
+ * app-container, so anchoring the rail to the viewport can make it drift
+ * outside that frame at tablet widths / browser zoom levels.  Keep the same
+ * Classic geometry, but anchor it to the shell itself.  The page canvas stays
+ * independently scrollable while the sidebar nav owns its own vertical scroll.
+ * ---------------------------------------------------------------------- */
+body.next-classic-shell-active .classic-app-shell {
+  position: relative !important;
+}
+
+@media (min-width: 769px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar,
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar {
+    position: absolute !important;
+    top: 18px !important;
+    bottom: 18px !important;
+    left: 18px !important;
+    height: auto !important;
+    max-height: none !important;
+    z-index: 70 !important;
+  }
+
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar {
+    transform: translateX(calc(-100% - 24px)) !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 900px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar,
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar {
+    top: 14px !important;
+    bottom: 14px !important;
+    left: 14px !important;
+  }
+}
+
+body.next-classic-shell-active .classic-app-shell .sidebar-nav {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+  scroll-padding-block: 12px 24px;
+}
+
+body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-list {
+  flex: 0 0 auto !important;
+  min-height: max-content;
+  padding-bottom: 14px !important;
+}
+
+body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-list > li {
+  flex: 0 0 auto !important;
+}
+
+/* Keep the route-loading shell geometrically identical to the loaded shell.
+   The old CSS sizes #menu-toggle .menu-toggle-logo, while loading placeholders
+   deliberately use a div (no id). Without these rules the raw logo expands to
+   its intrinsic image size during navigation. */
+.next-classic-loading-menu {
+  flex: 0 0 auto;
+}
+
+.next-classic-loading-menu .menu-toggle-logo {
+  display: block !important;
+  width: 22px !important;
+  height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  object-fit: contain !important;
+}
+
+.next-classic-loading-brand .brand-logo-icon {
+  width: 34px !important;
+  height: 34px !important;
+  max-width: 34px !important;
+  max-height: 34px !important;
+  object-fit: contain !important;
+}
+
+@media (min-width: 769px) {
+  .next-classic-loading-menu {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .next-classic-loading-menu {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    min-height: 42px !important;
+    padding: 0 !important;
+    border-radius: 14px !important;
+    background: #fff !important;
+    border: 1px solid #E9EDF3 !important;
+    box-shadow: 0 10px 24px rgba(0,0,0,.06) !important;
+  }
+}
+
 /* Login declarations copied from the inline Classic login page. */
 body.next-classic-login-active .login-card {
   animation: classicLoginCardSlideUp .8s ease-out forwards;

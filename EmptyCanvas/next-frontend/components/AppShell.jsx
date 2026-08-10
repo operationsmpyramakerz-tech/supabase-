@@ -2,6 +2,7 @@ import NotificationsBell from "./notifications/NotificationsBell";
 import {
   BodyClassSync,
   ClassicSidebarBootstrap,
+  ClassicSidebarViewportKeeper,
   HeaderMenuToggle,
   SidebarBrandToggle,
 } from "./ClassicShellControls";
@@ -230,6 +231,7 @@ export default function AppShell({
       {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
       <BodyClassSync className={combinedBodyClass} />
       <ClassicSidebarBootstrap />
+      <ClassicSidebarViewportKeeper />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar">

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 const COLLAPSED_KEY = "ui.sidebarCollapsed";
+const SIDEBAR_SCROLL_KEY = "ui.sidebarScrollTop";
 
 function setCollapsed(collapsed) {
   if (typeof document === "undefined") return;
@@ -32,7 +33,46 @@ export function ClassicSidebarBootstrap() {
       collapsed = saved === "1";
     } catch {}
     setCollapsed(collapsed);
-    return () => document.body.classList.remove("sidebar-collapsed");
+    // Keep the persisted class during route transitions so the loading shell
+    // does not briefly jump to the expanded state before the next page mounts.
+    return undefined;
+  }, []);
+  return null;
+}
+
+export function ClassicSidebarViewportKeeper() {
+  useEffect(() => {
+    const nav = document.querySelector(".classic-app-shell .sidebar-nav");
+    if (!(nav instanceof HTMLElement)) return undefined;
+
+    try {
+      const saved = Number(sessionStorage.getItem(SIDEBAR_SCROLL_KEY));
+      if (Number.isFinite(saved) && saved > 0) nav.scrollTop = saved;
+    } catch {}
+
+    const keepActiveVisible = () => {
+      const active = nav.querySelector(".nav-link.active");
+      if (!(active instanceof HTMLElement)) return;
+      const navRect = nav.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      if (activeRect.top < navRect.top + 8) {
+        nav.scrollTop -= (navRect.top + 8) - activeRect.top;
+      } else if (activeRect.bottom > navRect.bottom - 8) {
+        nav.scrollTop += activeRect.bottom - (navRect.bottom - 8);
+      }
+    };
+
+    const frame = window.requestAnimationFrame(keepActiveVisible);
+    const remember = () => {
+      try { sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(nav.scrollTop)); } catch {}
+    };
+    nav.addEventListener("scroll", remember, { passive: true });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      remember();
+      nav.removeEventListener("scroll", remember);
+    };
   }, []);
   return null;
 }
