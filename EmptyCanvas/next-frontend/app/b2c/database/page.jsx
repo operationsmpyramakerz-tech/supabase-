@@ -62,10 +62,12 @@ export default async function B2cDatabasePage() {
   return (
     <AppShell
       account={account}
-      title="B2C Database"
-      eyebrow="Customer data workspaces"
+      title="Database"
+      eyebrow="B2C customer data"
       activePath="/next/b2c/database"
       classicHrefOverride="/b2c/database"
+      bodyClass="b2c-page b2c-database-page b2c-library-page"
+      classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
     >
       <B2cDatabaseClient
         account={account}

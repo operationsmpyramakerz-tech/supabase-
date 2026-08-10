@@ -75,6 +75,8 @@ export default async function B2cTableWorkspacePage({ params }) {
         eyebrow="Customer data workspace"
         activePath={`/next/b2c/database/${databaseId}`}
         classicHrefOverride={`/b2c/database/${encodedId}`}
+        bodyClass="b2c-page b2c-table-view-page"
+        classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
       >
         <main className="standalone-state">
           <section className="state-card">
@@ -91,10 +93,12 @@ export default async function B2cTableWorkspacePage({ params }) {
   return (
     <AppShell
       account={account}
-      title={tablePayload.database?.name || "B2C Table"}
-      eyebrow="Customer records and schema"
+      title="Database"
+      eyebrow="B2C customer data"
       activePath={`/next/b2c/database/${databaseId}`}
       classicHrefOverride={`/b2c/database/${encodedId}`}
+      bodyClass="b2c-page b2c-table-view-page"
+      classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
     >
       <B2cTableWorkspaceClient
         databaseId={databaseId}

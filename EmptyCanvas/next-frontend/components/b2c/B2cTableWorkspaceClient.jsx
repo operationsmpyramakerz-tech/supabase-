@@ -108,22 +108,24 @@ function Toast({ toast, onClose }) {
 }
 function Modal({ title, subtitle, badge = "DB", wide = false, danger = false, onClose, children }) {
   return (
-    <div className="next-b2c-table-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`next-b2c-table-modal__card ${wide ? "is-wide" : ""} ${danger ? "is-danger" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <span>{badge}</span>
-          <div><h3>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
+    <div className="b2c-overlay next-b2c-classic-overlay" role="presentation" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget || event.target.classList.contains("b2c-overlay__backdrop")) onClose(); }}>
+      <div className="b2c-overlay__backdrop" />
+      <section className={`b2c-dialog ${wide ? "next-b2c-classic-dialog-wide" : "b2c-dialog--customer"} ${danger ? "next-b2c-classic-dialog-danger" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <button className="b2c-dialog__close" type="button" onClick={onClose} aria-label="Close">×</button>
+        <div className="b2c-dialog__header">
+          <span className="b2c-eyebrow">{badge}</span>
+          <h2>{title}</h2>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
         <div className="next-b2c-table-modal__body">{children}</div>
       </section>
     </div>
   );
 }
-function EmptyValue() { return <span className="next-b2c-table-muted">—</span>; }
+function EmptyValue() { return <span className="b2c-cell-muted">—</span>; }
 function FormulaValue({ record, field, engine }) {
   const expression = text(fieldOptions(field).formula);
-  if (!expression) return <span className="next-b2c-table-muted">No formula</span>;
+  if (!expression) return <span className="b2c-cell-muted">No formula</span>;
   let value = record.formulaValues?.[field.key];
   let error = text(record.formulaErrors?.[field.key]);
   if (!Object.prototype.hasOwnProperty.call(record.formulaValues || {}, field.key) && engine?.calculateFormulaValues) {
@@ -139,12 +141,12 @@ function CellValue({ value, field, record, engine }) {
   if (field.type === "files") {
     const files = Array.isArray(value) ? value : [];
     if (!files.length) return <EmptyValue />;
-    return <div className="next-b2c-table-files">{files.slice(0, 4).map((file, index) => <a key={`${file?.url}-${index}`} href={file?.url || "#"} target="_blank" rel="noreferrer"><span>{isImage(file) ? "IMG" : "FILE"}</span>{text(file?.name) || "Attachment"}</a>)}{files.length > 4 ? <em>+{files.length - 4}</em> : null}</div>;
+    return <div className="b2c-file-pills next-b2c-table-files">{files.slice(0, 4).map((file, index) => <a key={`${file?.url}-${index}`} href={file?.url || "#"} target="_blank" rel="noreferrer"><span>{isImage(file) ? "IMG" : "FILE"}</span>{text(file?.name) || "Attachment"}</a>)}{files.length > 4 ? <em>+{files.length - 4}</em> : null}</div>;
   }
-  if (field.type === "checkbox") return value ? <span className="next-b2c-table-yes">✓ Yes</span> : <EmptyValue />;
+  if (field.type === "checkbox") return value ? <span className="b2c-check-yes">✓ Yes</span> : <EmptyValue />;
   if (field.type === "multi_select") {
     const list = Array.isArray(value) ? value : [];
-    return list.length ? <div className="next-b2c-table-tags">{list.map((item) => <span key={item}>{item}</span>)}</div> : <EmptyValue />;
+    return list.length ? <div className="b2c-tag-list next-b2c-table-tags">{list.map((item) => <span className="b2c-tag" key={item}>{item}</span>)}</div> : <EmptyValue />;
   }
   if (value == null || value === "") return <EmptyValue />;
   if (field.type === "number") return <span>{formatNumber(value)}</span>;
@@ -378,6 +380,15 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
 
   useEffect(() => { loadFormulaEngine().then(setFormulaEngine).catch(() => {}); }, []);
   useEffect(() => { setPage(1); }, [query, sort, pageSize]);
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search B2C records...";
+    const handle = (event) => setQuery(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => { input.removeEventListener("input", handle); input.value = ""; input.placeholder = "Search"; };
+  }, []);
 
   const stats = useMemo(() => ({
     fields: fields.length,
@@ -460,63 +471,55 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   const exportHref = `/api/b2c/databases/${encodeURIComponent(databaseId)}/export.xlsx`;
 
   return (
-    <section className="next-b2c-table-page">
+    <main className="b2c-shell next-b2c-table-classic-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="next-b2c-table-warning"><strong>Some workspace resources were delayed.</strong><span>Refresh the table or use the classic workspace while the service recovers.</span><a href={`/b2c/database/${encodeURIComponent(databaseId)}?classic=1`}>Classic workspace</a></div> : null}
+      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some workspace resources were delayed.</strong><span>Refresh the table or use the Classic workspace while the service recovers.</span><a href={`/b2c/database/${encodeURIComponent(databaseId)}?classic=1`}>Classic workspace</a></div> : null}
 
-      <section className="next-b2c-table-hero">
-        <div>
-          <a href="/next/b2c/database" className="next-b2c-table-back">← All Databases</a>
-          <span className="next-b2c-table-eyebrow">B2C table workspace</span>
-          <h2>{database?.name || "B2C Table"}</h2>
-          <p>{database?.description || "Manage this table’s properties, customer records, linked form, formulas, and Excel export."}</p>
-          <div className="next-b2c-table-meta"><span>{database?.key || "Independent table"}</span><span>Updated {formatDate(database?.updatedAt || database?.createdAt, true)}</span></div>
+      <section className="b2c-table-workspace" aria-label={database?.name || "B2C Table"}>
+        <div className="b2c-table-view-head b2c-table-view-head--compact">
+          <a className="b2c-back-to-library" href="/next/b2c/database"><span aria-hidden="true">←</span><span>All Databases</span></a>
+          <div className="b2c-top-actions">
+            <a className="b2c-secondary-btn" href={formHref}>Open Linked Form</a>
+            <button type="button" className="b2c-secondary-btn" onClick={() => refresh()} disabled={busy === "refresh"}>{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
+            <a className="b2c-secondary-btn" href={exportHref}>Download Excel</a>
+            <button type="button" className="b2c-primary-btn" onClick={() => setSchemaOpen(true)}>Configure Table</button>
+          </div>
         </div>
-        <div className="next-b2c-table-hero__actions">
-          <a className="next-b2c-table-btn secondary" href={formHref}>Open Linked Form</a>
-          <a className="next-b2c-table-btn secondary" href={exportHref}>Download Excel</a>
-          <button type="button" className="next-b2c-table-btn secondary" onClick={() => refresh()} disabled={busy === "refresh"}>{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
-          <button type="button" className="next-b2c-table-btn primary" onClick={() => setSchemaOpen(true)}>Configure Table</button>
+
+        <div className="next-b2c-table-classic-title">
+          <div><span className="b2c-eyebrow">B2C data table</span><h2>{database?.name || "B2C Table"}</h2><p>{database?.description || "Manage this table’s properties, customer records, linked form, formulas, and Excel export."}</p></div>
+          <span className="next-b2c-table-classic-key">{database?.key || "Independent table"}</span>
         </div>
+
+        <div className="b2c-table-insights">
+          <article><span className="next-b2c-insight-icon">P</span><div><small>Properties</small><strong>{stats.fields}</strong></div></article>
+          <article><span className="is-green next-b2c-insight-icon">R</span><div><small>Records</small><strong>{stats.records}</strong></div></article>
+          <article><span className="is-orange next-b2c-insight-icon">F</span><div><small>Linked form</small><strong>{stats.forms ? "Available" : "—"}</strong></div></article>
+        </div>
+
+        <section className="b2c-detail-table-panel">
+          <div className="next-b2c-table-classic-controls">
+            <div><span>{filteredRecords.length} of {records.length} records</span>{query ? <button type="button" onClick={() => { setQuery(""); const input = document.querySelector(".classic-app-shell .main-header .searchbar input"); if (input) input.value = ""; }}>Clear search</button> : null}</div>
+            <label><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest created</option><option value="oldest">Oldest created</option><option value="updated">Recently updated</option><option value="id-asc">Record ID A–Z</option><option value="id-desc">Record ID Z–A</option></select></label>
+            <label><span>Rows</span><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
+          </div>
+          <div className="b2c-table-scroll b2c-table-scroll--wide">
+            <table className="b2c-customer-table b2c-customer-table--wide">
+              <thead><tr><th>Record ID</th>{fields.map((field) => <th key={field.id || field.key}>{field.label}</th>)}<th>Submitted by</th><th>Created</th><th aria-label="Actions" /></tr></thead>
+              <tbody>
+                {!fields.length ? <tr><td colSpan={5} className="b2c-table-empty">This table has no properties yet. Select <strong>Configure Table</strong> to build its schema.</td></tr> : null}
+                {fields.length && !visibleRecords.length ? <tr><td colSpan={fields.length + 4} className="b2c-table-empty">{query ? "No records match this search." : "No records yet. Open the linked form to create the first record."}</td></tr> : null}
+                {visibleRecords.map((record) => <tr key={record.id}><td><span className="b2c-customer-code">{record.customerCode}</span></td>{fields.map((field) => <td key={`${record.id}-${field.id || field.key}`}><CellValue value={record.values?.[field.key]} field={field} record={record} engine={formulaEngine} /></td>)}<td>{record.createdByName}</td><td className="b2c-cell-muted">{formatDate(record.createdAt, true)}</td><td><div className="b2c-table-actions"><button type="button" className="b2c-icon-btn" title="Edit record" onClick={() => setEditor(record)}>Edit</button><button type="button" className="b2c-icon-btn b2c-icon-btn--danger" title="Delete record" onClick={() => setDeleteTarget(record)}>Delete</button></div></td></tr>)}
+              </tbody>
+            </table>
+          </div>
+          {pageCount > 1 ? <footer className="next-b2c-table-pagination next-b2c-classic-pagination"><span>Page {safePage} of {pageCount}</span><div><button type="button" onClick={() => setPage(1)} disabled={safePage === 1}>First</button><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1}>Previous</button><button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={safePage === pageCount}>Next</button><button type="button" onClick={() => setPage(pageCount)} disabled={safePage === pageCount}>Last</button></div></footer> : null}
+        </section>
       </section>
-
-      <section className="next-b2c-table-stats">
-        <article><span>Properties</span><strong>{stats.fields}</strong><small>{stats.required} required</small></article>
-        <article><span>Customer Records</span><strong>{stats.records}</strong><small>{filteredRecords.length} visible</small></article>
-        <article><span>Linked Form</span><strong>{stats.forms ? "Ready" : "—"}</strong><small>{database?.defaultFormId ? "Default form connected" : "No form available"}</small></article>
-        <article><span>Formula Fields</span><strong>{stats.formulas}</strong><small>Calculated automatically</small></article>
-      </section>
-
-      <section className="next-b2c-table-workspace">
-        <header>
-          <div><span>Customer data</span><h3>Records</h3><p>Edit saved records, inspect attachments, and manage the dynamic table schema.</p></div>
-          <em>{filteredRecords.length} of {records.length} records</em>
-        </header>
-        <div className="next-b2c-table-toolbar">
-          <label className="next-b2c-table-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search record IDs, people, property values, or formulas…" />{query ? <button type="button" onClick={() => setQuery("")}>×</button> : null}</label>
-          <label><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest created</option><option value="oldest">Oldest created</option><option value="updated">Recently updated</option><option value="id-asc">Record ID A–Z</option><option value="id-desc">Record ID Z–A</option></select></label>
-          <label><span>Rows</span><select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
-        </div>
-
-        <div className="next-b2c-table-scroll">
-          <table>
-            <thead><tr><th>Record ID</th>{fields.map((field) => <th key={field.id || field.key}><span>{field.label}</span><small>{TYPE_LABELS[field.type] || field.type}</small></th>)}<th>Submitted by</th><th>Created</th><th>Actions</th></tr></thead>
-            <tbody>
-              {!fields.length ? <tr><td colSpan={5} className="next-b2c-table-empty-cell">This table has no properties yet. Select <strong>Configure Table</strong> to build its schema.</td></tr> : null}
-              {fields.length && !visibleRecords.length ? <tr><td colSpan={fields.length + 4} className="next-b2c-table-empty-cell">{query ? "No records match this search." : "No records yet. Open the linked form to create the first record."}</td></tr> : null}
-              {visibleRecords.map((record) => <tr key={record.id}><td><span className="next-b2c-table-code">{record.customerCode}</span></td>{fields.map((field) => <td key={`${record.id}-${field.id || field.key}`}><CellValue value={record.values?.[field.key]} field={field} record={record} engine={formulaEngine} /></td>)}<td>{record.createdByName}</td><td><span className="next-b2c-table-muted">{formatDate(record.createdAt, true)}</span></td><td><div className="next-b2c-table-actions"><button type="button" onClick={() => setEditor(record)}>Edit</button><button type="button" className="danger" onClick={() => setDeleteTarget(record)}>Delete</button></div></td></tr>)}
-            </tbody>
-          </table>
-        </div>
-
-        {pageCount > 1 ? <footer className="next-b2c-table-pagination"><span>Page {safePage} of {pageCount}</span><div><button type="button" onClick={() => setPage(1)} disabled={safePage === 1}>First</button><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1}>Previous</button><button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={safePage === pageCount}>Next</button><button type="button" onClick={() => setPage(pageCount)} disabled={safePage === pageCount}>Last</button></div></footer> : null}
-      </section>
-
-      <section className="next-b2c-table-rollout"><div><strong>Workspace migrated</strong><span>Records, property configuration, formulas, file editing, search, pagination, and Excel exports now run in Next.js. The customer Form Builder remains on the classic interface for the next migration stage.</span></div><a href={`/b2c/database/${encodeURIComponent(databaseId)}?classic=1`}>Classic workspace</a></section>
 
       {editor ? <RecordEditor record={editor} fields={fields} busy={busy === "record"} onClose={() => setEditor(null)} onSave={saveRecord} /> : null}
       {deleteTarget ? <DeleteRecordModal record={deleteTarget} busy={busy === "delete-record"} onClose={() => setDeleteTarget(null)} onConfirm={deleteRecord} /> : null}
       {schemaOpen ? <SchemaBuilder fields={fields} records={records} engine={formulaEngine} busy={busy === "schema"} onClose={() => setSchemaOpen(false)} onSave={saveSchema} /> : null}
-    </section>
+    </main>
   );
 }

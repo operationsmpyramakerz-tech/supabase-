@@ -2015,3 +2015,189 @@ body.expenses-users-page .next-expense-users-pdf {
     width:100%;
   }
 }
+
+/* ========================================================================== 
+   Stage 2H — B2C Database + Table Workspace Classic parity
+   ========================================================================== */
+body.b2c-page .next-b2c-classic-warning{
+  display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:11px 13px;
+  border:1px solid #f0d9a5;border-radius:13px;background:#fffaf0;color:#72591d;
+  font-size:11px;line-height:1.45;
+}
+body.b2c-page .next-b2c-classic-warning strong{font-weight:900}
+body.b2c-page .next-b2c-classic-warning span{flex:1;color:#856b2d}
+body.b2c-page .next-b2c-classic-warning a{color:#5b4311;font-weight:900;text-decoration:none}
+body.b2c-library-page .b2c-library-sort{
+  min-height:42px;display:flex;align-items:center;gap:8px;padding:0 10px;
+  border:1px solid #e5e7ef;border-radius:12px;background:#fff;color:#6d7480;
+}
+body.b2c-library-page .b2c-library-sort>span{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
+body.b2c-library-page .b2c-library-sort select{min-width:126px;border:0;outline:0;background:transparent;color:#303745;font:800 11px/1 inherit}
+body.b2c-library-page .b2c-folder__actions-menu a{
+  width:100%;border:0;border-radius:12px;display:flex;align-items:center;gap:8px;
+  padding:10px 11px;background:transparent;color:#0f172a;font-weight:900;font-size:.78rem;
+  cursor:pointer;text-align:left;text-decoration:none;box-sizing:border-box;
+}
+body.b2c-library-page .b2c-folder__actions-menu a:hover{background:#f8fafc}
+body.b2c-page .next-b2c-classic-delete-summary{
+  display:grid;gap:3px;margin:0 0 14px;padding:12px 13px;border:1px solid #f0d8dc;
+  border-radius:13px;background:#fff8f9;
+}
+body.b2c-page .next-b2c-classic-delete-summary strong{color:#9b3343;font-size:12px}
+body.b2c-page .next-b2c-classic-delete-summary span{color:#8b6870;font-size:10px}
+body.b2c-page .next-b2c-danger-btn{background:#b93449!important;border-color:#b93449!important;box-shadow:none!important}
+
+/* Dedicated table page: keep the Classic canvas and data-first structure. */
+body.b2c-table-view-page .next-b2c-table-classic-page{padding:0 20px 28px}
+body.b2c-table-view-page .next-b2c-table-classic-title{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin:0 0 16px;
+  padding:0 2px 2px;
+}
+body.b2c-table-view-page .next-b2c-table-classic-title h2{margin:5px 0 5px;color:#171b2b;font-size:22px;line-height:1.18}
+body.b2c-table-view-page .next-b2c-table-classic-title p{margin:0;max-width:760px;color:#707887;font-size:11px;line-height:1.5}
+body.b2c-table-view-page .next-b2c-table-classic-key{
+  flex:none;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:7px 10px;border-radius:999px;background:#f5f5f8;color:#747b89;font-size:9px;font-weight:850;
+}
+body.b2c-table-view-page .next-b2c-insight-icon{font-size:10px!important;font-weight:950!important}
+body.b2c-table-view-page .next-b2c-table-classic-controls{
+  min-height:54px;padding:9px 12px;display:flex;align-items:center;justify-content:flex-end;gap:9px;
+  border-bottom:1px solid #eceef3;background:#fbfbfd;
+}
+body.b2c-table-view-page .next-b2c-table-classic-controls>div{margin-right:auto;display:flex;align-items:center;gap:8px;color:#7b8290;font-size:10px;font-weight:800}
+body.b2c-table-view-page .next-b2c-table-classic-controls>div button{border:0;background:transparent;color:#5d46c4;font:900 10px/1 inherit;cursor:pointer}
+body.b2c-table-view-page .next-b2c-table-classic-controls label{
+  min-height:34px;display:flex;align-items:center;gap:6px;padding:0 9px;border:1px solid #e3e5eb;border-radius:10px;background:#fff;
+}
+body.b2c-table-view-page .next-b2c-table-classic-controls label>span{color:#9197a2;font-size:8px;font-weight:900;text-transform:uppercase}
+body.b2c-table-view-page .next-b2c-table-classic-controls select{border:0;outline:0;background:transparent;color:#3e4552;font:800 10px/1 inherit}
+body.b2c-table-view-page .next-b2c-classic-pagination{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-top:1px solid #eceef3;background:#fbfbfd;color:#777f8e;font-size:10px;
+}
+body.b2c-table-view-page .next-b2c-classic-pagination>div{display:flex;gap:5px}
+body.b2c-table-view-page .next-b2c-classic-pagination button{
+  min-height:30px;padding:0 9px;border:1px solid #e1e4ea;border-radius:9px;background:#fff;color:#4f5663;font:800 9px/1 inherit;cursor:pointer;
+}
+body.b2c-table-view-page .next-b2c-classic-pagination button:disabled{opacity:.4;cursor:not-allowed}
+body.b2c-table-view-page .b2c-file-pills.next-b2c-table-files>a{
+  display:inline-flex;align-items:center;gap:4px;max-width:145px;padding:5px 7px;border-radius:8px;background:#f4f2ff;color:#5945c5;text-decoration:none;font-size:11px;font-weight:800;overflow:hidden;
+}
+body.b2c-table-view-page .b2c-file-pills.next-b2c-table-files>a>span:first-child{font-size:8px;opacity:.72}
+body.b2c-table-view-page .next-b2c-table-formula{display:inline-flex;max-width:220px;padding:5px 7px;border-radius:8px;background:#f1effd;color:#6047c8;font-size:10px;font-weight:850}
+body.b2c-table-view-page .next-b2c-table-formula-error{display:inline-flex;padding:5px 7px;border-radius:8px;background:#fff0f2;color:#b43d4f;font-size:10px;font-weight:850}
+
+/* Re-skin the migrated React editors with the same Classic B2C dialog language. */
+body.b2c-page .next-b2c-table-modal__body{padding:0}
+body.b2c-page .next-b2c-classic-dialog-wide{width:min(1180px,100%)}
+body.b2c-page .next-b2c-classic-dialog-danger{border:1px solid #f0d7dc}
+body.b2c-page :is(.next-b2c-record-form,.next-b2c-schema-builder,.next-b2c-formula-builder,.next-b2c-delete-record){display:grid;gap:13px}
+body.b2c-page :is(.next-b2c-record-form__grid,.next-b2c-schema-list){display:grid;gap:10px}
+body.b2c-page .next-b2c-record-form__grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.b2c-page .next-b2c-record-control{display:grid;gap:6px;min-width:0}
+body.b2c-page .next-b2c-record-control.is-wide{grid-column:1/-1}
+body.b2c-page .next-b2c-record-control>span,
+body.b2c-page .next-b2c-schema-card label>span,
+body.b2c-page .next-b2c-formula-test>span{color:#8a91a0;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.045em}
+body.b2c-page .next-b2c-record-control :is(input,textarea,select),
+body.b2c-page .next-b2c-schema-card :is(input,textarea,select),
+body.b2c-page .next-b2c-delete-record input,
+body.b2c-page .next-b2c-formula-test select{
+  width:100%;min-height:40px;border:1px solid #dedfed;border-radius:11px;background:#fff;color:#282d3a;font:750 12px/1.25 inherit;padding:9px 10px;outline:0;box-sizing:border-box;
+}
+body.b2c-page .next-b2c-record-control textarea,body.b2c-page .next-b2c-schema-card textarea{min-height:86px;resize:vertical}
+body.b2c-page .next-b2c-record-control :is(input,textarea,select):focus,
+body.b2c-page .next-b2c-schema-card :is(input,textarea,select):focus,
+body.b2c-page .next-b2c-delete-record input:focus{border-color:#a99af2;box-shadow:0 0 0 3px rgba(90,61,231,.1)}
+body.b2c-page .next-b2c-record-checkbox{grid-template-columns:1fr auto;align-items:center}
+body.b2c-page .next-b2c-record-checkbox input{width:18px;min-height:18px}
+body.b2c-page .next-b2c-record-readonly{padding:11px;border:1px dashed #dadce4;border-radius:10px;background:#fafafd;color:#858c99;font-size:10px}
+body.b2c-page :is(.next-b2c-record-file-list,.next-b2c-schema-options){grid-column:1/-1}
+body.b2c-page .next-b2c-record-file-list{display:grid;gap:6px}
+body.b2c-page .next-b2c-record-file-list>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px;border:1px solid #e5e7ed;border-radius:9px;background:#fff}
+body.b2c-page :is(.next-b2c-record-form,.next-b2c-schema-builder,.next-b2c-formula-builder,.next-b2c-delete-record)>footer{display:flex;justify-content:flex-end;gap:8px}
+body.b2c-page .next-b2c-table-btn{min-height:40px;padding:0 14px;border:1px solid transparent;border-radius:12px;font:850 12px/1 inherit;cursor:pointer}
+body.b2c-page .next-b2c-table-btn.primary{background:linear-gradient(135deg,#5c40dc,#7e57ed);color:#fff}
+body.b2c-page .next-b2c-table-btn.secondary{border-color:#e5e7ef;background:#fff;color:#303745}
+body.b2c-page .next-b2c-table-btn.danger{background:#b93449;color:#fff}
+body.b2c-page .next-b2c-table-error{padding:10px 12px;border:1px solid #efc8ce;border-radius:10px;background:#fff5f6;color:#a43a4b;font-size:10px;font-weight:800}
+body.b2c-page .next-b2c-schema-card{
+  display:grid;grid-template-columns:76px minmax(0,1.1fr) minmax(170px,.7fr) auto auto;gap:10px;align-items:end;padding:13px;border:1px solid #e8eaf1;border-radius:16px;background:#fff;
+}
+body.b2c-page .next-b2c-schema-order{display:flex;align-items:center;gap:4px}
+body.b2c-page .next-b2c-schema-order span{display:grid;place-items:center;width:32px;height:38px;border-radius:10px;background:#f2efff;color:#6547e8;font-size:11px;font-weight:900}
+body.b2c-page .next-b2c-schema-order button,
+body.b2c-page .next-b2c-schema-delete,
+body.b2c-page .next-b2c-schema-formula button{min-height:32px;border:1px solid #e4e6ec;border-radius:9px;background:#fff;color:#666e7b;font:800 9px/1 inherit;cursor:pointer}
+body.b2c-page .next-b2c-schema-delete{color:#a54857;padding:0 9px}
+body.b2c-page .next-b2c-schema-required{display:flex!important;align-items:center;gap:7px!important;color:#58606e;font-size:10px;font-weight:850}
+body.b2c-page .next-b2c-schema-required input{width:18px!important;min-height:18px!important;padding:0!important}
+body.b2c-page .next-b2c-schema-options{display:grid;gap:6px}
+body.b2c-page .next-b2c-schema-formula{grid-column:2/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px solid #e7e4f8;border-radius:11px;background:#faf9ff}
+body.b2c-page .next-b2c-schema-formula>div{display:grid;gap:2px;min-width:0}
+body.b2c-page .next-b2c-schema-formula strong{color:#5640bd;font-size:10px}
+body.b2c-page .next-b2c-schema-formula span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#858b98;font-size:9px}
+body.b2c-page .next-b2c-schema-add{min-height:42px;border:1px dashed #cfc9ee;border-radius:12px;background:#faf9ff;color:#5f47ca;font:900 11px/1 inherit;cursor:pointer}
+body.b2c-page .next-b2c-formula-recipes{padding:12px;border:1px solid #ebe7fb;border-radius:14px;background:linear-gradient(120deg,#fbfaff,#f7fbff)}
+body.b2c-page .next-b2c-formula-recipes header{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+body.b2c-page .next-b2c-formula-recipes header strong{color:#4937a8;font-size:11px}
+body.b2c-page .next-b2c-formula-recipes header span{color:#8b92a0;font-size:10px}
+body.b2c-page .next-b2c-formula-recipes>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+body.b2c-page .next-b2c-formula-recipes button,
+body.b2c-page .next-b2c-formula-palette button{display:grid;gap:2px;padding:9px 10px;border:1px solid #e4e5ec;border-radius:10px;background:#fff;color:#404757;font:inherit;text-align:left;cursor:pointer}
+body.b2c-page .next-b2c-formula-recipes button b,body.b2c-page .next-b2c-formula-palette button b{font-size:10px}
+body.b2c-page .next-b2c-formula-recipes button small,body.b2c-page .next-b2c-formula-palette button small{color:#8a92a0;font-size:9px}
+body.b2c-page .next-b2c-formula-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(270px,.7fr);gap:14px}
+body.b2c-page .next-b2c-formula-editor,
+body.b2c-page .next-b2c-formula-palette{padding:13px;border:1px solid #e6e7ed;border-radius:13px;background:#fff}
+body.b2c-page .next-b2c-formula-toolbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+body.b2c-page .next-b2c-formula-toolbar button{min-width:31px;height:29px;border:1px solid #dfe2eb;border-radius:8px;background:#fff;color:#596170;font:800 11px/1 inherit;cursor:pointer}
+body.b2c-page .next-b2c-formula-editor textarea{width:100%;min-height:130px;padding:10px;border:1px solid #dfe2eb;border-radius:10px;font:750 11px/1.45 monospace;box-sizing:border-box}
+body.b2c-page .next-b2c-formula-result{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin-top:9px;padding:10px 11px;border:1px solid #dce9df;border-radius:10px;background:#fbfefa}
+body.b2c-page .next-b2c-formula-result span{color:#718177;font-size:9px;font-weight:900;text-transform:uppercase}
+body.b2c-page .next-b2c-formula-result strong{color:#257445;font-size:14px}
+body.b2c-page .next-b2c-formula-result small{grid-column:1/-1;color:#77827a;font-size:9px}
+body.b2c-page .next-b2c-formula-palette{display:grid;gap:12px;max-height:540px;overflow:auto}
+body.b2c-page .next-b2c-formula-palette section{display:grid;gap:7px}
+body.b2c-page .next-b2c-formula-palette section+section{padding-top:10px;border-top:1px solid #eceef3}
+body.b2c-page .next-b2c-formula-palette header{display:flex;align-items:center;justify-content:space-between;gap:7px}
+body.b2c-page .next-b2c-formula-palette header nav{display:flex;flex-wrap:wrap;gap:4px}
+body.b2c-page .next-b2c-formula-palette header nav button{display:inline-flex;padding:5px 7px;border-radius:999px;font-size:8px}
+body.b2c-page .next-b2c-formula-palette header nav button.active{border-color:#cfc2f7;background:#f3f0ff;color:#5b42c5}
+body.b2c-page .next-b2c-delete-record p{margin:0;color:#6c7380;font-size:11px}
+
+/* Loading shell for Stage 2H */
+body.b2c-page .next-classic-b2c-loading .b2c-shell{padding-top:0}
+body.b2c-page .next-b2c-loading-button{display:inline-block;width:120px;height:42px;border-radius:12px;background:#edf0f4;animation:nextB2cClassicPulse 1.05s ease-in-out infinite alternate}
+body.b2c-page .next-b2c-loading-button-primary{background:#d8dce4}
+body.b2c-page .next-b2c-loading-folder{pointer-events:none;opacity:.72}
+body.b2c-page .next-b2c-loading-table-classic .b2c-table-view-head{min-height:52px}
+body.b2c-page .next-b2c-loading-line-wide{display:block;width:120px;height:16px;border-radius:999px;background:#e7e9ee;animation:nextB2cClassicPulse 1.05s ease-in-out infinite alternate}
+body.b2c-page .next-b2c-loading-table-classic .b2c-table-insights article{min-height:82px;background:#fff}
+body.b2c-page .next-b2c-loading-table-head{height:42px;border-bottom:1px solid #eceef3;background:#f7f8fa}
+body.b2c-page .next-b2c-loading-table-row{height:49px;border-bottom:1px solid #eff0f4;background:linear-gradient(90deg,#fff,#fafbfc,#fff);background-size:200% 100%;animation:nextB2cClassicShimmer 1.2s linear infinite}
+@keyframes nextB2cClassicPulse{from{opacity:.45}to{opacity:.85}}
+@keyframes nextB2cClassicShimmer{to{background-position:-200% 0}}
+
+@media(max-width:900px){
+  body.b2c-table-view-page .next-b2c-table-classic-title{flex-direction:column}
+  body.b2c-table-view-page .next-b2c-table-classic-controls{flex-wrap:wrap;justify-content:flex-start}
+  body.b2c-table-view-page .next-b2c-table-classic-controls>div{width:100%;margin-right:0}
+  body.b2c-page .next-b2c-schema-card{grid-template-columns:72px minmax(0,1fr) minmax(150px,.65fr)}
+  body.b2c-page .next-b2c-schema-required,body.b2c-page .next-b2c-schema-delete{grid-column:auto}
+  body.b2c-page .next-b2c-formula-layout{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  body.b2c-library-page .b2c-library-sort{flex:1 1 100%}
+  body.b2c-library-page .b2c-library-sort select{flex:1}
+  body.b2c-table-view-page .next-b2c-table-classic-page{padding:0 14px 22px}
+  body.b2c-table-view-page .next-b2c-table-classic-controls label{flex:1}
+  body.b2c-table-view-page .next-b2c-classic-pagination{align-items:flex-start;flex-direction:column}
+  body.b2c-page .next-b2c-record-form__grid{grid-template-columns:1fr}
+  body.b2c-page .next-b2c-record-control.is-wide{grid-column:auto}
+  body.b2c-page .next-b2c-schema-card{grid-template-columns:1fr 1fr}
+  body.b2c-page .next-b2c-schema-order{grid-column:1/-1}
+  body.b2c-page .next-b2c-schema-options,body.b2c-page .next-b2c-schema-formula{grid-column:1/-1}
+  body.b2c-page .next-b2c-formula-recipes>div{grid-template-columns:1fr}
+  body.b2c-page :is(.next-b2c-record-form,.next-b2c-schema-builder,.next-b2c-formula-builder,.next-b2c-delete-record)>footer{flex-direction:column-reverse}
+  body.b2c-page :is(.next-b2c-record-form,.next-b2c-schema-builder,.next-b2c-formula-builder,.next-b2c-delete-record)>footer button{width:100%}
+}
