@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 const FIELD_META = [
-  { key: "name", label: "Name", icon: "ID", type: "text", required: true, hint: "Displayed across the ERP and team directories." },
-  { key: "department", label: "Department", icon: "DP", type: "text", hint: "Your assigned business department." },
-  { key: "position", label: "Position", icon: "PS", type: "text", hint: "Your current role or job title." },
-  { key: "phone", label: "Phone", icon: "PH", type: "tel", hint: "Used by internal teams when contact is required." },
-  { key: "email", label: "Email", icon: "EM", type: "email", hint: "Your work or preferred contact email." },
-  { key: "employeeCode", label: "Employee Code", icon: "#", type: "number", hint: "The internal employee identifier." },
-  { key: "password", label: "Password", icon: "PW", type: "password", required: true, hint: "Changing it immediately updates your sign-in password." },
+  { key: "name", label: "Name", type: "text", required: true },
+  { key: "department", label: "Department", type: "text" },
+  { key: "position", label: "Position", type: "text" },
+  { key: "phone", label: "Phone", type: "text", placeholder: "e.g. 0123456789" },
+  { key: "email", label: "Email", type: "email", placeholder: "e.g. name@company.com" },
+  { key: "employeeCode", label: "Employee Code", type: "number" },
+  { key: "password", label: "Password", type: "password", required: true, placeholder: "New password" },
 ];
 
 function text(value) {
@@ -21,28 +21,27 @@ function lower(value) {
 }
 
 function initials(name) {
-  return text(name)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "U";
+  const parts = text(name).split(/\s+/).filter(Boolean);
+  if (!parts.length) return "U";
+  const first = parts[0]?.[0] || "";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] || "") : "";
+  return `${first}${last}`.toUpperCase() || "U";
 }
 
 function safeUrl(value) {
-  const url = text(value);
-  if (!url) return "";
-  if (/^(https?:|data:|blob:|\/)/i.test(url)) return url;
-  return `https://${url.replace(/^\/+/, "")}`;
+  const raw = text(value);
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:|\/)/i.test(raw)) return raw;
+  return `https://${raw.replace(/^\/+/, "")}`;
 }
 
 function hostLabel(value) {
   const url = safeUrl(value);
-  if (!url) return "File link unavailable";
+  if (!url) return "";
   try {
-    return new URL(url, "https://operations-hub.local").hostname || url;
+    return new URL(url).hostname.replace(/^www\./i, "");
   } catch {
-    return url;
+    return "";
   }
 }
 
@@ -51,7 +50,6 @@ function normalizeFiles(files) {
     .map((file, index) => ({
       name: text(file?.name) || `File ${index + 1}`,
       url: safeUrl(file?.url || file?.external?.url || file?.file?.url),
-      type: text(file?.type),
     }))
     .filter((file) => file.name || file.url);
 }
@@ -70,8 +68,6 @@ function normalizeAccount(account = {}) {
     coverPhotoUrl: safeUrl(account?.coverPhotoUrl),
     passwordSet: account?.passwordSet === true,
     filesMedia: normalizeFiles(account?.filesMedia),
-    allowedPages: Array.isArray(account?.allowedPages) ? account.allowedPages.map(text).filter(Boolean) : [],
-    lmsAccess: account?.lmsAccess || null,
   };
 }
 
@@ -112,8 +108,8 @@ async function imageDataUrl(file, kind) {
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) return raw;
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    let compressed = canvas.toDataURL("image/webp", 0.78);
-    if (!compressed.startsWith("data:image/webp")) compressed = canvas.toDataURL("image/jpeg", 0.8);
+    let compressed = canvas.toDataURL("image/webp", 0.74);
+    if (!compressed.startsWith("data:image/webp")) compressed = canvas.toDataURL("image/jpeg", 0.76);
     return compressed && compressed.length < raw.length ? compressed : raw;
   } catch {
     return raw;
@@ -144,45 +140,56 @@ async function requestJson(url, options = {}, { redirectOn401 = true } = {}) {
   return body;
 }
 
+function Icon({ name, size = 18 }) {
+  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  const paths = {
+    edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
+    x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    paperclip: <path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>,
+    folder: <><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z"/></>,
+    external: <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
+    image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></>,
+    grid: <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
+    archive: <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
+    monitor: <><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
+    lock: <><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+    check: <polyline points="20 6 9 17 4 12"/>,
+    alert: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+    eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></>,
+    eyeOff: <><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/><path d="M1 1l22 22"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/></>,
+  };
+  return <svg {...common}>{paths[name] || paths.file}</svg>;
+}
+
+function fileIcon(file) {
+  const value = `${file?.name || ""} ${file?.url || ""}`.toLowerCase();
+  if (/\.(png|jpe?g|webp|gif|bmp|svg|avif)(\?|#|$)/i.test(value)) return "image";
+  if (/\.(xls|xlsx|csv)(\?|#|$)/i.test(value)) return "grid";
+  if (/\.(ppt|pptx)(\?|#|$)/i.test(value)) return "monitor";
+  if (/\.(zip|rar|7z)(\?|#|$)/i.test(value)) return "archive";
+  return "file";
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
+  const type = toast.type === "error" ? "error" : toast.type === "success" ? "success" : "info";
   return (
-    <div className={`next-account-toast is-${toast.type || "info"}`} role="status">
-      <div><strong>{toast.title || "My Account"}</strong><span>{toast.message}</span></div>
-      <button type="button" onClick={onClose} aria-label="Close">×</button>
+    <div className="toast-stack account-classic-toast" role="status" aria-live="polite">
+      <div className={`toast toast--${type} is-in`}>
+        <span className="toast__icon"><Icon name={type === "success" ? "check" : type === "error" ? "alert" : "file"} size={14} /></span>
+        <div className="toast__content"><div className="toast__title">{toast.title || "My Account"}</div><div className="toast__msg">{toast.message}</div></div>
+        <button className="toast__close" type="button" onClick={onClose} aria-label="Close">×</button>
+      </div>
     </div>
   );
 }
 
-function Modal({ title, subtitle, children, onClose, wide = false }) {
+function PasswordToggle({ visible, onToggle, label }) {
   return (
-    <div className="next-account-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`next-account-modal__card ${wide ? "is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <span>AC</span>
-          <div><h3>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-        <div className="next-account-modal__body">{children}</div>
-      </section>
-    </div>
-  );
-}
-
-function PasswordInput({ value, onChange, placeholder = "Current password", autoFocus = false }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <div className="next-account-password-input">
-      <input
-        autoFocus={autoFocus}
-        type={visible ? "text" : "password"}
-        autoComplete="current-password"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-      />
-      <button type="button" onClick={() => setVisible((current) => !current)}>{visible ? "Hide" : "Show"}</button>
-    </div>
+    <button type="button" className="toggle-password" aria-label={`${visible ? "Hide" : "Show"} ${label}`} aria-pressed={visible} onClick={onToggle}>
+      <Icon name={visible ? "eyeOff" : "eye"} size={20} />
+    </button>
   );
 }
 
@@ -190,13 +197,14 @@ function EditFieldModal({ field, account, onClose, onSaved }) {
   const isPassword = field?.key === "password";
   const [value, setValue] = useState(isPassword ? "" : text(account?.[field?.key]));
   const [currentPassword, setCurrentPassword] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showValue, setShowValue] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function submit(event) {
     event.preventDefault();
-    const nextValue = field?.key === "employeeCode" ? text(value) : String(value ?? "").trim();
+    const nextValue = String(value ?? "").trim();
     if (field?.required && !nextValue) return setError(`${field.label} cannot be empty.`);
     if (!text(currentPassword)) return setError("Current password is required.");
     setBusy(true);
@@ -209,61 +217,70 @@ function EditFieldModal({ field, account, onClose, onSaved }) {
 
       await requestJson("/api/account", {
         method: "PATCH",
-        body: JSON.stringify({ currentPassword, [field.key]: nextValue }),
+        body: JSON.stringify({ currentPassword, [field.key]: nextValue || null }),
       }, { redirectOn401: false });
 
       const refreshed = await requestJson("/api/account", {}, { redirectOn401: true });
       onSaved(normalizeAccount(refreshed), `${field.label} updated successfully.`);
       onClose();
     } catch (saveError) {
-      setError(saveError?.status === 401 ? "Invalid current password." : (saveError?.message || "The account field could not be updated."));
+      setError(saveError?.status === 401 ? "invalid password" : (saveError?.message || "The account field could not be updated."));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={`Edit ${field.label}`} subtitle={field.hint} onClose={onClose}>
-      <form className="next-account-form" onSubmit={submit}>
-        <label>
-          <span>{isPassword ? "New password" : field.label}{field.required ? " *" : ""}</span>
-          {isPassword ? (
-            <div className="next-account-password-input">
-              <input
-                autoFocus
-                type={showNewPassword ? "text" : "password"}
-                autoComplete="new-password"
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                placeholder="Enter a new password"
-              />
-              <button type="button" onClick={() => setShowNewPassword((current) => !current)}>{showNewPassword ? "Hide" : "Show"}</button>
-            </div>
-          ) : (
-            <input autoFocus type={field.type || "text"} value={value} onChange={(event) => setValue(event.target.value)} />
-          )}
-        </label>
-        <label><span>Current password *</span><PasswordInput value={currentPassword} onChange={setCurrentPassword} /></label>
-        {error ? <div className="next-account-error">{error}</div> : null}
-        <footer>
-          <button type="button" className="next-account-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-account-btn primary" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button>
-        </footer>
+    <div className="ex-modal" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <form className="ex-modal-box" role="dialog" aria-modal="true" aria-label={`Edit ${field.label}`} onSubmit={submit}>
+        <h3 className="ex-modal-title">Edit {field.label}</h3>
+        <label className="field-label"><Icon name="edit" size={16} /> {field.label}</label>
+        <div className={`password-wrapper ${isPassword ? "has-toggle" : ""}`}>
+          <input
+            autoFocus
+            className="ex-input"
+            type={isPassword ? (showValue ? "text" : "password") : (field.type || "text")}
+            value={value}
+            onChange={(event) => { setValue(event.target.value); setError(""); }}
+            placeholder={field.placeholder || ""}
+            autoComplete={isPassword ? "new-password" : undefined}
+          />
+          {isPassword ? <PasswordToggle visible={showValue} onToggle={() => setShowValue((current) => !current)} label="new password" /> : null}
+        </div>
+
+        <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
+        <div className="password-wrapper has-toggle">
+          <input
+            className="ex-input"
+            type={showCurrentPassword ? "text" : "password"}
+            value={currentPassword}
+            onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }}
+            autoComplete="current-password"
+          />
+          <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
+        </div>
+
+        {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}
+        <div className="ex-modal-actions">
+          <button className="ex-btn ex-primary" type="submit" disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
+          <button className="ex-btn ex-danger" type="button" onClick={onClose} disabled={busy}>Close</button>
+        </div>
       </form>
-    </Modal>
+    </div>
   );
 }
 
 function ImageUploadModal({ imageRequest, onClose, onSaved }) {
   const [currentPassword, setCurrentPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const kind = imageRequest?.kind === "cover" ? "cover" : "profile";
-  const title = kind === "cover" ? "Update cover photo" : "Update profile picture";
+  const label = kind === "cover" ? "Cover photo" : "Profile picture";
 
   async function submit(event) {
     event.preventDefault();
-    if (!imageRequest?.file) return setError("Choose an image first.");
+    if (!imageRequest?.file) return setError("Please choose an image first.");
     if (!text(currentPassword)) return setError("Current password is required.");
     setBusy(true);
     setError("");
@@ -281,37 +298,38 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
       onSaved(kind, safeUrl(kind === "cover" ? result.coverPhotoUrl : result.photoUrl));
       onClose();
     } catch (uploadError) {
-      setError(uploadError?.status === 401 ? "Invalid current password." : (uploadError?.message || "The image could not be uploaded."));
+      setError(uploadError?.status === 401 ? "invalid password" : (uploadError?.message || "The image could not be uploaded."));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={title} subtitle="The image is compressed in your browser before it is uploaded." onClose={onClose}>
-      <form className="next-account-form" onSubmit={submit}>
-        <div className={`next-account-image-preview is-${kind}`}>
-          {imageRequest?.preview ? <img src={imageRequest.preview} alt="Selected preview" /> : <span>No preview</span>}
+    <div className="ex-modal" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <form className="ex-modal-box" role="dialog" aria-modal="true" aria-label={`Change ${label}`} onSubmit={submit}>
+        <h3 className="ex-modal-title">Change {label}</h3>
+        <label className="field-label"><Icon name="image" size={16} /> Selected image</label>
+        <div className="password-wrapper">
+          <input className="ex-input" type="text" value={imageRequest?.file?.name || ""} readOnly />
         </div>
-        <div className="next-account-file-summary">
-          <strong>{imageRequest?.file?.name || "Selected image"}</strong>
-          <span>{imageRequest?.file ? `${(imageRequest.file.size / 1024 / 1024).toFixed(2)} MB` : ""}</span>
+        <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
+        <div className="password-wrapper has-toggle">
+          <input autoFocus className="ex-input" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }} autoComplete="current-password" />
+          <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
         </div>
-        <label><span>Current password *</span><PasswordInput autoFocus value={currentPassword} onChange={setCurrentPassword} /></label>
-        {error ? <div className="next-account-error">{error}</div> : null}
-        <footer>
-          <button type="button" className="next-account-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-account-btn primary" disabled={busy}>{busy ? "Uploading…" : "Upload image"}</button>
-        </footer>
+        {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}
+        <div className="ex-modal-actions">
+          <button className="ex-btn ex-primary" type="submit" disabled={busy}>{busy ? "Uploading..." : "Upload"}</button>
+          <button className="ex-btn ex-danger" type="button" onClick={onClose} disabled={busy}>Close</button>
+        </div>
       </form>
-    </Modal>
+    </div>
   );
 }
 
 function fieldDisplay(account, field) {
-  if (field.key === "password") return account.passwordSet ? "Password configured" : "No password configured";
-  const value = text(account?.[field.key]);
-  return value || "Not provided";
+  if (field.key === "password") return account.passwordSet ? "••••••••" : "—";
+  return text(account?.[field.key]) || "—";
 }
 
 export default function AccountClient({ initialAccount }) {
@@ -322,22 +340,6 @@ export default function AccountClient({ initialAccount }) {
   const [busyAction, setBusyAction] = useState("");
   const profileInputRef = useRef(null);
   const coverInputRef = useRef(null);
-
-  const access = useMemo(() => {
-    const allowed = new Set(account.allowedPages.map(lower));
-    const lmsPages = Array.isArray(account?.lmsAccess?.pages)
-      ? account.lmsAccess.pages.filter((page) => page?.isEnabled !== false)
-      : [];
-    return {
-      allowedCount: allowed.size,
-      lmsCount: lmsPages.length,
-      adminCount: Array.isArray(account?.pageAccess?.pages)
-        ? account.pageAccess.pages.filter((page) => lower(page?.accessLevel || page?.access_level) === "admin" && page?.isEnabled !== false).length
-        : 0,
-      history: ["history", "system history", "audit history", "audit log", "system audit", "/history"].some((name) => allowed.has(name)),
-      backup: ["backup", "back up", "database", "system database", "system backup", "/backup"].some((name) => allowed.has(name)),
-    };
-  }, [account]);
 
   function showToast(type, title, message) {
     setToast({ type, title, message });
@@ -354,20 +356,19 @@ export default function AccountClient({ initialAccount }) {
     if (!file) return;
     const isImage = lower(file.type).startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|avif|svg)$/i.test(file.name || "");
     if (!isImage) return showToast("error", "Invalid file", "Only image files can be used for the account profile.");
-    if (file.size > 10 * 1024 * 1024) return showToast("error", "Image too large", "Choose an image that is 10 MB or smaller.");
-    const preview = URL.createObjectURL(file);
-    setImageRequest({ kind, file, preview });
+    if (file.size > 10 * 1024 * 1024) return showToast("error", "Image too large", "Please choose an image up to 10 MB.");
+    setImageRequest({ kind, file, preview: URL.createObjectURL(file) });
   }
 
   async function removeImage(kind) {
     const label = kind === "cover" ? "cover photo" : "profile picture";
-    if (!window.confirm(`Remove the current ${label}?`)) return;
+    if (!window.confirm(`Remove the current ${label} and restore the default image?`)) return;
     setBusyAction(`remove-${kind}`);
     try {
       const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
       await requestJson(endpoint, { method: "DELETE" });
       setAccount((current) => ({ ...current, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: "" }));
-      showToast("success", "Image removed", `The ${label} was removed successfully.`);
+      showToast("success", "Removed", `${kind === "cover" ? "Cover photo" : "Profile picture"} removed successfully.`);
     } catch (error) {
       showToast("error", "Remove failed", error?.message || `The ${label} could not be removed.`);
     } finally {
@@ -375,108 +376,100 @@ export default function AccountClient({ initialAccount }) {
     }
   }
 
-  async function logout() {
-    if (!window.confirm("Sign out from Operations Hub?")) return;
-    setBusyAction("logout");
-    try {
-      await requestJson("/api/logout", { method: "POST" }, { redirectOn401: false });
-      window.location.href = "/login";
-    } catch (error) {
-      showToast("error", "Logout failed", error?.message || "Your session could not be closed.");
-      setBusyAction("");
-    }
-  }
-
+  const displayName = account.name || "User";
+  const subtitle = [account.department, account.position].filter(Boolean).join("  |  ") || "Team Member";
   const files = account.filesMedia;
 
   return (
-    <section className="next-account-page">
+    <section className="card account-page-shell">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <article className="next-account-profile-card">
-        <div className="next-account-cover">
-          {account.coverPhotoUrl ? <img src={account.coverPhotoUrl} alt="Account cover" /> : <div className="next-account-cover__fallback"><span>Operations Hub</span><b>Personal workspace</b></div>}
-          <div className="next-account-cover__actions">
-            <button type="button" onClick={() => coverInputRef.current?.click()}>Change cover</button>
-            {account.coverPhotoUrl ? <button type="button" className="danger" onClick={() => removeImage("cover")} disabled={busyAction === "remove-cover"}>{busyAction === "remove-cover" ? "Removing…" : "Remove"}</button> : null}
-          </div>
-          <input ref={coverInputRef} hidden type="file" accept="image/*" onChange={(event) => selectImage("cover", event.target.files?.[0])} />
-        </div>
-
-        <div className="next-account-identity">
-          <div className="next-account-avatar-wrap">
-            <button type="button" className="next-account-avatar" onClick={() => profileInputRef.current?.click()} aria-label="Change profile picture">
-              {account.photoUrl ? <img src={account.photoUrl} alt="Profile" /> : <span>{initials(account.name)}</span>}
-            </button>
-            <button type="button" className="next-account-avatar-edit" onClick={() => profileInputRef.current?.click()}>Edit</button>
-            {account.photoUrl ? <button type="button" className="next-account-avatar-remove" onClick={() => removeImage("profile")} disabled={busyAction === "remove-profile"}>×</button> : null}
-            <input ref={profileInputRef} hidden type="file" accept="image/*" onChange={(event) => selectImage("profile", event.target.files?.[0])} />
-          </div>
-          <div className="next-account-identity__copy">
-            <span>MY PROFILE</span>
-            <h2>{account.name || "Operations Hub user"}</h2>
-            <p>{[account.position, account.department].filter(Boolean).join(" · ") || "Complete your account information to help the team identify you."}</p>
-          </div>
-          <div className="next-account-identity__stats">
-            <div><strong>{access.allowedCount}</strong><span>ERP pages</span></div>
-            <div><strong>{access.lmsCount}</strong><span>LMS pages</span></div>
-            <div><strong>{access.adminCount}</strong><span>Admin access</span></div>
-          </div>
-        </div>
-      </article>
-
-      <div className="next-account-layout">
-        <div className="next-account-main-column">
-          <article className="next-account-section">
-            <header><div><span>PERSONAL INFORMATION</span><h3>Account details</h3><p>Edit one field at a time. Your current password is required before saving.</p></div></header>
-            <div className="next-account-fields-grid">
-              {FIELD_META.map((field) => (
-                <article className={`next-account-field-card ${field.key === "password" ? "is-security" : ""}`} key={field.key}>
-                  <span className="next-account-field-card__icon">{field.icon}</span>
-                  <div><small>{field.label}</small><strong className={!text(account?.[field.key]) && field.key !== "password" ? "is-empty" : ""}>{fieldDisplay(account, field)}</strong><p>{field.hint}</p></div>
-                  <button type="button" onClick={() => setEditField(field)}>Edit</button>
-                </article>
-              ))}
+      <div id="account-content">
+        <div className="account-panel account-panel--profile account-profile-modern">
+          <section className="profile-hero-section" aria-label="User profile header">
+            <div className="profile-cover-section" data-field="coverPhoto">
+              <button className="profile-cover-display" type="button" aria-label="Change cover photo" title="Change cover photo" onClick={() => coverInputRef.current?.click()}>
+                {account.coverPhotoUrl ? <img className="profile-cover-image" src={account.coverPhotoUrl} alt={`${displayName} cover photo`} /> : <span className="profile-cover-fallback" aria-hidden="true" />}
+              </button>
+              {account.coverPhotoUrl ? (
+                <button className="profile-cover-remove profile-image-remove" type="button" aria-label="Remove cover photo" title="Remove cover photo" onClick={() => removeImage("cover")} disabled={busyAction === "remove-cover"}>
+                  <Icon name="x" size={18} />
+                </button>
+              ) : null}
+              <button className="profile-cover-edit" type="button" aria-label="Edit cover photo" title="Edit cover photo" onClick={() => coverInputRef.current?.click()} disabled={busyAction === "remove-cover"}>
+                <Icon name="edit" size={18} />
+              </button>
+              <input ref={coverInputRef} className="acc-file-input profile-cover-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("cover", event.target.files?.[0])} />
             </div>
-          </article>
 
-          <article className="next-account-section">
-            <header><div><span>FILES & MEDIA</span><h3>Shared profile files</h3><p>Files assigned to your team-member record are available here for quick access.</p></div><em>{files.length} files</em></header>
-            {files.length ? (
-              <div className="next-account-files-grid">
-                {files.map((file, index) => (
-                  <a className={`next-account-file-card ${file.url ? "" : "is-disabled"}`} href={file.url || undefined} target={file.url ? "_blank" : undefined} rel="noreferrer" key={`${file.name}-${index}`}>
-                    <span>FILE</span>
-                    <div><strong>{file.name}</strong><small>{file.url ? hostLabel(file.url) : "No public URL"}</small></div>
-                    <b>{file.url ? "Open ↗" : "Unavailable"}</b>
-                  </a>
-                ))}
+            <div className="profile-identity-block">
+              <div className="profile-avatar-section" data-field="profilePicture">
+                <div className="profile-avatar-shell">
+                  <button className="profile-avatar-display" type="button" aria-label="Change profile picture" title="Change profile picture" onClick={() => profileInputRef.current?.click()}>
+                    {account.photoUrl ? <img className="profile-avatar-image" src={account.photoUrl} width="142" height="142" alt={`${displayName} profile picture`} /> : <span className="profile-avatar-fallback" aria-hidden="true">{initials(displayName)}</span>}
+                  </button>
+                  <button className="profile-avatar-edit" type="button" aria-label="Edit profile picture" title="Edit profile picture" onClick={() => profileInputRef.current?.click()} disabled={busyAction === "remove-profile"}>
+                    <Icon name="edit" size={18} />
+                  </button>
+                  {account.photoUrl ? (
+                    <button className="profile-avatar-remove profile-image-remove" type="button" aria-label="Remove profile picture" title="Remove profile picture" onClick={() => removeImage("profile")} disabled={busyAction === "remove-profile"}>
+                      <Icon name="x" size={18} />
+                    </button>
+                  ) : null}
+                  <input ref={profileInputRef} className="acc-file-input profile-avatar-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("profile", event.target.files?.[0])} />
+                </div>
               </div>
-            ) : (
-              <div className="next-account-empty"><span>0</span><div><strong>No shared files</strong><p>Files added to your user record will appear in this section.</p></div></div>
-            )}
-          </article>
+              <h2 className="profile-identity-name">{displayName}</h2>
+              <div className="profile-identity-subtitle">{subtitle}</div>
+            </div>
+          </section>
+
+          <div className="profile-fields-list">
+            {FIELD_META.map((field) => (
+              <section className="profile-field-card" data-field={field.key} key={field.key}>
+                <div className="profile-field-label">{field.label}</div>
+                <div className={`profile-field-box ${field.key === "password" ? "profile-field-box--password" : ""}`}>
+                  <span className="profile-field-value">{fieldDisplay(account, field)}</span>
+                  <button className="profile-field-edit acc-action acc-edit" type="button" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setEditField(field)}>
+                    <Icon name="edit" size={16} />
+                  </button>
+                </div>
+              </section>
+            ))}
+          </div>
+
+          <section className="profile-files-media-section" aria-label="Files and media">
+            <div className="profile-files-media-head">
+              <span className="profile-files-media-badge"><Icon name="paperclip" size={18} /></span>
+              <div>
+                <div className="profile-files-media-title">Files &amp; media</div>
+                <div className="profile-files-media-sub">{files.length ? `${files.length} item${files.length === 1 ? "" : "s"} attached to your profile` : "Attachments from your Team Members record"}</div>
+              </div>
+            </div>
+            <div className="profile-media-files-grid">
+              {files.length ? files.map((file, index) => {
+                const host = hostLabel(file.url);
+                const inner = (
+                  <>
+                    <span className="profile-media-file-icon"><Icon name={fileIcon(file)} size={18} /></span>
+                    <span className="profile-media-file-body"><span className="profile-media-file-name">{file.name || host || `File ${index + 1}`}</span>{host ? <span className="profile-media-file-url">{host}</span> : null}</span>
+                    {file.url ? <span className="profile-media-file-open"><Icon name="external" size={17} /></span> : null}
+                  </>
+                );
+                return file.url ? (
+                  <a className="profile-media-file-card" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}>{inner}</a>
+                ) : (
+                  <div className="profile-media-file-card profile-media-file-card--disabled" key={`${file.name}-${index}`}>{inner}</div>
+                );
+              }) : (
+                <div className="profile-media-empty">
+                  <span className="profile-media-empty-icon"><Icon name="folder" size={18} /></span>
+                  <span>No files or links added yet.</span>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
-
-        <aside className="next-account-side-column">
-          <article className="next-account-security-card">
-            <span>SECURITY</span>
-            <h3>Protect your account</h3>
-            <p>Every profile change is checked against your current password before it is saved.</p>
-            <button type="button" onClick={() => setEditField(FIELD_META.find((field) => field.key === "password"))}>Change password</button>
-          </article>
-
-          <article className="next-account-shortcuts">
-            <header><span>WORKSPACE</span><h3>Account shortcuts</h3></header>
-            <a href="/next/how-it-works"><div><strong>How it works</strong><small>Guides and operating instructions</small></div><b>→</b></a>
-            <a href="/next/app-install"><div><strong>Install Operations Hub</strong><small>PWA installation and device app status</small></div><b>→</b></a>
-            {access.history ? <a href="/next/history"><div><strong>System history</strong><small>Review recorded ERP actions</small></div><b>→</b></a> : null}
-            {access.backup ? <a href="/next/backup"><div><strong>Database backup</strong><small>Export and restore system data</small></div><b>→</b></a> : null}
-            <a href="/account?classic=1"><div><strong>Classic profile</strong><small>Open the previous account interface</small></div><b>↗</b></a>
-          </article>
-
-          <button type="button" className="next-account-logout" onClick={logout} disabled={busyAction === "logout"}>{busyAction === "logout" ? "Signing out…" : "Sign out"}</button>
-        </aside>
       </div>
 
       {editField ? (
@@ -494,7 +487,7 @@ export default function AccountClient({ initialAccount }) {
           onClose={closeImageModal}
           onSaved={(kind, url) => {
             setAccount((current) => ({ ...current, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: url }));
-            showToast("success", "Image updated", kind === "cover" ? "Cover photo updated successfully." : "Profile picture updated successfully.");
+            showToast("success", "Saved", kind === "cover" ? "Cover photo updated successfully." : "Profile picture updated successfully.");
           }}
         />
       ) : null}

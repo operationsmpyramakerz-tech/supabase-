@@ -29,10 +29,12 @@ export default async function AccountPage() {
   return (
     <AppShell
       account={response.data}
-      title="My Account"
+      title="User Profile"
       eyebrow="Profile, security and personal workspace"
       activePath="/next/account"
       classicHrefOverride="/account"
+      bodyClass="page-account"
+      classicStyles={["/css/account-classic-inline.css?v=next-stage-2n-account"]}
     >
       <AccountClient initialAccount={response.data} />
     </AppShell>
