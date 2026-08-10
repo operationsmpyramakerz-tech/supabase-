@@ -146,12 +146,12 @@ function Toast({ toast, onClose }) {
 function ReceiptViewer({ item, onClose }) {
   const screenshots = screenshotsFor(item);
   return (
-    <Modal title="Receipt screenshots" subtitle={`${screenshots.length} uploaded image${screenshots.length === 1 ? "" : "s"}.`} onClose={onClose} className="next-expense-users-receipts-modal">
-      {screenshots.length ? <div className="next-expense-users-receipts">{screenshots.map((shot, index) => {
-        const fallback = `/api/expenses/screenshot/${encodeURIComponent(text(item?.id))}?index=${index}`;
-        return <a href={shot.url || fallback} target="_blank" rel="noreferrer" key={`${shot.url}-${index}`}><img src={shot.url || fallback} alt={shot.name} /><span>{shot.name}</span></a>;
-      })}</div> : <div className="next-expense-users-empty-inline">No screenshots were uploaded.</div>}
-    </Modal>
+    <div className="expense-shots-modal is-open" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="expense-shots-modal__card" role="dialog" aria-modal="true">
+        <div className="expense-shots-modal__head"><div><h4 className="expense-shots-modal__title">Screenshots</h4><div className="expense-shots-modal__count">{screenshots.length ? `${screenshots.length} image${screenshots.length === 1 ? "" : "s"}` : "No images uploaded"}</div></div><button type="button" className="expense-shots-modal__close" onClick={onClose} aria-label="Close screenshots viewer">×</button></div>
+        <div className="expense-shots-modal__body">{screenshots.length ? <div className="expense-shots-modal__grid">{screenshots.map((shot, index) => { const fallback = `/api/expenses/screenshot/${encodeURIComponent(text(item?.id))}?index=${index}`; return <a className="expense-shots-modal__item" href={shot.url || fallback} target="_blank" rel="noreferrer" key={`${shot.url}-${index}`}><span className="expense-shots-modal__image-wrap"><img className="expense-shots-modal__image" src={shot.url || fallback} alt={shot.name}/></span><span className="expense-shots-modal__caption">{shot.name}</span></a>; })}</div> : <div className="expense-shots-modal__empty"><div className="expense-shots-modal__empty-icon"><UserClassicIcon name="image" size={24}/></div><div>No screenshots uploaded for this expense.</div></div>}</div>
+      </div>
+    </div>
   );
 }
 
@@ -265,65 +265,112 @@ function TransactionRow({ item, onReceipt, onEdit, onDelete }) {
   );
 }
 
+function UserClassicIcon({ name, size = 18 }) {
+  const common = { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  const icons = {
+    download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+    filter: <><polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/></>,
+    rotate: <><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></>,
+    sort: <><line x1="3" y1="6" x2="21" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></>,
+    card: <><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></>,
+    image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+    arrow: <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
+    edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+    trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></>,
+  };
+  return <svg {...common}>{icons[name] || icons.card}</svg>;
+}
+
+function userDisplayReason(item) {
+  return text(item?.reason) || text(ordersFor(item)[0]?.label) || (number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out");
+}
+
+function userRoute(item) {
+  const cashIn = number(item?.cashIn) > 0;
+  return { from: text(item?.from || item?.cashInFrom) || (cashIn ? "Cash in" : "—"), to: text(item?.to) || (cashIn ? "Wallet" : "—") };
+}
+
+function userAmount(item) {
+  const cashIn = number(item?.cashIn), cashOut = number(item?.cashOut), km = number(item?.kilometer);
+  if (cashIn > 0) return { text: `+${money(cashIn)}`, tone: "is-positive" };
+  if (normalized(item?.fundsType) === "owncar" && km > 0 && !cashOut) return { text: `${km} km`, tone: "is-neutral" };
+  if (cashOut > 0) return { text: `-${money(cashOut)}`, tone: "is-negative" };
+  return { text: money(0), tone: "is-neutral" };
+}
+
+function groupUserExpenses(items, sort = "newest") {
+  const map = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const reason = userDisplayReason(item), date = text(item?.date), key = `${date}__${lower(reason)}`;
+    if (!map.has(key)) map.set(key, { key, date, reason, items: [], orders: new Map(), cashIn: 0, cashOut: 0, kilometers: 0, created: transactionTime(item) });
+    const group = map.get(key); group.items.push(item); group.cashIn += number(item?.cashIn); group.cashOut += number(item?.cashOut); group.kilometers += number(item?.kilometer); group.created = Math.max(group.created, transactionTime(item));
+    for (const order of ordersFor(item)) { const orderKey = text(order?.key || order?.orderId || order?.label); if (orderKey && !group.orders.has(orderKey)) group.orders.set(orderKey, order); }
+  }
+  const rows = [...map.values()].map((group) => ({ ...group, orders: [...group.orders.values()], total: group.cashIn - group.cashOut }));
+  rows.sort((a,b) => sort === "oldest" ? a.created-b.created : sort === "amount-high" ? b.total-a.total : sort === "amount-low" ? a.total-b.total : b.created-a.created);
+  return rows;
+}
+
+function UserExpenseShot({ item, onReceipt }) {
+  const shots = screenshotsFor(item);
+  return <button className={`expense-ticket__shot-btn${shots.length ? " expense-ticket__shot-btn--has-shots" : ""}`} type="button" disabled={!shots.length} onClick={() => shots.length && onReceipt(item)}><span className="expense-ticket__shot-btn-icon"><UserClassicIcon name="image" size={18}/></span></button>;
+}
+
+function UserExpenseOrderActions({ orders }) {
+  if (!orders?.length) return null;
+  return <div className="expense-ticket__order-actions">{orders.map((order,index) => { const href = modernReceiptViewerHref(order) || modernTrackingHref(order); const label = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order"; return href ? <a className="expense-ticket__order-btn" href={href} target="_blank" rel="noreferrer" key={`${label}-${index}`}>{label}</a> : <span className="expense-ticket__order-btn expense-ticket__order-btn--disabled" key={`${label}-${index}`}>{label}</span>; })}</div>;
+}
+
+function UserExpenseTicket({ group, onReceipt, onEdit, onDelete, menuKey, setMenuKey }) {
+  const total = group.total > 0 ? { text: `+${money(group.total)}`, tone: "is-positive" } : group.total < 0 ? { text: `-${money(Math.abs(group.total))}`, tone: "is-negative" } : (!group.cashIn && !group.cashOut && group.kilometers ? { text: `${group.kilometers} km`, tone: "is-neutral" } : { text: money(0), tone: "is-neutral" });
+  const primary = group.items[0];
+  return <article className="expense-ticket">
+    <div className="expense-ticket__top"><div className={`expense-ticket__header-row${group.orders.length ? " expense-ticket__header-row--with-order" : ""}`}><div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div><div className="expense-ticket__header-side"><div className={`expense-ticket__actions${menuKey === group.key ? " is-open" : ""}`}><button type="button" className="expense-ticket__more" onClick={() => setMenuKey(menuKey === group.key ? "" : group.key)} aria-label="Expense actions">⋯</button><div className="expense-ticket__menu"><button type="button" className="expense-ticket__menu-item" onClick={() => { setMenuKey(""); onEdit(primary); }}><UserClassicIcon name="edit" size={15}/><span>Edit</span></button><button type="button" className="expense-ticket__menu-item expense-ticket__menu-item--danger" onClick={() => { setMenuKey(""); onDelete(primary); }}><UserClassicIcon name="trash" size={15}/><span>Delete</span></button></div></div>{group.orders.length ? <UserExpenseOrderActions orders={group.orders}/> : <div className="expense-ticket__reason">{group.reason}</div>}</div></div>{group.orders.length ? <div className="expense-ticket__reason expense-ticket__reason--block">{group.reason}</div> : null}<div className="expense-ticket__header-divider"/></div>
+    <div className="expense-ticket__legs">{group.items.map((item,index) => { const route=userRoute(item), amount=userAmount(item); return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><UserExpenseShot item={item} onReceipt={onReceipt}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title">{number(item?.cashIn)>0 ? "Cash In" : text(item?.fundsType) || "Cash Out"}</div><div className={`expense-ticket__route-amount ${amount.tone}`}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from">{route.from}</span><span className="expense-ticket__route-arrow"><UserClassicIcon name="arrow" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to">{route.to}</span></div></div></div></div>; })}</div>
+    <div className="expense-ticket__separator"/><div className="expense-ticket__footer"><span className="expense-ticket__footer-label">Total</span><span className={`expense-ticket__footer-value ${total.tone}`}>{total.text}</span></div>
+  </article>;
+}
+
 function UserExpensesModal({ user, onClose, onUsersRefresh, notify }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [type, setType] = useState("all");
   const [sort, setSort] = useState("newest");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [draftDateFrom, setDraftDateFrom] = useState("");
+  const [draftDateTo, setDraftDateTo] = useState("");
   const [showPast, setShowPast] = useState(false);
   const [receiptItem, setReceiptItem] = useState(null);
   const [editItem, setEditItem] = useState(null);
   const [deleteItem, setDeleteItem] = useState(null);
   const [exporting, setExporting] = useState("");
+  const [menuKey, setMenuKey] = useState("");
 
   const load = async () => {
     setLoading(true);
-    try {
-      const body = await requestJson(`/api/expenses/user/${encodeURIComponent(text(user?.id || user?.userId))}`);
-      setPayload(body);
-    } catch (error) { notify("Unable to load expenses", error?.message || "Failed to load this user's expenses.", "error"); }
+    try { const body = await requestJson(`/api/expenses/user/${encodeURIComponent(text(user?.id || user?.userId))}`); setPayload(body); }
+    catch (error) { notify("Unable to load expenses", error?.message || "Failed to load this user's expenses.", "error"); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [user?.id, user?.userId]);
 
   const split = useMemo(() => splitBySettlement(payload?.items || [], payload?.lastSettledAt, payload?.lastSettledDate), [payload]);
-  const currentBalance = useMemo(() => split.recent.reduce((sum, item) => sum + transactionValue(item), 0), [split.recent]);
-  const allVisibleBase = showPast ? [...split.recent, ...split.past] : split.recent;
-  const filtered = useMemo(() => {
-    const q = lower(query);
-    const rows = allVisibleBase.filter((item) => {
-      const date = text(item?.date);
-      if (dateFrom && date < dateFrom) return false;
-      if (dateTo && date > dateTo) return false;
-      const value = transactionValue(item);
-      if (type === "in" && value <= 0) return false;
-      if (type === "out" && value >= 0) return false;
-      if (type === "settlement" && !isSettlement(item)) return false;
-      if (type !== "settlement" && type !== "all" && isSettlement(item)) return false;
-      if (!q) return true;
-      return [item?.reason, item?.fundsType, item?.from, item?.to, item?.cashInFrom, ...ordersFor(item).map((order) => order?.label)].join(" ").toLowerCase().includes(q);
-    });
-    return rows.sort((a, b) => {
-      if (sort === "oldest") return transactionTime(a) - transactionTime(b);
-      if (sort === "amount-high") return Math.abs(transactionValue(b)) - Math.abs(transactionValue(a));
-      if (sort === "amount-low") return Math.abs(transactionValue(a)) - Math.abs(transactionValue(b));
-      return transactionTime(b) - transactionTime(a);
-    });
-  }, [allVisibleBase, query, type, sort, dateFrom, dateTo]);
-  const filteredNet = filtered.reduce((sum, item) => sum + transactionValue(item), 0);
+  const dateFilterActive = !!(dateFrom || dateTo);
+  const filteredRecent = useMemo(() => split.recent.filter((item) => { const date=text(item?.date); return (!dateFrom || date >= dateFrom) && (!dateTo || date <= dateTo); }), [split.recent,dateFrom,dateTo]);
+  const filteredPast = useMemo(() => split.past.filter((item) => { const date=text(item?.date); return (!dateFrom || date >= dateFrom) && (!dateTo || date <= dateTo); }), [split.past,dateFrom,dateTo]);
+  const visible = dateFilterActive ? [...filteredRecent, ...filteredPast] : (showPast ? [...filteredRecent, ...filteredPast] : filteredRecent);
+  const balanceItems = dateFilterActive ? [...filteredRecent, ...filteredPast] : filteredRecent;
+  const filteredNet = balanceItems.reduce((sum,item) => sum + transactionValue(item), 0);
+  const recentGroups = useMemo(() => groupUserExpenses(filteredRecent, sort), [filteredRecent, sort]);
+  const pastGroups = useMemo(() => groupUserExpenses(filteredPast, sort), [filteredPast, sort]);
+  const allDateGroups = useMemo(() => groupUserExpenses([...filteredRecent, ...filteredPast], sort), [filteredRecent, filteredPast, sort]);
 
   const refreshAfterMutation = async () => { await Promise.all([load(), onUsersRefresh()]); };
   const exportFile = async (fileType) => {
-    if (!filtered.length) return notify("Nothing to export", "No transactions match the active filters.", "info");
+    if (!visible.length) return notify("Nothing to export", "No transactions match the active filters.", "info");
     setExporting(fileType);
     try {
-      const response = await fetch(`/api/expenses/export/${fileType}`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userName: `Expenses — ${user.name}`, userId: text(user?.id || user?.userId), items: filtered, dateFrom, dateTo, lastSettledAt: payload?.lastSettledAt, lastSettledDate: payload?.lastSettledDate }),
-      });
+      const response = await fetch(`/api/expenses/export/${fileType}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userName: `Expenses — ${user.name}`, userId: text(user?.id || user?.userId), items: visible, dateFrom, dateTo, lastSettledAt: payload?.lastSettledAt, lastSettledDate: payload?.lastSettledDate }) });
       if (response.status === 401) { window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`; return; }
       if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.error || "Expense export failed."); }
       downloadBlob(await response.blob(), responseFileName(response, fileType === "excel" ? `${user.name}_expenses.xlsx` : `${user.name}_expenses.pdf`));
@@ -332,47 +379,33 @@ function UserExpensesModal({ user, onClose, onUsersRefresh, notify }) {
     finally { setExporting(""); }
   };
 
-  return (
-    <>
-      <Modal title={user.name || "User expenses"} subtitle={`${number(user.count)} recorded transaction${number(user.count) === 1 ? "" : "s"}.`} onClose={onClose} className="next-expense-users-sheet">
-        <section className="next-expense-users-sheet-summary">
-          <article className={currentBalance < 0 ? "negative" : "positive"}><span>Current balance</span><strong>{money(currentBalance)}</strong><small>Since last settlement</small></article>
-          <article><span>Recent transactions</span><strong>{split.recent.length}</strong><small>{split.past.length} archived by settlement</small></article>
-          <article><span>Last settled</span><strong>{formatDate(payload?.lastSettledDate || split.settlement?.date)}</strong><small>{payload?.lastSettledAt ? formatDate(payload.lastSettledAt) : "No settlement found"}</small></article>
-          <article><span>Filtered net</span><strong>{money(filteredNet, { signed: true })}</strong><small>{filtered.length} visible</small></article>
-        </section>
+  const renderGroups = (groups) => groups.length ? groups.map((group) => <UserExpenseTicket group={group} onReceipt={setReceiptItem} onEdit={setEditItem} onDelete={setDeleteItem} menuKey={menuKey} setMenuKey={setMenuKey} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>;
 
-        <div className="next-expense-users-sheet-toolbar">
-          <label className="next-expense-users-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search reason, type, route, or order…" /></label>
-          <select value={type} onChange={(event) => setType(event.target.value)}><option value="all">All types</option><option value="in">Cash in</option><option value="out">Cash out</option><option value="settlement">Settlements</option></select>
-          <select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="amount-high">Largest amount</option><option value="amount-low">Smallest amount</option></select>
-          <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="From date" />
-          <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="To date" />
-          <button type="button" onClick={() => { setQuery(""); setType("all"); setSort("newest"); setDateFrom(""); setDateTo(""); }}>Reset</button>
+  return <>
+    <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="ios-sheet" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="ios-drag"/>
+        <div className="user-expenses-header"><div className="sheet-header"><div className="sheet-header-text"><div className="user-expenses-title">{user.name || "User Expenses"}</div><div className="user-expenses-sub">All expenses for this team member</div></div></div></div>
+        <div className="sheet-scroll">
+          <div className={`total-balance-card ${filteredNet < 0 ? "is-negative" : filteredNet > 0 ? "is-positive" : ""}`}><div className="total-balance-meta"><div className="total-balance-label"><UserClassicIcon name="card" size={18}/>Total balance</div><div className="total-balance-hint">After filters applied</div></div><div className="total-balance-value">{money(filteredNet, { signed: true })}</div></div>
+          <div className="sheet-controls">
+            <div className="controls-row"><div className="download-wrapper next-expense-users-downloads"><button className="download-btn" type="button" onClick={() => exportFile("excel")} disabled={!!exporting}><UserClassicIcon name="download" size={18}/>{exporting === "excel" ? "Preparing Excel…" : "Download Excel"}</button><button className="download-btn next-expense-users-pdf" type="button" onClick={() => exportFile("pdf")} disabled={!!exporting}>{exporting === "pdf" ? "Preparing PDF…" : "PDF"}</button></div><div className="sort-wrapper"><label className="control-label">Sort</label><div className="select-with-icon"><UserClassicIcon name="sort" size={18}/><select className="sort-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="amount-high">Highest amount</option><option value="amount-low">Lowest amount</option></select></div></div></div>
+            <div className="date-filter"><div className="date-field"><label>From</label><input type="date" value={draftDateFrom} onChange={(event) => setDraftDateFrom(event.target.value)}/></div><div className="date-field"><label>To</label><input type="date" value={draftDateTo} onChange={(event) => setDraftDateTo(event.target.value)}/></div><div className="date-actions"><button className="filter-btn" type="button" onClick={() => { setDateFrom(draftDateFrom); setDateTo(draftDateTo); }}><UserClassicIcon name="filter" size={18}/>Apply</button><button className="filter-btn reset-btn" type="button" onClick={() => { setDraftDateFrom(""); setDraftDateTo(""); setDateFrom(""); setDateTo(""); }}><UserClassicIcon name="rotate" size={18}/>Reset</button></div></div>
+          </div>
+          <div id="userExpensesList">{loading ? <div className="loader"/> : dateFilterActive ? renderGroups(allDateGroups) : <>{renderGroups(recentGroups)}{showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{renderGroups(pastGroups)}</> : null}</>}</div>
+          {!dateFilterActive && split.past.length ? <div className="past-expenses-wrapper"><button className="past-expenses-btn" type="button" onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
         </div>
-
-        <div className="next-expense-users-sheet-actions">
-          <button type="button" onClick={() => exportFile("pdf")} disabled={!!exporting}>{exporting === "pdf" ? "Preparing PDF…" : "Download PDF"}</button>
-          <button type="button" onClick={() => exportFile("excel")} disabled={!!exporting}>{exporting === "excel" ? "Preparing Excel…" : "Download Excel"}</button>
-          <button type="button" onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh user"}</button>
-        </div>
-
-        {loading ? <div className="next-expense-users-sheet-loading"><span /><span /><span /></div> : filtered.length ? <div className="next-expense-users-transactions">{filtered.map((item) => <TransactionRow key={text(item?.id) || `${item?.date}-${item?.reason}-${transactionTime(item)}`} item={item} onReceipt={setReceiptItem} onEdit={setEditItem} onDelete={setDeleteItem} />)}</div> : <div className="next-expense-users-empty-inline"><strong>No matching transactions</strong><span>Change the filters or include expenses before the last settlement.</span></div>}
-
-        {split.past.length ? <div className="next-expense-users-past-toggle"><span>{showPast ? "Past expenses are included in the list." : `${split.past.length} transaction${split.past.length === 1 ? "" : "s"} are before the last settlement.`}</span><button type="button" onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
-      </Modal>
-      {receiptItem ? <ReceiptViewer item={receiptItem} onClose={() => setReceiptItem(null)} /> : null}
-      {editItem ? <EditExpenseModal item={editItem} user={user} onClose={() => setEditItem(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
-      {deleteItem ? <DeleteExpenseModal item={deleteItem} user={user} onClose={() => setDeleteItem(null)} onDeleted={refreshAfterMutation} notify={notify} /> : null}
-    </>
-  );
+        <button className="modal-close-btn" type="button" onClick={onClose}>Close</button>
+      </div>
+    </div>
+    {receiptItem ? <ReceiptViewer item={receiptItem} onClose={() => setReceiptItem(null)} /> : null}
+    {editItem ? <EditExpenseModal item={editItem} user={user} onClose={() => setEditItem(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
+    {deleteItem ? <DeleteExpenseModal item={deleteItem} user={user} onClose={() => setDeleteItem(null)} onDeleted={refreshAfterMutation} notify={notify} /> : null}
+  </>;
 }
 
 export default function ExpensesUsersClient({ account, initialUsersPayload, bootstrapWarnings = [] }) {
   const [users, setUsers] = useState(Array.isArray(initialUsersPayload?.users) ? initialUsersPayload.users : []);
-  const [query, setQuery] = useState("");
-  const [balanceFilter, setBalanceFilter] = useState("all");
-  const [sort, setSort] = useState("name");
   const [selectedUser, setSelectedUser] = useState(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
@@ -393,63 +426,29 @@ export default function ExpensesUsersClient({ account, initialUsersPayload, boot
     finally { setBusy(false); }
   };
 
-  const stats = useMemo(() => {
-    const positive = users.filter((user) => number(user.total) > 0).length;
-    const negative = users.filter((user) => number(user.total) < 0).length;
-    const settled = users.filter((user) => Math.abs(number(user.total)) < 0.0001).length;
-    const net = users.reduce((sum, user) => sum + number(user.total), 0);
-    return { positive, negative, settled, net, transactions: users.reduce((sum, user) => sum + number(user.count), 0) };
-  }, [users]);
-  const visibleUsers = useMemo(() => {
-    const q = lower(query);
-    return users.filter((user) => {
-      const total = number(user.total);
-      if (balanceFilter === "positive" && total <= 0) return false;
-      if (balanceFilter === "negative" && total >= 0) return false;
-      if (balanceFilter === "settled" && Math.abs(total) >= 0.0001) return false;
-      return !q || [user?.name, user?.id, user?.userId].join(" ").toLowerCase().includes(q);
-    }).sort((a, b) => {
-      if (sort === "balance-high") return number(b.total) - number(a.total);
-      if (sort === "balance-low") return number(a.total) - number(b.total);
-      if (sort === "transactions") return number(b.count) - number(a.count);
-      if (sort === "settlement") return String(b.lastSettledDate || "").localeCompare(String(a.lastSettledDate || ""));
-      return text(a.name).localeCompare(text(b.name));
-    });
-  }, [users, query, balanceFilter, sort]);
+  const visibleUsers = users;
 
   return (
-    <section className="next-expense-users-page">
-      <section className="next-expense-users-hero">
-        <div><span className="pill">Team expenses control</span><h2>Review each team member’s balance, receipts, routes, and settlement history.</h2><p>Open any user to inspect recent and past transactions, export filtered reports, and perform password-protected corrections without leaving the Next.js workspace.</p><div><button className="primary-button" type="button" onClick={refresh} disabled={busy}>{busy ? "Refreshing…" : "Refresh balances"}</button><a className="secondary-button" href="/next/expenses">My Expenses</a><a className="secondary-button" href="/expenses/users?classic=1">Classic Expenses Users</a></div></div>
-        <aside><span>Visible users</span><strong>{users.length}</strong><small>{stats.transactions} total transactions</small></aside>
-      </section>
-
-      {bootstrapWarnings.length ? <div className="next-expense-users-warning"><strong>Some startup data was delayed.</strong><span>The page remains usable and can be refreshed from the toolbar.</span></div> : null}
-
-      <section className="next-expense-users-stats">
-        <article><span>Combined balance</span><strong className={stats.net < 0 ? "negative" : "positive"}>{money(stats.net, { signed: true })}</strong><small>Across visible users</small></article>
-        <article><span>Positive balances</span><strong>{stats.positive}</strong><small>Users holding funds</small></article>
-        <article><span>Negative balances</span><strong>{stats.negative}</strong><small>Users requiring reconciliation</small></article>
-        <article><span>Settled balances</span><strong>{stats.settled}</strong><small>Current balance is zero</small></article>
-      </section>
-
-      <section className="next-expense-users-toolbar">
-        <label className="next-expense-users-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search team member…" /></label>
-        <select value={balanceFilter} onChange={(event) => setBalanceFilter(event.target.value)}><option value="all">All balances</option><option value="positive">Positive</option><option value="negative">Negative</option><option value="settled">Settled</option></select>
-        <select value={sort} onChange={(event) => setSort(event.target.value)}><option value="name">Name A–Z</option><option value="balance-high">Highest balance</option><option value="balance-low">Lowest balance</option><option value="transactions">Most transactions</option><option value="settlement">Latest settlement</option></select>
-        <button type="button" onClick={() => { setQuery(""); setBalanceFilter("all"); setSort("name"); }}>Clear filters</button>
-      </section>
-
-      <div className="next-expense-users-results-line"><span>{visibleUsers.length} of {users.length} users</span><small>Signed balance = Cash in − Cash out</small></div>
-
-      {visibleUsers.length ? <section className="next-expense-users-grid">{visibleUsers.map((user) => {
-        const total = number(user.total);
-        const initials = text(user.name).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U";
-        return <button type="button" className={`next-expense-user-card ${total < 0 ? "is-negative" : total > 0 ? "is-positive" : "is-settled"}`} onClick={() => setSelectedUser(user)} key={text(user.id || user.userId || user.name)}><header><span>{initials}</span><div><strong>{user.name || "Unknown user"}</strong><small>{text(user.userId || user.id) || "No employee code"}</small></div><em>Open</em></header><div className="next-expense-user-card__balance"><span>Current balance</span><strong>{money(total, { signed: true })}</strong></div><footer><span><b>{number(user.count)}</b> transactions</span><span><b>{formatDate(user.lastSettledDate)}</b> last settled</span></footer></button>;
-      })}</section> : <section className="next-expense-users-empty"><span>⌕</span><h3>No users match the selected filters.</h3><p>Clear the search or choose a different balance status.</p></section>}
-
+    <>
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some expense-user data was delayed.</strong><span>The loaded balances remain available and can be refreshed automatically when a user is opened.</span><a href="/expenses/users?classic=1">Open classic Expenses Users</a></div> : null}
+      <div className="expenses-layout next-expense-users-classic-parity">
+        <div className="user-tabs">
+          {busy ? <div className="loader" /> : visibleUsers.length ? visibleUsers.map((user) => {
+            const total = number(user.total);
+            const key = text(user.id || user.userId || user.name);
+            const active = text(selectedUser?.id || selectedUser?.userId || selectedUser?.name) === key;
+            const count = number(user.count);
+            return <button type="button" className={`user-tab${total < 0 ? " has-negative" : total > 0 ? " has-positive" : ""}${active ? " active" : ""}`} onClick={() => setSelectedUser(user)} key={key}>
+              <div className="user-tab__header"><span className="user-tab__count">{count} item{count === 1 ? "" : "s"}</span><span className="user-tab__name">{user.name || "Unknown user"}</span></div>
+              <div className="user-tab__divider" aria-hidden="true" />
+              <div className="user-tab__body"><span className="user-tab__label">Current balance</span><span className="user-total">{money(total, { signed: true })}</span></div>
+              <div className="user-tab__footer"><span className="user-tab__footer-label">Last settled</span><span className="user-settled">{formatDate(user.lastSettledDate)}</span></div>
+            </button>;
+          }) : <div className="users-empty"><div className="expenses-empty">Sorry, No data available</div></div>}
+        </div>
+      </div>
       {selectedUser ? <UserExpensesModal user={selectedUser} onClose={() => setSelectedUser(null)} onUsersRefresh={refresh} notify={notify} /> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
-    </section>
+    </>
   );
 }

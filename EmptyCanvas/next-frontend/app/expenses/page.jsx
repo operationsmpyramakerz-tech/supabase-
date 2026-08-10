@@ -63,7 +63,7 @@ export default async function ExpensesPage() {
   if (!account) redirect("/login?next=/next/expenses");
 
   return (
-    <AppShell account={account} title="Expenses" eyebrow="Live cash-flow workspace" activePath="/next/expenses">
+    <AppShell account={account} title="Expenses" eyebrow="Live cash-flow workspace" activePath="/next/expenses" bodyClass="expenses-page" classicStyles={["/css/expenses-redesign.css?v=expenses-dashboard-v2", "/next/css/expenses-classic-inline.css?v=stage2f"]}>
       <ExpensesClient
         account={account}
         initialPayload={expensePayload || { success: true, items: [] }}

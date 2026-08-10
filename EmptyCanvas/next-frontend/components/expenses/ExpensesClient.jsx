@@ -397,9 +397,23 @@ function ExportModal({ account, items, onClose, notify }) {
 function ScreenshotModal({ transaction, onClose }) {
   const screenshots = screenshotsFor(transaction);
   return (
-    <Modal title="Screenshots" subtitle={`${screenshots.length} uploaded image${screenshots.length === 1 ? "" : "s"}.`} onClose={onClose}>
-      {screenshots.length ? <div className="expense-screenshot-grid">{screenshots.map((shot, index) => <a href={shot.url || `/api/expenses/screenshot/${encodeURIComponent(text(transaction?.id))}?index=${index}`} target="_blank" rel="noreferrer" key={`${shot.url}-${index}`}><img src={shot.url || `/api/expenses/screenshot/${encodeURIComponent(text(transaction?.id))}?index=${index}`} alt={shot.name} /><span>{shot.name}</span></a>)}</div> : <div className="expense-empty-inline">No screenshots were uploaded for this transaction.</div>}
-    </Modal>
+    <div className="expense-shots-modal is-open" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="expense-shots-modal__card" role="dialog" aria-modal="true">
+        <div className="expense-shots-modal__head">
+          <div>
+            <h4 className="expense-shots-modal__title">Screenshots</h4>
+            <div className="expense-shots-modal__count">{screenshots.length ? `${screenshots.length} image${screenshots.length === 1 ? "" : "s"}` : "No images uploaded"}</div>
+          </div>
+          <button type="button" className="expense-shots-modal__close" onClick={onClose} aria-label="Close screenshots viewer">×</button>
+        </div>
+        <div className="expense-shots-modal__body">
+          {screenshots.length ? <div className="expense-shots-modal__grid">{screenshots.map((shot, index) => {
+            const fallback = `/api/expenses/screenshot/${encodeURIComponent(text(transaction?.id))}?index=${index}`;
+            return <a className="expense-shots-modal__item" href={shot.url || fallback} target="_blank" rel="noreferrer" key={`${shot.url}-${index}`}><span className="expense-shots-modal__image-wrap"><img className="expense-shots-modal__image" src={shot.url || fallback} alt={shot.name} /></span><span className="expense-shots-modal__caption">{shot.name}</span></a>;
+          })}</div> : <div className="expense-shots-modal__empty"><div className="expense-shots-modal__empty-icon"><ClassicExpenseIcon name="image" size={24}/></div><div>No screenshots uploaded for this expense.</div></div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -425,6 +439,134 @@ function TransactionCard({ item, onScreenshots }) {
       <div className="expense-transaction__amount"><strong>{ownCar && !value ? `${number(item?.kilometer)} km` : money(value, { signed: true })}</strong>{shots.length ? <button type="button" onClick={() => onScreenshots(item)}>Receipt {shots.length > 1 ? `(${shots.length})` : ""}</button> : <span>No receipt</span>}</div>
     </article>
   );
+}
+
+
+function ClassicExpenseIcon({ name, size = 18 }) {
+  const common = { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  const icons = {
+    "arrow-down-left": <><line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/></>,
+    "arrow-up-right": <><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></>,
+    "arrow-right": <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
+    calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
+    "chevron-down": <polyline points="6 9 12 15 18 9"/>,
+    clock: <><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></>,
+    "check-circle": <><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+    "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
+    image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+    "credit-card": <><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></>,
+    car: <><path d="M5 17h14"/><path d="M6 17l1-6h10l1 6"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></>,
+    tag: <><path d="M20.6 13.4L11 3H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,
+  };
+  return <svg {...common}>{icons[name] || icons.tag}</svg>;
+}
+
+function compactMoney(value) {
+  const amount = Math.abs(number(value));
+  if (amount >= 1000000) return `£${(amount / 1000000).toFixed(amount >= 10000000 ? 0 : 1)}m`;
+  if (amount >= 1000) return `£${(amount / 1000).toFixed(amount >= 10000 ? 0 : 1)}k`;
+  return money(amount);
+}
+
+function groupTransactions(items) {
+  const groups = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const reason = displayReason(item);
+    const date = text(item?.date);
+    const key = `${date}__${lower(reason)}`;
+    if (!groups.has(key)) groups.set(key, { key, date, reason, items: [], orders: new Map(), cashIn: 0, cashOut: 0, kilometers: 0, created: transactionTime(item) });
+    const group = groups.get(key);
+    group.items.push(item);
+    group.cashIn += number(item?.cashIn);
+    group.cashOut += number(item?.cashOut);
+    group.kilometers += number(item?.kilometer);
+    group.created = Math.max(group.created, transactionTime(item));
+    for (const order of Array.isArray(item?.orders) ? item.orders : []) {
+      const orderKey = text(order?.key || order?.trackingGroupId || order?.orderId || order?.label);
+      if (orderKey && !group.orders.has(orderKey)) group.orders.set(orderKey, order);
+    }
+  }
+  return [...groups.values()].map((group) => ({ ...group, orders: [...group.orders.values()], total: group.cashIn - group.cashOut })).sort((a, b) => {
+    const da = new Date(`${a.date || ""}T00:00:00`).getTime();
+    const db = new Date(`${b.date || ""}T00:00:00`).getTime();
+    if (Number.isFinite(da) && Number.isFinite(db) && da !== db) return db - da;
+    return b.created - a.created;
+  });
+}
+
+function expenseAmount(item) {
+  const cashIn = number(item?.cashIn);
+  const cashOut = number(item?.cashOut);
+  if (cashIn > 0) return { text: `+${money(cashIn)}`, tone: "is-positive" };
+  if (typeKey(item?.fundsType) === "owncar" && number(item?.kilometer) > 0 && !cashOut) return { text: `${number(item.kilometer)} km`, tone: "is-neutral" };
+  if (cashOut > 0) return { text: `-${money(cashOut)}`, tone: "is-negative" };
+  return { text: money(0), tone: "is-neutral" };
+}
+
+function groupAmount(group) {
+  if (!group.cashIn && !group.cashOut && group.kilometers > 0) return { text: `${group.kilometers} km`, tone: "is-neutral" };
+  if (group.total > 0) return { text: `+${money(group.total)}`, tone: "is-positive" };
+  if (group.total < 0) return { text: `-${money(Math.abs(group.total))}`, tone: "is-negative" };
+  return { text: money(0), tone: "is-neutral" };
+}
+
+function orderMeta(order) {
+  const key = typeKey(order?.orderType);
+  if (key.includes("withdraw")) return { bg: "#fff1f2", fg: "#be123c", border: "#fecdd3" };
+  if (key.includes("maintenance")) return { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa" };
+  return { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" };
+}
+
+function ExpenseOrderActions({ orders }) {
+  if (!orders?.length) return null;
+  return <div className="expense-ticket__order-actions">{orders.map((order, index) => {
+    const href = modernReceiptViewerHref(order) || modernTrackingHref(order);
+    const label = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order";
+    const meta = orderMeta(order);
+    const style = { "--expense-order-btn-bg": meta.bg, "--expense-order-btn-fg": meta.fg, "--expense-order-btn-border": meta.border };
+    return href ? <a className="expense-ticket__order-btn" style={style} href={href} target="_blank" rel="noreferrer" key={`${label}-${index}`}><span>{label}</span><ClassicExpenseIcon name="external-link" size={14}/></a> : <span className="expense-ticket__order-btn expense-ticket__order-btn--disabled" style={style} key={`${label}-${index}`}>{label}</span>;
+  })}</div>;
+}
+
+function ExpenseShotButton({ item, onScreenshots }) {
+  const shots = screenshotsFor(item);
+  return <button type="button" className={`expense-ticket__shot-btn${shots.length ? " expense-ticket__shot-btn--has-shots" : ""}`} disabled={!shots.length} onClick={() => shots.length && onScreenshots(item)} aria-label={shots.length ? `View ${shots.length} screenshots` : "No screenshots uploaded"}><span className="expense-ticket__shot-btn-icon"><ClassicExpenseIcon name="image" size={18}/></span></button>;
+}
+
+function LedgerGroup({ group, onScreenshots }) {
+  const total = groupAmount(group);
+  return <section className="expense-ledger-group">
+    <div className="expense-ledger-group__summary">
+      <div className="expense-ledger-group__identity"><span className="expense-ledger-group__date">{formatDate(group.date, group.date || "No date")}</span><span className="expense-ledger-group__reason" title={group.reason}>{group.reason}</span></div>
+      <div className="expense-ledger-group__orders"><ExpenseOrderActions orders={group.orders}/></div>
+      <span className={`expense-ledger-group__total ${total.tone}`}>{total.text}</span>
+      <span className="expense-ledger-group__receipt-label">Receipt</span>
+    </div>
+    <div className="expense-ledger-group__rows">{group.items.map((item, index) => {
+      const amount = expenseAmount(item); const route = routeEndpoints(item); const cashIn = number(item?.cashIn) > 0; const category = cashIn ? { bg: "#edf9f2", fg: "#24935d", icon: "credit-card" } : { bg: "#fff3e9", fg: "#d96415", icon: typeKey(item?.fundsType) === "owncar" ? "car" : "tag" };
+      return <div className="expense-ledger-row" key={text(item?.id) || `${group.key}-${index}`}>
+        <div className="expense-ledger-row__context"><span className="expense-ledger-row__category-icon" style={{ "--category-bg": category.bg, "--category-fg": category.fg }}><ClassicExpenseIcon name={category.icon} size={14}/></span><span className="expense-ledger-row__context-copy"><span className="expense-ledger-row__type">{cashIn ? "Cash In" : text(item?.fundsType) || "Cash Out"}</span><span className="expense-ledger-row__kind">{cashIn ? "Incoming" : "Expense"}</span></span></div>
+        <div className="expense-ledger-row__route"><span className="expense-ledger-row__route-main">{route.from} → {route.to}</span><span className="expense-ledger-row__route-sub"><span>{text(item?.reason) || "—"}</span></span></div>
+        <span className={`expense-ledger-row__amount ${amount.tone}`}>{amount.text}</span>
+        <span className="expense-ledger-row__shot"><ExpenseShotButton item={item} onScreenshots={onScreenshots}/></span>
+      </div>;
+    })}</div>
+  </section>;
+}
+
+function ExpenseTicket({ group, onScreenshots, compact = false }) {
+  const total = groupAmount(group);
+  return <article className={`expense-ticket${compact ? " expense-ticket--compact" : ""}`}>
+    <div className="expense-ticket__top"><div className={`expense-ticket__header-row${group.orders.length ? " expense-ticket__header-row--with-order" : ""}`}><div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div><div className="expense-ticket__header-side"><ExpenseOrderActions orders={group.orders}/>{!group.orders.length ? <div className="expense-ticket__reason">{group.reason}</div> : null}</div></div>{group.orders.length ? <div className="expense-ticket__reason expense-ticket__reason--block">{group.reason}</div> : null}<div className="expense-ticket__header-divider" /></div>
+    <div className="expense-ticket__legs">{group.items.map((item, index) => { const route = routeEndpoints(item); const amount = expenseAmount(item); return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><ExpenseShotButton item={item} onScreenshots={onScreenshots}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title">{number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"}</div><div className={`expense-ticket__route-amount ${amount.tone}`}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from">{route.from}</span><span className="expense-ticket__route-arrow"><ClassicExpenseIcon name="arrow-right" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to">{route.to}</span></div></div></div></div>; })}</div>
+    <div className="expense-ticket__separator" />
+    <div className="expense-ticket__footer"><span className="expense-ticket__footer-label">Total</span><span className={`expense-ticket__footer-value ${total.tone}`}>{total.text}</span></div>
+  </article>;
+}
+
+function AllExpensesSheet({ items, onClose, onScreenshots, onExport }) {
+  const groups = groupTransactions(items);
+  return <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="ios-sheet"><div className="ios-drag"/><h3 className="ex-modal-title" style={{ textAlign: "center" }}>All Expenses</h3><div className="next-all-expenses-sheet-actions"><button className="view-all-chip" type="button" onClick={onExport}>Export</button></div><div id="allExpensesList">{groups.length ? groups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} compact key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}</div><button className="next-all-expenses-close" type="button" onClick={onClose}>Close</button></div></div>;
 }
 
 export default function ExpensesClient({ account, initialPayload = {}, initialTypes = [], cashInFromOptions = [], orderOptions = [], bootstrapWarnings = [] }) {
@@ -508,45 +650,57 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
   }, [items, filter, search]);
   const maxMonthly = Math.max(1, ...monthlyTotals);
 
+  const filteredGroups = useMemo(() => groupTransactions(filteredItems), [filteredItems]);
+
   return (
-    <section className="next-expenses-page">
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some expense options could not refresh.</strong><span>The loaded transactions remain available, and the classic page can be used as a fallback.</span><a href="/expenses?classic=1">Open classic Expenses</a></div> : null}
+    <>
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some expense options could not refresh.</strong><span>The loaded transactions remain available, and the Classic page can still be opened as a fallback.</span><a href="/expenses?classic=1">Open classic Expenses</a></div> : null}
       {toast ? <div className={`next-toast next-toast--${toast.type}`} role="status"><span>{toast.type === "success" ? "✓" : toast.type === "error" ? "!" : "i"}</span><strong>{toast.message}</strong><button onClick={() => setToast(null)}>×</button></div> : null}
 
-      <div className="expenses-summary-grid">
-        <article className="expenses-balance-card">
-          <header><div><span>Expense summary</span><h2>Current balance</h2></div><em>Since settlement</em></header>
-          <strong className={summary.balance < 0 ? "negative" : summary.balance > 0 ? "positive" : ""}>{money(summary.balance)}</strong>
-          <div className="expenses-flow-pills"><span className="is-in"><i>↙</i><small>Cash in</small><b>{money(summary.cashIn)}</b></span><span className="is-out"><i>↗</i><small>Cash out</small><b>{money(summary.cashOut)}</b></span></div>
-          <footer><button type="button" onClick={() => setModal("settle")}>✓ Settle my account</button><div><span>Last settlement</span><strong>{formatDate(lastSettledDate || lastSettledAt)}</strong></div></footer>
-        </article>
+      <div className="expenses-layout expenses-dashboard next-expenses-classic-parity">
+        <aside className="expenses-dashboard__sidebar" aria-label="Expense analytics">
+          <section className="total-card expenses-summary-card" aria-label="Expenses summary">
+            <div className="expenses-summary-card__head"><div><span className="expenses-eyebrow">Expense summary</span><div className="total-label">Current balance</div></div><span className="expenses-summary-card__period">Since settlement</span></div>
+            <div className="total-card__main"><div className="total-amount">{money(summary.balance)}</div><div className="total-currency">EGP</div></div>
+            <div className="total-card__side" aria-label="Cash flow summary">
+              <div className="summary-pill summary-pill--in"><span className="summary-pill__icon"><ClassicExpenseIcon name="arrow-down-left"/></span><span className="summary-pill__copy"><span className="summary-pill__label">Cash in</span><span className="summary-pill__value">+{money(summary.cashIn)}</span></span></div>
+              <div className="summary-pill summary-pill--out"><span className="summary-pill__icon"><ClassicExpenseIcon name="arrow-up-right"/></span><span className="summary-pill__copy"><span className="summary-pill__label">Cash out</span><span className="summary-pill__value">-{money(summary.cashOut)}</span></span></div>
+            </div>
+            <div className="total-card__actions"><button className="settle-btn" type="button" onClick={() => setModal("settle")}><ClassicExpenseIcon name="check-circle" size={15}/><span>Settled my account</span></button><div className={`last-settled ${lastSettledDate || lastSettledAt ? "" : "last-settled--empty"}`}><span className="last-settled__label">Last settlement</span><span className="last-settled__date">{formatDate(lastSettledDate || lastSettledAt, "No settlements yet")}</span><span className="last-settled__receipt" /></div></div>
+          </section>
 
-        <article className="expenses-monthly-card">
-          <header><div><span>Monthly overview</span><h2>Expenses by month</h2></div><select value={selectedYear} onChange={(event) => { const year = Number(event.target.value); setSelectedYear(year); setSelectedMonth(""); }}>{years.map((year) => <option key={year}>{year}</option>)}</select></header>
-          <div className="expenses-month-bars">{monthlyTotals.map((value, index) => { const key = `${selectedYear}-${String(index + 1).padStart(2, "0")}`; return <button type="button" key={key} className={effectiveSelectedMonth === key ? "active" : ""} onClick={() => setSelectedMonth(key)} title={`${MONTHS[index]}: ${money(value)}`}><span>{value ? money(value) : ""}</span><i><b style={{ height: `${Math.max(value ? 8 : 2, value / maxMonthly * 100)}%` }} /></i><small>{MONTHS[index]}</small></button>; })}</div>
-        </article>
+          <section className="expenses-analytics-card expenses-monthly-card" aria-labelledby="monthlyExpenseTitle">
+            <div className="expenses-card-head"><div><span className="expenses-eyebrow">Monthly overview</span><h2 id="monthlyExpenseTitle">Expenses by month</h2></div><label className="expenses-year-select" aria-label="Select chart year"><ClassicExpenseIcon name="calendar" size={13}/><select value={selectedYear} onChange={(event) => { const year = Number(event.target.value); setSelectedYear(year); setSelectedMonth(""); }}>{years.map((year) => <option key={year}>{year}</option>)}</select><ClassicExpenseIcon name="chevron-down" size={12}/></label></div>
+            <div className="expense-monthly-chart"><div className="expense-chart-shell"><div className="expense-chart-y-axis" aria-hidden="true">{[maxMonthly, maxMonthly * .75, maxMonthly * .5, maxMonthly * .25, 0].map((value, index) => <span key={index}>{compactMoney(value)}</span>)}</div><div className="expense-chart-stage"><div className="expense-chart-grid" aria-hidden="true"><span/><span/><span/><span/><span/></div><div className="expense-month-bars">{monthlyTotals.map((value, index) => { const key = `${selectedYear}-${String(index + 1).padStart(2, "0")}`; const percent = maxMonthly ? value / maxMonthly * 100 : 0; return <button type="button" className={`expense-month-bar ${effectiveSelectedMonth === key ? "is-active " : ""}${value ? "has-data" : "is-empty"}`} onClick={() => setSelectedMonth(key)} key={key}><span className="expense-month-bar__bubble">{compactMoney(value)}</span><span className="expense-month-bar__track"><span className="expense-month-bar__fill" style={{ "--value": percent.toFixed(2) }}/></span><span className="expense-month-bar__label">{MONTHS[index]}</span></button>; })}</div></div></div></div>
+          </section>
 
-        <article className="expenses-types-card-next">
-          <header><div><span>Selected month</span><h2>Expense types</h2></div><em>{formatDate(`${effectiveSelectedMonth}-01`, "—")}</em></header>
-          {typeRows.length ? <div className="expenses-types-layout"><div className="expenses-donut" style={{ background: donutGradient }}><div><span>Total</span><strong>{money(typeTotal)}</strong></div></div><div className="expenses-type-legend">{typeRows.map((row, index) => <div key={row.label}><i style={{ background: TYPE_COLORS[index % TYPE_COLORS.length] }} /><span>{row.label}</span><strong>{typeTotal ? `${(row.value / typeTotal * 100).toFixed(row.value / typeTotal >= 0.1 ? 0 : 1)}%` : "0%"}</strong></div>)}</div></div> : <div className="expense-empty-inline">No cash-out expenses in this month.</div>}
-        </article>
+          <section className="expenses-analytics-card expenses-types-card" aria-labelledby="expenseTypesTitle">
+            <div className="expenses-card-head"><div><span className="expenses-eyebrow">Selected month</span><h2 id="expenseTypesTitle">Expense types</h2></div><span className="expenses-selected-month">{formatDate(`${effectiveSelectedMonth}-01`, "—")}</span></div>
+            <div className="expense-types-chart">{typeRows.length ? <div className="expense-types-layout"><div className="expense-donut" style={{ "--donut-gradient": donutGradient }}><div className="expense-donut__center"><span>Total</span><strong>{compactMoney(typeTotal)}</strong></div></div><div className="expense-types-legend">{typeRows.map((row, index) => <div className="expense-type-legend-row" key={row.label}><span className="expense-type-legend-row__dot" style={{ "--legend-color": TYPE_COLORS[index % TYPE_COLORS.length] }}/><span className="expense-type-legend-row__name">{row.label}</span><span className="expense-type-legend-row__value">{typeTotal ? `${(row.value / typeTotal * 100).toFixed(row.value / typeTotal >= .1 ? 0 : 1)}%` : "0%"}</span></div>)}</div></div> : <div className="expense-chart-empty"><ClassicExpenseIcon name="tag" size={20}/><span>No cash-out expenses in this month.</span></div>}</div>
+          </section>
+        </aside>
+
+        <section className="expenses-dashboard__main" aria-label="Expense activity">
+          <div className="expense-action-grid" aria-label="Expense actions">
+            <button className="cash-btn cash-in" type="button" onClick={() => setModal("cash-in")}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong><small>Record incoming money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+            <button className="cash-btn cash-out" type="button" onClick={() => setModal("cash-out")}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong><small>Record outgoing money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+          </div>
+
+          <section className="expenses-activity-card">
+            <div className="expenses-activity-head"><div><span className="expenses-eyebrow">Transactions</span><h2>Expense details</h2></div><button className="view-all-chip" type="button" onClick={() => setModal("all")}><span>View all</span><ClassicExpenseIcon name="external-link" size={13}/></button></div>
+            <div className="expenses-overview" aria-label="Expenses overview controls"><div className="expenses-filters" role="tablist">{[["recent","Recent"],["cash-in","Cash in"],["cash-out","Cash out"]].map(([key,label]) => <button className={`expenses-filter${filter === key ? " is-active" : ""}`} aria-selected={filter === key} type="button" onClick={() => setFilter(key)} key={key}>{label}</button>)}</div><span className="expenses-period-note"><ClassicExpenseIcon name="clock" size={13}/>Last 7 days</span></div>
+            <div className="expenses-ledger-head" aria-hidden="true"><span>Date / Reason</span><span>Type &amp; route</span><span>Amount</span><span>Receipt</span></div>
+            <div className="expenses-content">{filteredGroups.length ? filteredGroups.map((group) => <LedgerGroup group={group} onScreenshots={setScreenshotTransaction} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}</div>
+          </section>
+        </section>
       </div>
-
-      <div className="expense-action-row"><button className="expense-action-in" onClick={() => setModal("cash-in")} type="button"><span>↙</span><div><strong>Cash in</strong><small>Record incoming money</small></div><i>→</i></button><button className="expense-action-out" onClick={() => setModal("cash-out")} type="button"><span>↗</span><div><strong>Cash out</strong><small>Record outgoing money</small></div><i>→</i></button></div>
-
-      <section className="expenses-ledger-card">
-        <header><div><span>Transactions</span><h2>Expense details</h2></div><div className="expenses-ledger-actions"><button type="button" onClick={() => setModal("export")}>Export</button><button type="button" onClick={() => setModal("all")}>View all</button></div></header>
-        <div className="expenses-toolbar"><div className="expenses-filter-tabs">{[["recent", "Recent"], ["cash-in", "Cash in"], ["cash-out", "Cash out"]].map(([key, label]) => <button className={filter === key ? "active" : ""} type="button" onClick={() => setFilter(key)} key={key}>{label}</button>)}</div><label><span>⌕</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transactions…" />{search ? <button onClick={() => setSearch("")} type="button">×</button> : null}</label></div>
-        <div className="expense-transaction-list">{filteredItems.length ? filteredItems.slice(0, 12).map((item) => <TransactionCard item={item} key={text(item?.id) || `${transactionTime(item)}-${displayReason(item)}`} onScreenshots={setScreenshotTransaction} />) : <div className="expense-empty-state"><span>∅</span><h3>No matching transactions</h3><p>Try another filter or search phrase.</p></div>}</div>
-        <footer><span>{filteredItems.length} matching transaction{filteredItems.length === 1 ? "" : "s"}</span><a href="/expenses?classic=1">Open classic Expenses</a></footer>
-      </section>
 
       {modal === "cash-in" ? <CashInModal options={cashInFromOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "settle" ? <SettleModal onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "export" ? <ExportModal account={account} items={items} onClose={() => setModal("")} notify={notify} /> : null}
-      {modal === "all" ? <Modal title="All expenses" subtitle={`${items.length} transaction${items.length === 1 ? "" : "s"}.`} onClose={() => setModal("")} wide><div className="expense-transaction-list expense-transaction-list--modal">{items.map((item) => <TransactionCard item={item} key={`all-${text(item?.id) || `${transactionTime(item)}-${displayReason(item)}`}`} onScreenshots={setScreenshotTransaction} />)}</div></Modal> : null}
+      {modal === "all" ? <AllExpensesSheet items={items} onClose={() => setModal("")} onScreenshots={setScreenshotTransaction} onExport={() => setModal("export")} /> : null}
       {screenshotTransaction ? <ScreenshotModal transaction={screenshotTransaction} onClose={() => setScreenshotTransaction(null)} /> : null}
-    </section>
+    </>
   );
 }
