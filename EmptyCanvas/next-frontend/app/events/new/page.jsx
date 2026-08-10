@@ -80,6 +80,8 @@ export default async function NewEventRequestPage({ searchParams }) {
         title="Edit Event Request"
         eyebrow="Event planning and execution brief"
         activePath="/next/events/new"
+      bodyClass="events-page events-new-page"
+      classicStyles={["/css/events.css?v=next-stage-2k-events"]}
         classicHrefOverride={`/events/new?edit=${encodeURIComponent(editId)}`}
       >
         <main className="standalone-state">
@@ -100,6 +102,8 @@ export default async function NewEventRequestPage({ searchParams }) {
       title={editId ? "Edit Event Request" : "New Event Request"}
       eyebrow="Event planning and execution brief"
       activePath="/next/events/new"
+      bodyClass="events-page events-new-page"
+      classicStyles={["/css/events.css?v=next-stage-2k-events"]}
       classicHrefOverride={editId ? `/events/new?edit=${encodeURIComponent(editId)}` : "/events/new"}
     >
       <EventRequestFormClient

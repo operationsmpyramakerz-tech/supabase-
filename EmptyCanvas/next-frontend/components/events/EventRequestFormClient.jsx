@@ -224,7 +224,7 @@ function Toast({ toast, onClose }) {
 
 function Field({ label, required, wide, children }) {
   return (
-    <label className={`next-event-form-field${wide ? " is-wide" : ""}`}>
+    <label className={`events-field next-event-form-field${wide ? " events-field--wide is-wide" : ""}`}>
       <span>{label}{required ? <em>*</em> : null}</span>
       {children}
     </label>
@@ -233,10 +233,10 @@ function Field({ label, required, wide, children }) {
 
 function FormSection({ number: sectionNumber, icon, title, description, action, children }) {
   return (
-    <section className="next-event-form-section">
-      <header>
-        <span className="next-event-form-section__icon">{icon}</span>
-        <div><small>Section {sectionNumber}</small><h3>{title}</h3><p>{description}</p></div>
+    <section className="events-form-section next-event-form-section">
+      <header className="events-form-section__heading">
+        <span className="events-section-icon next-event-form-section__icon">{icon}</span>
+        <div><h2>{sectionNumber}. {title}</h2><p>{description}</p></div>
         {action || null}
       </header>
       {children}
@@ -245,7 +245,7 @@ function FormSection({ number: sectionNumber, icon, title, description, action, 
 }
 
 function EmptyRows({ label }) {
-  return <div className="next-event-form-empty"><span>＋</span><strong>No {label} added yet</strong><small>Use the button above to add the first item.</small></div>;
+  return <div className="events-empty-repeat next-event-form-empty"><span>＋</span><strong>No {label} added yet</strong><small>Use the button above to add the first item.</small></div>;
 }
 
 export default function EventRequestFormClient({
@@ -594,35 +594,19 @@ export default function EventRequestFormClient({
   }
 
   return (
-    <section className="next-event-form-page">
+    <section className="events-shell events-shell--form next-event-form-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <header className="next-event-form-hero">
-        <div>
-          <span className="next-event-form-kicker">{editingId ? `Editing ${initialEvent?.eventCode || "event request"}` : "Operations event brief"}</span>
-          <h2>{editingId ? "Update the approved planning details" : "Create a complete event request before execution starts"}</h2>
-          <p>Plan the schedule, project resources, reusable event components, venue requirements, and transport estimate in one structured workflow.</p>
-          <div className="next-event-form-hero__actions">
-            <a href="/next/events" className="secondary-button">Event Requests</a>
-            <a href="/next/events-calendar" className="secondary-button">Calendar</a>
-            <a href="/next/event-components" className="secondary-button">Components</a>
-            <button type="button" className="secondary-button" onClick={refreshReferenceData} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh catalogues"}</button>
-          </div>
-        </div>
-        <aside>
-          <small>Estimated total</small>
-          <strong>{money(totalCost)}</strong>
-          <span>{projects.length + marketing.length + venueRequirements.length} planned items</span>
-          <div><b>{money(transportCost)}</b><small>Round-trip transport</small></div>
-        </aside>
-      </header>
+      <div className="events-form-top">
+        <a className="events-back-link" href="/next/events-calendar" aria-label="Back to Calendar" title="Back to Calendar">←</a>
+      </div>
 
-      {bootstrapWarnings.length ? <div className="next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete.</div> : null}
-      {viewOnly ? <div className="next-event-form-warning is-info">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
+      {bootstrapWarnings.length ? <div className="events-stage2k-notice next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete.</div> : null}
+      {viewOnly ? <div className="events-stage2k-notice is-info next-event-form-warning">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
 
       <form className="next-event-form" onSubmit={submit}>
         <FormSection number="1" icon="◫" title="Event Overview" description="Who is requesting the event, and when will it happen?">
-          <div className="next-event-form-grid">
+          <div className="events-form-grid next-event-form-grid">
             <Field label="Event Name" required wide><input value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} maxLength={240} placeholder="Example: Green Valley School Tech Day 2026" disabled={viewOnly} /></Field>
             <Field label="Event Type" required>
               <div className="next-event-type-control">
@@ -642,7 +626,7 @@ export default function EventRequestFormClient({
             <Field label="Start Date & Time" required><input type="datetime-local" value={form.eventStartDate} onChange={(event) => updateField("eventStartDate", event.target.value)} disabled={viewOnly} /></Field>
             <Field label="End Date & Time"><input type="datetime-local" value={form.eventEndDate} onChange={(event) => updateField("eventEndDate", event.target.value)} disabled={viewOnly} /></Field>
             {conflicts.length ? (
-              <div className="next-event-conflict is-wide">
+              <div className="events-date-conflict next-event-conflict is-wide">
                 <span>i</span><div><strong>Schedule notice</strong><p>{conflicts.length} event{conflicts.length === 1 ? " is" : "s are"} already scheduled across the selected date range: {conflicts.slice(0, 3).map((item) => item.eventCode || item.eventName || "Untitled event").join(", ")}.</p></div>
               </div>
             ) : null}
@@ -654,12 +638,12 @@ export default function EventRequestFormClient({
           </div>
         </FormSection>
 
-        <FormSection number="2" icon="⚙" title="Projects" description="Add every activity, kit, or technical project required for the event." action={<button type="button" className="next-event-inline-add" onClick={addProject} disabled={viewOnly}>＋ Add Project</button>}>
-          <div className="next-event-repeat-list">
+        <FormSection number="2" icon="⚙" title="Projects" description="Add every activity, kit, or technical project required for the event." action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}>＋ Add Project</button>}>
+          <div className="events-repeat-list next-event-repeat-list">
             {!projects.length ? <EmptyRows label="projects" /> : projects.map((item) => {
               const component = components.find((entry) => text(entry.id) === text(item.componentId));
               return (
-                <article className="next-event-repeat-row next-event-repeat-row--project" key={item.key}>
+                <article className="events-repeat-row events-repeat-row--project next-event-repeat-row next-event-repeat-row--project" key={item.key}>
                   <Field label="Project / Activity"><select value={item.componentId} onChange={(event) => selectProject(item.key, event.target.value)} disabled={viewOnly}><option value="">Select component</option>{projectComponents.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select></Field>
                   <Field label="Quantity"><input type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateProject(item.key, { quantity: event.target.value })} disabled={viewOnly} /></Field>
                   <Field label="Working Cost"><input type="number" min="0" step="0.01" value={item.workingCost} onChange={(event) => updateProject(item.key, { workingCost: event.target.value })} disabled={viewOnly} /></Field>
@@ -704,7 +688,7 @@ export default function EventRequestFormClient({
         />
 
         <FormSection number="5" icon="⌖" title="Venue & Location Details" description="Give Operations enough detail to prepare the team, transport, and setup.">
-          <div className="next-event-form-grid">
+          <div className="events-form-grid next-event-form-grid">
             <Field label="Venue Name" required wide><input value={form.venueName} onChange={(event) => updateField("venueName", event.target.value)} maxLength={240} placeholder="Example: Main Sports Hall" disabled={viewOnly} /></Field>
             <Field label="Venue Type"><input value={form.venueType} onChange={(event) => updateField("venueType", event.target.value)} maxLength={120} placeholder="School hall, outdoor area…" disabled={viewOnly} /></Field>
             <Field label="Governorate / Area" required>
@@ -718,7 +702,7 @@ export default function EventRequestFormClient({
             </Field>
             <Field label="Google Maps / Location URL" required wide><input type="url" value={form.locationUrl} onChange={(event) => updateField("locationUrl", event.target.value)} maxLength={1000} placeholder="https://maps.app.goo.gl/..." disabled={viewOnly} /><small className={form.locationUrl && !isGoogleMapsUrl(form.locationUrl) ? "is-error" : ""}>{form.locationUrl && !isGoogleMapsUrl(form.locationUrl) ? "Paste a valid Google Maps link." : "Use the exact Google Maps venue link."}</small></Field>
             <Field label="Venue Setup Time"><input type="datetime-local" value={form.venueSetupTime} onChange={(event) => updateField("venueSetupTime", event.target.value)} disabled={viewOnly} /></Field>
-            <div className="next-event-checkboxes is-wide">
+            <div className="events-checkbox-grid events-field--wide next-event-checkboxes is-wide">
               <label><input type="checkbox" checked={form.requiresPower} onChange={(event) => updateField("requiresPower", event.target.checked)} disabled={viewOnly} /><span>Electricity / power points required</span></label>
               <label><input type="checkbox" checked={form.requiresInternet} onChange={(event) => updateField("requiresInternet", event.target.checked)} disabled={viewOnly} /><span>Internet connection required</span></label>
               <label><input type="checkbox" checked={form.requiresSoundSystem} onChange={(event) => updateField("requiresSoundSystem", event.target.checked)} disabled={viewOnly} /><span>Sound system required</span></label>
@@ -727,33 +711,33 @@ export default function EventRequestFormClient({
           </div>
         </FormSection>
 
-        <section className="next-event-cost-summary" aria-label="Event cost summary">
+        <section className="events-cost-summary next-event-cost-summary" aria-label="Event cost summary">
           <article><small>Working Cost</small><strong>{money(workingCost)}</strong><span>Projects, marketing materials, and venue requirements</span></article>
           <article><small>Transport Cost</small><strong>{money(transportCost)}</strong><span>{selectedRate ? `${money(selectedRate.transportCost)} × 2 · ${selectedRate.areaName}` : "Select a governorate to calculate transport"}</span></article>
-          <article className="is-total"><small>Total Cost</small><strong>{money(totalCost)}</strong><span>Working cost + round-trip transport</span></article>
+          <article className="events-cost-summary__total is-total"><small>Total Cost</small><strong>{money(totalCost)}</strong><span>Working cost + round-trip transport</span></article>
         </section>
 
-        {error ? <div className="next-event-form-error" role="alert">{error}</div> : null}
-        <footer className="next-event-form-submit">
-          <a href="/next/events" className="secondary-button">Cancel</a>
-          <button type="submit" className="primary-button" disabled={submitting || viewOnly}>{submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event Request" : "Submit Event Request")}</button>
+        {error ? <div className="events-form-error next-event-form-error" role="alert">{error}</div> : null}
+        <footer className="events-form-submit next-event-form-submit">
+          <a href="/next/events" className="events-secondary-btn secondary-button">Cancel</a>
+          <button type="submit" className="events-primary-btn primary-button" disabled={submitting || viewOnly}>{submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event Request" : "Submit Event Request")}</button>
         </footer>
       </form>
 
       {showRateAuth ? (
-        <div className="next-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRateAuth(false); }}>
-          <form className="next-modal next-event-auth-modal" onSubmit={authorizeRateEditor}>
+        <div className="events-modal-overlay next-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRateAuth(false); }}>
+          <form className="events-modal events-modal--authorization next-modal next-event-auth-modal" onSubmit={authorizeRateEditor}>
             <header><div><span>Admin authorization</span><h2>Transport settings</h2><p>Enter the Events Admin password to edit governorate transport rates.</p></div><button type="button" onClick={() => setShowRateAuth(false)}>×</button></header>
             <Field label="Admin Password" required><input type="password" value={ratePassword} onChange={(event) => setRatePassword(event.target.value)} autoFocus /></Field>
-            {rateAuthError ? <div className="next-event-form-error">{rateAuthError}</div> : null}
-            <footer><button type="button" className="secondary-button" onClick={() => setShowRateAuth(false)}>Cancel</button><button type="submit" className="primary-button" disabled={authorizingRates}>{authorizingRates ? "Authorizing…" : "Authorize & Continue"}</button></footer>
+            {rateAuthError ? <div className="events-form-error next-event-form-error">{rateAuthError}</div> : null}
+            <footer><button type="button" className="events-secondary-btn secondary-button" onClick={() => setShowRateAuth(false)}>Cancel</button><button type="submit" className="events-primary-btn primary-button" disabled={authorizingRates}>{authorizingRates ? "Authorizing…" : "Authorize & Continue"}</button></footer>
           </form>
         </div>
       ) : null}
 
       {showRates ? (
-        <div className="next-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRates(false); }}>
-          <form className="next-modal next-event-rates-modal" onSubmit={saveRates}>
+        <div className="events-modal-overlay next-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRates(false); }}>
+          <form className="events-modal events-modal--governorate-rates next-modal next-event-rates-modal" onSubmit={saveRates}>
             <header><div><span>Transport settings</span><h2>Governorate transport rates</h2><p>Set the approximate one-way cost. Event transport is calculated as the selected rate × 2.</p></div><button type="button" onClick={() => setShowRates(false)}>×</button></header>
             <div className="next-event-rates-list">
               {ratesDraft.map((rate) => (
@@ -765,9 +749,9 @@ export default function EventRequestFormClient({
                 </article>
               ))}
             </div>
-            <button type="button" className="next-event-add-rate" onClick={() => setRatesDraft((current) => [...current, { key: makeKey("rate"), id: "", areaName: "", transportCost: 0, isActive: true }])}>＋ Add Governorate / Area</button>
-            {ratesError ? <div className="next-event-form-error">{ratesError}</div> : null}
-            <footer><button type="button" className="secondary-button" onClick={() => setShowRates(false)}>Cancel</button><button type="submit" className="primary-button" disabled={savingRates}>{savingRates ? "Saving…" : "Save Transport Rates"}</button></footer>
+            <button type="button" className="events-add-governorate-rate next-event-add-rate" onClick={() => setRatesDraft((current) => [...current, { key: makeKey("rate"), id: "", areaName: "", transportCost: 0, isActive: true }])}>＋ Add Governorate / Area</button>
+            {ratesError ? <div className="events-form-error next-event-form-error">{ratesError}</div> : null}
+            <footer><button type="button" className="events-secondary-btn secondary-button" onClick={() => setShowRates(false)}>Cancel</button><button type="submit" className="events-primary-btn primary-button" disabled={savingRates}>{savingRates ? "Saving…" : "Save Transport Rates"}</button></footer>
           </form>
         </div>
       ) : null}
@@ -777,14 +761,14 @@ export default function EventRequestFormClient({
 
 function ComponentSection({ number: sectionNumber, icon, title, description, kind, rows, source, allComponents, viewOnly, onAdd, onSelect, onUpdate, onRemove }) {
   return (
-    <FormSection number={sectionNumber} icon={icon} title={title} description={description} action={<button type="button" className="next-event-inline-add" onClick={onAdd} disabled={viewOnly}>＋ Add {kind === "marketing" ? "Material" : "Requirement"}</button>}>
-      <div className="next-event-repeat-list">
+    <FormSection number={sectionNumber} icon={icon} title={title} description={description} action={<button type="button" className="events-inline-add next-event-inline-add" onClick={onAdd} disabled={viewOnly}>＋ Add {kind === "marketing" ? "Material" : "Requirement"}</button>}>
+      <div className="events-repeat-list next-event-repeat-list">
         {!rows.length ? <EmptyRows label={kind === "marketing" ? "marketing materials" : "venue requirements"} /> : rows.map((item) => {
           const component = allComponents.find((entry) => text(entry.id) === text(item.componentId));
           const cost = componentTotal(component, item.quantity);
           const link = safeHttpUrl(component?.linkUrl);
           return (
-            <article className="next-event-repeat-row next-event-repeat-row--component" key={item.key}>
+            <article className="events-repeat-row next-event-repeat-row next-event-repeat-row--component" key={item.key}>
               <Field label="Component"><select value={item.componentId} onChange={(event) => onSelect(item.key, event.target.value)} disabled={viewOnly}><option value="">Select component</option>{source.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select></Field>
               <Field label="Quantity"><input type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => onUpdate(item.key, { quantity: event.target.value })} disabled={viewOnly} /></Field>
               <div className="next-event-component-cost"><small>Cost</small><strong>{component ? money(cost) : "Select a component"}</strong><span>{component ? `${money(componentUnitCost(component))} / unit · ${lower(component.ownershipType) === "external_rental" ? "External Rental" : "Company Owned"}` : "Cost details appear here."}</span></div>

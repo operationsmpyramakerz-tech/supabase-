@@ -64,7 +64,7 @@ export default async function EventComponentsPage({ searchParams }) {
   if (!account) redirect("/login?next=/next/event-components");
 
   return (
-    <AppShell account={account} title="Event Components" eyebrow="Reusable event resources" activePath="/next/event-components">
+    <AppShell account={account} title="Event Components" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" classicStyles={["/css/events.css?v=next-stage-2k-events"]}>
       <EventComponentsClient
         account={account}
         initialComponents={Array.isArray(componentsPayload?.components) ? componentsPayload.components : []}

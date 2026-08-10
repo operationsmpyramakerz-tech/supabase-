@@ -60,7 +60,7 @@ export default async function EventsCalendarPage() {
   if (!account) redirect("/login?next=/next/events-calendar");
 
   return (
-    <AppShell account={account} title="Event Calendar" eyebrow="Event execution schedule" activePath="/next/events-calendar">
+    <AppShell account={account} title="Event Calendar" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" classicStyles={["/css/events.css?v=next-stage-2k-events"]}>
       <EventsCalendarClient
         account={account}
         initialEvents={Array.isArray(eventsPayload?.events) ? eventsPayload.events : []}

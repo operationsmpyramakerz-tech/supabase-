@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -141,7 +141,7 @@ function Toast({ toast, onClose }) {
 
 function StatusPill({ status }) {
   const key = normalizeStatus(status);
-  return <span className={`next-events-status next-events-status--${key}`}>{STATUS_LABELS[key]}</span>;
+  return <span className={`events-status events-status--${key} next-events-status next-events-status--${key}`}>{STATUS_LABELS[key]}</span>;
 }
 
 function SummaryCard({ label, value, note, tone = "default" }) {
@@ -156,7 +156,7 @@ function SummaryCard({ label, value, note, tone = "default" }) {
 
 function DetailItem({ label, value, wide = false }) {
   return (
-    <div className={`next-events-detail-item${wide ? " wide" : ""}`}>
+    <div className={`events-detail-item next-events-detail-item${wide ? " wide" : ""}`}>
       <small>{label}</small>
       <strong>{text(value) || "—"}</strong>
     </div>
@@ -166,20 +166,20 @@ function DetailItem({ label, value, wide = false }) {
 function ItemList({ items, component = false, empty }) {
   if (!Array.isArray(items) || !items.length) return <p className="next-events-empty-copy">{empty}</p>;
   return (
-    <div className="next-events-item-list">
+    <ul className="events-detail-list next-events-item-list">
       {items.map((item, index) => {
         const title = component ? item?.name : item?.title;
         const notes = component ? item?.notes : [item?.description, item?.notes].map(text).filter(Boolean).join(" · ");
         const quantity = number(item?.quantity);
         const total = number(item?.totalCost || quantity * number(item?.unitCost || item?.workingCost));
         return (
-          <article key={`${text(title)}-${index}`}>
-            <div><strong>{text(title) || "Untitled item"}</strong><small>{quantity || 0} required{notes ? ` · ${notes}` : ""}</small></div>
-            <b>{formatMoney(total)}</b>
-          </article>
+          <li key={`${text(title)}-${index}`}>
+            <strong>{text(title) || "Untitled item"}</strong>
+            <small>{quantity || 0} required{notes ? ` · ${notes}` : ""} · {formatMoney(total)}</small>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }
 
@@ -195,21 +195,21 @@ function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRe
       : null;
 
   return (
-    <div className="next-modal-layer" role="presentation" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
-      <section className="next-modal next-events-details-modal" role="dialog" aria-modal="true" aria-label="Event request details">
-        <header className="next-events-modal-head">
+    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
+      <section className="events-modal events-modal--detail next-modal next-events-details-modal" role="dialog" aria-modal="true" aria-label="Event request details">
+        <header className="events-modal__header next-events-modal-head">
           <div>
             <span className="next-events-kicker">{event.eventCode || "Event request"}</span>
             <h2>{event.eventName || "Untitled Event"}</h2>
             <p>{formatDateRange(event)}</p>
           </div>
-          <div><StatusPill status={event.status} /><button type="button" className="next-modal-close" onClick={onClose} aria-label="Close">×</button></div>
+          <div><StatusPill status={event.status} /><button type="button" className="events-modal__close next-modal-close" onClick={onClose} aria-label="Close">×</button></div>
         </header>
 
-        <div className="next-events-detail-body">
-          <section className="next-events-detail-section">
+        <div className="events-detail-content next-events-detail-body">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Overview</h3>
-            <div className="next-events-detail-grid">
+            <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Type" value={typeLabel(event)} />
               <DetailItem label="Organization" value={event.organizationName} />
               <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} />
@@ -217,9 +217,9 @@ function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRe
             </div>
           </section>
 
-          <section className="next-events-detail-section">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Contact</h3>
-            <div className="next-events-detail-grid">
+            <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Contact person" value={event.contactPerson} />
               <DetailItem label="Phone" value={event.contactPhone} />
               <DetailItem label="Email" value={event.contactEmail} />
@@ -227,29 +227,29 @@ function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRe
             </div>
           </section>
 
-          <section className="next-events-detail-section next-events-detail-section--wide">
+          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
             <h3>Target audience</h3>
             <p>{text(event.audience) || "No audience details were added."}</p>
           </section>
 
-          <section className="next-events-detail-section">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Projects</h3>
             <ItemList items={event.projects} empty="No projects were added." />
           </section>
 
-          <section className="next-events-detail-section">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Marketing materials</h3>
             <ItemList items={event.marketingMaterials} component empty="No marketing materials were added." />
           </section>
 
-          <section className="next-events-detail-section">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Venue requirements</h3>
             <ItemList items={event.venueRequirements} component empty="No venue requirements were added." />
           </section>
 
-          <section className="next-events-detail-section">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Venue & location</h3>
-            <div className="next-events-detail-grid">
+            <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Venue" value={event.venueName} />
               <DetailItem label="Venue type" value={event.venueType} />
               <DetailItem label="Governorate" value={event.governorate} />
@@ -258,15 +258,15 @@ function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRe
             {mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
           </section>
 
-          <section className="next-events-detail-section">
+          <section className="events-detail-block next-events-detail-section">
             <h3>Site notes</h3>
-            <div className="next-events-detail-grid">
+            <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Utilities" value={utilities} wide />
               <DetailItem label="Venue notes" value={event.venueNotes || "No venue notes were added."} wide />
             </div>
           </section>
 
-          <section className="next-events-detail-section next-events-detail-section--wide">
+          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
             <h3>Cost summary</h3>
             <div className="next-events-cost-grid">
               <span><small>Working cost</small><strong>{formatMoney(event.workingCost)}</strong></span>
@@ -276,18 +276,18 @@ function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRe
           </section>
 
           {text(event.operationsNotes) ? (
-            <section className="next-events-detail-section next-events-detail-section--wide"><h3>Operations notes</h3><p>{event.operationsNotes}</p></section>
+            <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide"><h3>Operations notes</h3><p>{event.operationsNotes}</p></section>
           ) : null}
         </div>
 
-        <footer className="next-events-modal-actions">
+        <footer className="events-modal__actions next-events-modal-actions">
           <div>
-            {canRequestActions ? <button type="button" className="secondary" disabled={busy} onClick={() => onRequestAction("edit")}>Edit</button> : null}
+            {canRequestActions ? <button type="button" className="events-secondary-btn secondary" disabled={busy} onClick={() => onRequestAction("edit")}>Edit</button> : null}
             {canRequestActions && status !== "cancelled" ? <button type="button" className="danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button> : null}
           </div>
           <div>
-            <button type="button" className="secondary" onClick={onDownload}>Download PDF</button>
-            {workflow && canRequestActions ? <button type="button" className="primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}>{workflow.label}</button> : null}
+            <button type="button" className="events-secondary-btn secondary" onClick={onDownload}>Download PDF</button>
+            {workflow && canRequestActions ? <button type="button" className="events-primary-btn primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}>{workflow.label}</button> : null}
           </div>
         </footer>
       </section>
@@ -298,12 +298,12 @@ function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRe
 function AuthorizationModal({ authorization, busy, error, onClose, onPassword, onSubmit }) {
   if (!authorization) return null;
   return (
-    <div className="next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="next-modal next-events-auth-modal" onSubmit={onSubmit}>
-        <header className="next-events-modal-head"><div><span className="next-events-kicker">Admin verification</span><h2>{authorization.title}</h2><p>Enter the shared Events Admin password to continue.</p></div><button type="button" className="next-modal-close" onClick={onClose}>×</button></header>
-        <label className="next-field"><span>Admin password</span><input autoFocus type="password" value={authorization.password} onChange={(event) => onPassword(event.target.value)} placeholder="Enter Admin password" /></label>
-        {error ? <div className="next-events-form-error">{error}</div> : null}
-        <footer className="next-events-modal-actions"><span /><div><button type="button" className="secondary" onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={busy}>{busy ? "Verifying..." : "Verify & continue"}</button></div></footer>
+    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <form className="events-modal events-modal--authorization next-modal next-events-auth-modal" onSubmit={onSubmit}>
+        <header className="events-modal__header next-events-modal-head"><div><span className="next-events-kicker">Admin verification</span><h2>{authorization.title}</h2><p>Enter the shared Events Admin password to continue.</p></div><button type="button" className="events-modal__close next-modal-close" onClick={onClose}>×</button></header>
+        <label className="events-field next-field"><span>Admin password</span><input autoFocus type="password" value={authorization.password} onChange={(event) => onPassword(event.target.value)} placeholder="Enter Admin password" /></label>
+        {error ? <div className="events-form-error next-events-form-error">{error}</div> : null}
+        <footer className="events-modal__actions next-events-modal-actions"><span /><div><button type="button" className="events-secondary-btn secondary" onClick={onClose}>Cancel</button><button type="submit" className="events-primary-btn primary" disabled={busy}>{busy ? "Verifying..." : "Verify & continue"}</button></div></footer>
       </form>
     </div>
   );
@@ -312,10 +312,10 @@ function AuthorizationModal({ authorization, busy, error, onClose, onPassword, o
 function ConfirmationModal({ confirmation, busy, onClose, onConfirm }) {
   if (!confirmation) return null;
   return (
-    <div className="next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="next-modal next-events-confirm-modal" role="dialog" aria-modal="true">
-        <header className="next-events-modal-head"><div><span className="next-events-kicker">Confirm action</span><h2>{confirmation.title}</h2><p>{confirmation.message}</p></div><button type="button" className="next-modal-close" onClick={onClose}>×</button></header>
-        <footer className="next-events-modal-actions"><span /><div><button type="button" className="secondary" onClick={onClose}>Back</button><button type="button" className={confirmation.danger ? "danger" : "primary"} disabled={busy} onClick={onConfirm}>{busy ? "Updating..." : confirmation.label}</button></div></footer>
+    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="events-modal events-modal--workflow-confirm next-modal next-events-confirm-modal" role="dialog" aria-modal="true">
+        <header className="events-modal__header next-events-modal-head"><div><span className="next-events-kicker">Confirm action</span><h2>{confirmation.title}</h2><p>{confirmation.message}</p></div><button type="button" className="events-modal__close next-modal-close" onClick={onClose}>×</button></header>
+        <footer className="events-modal__actions next-events-modal-actions"><span /><div><button type="button" className="events-secondary-btn secondary" onClick={onClose}>Back</button><button type="button" className={confirmation.danger ? "danger" : "primary"} disabled={busy} onClick={onConfirm}>{busy ? "Updating..." : confirmation.label}</button></div></footer>
       </section>
     </div>
   );
@@ -326,13 +326,13 @@ function ProfileModal({ profileState, onClose }) {
   const profile = profileState.profile || {};
   const initials = (text(profile.name || profileState.name) || "U").split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
   return (
-    <div className="next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="next-modal next-events-profile-modal" role="dialog" aria-modal="true">
-        <header className="next-events-modal-head"><div><span className="next-events-kicker">Created by</span><h2>{profile.name || profileState.name || "Team member"}</h2><p>{[profile.position, profile.department].map(text).filter(Boolean).join(" · ") || "Team member"}</p></div><button type="button" className="next-modal-close" onClick={onClose}>×</button></header>
-        {profileState.loading ? <div className="next-events-profile-state">Loading profile details...</div> : profileState.error ? <div className="next-events-form-error">{profileState.error}</div> : (
+    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="events-modal next-modal next-events-profile-modal" role="dialog" aria-modal="true">
+        <header className="events-modal__header next-events-modal-head"><div><span className="next-events-kicker">Created by</span><h2>{profile.name || profileState.name || "Team member"}</h2><p>{[profile.position, profile.department].map(text).filter(Boolean).join(" · ") || "Team member"}</p></div><button type="button" className="events-modal__close next-modal-close" onClick={onClose}>×</button></header>
+        {profileState.loading ? <div className="next-events-profile-state">Loading profile details...</div> : profileState.error ? <div className="events-form-error next-events-form-error">{profileState.error}</div> : (
           <div className="next-events-profile-body">
             <div className="next-events-avatar">{profile.photoUrl ? <img src={profile.photoUrl} alt="" /> : <span>{initials}</span>}</div>
-            <div className="next-events-detail-grid">
+            <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Name" value={profile.name || profile.username} />
               <DetailItem label="Department" value={profile.department} />
               <DetailItem label="Position" value={profile.position} />
@@ -364,6 +364,20 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   const [authorizationError, setAuthorizationError] = useState("");
   const [confirmation, setConfirmation] = useState(null);
   const [profileState, setProfileState] = useState(null);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search event requests...";
+    const handle = (event) => setQuery(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.value = "";
+      input.placeholder = "Search";
+    };
+  }, []);
 
   const typeOptions = useMemo(() => {
     const counts = new Map();
@@ -528,70 +542,71 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   };
 
   return (
-    <section className="next-events-page">
+    <section className="events-shell events-request-workspace next-events-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
-
-      <div className="next-events-title-row">
-        <div>
-          <span className="next-events-kicker">Live requests</span>
-          <h2>Event execution workspace</h2>
-          <p>Review submitted requests, monitor delivery progress, and open the event schedule.</p>
-        </div>
-        <div className="next-events-title-actions">
-          <a href="/events?classic=1" className="secondary">Classic Events</a>
-          {canOpenCalendar ? <a href="/next/events-calendar" className="secondary">Calendar</a> : null}
-          {canOpenComponents ? <a href="/next/event-components" className="secondary">Components</a> : null}
-          {canRequestActions ? <a href="/next/events/new" className="primary">+ New event</a> : null}
-        </div>
-      </div>
 
       {bootstrapWarnings.length ? <div className="next-bootstrap-warning">Some Events resources were delayed. The page remains available and can be refreshed.</div> : null}
 
-      <div className="next-events-summary-grid">
-        <SummaryCard label="Total requests" value={events.length} note={`${counts.submitted} awaiting approval`} />
-        <SummaryCard label="In progress" value={counts.in_progress} note={`${upcoming} upcoming scheduled events`} tone="blue" />
-        <SummaryCard label="Delivered" value={counts.completed} note={`${counts.cancelled} cancelled requests`} tone="green" />
-        <SummaryCard label="Planned value" value={formatMoney(totalCost)} note="Working and transport costs" tone="orange" />
-      </div>
-
-      <div className="next-events-toolbar">
-        <label className="next-events-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by event, code, organization, location, or requester" /></label>
-        <label className="next-events-type-filter"><span>Event type</span><select value={eventType} onChange={(event) => setEventType(event.target.value)}>{typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}</select></label>
-        <button type="button" className="next-events-refresh" onClick={() => refreshEvents().catch((error) => setToast({ type: "error", title: "Events", message: error.message }))}>Refresh</button>
-      </div>
-
-      <div className="next-events-tabs" role="tablist" aria-label="Event request status">
-        {["all", "submitted", "in_progress", "completed", "cancelled"].map((key) => (
-          <button type="button" role="tab" aria-selected={status === key} className={status === key ? "active" : ""} onClick={() => setStatus(key)} key={key}>
-            <span>{key === "all" ? "All" : STATUS_LABELS[key]}</span><b>{counts[key]}</b>
-          </button>
-        ))}
+      <div className="events-orders-toolbar" aria-label="Event request status">
+        <div className="events-orders-toolbar__scroll">
+          <div className="events-orders-tabs" role="tablist" aria-label="Event request status tabs">
+            {["all", "submitted", "in_progress", "completed", "cancelled"].map((key) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={status === key}
+                className={`events-order-status-tab${status === key ? " is-active" : ""}`}
+                onClick={() => setStatus(key)}
+                key={key}
+              >
+                <span className="order-status-tab__icon" aria-hidden="true">{key === "all" ? "▦" : key === "submitted" ? "↗" : key === "in_progress" ? "◌" : key === "completed" ? "✓" : "×"}</span>
+                <span className="order-status-tab__label">{key === "all" ? "All" : STATUS_LABELS[key]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="events-stage2k-filter" aria-label="Filter event type">
+          <span>Filter</span>
+          <select value={eventType} onChange={(event) => setEventType(event.target.value)}>
+            {typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}
+          </select>
+        </label>
+        <button type="button" className="events-secondary-btn events-stage2k-refresh" onClick={() => refreshEvents().catch((error) => setToast({ type: "error", title: "Events", message: error.message }))}>Refresh</button>
+        {canRequestActions ? <a href="/next/events/new" className="events-primary-btn events-stage2k-new">+ New event</a> : null}
       </div>
 
       {filtered.length ? (
-        <div className="next-events-grid">
+        <div className="events-request-cards">
           {filtered.map((event) => {
             const mapUrl = safeUrl(event.locationUrl);
+            const typeClass = (lower(event.eventType) || "other").replace(/[^a-z0-9_]/g, "") || "other";
             return (
-              <article className="next-events-card" key={event.id} onClick={() => openDetails(event)} role="button" tabIndex={0} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") openDetails(event); }}>
-                <header>
-                  <div className={`next-events-type-icon next-events-type-icon--${lower(event.eventType) || "other"}`}>◈</div>
-                  <div><strong>{event.eventCode || "Pending reference"}</strong><small>{formatDateRange(event)}</small></div>
-                  <span className="next-events-type-chip">{typeLabel(event)}</span>
-                </header>
-                <h3>{event.eventName || "Untitled Event"}</h3>
-                <p>{text(event.organizationName) || "No organization added"}</p>
-                <div className="next-events-card-meta">
-                  {mapUrl ? <a href={mapUrl} target="_blank" rel="noreferrer" onClick={(clickEvent) => clickEvent.stopPropagation()}>⌖ {event.governorate || "Open location"}</a> : <span>⌖ {event.governorate || "Location to be confirmed"}</span>}
-                  <span>{formatMoney(event.totalCost)}</span>
+              <article className="events-request-card co-card" key={event.id} onClick={() => openDetails(event)} role="button" tabIndex={0} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") openDetails(event); }}>
+                <div className="co-top">
+                  <span className={`events-request-card__thumb events-request-card__thumb--${typeClass}`} aria-hidden="true">◈</span>
+                  <div className="co-main">
+                    <div className="co-title">{event.eventCode || "Pending reference"}</div>
+                    <div className="co-sub">{formatDateRange(event)}</div>
+                    <div className="co-createdby">{event.eventName || "Untitled Event"}</div>
+                  </div>
+                  <div className="events-request-card__count">{typeLabel(event)}</div>
                 </div>
-                <footer><StatusPill status={event.status} /><button type="button" onClick={(clickEvent) => openProfile(event, clickEvent)} aria-label={`Open ${event.requesterName || "creator"} profile`}>◎ {event.requesterName || "Creator"}</button></footer>
+                <div className="co-divider" />
+                <div className="co-bottom">
+                  <div className="co-est">
+                    {mapUrl ? <a className="events-request-card__location events-request-card__location-link" href={mapUrl} target="_blank" rel="noreferrer" onClick={(clickEvent) => clickEvent.stopPropagation()}>⌖ <span>{event.governorate || "Open location"}</span></a> : <span className="events-request-card__location is-disabled">⌖ <span>{event.governorate || "Location to be confirmed"}</span></span>}
+                  </div>
+                  <div className="co-actions">
+                    <StatusPill status={event.status} />
+                    <button type="button" className="co-right-ico co-creator-btn" onClick={(clickEvent) => openProfile(event, clickEvent)} aria-label={`Created by ${event.requesterName || "creator"}`}>◎</button>
+                  </div>
+                </div>
               </article>
             );
           })}
         </div>
       ) : (
-        <div className="next-events-empty"><span>◇</span><h3>No event requests match this view</h3><p>Try another status, type, or search phrase.</p></div>
+        <div className="events-empty"><span>◇</span><span>No event requests match this view.</span></div>
       )}
 
       <EventsDetailsModal
