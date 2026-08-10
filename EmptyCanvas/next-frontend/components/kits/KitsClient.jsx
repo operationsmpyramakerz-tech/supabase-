@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -122,13 +122,13 @@ function Toast({ toast, onClose }) {
 
 function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false }) {
   return (
-    <div className="next-proposals-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`next-proposals-modal__card ${wide ? "is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <span>{icon}</span>
-          <div><h3>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
+    <div className="products-modal-overlay next-proposals-classic-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
+        <div className="products-modal__header">
+          <div className="products-modal__icon" aria-hidden="true">{icon}</div>
+          <div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
+        </div>
         <div className="next-proposals-modal__body">{children}</div>
       </section>
     </div>
@@ -159,12 +159,12 @@ function NameModal({ dialog, busy, onClose, onSubmit }) {
 
   return (
     <Modal title={title} subtitle={subtitle} icon="▣" onClose={onClose}>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <label><span>Kit Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: Arduino starter kit" /></label>
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Saving…" : action}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : action}</button>
         </div>
       </form>
     </Modal>
@@ -189,12 +189,12 @@ function PasswordModal({ request, busy, onClose, onVerified }) {
 
   return (
     <Modal title={request?.title || "Admin password required"} subtitle={request?.message || "Enter the Admin password to continue."} icon="⌾" onClose={onClose}>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <label><span>Admin Password *</span><input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
         </div>
       </form>
     </Modal>
@@ -225,7 +225,7 @@ function AddProductModal({ kit, products, busy, onClose, onSubmit }) {
 
   return (
     <Modal title={`Add Product to ${kit.name}`} subtitle="Choose a catalogue product and the quantity stored in this reusable kit." icon="＋" onClose={onClose} wide>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <label><span>Search Catalogue</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product name, ID code, tag or unit" /></label>
         <div className="next-proposals-product-picker">
           {filteredProducts.map((product) => (
@@ -237,14 +237,14 @@ function AddProductModal({ kit, products, busy, onClose, onSubmit }) {
           ))}
           {!filteredProducts.length ? <div className="next-proposals-empty-inline">No matching catalogue products.</div> : null}
         </div>
-        <div className="next-proposals-form-grid">
+        <div className="next-proposals-form-grid products-form-grid">
           <label><span>Quantity *</span><input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
           <label><span>Selected Product</span><input value={products.find((product) => product.id === selected)?.name || "No product selected"} readOnly /></label>
         </div>
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Adding…" : "Add Product"}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Adding…" : "Add Product"}</button>
         </div>
       </form>
     </Modal>
@@ -263,7 +263,31 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   const [nameDialog, setNameDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
+  const [folderMenu, setFolderMenu] = useState("");
+  const [detailEdit, setDetailEdit] = useState(false);
   const passwordResolver = useRef(null);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search kits...";
+    const handle = (event) => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.value = "";
+      input.placeholder = "Search";
+    };
+  }, []);
+
+  useEffect(() => {
+    const close = (event) => {
+      if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
@@ -332,7 +356,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     syncKit({ ...kit, itemsCount: items.length });
   };
 
-  const loadKit = async (kitId) => {
+  const loadKit = async (kitId, options = {}) => {
+    setDetailEdit(Boolean(options.edit));
+    setFolderMenu("");
     setDetailBusy(true);
     try {
       const body = await requestJson(`/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
@@ -405,7 +431,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
         const created = syncKit({ ...(body.kit || {}), canEdit: true });
         setNameDialog(null);
         notify(`“${name}” was created.`);
-        await loadKit(created.id);
+        await loadKit(created.id, { edit: true });
         return;
       }
       if (dialog.mode === "copy") {
@@ -503,64 +529,92 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   if (activeDetail || detailBusy) {
     const kit = activeDetail?.kit;
     return (
-      <main className="next-proposals-page next-kits-page">
+      <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
-        {detailBusy && !activeDetail ? (
-          <section className="next-proposals-detail-loading"><span /><span /><span /></section>
-        ) : (
-          <>
-            <section className="next-proposals-detail-hero next-kits-detail-hero">
-              <div>
-                <button type="button" className="next-proposals-back" onClick={() => setActiveDetail(null)}>← All Kits</button>
-                <span className="next-proposals-chip">Reusable product kit</span>
-                <h2>{kit?.name}</h2>
-                <p>Created by {kit?.createdBy || "Unknown"} · Updated {formatDate(kit?.updatedAt || kit?.createdAt)}</p>
-              </div>
-              <aside>
-                <button type="button" className="next-proposals-btn primary" onClick={() => setAddDialog(true)}>＋ Add Product</button>
-                <a className="next-proposals-btn dark" href="/next/proposals">Use in Proposal</a>
-                <button type="button" className="next-proposals-btn secondary" onClick={() => setNameDialog({ mode: "rename", kit, value: kit?.name || "" })}>Rename</button>
-                <button type="button" className="next-proposals-btn danger" onClick={() => deleteKit(kit)}>Delete</button>
-              </aside>
-            </section>
-
-            <section className="next-proposals-detail-stats">
-              <article><small>Unique components</small><strong>{formatNumber(detailTotals.items)}</strong><span>Product rows in this kit</span></article>
-              <article><small>Total quantity</small><strong>{formatNumber(detailTotals.quantity)}</strong><span>All saved units</span></article>
-              <article><small>Estimated value</small><strong>{formatMoney(detailTotals.value)}</strong><span>Based on catalogue prices</span></article>
-              <article><small>Ownership</small><strong>{kit?.canEdit ? "Mine" : "Shared"}</strong><span>{kit?.canEdit ? "Direct editing" : "Admin password protected"}</span></article>
-            </section>
-
-            <section className="next-proposals-detail-card">
-              <header>
-                <div><small>Kit contents</small><h3>{enrichedRows.length} component{enrichedRows.length === 1 ? "" : "s"}</h3></div>
-                <div className="next-proposals-detail-actions">
-                  <button type="button" onClick={() => setAddDialog(true)}>Add Product</button>
-                  <button type="button" onClick={() => loadKit(kit.id)} disabled={detailBusy}>{detailBusy ? "Refreshing…" : "Refresh"}</button>
+        <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
+          <section className="proposals-panel">
+            <section className="products-proposal-detail">
+              {detailBusy && !activeDetail ? (
+                <div className="products-loading-card" role="status" aria-live="polite">
+                  <div className="products-spinner" aria-hidden="true" />
+                  <div><strong>Loading kit</strong></div>
                 </div>
-              </header>
+              ) : (
+                <>
+                  <header className="products-proposal-detail__head">
+                    <button type="button" className="products-back-btn" onClick={() => { setActiveDetail(null); setDetailEdit(false); }} aria-label="Back to kits">←</button>
+                    <div className="proposal-classic-kit-heading">
+                      <h2>{kit?.name || "Kit"}</h2>
+                      <p>{formatNumber(enrichedRows.length)} saved component{enrichedRows.length === 1 ? "" : "s"} · {detailEdit ? "Edit mode" : "View only"}</p>
+                    </div>
+                    <div className="proposal-detail-actions">
+                      {detailEdit ? (
+                        <>
+                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>＋ <span>Add Product</span></button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => setNameDialog({ mode: "rename", kit, value: kit?.name || "" })}>Rename</button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(false)}>Done</button>
+                        </>
+                      ) : (
+                        <>
+                          <a className="products-btn products-btn--dark" href="/next/proposals">Use in Proposal</a>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(true)}>Edit</button>
+                        </>
+                      )}
+                    </div>
+                  </header>
 
-              <div className="next-proposals-table-wrap">
-                <table className="next-proposals-table">
-                  <thead><tr><th>Component</th><th>Tag / Unit</th><th>Unit Cost</th><th>Quantity</th><th>Total</th><th /></tr></thead>
-                  <tbody>
-                    {enrichedRows.map((row) => (
-                      <tr key={row.id}>
-                        <td><div className="next-proposals-component"><span>{row.product?.imageUrl ? <img src={row.product.imageUrl} alt="" loading="lazy" /> : "▧"}</span><div><strong>{row.name}</strong><small>{row.displayId || "No ID code"}</small>{row.product?.url ? <a href={row.product.url} target="_blank" rel="noreferrer">Supplier link ↗</a> : null}</div></div></td>
-                        <td><strong>{row.tag}</strong><small>{row.unit || "No unit"}</small></td>
-                        <td>{formatMoney(row.unitPrice)}</td>
-                        <td><input className="next-proposals-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onBlur={(event) => updateQuantity(row, event.target.value)} /></td>
-                        <td><strong>{formatMoney(row.totalPrice)}</strong></td>
-                        <td><button type="button" className="next-proposals-icon-btn danger" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>×</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!enrichedRows.length ? <div className="next-proposals-empty"><span>▧</span><strong>No components yet</strong><p>Add products and quantities to make this kit reusable inside proposals.</p><button type="button" className="next-proposals-btn primary" onClick={() => setAddDialog(true)}>Add Product</button></div> : null}
-              </div>
+                  {detailEdit ? (
+                    <div className="products-proposal-tools proposals-one-tool">
+                      <div className="products-proposal-tool-card">
+                        <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Add kit component</span></div>
+                        <div className="proposal-classic-inline-actions">
+                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>Add Product</button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => loadKit(kit.id, { edit: true })} disabled={detailBusy}>{detailBusy ? "Refreshing…" : "Refresh"}</button>
+                          <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteKit(kit)}>Delete Kit</button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="proposal-view-note"><span aria-hidden="true">◉</span><span>View only. Use the 3-dot menu or choose Edit to modify this kit.</span></div>
+                  )}
+
+                  <div className="products-proposal-table-card">
+                    <div className="products-proposal-table-head">
+                      <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
+                      <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
+                    </div>
+                    <div className="products-proposal-table-wrap">
+                      <table className="products-proposal-table">
+                        <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th /></tr></thead>
+                        <tbody>
+                          {enrichedRows.map((row) => (
+                            <tr key={row.id}>
+                              <td className="proposal-component-name">
+                                <strong>{row.name}</strong>
+                                <small className="proposal-classic-component-meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
+                              </td>
+                              <td>{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onBlur={(event) => updateQuantity(row, event.target.value)} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
+                              <td className="proposal-price-cell">{formatMoney(row.unitPrice)}</td>
+                              <td className="proposal-price-cell proposal-price-cell--total">{formatMoney(row.totalPrice)}</td>
+                              <td className="proposal-link-cell">{row.product?.url ? <a className="proposal-product-link" href={row.product.url} target="_blank" rel="noreferrer">Open ↗</a> : "—"}</td>
+                              <td><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`}>×</button> : null}</div></td>
+                            </tr>
+                          ))}
+                          {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component above." : "Choose Edit to add components."}</div></td></tr> : null}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="proposal-total-block">
+                      <div><span>Components</span><strong>{formatNumber(detailTotals.items)}</strong></div>
+                      <div><span>Total Quantity</span><strong>{formatNumber(detailTotals.quantity)}</strong></div>
+                      <div><span>Estimated Total</span><strong>{formatMoney(detailTotals.value)}</strong></div>
+                    </div>
+                  </div>
+                </>
+              )}
             </section>
-          </>
-        )}
+          </section>
+        </section>
 
         {addDialog && kit ? <AddProductModal kit={kit} products={products} busy={busy} onClose={() => setAddDialog(false)} onSubmit={addProduct} /> : null}
         {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
@@ -570,69 +624,50 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   }
 
   return (
-    <main className="next-proposals-page next-kits-page">
+    <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <section className="next-proposals-hero next-kits-hero">
-        <div>
-          <span className="next-proposals-chip">Reusable product bundles</span>
-          <h2>Build a kit once, then reuse it in every proposal.</h2>
-          <p>Create standard component bundles, preserve exact quantities, copy proven configurations, and insert complete kits into quotations without rebuilding the same list.</p>
-          <div>
-            <button type="button" className="next-proposals-btn primary" onClick={() => setNameDialog({ mode: "create", value: "" })}>＋ Create New Kit</button>
-            <a className="next-proposals-btn secondary" href="/next/products">Open Product Catalogue</a>
-            <a className="next-proposals-btn secondary" href="/next/proposals">Open Proposals</a>
+      <div className="proposals-floating-actions">
+        <button type="button" className="products-add-btn proposals-create-btn" onClick={() => setNameDialog({ mode: "create", value: "" })}><span aria-hidden="true">＋</span><span>Create New Kit</span></button>
+      </div>
+
+      {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit is missing.</span></div> : null}
+
+      <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
+        <section className="proposals-panel">
+          <div className="products-proposals-list">
+            {filteredKits.length ? (
+              <div className="products-proposal-folders">
+                {filteredKits.map((kit) => (
+                  <article className="products-proposal-folder" key={kit.id}>
+                    <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === kit.id ? "" : kit.id); }} aria-label={`Actions for ${kit.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
+                    {folderMenu === kit.id ? (
+                      <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+                        <button type="button" onClick={() => loadKit(kit.id, { edit: true })}><span>Edit</span></button>
+                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} Copy` }); }}><span>Make a copy</span></button>
+                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><span>Delete</span></button>
+                      </div>
+                    ) : null}
+                    <button type="button" className="products-proposal-folder__main" onClick={() => loadKit(kit.id)} aria-label={`Open ${kit.name}`}>
+                      <span className="proposal-folder-figure" aria-hidden="true">
+                        <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                        <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                        <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                        <span className="proposal-folder-figure__back" />
+                        <span className="proposal-folder-figure__front"><small>K</small></span>
+                      </span>
+                      <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
+                      <span className="proposal-folder-count"><span aria-hidden="true">▱</span><span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span></span>
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="products-proposals-empty">Sorry, No data available</div>
+            )}
           </div>
-        </div>
-        <aside>
-          <small>Workspace owner</small>
-          <strong>{account?.name || account?.username || "User"}</strong>
-          <span>{stats.owned} editable kit{stats.owned === 1 ? "" : "s"}</span>
-          <div><b>{products.length}</b><small>Catalogue products</small></div>
-        </aside>
+        </section>
       </section>
-
-      {bootstrapWarnings.length ? <section className="next-proposals-warning"><strong>Some startup resources were delayed.</strong><span>The page remains usable and you can press Refresh to retry.</span></section> : null}
-
-      <section className="next-proposals-stats">
-        <article><small>Kit folders</small><strong>{formatNumber(stats.folders)}</strong><span>Reusable product bundles</span></article>
-        <article><small>Saved components</small><strong>{formatNumber(stats.components)}</strong><span>Across all kits</span></article>
-        <article><small>My kits</small><strong>{formatNumber(stats.owned)}</strong><span>Directly editable folders</span></article>
-        <article><small>Average kit size</small><strong>{formatNumber(stats.average)}</strong><span>Components per kit</span></article>
-      </section>
-
-      <section className="next-proposals-toolbar">
-        <label className="next-proposals-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search kit name or creator" /></label>
-        <select value={sort} onChange={(event) => setSort(event.target.value)}><option value="updated-desc">Recently updated</option><option value="created-desc">Recently created</option><option value="name-asc">Name A–Z</option><option value="items-desc">Most components</option></select>
-        <button type="button" className="next-proposals-btn secondary" onClick={refreshKits} disabled={busy}>{busy ? "Refreshing…" : "Refresh"}</button>
-      </section>
-
-      <section className="next-proposals-results-line"><div><strong>{filteredKits.length}</strong><span>kit folder{filteredKits.length === 1 ? "" : "s"}</span></div><small>Open a kit to manage its products and quantities.</small></section>
-
-      <section className="next-proposals-grid">
-        {filteredKits.map((kit) => (
-          <article className="next-proposal-card next-kit-card" key={kit.id}>
-            <header>
-              <span className="next-kit-owner-badge">{kit.canEdit ? "Mine" : "Shared"}</span>
-              <div className="next-proposal-folder-icon next-kit-folder-icon"><i /><b>K</b></div>
-              <button type="button" className="next-proposals-icon-btn" onClick={() => setNameDialog({ mode: "copy", kit, value: `${kit.name} Copy` })} title="Make a copy">⧉</button>
-            </header>
-            <button type="button" className="next-proposal-card__body" onClick={() => loadKit(kit.id)}>
-              <span>Reusable product kit</span>
-              <h3>{kit.name}</h3>
-              <p>Created by {kit.createdBy || "Unknown user"}</p>
-              <div><strong>{formatNumber(kit.itemsCount)}</strong><small>components</small><b>{formatDate(kit.updatedAt || kit.createdAt)}</b></div>
-            </button>
-            <footer>
-              <button type="button" onClick={() => loadKit(kit.id)}>Open</button>
-              <button type="button" onClick={() => setNameDialog({ mode: "rename", kit, value: kit.name })}>Rename</button>
-              <button type="button" className="danger" onClick={() => deleteKit(kit)}>Delete</button>
-            </footer>
-          </article>
-        ))}
-      </section>
-
-      {!filteredKits.length ? <section className="next-proposals-empty"><span>▣</span><strong>{kits.length ? "No matching kits" : "No kits yet"}</strong><p>{kits.length ? "Try a different search term." : "Create your first reusable product kit."}</p><button type="button" className="next-proposals-btn primary" onClick={() => setNameDialog({ mode: "create", value: "" })}>Create Kit</button></section> : null}
 
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}

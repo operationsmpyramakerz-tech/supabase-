@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -152,15 +152,15 @@ function Toast({ toast, onClose }) {
 
 function Modal({ title, subtitle, icon = "◆", children, footer, onClose, wide = false }) {
   return (
-    <div className="next-proposals-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`next-proposals-modal__card ${wide ? "is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <span>{icon}</span>
-          <div><h3>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
+    <div className="products-modal-overlay next-proposals-classic-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
+        <div className="products-modal__header">
+          <div className="products-modal__icon" aria-hidden="true">{icon}</div>
+          <div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
+        </div>
         <div className="next-proposals-modal__body">{children}</div>
-        {footer ? <footer>{footer}</footer> : null}
+        {footer ? <div className="products-modal__actions">{footer}</div> : null}
       </section>
     </div>
   );
@@ -191,12 +191,12 @@ function NameModal({ dialog, busy, onClose, onSubmit }) {
 
   return (
     <Modal title={title} subtitle={subtitle} icon="▣" onClose={onClose} footer={null}>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <label><span>Proposal Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: School supplies quotation" /></label>
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Saving…" : action}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : action}</button>
         </div>
       </form>
     </Modal>
@@ -221,12 +221,12 @@ function PasswordModal({ request, busy, onClose, onVerified }) {
 
   return (
     <Modal title={request?.title || "Admin password required"} subtitle={request?.message || "Enter the Admin password to continue."} icon="⌾" onClose={onClose}>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <label><span>Admin Password *</span><input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
         </div>
       </form>
     </Modal>
@@ -260,7 +260,7 @@ function AddItemsModal({ proposal, products, kits, tags, busy, onClose, onSubmit
 
   return (
     <Modal title={`Add Components to ${proposal.name}`} subtitle="Add one product, a complete product tag, or a reusable kit." icon="＋" onClose={onClose} wide>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <div className="next-proposals-segmented">
           {[['product', 'Single Product'], ['tag', 'Product Tag'], ['kit', 'Kit']].map(([value, label]) => (
             <button type="button" key={value} className={mode === value ? "active" : ""} onClick={() => { setMode(value); setSelected(""); }}>{label}</button>
@@ -291,15 +291,15 @@ function AddItemsModal({ proposal, products, kits, tags, busy, onClose, onSubmit
           <label><span>Kit *</span><select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Choose a kit</option>{kits.map((kit) => <option key={kit.id} value={kit.id}>{kit.name} ({kit.itemsCount} items)</option>)}</select></label>
         ) : null}
 
-        <div className="next-proposals-form-grid">
+        <div className="next-proposals-form-grid products-form-grid">
           <label><span>{mode === "kit" ? "Kit Multiplier" : "Quantity"}</span><input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
           <label><span>When Product Already Exists</span><select value={mergeLogic} onChange={(event) => setMergeLogic(event.target.value)}><option value="add">Add quantities</option><option value="max">Keep maximum</option><option value="min">Keep minimum</option></select></label>
         </div>
 
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Adding…" : "Add Components"}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Adding…" : "Add Components"}</button>
         </div>
       </form>
     </Modal>
@@ -325,13 +325,13 @@ function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
 
   return (
     <Modal title="Make Order" subtitle={`Create a Request Products order from all components in “${proposal.name}”.`} icon="▤" onClose={onClose}>
-      <form className="next-proposals-form" onSubmit={submit}>
+      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <label><span>Team Member *</span><select value={memberId} onChange={(event) => setMemberId(event.target.value)}><option value="">Select team member</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}{member.department ? ` · ${member.department}` : ""}</option>)}</select></label>
         <label><span>Admin Password *</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        {error ? <div className="next-proposals-error">{error}</div> : null}
-        <div className="next-proposals-form__actions">
-          <button type="button" className="next-proposals-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="next-proposals-btn primary" disabled={busy}>{busy ? "Creating…" : "Create Order"}</button>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="next-proposals-form__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Creating…" : "Create Order"}</button>
         </div>
       </form>
     </Modal>
@@ -363,7 +363,32 @@ export default function ProposalsClient({
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [orderDialog, setOrderDialog] = useState(false);
+  const [folderMenu, setFolderMenu] = useState("");
+  const [combineOpen, setCombineOpen] = useState(false);
+  const [detailEdit, setDetailEdit] = useState(false);
   const passwordResolver = useRef(null);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search proposals...";
+    const handle = (event) => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.value = "";
+      input.placeholder = "Search";
+    };
+  }, []);
+
+  useEffect(() => {
+    const close = (event) => {
+      if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const tags = useMemo(() => {
@@ -438,7 +463,9 @@ export default function ProposalsClient({
     syncProposal({ ...proposal, itemsCount: items.length });
   };
 
-  const loadProposal = async (proposalId) => {
+  const loadProposal = async (proposalId, options = {}) => {
+    setDetailEdit(Boolean(options.edit));
+    setFolderMenu("");
     setDetailBusy(true);
     try {
       const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposalId)}?_ts=${Date.now()}`);
@@ -662,71 +689,111 @@ export default function ProposalsClient({
   if (activeDetail || detailBusy) {
     const proposal = activeDetail?.proposal;
     return (
-      <main className="next-proposals-page">
+      <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
-        {detailBusy && !activeDetail ? (
-          <section className="next-proposals-detail-loading"><span /><span /><span /></section>
-        ) : (
-          <>
-            <section className="next-proposals-detail-hero">
-              <div>
-                <button type="button" className="next-proposals-back" onClick={() => setActiveDetail(null)}>← All Proposals</button>
-                <span className="next-proposals-chip">Quotation folder</span>
-                <h2>{proposal?.name}</h2>
-                <p>Created by {proposal?.createdBy || "Unknown"} · Updated {formatDate(proposal?.updatedAt || proposal?.createdAt)}</p>
-                {proposal?.combinedSources?.length ? <div className="next-proposals-combined-note"><strong>Combined proposal</strong><span>{proposal.combineNote || `Sources: ${proposal.combinedSources.map((source) => source.name || source.id).join(", ")}`}</span></div> : null}
-              </div>
-              <aside>
-                <button type="button" className="next-proposals-btn primary" onClick={() => setAddDialog(true)}>＋ Add Components</button>
-                <button type="button" className="next-proposals-btn dark" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}>Make Order</button>
-                <button type="button" className="next-proposals-btn secondary" onClick={() => setNameDialog({ mode: "rename", proposal, value: proposal?.name || "" })}>Rename</button>
-                <button type="button" className="next-proposals-btn danger" onClick={() => deleteProposal(proposal)}>Delete</button>
-              </aside>
-            </section>
-
-            <section className="next-proposals-detail-stats">
-              <article><small>Unique components</small><strong>{formatNumber(detailTotals.items)}</strong><span>Rows in proposal</span></article>
-              <article><small>Total quantity</small><strong>{formatNumber(detailTotals.quantity)}</strong><span>All requested units</span></article>
-              <article><small>Estimated value</small><strong>{formatMoney(detailTotals.value)}</strong><span>Based on catalogue prices</span></article>
-              <article><small>Edit ownership</small><strong>{proposal?.canEdit ? "Owner" : "Protected"}</strong><span>{proposal?.canEdit ? "Direct editing enabled" : "Admin password required"}</span></article>
-            </section>
-
-            <section className="next-proposals-detail-card">
-              <header>
-                <div><small>Proposal components</small><h3>Quotation list</h3></div>
-                <div className="next-proposals-detail-actions">
-                  <button type="button" onClick={() => downloadSingle("pdf")}>PDF</button>
-                  <button type="button" onClick={() => downloadSingle("excel")}>Excel</button>
-                  <button type="button" onClick={() => loadProposal(proposal.id)} disabled={detailBusy}>{detailBusy ? "Refreshing…" : "Refresh"}</button>
+        <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
+          <section className="proposals-panel">
+            <section className="products-proposal-detail">
+              {detailBusy && !activeDetail ? (
+                <div className="products-loading-card" role="status" aria-live="polite">
+                  <div className="products-spinner" aria-hidden="true" />
+                  <div><strong>Loading proposal</strong></div>
                 </div>
-              </header>
+              ) : (
+                <>
+                  <header className="products-proposal-detail__head proposal-detail-head--compact">
+                    <button type="button" className="products-back-btn" onClick={() => { setActiveDetail(null); setDetailEdit(false); }} aria-label="Back to proposals">←</button>
+                    <div className="proposal-detail-actions">
+                      {detailEdit ? (
+                        <>
+                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>＋ <span>Add Components</span></button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => setNameDialog({ mode: "rename", proposal, value: proposal?.name || "" })}>Rename</button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(false)}>Done</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("pdf")}>PDF</button>
+                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("excel")}>Excel</button>
+                          <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}>Make Order</button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(true)}>Edit</button>
+                        </>
+                      )}
+                    </div>
+                  </header>
 
-              <div className="next-proposals-export-columns">
-                <span>Export columns:</span>
-                {EXPORT_COLUMNS.map(([key, label]) => <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} />{label}</label>)}
-              </div>
+                  <div className="proposal-classic-detail-title">
+                    <span className="proposal-create-title-pill"><span>{proposal?.name || "Proposal"}</span></span>
+                    <p>Created by {proposal?.createdBy || "Unknown"} · Updated {formatDate(proposal?.updatedAt || proposal?.createdAt)}</p>
+                  </div>
 
-              <div className="next-proposals-table-wrap">
-                <table className="next-proposals-table">
-                  <thead><tr><th>Component</th><th>Tag / Unit</th><th>Unit Cost</th><th>Quantity</th><th>Total</th><th /></tr></thead>
-                  <tbody>
-                    {enrichedRows.map((row) => (
-                      <tr key={row.id}>
-                        <td><div className="next-proposals-component"><span>{row.product?.imageUrl ? <img src={row.product.imageUrl} alt="" loading="lazy" /> : "▧"}</span><div><strong>{row.name}</strong><small>{row.displayId || "No ID code"}</small>{row.product?.url ? <a href={row.product.url} target="_blank" rel="noreferrer">Supplier link ↗</a> : null}</div></div></td>
-                        <td><strong>{row.tag}</strong><small>{row.unit || "No unit"}</small></td>
-                        <td>{formatMoney(row.unitPrice)}</td>
-                        <td><input className="next-proposals-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onBlur={(event) => updateQuantity(row, event.target.value)} /></td>
-                        <td><strong>{formatMoney(row.totalPrice)}</strong></td>
-                        <td><button type="button" className="next-proposals-icon-btn danger" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>×</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!enrichedRows.length ? <div className="next-proposals-empty"><span>▧</span><strong>No components yet</strong><p>Add products, a complete tag, or a reusable kit to build this quotation.</p><button type="button" className="next-proposals-btn primary" onClick={() => setAddDialog(true)}>Add Components</button></div> : null}
-              </div>
+                  {proposal?.combinedSources?.length ? (
+                    <div className="proposal-view-note">
+                      <span aria-hidden="true">◎</span>
+                      <span>{proposal.combineNote || `Combined from ${proposal.combinedSources.map((source) => source.name || source.id).join(", ")}`}</span>
+                    </div>
+                  ) : null}
+
+                  {detailEdit ? (
+                    <div className="products-proposal-tools proposals-one-tool">
+                      <div className="products-proposal-tool-card">
+                        <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Edit proposal components</span></div>
+                        <div className="proposal-classic-inline-actions">
+                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>Add product, tag or kit</button>
+                          <button type="button" className="products-btn products-btn--light" onClick={() => loadProposal(proposal.id, { edit: true })} disabled={detailBusy}>{detailBusy ? "Refreshing…" : "Refresh"}</button>
+                          <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="proposal-view-note"><span aria-hidden="true">◉</span><span>View only. Choose Edit to modify this proposal.</span></div>
+                  )}
+
+                  <div className="products-proposal-table-card">
+                    <div className="products-proposal-table-head">
+                      <div><h3>Components table</h3><p>Saved products and quantities for this proposal.</p></div>
+                      <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
+                    </div>
+                    <div className="products-proposal-table-wrap">
+                      <table className="products-proposal-table">
+                        <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th /></tr></thead>
+                        <tbody>
+                          {enrichedRows.map((row) => (
+                            <tr key={row.id}>
+                              <td className="proposal-component-name">
+                                <strong>{row.name}</strong>
+                                <small className="proposal-classic-component-meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
+                              </td>
+                              <td>{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onBlur={(event) => updateQuantity(row, event.target.value)} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
+                              <td className="proposal-price-cell">{formatMoney(row.unitPrice)}</td>
+                              <td className="proposal-price-cell proposal-price-cell--total">{formatMoney(row.totalPrice)}</td>
+                              <td className="proposal-link-cell">{row.product?.url ? <a className="proposal-product-link" href={row.product.url} target="_blank" rel="noreferrer">Open ↗</a> : "—"}</td>
+                              <td><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`}>×</button> : null}</div></td>
+                            </tr>
+                          ))}
+                          {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component, tag or saved kit above." : "Choose Edit to add components."}</div></td></tr> : null}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="proposal-total-block">
+                      <div><span>Components</span><strong>{formatNumber(detailTotals.items)}</strong></div>
+                      <div><span>Total Quantity</span><strong>{formatNumber(detailTotals.quantity)}</strong></div>
+                      <div><span>Estimated Total</span><strong>{formatMoney(detailTotals.value)}</strong></div>
+                    </div>
+                  </div>
+
+                  {!detailEdit ? (
+                    <div className="proposal-classic-export-columns">
+                      <span>Download columns</span>
+                      {EXPORT_COLUMNS.map(([key, label]) => (
+                        <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              )}
             </section>
-          </>
-        )}
+          </section>
+        </section>
 
         {addDialog && proposal ? <AddItemsModal proposal={proposal} products={products} kits={kits} tags={tags} busy={busy} onClose={() => setAddDialog(false)} onSubmit={submitAdd} /> : null}
         {orderDialog && proposal ? <MakeOrderModal proposal={proposal} members={members} busy={busy} onClose={() => setOrderDialog(false)} onSubmit={makeOrder} /> : null}
@@ -737,80 +804,79 @@ export default function ProposalsClient({
   }
 
   return (
-    <main className="next-proposals-page">
+    <main className="products-shell proposals-shell next-proposals-classic-parity">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <section className="next-proposals-hero">
-        <div>
-          <span className="next-proposals-chip">Reusable quotation workspace</span>
-          <h2>Build, compare and reuse complete product proposals.</h2>
-          <p>Create quotation folders, add products individually or by tag and kit, export professional files, combine multiple proposals, and create an ERP order from a finished quotation.</p>
-          <div>
-            <button type="button" className="next-proposals-btn primary" onClick={() => setNameDialog({ mode: "create", value: "" })}>＋ Create New Proposal</button>
-            <a className="next-proposals-btn secondary" href="/next/products">Open Product Catalogue</a>
-            <a className="next-proposals-btn secondary" href="/next/kits">Open Kits</a>
+      <div className="proposals-floating-actions">
+        <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button>
+        <button type="button" className="products-add-btn proposals-create-btn" onClick={() => setNameDialog({ mode: "create", value: "" })}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button>
+      </div>
+
+      {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a folder is missing.</span></div> : null}
+
+      <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
+        <section className="proposals-panel">
+          <div className="products-proposals-list">
+            {filteredProposals.length ? (
+              <div className="products-proposal-folders">
+                {filteredProposals.map((proposal) => (
+                  <article className="products-proposal-folder" key={proposal.id}>
+                    <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === proposal.id ? "" : proposal.id); }} aria-label={`Actions for ${proposal.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
+                    {folderMenu === proposal.id ? (
+                      <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+                        <button type="button" onClick={() => loadProposal(proposal.id, { edit: true })}><span>Edit</span></button>
+                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><span>Make a copy</span></button>
+                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><span>Delete</span></button>
+                      </div>
+                    ) : null}
+                    <button type="button" className="products-proposal-folder__main" onClick={() => loadProposal(proposal.id)} aria-label={`Open ${proposal.name}`}>
+                      <span className="proposal-folder-figure" aria-hidden="true">
+                        <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                        <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                        <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                        <span className="proposal-folder-figure__back" />
+                        <span className="proposal-folder-figure__front"><small>Q</small></span>
+                      </span>
+                      <span className="proposal-folder-copy"><strong>{proposal.name}</strong><em>Created by {proposal.createdBy || "—"}</em></span>
+                      <span className="proposal-folder-count"><span aria-hidden="true">▱</span><span>{formatNumber(proposal.itemsCount)} component{proposal.itemsCount === 1 ? "" : "s"}</span></span>
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="products-proposals-empty">Sorry, No data available</div>
+            )}
           </div>
-        </div>
-        <aside>
-          <small>Workspace owner</small>
-          <strong>{account?.name || account?.username || "User"}</strong>
-          <span>{stats.owned} editable proposal{stats.owned === 1 ? "" : "s"}</span>
-          <div><b>{products.length}</b><small>Catalogue products</small></div>
-        </aside>
-      </section>
-
-      {bootstrapWarnings.length ? <section className="next-proposals-warning"><strong>Some startup resources were delayed.</strong><span>The page remains usable and you can press Refresh to retry.</span></section> : null}
-
-      <section className="next-proposals-stats">
-        <article><small>Proposal folders</small><strong>{formatNumber(stats.folders)}</strong><span>Saved quotation workspaces</span></article>
-        <article><small>Saved components</small><strong>{formatNumber(stats.components)}</strong><span>Across all proposals</span></article>
-        <article><small>My proposals</small><strong>{formatNumber(stats.owned)}</strong><span>Directly editable folders</span></article>
-        <article><small>Combined proposals</small><strong>{formatNumber(stats.combined)}</strong><span>Built from multiple sources</span></article>
-      </section>
-
-      <section className="next-proposals-toolbar">
-        <label className="next-proposals-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search proposal name or creator" /></label>
-        <select value={sort} onChange={(event) => setSort(event.target.value)}><option value="updated-desc">Recently updated</option><option value="created-desc">Recently created</option><option value="name-asc">Name A–Z</option><option value="items-desc">Most components</option></select>
-        <button type="button" className="next-proposals-btn secondary" onClick={refreshFolders} disabled={busy}>{busy ? "Refreshing…" : "Refresh"}</button>
-      </section>
-
-      {selectedIds.length ? (
-        <section className="next-proposals-combine-bar">
-          <div><strong>{selectedIds.length} proposal{selectedIds.length === 1 ? "" : "s"} selected</strong><span>Select at least two folders to combine or export together.</span></div>
-          <label><span>Combine logic</span><select value={combineLogic} onChange={(event) => setCombineLogic(event.target.value)}><option value="add">Add quantities</option><option value="separate">Separate source quantities</option></select></label>
-          <button type="button" onClick={() => downloadCombined("pdf")} disabled={selectedIds.length < 2}>Combined PDF</button>
-          <button type="button" onClick={() => downloadCombined("excel")} disabled={selectedIds.length < 2}>Combined Excel</button>
-          <button type="button" className="primary" onClick={() => setNameDialog({ mode: "combine", value: "" })} disabled={selectedIds.length < 2}>Save Combined</button>
-          <button type="button" onClick={() => setSelectedIds([])}>Clear</button>
         </section>
-      ) : null}
-
-      <section className="next-proposals-results-line"><div><strong>{filteredProposals.length}</strong><span>proposal folder{filteredProposals.length === 1 ? "" : "s"}</span></div><small>Check folders to combine them.</small></section>
-
-      <section className="next-proposals-grid">
-        {filteredProposals.map((proposal) => (
-          <article className={`next-proposal-card ${selectedIds.includes(proposal.id) ? "is-selected" : ""}`} key={proposal.id}>
-            <header>
-              <label title="Select for combined proposal"><input type="checkbox" checked={selectedIds.includes(proposal.id)} onChange={() => toggleSelected(proposal.id)} /><span>✓</span></label>
-              <div className="next-proposal-folder-icon"><i /><b>▤</b></div>
-              <button type="button" className="next-proposals-icon-btn" onClick={() => setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` })} title="Make a copy">⧉</button>
-            </header>
-            <button type="button" className="next-proposal-card__body" onClick={() => loadProposal(proposal.id)}>
-              <span>{proposal.combinedSources.length ? "Combined proposal" : proposal.canEdit ? "My proposal" : "Shared proposal"}</span>
-              <h3>{proposal.name}</h3>
-              <p>{proposal.combineNote || `Created by ${proposal.createdBy || "Unknown user"}`}</p>
-              <div><strong>{formatNumber(proposal.itemsCount)}</strong><small>components</small><b>{formatDate(proposal.updatedAt || proposal.createdAt)}</b></div>
-            </button>
-            <footer>
-              <button type="button" onClick={() => loadProposal(proposal.id)}>Open</button>
-              <button type="button" onClick={() => setNameDialog({ mode: "rename", proposal, value: proposal.name })}>Rename</button>
-              <button type="button" className="danger" onClick={() => deleteProposal(proposal)}>Delete</button>
-            </footer>
-          </article>
-        ))}
       </section>
 
-      {!filteredProposals.length ? <section className="next-proposals-empty"><span>▣</span><strong>{proposals.length ? "No matching proposals" : "No proposals yet"}</strong><p>{proposals.length ? "Try a different search term." : "Create your first reusable quotation folder."}</p><button type="button" className="next-proposals-btn primary" onClick={() => setNameDialog({ mode: "create", value: "" })}>Create Proposal</button></section> : null}
+      {combineOpen ? (
+        <Modal title="Combine proposals" subtitle="Select two or more proposals, choose the quantity logic, then download or save the result." icon="▦" onClose={() => setCombineOpen(false)} wide>
+          <div className="proposal-classic-combine-form">
+            <div className="proposal-classic-combine-list">
+              {proposals.map((proposal) => (
+                <label key={proposal.id} className="proposal-classic-check-row">
+                  <input type="checkbox" checked={selectedIds.includes(proposal.id)} onChange={() => toggleSelected(proposal.id)} />
+                  <span><strong>{proposal.name}</strong><small>{formatNumber(proposal.itemsCount)} component{proposal.itemsCount === 1 ? "" : "s"}</small></span>
+                </label>
+              ))}
+            </div>
+            <label className="products-field"><span>Combine logic</span><select value={combineLogic} onChange={(event) => setCombineLogic(event.target.value)}><option value="add">Add quantities</option><option value="separate">Separate source quantities</option></select></label>
+            <div className="proposal-classic-export-columns proposal-classic-export-columns--modal">
+              <span>Columns</span>
+              {EXPORT_COLUMNS.map(([key, label]) => (
+                <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
+              ))}
+            </div>
+            <div className="products-modal__actions">
+              <button type="button" className="products-btn products-btn--light" onClick={() => setCombineOpen(false)}>Cancel</button>
+              <button type="button" className="products-btn products-btn--light" disabled={selectedIds.length < 2} onClick={() => { setCombineOpen(false); setNameDialog({ mode: "combine", value: "" }); }}>Save as new proposal</button>
+              <button type="button" className="products-btn products-btn--dark" disabled={selectedIds.length < 2} onClick={() => downloadCombined("pdf")}>Download PDF</button>
+              <button type="button" className="products-btn products-btn--dark" disabled={selectedIds.length < 2} onClick={() => downloadCombined("excel")}>Download Excel</button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.proposal?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}

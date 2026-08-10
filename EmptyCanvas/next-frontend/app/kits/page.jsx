@@ -61,7 +61,17 @@ export default async function KitsPage() {
   if (!account) redirect("/login?next=/next/kits");
 
   return (
-    <AppShell account={account} title="Kits" eyebrow="Reusable product bundles" activePath="/next/kits">
+    <AppShell
+      account={account}
+      title="Kits"
+      eyebrow="Reusable product bundles"
+      activePath="/next/kits"
+      bodyClass="products-page proposals-page kits-page"
+      classicStyles={[
+        "/css/products.css?v=products-manual-image-v1",
+        "/css/proposals.css?v=b2b-addname-transparent-pdf-v1",
+      ]}
+    >
       <KitsClient
         account={account}
         initialCatalog={catalog}

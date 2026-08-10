@@ -63,7 +63,17 @@ export default async function ProposalsPage() {
   if (!account) redirect("/login?next=/next/proposals");
 
   return (
-    <AppShell account={account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals">
+    <AppShell
+      account={account}
+      title="Proposals"
+      eyebrow="Reusable quotation workspace"
+      activePath="/next/proposals"
+      bodyClass="products-page proposals-page"
+      classicStyles={[
+        "/css/products.css?v=products-manual-image-v1",
+        "/css/proposals.css?v=b2b-addname-transparent-pdf-v1",
+      ]}
+    >
       <ProposalsClient
         account={account}
         initialCatalog={catalog}
