@@ -62,7 +62,14 @@ export default async function KpisPage() {
   if (!account) redirect("/login?next=/next/kpis");
 
   return (
-    <AppShell account={account} title="KPIs" eyebrow="Employee performance management" activePath="/next/kpis">
+    <AppShell
+      account={account}
+      title="KPIs"
+      eyebrow="Employee performance management"
+      activePath="/next/kpis"
+      bodyClass="kpis-page"
+      classicStyles={["/css/kpis.css?v=next-stage-2l-kpis"]}
+    >
       <KpisClient
         initialMeta={meta}
         initialReviews={reviews}
