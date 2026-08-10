@@ -75,10 +75,12 @@ export default async function B2cFormsPage({ searchParams }) {
   return (
     <AppShell
       account={account}
-      title="B2C Forms"
-      eyebrow="Customer entry and form builder"
+      title="Forms"
+      eyebrow="B2C customer entry"
       activePath="/next/b2c/forms"
       classicHrefOverride="/b2c/form"
+      bodyClass="b2c-page b2c-form-page"
+      classicStyles={["/css/b2c.css?v=b2c-form-builder-controls-v1"]}
     >
       <B2cFormsClient
         account={account}

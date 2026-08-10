@@ -168,6 +168,25 @@ function updateQueryString(formId = "") {
   window.history.replaceState({}, "", url);
 }
 
+
+function Icon({ name, size = 16 }) {
+  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  if (name === "clipboard") return <svg {...common}><path d="M9 5h6"/><path d="M9 3h6a2 2 0 0 1 2 2v1h2v15H5V6h2V5a2 2 0 0 1 2-2Z"/><path d="M9 12h6M9 16h6"/></svg>;
+  if (name === "database") return <svg {...common}><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>;
+  if (name === "plus") return <svg {...common}><path d="M12 5v14M5 12h14"/></svg>;
+  if (name === "refresh") return <svg {...common}><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.4-2.5L20 11M4 13l2.5 4.5A7 7 0 0 0 17.9 15"/></svg>;
+  if (name === "arrow-left") return <svg {...common}><path d="M19 12H5M11 18l-6-6 6-6"/></svg>;
+  if (name === "sliders") return <svg {...common}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg>;
+  if (name === "save") return <svg {...common}><path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>;
+  if (name === "rotate") return <svg {...common}><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>;
+  if (name === "play") return <svg {...common}><path d="m8 5 11 7-11 7Z"/></svg>;
+  if (name === "trash") return <svg {...common}><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg>;
+  if (name === "paperclip") return <svg {...common}><path d="m21.4 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 1 1-2.8-2.8l8.3-8.3"/></svg>;
+  if (name === "check") return <svg {...common}><path d="m20 6-11 11-5-5"/></svg>;
+  if (name === "branch") return <svg {...common}><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 10h4a6 6 0 0 0 6-2"/></svg>;
+  return null;
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -177,20 +196,29 @@ function Toast({ toast, onClose }) {
     </div>
   );
 }
-function Modal({ title, subtitle, badge = "FORM", wide = false, onClose, children }) {
+
+function ClassicModal({ title, subtitle, eyebrow = "B2C form", builder = false, onClose, children }) {
+  useEffect(() => {
+    const old = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = old; };
+  }, []);
   return (
-    <div className="next-b2c-forms-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`next-b2c-forms-modal__card ${wide ? "is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <span>{badge}</span>
-          <div><h3>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-        <div className="next-b2c-forms-modal__body">{children}</div>
+    <div className="b2c-overlay next-b2c-classic-form-overlay" aria-hidden="false" onMouseDown={(event) => {
+      if (event.target === event.currentTarget || event.target.classList.contains("b2c-overlay__backdrop")) onClose();
+    }}>
+      <div className="b2c-overlay__backdrop" />
+      <section className={`b2c-dialog ${builder ? "b2c-dialog--builder" : "b2c-dialog--small"}`} role="dialog" aria-modal="true" aria-label={title}>
+        <button className="b2c-dialog__close" type="button" onClick={onClose} aria-label="Close">×</button>
+        <div className={`b2c-dialog__header ${builder ? "b2c-dialog__header--builder" : ""}`}>
+          <div><span className="b2c-eyebrow">{eyebrow}</span><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
+        </div>
+        {children}
       </section>
     </div>
   );
 }
+
 function FormDetailsEditor({ form, busy, onClose, onSave }) {
   const [name, setName] = useState(form?.name || "");
   const [description, setDescription] = useState(form?.description || "");
@@ -203,16 +231,22 @@ function FormDetailsEditor({ form, busy, onClose, onSave }) {
     catch (saveError) { setError(saveError?.message || "The form could not be updated."); }
   };
   return (
-    <Modal title="Edit Form Details" subtitle="Update the form name and description without changing its questions." badge="EDIT" onClose={onClose}>
-      <form className="next-b2c-form-dialog" onSubmit={submit}>
-        <label><span>Form name *</span><input autoFocus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label><span>Description</span><textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        {error ? <div className="next-b2c-forms-error">{error}</div> : null}
-        <footer><button type="button" className="next-b2c-forms-btn secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="next-b2c-forms-btn primary" disabled={busy}>{busy ? "Saving…" : "Save Details"}</button></footer>
+    <ClassicModal title="Edit Form Details" subtitle="Update the form name and description without changing its questions." eyebrow="Form details" onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="b2c-form-grid">
+          <label className="b2c-form-control b2c-form-control--wide"><span>Form name <em>*</em></span><input autoFocus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <label className="b2c-form-control b2c-form-control--wide"><span>Description</span><textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+        </div>
+        {error ? <div className="b2c-dialog__error">{error}</div> : null}
+        <div className="b2c-dialog__actions">
+          <button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="b2c-primary-btn" disabled={busy}>{busy ? "Saving…" : "Save Details"}</button>
+        </div>
       </form>
-    </Modal>
+    </ClassicModal>
   );
 }
+
 function NewFormDialog({ databases, busy, defaultDatabaseId, onClose, onCreate }) {
   const [name, setName] = useState("");
   const [databaseId, setDatabaseId] = useState(defaultDatabaseId || "");
@@ -226,18 +260,24 @@ function NewFormDialog({ databases, busy, defaultDatabaseId, onClose, onCreate }
     catch (createError) { setError(createError?.message || "The form could not be created."); }
   };
   return (
-    <Modal title="Create B2C Form" subtitle="Link the new form to one existing customer data table." badge="NEW" onClose={onClose}>
-      <form className="next-b2c-form-dialog" onSubmit={submit}>
-        <label><span>Form name *</span><input autoFocus maxLength={120} placeholder="e.g. Customer Update Form" value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label><span>Linked table *</span><select value={databaseId} onChange={(event) => setDatabaseId(event.target.value)}><option value="">Choose a data table</option>{databases.map((database) => <option value={database.id} key={database.id}>{database.name}</option>)}</select></label>
-        <label><span>Description</span><textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        {!databases.length ? <div className="next-b2c-forms-note">Create a B2C data table before creating a form. <a href="/next/b2c/database">Open Database</a></div> : null}
-        {error ? <div className="next-b2c-forms-error">{error}</div> : null}
-        <footer><button type="button" className="next-b2c-forms-btn secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="next-b2c-forms-btn primary" disabled={busy || !databases.length}>{busy ? "Creating…" : "Create Form"}</button></footer>
+    <ClassicModal title="Create B2C Form" subtitle="Link this form to one existing data table." eyebrow="New form" onClose={onClose}>
+      <form onSubmit={submit}>
+        <div className="b2c-form-grid">
+          <label className="b2c-form-control b2c-form-control--wide"><span>Form name <em>*</em></span><input autoFocus maxLength={120} placeholder="e.g. Customer Update Form" value={name} onChange={(event) => setName(event.target.value)} /></label>
+          <label className="b2c-form-control b2c-form-control--wide"><span>Linked table <em>*</em></span><select value={databaseId} onChange={(event) => setDatabaseId(event.target.value)}><option value="">Choose a data table</option>{databases.map((database) => <option value={database.id} key={database.id}>{database.name}</option>)}</select></label>
+          <label className="b2c-form-control b2c-form-control--wide"><span>Description</span><textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+        </div>
+        {!databases.length ? <div className="next-b2c-classic-form-note">Create a B2C data table before creating a form. <a href="/next/b2c/database">Open Database</a></div> : null}
+        {error ? <div className="b2c-dialog__error">{error}</div> : null}
+        <div className="b2c-dialog__actions">
+          <button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="b2c-primary-btn" disabled={busy || !databases.length}><Icon name="plus" />{busy ? "Creating…" : "Create Form"}</button>
+        </div>
       </form>
-    </Modal>
+    </ClassicModal>
   );
 }
+
 function BuilderDialog({ form, fields, busy, onClose, onSave }) {
   const [draft, setDraft] = useState(() => fields.map((field, index) => ({ ...normalizeField(field, index), sortOrder: index + 1 })));
   const [error, setError] = useState("");
@@ -286,26 +326,34 @@ function BuilderDialog({ form, fields, busy, onClose, onSave }) {
     } catch (saveError) { setError(saveError?.message || "The form builder could not be saved."); }
   };
   return (
-    <Modal title={`Edit ${form?.name || "Form"}`} subtitle="Reorder questions, set required rules, and add conditional visibility." badge="BUILD" wide onClose={onClose}>
-      <form className="next-b2c-builder" onSubmit={submit}>
-        <div className="next-b2c-builder-guide"><strong>Conditional visibility</strong><span>A question can depend on another answer. Required validation runs only while the question is visible.</span></div>
-        <div className="next-b2c-builder-list">
+    <ClassicModal title={`Edit ${form?.name || "Form"}`} subtitle="Reorder questions, decide which fields are required, and add conditional visibility." eyebrow="Form builder" builder onClose={onClose}>
+      <form className="next-b2c-classic-builder-form" onSubmit={submit}>
+        <div className="b2c-builder-guide"><Icon name="branch" /><span>Conditions use answers from other fields. Required validation is applied only while the question is visible.</span></div>
+        <div className="b2c-form-builder-list">
           {draft.length ? draft.map((item, index) => {
             const condition = item.condition || {};
             const controlling = draft.filter((_, position) => position !== index);
             return (
               <article
-                className={`next-b2c-builder-card ${dragIndex === index ? "is-dragging" : ""}`}
+                className={`b2c-column-card b2c-form-builder-card ${dragIndex === index ? "is-dragging" : ""}`}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => drop(index)}
+                tabIndex={0}
+                aria-label={`Form question ${index + 1}`}
                 key={item.fieldId || item.id || item.key}
               >
-                <div className="next-b2c-builder-order" draggable onDragStart={() => setDragIndex(index)} onDragEnd={() => setDragIndex(-1)} title="Drag to reorder"><span>{index + 1}</span><button type="button" onClick={() => move(index, -1)} disabled={index === 0}>↑</button><button type="button" onClick={() => move(index, 1)} disabled={index === draft.length - 1}>↓</button></div>
-                <div className="next-b2c-builder-question"><small>Question</small><strong>{item.label}</strong><span>{TYPE_LABELS[item.type] || "Text"}</span></div>
-                <label className="next-b2c-builder-required"><input type="checkbox" checked={Boolean(item.formRequired)} onChange={(event) => update(index, { formRequired: event.target.checked })} /><span>Required</span></label>
-                <button type="button" className="next-b2c-builder-remove" onClick={() => remove(index)}>Remove</button>
-                <label className="next-b2c-builder-condition-toggle"><input type="checkbox" checked={Boolean(condition.enabled)} onChange={(event) => updateCondition(index, event.target.checked ? { enabled: true } : { enabled: false, fieldKey: "", operator: "equals", value: "" })} /><span>Conditional visibility</span></label>
-                <div className={`next-b2c-builder-condition ${condition.enabled ? "" : "is-disabled"}`}>
+                <span className="b2c-column-order" aria-hidden="true">{index + 1}</span>
+                <div className="b2c-field-control b2c-form-builder-question"><label>Question</label><strong>{item.label}</strong><small>{TYPE_LABELS[item.type] || "Text"}</small></div>
+                <label className="b2c-field-required">
+                  <input className="b2c-switch-input" type="checkbox" checked={Boolean(item.formRequired)} onChange={(event) => update(index, { formRequired: event.target.checked })} />
+                  <span className="b2c-switch-ui" aria-hidden="true" /><span className="b2c-field-required__label">Required</span>
+                </label>
+                <div className="b2c-column-actions">
+                  <button type="button" className="b2c-column-drag-handle" draggable onDragStart={() => setDragIndex(index)} onDragEnd={() => setDragIndex(-1)} title="Drag to reorder" aria-label={`Drag question ${index + 1} to reorder`}><span className="b2c-drag-dots" aria-hidden="true" /></button>
+                  <button type="button" onClick={() => remove(index)} title="Delete question from this form" aria-label="Delete question from this form"><Icon name="trash" size={14} /></button>
+                </div>
+                <label className="b2c-form-builder-toggle b2c-form-builder-condition-toggle"><input type="checkbox" checked={Boolean(condition.enabled)} onChange={(event) => updateCondition(index, event.target.checked ? { enabled: true } : { enabled: false, fieldKey: "", operator: "equals", value: "" })} /> Conditional visibility</label>
+                <div className={`b2c-form-builder-condition ${condition.enabled ? "" : "is-disabled"}`}>
                   <select disabled={!condition.enabled} value={condition.fieldKey || ""} onChange={(event) => updateCondition(index, { fieldKey: event.target.value })}>
                     <option value="">Show when…</option>
                     {controlling.map((field) => <option value={field.key} key={field.key}>{field.label}</option>)}
@@ -318,46 +366,50 @@ function BuilderDialog({ form, fields, busy, onClose, onSave }) {
                 </div>
               </article>
             );
-          }) : <div className="next-b2c-builder-empty">This form has no visible questions. Add or restore properties from the linked Database table.</div>}
+          }) : <div className="b2c-builder-empty">This form has no visible questions. Add properties from the Database table, or reopen the table builder to restore questions.</div>}
         </div>
-        {error ? <div className="next-b2c-forms-error">{error}</div> : null}
-        <footer><button type="button" className="next-b2c-forms-btn secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="next-b2c-forms-btn primary" disabled={busy}>{busy ? "Saving…" : "Save Form Builder"}</button></footer>
+        {error ? <div className="b2c-dialog__error">{error}</div> : null}
+        <div className="b2c-dialog__actions">
+          <button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="b2c-primary-btn" disabled={busy}><Icon name="save" />{busy ? "Saving…" : "Save Form Builder"}</button>
+        </div>
       </form>
-    </Modal>
+    </ClassicModal>
   );
 }
+
 function DynamicField({ field, value, selectedFiles, visible, onChange, onFiles }) {
   if (!visible) return null;
   const required = Boolean(field.formRequired);
   const options = fieldOptions(field).options || [];
   if (field.type === "formula") {
-    return <div className="next-b2c-customer-control"><span>{field.label}</span><div className="next-b2c-customer-readonly">This value is calculated automatically after the record is saved.</div></div>;
+    return <div className="b2c-form-control b2c-dynamic-field"><label>{field.label}</label><div className="b2c-readonly-field">This field is generated by the database.</div></div>;
   }
   if (field.type === "files") {
     return (
-      <label className="next-b2c-customer-control is-wide">
-        <span>{field.label}{required ? " *" : ""}</span>
-        <input type="file" multiple required={required && !selectedFiles.length} onChange={(event) => onFiles(Array.from(event.target.files || []).slice(0, 20))} />
-        <small>Photos, PDFs, or files up to 10 MB each. Files upload directly to Supabase Storage when available.</small>
-        {selectedFiles.length ? <div className="next-b2c-customer-files">{selectedFiles.map((file, index) => <div key={`${file.name}-${file.lastModified}-${index}`}><span><b>{file.name}</b><small>{fileSize(file.size)}</small></span><button type="button" onClick={() => onFiles(selectedFiles.filter((_, position) => position !== index))}>Remove</button></div>)}</div> : null}
-      </label>
+      <div className="b2c-form-control b2c-form-control--wide b2c-dynamic-field">
+        <label>{field.label}{required ? <em>*</em> : null}</label>
+        <input className="b2c-file-input" type="file" multiple required={required && !selectedFiles.length} onChange={(event) => onFiles(Array.from(event.target.files || []).slice(0, 20))} />
+        <small>Upload photos, PDFs, or files up to 10 MB each.</small>
+        {selectedFiles.length ? <div className="b2c-current-files">{selectedFiles.map((file, index) => <span className="b2c-file-pill next-b2c-selected-file-pill" key={`${file.name}-${file.lastModified}-${index}`}><Icon name="paperclip" size={12} /><span>{file.name}</span><small>{fileSize(file.size)}</small><button type="button" onClick={() => onFiles(selectedFiles.filter((_, position) => position !== index))} aria-label={`Remove ${file.name}`}>×</button></span>)}</div> : null}
+      </div>
     );
   }
   if (field.type === "checkbox") {
-    return <label className="next-b2c-customer-control next-b2c-customer-checkbox"><span>{field.label}{required ? " *" : ""}</span><input type="checkbox" checked={Boolean(value)} required={required} onChange={(event) => onChange(event.target.checked)} /><b>Yes</b></label>;
+    return <div className="b2c-form-control b2c-dynamic-field"><label>{field.label}{required ? <em>*</em> : null}</label><label className="b2c-checkbox-control"><input type="checkbox" checked={Boolean(value)} required={required} onChange={(event) => onChange(event.target.checked)} /><span>Yes</span></label></div>;
   }
   if (field.type === "select") {
-    return <label className="next-b2c-customer-control"><span>{field.label}{required ? " *" : ""}</span><select required={required} value={value ?? ""} onChange={(event) => onChange(event.target.value)}><option value="">Select…</option>{options.map((option) => <option value={option} key={option}>{option}</option>)}</select></label>;
+    return <div className="b2c-form-control b2c-dynamic-field"><label>{field.label}{required ? <em>*</em> : null}</label><select required={required} value={value ?? ""} onChange={(event) => onChange(event.target.value)}><option value="">Select…</option>{options.map((option) => <option value={option} key={option}>{option}</option>)}</select></div>;
   }
   if (field.type === "multi_select") {
-    return <label className="next-b2c-customer-control"><span>{field.label}{required ? " *" : ""}</span><select multiple required={required} value={Array.isArray(value) ? value : []} onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value))}>{options.map((option) => <option value={option} key={option}>{option}</option>)}</select><small>Hold Ctrl or Command to select more than one option.</small></label>;
+    return <div className="b2c-form-control b2c-dynamic-field"><label>{field.label}{required ? <em>*</em> : null}</label><select className="b2c-multi-select" multiple required={required} value={Array.isArray(value) ? value : []} onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value))}>{options.map((option) => <option value={option} key={option}>{option}</option>)}</select></div>;
   }
   const inputType = field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "email" ? "email" : field.type === "url" ? "url" : field.type === "phone" ? "tel" : "text";
   return (
-    <label className="next-b2c-customer-control">
-      <span>{field.label}{required ? " *" : ""}</span>
+    <div className="b2c-form-control b2c-dynamic-field">
+      <label>{field.label}{required ? <em>*</em> : null}</label>
       <input type={inputType} step={field.type === "number" ? "any" : undefined} inputMode={field.type === "number" ? "decimal" : field.type === "phone" ? "tel" : undefined} required={required} value={value ?? ""} placeholder={field.type === "place" ? "Address or place" : undefined} onChange={(event) => onChange(event.target.value)} />
-    </label>
+    </div>
   );
 }
 
@@ -383,6 +435,16 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
   const canSubmit = useMemo(() => hasAnyAccess(allowed, FORM_ACCESS_ALIASES), [allowed]);
   const canUseDatabase = useMemo(() => hasAnyAccess(allowed, DATABASE_ACCESS_ALIASES), [allowed]);
   const canManage = canSubmit || canUseDatabase;
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = "";
+    input.placeholder = "Search B2C forms...";
+    const handle = (event) => setQuery(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => { input.removeEventListener("input", handle); input.value = ""; input.placeholder = "Search"; };
+  }, []);
 
   const stats = useMemo(() => ({
     forms: forms.length,
@@ -422,7 +484,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     setSubmitted(false);
     setSubmitError("");
     if (updateUrl && nextForm?.id) updateQueryString(nextForm.id);
-    requestAnimationFrame(() => document.querySelector(".next-b2c-active-form")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    requestAnimationFrame(() => document.querySelector(".b2c-active-form-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   };
   const refreshLibrary = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
@@ -555,7 +617,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
       clearForm();
       setSubmitted(true);
       notify("Customer record was saved successfully.");
-      requestAnimationFrame(() => document.querySelector(".next-b2c-form-success")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      requestAnimationFrame(() => document.querySelector(".b2c-form-progress")?.scrollIntoView({ behavior: "smooth", block: "center" }));
     } catch (error) {
       setSubmitError(error?.message || "The customer record could not be saved.");
     } finally {
@@ -564,86 +626,106 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     }
   };
 
-  return (
-    <section className="next-b2c-forms-page">
-      <Toast toast={toast} onClose={() => setToast(null)} />
 
+  return (
+    <main className="b2c-shell b2c-form-shell next-b2c-classic-forms">
+      <Toast toast={toast} onClose={() => setToast(null)} />
       {bootstrapWarnings.length ? (
-        <div className="next-b2c-forms-warning" role="status"><strong>Some B2C resources did not finish loading.</strong><span>Refresh the page or use the classic form library while the service recovers.</span><a href="/b2c/form?classic=1">Open classic Forms</a></div>
+        <div className="next-b2c-classic-warning" role="status">
+          <strong>Some B2C resources did not finish loading.</strong>
+          <span>Refresh this page or use the Classic interface while the service recovers.</span>
+          <a href="/b2c/form?classic=1">Classic Forms</a>
+        </div>
       ) : null}
 
-      <section className="next-b2c-forms-hero">
-        <div>
-          <span className="next-b2c-forms-eyebrow">B2C customer entry</span>
-          <h2>Build controlled forms and save records into the correct customer table.</h2>
-          <p>Every form uses the existing Supabase schema, validation rules, conditional questions, and protected file upload workflow.</p>
-          <div className="next-b2c-forms-hero__actions">
-            {canManage ? <button type="button" className="next-b2c-forms-btn primary" onClick={() => setDialog("new")}>+ New Form</button> : null}
-            {canUseDatabase ? <a className="next-b2c-forms-btn secondary" href="/next/b2c/database">Open Database</a> : null}
-            <button type="button" className="next-b2c-forms-btn secondary" onClick={() => refreshLibrary().catch(() => {})} disabled={busy === "refresh"}>{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
-          </div>
-        </div>
-        <aside aria-hidden="true"><span>FORM</span><i /><i /><i /></aside>
-      </section>
+      <section className="b2c-form-workspace" aria-labelledby="b2cFormTitle">
+        {!activeForm ? (
+          <>
+            <div className="b2c-form-workspace__intro">
+              <div>
+                <span className="b2c-eyebrow"><Icon name="clipboard" /> Form library</span>
+                <h2 id="b2cFormTitle">B2C Forms</h2>
+                <p>Each form is linked to one B2C data table. Open a form to submit records or edit its order, required fields, and visibility conditions.</p>
+              </div>
+              <div className="b2c-top-actions">
+                {canUseDatabase ? <a className="b2c-secondary-btn" href="/next/b2c/database"><Icon name="database" /><span>Database</span></a> : null}
+                <button className="b2c-secondary-btn b2c-compact-btn" type="button" onClick={() => refreshLibrary().catch(() => {})} disabled={busy === "refresh"}><Icon name="refresh" />{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
+                {canManage ? <button className="b2c-primary-btn" type="button" onClick={() => setDialog("new")}><Icon name="plus" /><span>New Form</span></button> : null}
+              </div>
+            </div>
 
-      <section className="next-b2c-forms-stats" aria-label="B2C forms summary">
-        <article><span>Forms</span><strong>{formatNumber(stats.forms)}</strong><small>Available entry workflows</small></article>
-        <article><span>Linked Tables</span><strong>{formatNumber(stats.tables)}</strong><small>Independent destinations</small></article>
-        <article><span>Configured Questions</span><strong>{formatNumber(stats.questions)}</strong><small>Across all form layouts</small></article>
-        <article><span>Default Forms</span><strong>{formatNumber(stats.defaultForms)}</strong><small>Created with data tables</small></article>
-      </section>
+            <div className="next-b2c-classic-forms-toolbar">
+              <label><span>Data table</span><select value={databaseFilter} onChange={(event) => setDatabaseFilter(event.target.value)}><option value="all">All tables</option>{databases.map((database) => <option value={database.id} key={database.id}>{database.name}</option>)}</select></label>
+              <label><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="updated-desc">Recently updated</option><option value="created-desc">Recently created</option><option value="name-asc">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="fields-desc">Most questions</option></select></label>
+              <span>{visibleForms.length} of {forms.length} forms</span>
+              {(query || databaseFilter !== "all") ? <button type="button" onClick={() => { setQuery(""); setDatabaseFilter("all"); const input = document.querySelector(".classic-app-shell .main-header .searchbar input"); if (input) input.value = ""; }}>Clear filters</button> : null}
+            </div>
 
-      {!activeForm ? (
-        <section className="next-b2c-forms-library">
-          <header><div><span>Form library</span><h3>Choose a form to enter a record or edit its layout.</h3></div><small>{visibleForms.length} of {forms.length} forms</small></header>
-          <div className="next-b2c-forms-toolbar">
-            <label className="next-b2c-forms-search"><span>Search</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Form name, table, or description" /></label>
-            <label><span>Data table</span><select value={databaseFilter} onChange={(event) => setDatabaseFilter(event.target.value)}><option value="all">All tables</option>{databases.map((database) => <option value={database.id} key={database.id}>{database.name}</option>)}</select></label>
-            <label><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="updated-desc">Recently updated</option><option value="created-desc">Recently created</option><option value="name-asc">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="fields-desc">Most questions</option></select></label>
-            {(query || databaseFilter !== "all") ? <button type="button" onClick={() => { setQuery(""); setDatabaseFilter("all"); }}>Clear</button> : null}
-          </div>
-          {visibleForms.length ? (
-            <div className="next-b2c-forms-grid">
-              {visibleForms.map((form) => (
-                <article className="next-b2c-form-card" key={form.id}>
-                  <header><span>FORM</span><div>{form.isDefault ? <b>Default</b> : null}{form.isActive ? <em>Active</em> : <em className="is-muted">Inactive</em>}</div></header>
-                  <div><small>{form.databaseName}</small><h3>{form.name}</h3><p>{form.description || "No description has been added to this form."}</p></div>
-                  <dl><div><dt>Questions</dt><dd>{formatNumber(form.fieldCount)}</dd></div><div><dt>Updated</dt><dd>{formatDate(form.updatedAt || form.createdAt)}</dd></div></dl>
-                  <footer>
-                    <button type="button" className="next-b2c-forms-btn primary" onClick={() => openForm(form.id).catch(() => {})} disabled={busy === `open:${form.id}`}>{busy === `open:${form.id}` ? "Opening…" : canSubmit ? "Open Form" : "Preview Form"}</button>
-                    {canManage ? <button type="button" className="next-b2c-forms-icon-btn" title="Open Form Builder" onClick={() => openForm(form.id, { openBuilder: true }).catch(() => {})}>Build</button> : null}
-                  </footer>
+            <section className="b2c-forms-library">
+              {visibleForms.length ? visibleForms.map((form) => (
+                <article className="b2c-form-card" key={form.id}>
+                  <div className="b2c-form-card__head"><span className="b2c-form-card__icon"><Icon name="clipboard" size={19} /></span><span className="b2c-form-card__table">{form.databaseName || "B2C Table"}</span></div>
+                  <h3>{form.name}</h3>
+                  <p>{form.description || "No description"}</p>
+                  <div className="b2c-form-card__footer">
+                    <span className="b2c-form-card__fields">{formatNumber(form.fieldCount)} field{form.fieldCount === 1 ? "" : "s"}</span>
+                    <div className="b2c-form-card__actions">
+                      <button type="button" onClick={() => openForm(form.id).catch(() => {})} disabled={busy === `open:${form.id}`}><Icon name="play" size={14} />{busy === `open:${form.id}` ? "Opening…" : canSubmit ? "Open" : "Preview"}</button>
+                      {canManage ? <button type="button" title="Edit form" aria-label={`Edit ${form.name}`} onClick={() => openForm(form.id, { openBuilder: true }).catch(() => {})}><Icon name="sliders" size={14} /></button> : null}
+                    </div>
+                  </div>
                 </article>
-              ))}
+              )) : (
+                <div className="b2c-database-empty">
+                  {forms.length ? "No forms match the current filters." : <>No B2C forms yet. Create a data table first, or select <strong>New Form</strong> to link a form to an existing table.</>}
+                </div>
+              )}
+            </section>
+          </>
+        ) : (
+          <section className="b2c-active-form-panel next-b2c-active-form-panel-static">
+            <div className="b2c-active-form-heading">
+              <div>
+                <button className="b2c-back-link" type="button" onClick={closeActiveForm}><Icon name="arrow-left" size={15} /> All Forms</button>
+                <span className="b2c-eyebrow"><Icon name="clipboard" /> Linked form</span>
+                <h2>{activeForm.name}</h2>
+                <p>{activeForm.description || `Complete the available fields below to save a record in ${activeForm.database?.name || activeForm.databaseName || "the linked table"}.`}</p>
+              </div>
+              <div className="b2c-top-actions">
+                {canUseDatabase && activeForm.databaseId ? <a className="b2c-secondary-btn b2c-compact-btn" href={`/next/b2c/database/${encodeURIComponent(activeForm.databaseId)}`}><Icon name="database" /> Open Table</a> : null}
+                {canManage ? <button className="b2c-secondary-btn b2c-compact-btn" type="button" onClick={() => setDialog("details")}>Edit Details</button> : null}
+                {canManage ? <button className="b2c-secondary-btn" type="button" onClick={() => setDialog("builder")}><Icon name="sliders" /><span>Edit Form</span></button> : null}
+              </div>
             </div>
-          ) : <div className="next-b2c-forms-empty"><strong>No forms match the current filters.</strong><span>{forms.length ? "Change the search or table filter." : "Create a B2C data table and then create its first form."}</span>{canManage ? <button type="button" className="next-b2c-forms-btn primary" onClick={() => setDialog("new")}>Create Form</button> : null}</div>}
-        </section>
-      ) : (
-        <section className="next-b2c-active-form">
-          <header className="next-b2c-active-form__head">
-            <div><button type="button" onClick={closeActiveForm}>← All Forms</button><span>{activeForm.database?.name || activeForm.databaseName || "B2C Table"}</span><h3>{activeForm.name}</h3><p>{activeForm.description || `Complete the questions below to save a record in ${activeForm.database?.name || "the linked table"}.`}</p></div>
-            <div>{canUseDatabase && activeForm.databaseId ? <a className="next-b2c-forms-btn secondary" href={`/next/b2c/database/${encodeURIComponent(activeForm.databaseId)}`}>Open Table</a> : null}{canManage ? <button type="button" className="next-b2c-forms-btn secondary" onClick={() => setDialog("details")}>Edit Details</button> : null}{canManage ? <button type="button" className="next-b2c-forms-btn primary" onClick={() => setDialog("builder")}>Form Builder</button> : null}</div>
-          </header>
 
-          <div className="next-b2c-active-form__summary"><span><b>{visibleQuestionCount}</b> visible questions</span><span><b>{requiredQuestionCount}</b> required</span><span><b>{fields.filter((field) => field.condition?.enabled).length}</b> conditional</span><span><b>{fields.filter((field) => field.type === "files").length}</b> upload fields</span></div>
-
-          {submitted ? <div className="next-b2c-form-success"><div><strong>Record saved successfully.</strong><span>The record was added to {activeForm.database?.name || activeForm.databaseName || "the linked B2C table"}.</span></div><button type="button" onClick={() => setSubmitted(false)}>Add another record</button></div> : null}
-          {!canSubmit ? <div className="next-b2c-forms-warning"><strong>Preview mode</strong><span>Your account can configure this form but Customer Form access is required to submit records.</span></div> : null}
-
-          <form ref={formRef} className="next-b2c-customer-form" onSubmit={submitRecord} noValidate={false}>
-            <div className="next-b2c-customer-grid">
-              {fields.length ? fields.map((field) => <DynamicField key={field.id || field.key} field={field} value={values[field.key]} selectedFiles={selectedFiles[field.key] || []} visible={Boolean(fieldVisibility[field.key])} onChange={(value) => { setValues((current) => ({ ...current, [field.key]: value })); setSubmitted(false); setSubmitError(""); }} onFiles={(files) => { setSelectedFiles((current) => ({ ...current, [field.key]: files })); setSubmitted(false); setSubmitError(""); }} />) : <div className="next-b2c-forms-empty is-inline"><strong>This form has no visible questions.</strong><span>Configure properties in the linked Database table, then open Form Builder.</span></div>}
+            <div className="next-b2c-classic-form-summary" aria-label="Form summary">
+              <span><b>{visibleQuestionCount}</b> visible</span>
+              <span><b>{requiredQuestionCount}</b> required</span>
+              <span><b>{fields.filter((field) => field.condition?.enabled).length}</b> conditional</span>
+              <span><b>{fields.filter((field) => field.type === "files").length}</b> upload fields</span>
             </div>
-            {uploadState ? <div className="next-b2c-upload-progress"><div><strong>Uploading {uploadState.file}</strong><span>{uploadState.field} · File {uploadState.current} of {uploadState.total}</span></div><progress max="100" value={uploadState.percent || 0} /><b>{Math.round(uploadState.percent || 0)}%</b></div> : null}
-            {submitError ? <div className="next-b2c-forms-error">{submitError}</div> : null}
-            <footer><button type="button" className="next-b2c-forms-btn secondary" onClick={clearForm} disabled={busy === "submit"}>Clear Form</button><button type="submit" className="next-b2c-forms-btn primary" disabled={busy === "submit" || !canSubmit || !fields.length}>{busy === "submit" ? (uploadState ? "Uploading…" : "Saving…") : "Save Record"}</button></footer>
-          </form>
-        </section>
-      )}
 
-      {dialog === "new" ? <NewFormDialog databases={databases} defaultDatabaseId={databaseFilter !== "all" ? databaseFilter : initialDatabaseId} busy={busy === "create"} onClose={() => setDialog(null)} onCreate={createForm} /> : null}
-      {dialog === "details" && activeForm ? <FormDetailsEditor form={activeForm} busy={busy === "details"} onClose={() => setDialog(null)} onSave={updateFormDetails} /> : null}
-      {dialog === "builder" && activeForm ? <BuilderDialog form={activeForm} fields={fields} busy={busy === "builder"} onClose={() => setDialog(null)} onSave={saveBuilder} /> : null}
-    </section>
+            {submitted ? <div className="b2c-form-progress"><span><Icon name="check" size={18} /> Record saved successfully.</span><button type="button" onClick={() => setSubmitted(false)}>Add another record</button></div> : null}
+            {!canSubmit ? <div className="next-b2c-classic-form-note"><strong>Preview mode.</strong> Customer Form access is required to submit records.</div> : null}
+
+            <form ref={formRef} className="b2c-customer-form" onSubmit={submitRecord} noValidate={false}>
+              <div className="b2c-form-grid">
+                {fields.length ? fields.map((field) => <DynamicField key={field.id || field.key} field={field} value={values[field.key]} selectedFiles={selectedFiles[field.key] || []} visible={Boolean(fieldVisibility[field.key])} onChange={(value) => { setValues((current) => ({ ...current, [field.key]: value })); setSubmitted(false); setSubmitError(""); }} onFiles={(files) => { setSelectedFiles((current) => ({ ...current, [field.key]: files })); setSubmitted(false); setSubmitError(""); }} />) : <div className="b2c-conditional-note">This form has no fields yet. Configure properties in Database, then open Form Builder.</div>}
+              </div>
+              {uploadState ? <div className="next-b2c-classic-upload-progress"><div><strong>Uploading {uploadState.file}</strong><span>{uploadState.field} · File {uploadState.current} of {uploadState.total}</span></div><progress max="100" value={uploadState.percent || 0} /><b>{Math.round(uploadState.percent || 0)}%</b></div> : null}
+              {submitError ? <div className="b2c-form-error">{submitError}</div> : null}
+              <div className="b2c-customer-form__actions">
+                <button type="button" className="b2c-secondary-btn" onClick={clearForm} disabled={busy === "submit"}><Icon name="rotate" /><span>Clear Form</span></button>
+                <button type="submit" className="b2c-primary-btn" disabled={busy === "submit" || !canSubmit || !fields.length}><Icon name="save" /><span>{busy === "submit" ? (uploadState ? "Uploading…" : "Saving…") : "Save Record"}</span></button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {dialog === "new" ? <NewFormDialog databases={databases} defaultDatabaseId={databaseFilter !== "all" ? databaseFilter : initialDatabaseId} busy={busy === "create"} onClose={() => setDialog(null)} onCreate={createForm} /> : null}
+        {dialog === "details" && activeForm ? <FormDetailsEditor form={activeForm} busy={busy === "details"} onClose={() => setDialog(null)} onSave={updateFormDetails} /> : null}
+        {dialog === "builder" && activeForm ? <BuilderDialog form={activeForm} fields={fields} busy={busy === "builder"} onClose={() => setDialog(null)} onSave={saveBuilder} /> : null}
+      </section>
+    </main>
   );
 }
