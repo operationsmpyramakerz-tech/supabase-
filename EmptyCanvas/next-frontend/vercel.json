@@ -3,6 +3,24 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/products",
+      "destination": "/next/api/products"
+    },
+    {
+      "source": "/api/products/tags",
+      "destination": "/next/api/products/tags"
+    },
+    {
+      "source": "/api/products/units",
+      "destination": "/next/api/products/units"
+    },
+    {
+      "source": "/api/products/:id((?!admin|proposals|kits|tags|units)[^/]+)",
+      "destination": "/next/api/products/:id"
+    }
+  ],
   "redirects": [
     {
       "source": "/",
