@@ -9,8 +9,16 @@
       "destination": "/next/api/products"
     },
     {
-      "source": "/api/products/:path*",
-      "destination": "/next/api/products/:path*"
+      "source": "/api/products/tags",
+      "destination": "/next/api/products/tags"
+    },
+    {
+      "source": "/api/products/units",
+      "destination": "/next/api/products/units"
+    },
+    {
+      "source": "^/api/products/(?<id>(?!(?:admin|proposals|kits|tags|units)$)[^/]+)$",
+      "destination": "/next/api/products/$id"
     }
   ],
   "redirects": [

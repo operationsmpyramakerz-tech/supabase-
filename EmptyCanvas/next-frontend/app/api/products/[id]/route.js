@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
-import { deleteProduct, updateProduct } from "../../../../lib/products-service";
+import { deleteProduct, getProductsCatalog, updateProduct } from "../../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,26 @@ function errorResponse(error, fallback) {
     { ok: false, error: error?.message || fallback },
     { status: Number(error?.status) || 500 },
   );
+}
+
+export async function GET(_request, { params }) {
+  const gate = await getLegacyAccountGate("Products");
+  if (!gate.ok) return gateResponse(gate);
+
+  try {
+    const { id } = await params;
+    const catalog = await getProductsCatalog();
+    const product = (catalog.products || []).find((item) => String(item?.id || "") === String(id || ""));
+    if (!product) {
+      return NextResponse.json({ ok: false, error: "Product not found." }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, source: "supabase-next", product }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("GET /next/api/products/:id error:", error?.details || error);
+    return errorResponse(error, "Failed to load product.");
+  }
 }
 
 export async function PATCH(request, { params }) {
