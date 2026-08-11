@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
-import { createProduct, getProductsCatalog } from "../../../lib/products-service";
+import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { createProductUnit, listProductUnits } from "../../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
 
@@ -16,33 +16,28 @@ function errorResponse(error, fallback) {
 }
 
 export async function GET() {
-  const gate = await getLegacyAccountGate(["Products", "Proposals"]);
+  const gate = await getLegacyAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
-
   try {
-    return NextResponse.json(await getProductsCatalog(), {
-      status: 200,
+    return NextResponse.json({ ok: true, source: "supabase-next", units: await listProductUnits() }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    console.error("GET /next/api/products error:", error?.details || error);
-    return errorResponse(error, "Failed to load products from Supabase.");
+    return errorResponse(error, "Failed to load product units.");
   }
 }
 
 export async function POST(request) {
   const gate = await getLegacyAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
-
   try {
     const body = await request.json().catch(() => ({}));
-    const product = await createProduct(body);
-    return NextResponse.json({ ok: true, source: "supabase-next", product }, {
-      status: 201,
+    const unit = await createProductUnit(body?.name || body?.unit || body?.newUnit);
+    return NextResponse.json({ ok: true, source: "supabase-next", unit: unit.name, alreadyExists: !!unit.alreadyExists }, {
+      status: unit.alreadyExists ? 200 : 201,
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    console.error("POST /next/api/products error:", error?.details || error);
-    return errorResponse(error, "Failed to create product.");
+    return errorResponse(error, "Failed to add product unit.");
   }
 }

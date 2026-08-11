@@ -35,21 +35,30 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
 
-  // The production pilot is deployed as a separate Vercel project. The Next
-  // browser code intentionally keeps using the existing same-origin /api URLs
-  // so cookies, uploads, downloads, and legacy fallbacks continue to behave as
-  // they did in the Express application. A fallback rewrite turns requests
-  // that do not belong to the Next app into a reverse proxy to the existing ERP.
-  //
-  // `basePath: false` is important here: /api, /images, /home?classic=1, etc.
-  // live at the deployment root while the Next application itself lives under
-  // /next. Next filesystem/pages are evaluated before this fallback, therefore
-  // /next/* stays inside this project.
+  // Product APIs are the first backend slice owned by Next.js. Existing browser
+  // code intentionally keeps its historical root /api/products URLs; these
+  // beforeFiles rewrites route only that migrated namespace into the Next app.
+  // Everything else continues to fall back to Express until its migration turn.
   async rewrites() {
-    if (!legacyBackendOrigin) return [];
+    const beforeFiles = [
+      {
+        source: "/api/products",
+        destination: `${basePath}/api/products`,
+        basePath: false,
+      },
+      {
+        source: "/api/products/:path*",
+        destination: `${basePath}/api/products/:path*`,
+        basePath: false,
+      },
+    ];
+
+    if (!legacyBackendOrigin) {
+      return { beforeFiles, afterFiles: [], fallback: [] };
+    }
 
     return {
-      beforeFiles: [],
+      beforeFiles,
       afterFiles: [],
       fallback: [
         {
