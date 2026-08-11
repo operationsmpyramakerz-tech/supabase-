@@ -17,8 +17,8 @@
       "destination": "/next/api/products/units"
     },
     {
-      "source": "^/api/products/(?<id>(?!(?:admin|proposals|kits|tags|units)$)[^/]+)$",
-      "destination": "/next/api/products/$id"
+      "source": "/api/products/:id((?!admin|proposals|kits|tags|units)[^/]+)",
+      "destination": "/next/api/products/:id"
     }
   ],
   "redirects": [
