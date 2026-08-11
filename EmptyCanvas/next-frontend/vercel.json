@@ -3,6 +3,16 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/products",
+      "destination": "/next/api/products"
+    },
+    {
+      "source": "/api/products/:path*",
+      "destination": "/next/api/products/:path*"
+    }
+  ],
   "redirects": [
     {
       "source": "/",
