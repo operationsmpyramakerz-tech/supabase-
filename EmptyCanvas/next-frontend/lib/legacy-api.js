@@ -34,10 +34,6 @@ function backendOrigin() {
     "",
   );
   if (configured) return configured;
-
-  // The old PM2/self-hosted topology still works without an explicit value.
-  // On Vercel, however, 127.0.0.1 points to the Next deployment itself and
-  // would only produce timeouts, so fail fast with a useful 503 instead.
   if (String(process.env.VERCEL || "").trim() === "1") return "";
   return "http://127.0.0.1:5000";
 }
@@ -59,6 +55,8 @@ export async function fetchLegacyJson(pathname, options = {}) {
   const controller = new AbortController();
   const timeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const hasBody = typeof options.body !== "undefined" && options.body !== null;
+  const body = hasBody && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body;
 
   try {
     const response = await fetch(url, {
@@ -72,8 +70,10 @@ export async function fetchLegacyJson(pathname, options = {}) {
         "x-forwarded-host": headerStore.get("host") || "",
         "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
         "x-operations-hub-frontend": "next-pilot",
+        ...(hasBody ? { "content-type": "application/json" } : {}),
         ...(options.headers || {}),
       },
+      body: hasBody ? body : undefined,
     });
 
     let data = null;
