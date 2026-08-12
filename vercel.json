@@ -8,6 +8,56 @@
   ],
   "routes": [
     {
+      "src": "^/api/products/proposals$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/copy$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/$1/copy",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/items$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/$1/items",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/items/(?!by-tag$|by-kit$)([^/]+)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/$1/items/$2",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/$1",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/kits$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/kits",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/kits/([^/]+)/copy$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/kits/$1/copy",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/kits/([^/]+)/items$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/kits/$1/items",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/kits/([^/]+)/items/([^/]+)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/kits/$1/items/$2",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
+      "src": "^/api/products/kits/([^/]+)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/kits/$1",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
       "src": "/(.*)",
       "dest": "/EmptyCanvas/api/index.js"
     }
