@@ -63,56 +63,77 @@ function queryString(params = {}) {
   return raw ? `?${raw}` : "";
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryableStatus(status) {
+  const value = Number(status) || 0;
+  return !value || value === 408 || value === 425 || value === 429 || value >= 500;
+}
+
 export async function supabaseRequest(pathname, options = {}) {
   const { url, key } = ensureConfigured();
-  const controller = new AbortController();
+  const method = String(options.method || "GET").toUpperCase();
   const timeoutMs = Math.max(
     1000,
     Math.min(120000, Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000),
   );
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const requestedAttempts = Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 3) || 3;
+  const maxAttempts = method === "GET" ? Math.max(1, Math.min(3, requestedAttempts)) : 1;
+  let lastError = null;
 
-  try {
-    const headers = {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      ...(options.headers || {}),
-    };
-    if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    const response = await fetch(`${url}/rest/v1${pathname}`, {
-      method: options.method || "GET",
-      cache: "no-store",
-      signal: controller.signal,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
+    try {
+      const headers = {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        ...(options.headers || {}),
+      };
+      if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
 
-    const raw = await response.text();
-    let data = null;
-    try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+      const response = await fetch(`${url}/rest/v1${pathname}`, {
+        method,
+        cache: "no-store",
+        signal: controller.signal,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
 
-    if (!response.ok) {
-      const message = data && typeof data === "object"
-        ? (data.message || data.details || data.hint || JSON.stringify(data))
-        : (raw || `Supabase request failed with status ${response.status}`);
-      const error = new Error(message);
-      error.status = response.status;
-      error.details = data;
-      throw error;
+      const raw = await response.text();
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+
+      if (!response.ok) {
+        const message = data && typeof data === "object"
+          ? (data.message || data.details || data.hint || JSON.stringify(data))
+          : (raw || `Supabase request failed with status ${response.status}`);
+        const error = new Error(message);
+        error.status = response.status;
+        error.details = data;
+        throw error;
+      }
+      return data;
+    } catch (error) {
+      let current = error;
+      if (error?.name === "AbortError") {
+        current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+        current.code = "SUPABASE_TIMEOUT";
+        current.status = 504;
+      }
+      lastError = current;
+      const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status);
+      if (!canRetry) throw current;
+      await wait(attempt === 1 ? 180 : 420);
+    } finally {
+      clearTimeout(timeout);
     }
-    return data;
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      const timeoutError = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
-      timeoutError.code = "SUPABASE_TIMEOUT";
-      timeoutError.status = 504;
-      throw timeoutError;
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw lastError || new Error("Supabase request failed.");
 }
 
 export async function select(table, params = {}) {
