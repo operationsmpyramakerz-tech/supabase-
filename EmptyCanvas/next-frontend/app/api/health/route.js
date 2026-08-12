@@ -40,9 +40,33 @@ async function getStorageBucketDiagnostics(config) {
   }
 }
 
+async function tableColumns(config, table) {
+  try {
+    const response = await fetch(`${config.url}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`, {
+      method: "GET",
+      cache: "no-store",
+      headers: { apikey: config.key, Authorization: `Bearer ${config.key}` },
+    });
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+    if (!response.ok) return { ok: false, status: response.status, columns: [] };
+    const row = Array.isArray(data) ? data[0] : null;
+    return { ok: true, status: response.status, columns: row && typeof row === "object" ? Object.keys(row) : [] };
+  } catch (error) {
+    return { ok: false, status: null, columns: [], error: error?.message || String(error) };
+  }
+}
+
 export async function GET() {
   const config = getSupabaseConfig();
-  const storage = await getStorageBucketDiagnostics(config);
+  const [storage, proposals, proposalItems, kits, kitItems] = await Promise.all([
+    getStorageBucketDiagnostics(config),
+    tableColumns(config, "product_proposals"),
+    tableColumns(config, "product_proposal_items"),
+    tableColumns(config, "product_kits"),
+    tableColumns(config, "product_kit_items"),
+  ]);
   return Response.json({
     ok: true,
     service: "operations-hub-next-frontend",
@@ -52,6 +76,12 @@ export async function GET() {
       urlConfigured: /^https:\/\//i.test(String(config.url || "")),
       keyConfigured: !!String(config.key || "").trim(),
       storage,
+      proposalKitColumns: {
+        product_proposals: proposals,
+        product_proposal_items: proposalItems,
+        product_kits: kits,
+        product_kit_items: kitItems,
+      },
     },
     timestamp: new Date().toISOString(),
   }, { headers: { "Cache-Control": "no-store" } });
