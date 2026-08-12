@@ -8,6 +8,11 @@
   ],
   "routes": [
     {
+      "src": "^/api/_next-health$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/health",
+      "env": ["NEXT_FRONTEND_ORIGIN"]
+    },
+    {
       "src": "^/api/products/proposals$",
       "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals",
       "env": ["NEXT_FRONTEND_ORIGIN"]
