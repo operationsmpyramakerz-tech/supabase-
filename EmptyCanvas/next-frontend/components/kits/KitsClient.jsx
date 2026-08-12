@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -361,7 +362,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     setFolderMenu("");
     setDetailBusy(true);
     try {
-      const body = await requestJson(`/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
       syncDetail(body);
     } catch (error) {
       notify(error?.message || "The kit could not be loaded.", "error");
@@ -374,8 +375,8 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     setBusy(true);
     try {
       const [kitBody, productBody] = await Promise.all([
-        requestJson(`/api/products/kits?_ts=${Date.now()}`),
-        requestJson(`/api/products?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
+        requestJson(`/next/api/products?_ts=${Date.now()}`),
       ]);
       setKits((kitBody.kits || []).map(normalizeKit));
       setProducts((productBody.products || []).map(normalizeProduct));
@@ -427,7 +428,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     setBusy(true);
     try {
       if (dialog.mode === "create") {
-        const body = await requestJson("/api/products/kits", { method: "POST", body: JSON.stringify({ name, adminPassword }) });
+        const body = await requestJson("/next/api/products/kits", { method: "POST", body: JSON.stringify({ name, adminPassword }) });
         const created = syncKit({ ...(body.kit || {}), canEdit: true });
         setNameDialog(null);
         notify(`“${name}” was created.`);
@@ -435,11 +436,11 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
         return;
       }
       if (dialog.mode === "copy") {
-        const body = await requestJson(`/api/products/kits/${encodeURIComponent(dialog.kit.id)}/copy`, { method: "POST", body: JSON.stringify({ name }) });
+        const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(dialog.kit.id)}/copy`, { method: "POST", body: JSON.stringify({ name }) });
         syncKit(body.kit);
         notify(`A copy named “${name}” was created.`);
       } else if (dialog.mode === "rename") {
-        const body = await requestJson(`/api/products/kits/${encodeURIComponent(dialog.kit.id)}`, { method: "PATCH", body: JSON.stringify({ name, adminPassword }) });
+        const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(dialog.kit.id)}`, { method: "PATCH", body: JSON.stringify({ name, adminPassword }) });
         syncKit(body.kit);
         notify("Kit name updated.");
       }
@@ -450,12 +451,19 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   };
 
   const deleteKit = async (kit) => {
-    if (!window.confirm(`Delete “${kit.name}” and all saved components? This action cannot be undone.`)) return;
+    const confirmed = await confirmDelete({
+      itemName: kit.name,
+      itemType: "kit",
+      title: "Delete kit?",
+      message: `You’re going to permanently delete “${kit.name}” and all saved components. This action cannot be undone.`,
+      confirmLabel: "Yes, Delete!",
+    });
+    if (!confirmed) return;
     const adminPassword = await protectedPassword(kit, "Enter the Admin password to delete a kit created by another user.");
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      await requestJson(`/api/products/kits/${encodeURIComponent(kit.id)}`, { method: "DELETE", body: JSON.stringify({ adminPassword }) });
+      await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, { method: "DELETE", body: JSON.stringify({ adminPassword }) });
       setKits((current) => current.filter((item) => item.id !== kit.id));
       if (activeDetail?.kit?.id === kit.id) setActiveDetail(null);
       notify("Kit deleted.");
@@ -473,7 +481,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      const body = await requestJson(`/api/products/kits/${encodeURIComponent(kit.id)}/items`, {
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items`, {
         method: "POST",
         body: JSON.stringify({ productId, quantity, adminPassword }),
       });
@@ -493,7 +501,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      const body = await requestJson(`/api/products/kits/${encodeURIComponent(kit.id)}/items/${encodeURIComponent(row.id)}`, {
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
         body: JSON.stringify({ quantity, adminPassword }),
       });
@@ -507,13 +515,20 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   };
 
   const removeItem = async (row) => {
-    if (!window.confirm(`Remove “${row.name}” from this kit?`)) return;
+    const confirmed = await confirmDelete({
+      itemName: row.name,
+      itemType: "component",
+      title: "Remove component?",
+      message: `Remove “${row.name}” from this kit? The product itself will stay in the Products catalogue.`,
+      confirmLabel: "Remove Component",
+    });
+    if (!confirmed) return;
     const kit = activeDetail?.kit;
     const adminPassword = await protectedPassword(kit, "Enter the Admin password to modify a kit created by another user.");
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      const body = await requestJson(`/api/products/kits/${encodeURIComponent(kit.id)}/items/${encodeURIComponent(row.id)}`, {
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "DELETE",
         body: JSON.stringify({ adminPassword }),
       });
