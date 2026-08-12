@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { deleteProposalItem, updateProposalItem } from "../../../../../../../lib/proposal-kit-service";
+import { errorResponse, gateResponse, proposalGate, requestBody } from "../../../../../../../lib/proposal-kit-api";
+export async function PATCH(request,{params}){const gate=await proposalGate();if(!gate.ok)return gateResponse(gate);try{const {id,itemId}=await params;return NextResponse.json({ok:true,source:"supabase-next",...(await updateProposalItem(id,itemId,await requestBody(request),gate.account))});}catch(error){return errorResponse(error,"Failed to update proposal component.");}}
+export async function DELETE(request,{params}){const gate=await proposalGate();if(!gate.ok)return gateResponse(gate);try{const {id,itemId}=await params;return NextResponse.json({ok:true,source:"supabase-next",...(await deleteProposalItem(id,itemId,await requestBody(request),gate.account))});}catch(error){return errorResponse(error,"Failed to delete proposal component.");}}
