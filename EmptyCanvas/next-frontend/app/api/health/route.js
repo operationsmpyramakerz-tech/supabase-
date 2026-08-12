@@ -53,9 +53,42 @@ async function getStorageBucketDiagnostics(config) {
   }
 }
 
+async function logProposalKitSchema(config) {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const response = await fetch(`${config.url}/rest/v1/`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        apikey: config.key,
+        Authorization: `Bearer ${config.key}`,
+        Accept: "application/openapi+json, application/json",
+      },
+    });
+    if (!response.ok) {
+      console.warn(`[schema-probe] PostgREST OpenAPI failed with ${response.status}`);
+      return;
+    }
+    const doc = await response.json();
+    const definitions = doc?.definitions || doc?.components?.schemas || {};
+    const candidates = {};
+    for (const [name, definition] of Object.entries(definitions)) {
+      if (!/(proposal|kit)/i.test(name)) continue;
+      candidates[name] = Object.keys(definition?.properties || {});
+    }
+    const paths = Object.keys(doc?.paths || {}).filter((path) => /(proposal|kit)/i.test(path));
+    console.info(`[schema-probe] ${JSON.stringify({ candidates, paths })}`);
+  } catch (error) {
+    console.warn(`[schema-probe] ${error?.message || String(error)}`);
+  }
+}
+
 export async function GET() {
   const config = getSupabaseConfig();
-  const storage = await getStorageBucketDiagnostics(config);
+  const [storage] = await Promise.all([
+    getStorageBucketDiagnostics(config),
+    logProposalKitSchema(config),
+  ]);
 
   return Response.json({
     ok: true,
