@@ -54,9 +54,7 @@ async function probeTable(config, table) {
     const raw = await response.text();
     let data = null;
     try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
-    if (!response.ok) {
-      return { exists: false, status: response.status, columns: [] };
-    }
+    if (!response.ok) return { exists: false, status: response.status, columns: [] };
     const row = Array.isArray(data) ? data[0] : null;
     return { exists: true, status: response.status, columns: row && typeof row === "object" ? Object.keys(row) : [] };
   } catch (error) {
@@ -66,10 +64,12 @@ async function probeTable(config, table) {
 
 async function getProposalKitSchema(config) {
   const names = [
-    "proposals", "proposal_items", "proposal_products", "product_proposals", "products_proposals",
-    "product_proposal_items", "products_proposal_items",
-    "kits", "kit_items", "kit_products", "product_kits", "products_kits",
-    "product_kit_items", "products_kit_items",
+    "proposal", "proposals", "proposal_headers", "proposal_groups", "proposal_sets", "proposal_catalog", "proposal_templates",
+    "product_proposal", "product_proposals", "product_proposal_headers", "product_proposal_groups", "product_proposal_sets", "product_proposal_catalog", "product_proposal_templates",
+    "products_proposals", "pricing_proposals", "school_proposals", "proposal_items", "proposal_products", "product_proposal_items", "products_proposal_items",
+    "kit", "kits", "kit_headers", "kit_groups", "kit_sets", "kit_catalog", "kit_templates", "kits_catalog",
+    "product_kit", "product_kits", "product_kit_headers", "product_kit_groups", "product_kit_sets", "product_kit_catalog", "product_kit_templates", "product_kits_catalog",
+    "products_kits", "kit_items", "kit_products", "product_kit_items", "products_kit_items",
   ];
   const result = {};
   if (!isSupabaseConfigured()) return result;
