@@ -1,22 +1,22 @@
 {
   "rewrites": [
-    {
-      "source": "/orders/new",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/orders/new/products",
-      "destination": "/create-order-products.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/api/index"
-    }
+    { "source": "/api/products/proposals", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals" },
+    { "source": "/api/products/proposals/:id/copy", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/:id/copy" },
+    { "source": "/api/products/proposals/:id/items", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/:id/items" },
+    { "source": "/api/products/proposals/:id/items/:itemId((?!by-tag|by-kit)[^/]+)", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/:id/items/:itemId" },
+    { "source": "/api/products/proposals/:id", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/:id" },
+
+    { "source": "/api/products/kits", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/kits" },
+    { "source": "/api/products/kits/:id/copy", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/kits/:id/copy" },
+    { "source": "/api/products/kits/:id/items", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/kits/:id/items" },
+    { "source": "/api/products/kits/:id/items/:itemId", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/kits/:id/items/:itemId" },
+    { "source": "/api/products/kits/:id", "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/kits/:id" },
+
+    { "source": "/orders/new", "destination": "/api/index" },
+    { "source": "/orders/new/products", "destination": "/create-order-products.html" },
+    { "source": "/(.*)", "destination": "/api/index" }
   ],
   "crons": [
-    {
-      "path": "/api/cron/notifications",
-      "schedule": "0 9 * * *"
-    }
+    { "path": "/api/cron/notifications", "schedule": "0 9 * * *" }
   ]
 }
