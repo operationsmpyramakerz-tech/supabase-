@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -262,7 +263,7 @@ function AddItemsModal({ proposal, products, kits, tags, busy, onClose, onSubmit
     <Modal title={`Add Components to ${proposal.name}`} subtitle="Add one product, a complete product tag, or a reusable kit." icon="＋" onClose={onClose} wide>
       <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <div className="next-proposals-segmented">
-          {[['product', 'Single Product'], ['tag', 'Product Tag'], ['kit', 'Kit']].map(([value, label]) => (
+          {[["product", "Single Product"], ["tag", "Product Tag"], ["kit", "Kit"]].map(([value, label]) => (
             <button type="button" key={value} className={mode === value ? "active" : ""} onClick={() => { setMode(value); setSelected(""); }}>{label}</button>
           ))}
         </div>
@@ -449,8 +450,7 @@ export default function ProposalsClient({
     const normalized = normalizeProposal(proposal);
     setProposals((current) => {
       const exists = current.some((item) => item.id === normalized.id);
-      const next = exists ? current.map((item) => item.id === normalized.id ? normalized : item) : [normalized, ...current];
-      return next;
+      return exists ? current.map((item) => item.id === normalized.id ? normalized : item) : [normalized, ...current];
     });
     setActiveDetail((current) => current?.proposal?.id === normalized.id ? { ...current, proposal: normalized } : current);
     return normalized;
@@ -468,7 +468,7 @@ export default function ProposalsClient({
     setFolderMenu("");
     setDetailBusy(true);
     try {
-      const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposalId)}?_ts=${Date.now()}`);
+      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposalId)}?_ts=${Date.now()}`);
       syncDetail(body);
     } catch (error) {
       notify(error?.message || "The proposal could not be loaded.", "error");
@@ -481,10 +481,10 @@ export default function ProposalsClient({
     setBusy(true);
     try {
       const [proposalBody, kitBody, memberBody, productBody] = await Promise.all([
-        requestJson(`/api/products/proposals?_ts=${Date.now()}`),
-        requestJson(`/api/products/kits?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/proposals?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
         requestJson(`/api/products/proposals/team-members?_ts=${Date.now()}`),
-        requestJson(`/api/products?_ts=${Date.now()}`),
+        requestJson(`/next/api/products?_ts=${Date.now()}`),
       ]);
       setProposals((proposalBody.proposals || []).map(normalizeProposal));
       setKits((kitBody.kits || []).map(normalizeKit));
@@ -537,15 +537,15 @@ export default function ProposalsClient({
     setBusy(true);
     try {
       if (dialog.mode === "create") {
-        const body = await requestJson("/api/products/proposals", { method: "POST", body: JSON.stringify({ name, adminPassword }) });
+        const body = await requestJson("/next/api/products/proposals", { method: "POST", body: JSON.stringify({ name, adminPassword }) });
         syncProposal({ ...(body.proposal || {}), canEdit: true });
         notify(`“${name}” was created.`);
       } else if (dialog.mode === "copy") {
-        const body = await requestJson(`/api/products/proposals/${encodeURIComponent(dialog.proposal.id)}/copy`, { method: "POST", body: JSON.stringify({ name }) });
+        const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(dialog.proposal.id)}/copy`, { method: "POST", body: JSON.stringify({ name }) });
         syncProposal(body.proposal);
         notify(`A copy named “${name}” was created.`);
       } else if (dialog.mode === "rename") {
-        const body = await requestJson(`/api/products/proposals/${encodeURIComponent(dialog.proposal.id)}`, { method: "PATCH", body: JSON.stringify({ name, adminPassword }) });
+        const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(dialog.proposal.id)}`, { method: "PATCH", body: JSON.stringify({ name, adminPassword }) });
         syncProposal(body.proposal);
         notify("Proposal name updated.");
       } else if (dialog.mode === "combine") {
@@ -564,12 +564,19 @@ export default function ProposalsClient({
   };
 
   const deleteProposal = async (proposal) => {
-    if (!window.confirm(`Delete “${proposal.name}” and all saved components? This action cannot be undone.`)) return;
+    const confirmed = await confirmDelete({
+      itemName: proposal.name,
+      itemType: "proposal",
+      title: "Delete proposal?",
+      message: `You’re going to permanently delete “${proposal.name}” and all saved components. This action cannot be undone.`,
+      confirmLabel: "Yes, Delete!",
+    });
+    if (!confirmed) return;
     const adminPassword = await protectedPassword(proposal, "Enter the Admin password to delete a proposal created by another user.");
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}`, { method: "DELETE", body: JSON.stringify({ adminPassword }) });
+      await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}`, { method: "DELETE", body: JSON.stringify({ adminPassword }) });
       setProposals((current) => current.filter((item) => item.id !== proposal.id));
       setSelectedIds((current) => current.filter((id) => id !== proposal.id));
       if (activeDetail?.proposal?.id === proposal.id) setActiveDetail(null);
@@ -588,13 +595,13 @@ export default function ProposalsClient({
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      let endpoint = `/api/products/proposals/${encodeURIComponent(proposal.id)}/items`;
+      let endpoint = `/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items`;
       let payload = { productId: selected, quantity, mergeLogic, adminPassword };
       if (mode === "tag") {
-        endpoint += "/by-tag";
+        endpoint = `/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-tag`;
         payload = { tag: selected, quantity, mergeLogic, adminPassword };
       } else if (mode === "kit") {
-        endpoint += "/by-kit";
+        endpoint = `/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`;
         payload = { kitId: selected, quantity, mergeLogic, adminPassword };
       }
       const body = await requestJson(endpoint, { method: "POST", body: JSON.stringify(payload) });
@@ -614,7 +621,7 @@ export default function ProposalsClient({
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/items/${encodeURIComponent(row.id)}`, {
+      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
         body: JSON.stringify({ quantity, adminPassword }),
       });
@@ -628,13 +635,20 @@ export default function ProposalsClient({
   };
 
   const removeItem = async (row) => {
-    if (!window.confirm(`Remove “${row.name}” from this proposal?`)) return;
+    const confirmed = await confirmDelete({
+      itemName: row.name,
+      itemType: "component",
+      title: "Remove component?",
+      message: `Remove “${row.name}” from this proposal? The product itself will stay in the Products catalogue.`,
+      confirmLabel: "Remove Component",
+    });
+    if (!confirmed) return;
     const proposal = activeDetail?.proposal;
     const adminPassword = await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
     if (adminPassword === null) return;
     setBusy(true);
     try {
-      const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/items/${encodeURIComponent(row.id)}`, {
+      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "DELETE",
         body: JSON.stringify({ adminPassword }),
       });
