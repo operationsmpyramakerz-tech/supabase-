@@ -53,8 +53,9 @@ async function getStorageBucketDiagnostics(config) {
   }
 }
 
-async function logProposalKitSchema(config) {
-  if (!isSupabaseConfigured()) return;
+async function getProposalKitSchema(config) {
+  const empty = { candidates: {}, paths: [], status: null, error: "" };
+  if (!isSupabaseConfigured()) return empty;
   try {
     const response = await fetch(`${config.url}/rest/v1/`, {
       method: "GET",
@@ -65,29 +66,30 @@ async function logProposalKitSchema(config) {
         Accept: "application/openapi+json, application/json",
       },
     });
+    empty.status = response.status;
     if (!response.ok) {
-      console.warn(`[schema-probe] PostgREST OpenAPI failed with ${response.status}`);
-      return;
+      empty.error = `PostgREST OpenAPI failed with ${response.status}`;
+      return empty;
     }
     const doc = await response.json();
     const definitions = doc?.definitions || doc?.components?.schemas || {};
-    const candidates = {};
     for (const [name, definition] of Object.entries(definitions)) {
       if (!/(proposal|kit)/i.test(name)) continue;
-      candidates[name] = Object.keys(definition?.properties || {});
+      empty.candidates[name] = Object.keys(definition?.properties || {});
     }
-    const paths = Object.keys(doc?.paths || {}).filter((path) => /(proposal|kit)/i.test(path));
-    console.info(`[schema-probe] ${JSON.stringify({ candidates, paths })}`);
+    empty.paths = Object.keys(doc?.paths || {}).filter((path) => /(proposal|kit)/i.test(path));
+    return empty;
   } catch (error) {
-    console.warn(`[schema-probe] ${error?.message || String(error)}`);
+    empty.error = error?.message || String(error);
+    return empty;
   }
 }
 
 export async function GET() {
   const config = getSupabaseConfig();
-  const [storage] = await Promise.all([
+  const [storage, schemaProbe] = await Promise.all([
     getStorageBucketDiagnostics(config),
-    logProposalKitSchema(config),
+    getProposalKitSchema(config),
   ]);
 
   return Response.json({
@@ -99,6 +101,7 @@ export async function GET() {
       urlConfigured: /^https:\/\//i.test(String(config.url || "")),
       keyConfigured: !!String(config.key || "").trim(),
       storage,
+      schemaProbe,
     },
     timestamp: new Date().toISOString(),
   }, {
