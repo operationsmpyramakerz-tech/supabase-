@@ -2,66 +2,62 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import StocktakingClient from "../../components/stocktaking/StocktakingClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
+import { stocktakingForAccount } from "../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
+function UnavailableState({ message, forbidden = false }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{forbidden ? "Stocktaking is not available" : "The new Stocktaking page could not load"}</h1>
+        <p>{message}</p>
+        <div className="actions">
+          {!forbidden ? <a className="primary-button" href="/stocktaking?classic=1">Open classic Stocktaking</a> : null}
+          <a className={forbidden ? "primary-button" : "secondary-button"} href="/next/home">Return to Home</a>
+        </div>
+      </section>
+    </main>
+  );
 }
 
 export default async function StocktakingPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=stocktaking", { timeoutMs: 30000 });
+  const gate = await getLegacyAccountGate(["Stocktaking"]);
 
-  if (response.status === 401) redirect("/login?next=/next/stocktaking");
-  if (response.status === 403) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Stocktaking is not available</h1>
-          <p>Your account does not have access to Stocktaking.</p>
-          <a className="primary-button" href="/next/home">Return to Home</a>
-        </section>
-      </main>
-    );
+  if (gate.status === 401) redirect("/login?next=/next/stocktaking");
+  if (gate.status === 403) {
+    return <UnavailableState forbidden message="Your account does not have access to Stocktaking." />;
+  }
+  if (!gate.ok || !gate.account) {
+    return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Stocktaking page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/stocktaking?classic=1">Open classic Stocktaking</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  let stock = [];
+  const warnings = [];
+  try {
+    stock = await stocktakingForAccount(gate.account);
+  } catch (directError) {
+    // Temporary rollback path while the Stocktaking migration is being proven in production.
+    const fallback = await fetchLegacyJson("/api/stock", { timeoutMs: 15000 });
+    if (fallback.status === 401) redirect("/login?next=/next/stocktaking");
+    if (fallback.ok && Array.isArray(fallback.data)) {
+      stock = fallback.data;
+      warnings.push("Stocktaking recovery path used.");
+    } else {
+      return (
+        <UnavailableState
+          message={directError?.message || fallback.error || fallback.data?.error || "Stocktaking data is temporarily unavailable."}
+        />
+      );
+    }
   }
-
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const stock = getResource(resources, "/api/stock", []);
-
-  if (!account) redirect("/login?next=/next/stocktaking");
 
   return (
     <AppShell
-      account={account}
+      account={gate.account}
       title="Stocktaking"
       eyebrow="Live inventory overview"
       activePath="/next/stocktaking"
@@ -69,7 +65,7 @@ export default async function StocktakingPage() {
     >
       <StocktakingClient
         initialStock={Array.isArray(stock) ? stock : []}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={warnings}
       />
     </AppShell>
   );
