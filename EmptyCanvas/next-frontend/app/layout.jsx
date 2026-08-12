@@ -1,6 +1,7 @@
 import Script from "next/script";
 import "./globals.css";
 import "./classic-parity.css";
+import "./system-ui.css";
 
 export const metadata = {
   title: "Operations Hub — Next.js Pilot",
