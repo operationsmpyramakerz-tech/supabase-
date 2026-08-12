@@ -17,29 +17,20 @@ async function getStorageBucketDiagnostics(config) {
   if (!isSupabaseConfigured() || !result.name) return result;
 
   try {
-    const response = await fetch(
-      `${config.url}/storage/v1/bucket/${encodeURIComponent(result.name)}`,
-      {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          apikey: config.key,
-          Authorization: `Bearer ${config.key}`,
-        },
-      },
-    );
-
+    const response = await fetch(`${config.url}/storage/v1/bucket/${encodeURIComponent(result.name)}`, {
+      method: "GET",
+      cache: "no-store",
+      headers: { apikey: config.key, Authorization: `Bearer ${config.key}` },
+    });
     result.reachable = true;
     result.status = response.status;
     const raw = await response.text();
     let data = null;
     try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
-
     if (!response.ok) {
       result.error = data?.message || data?.error || `Storage bucket lookup failed with status ${response.status}`;
       return result;
     }
-
     result.exists = true;
     result.public = typeof data?.public === "boolean" ? data.public : null;
     result.fileSizeLimit = data?.file_size_limit ?? data?.fileSizeLimit ?? null;
@@ -53,36 +44,40 @@ async function getStorageBucketDiagnostics(config) {
   }
 }
 
-async function getProposalKitSchema(config) {
-  const empty = { candidates: {}, paths: [], status: null, error: "" };
-  if (!isSupabaseConfigured()) return empty;
+async function probeTable(config, table) {
   try {
-    const response = await fetch(`${config.url}/rest/v1/`, {
+    const response = await fetch(`${config.url}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`, {
       method: "GET",
       cache: "no-store",
-      headers: {
-        apikey: config.key,
-        Authorization: `Bearer ${config.key}`,
-        Accept: "application/openapi+json, application/json",
-      },
+      headers: { apikey: config.key, Authorization: `Bearer ${config.key}` },
     });
-    empty.status = response.status;
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
     if (!response.ok) {
-      empty.error = `PostgREST OpenAPI failed with ${response.status}`;
-      return empty;
+      return { exists: false, status: response.status, columns: [] };
     }
-    const doc = await response.json();
-    const definitions = doc?.definitions || doc?.components?.schemas || {};
-    for (const [name, definition] of Object.entries(definitions)) {
-      if (!/(proposal|kit)/i.test(name)) continue;
-      empty.candidates[name] = Object.keys(definition?.properties || {});
-    }
-    empty.paths = Object.keys(doc?.paths || {}).filter((path) => /(proposal|kit)/i.test(path));
-    return empty;
+    const row = Array.isArray(data) ? data[0] : null;
+    return { exists: true, status: response.status, columns: row && typeof row === "object" ? Object.keys(row) : [] };
   } catch (error) {
-    empty.error = error?.message || String(error);
-    return empty;
+    return { exists: false, status: null, columns: [], error: error?.message || String(error) };
   }
+}
+
+async function getProposalKitSchema(config) {
+  const names = [
+    "proposals", "proposal_items", "proposal_products", "product_proposals", "products_proposals",
+    "product_proposal_items", "products_proposal_items",
+    "kits", "kit_items", "kit_products", "product_kits", "products_kits",
+    "product_kit_items", "products_kit_items",
+  ];
+  const result = {};
+  if (!isSupabaseConfigured()) return result;
+  const checks = await Promise.all(names.map(async (name) => [name, await probeTable(config, name)]));
+  for (const [name, details] of checks) {
+    if (details.exists) result[name] = details;
+  }
+  return result;
 }
 
 export async function GET() {
@@ -104,7 +99,5 @@ export async function GET() {
       schemaProbe,
     },
     timestamp: new Date().toISOString(),
-  }, {
-    headers: { "Cache-Control": "no-store" },
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
