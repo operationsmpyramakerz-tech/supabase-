@@ -1,0 +1,97 @@
+.next-proposals-toast {
+  position: fixed !important;
+  inset: 22px 22px auto auto !important;
+  z-index: 2147483000 !important;
+  width: min(390px, calc(100vw - 32px)) !important;
+  max-width: 390px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 15px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  border: 1px solid rgba(255, 255, 255, .12) !important;
+  border-radius: 18px !important;
+  background: rgba(15, 23, 42, .96) !important;
+  color: #fff !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .28) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  overflow: hidden !important;
+  animation: opsToastIn .18s ease-out !important;
+}
+
+.next-proposals-toast.is-success {
+  border-color: rgba(52, 211, 153, .36) !important;
+}
+
+.next-proposals-toast.is-error {
+  border-color: rgba(248, 113, 113, .46) !important;
+}
+
+.next-proposals-toast > div {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 3px !important;
+}
+
+.next-proposals-toast strong {
+  display: block !important;
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  line-height: 1.25 !important;
+  font-weight: 850 !important;
+}
+
+.next-proposals-toast span {
+  display: block !important;
+  margin: 0 !important;
+  color: rgba(255, 255, 255, .76) !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.next-proposals-toast > button {
+  flex: 0 0 auto !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .1) !important;
+  color: #fff !important;
+  font-size: 19px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+}
+
+.next-proposals-toast > button:hover {
+  background: rgba(255, 255, 255, .17) !important;
+}
+
+@keyframes opsToastIn {
+  from { opacity: 0; transform: translateY(-8px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 600px) {
+  .next-proposals-toast {
+    inset: 14px 14px auto 14px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .next-proposals-toast { animation: none !important; }
+}
