@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
 
 const DEFAULT_UNITS = ["Piece", "Pack", "Kilogram", "Metre", "Inch"];
 
@@ -244,7 +245,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
     setBusy(true);
     setError("");
     try {
-      const body = await requestJson("/api/products/units", {
+      const body = await requestJson("/next/api/products/units", {
         method: "POST",
         body: JSON.stringify({ name }),
       });
@@ -283,7 +284,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
         imageType: image.type || null,
         removeImage: !!image.removed,
       };
-      const endpoint = isEdit ? `/api/products/${encodeURIComponent(product.id)}` : "/api/products";
+      const endpoint = isEdit ? `/next/api/products/${encodeURIComponent(product.id)}` : "/next/api/products";
       const body = await requestJson(endpoint, {
         method: isEdit ? "PATCH" : "POST",
         body: JSON.stringify(payload),
@@ -386,7 +387,7 @@ function TagModal({ mode, tag, onClose, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      const body = await requestJson("/api/products/tags", {
+      const body = await requestJson("/next/api/products/tags", {
         method: mode === "edit" ? "PATCH" : "POST",
         body: JSON.stringify(mode === "edit" ? { oldTag: tag, newTag: clean } : { name: clean }),
       });
@@ -528,9 +529,16 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
 
   const deleteProduct = async (product) => {
     setProductMenu("");
-    if (!window.confirm(`Delete “${product.name}”? This action cannot be undone.`)) return;
+    const confirmed = await confirmDelete({
+      itemName: product.name,
+      itemType: "product",
+      title: "Delete product?",
+      message: `You’re going to permanently delete “${product.name}”. This action cannot be undone.`,
+      confirmLabel: "Yes, Delete!",
+    });
+    if (!confirmed) return;
     try {
-      await requestJson(`/api/products/${encodeURIComponent(product.id)}`, { method: "DELETE" });
+      await requestJson(`/next/api/products/${encodeURIComponent(product.id)}`, { method: "DELETE" });
       setProducts((current) => current.filter((item) => item.id !== product.id));
       notify("success", "Product deleted successfully.");
     } catch (error) {
@@ -555,9 +563,16 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
   const deleteTag = async (tag) => {
     setGroupMenu("");
     if (!tag || lower(tag) === "uncategorized") return;
-    if (!window.confirm(`Delete the tag “${tag}”? Products in this tag will move to Uncategorized.`)) return;
+    const confirmed = await confirmDelete({
+      itemName: tag,
+      itemType: "tag",
+      title: "Delete tag?",
+      message: `Delete the tag “${tag}”? Products in this tag will move to Uncategorized and will not be deleted.`,
+      confirmLabel: "Delete Tag",
+    });
+    if (!confirmed) return;
     try {
-      await requestJson("/api/products/tags", { method: "DELETE", body: JSON.stringify({ tag }) });
+      await requestJson("/next/api/products/tags", { method: "DELETE", body: JSON.stringify({ tag }) });
       setProducts((current) => current.map((product) => firstTag(product) === tag ? { ...product, tags: ["Uncategorized"] } : product));
       setTagCatalog((current) => mergeUnique(current.filter((item) => lower(item) !== lower(tag)).concat("Uncategorized")));
       if (activeTag === tag) setActiveTag("__all__");
