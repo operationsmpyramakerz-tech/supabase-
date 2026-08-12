@@ -38,6 +38,10 @@ function backendOrigin() {
   return "http://127.0.0.1:5000";
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function fetchLegacyJson(pathname, options = {}) {
   const origin = backendOrigin();
   if (!origin) {
@@ -52,53 +56,68 @@ export async function fetchLegacyJson(pathname, options = {}) {
 
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const url = new URL(String(pathname || "/"), origin);
-  const controller = new AbortController();
   const timeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const hasBody = typeof options.body !== "undefined" && options.body !== null;
   const body = hasBody && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body;
+  const method = String(options.method || "GET").toUpperCase();
+  const maxAttempts = method === "GET" ? 3 : 1;
+  let lastError = "Legacy API is unavailable.";
 
-  try {
-    const response = await fetch(url, {
-      method: options.method || "GET",
-      cache: "no-store",
-      redirect: "manual",
-      signal: controller.signal,
-      headers: {
-        accept: "application/json",
-        cookie: cookieHeader(cookieStore),
-        "x-forwarded-host": headerStore.get("host") || "",
-        "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
-        "x-operations-hub-frontend": "next-pilot",
-        ...(hasBody ? { "content-type": "application/json" } : {}),
-        ...(options.headers || {}),
-      },
-      body: hasBody ? body : undefined,
-    });
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    let data = null;
-    const contentType = String(response.headers.get("content-type") || "");
-    if (contentType.includes("application/json")) {
-      data = await response.json().catch(() => null);
-    }
+    try {
+      const response = await fetch(url, {
+        method,
+        cache: "no-store",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          accept: "application/json",
+          cookie: cookieHeader(cookieStore),
+          "x-forwarded-host": headerStore.get("host") || "",
+          "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
+          "x-operations-hub-frontend": "next-pilot",
+          ...(hasBody ? { "content-type": "application/json" } : {}),
+          ...(options.headers || {}),
+        },
+        body: hasBody ? body : undefined,
+      });
 
-    return {
-      ok: response.ok,
-      status: response.status,
-      data,
-      location: response.headers.get("location") || "",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      status: 503,
-      data: null,
-      location: "",
-      error: error?.name === "AbortError"
+      let data = null;
+      const contentType = String(response.headers.get("content-type") || "");
+      if (contentType.includes("application/json")) {
+        data = await response.json().catch(() => null);
+      }
+
+      if (method === "GET" && attempt < maxAttempts && [408, 425, 429, 500, 502, 503, 504].includes(response.status)) {
+        await wait(attempt === 1 ? 180 : 420);
+        continue;
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        data,
+        location: response.headers.get("location") || "",
+      };
+    } catch (error) {
+      lastError = error?.name === "AbortError"
         ? `Legacy API timed out after ${timeoutMs}ms.`
-        : (error?.message || "Legacy API is unavailable."),
-    };
-  } finally {
-    clearTimeout(timeout);
+        : (error?.message || "Legacy API is unavailable.");
+      if (method !== "GET" || attempt >= maxAttempts) break;
+      await wait(attempt === 1 ? 180 : 420);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  return {
+    ok: false,
+    status: 503,
+    data: null,
+    location: "",
+    error: lastError,
+  };
 }
