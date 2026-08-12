@@ -58,7 +58,7 @@ function accountIdentity(account = {}) {
 function isOwner(row = {}, account = {}) {
   const identity = accountIdentity(account);
   const createdId = text(row.created_by_id);
-  const createdName = text(row.created_by_name);
+  const createdName = text(row.created_by);
   if (createdId && identity.id) return createdId === identity.id;
   if (createdName && identity.name) return createdName.toLowerCase() === identity.name.toLowerCase();
   return false;
@@ -104,7 +104,6 @@ function proposalItem(row = {}) {
     productId: text(row.product_id),
     productName: text(row.product_name) || "Untitled product",
     quantity: positiveInt(row.quantity),
-    unitPrice: row.unit_price == null ? null : number(row.unit_price),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
   };
@@ -126,14 +125,16 @@ function proposalHeader(row = {}, itemCount = 0, account = {}) {
   return {
     id: text(row.id),
     name: text(row.name) || "Untitled proposal",
-    createdBy: text(row.created_by_name),
+    createdBy: text(row.created_by),
     createdById: text(row.created_by_id),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
     itemsCount: Number(itemCount) || 0,
     canEdit: isOwner(row, account),
     combinedSources: Array.isArray(row.combined_sources) ? row.combined_sources : [],
-    combinedSourceNames: Array.isArray(row.combined_source_names) ? row.combined_source_names : [],
+    combineLogic: text(row.combine_logic),
+    combineNote: text(row.combine_note),
+    combinedMatrix: Array.isArray(row.combined_matrix) ? row.combined_matrix : [],
     source: "supabase-next",
   };
 }
@@ -142,7 +143,7 @@ function kitHeader(row = {}, itemCount = 0, account = {}) {
   return {
     id: text(row.id),
     name: text(row.name) || "Untitled kit",
-    createdBy: text(row.created_by_name),
+    createdBy: text(row.created_by),
     createdById: text(row.created_by_id),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
@@ -159,13 +160,6 @@ function counts(rows, foreignKey) {
     if (id) map.set(id, (map.get(id) || 0) + 1);
   }
   return map;
-}
-
-async function activeKitRows() {
-  const rows = await supabaseRequest(
-    `/${encodeURIComponent(kitsTable())}?select=*&deleted_at=is.null&order=updated_at.desc,created_at.desc`,
-  );
-  return Array.isArray(rows) ? rows : [];
 }
 
 export async function listProposals(account) {
@@ -202,7 +196,7 @@ export async function createProposal(name, account) {
   const now = new Date().toISOString();
   const row = { name: clean, created_at: now, updated_at: now };
   if (identity.id) row.created_by_id = identity.id;
-  if (identity.name) row.created_by_name = identity.name;
+  if (identity.name) row.created_by = identity.name;
   const created = await insert(proposalTable(), row);
   return proposalHeader(created || row, 0, account);
 }
@@ -250,7 +244,6 @@ export async function copyProposal(id, name, account) {
       product_id: item.product_id,
       product_name: item.product_name,
       quantity: positiveInt(item.quantity),
-      unit_price: item.unit_price == null ? null : number(item.unit_price),
       created_at: now,
       updated_at: now,
     });
@@ -289,7 +282,6 @@ export async function addProposalProduct(proposalId, body, account) {
     await updateById(proposalItemsTable(), existing.id, {
       quantity: mergedQuantity(existing.quantity, quantity, text(body?.mergeLogic).toLowerCase()),
       product_name: text(product.name) || text(existing.product_name),
-      unit_price: product.unit_price == null ? existing.unit_price : number(product.unit_price),
       updated_at: now,
     });
   } else {
@@ -298,7 +290,6 @@ export async function addProposalProduct(proposalId, body, account) {
       product_id: productId,
       product_name: text(product.name) || "Untitled product",
       quantity,
-      unit_price: product.unit_price == null ? null : number(product.unit_price),
       created_at: now,
       updated_at: now,
     });
@@ -348,7 +339,7 @@ export async function deleteProposalItem(proposalId, itemId, body, account) {
 
 export async function listKits(account) {
   const [headers, items] = await Promise.all([
-    activeKitRows(),
+    selectAll(kitsTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
     selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
   ]);
   const itemCounts = counts(items, "kit_id");
@@ -357,7 +348,7 @@ export async function listKits(account) {
 
 export async function getKit(id, account) {
   const row = await selectById(kitsTable(), id);
-  if (!row || row.deleted_at) {
+  if (!row) {
     const error = new Error("Kit not found.");
     error.status = 404;
     throw error;
@@ -377,14 +368,14 @@ export async function createKit(name, account) {
   const now = new Date().toISOString();
   const row = { name: clean, created_at: now, updated_at: now };
   if (identity.id) row.created_by_id = identity.id;
-  if (identity.name) row.created_by_name = identity.name;
+  if (identity.name) row.created_by = identity.name;
   const created = await insert(kitsTable(), row);
   return kitHeader(created || row, 0, account);
 }
 
 export async function updateKit(id, body, account) {
   const current = await selectById(kitsTable(), id);
-  if (!current || current.deleted_at) {
+  if (!current) {
     const error = new Error("Kit not found.");
     error.status = 404;
     throw error;
@@ -403,18 +394,15 @@ export async function updateKit(id, body, account) {
 
 export async function deleteKit(id, body, account) {
   const current = await selectById(kitsTable(), id);
-  if (!current || current.deleted_at) return;
+  if (!current) return;
   await requireOwnerOrAdmin(current, account, body?.adminPassword);
-  const identity = accountIdentity(account);
-  const patch = { deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-  if (identity.id) patch.deleted_by_id = identity.id;
-  if (identity.name) patch.deleted_by_name = identity.name;
-  await updateById(kitsTable(), id, patch);
+  await deleteRowsByForeignKey(kitItemsTable(), "kit_id", id);
+  await deleteById(kitsTable(), id);
 }
 
 export async function copyKit(id, name, account) {
   const source = await selectById(kitsTable(), id);
-  if (!source || source.deleted_at) {
+  if (!source) {
     const error = new Error("Kit not found.");
     error.status = 404;
     throw error;
@@ -437,7 +425,7 @@ export async function copyKit(id, name, account) {
 
 export async function addKitProduct(kitId, body, account) {
   const parent = await selectById(kitsTable(), kitId);
-  if (!parent || parent.deleted_at) {
+  if (!parent) {
     const error = new Error("Kit not found.");
     error.status = 404;
     throw error;
@@ -476,7 +464,7 @@ export async function addKitProduct(kitId, body, account) {
 
 export async function updateKitItem(kitId, itemId, body, account) {
   const parent = await selectById(kitsTable(), kitId);
-  if (!parent || parent.deleted_at) {
+  if (!parent) {
     const error = new Error("Kit not found.");
     error.status = 404;
     throw error;
@@ -496,7 +484,7 @@ export async function updateKitItem(kitId, itemId, body, account) {
 
 export async function deleteKitItem(kitId, itemId, body, account) {
   const parent = await selectById(kitsTable(), kitId);
-  if (!parent || parent.deleted_at) {
+  if (!parent) {
     const error = new Error("Kit not found.");
     error.status = 404;
     throw error;
