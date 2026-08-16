@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const MAX_CSV_SIZE = 25 * 1024 * 1024;
 
@@ -119,6 +119,62 @@ function moduleMark(value) {
   return marks[clean] || initials(clean);
 }
 
+function BackupIcon({ name }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  const paths = {
+    database: <><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>,
+    refresh: <><path d="M20 6v6h-6"/><path d="M4 18v-6h6"/><path d="M18.5 9a7 7 0 0 0-11.8-2.6L4 9"/><path d="M5.5 15a7 7 0 0 0 11.8 2.6L20 15"/></>,
+    download: <><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></>,
+    upload: <><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 21h14"/></>,
+    trash: <><path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></>,
+    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
+    chevron: <path d="m7 9 5 5 5-5"/>,
+    check: <path d="m5 12 4 4L19 6"/>,
+    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></>,
+  };
+  return <svg {...common}>{paths[name] || paths.database}</svg>;
+}
+
+function BackupSelect({ label, value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selected = options.find((option) => option.value === value) || options[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function pointerDown(event) {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    }
+    function keyDown(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", pointerDown);
+    document.addEventListener("keydown", keyDown);
+    return () => {
+      document.removeEventListener("pointerdown", pointerDown);
+      document.removeEventListener("keydown", keyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className={`next-backup-select ${open ? "is-open" : ""}`} ref={rootRef}>
+      <span className="next-backup-select__label">{label}</span>
+      <button type="button" className="next-backup-select__trigger" onClick={() => setOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={open}>
+        <span>{selected?.label || "Select"}</span><BackupIcon name="chevron" />
+      </button>
+      {open ? (
+        <div className="next-backup-select__menu" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "is-selected" : ""} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>
+              <span>{option.label}</span>{option.value === value ? <BackupIcon name="check" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -130,6 +186,17 @@ function Toast({ toast, onClose }) {
 }
 
 function Modal({ title, subtitle, onClose, children, footer = null, danger = false }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function keyDown(event) { if (event.key === "Escape") onClose(); }
+    document.addEventListener("keydown", keyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", keyDown);
+    };
+  }, [onClose]);
+
   return (
     <div className="next-backup-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className={`next-backup-modal__card ${danger ? "is-danger" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
@@ -307,6 +374,19 @@ export default function BackupClient({ initialTables = [], bootstrapWarnings = [
 
   const modules = useMemo(() => unique(tables.map((item) => item?.moduleName)).sort((a, b) => a.localeCompare(b)), [tables]);
   const sensitiveCount = useMemo(() => tables.filter((item) => item?.sensitive).length, [tables]);
+  const moduleOptions = useMemo(() => [{ value: "all", label: "All modules" }, ...modules.map((module) => ({ value: module, label: module }))], [modules]);
+  const sensitivityOptions = [
+    { value: "all", label: "All tables" },
+    { value: "standard", label: "Standard tables" },
+    { value: "sensitive", label: "Sensitive tables" },
+  ];
+  const sortOptions = [
+    { value: "module-name", label: "Module then name" },
+    { value: "name", label: "Name A–Z" },
+    { value: "name-desc", label: "Name Z–A" },
+    { value: "table", label: "Table name" },
+    { value: "sensitive", label: "Sensitive first" },
+  ];
 
   const filteredTables = useMemo(() => {
     const needle = lower(query);
@@ -378,20 +458,20 @@ export default function BackupClient({ initialTables = [], bootstrapWarnings = [
   }
 
   return (
-    <section className="next-backup-page">
+    <section className="next-backup-page next-backup-page--refined">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <article className="next-backup-hero">
+      <article className="next-backup-hero next-backup-hero--refined">
         <div className="next-backup-hero__copy">
-          <span className="next-backup-kicker">SYSTEM DATA CONTROL</span>
-          <h2>Export before every destructive action</h2>
-          <p>Download individual Supabase tables as CSV, create a complete ZIP backup, validate CSV restores, or clear table data through the existing protected ERP APIs.</p>
-          {Array.isArray(bootstrapWarnings) && bootstrapWarnings.length ? <small>Some bootstrap resources were unavailable. The table catalogue shown here may be incomplete until refreshed.</small> : null}
+          <span className="next-backup-kicker">SYSTEM DATA</span>
+          <h2>Database</h2>
+          <p>Export, import and clear Supabase table data from one protected workspace.</p>
+          {Array.isArray(bootstrapWarnings) && bootstrapWarnings.length ? <small>Some resources were unavailable during page load. Refresh the catalogue before making a destructive change.</small> : null}
         </div>
         <div className="next-backup-hero__actions">
-          <button type="button" className="next-backup-btn secondary" onClick={refresh} disabled={Boolean(busyAction)}>{busyAction === "refresh" ? "Refreshing…" : "Refresh catalogue"}</button>
-          <button type="button" className="next-backup-btn primary" onClick={exportAll} disabled={Boolean(busyAction)}>{busyAction === "export-all" ? "Preparing ZIP…" : "Export all data"}</button>
-          <button type="button" className="next-backup-btn danger-outline" onClick={() => setDeleteTarget({ isAll: true })} disabled={Boolean(busyAction)}>Delete all data</button>
+          <button type="button" className="next-backup-btn secondary" onClick={refresh} disabled={Boolean(busyAction)}><BackupIcon name="refresh" /><span>{busyAction === "refresh" ? "Refreshing…" : "Refresh"}</span></button>
+          <button type="button" className="next-backup-btn primary" onClick={exportAll} disabled={Boolean(busyAction)}><BackupIcon name="download" /><span>{busyAction === "export-all" ? "Preparing ZIP…" : "Export all"}</span></button>
+          <button type="button" className="next-backup-btn danger-outline" onClick={() => setDeleteTarget({ isAll: true })} disabled={Boolean(busyAction)}><BackupIcon name="trash" /><span>Delete all</span></button>
         </div>
       </article>
 
@@ -402,19 +482,22 @@ export default function BackupClient({ initialTables = [], bootstrapWarnings = [
         <article><span>FM</span><div><small>Backup formats</small><strong>2</strong><p>CSV per table and full ZIP</p></div></article>
       </div>
 
-      <article className="next-backup-toolbar">
-        <label className="next-backup-search"><span>Search</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Page, table, module or description…" /></label>
-        <label><span>Module</span><select value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)}><option value="all">All modules</option>{modules.map((module) => <option value={module} key={module}>{module}</option>)}</select></label>
-        <label><span>Data sensitivity</span><select value={sensitivityFilter} onChange={(event) => setSensitivityFilter(event.target.value)}><option value="all">All tables</option><option value="standard">Standard tables</option><option value="sensitive">Sensitive tables</option></select></label>
-        <label><span>Sort by</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="module-name">Module then name</option><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="table">Table name</option><option value="sensitive">Sensitive first</option></select></label>
+      <article className="next-backup-toolbar next-backup-toolbar--modern">
+        <label className="next-backup-search">
+          <span>Search tables</span>
+          <div className="next-backup-search__field"><BackupIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Page, table, module…" /></div>
+        </label>
+        <BackupSelect label="Module" value={moduleFilter} options={moduleOptions} onChange={setModuleFilter} />
+        <BackupSelect label="Sensitivity" value={sensitivityFilter} options={sensitivityOptions} onChange={setSensitivityFilter} />
+        <BackupSelect label="Sort by" value={sort} options={sortOptions} onChange={setSort} />
         <div className="next-backup-toolbar__result"><strong>{filteredTables.length}</strong><span>of {tables.length} tables</span></div>
         <button type="button" className="next-backup-clear" onClick={clearFilters}>Clear filters</button>
       </article>
 
       <article className="next-backup-list-card">
         <header>
-          <div><span className="next-backup-kicker">DATABASE TABLES</span><h2>Backup catalogue</h2></div>
-          <p>Imports and deletes require the Backup page admin password.</p>
+          <div><span className="next-backup-kicker">DATABASE TABLES</span><h2>Tables</h2></div>
+          <p><strong>{filteredTables.length}</strong> visible · Imports and deletes require the admin password.</p>
         </header>
         {filteredTables.length ? (
           <div className="next-backup-grid">
@@ -431,9 +514,9 @@ export default function BackupClient({ initialTables = [], bootstrapWarnings = [
                   <div className="next-backup-table-name"><span>Supabase table</span><code>{text(table?.tableName) || "table"}</code></div>
                   <p>{text(table?.description) || "System data stored in Supabase."}</p>
                   <footer>
-                    <button type="button" className="next-backup-card-btn export" onClick={() => exportOne(table)} disabled={Boolean(busyAction)}>{exporting ? "Exporting…" : "Export CSV"}</button>
-                    <button type="button" className="next-backup-card-btn import" onClick={() => setImportTarget(table)} disabled={Boolean(busyAction)}>Import CSV</button>
-                    <button type="button" className="next-backup-card-btn delete" onClick={() => setDeleteTarget(table)} disabled={Boolean(busyAction)}>Delete rows</button>
+                    <button type="button" className="next-backup-card-btn export" onClick={() => exportOne(table)} disabled={Boolean(busyAction)}><BackupIcon name="download" /><span>{exporting ? "Exporting…" : "Export"}</span></button>
+                    <button type="button" className="next-backup-card-btn import" onClick={() => setImportTarget(table)} disabled={Boolean(busyAction)}><BackupIcon name="upload" /><span>Import</span></button>
+                    <button type="button" className="next-backup-card-btn delete" onClick={() => setDeleteTarget(table)} disabled={Boolean(busyAction)}><BackupIcon name="trash" /><span>Delete</span></button>
                   </footer>
                 </article>
               );
