@@ -281,7 +281,7 @@ function OrderReviewCard({ group, activeTab, onOpen, onCreator }) {
         <div className="co-thumb co-thumb--order-type" style={{ "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd }} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
         <div className="co-main">
           <div className="co-title">{group.orderIdLabel}</div>
-          <div className="next-review-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span><span className="next-review-order-type">{type.label}</span></div>
+          <div className="next-review-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
           <div className="co-createdby">{group.createdByName || "—"}</div>
         </div>
         <div className="co-qty">x{group.items.length}</div>
@@ -604,15 +604,6 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   }, [creatorState]);
 
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
-  const tabCounts = useMemo(() => {
-    const counts = { all: buildGroups(orders.filter((item) => !isArchived(item))).length };
-    counts.archive = buildGroups(orders.filter(isArchived)).length;
-    for (const item of REVIEW_TABS) {
-      if (item.key === "all" || item.key === "archive") continue;
-      counts[item.key] = buildGroups(orders.filter((row) => !isArchived(row) && approvalKey(row?.approval ?? row?.svApproval ?? row?.sv_approval) === item.key)).length;
-    }
-    return counts;
-  }, [orders]);
   const selected = useMemo(() => allGroups.find((group) => group.key === selectedKey) || null, [allGroups, selectedKey]);
   const statusRows = useMemo(() => {
     if (tab === "all") return orders.filter((item) => !isArchived(item));
@@ -757,13 +748,8 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
     <div className="next-orders-review-toolbar-wrap">
-      <div className="next-orders-review-toolbar-summary" aria-live="polite">
-        <span>{visibleGroups.length} order{visibleGroups.length === 1 ? "" : "s"}</span>
-        <strong>{REVIEW_TABS.find((item) => item.key === tab)?.label || "All"}</strong>
-        {query.trim() || type !== "all" ? <em>Filtered</em> : null}
-      </div>
       <div className="orders-toolbar" aria-label="Orders review tools">
-        <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Orders Review status">{REVIEW_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span><span className="order-status-tab__count">{tabCounts[item.key] || 0}</span></span></button>)}</div></div>
+        <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Orders Review status">{REVIEW_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}</div></div>
         <div className="orders-toolbar__divider" aria-hidden="true"/><TypeFilter value={type} options={typeOptions} onChange={setType}/>
       </div>
     </div>

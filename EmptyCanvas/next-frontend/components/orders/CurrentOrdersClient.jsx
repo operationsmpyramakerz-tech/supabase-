@@ -430,7 +430,6 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
           <div className="co-title">{group.orderIdLabel}</div>
           <div className="next-current-order-meta">
             <span className="co-sub">{formatDate(group.latestCreated)}</span>
-            <span className="next-current-order-type">{type.label}</span>
           </div>
         </div>
         <div className="co-qty" title={`${group.items.length} component${group.items.length === 1 ? "" : "s"}`}>x{group.items.length}</div>
@@ -440,9 +439,8 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
         <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div></div>
         <div className="co-actions">
           {mixed ? <MixedStatusPill /> : <StatusPill status={group.status} reason={reasons} onReason={onReason} />}
-          <span className="next-current-order-progress" aria-label={`${progress}% workflow progress`} title={`${progress}% workflow progress`}>
+          <span className="next-current-order-progress next-current-order-progress--icon-only" aria-label={`${progress}% workflow progress`} title={`${progress}% workflow progress`}>
             <ClassicOrderIcon name="percent" />
-            <strong>{progress}</strong>
           </span>
         </div>
       </div>
@@ -677,15 +675,6 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
   }, [tab, type, query]);
 
-  const tabCounts = useMemo(() => {
-    const counts = { all: buildGroups(orders).length };
-    for (const item of STATUS_TABS) {
-      if (item.key === "all") continue;
-      counts[item.key] = buildGroups(orders.filter((row) => statusTabForItem(row) === item.key)).length;
-    }
-    return counts;
-  }, [orders]);
-
   const statusRows = useMemo(() => tab === "all" ? orders : orders.filter((item) => statusTabForItem(item) === tab), [orders, tab]);
   const statusGroups = useMemo(() => buildGroups(statusRows), [statusRows]);
   const typeOptions = useMemo(() => {
@@ -826,11 +815,6 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
       <div className="next-current-orders-toolbar-wrap">
-        <div className="next-current-orders-toolbar-summary" aria-live="polite">
-          <span>{visibleGroups.length} order{visibleGroups.length === 1 ? "" : "s"}</span>
-          <strong>{STATUS_TABS.find((item) => item.key === tab)?.label || "All"}</strong>
-          {query.trim() || type !== "all" ? <em>Filtered</em> : null}
-        </div>
         <div className="orders-toolbar" aria-label="Current orders tools">
           <div className="orders-toolbar__scroll">
             <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Current Orders status">
@@ -839,7 +823,6 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
                   <span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon} /></span>
                   <span className="order-status-tab__copy">
                     <span className="order-status-tab__label">{item.label}</span>
-                    <span className="order-status-tab__count">{tabCounts[item.key] || 0}</span>
                   </span>
                 </button>
               ))}
