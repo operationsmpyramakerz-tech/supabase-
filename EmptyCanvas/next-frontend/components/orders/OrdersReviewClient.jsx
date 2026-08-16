@@ -282,7 +282,6 @@ function OrderReviewCard({ group, activeTab, onOpen, onCreator }) {
         <div className="co-main">
           <div className="co-title">{group.orderIdLabel}</div>
           <div className="next-review-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
-          <div className="co-createdby">{group.createdByName || "—"}</div>
         </div>
         <div className="co-qty">x{group.items.length}</div>
       </div>
@@ -356,7 +355,6 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
   const showUnarchive = archived || activeTab === "archive";
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(approval));
-  const type = orderTypeMeta(group.orderType, group.orderTypeColor);
   const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
   const state = archived ? "archive" : approval;
 
@@ -376,18 +374,13 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
         </div> : null}
       </div> : null}
       <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-      <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub">{group.orderIdLabel}</div></div></div>
+      <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div></div></div>
 
       <div className="next-review-order-modal-summary" aria-label="Review order summary">
         <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
         <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
         <div><span>Components</span><strong>{group.items.length}</strong></div>
         <div className="next-review-order-modal-summary__status"><span>Review</span>{approval === "mixed" && !archived ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
-      </div>
-
-      <div className="next-review-order-modal-context">
-        <span className="next-review-order-modal-type" style={{ "--review-type-bg": type.bg, "--review-type-fg": type.fg, "--review-type-border": type.bd }}><ClassicOrderIcon name={type.icon} />{type.label}</span>
-        <span className="next-review-order-modal-creator"><ClassicOrderIcon name="user" />{group.createdByName || "—"}</span>
       </div>
 
       <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
@@ -754,7 +747,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       </div>
     </div>
 
-    <section className="card" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
+    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
 
     <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={() => setSelectedKey("")} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView}/>
     <PasswordModal state={passwordState} busy={passwordBusy} error={passwordError} onCancel={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }} onSubmit={submitPasswordAction}/>
