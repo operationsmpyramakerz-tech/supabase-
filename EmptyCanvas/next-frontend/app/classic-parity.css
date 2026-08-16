@@ -5854,3 +5854,580 @@ body.page-maintenance-orders .next-maintenance-receipt-photo span {
   opacity: .5;
   cursor: not-allowed;
 }
+
+/* Stage 2D — Maintenance / Operations maintenance parity refresh ------------
+ * Maintenance keeps the Classic workflow, but uses the same floating toolbar,
+ * full-width cards and compact detail language as Current / Operations Orders.
+ */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-orders-toolbar-wrap {
+  width: 100% !important;
+  margin: 0 0 12px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar {
+  gap: 9px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar__scroll {
+  min-width: 0;
+  border-radius: 18px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .portfolio-tabs {
+  gap: 5px;
+  min-width: max-content;
+  padding: 4px;
+  border: 1px solid #edf1f5;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .portfolio-tabs::before {
+  border-radius: 14px;
+  background: linear-gradient(180deg, #101827 0%, #020617 100%);
+  box-shadow: 0 10px 22px rgba(2, 6, 23, .18);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__button {
+  min-height: 46px;
+  max-width: 190px;
+  padding: 0 14px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-orders-list-surface,
+body.page-maintenance-orders .next-classic-maintenance-parity #requested-list {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity #requested-list {
+  gap: 10px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 12px 13px !important;
+  border: 1px solid #e7ebf1 !important;
+  border-radius: 20px !important;
+  background: #fff !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .055) !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card::before {
+  content: none !important;
+  display: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-top {
+  gap: 11px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-main {
+  align-self: center;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-sub {
+  margin-top: 4px;
+  font-size: 10.5px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-note,
+body.operations-orders-page .next-classic-orders-parity .next-operations-maintenance-card-note {
+  min-height: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-note .co-est-label,
+body.operations-orders-page .next-classic-orders-parity .next-operations-maintenance-card-note .co-est-label {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .015em;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary > div {
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid #e8edf3;
+  border-radius: 15px;
+  background: #f8fafc;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary > div > span:first-child {
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary__status strong {
+  color: #166534;
+}
+
+/* Shared modern Log Maintenance modal — used from Operations and Maintenance. */
+.next-maintenance-log-overlay {
+  z-index: 2600 !important;
+  padding: 18px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+.next-maintenance-log-dialog {
+  width: min(800px, calc(100vw - 28px)) !important;
+  max-width: 800px !important;
+  max-height: min(90dvh, 860px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(226, 232, 240, .95) !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  box-shadow: 0 28px 80px rgba(2, 6, 23, .28) !important;
+}
+
+.next-maintenance-log-dialog .next-maintenance-log-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 !important;
+  padding: 20px 58px 16px 20px !important;
+  border-bottom: 1px solid #eef2f6;
+  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+}
+
+.next-maintenance-log-dialog .next-maintenance-log-header .req-edit-icon {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border-radius: 14px;
+  background: #fff7ed;
+  color: #c2410c;
+  box-shadow: inset 0 0 0 1px #fed7aa;
+}
+
+.next-maintenance-log-dialog .next-maintenance-log-header .req-edit-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.next-maintenance-log-dialog .co-submodal-title {
+  color: #0f172a;
+  font-size: 20px;
+  letter-spacing: -.025em;
+}
+
+.next-maintenance-log-dialog .co-submodal-sub {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-body {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 14px 18px 18px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  background: #f8fafc;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-items {
+  display: grid;
+  gap: 12px;
+}
+
+.next-maintenance-log-dialog .next-maintenance-log-card {
+  margin: 0;
+  padding: 16px !important;
+  overflow: visible !important;
+  border: 1px solid #e6ebf1 !important;
+  border-radius: 18px !important;
+  background: #fff !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .045) !important;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__head {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__label {
+  color: #f97316;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__title {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__issue {
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__fields > .co-submodal-field:first-child,
+.next-maintenance-log-dialog .req-maintenance-log-card__spares {
+  grid-column: 1 / -1;
+}
+
+.next-maintenance-log-dialog .co-submodal-label {
+  margin-bottom: 6px;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.next-maintenance-log-dialog .co-submodal-textarea,
+.next-maintenance-log-dialog .co-submodal-input,
+.next-maintenance-log-dialog .next-maintenance-modern-select__trigger {
+  border-color: #e2e8f0;
+  border-radius: 12px;
+  background: #fbfdff;
+  box-shadow: none;
+}
+
+.next-maintenance-log-dialog .co-submodal-textarea {
+  min-height: 105px;
+  resize: vertical;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-row {
+  grid-template-columns: minmax(0, 1fr) 96px 40px;
+  gap: 8px;
+  padding: 9px;
+  border-color: #e7ebf1;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-add--full {
+  min-height: 42px;
+  margin-top: 8px;
+  border-radius: 13px;
+  box-shadow: none;
+}
+
+.next-maintenance-log-dialog > .co-submodal-actions {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  padding: 13px 18px 16px !important;
+  border-top: 1px solid #eef2f6;
+  background: #fff;
+}
+
+/* Modern custom selects inside the shared maintenance logger. */
+.next-maintenance-log-dialog .next-maintenance-modern-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__trigger {
+  width: 100%;
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  color: #334155;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__trigger svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__menu {
+  position: absolute;
+  z-index: 5000;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 270px;
+  padding: 7px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, .18);
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__search {
+  padding: 2px 2px 7px;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__search input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  outline: 0;
+  font: inherit;
+  font-size: 11px;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__options {
+  max-height: 210px;
+  overflow: auto;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__option {
+  width: 100%;
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__option:hover,
+.next-maintenance-log-dialog .next-maintenance-modern-select__option.is-selected {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.next-maintenance-log-dialog .next-maintenance-modern-select__empty {
+  padding: 12px 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Operations Orders — Classic maintenance actions that were missing in Next. */
+body.operations-orders-page .next-operations-tech-visit-overlay,
+body.operations-orders-page .next-maintenance-receipt-overlay {
+  z-index: 2600 !important;
+}
+
+body.operations-orders-page .next-operations-tech-visit-dialog {
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(88dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+body.operations-orders-page .next-operations-tech-visit-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+body.operations-orders-page .next-operations-tech-visit-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+body.operations-orders-page .next-operations-tech-visit-list {
+  display: grid;
+  gap: 10px;
+}
+
+body.operations-orders-page .next-operations-tech-visit-card {
+  padding: 13px;
+  border: 1px solid #e7ebf1;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+body.operations-orders-page .next-operations-tech-visit-card__head {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+body.operations-orders-page .next-operations-tech-visit-card__head span {
+  color: #f97316;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+body.operations-orders-page .next-operations-tech-visit-card__head strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+body.operations-orders-page .next-maintenance-receipt-dialog {
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(88dvh, 720px);
+  overflow: auto;
+  border-radius: 22px;
+}
+
+body.operations-orders-page .next-maintenance-receipt-numbers .co-submodal-inputs {
+  display: grid;
+  gap: 7px;
+}
+
+body.operations-orders-page .next-maintenance-upload-field {
+  width: 100%;
+}
+
+@media (max-width: 680px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary > div {
+    min-height: 54px;
+    padding: 8px 9px;
+    border-radius: 12px;
+  }
+
+  .next-maintenance-log-overlay {
+    padding: 9px !important;
+  }
+
+  .next-maintenance-log-dialog {
+    width: calc(100vw - 18px) !important;
+    max-height: 92dvh !important;
+    border-radius: 20px !important;
+  }
+
+  .next-maintenance-log-dialog .next-maintenance-log-header {
+    padding: 15px 48px 13px 14px !important;
+  }
+
+  .next-maintenance-log-dialog .next-maintenance-log-header .req-edit-icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    border-radius: 12px;
+  }
+
+  .next-maintenance-log-dialog .co-submodal-title {
+    font-size: 17px;
+  }
+
+  .next-maintenance-log-dialog .req-maintenance-log-body {
+    padding: 10px !important;
+  }
+
+  .next-maintenance-log-dialog .next-maintenance-log-card {
+    padding: 12px !important;
+    border-radius: 15px !important;
+  }
+
+  .next-maintenance-log-dialog .req-maintenance-log-card__fields {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .next-maintenance-log-dialog .req-maintenance-log-card__fields > .co-submodal-field:first-child,
+  .next-maintenance-log-dialog .req-maintenance-log-card__spares {
+    grid-column: auto;
+  }
+
+  .next-maintenance-log-dialog .req-maintenance-spare-row {
+    grid-template-columns: minmax(0, 1fr) 76px 36px;
+    gap: 7px;
+    padding: 8px;
+  }
+
+  .next-maintenance-log-dialog > .co-submodal-actions {
+    padding: 10px 12px 12px !important;
+  }
+
+  .next-maintenance-log-dialog > .co-submodal-actions .ro-action-btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  body.operations-orders-page .next-operations-tech-visit-dialog,
+  body.operations-orders-page .next-maintenance-receipt-dialog {
+    width: calc(100vw - 18px);
+    max-height: 92dvh;
+  }
+}
