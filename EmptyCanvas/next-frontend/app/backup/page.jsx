@@ -61,8 +61,8 @@ export default async function BackupPage() {
   return (
     <AppShell
       account={account}
-      title="Database Backup"
-      eyebrow="Controlled export, restore and data-clearing workspace"
+      title="Database"
+      eyebrow="Backup, restore and database control"
       activePath="/next/backup"
       classicHrefOverride="/backup"
     >
