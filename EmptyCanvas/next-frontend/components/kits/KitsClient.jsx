@@ -1010,23 +1010,64 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
                       <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
                       <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
                     </div>
-                    <div className="products-proposal-table-wrap">
-                      <table className="products-proposal-table">
-                        <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th /></tr></thead>
-                        <tbody>
-                          {enrichedRows.map((row) => (
-                            <tr className={`kit-component-row ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
-                              <td className="proposal-component-name kit-component-name"><strong>{row.name}</strong></td>
-                              <td className="kit-component-quantity">{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined} onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined} aria-label={`Quantity for ${row.name}`} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
-                              <td className="proposal-price-cell kit-component-unit-price">{formatMoney(row.unitPrice)}</td>
-                              <td className="proposal-price-cell proposal-price-cell--total kit-component-total-price">{formatMoney(row.totalPrice)}</td>
-                              <td className="proposal-link-cell kit-component-link-cell">{row.product?.url ? <a className="proposal-row-link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}><FeatherIcon name="externalLink" /></a> : <span className="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><FeatherIcon name="minus" /></span>}</td>
-                              <td className="kit-component-actions-cell"><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete"><FeatherIcon name="trash" /></button> : null}</div></td>
-                            </tr>
-                          ))}
-                          {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component above." : "Open Edit from the folder menu to add components."}</div></td></tr> : null}
-                        </tbody>
-                      </table>
+                    <div className="products-proposal-table-wrap kit-components-wrap">
+                      <div className="kit-components-grid">
+                        {enrichedRows.map((row) => (
+                          <article className={`kit-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+                            <header className="kit-component-card__head">
+                              <div className="kit-component-card__title">
+                                <span>Component</span>
+                                <h4>{row.name}</h4>
+                              </div>
+                            </header>
+
+                            <div className="kit-component-card__metrics">
+                              <div className="kit-component-card__metric kit-component-card__metric--qty">
+                                <span>Qty</span>
+                                {detailEdit ? (
+                                  <input
+                                    className="proposal-item-qty kit-component-card__qty-input"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    defaultValue={row.quantity}
+                                    key={`${row.id}-${row.quantity}`}
+                                    onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined}
+                                    onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined}
+                                    aria-label={`Quantity for ${row.name}`}
+                                  />
+                                ) : <strong>{formatNumber(row.quantity)}</strong>}
+                              </div>
+                              <div className="kit-component-card__metric">
+                                <span>Unit price</span>
+                                <strong>{formatMoney(row.unitPrice)}</strong>
+                              </div>
+                              <div className="kit-component-card__metric kit-component-card__metric--total">
+                                <span>Total price</span>
+                                <strong>{formatMoney(row.totalPrice)}</strong>
+                              </div>
+                            </div>
+
+                            <footer className="kit-component-card__actions">
+                              {row.product?.url ? (
+                                <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
+                                  <FeatherIcon name="externalLink" /><span>Open link</span>
+                                </a>
+                              ) : (
+                                <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
+                                  <FeatherIcon name="minus" /><span>No link</span>
+                                </span>
+                              )}
+                              {detailEdit ? (
+                                <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
+                                  <FeatherIcon name="trash" /><span>Remove</span>
+                                </button>
+                              ) : null}
+                            </footer>
+                          </article>
+                        ))}
+                        {!enrichedRows.length ? <div className="products-table-empty kit-components-empty">No components yet. {detailEdit ? "Add one component above." : "Open Edit from the folder menu to add components."}</div> : null}
+                      </div>
                     </div>
                     <div className="proposal-total-block">
                       <div><span>Total requested items</span><strong>{formatNumber(detailTotals.items)} item{detailTotals.items === 1 ? "" : "s"}</strong></div>
