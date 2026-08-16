@@ -4323,3 +4323,466 @@ body.orders-review-page .next-classic-orders-parity .next-review-order-card::bef
   content: none !important;
   display: none !important;
 }
+
+/* Stage 2C — Operations Orders Next.js visual parity ------------------------
+ * Keep the existing Operations Orders workflow/API logic, while matching the
+ * compact card, toolbar and modal language used by Current Orders / Review.
+ */
+body.operations-orders-page .next-classic-orders-parity .next-operations-orders-toolbar-wrap {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar {
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar__scroll {
+  border-radius: 18px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs {
+  gap: 5px;
+  min-width: max-content;
+  padding: 4px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #edf1f5;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs::before {
+  border-radius: 14px;
+  background: linear-gradient(180deg, #101827 0%, #020617 100%);
+  box-shadow: 0 10px 22px rgba(2, 6, 23, .18);
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 88px;
+  min-height: 48px;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 14px;
+  text-align: left;
+}
+
+body.operations-orders-page .next-classic-orders-parity .order-status-tab__icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .order-status-tab__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .order-status-tab__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+body.operations-orders-page .next-classic-orders-parity .order-status-tab__label {
+  display: block !important;
+  max-width: none;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-toolbar__divider {
+  height: 42px;
+  background: #e2e8f0;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button {
+  min-height: 46px;
+  max-width: 190px;
+  padding: 0 14px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-type-filter__panel {
+  top: calc(100% + 9px);
+  width: min(330px, calc(100vw - 28px));
+  border-radius: 20px;
+  padding: 10px;
+  z-index: 120;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-type-filter__option {
+  min-height: 58px;
+  padding: 9px 10px;
+  border-radius: 15px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .orders-type-filter__option-icon {
+  flex-basis: 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .operations-orders-list-surface,
+body.operations-orders-page .next-classic-orders-parity #requested-list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity #requested-list {
+  gap: 10px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-color: #e7ebf1;
+  border-radius: 20px;
+  padding: 12px 13px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .055);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card::before {
+  content: none !important;
+  display: none !important;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card:hover {
+  transform: translateY(-1px);
+  border-color: #dce2ea;
+  box-shadow: 0 15px 30px rgba(15, 23, 42, .08);
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-top {
+  gap: 11px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-thumb svg {
+  width: 22px;
+  height: 22px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-title {
+  font-size: 16px;
+  letter-spacing: -.015em;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-meta .co-sub {
+  margin: 0;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-qty {
+  padding: 4px 7px;
+  margin-left: 4px;
+  border: 1px solid #edf1f5;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-divider {
+  margin: 9px 0;
+  background: #eef2f6;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-est-label {
+  font-size: 10px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-est-value {
+  margin-top: 3px;
+  font-size: 18px;
+  letter-spacing: -.025em;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-actions {
+  gap: 7px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-status-btn {
+  min-height: 30px;
+  padding: 6px 11px;
+  font-size: 10px;
+  box-shadow: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-creator-btn {
+  display: grid !important;
+  place-items: center !important;
+  grid-template-columns: 1fr !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: #020617 !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(2, 6, 23, .14);
+  cursor: pointer;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-creator-btn svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary > div {
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid #e8edf3;
+  border-radius: 15px;
+  background: #f8fafc;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary > div > span:first-child {
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary strong {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary__status .co-status-btn,
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary__status .sv-mixed-approval-pill {
+  align-self: flex-start;
+  min-height: 26px;
+  padding: 5px 9px;
+  font-size: 9px;
+}
+
+body.operations-orders-page .next-operations-creator-popover {
+  z-index: 2200;
+  width: min(330px, calc(100vw - 24px));
+}
+
+body.operations-orders-page .next-operations-creator-popover .creator-profile-window {
+  max-height: min(520px, calc(100dvh - 28px));
+  overflow: auto;
+}
+
+body.operations-orders-page .next-operations-creator-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 768px) {
+  body.operations-orders-page .next-classic-orders-parity .orders-toolbar {
+    gap: 7px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs {
+    gap: 4px;
+    padding: 3px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+    min-width: 80px;
+    min-height: 44px;
+    gap: 7px;
+    padding: 6px 8px;
+    border-radius: 12px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-status-tab__icon {
+    flex-basis: 27px;
+    width: 27px;
+    height: 27px;
+    border-radius: 9px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-status-tab__label {
+    font-size: 10px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-toolbar__divider {
+    height: 38px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button {
+    min-height: 42px;
+    max-width: 130px;
+    padding: 0 11px;
+    border-radius: 13px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  body.operations-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+    min-width: 72px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-status-tab__label {
+    max-width: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-toolbar__divider {
+    display: none;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button {
+    position: relative;
+    width: 42px;
+    min-width: 42px;
+    max-width: 42px;
+    height: 42px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button-label {
+    display: none;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button-dot {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 6px;
+    height: 6px;
+    box-shadow: 0 0 0 2px #fff;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .orders-type-filter__panel {
+    position: fixed;
+    top: auto;
+    right: 10px;
+    bottom: 14px;
+    left: 10px;
+    width: auto;
+    max-height: min(72dvh, 520px);
+    overflow-y: auto;
+    border-radius: 22px;
+    padding: 12px;
+    box-shadow: 0 24px 70px rgba(2, 6, 23, .25);
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card {
+    border-radius: 17px;
+    padding: 10px 11px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-thumb {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-title {
+    font-size: 14px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-est-value {
+    font-size: 16px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-status-btn {
+    min-height: 28px;
+    max-width: 112px;
+    padding: 5px 9px;
+    font-size: 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-creator-btn {
+    width: 31px !important;
+    min-width: 31px !important;
+    height: 31px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary {
+    gap: 6px;
+    margin-top: 9px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary > div {
+    min-height: 54px;
+    padding: 8px 9px;
+    border-radius: 13px;
+  }
+
+  body.operations-orders-page .next-operations-creator-popover {
+    left: 10px !important;
+    right: 10px !important;
+    width: auto;
+    max-width: none;
+  }
+}
