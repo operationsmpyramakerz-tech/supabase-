@@ -435,6 +435,51 @@ function MixedStatusPill() {
   return <span className="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected"><span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span><span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span></span>;
 }
 
+function profileFieldValue(profile, aliases) {
+  const wanted = new Set((Array.isArray(aliases) ? aliases : [aliases]).map((value) => lower(value).replace(/[^a-z0-9]/g, "")));
+  const topLevel = Object.entries(profile || {}).find(([key, value]) => wanted.has(lower(key).replace(/[^a-z0-9]/g, "")) && text(value));
+  if (topLevel) return text(topLevel[1]);
+  const field = (Array.isArray(profile?.fields) ? profile.fields : []).find((item) => wanted.has(lower(item?.label || item?.name || item?.key).replace(/[^a-z0-9]/g, "")) && text(item?.value));
+  return text(field?.value);
+}
+
+function safeHttpUrl(value) {
+  const url = text(value);
+  return /^https?:\/\//i.test(url) ? url : "";
+}
+
+function CreatorProfilePopover({ state, onClose }) {
+  if (!state) return null;
+  const profile = state.profile || {};
+  const name = profileFieldValue(profile, ["name", "full name", "username"]) || text(state.name) || "Creator";
+  const department = profileFieldValue(profile, ["department", "dept"]);
+  const position = profileFieldValue(profile, ["position", "job title", "title"]);
+  const phone = profileFieldValue(profile, ["phone", "mobile", "phone number"]);
+  const email = profileFieldValue(profile, ["email", "email address"]);
+  const employeeCode = profileFieldValue(profile, ["employee code", "employee id", "code"]);
+  const photoUrl = safeHttpUrl(profile?.photoUrl || profile?.profilePicture || profile?.profile_picture);
+  const files = (Array.isArray(profile?.filesMedia) ? profile.filesMedia : Array.isArray(profile?.files_media) ? profile.files_media : []).map((file) => ({
+    name: text(file?.name || file?.filename || file?.title) || "File",
+    url: safeHttpUrl(file?.url || file?.href),
+  }));
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U";
+  const subtitle = [position, department].filter(Boolean).join(" • ") || "Team member";
+  const details = [
+    ["Department", department], ["Position", position], ["Phone", phone], ["Email", email], ["Employee code", employeeCode],
+  ].filter(([, value]) => value);
+
+  return <div className="creator-profile-popover is-open next-operations-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile">
+    <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
+    <div className="creator-profile-head"><div className={`creator-profile-avatar ${photoUrl ? "has-image" : ""}`}>{photoUrl ? <img src={photoUrl} alt={name}/> : <span>{initials}</span>}</div><div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div></div>
+    {state.loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : state.error ? <div className="creator-profile-state creator-profile-state--error"><span>Could not load this user details.</span></div> : <>
+      <div className="creator-profile-section-title">Profile details</div>
+      {details.length ? <div className="creator-profile-fields next-operations-creator-fields">{details.map(([label, value]) => <div className="creator-profile-field" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : <div className="creator-profile-empty creator-profile-empty--fields"><span>No profile details available.</span></div>}
+      <div className="creator-profile-section-title creator-profile-section-title--files">Files &amp; media</div>
+      {files.length ? <div className="creator-profile-files">{files.map((file, index) => file.url ? <a className="creator-profile-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span><span className="creator-profile-file-open"><ClassicOrderIcon name="external-link" /></span></a> : <div className="creator-profile-file creator-profile-file--disabled" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span></div>)}</div> : <div className="creator-profile-empty"><span>No files or media.</span></div>}
+    </>}
+  </div></div>;
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -446,7 +491,7 @@ function downloadBlob(blob, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function OperationsOrderCard({ group, tab, onOpen }) {
+function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
   const type = orderTypeMeta(group.orderType);
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
   const displayItems = tab === "remaining"
@@ -456,26 +501,24 @@ function OperationsOrderCard({ group, tab, onOpen }) {
       : group.items;
   const value = tab === "remaining" ? group.remainingTotal : tab === "received" ? group.receivedTotal : group.total;
   return (
-    <article className="co-card" role="button" tabIndex={0} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-thumb co-thumb--order-type" style={thumbStyle} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
         <div className="co-main">
           <div className="co-title">{group.orderIdLabel}</div>
-          <div className="co-sub">{formatDate(group.latestCreated)}</div>
-          <div className="co-createdby">{group.createdByName || "—"}</div>
+          <div className="next-operations-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
         </div>
-        <div className="co-qty">x{displayItems.length}</div>
+        <div className="co-qty" title={`${displayItems.length} component${displayItems.length === 1 ? "" : "s"}`}>x{displayItems.length}</div>
       </div>
       <div className="co-divider" />
       <div className="co-bottom">
         <div className="co-est">
           <div className="co-est-label">Estimate Total</div>
           <div className="co-est-value">{formatMoney(value)}</div>
-          {group.operationsByName ? <div className="co-received-by">Received by: {group.operationsByName}</div> : null}
         </div>
         <div className="co-actions">
           {tab === "all" && group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} />}
-          <span className="co-right-ico" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`}><ClassicOrderIcon name="user" /></span>
+          <button type="button" className="co-right-ico co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
         </div>
       </div>
     </article>
@@ -518,14 +561,17 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub">{group.orderIdLabel}</div></div></div>
+        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>
+        <div className="next-operations-order-modal-summary" aria-label="Order summary">
+          <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
+          <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+          <div><span>Components</span><strong>{group.items.length}</strong></div>
+          <div className="next-operations-order-modal-summary__status"><span>Status</span>{group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} />}</div>
+        </div>
         <Progress stage={group.stage} />
         <div className="co-modal-body">
           <div className="co-modal-meta">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-            <div className="co-meta-row"><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-            <div className="co-meta-row"><span>Products</span><strong>{group.items.length}</strong></div>
-            <div className="co-meta-row"><span>Estimated cost</span><strong>{formatMoney(group.total)}</strong></div>
             {group.receiptNumber ? <div className="co-meta-row"><span>Store Receipt Number</span><strong>{group.receiptNumber}</strong></div> : null}
             {group.operationsByName ? <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div> : null}
             {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
@@ -606,6 +652,8 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [creatorState, setCreatorState] = useState(null);
+  const creatorProfileCache = useRef(new Map());
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or user...");
 
@@ -625,6 +673,26 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
   }, [tab, type, query]);
+
+  useEffect(() => {
+    const close = (event) => {
+      if (!creatorState) return;
+      if (event.target.closest?.(".creator-profile-popover") || event.target.closest?.(".co-creator-btn")) return;
+      setCreatorState(null);
+    };
+    const key = (event) => { if (event.key === "Escape") setCreatorState(null); };
+    const reposition = () => setCreatorState(null);
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", key);
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [creatorState]);
 
   const groups = useMemo(() => buildGroups(orders), [orders]);
   const tabGroups = useMemo(() => groupsForTab(groups, orders, tab), [groups, orders, tab]);
@@ -647,12 +715,6 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
       return !needle || groupSearchText(group).includes(needle);
     });
   }, [tabGroups, type, query]);
-
-  const tabCounts = useMemo(() => {
-    const counts = {};
-    STATUS_TABS.forEach((item) => { counts[item.key] = groupsForTab(groups, orders, item.key).length; });
-    return counts;
-  }, [groups, orders]);
 
   async function refreshOrders() {
     const response = await fetch("/api/orders/requested?scope=all-system&_fresh=1", { credentials: "include", cache: "no-store" });
@@ -767,24 +829,53 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     }
   }
 
+  async function openCreatorProfile(anchor, group) {
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(330, window.innerWidth - 28);
+    const estimatedHeight = Math.min(500, Math.max(240, window.innerHeight - 28));
+    const left = Math.min(Math.max(14, rect.right - width), Math.max(14, window.innerWidth - width - 14));
+    const below = rect.bottom + 10;
+    const above = rect.top - estimatedHeight - 10;
+    const top = below + estimatedHeight <= window.innerHeight - 14 ? below : Math.max(14, above);
+    const base = { left, top, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
+    setCreatorState(base);
+    const key = text(group.createdById || group.createdByName);
+    if (!key) { setCreatorState({ ...base, loading: false, error: true }); return; }
+    if (creatorProfileCache.current.has(key)) {
+      setCreatorState({ ...base, loading: false, profile: creatorProfileCache.current.get(key), error: false });
+      return;
+    }
+    try {
+      const response = await fetch(`/api/team-members/${encodeURIComponent(key)}/public`, { credentials: "include", cache: "no-store" });
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load user profile.");
+      creatorProfileCache.current.set(key, data);
+      setCreatorState({ ...base, loading: false, profile: data, error: false });
+    } catch {
+      setCreatorState({ ...base, loading: false, error: true });
+    }
+  }
+
   return (
     <section className="next-classic-orders-parity next-classic-operations-parity">
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/requested?classic=1">Classic page</a></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
-      <div className="orders-toolbar" aria-label="Operations orders tools">
-        <div className="orders-toolbar__scroll">
-          <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
-            {STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__label">{item.label}</span></button>)}
+      <div className="next-operations-orders-toolbar-wrap">
+        <div className="orders-toolbar" aria-label="Operations orders tools">
+          <div className="orders-toolbar__scroll">
+            <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
+              {STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}
+            </div>
           </div>
+          <div className="orders-toolbar__divider" aria-hidden="true" />
+          <TypeFilter value={type} options={typeOptions} onChange={setType} />
         </div>
-        <div className="orders-toolbar__divider" aria-hidden="true" />
-        <TypeFilter value={type} options={typeOptions} onChange={setType} />
       </div>
 
-      <section className="card">
+      <section className="operations-orders-list-surface" id="operations-orders-list">
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
+          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
         </div>
       </section>
 
@@ -793,6 +884,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
       <ArchiveModal state={actionState?.action === "archive" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <ReceiveModal state={actionState?.action === "receive" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <ConfirmModal state={["approve", "deliver", "unarchive", "withdrawal", "delivery"].includes(actionState?.action) ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
+      <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
     </section>
   );
 }
