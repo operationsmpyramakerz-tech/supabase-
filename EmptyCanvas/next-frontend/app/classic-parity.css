@@ -4260,3 +4260,26 @@ body.orders-review-page .next-review-creator-fields { grid-template-columns: rep
     max-width: none;
   }
 }
+
+/* Stage 2B — Orders toolbar background + review width parity ---------------- */
+/*
+ * Keep the floating Classic tab/filter controls, but remove the extra white
+ * wrapper surface around them. The white orders-list surface is intentionally
+ * left intact.
+ */
+body.current-orders-page .next-classic-orders-parity .next-current-orders-toolbar-wrap,
+body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Orders Review keeps the existing white orders background. Only its
+   horizontal inner padding is removed so each order card gets the same
+   full-width footprint as Current Orders. */
+body.orders-review-page .next-classic-orders-parity #sv-orders.card {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
