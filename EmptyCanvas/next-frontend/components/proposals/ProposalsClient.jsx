@@ -245,6 +245,147 @@ function PasswordModal({ request, busy, onClose, onVerified }) {
   );
 }
 
+
+function ModernSelect({ label, value, options, placeholder = "Select", searchable = false, onChange, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const selected = options.find((option) => String(option.value) === String(value));
+  const filtered = useMemo(() => {
+    const needle = lower(query);
+    if (!needle) return options;
+    return options.filter((option) => lower(`${option.label || ""} ${option.meta || ""}`).includes(needle));
+  }, [options, query]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [open]);
+
+  const choose = (nextValue) => {
+    onChange(nextValue);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div className={`next-proposals-modern-select ${open ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`} ref={rootRef}>
+      {label ? <span className="next-proposals-modern-select__label">{label}</span> : null}
+      <button
+        type="button"
+        className="next-proposals-modern-select__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+      </button>
+      {open ? (
+        <div className="next-proposals-modern-select__menu" role="listbox" aria-label={label || placeholder}>
+          {searchable ? (
+            <div className="next-proposals-modern-select__search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." />
+            </div>
+          ) : null}
+          <div className="next-proposals-modern-select__options">
+            {filtered.map((option) => {
+              const active = String(option.value) === String(value);
+              return (
+                <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={`${label || "select"}-${option.value}`} onClick={() => choose(option.value)}>
+                  <span><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
+                  {active ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : null}
+                </button>
+              );
+            })}
+            {!filtered.length ? <div className="next-proposals-modern-select__empty">No matching options.</div> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const selectedProposals = proposals.filter((proposal) => selectedIds.includes(proposal.id));
+  const filtered = useMemo(() => {
+    const needle = lower(query);
+    if (!needle) return proposals;
+    return proposals.filter((proposal) => lower(`${proposal.name} ${proposal.createdBy}`).includes(needle));
+  }, [proposals, query]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [open]);
+
+  const triggerText = selectedProposals.length
+    ? `${selectedProposals.length} proposal${selectedProposals.length === 1 ? "" : "s"} selected`
+    : "Choose proposals";
+
+  return (
+    <div className={`proposal-combine-multi ${open ? "is-open" : ""}`} ref={rootRef}>
+      <span className="proposal-combine-multi__label">Proposals</span>
+      <button type="button" className="proposal-combine-multi__trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <span>
+          <strong>{triggerText}</strong>
+          <small>{selectedProposals.length ? selectedProposals.slice(0, 3).map((proposal) => proposal.name).join(" · ") + (selectedProposals.length > 3 ? ` +${selectedProposals.length - 3}` : "") : "Select two or more proposals"}</small>
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+      </button>
+      {open ? (
+        <div className="proposal-combine-multi__menu" role="listbox" aria-multiselectable="true" aria-label="Choose proposals">
+          <div className="proposal-combine-multi__search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+            <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search proposals..." />
+            {selectedIds.length ? <button type="button" onClick={() => selectedIds.forEach((id) => onToggle(id))}>Clear</button> : null}
+          </div>
+          <div className="proposal-combine-multi__options">
+            {filtered.map((proposal) => {
+              const active = selectedIds.includes(proposal.id);
+              return (
+                <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={proposal.id} onClick={() => onToggle(proposal.id)}>
+                  <span className="proposal-combine-multi__check" aria-hidden="true">{active ? "✓" : ""}</span>
+                  <span className="proposal-combine-multi__copy"><strong>{proposal.name}</strong><small>{formatNumber(proposal.itemsCount)} component{proposal.itemsCount === 1 ? "" : "s"}{proposal.createdBy ? ` · ${proposal.createdBy}` : ""}</small></span>
+                </button>
+              );
+            })}
+            {!filtered.length ? <div className="proposal-combine-multi__empty">No proposals match your search.</div> : null}
+          </div>
+          <div className="proposal-combine-multi__footer"><span>{selectedIds.length} selected</span><button type="button" onClick={() => setOpen(false)}>Done</button></div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AddItemsModal({ proposal, products, kits, tags, busy, onClose, onSubmit }) {
   const [mode, setMode] = useState("product");
   const [selected, setSelected] = useState("");
@@ -296,16 +437,39 @@ function AddItemsModal({ proposal, products, kits, tags, busy, onClose, onSubmit
         ) : null}
 
         {mode === "tag" ? (
-          <label><span>Product Tag *</span><select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Choose a tag</option>{tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select></label>
+          <ModernSelect
+            label="Product Tag *"
+            value={selected}
+            placeholder="Choose a tag"
+            searchable
+            options={tags.map((tag) => ({ value: tag, label: tag }))}
+            onChange={setSelected}
+          />
         ) : null}
 
         {mode === "kit" ? (
-          <label><span>Kit *</span><select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Choose a kit</option>{kits.map((kit) => <option key={kit.id} value={kit.id}>{kit.name} ({kit.itemsCount} items)</option>)}</select></label>
+          <ModernSelect
+            label="Kit *"
+            value={selected}
+            placeholder="Choose a kit"
+            searchable
+            options={kits.map((kit) => ({ value: kit.id, label: kit.name, meta: `${formatNumber(kit.itemsCount)} item${kit.itemsCount === 1 ? "" : "s"}` }))}
+            onChange={setSelected}
+          />
         ) : null}
 
         <div className="next-proposals-form-grid products-form-grid">
           <label><span>{mode === "kit" ? "Kit Multiplier" : "Quantity"}</span><input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-          <label><span>When Product Already Exists</span><select value={mergeLogic} onChange={(event) => setMergeLogic(event.target.value)}><option value="add">Add quantities</option><option value="max">Keep maximum</option><option value="min">Keep minimum</option></select></label>
+          <ModernSelect
+            label="When Product Already Exists"
+            value={mergeLogic}
+            options={[
+              { value: "add", label: "Add quantities", meta: "Add the new quantity to the saved one" },
+              { value: "max", label: "Keep maximum", meta: "Keep whichever quantity is higher" },
+              { value: "min", label: "Keep minimum", meta: "Keep whichever quantity is lower" },
+            ]}
+            onChange={setMergeLogic}
+          />
         </div>
 
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
@@ -338,7 +502,14 @@ function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
   return (
     <Modal title="Make Order" subtitle={`Create a Request Products order from all components in “${proposal.name}”.`} icon="▤" onClose={onClose}>
       <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Team Member *</span><select value={memberId} onChange={(event) => setMemberId(event.target.value)}><option value="">Select team member</option>{members.map((member) => <option key={member.id} value={member.id}>{member.name}{member.department ? ` · ${member.department}` : ""}</option>)}</select></label>
+        <ModernSelect
+          label="Team Member *"
+          value={memberId}
+          placeholder="Select team member"
+          searchable
+          options={members.map((member) => ({ value: member.id, label: member.name, meta: member.department || "Team member" }))}
+          onChange={setMemberId}
+        />
         <label><span>Admin Password *</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className="next-proposals-form__actions products-modal__actions">
@@ -356,7 +527,6 @@ export default function ProposalsClient({
   initialProposals,
   initialKits,
   initialMembers,
-  bootstrapWarnings = [],
 }) {
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [proposals, setProposals] = useState(() => (Array.isArray(initialProposals?.proposals) ? initialProposals.proposals : []).map(normalizeProposal));
@@ -1157,7 +1327,6 @@ export default function ProposalsClient({
         <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button>
       </div>
 
-      {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a folder is missing.</span></div> : null}
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
         <section className="proposals-panel">
@@ -1198,14 +1367,7 @@ export default function ProposalsClient({
       {combineOpen ? (
         <Modal title="Combine proposals" subtitle="Select two or more proposals, choose the quantity logic, then download or save the result." icon="▦" onClose={() => setCombineOpen(false)} wide>
           <div className="proposal-classic-combine-form">
-            <div className="proposal-classic-combine-list">
-              {proposals.map((proposal) => (
-                <label key={proposal.id} className="proposal-classic-check-row">
-                  <input type="checkbox" checked={selectedIds.includes(proposal.id)} onChange={() => toggleSelected(proposal.id)} />
-                  <span><strong>{proposal.name}</strong><small>{formatNumber(proposal.itemsCount)} component{proposal.itemsCount === 1 ? "" : "s"}</small></span>
-                </label>
-              ))}
-            </div>
+            <ProposalMultiSelect proposals={proposals} selectedIds={selectedIds} onToggle={toggleSelected} />
             <div className="products-field proposal-combine-logic-field">
               <span>Combine logic</span>
               <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Combine logic">
