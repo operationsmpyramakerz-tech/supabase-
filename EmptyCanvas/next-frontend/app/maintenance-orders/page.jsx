@@ -65,7 +65,7 @@ export default async function MaintenanceOrdersPage() {
       account={account}
       title="Maintenance Orders"
       eyebrow="Technical maintenance workflow"
-      bodyClass="order-modal-fit-screen page-maintenance-orders"
+      bodyClass="order-modal-fit-screen page-maintenance-orders page-orders-maintenance-orders"
       activePath="/next/maintenance-orders"
     >
       <MaintenanceOrdersClient
