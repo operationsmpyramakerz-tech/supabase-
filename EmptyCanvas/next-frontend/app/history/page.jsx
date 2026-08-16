@@ -61,7 +61,7 @@ export default async function HistoryPage() {
   return (
     <AppShell
       account={account}
-      title="System History"
+      title="History"
       eyebrow="Audit trail and operational accountability"
       activePath="/next/history"
     >
