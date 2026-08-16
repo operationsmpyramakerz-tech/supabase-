@@ -230,7 +230,8 @@ function DetailItem({ label, value, wide = false }) {
   return <div className={`next-history-detail-item ${wide ? "is-wide" : ""}`}><span>{label}</span><strong>{text(value) || "—"}</strong></div>;
 }
 
-function ProfileModal({ actor, onClose }) {
+function ProfilePopover({ state, onClose }) {
+  const actor = state?.row;
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -261,6 +262,8 @@ function ProfileModal({ actor, onClose }) {
     return () => { cancelled = true; };
   }, [actor]);
 
+  if (!state) return null;
+
   const files = (Array.isArray(profile?.filesMedia) ? profile.filesMedia : [])
     .map((file, index) => ({ name: text(file?.name) || `File ${index + 1}`, url: safeUrl(file?.url) }))
     .filter((file) => file.name || file.url);
@@ -269,29 +272,27 @@ function ProfileModal({ actor, onClose }) {
   const name = profileFieldValue(profile, PROFILE_FIELD_ORDER[0]) || text(actor?.actorName) || "System user";
   const position = profileFieldValue(profile, PROFILE_FIELD_ORDER[2]);
   const department = profileFieldValue(profile, PROFILE_FIELD_ORDER[1]);
+  const subtitle = [position, department].filter(Boolean).join(" • ") || "Team member";
 
   return (
-    <Modal title="Created by" subtitle="Team member attached to this history record." onClose={onClose}>
-      {loading ? <div className="next-history-profile-state">Loading profile…</div> : error ? <div className="next-history-inline-error">{error}</div> : (
-        <div className="next-history-profile">
-          <section className="next-history-profile__identity">
-            {photo ? <img src={photo} alt="" /> : <span>{initials(name)}</span>}
-            <div><small>Created by</small><h3>{name}</h3><p>{[position, department].filter(Boolean).join(" • ") || "Team member"}</p></div>
-          </section>
-          <section className="next-history-profile__fields">
-            {fields.length ? fields.map((field) => <DetailItem key={field.label} label={field.label} value={field.value} />) : <div className="next-history-profile-state is-compact">No profile details are available.</div>}
-          </section>
-          <section className="next-history-profile__files">
-            <h4>Files &amp; media</h4>
-            {files.length ? files.map((file, index) => file.url ? (
-              <a href={file.url} target="_blank" rel="noreferrer" key={`${file.url}-${index}`}><span>FL</span><div><strong>{file.name}</strong><small>{urlHost(file.url) || "Open file"}</small></div><b>↗</b></a>
-            ) : (
-              <div className="is-disabled" key={`${file.name}-${index}`}><span>FL</span><div><strong>{file.name}</strong><small>Link unavailable</small></div></div>
-            )) : <p>No files or media are attached to this profile.</p>}
-          </section>
+    <div className="creator-profile-popover history-created-by-popover is-open" style={{ left: state.left, top: state.top }} aria-hidden="false">
+      <div className="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile">
+        <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
+        <div className="creator-profile-head">
+          <div className={`creator-profile-avatar ${photo ? "has-image" : ""}`}>{photo ? <img src={photo} alt={name} /> : <span>{initials(name)}</span>}</div>
+          <div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div>
         </div>
-      )}
-    </Modal>
+        {loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : error ? <div className="creator-profile-state creator-profile-state--error"><span>{error}</span></div> : (
+          <>
+            <div className="creator-profile-section-title">Profile details</div>
+            <div className="next-classic-creator-fields history-created-by-fields">
+              {fields.length ? fields.map((field) => <div key={field.label}><span>{field.label}</span><strong>{field.value}</strong></div>) : <div className="history-created-by-empty"><span>Profile</span><strong>No profile details available.</strong></div>}
+            </div>
+            {files.length ? <><div className="creator-profile-section-title">Files &amp; media</div><div className="history-created-by-files">{files.map((file, index) => file.url ? <a href={file.url} target="_blank" rel="noreferrer" key={`${file.url}-${index}`}><span>FL</span><strong>{file.name}</strong><b>↗</b></a> : <div key={`${file.name}-${index}`}><span>FL</span><strong>{file.name}</strong></div>)}</div></> : null}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -397,6 +398,22 @@ function ClearHistoryModal({ onClose, onCleared }) {
   );
 }
 
+function ModernSelect({ label, value, options, isOpen, onToggle, onChange }) {
+  const selected = options.find((option) => option.value === value) || options[0];
+  return (
+    <div className={`next-history-modern-select ${isOpen ? "is-open" : ""}`}>
+      <span className="next-history-modern-select__label">{label}</span>
+      <button type="button" className="next-history-modern-select__trigger" onClick={onToggle} aria-label={label} aria-haspopup="listbox" aria-expanded={isOpen}>
+        <span>{selected?.label || "Select"}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+      </button>
+      {isOpen ? <div className="next-history-modern-select__menu" role="listbox" aria-label={label}>
+        {options.map((option) => <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "is-selected" : ""} onClick={() => onChange(option.value)} key={`${label}-${option.value || "all"}`}><span>{option.label}</span>{option.value === value ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> : null}</button>)}
+      </div> : null}
+    </div>
+  );
+}
+
 function FilterModal({
   current,
   pages,
@@ -407,10 +424,40 @@ function FilterModal({
   onClose,
 }) {
   const [draft, setDraft] = useState(current);
+  const [openSelect, setOpenSelect] = useState("");
+
+  useEffect(() => {
+    function pointerdown(event) {
+      if (!openSelect || event.target.closest?.(".next-history-modern-select")) return;
+      setOpenSelect("");
+    }
+    function keydown(event) {
+      if (event.key === "Escape" && openSelect) {
+        event.stopPropagation();
+        setOpenSelect("");
+      }
+    }
+    document.addEventListener("pointerdown", pointerdown, true);
+    document.addEventListener("keydown", keydown, true);
+    return () => {
+      document.removeEventListener("pointerdown", pointerdown, true);
+      document.removeEventListener("keydown", keydown, true);
+    };
+  }, [openSelect]);
 
   function update(key, value) {
     setDraft((existing) => ({ ...existing, [key]: value }));
   }
+
+  function dropdown(key, label, value, options) {
+    return <ModernSelect label={label} value={value} options={options} isOpen={openSelect === key} onToggle={() => setOpenSelect((currentKey) => currentKey === key ? "" : key)} onChange={(nextValue) => { update(key, nextValue); setOpenSelect(""); }} />;
+  }
+
+  const pageOptions = [{ value: "", label: "All pages" }, ...pages.map((item) => ({ value: item, label: item }))];
+  const actorOptions = [{ value: "", label: "All users" }, ...actors.map((item) => ({ value: item, label: item }))];
+  const actionOptions = [{ value: "", label: "All actions" }, ...actions.map((item) => ({ value: item, label: item }))];
+  const resultOptions = [{ value: "all", label: "All results" }, { value: "success", label: "Successful" }, { value: "error", label: "Failed" }];
+  const orderOptions = [{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }];
 
   return (
     <Modal title="History filters" subtitle="Filter the audit trail without changing the saved records." onClose={onClose}>
@@ -420,12 +467,12 @@ function FilterModal({
           <div><HistoryIcon name="search"/><input value={draft.search} onChange={(event) => update("search", event.target.value)} placeholder="Action, entity, user, path…" /></div>
         </label>
         <div className="next-history-filter-grid">
-          <label><span>Page name</span><select value={draft.page} onChange={(event) => update("page", event.target.value)}><option value="">All pages</option>{pages.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label><span>User name</span><select value={draft.actor} onChange={(event) => update("actor", event.target.value)}><option value="">All users</option>{actors.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label><span>Date</span><input type="date" value={draft.date} onChange={(event) => update("date", event.target.value)} onClick={(event) => { try { event.currentTarget.showPicker?.(); } catch {} }} /></label>
-          <label><span>Action</span><select value={draft.action} onChange={(event) => update("action", event.target.value)}><option value="">All actions</option>{actions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          <label><span>Result</span><select value={draft.status} onChange={(event) => update("status", event.target.value)}><option value="all">All results</option><option value="success">Successful</option><option value="error">Failed</option></select></label>
-          <label><span>Order</span><select value={draft.sort} onChange={(event) => update("sort", event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+          {dropdown("page", "Page name", draft.page, pageOptions)}
+          {dropdown("actor", "User name", draft.actor, actorOptions)}
+          <label className="next-history-filter-date"><span>Date</span><input type="date" value={draft.date} onChange={(event) => update("date", event.target.value)} onClick={(event) => { try { event.currentTarget.showPicker?.(); } catch {} }} /></label>
+          {dropdown("action", "Action", draft.action, actionOptions)}
+          {dropdown("status", "Result", draft.status, resultOptions)}
+          {dropdown("sort", "Order", draft.sort, orderOptions)}
         </div>
         <div className="next-history-filter-actions">
           <button type="button" className="secondary" onClick={onClear}>Clear</button>
@@ -448,7 +495,7 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [profileActor, setProfileActor] = useState(null);
+  const [profilePopover, setProfilePopover] = useState(null);
   const [showClear, setShowClear] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState(null);
@@ -458,14 +505,13 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
   }, [search, page, actor, action, date, status, sort]);
 
   useEffect(() => {
-    const modalOpen = !!selected || !!profileActor || showClear || showFilters;
+    const modalOpen = !!selected || showClear || showFilters;
     if (!modalOpen) return undefined;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     function keydown(event) {
       if (event.key !== "Escape") return;
-      if (profileActor) setProfileActor(null);
-      else if (selected) setSelected(null);
+      if (selected) setSelected(null);
       else if (showFilters) setShowFilters(false);
       else setShowClear(false);
     }
@@ -474,7 +520,27 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
       document.body.style.overflow = previous;
       document.removeEventListener("keydown", keydown);
     };
-  }, [selected, profileActor, showClear, showFilters]);
+  }, [selected, showClear, showFilters]);
+
+  useEffect(() => {
+    if (!profilePopover) return undefined;
+    function close(event) {
+      if (event?.target?.closest?.(".history-created-by-popover") || event?.target?.closest?.(".next-history-actor")) return;
+      setProfilePopover(null);
+    }
+    function keydown(event) { if (event.key === "Escape") setProfilePopover(null); }
+    function viewportChange() { setProfilePopover(null); }
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", keydown);
+    window.addEventListener("resize", viewportChange);
+    window.addEventListener("scroll", viewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", keydown);
+      window.removeEventListener("resize", viewportChange);
+      window.removeEventListener("scroll", viewportChange, true);
+    };
+  }, [profilePopover]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -565,6 +631,22 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
     setShowFilters(false);
   }
 
+  function openProfilePopover(anchor, row) {
+    if (!text(row?.actorId)) {
+      setSelected(row);
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(380, window.innerWidth - 28);
+    const estimatedHeight = Math.min(520, window.innerHeight - 28);
+    const left = Math.min(Math.max(14, rect.right - width), Math.max(14, window.innerWidth - width - 14));
+    const below = rect.bottom + 10;
+    const top = below + Math.min(360, estimatedHeight) <= window.innerHeight
+      ? below
+      : Math.max(14, rect.top - estimatedHeight - 10);
+    setProfilePopover({ row, left, top });
+  }
+
   const currentFilters = { search, page, actor, action, date, status, sort };
   const hasFilters = !!(search || page || actor || action || date || status !== "all" || sort !== "newest");
   const activeFilterText = useMemo(() => {
@@ -592,7 +674,6 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
           <div className="next-history-hero-tags"><span>{text(account?.name || account?.username) || "Current user"}</span><span>Up to 1,000 recent records</span>{bootstrapWarnings.length ? <span>{bootstrapWarnings.length} bootstrap warning{bootstrapWarnings.length === 1 ? "" : "s"}</span> : null}</div>
         </div>
         <div className="next-history-hero-actions">
-          <button type="button" className="secondary" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
           <a href="/history?classic=1">Classic History</a>
           <button type="button" className="danger" onClick={() => setShowClear(true)}>Clear all</button>
         </div>
@@ -626,9 +707,6 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
             <p title={activeFilterText}>{activeFilterText}</p>
           </div>
           <div className="next-history-list-actions--parity">
-            <button type="button" className="next-history-refresh-button" onClick={refresh} disabled={loading} title="Refresh history">
-              <HistoryIcon name="refresh"/><span>{loading ? "Refreshing…" : "Refresh"}</span>
-            </button>
             <button type="button" className={`next-history-filter-button ${hasFilters ? "is-active" : ""}`} onClick={() => setShowFilters(true)}>
               <HistoryIcon name="filter"/><span>Filter by</span>{hasFilters ? <b aria-label="Filters active">•</b> : null}
             </button>
@@ -654,7 +732,7 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
                   <span>{text(row?.pageName) || "System"}</span>
                   <small>{text(row?.method) || "—"} {statusCode ? `• ${statusCode}` : ""}</small>
                 </div>
-                <button type="button" className="next-history-actor" onClick={() => text(row?.actorId) ? setProfileActor(row) : setSelected(row)} aria-label={`Created by ${text(row?.actorName) || "System"}`} title={`Created by ${text(row?.actorName) || "System"}`}>
+                <button type="button" className="next-history-actor co-right-ico co-creator-btn" onClick={(event) => openProfilePopover(event.currentTarget, row)} aria-label={`Created by ${text(row?.actorName) || "System"}`} title={`Created by ${text(row?.actorName) || "System"}`}>
                   <span className="next-history-actor-initials">{initials(row?.actorName)}</span>
                   <span className="next-history-actor-icon"><HistoryIcon name="user"/></span>
                   <div><strong>{text(row?.actorName) || "System"}</strong><small>{text(row?.actorDepartment || row?.actorPosition) || "System activity"}</small></div>
@@ -664,7 +742,7 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
               </article>
             );
           }) : (
-            <div className="next-history-empty"><span>0</span><strong>No history records found</strong><p>Change the filters or refresh the audit trail.</p>{hasFilters ? <button type="button" onClick={clearFilters}>Clear filters</button> : null}</div>
+            <div className="next-history-empty"><span>0</span><strong>No history records found</strong><p>Change the filters to find the records you need.</p>{hasFilters ? <button type="button" onClick={clearFilters}>Clear filters</button> : null}</div>
           )}
         </div>
 
@@ -680,8 +758,8 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
         onClear={() => { clearFilters(); setShowFilters(false); }}
         onApply={applyFilters}
       /> : null}
-      {selected ? <DetailsModal row={selected} onClose={() => setSelected(null)} onProfile={() => { const current = selected; setSelected(null); setProfileActor(current); }} /> : null}
-      {profileActor ? <ProfileModal actor={profileActor} onClose={() => setProfileActor(null)} /> : null}
+      {selected ? <DetailsModal row={selected} onClose={() => setSelected(null)} onProfile={() => { const current = selected; setSelected(null); const width = Math.min(380, window.innerWidth - 28); setProfilePopover({ row: current, left: Math.max(14, window.innerWidth - width - 24), top: 90 }); }} /> : null}
+      {profilePopover ? <ProfilePopover state={profilePopover} onClose={() => setProfilePopover(null)} /> : null}
       {showClear ? <ClearHistoryModal onClose={() => setShowClear(false)} onCleared={() => {
         setRows([]);
         clearFilters();
