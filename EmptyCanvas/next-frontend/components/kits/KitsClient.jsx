@@ -1015,13 +1015,13 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
                         <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th /></tr></thead>
                         <tbody>
                           {enrichedRows.map((row) => (
-                            <tr key={row.id}>
-                              <td className="proposal-component-name"><strong>{row.name}</strong></td>
-                              <td>{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined} onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined} aria-label={`Quantity for ${row.name}`} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
-                              <td className="proposal-price-cell">{formatMoney(row.unitPrice)}</td>
-                              <td className="proposal-price-cell proposal-price-cell--total">{formatMoney(row.totalPrice)}</td>
-                              <td className="proposal-link-cell">{row.product?.url ? <a className="proposal-row-link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}><FeatherIcon name="externalLink" /></a> : <span className="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><FeatherIcon name="minus" /></span>}</td>
-                              <td><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete"><FeatherIcon name="trash" /></button> : null}</div></td>
+                            <tr className={`kit-component-row ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+                              <td className="proposal-component-name kit-component-name"><strong>{row.name}</strong></td>
+                              <td className="kit-component-quantity">{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined} onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined} aria-label={`Quantity for ${row.name}`} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
+                              <td className="proposal-price-cell kit-component-unit-price">{formatMoney(row.unitPrice)}</td>
+                              <td className="proposal-price-cell proposal-price-cell--total kit-component-total-price">{formatMoney(row.totalPrice)}</td>
+                              <td className="proposal-link-cell kit-component-link-cell">{row.product?.url ? <a className="proposal-row-link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}><FeatherIcon name="externalLink" /></a> : <span className="proposal-row-link proposal-row-link--disabled" aria-label="No product link"><FeatherIcon name="minus" /></span>}</td>
+                              <td className="kit-component-actions-cell"><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete"><FeatherIcon name="trash" /></button> : null}</div></td>
                             </tr>
                           ))}
                           {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component above." : "Open Edit from the folder menu to add components."}</div></td></tr> : null}
