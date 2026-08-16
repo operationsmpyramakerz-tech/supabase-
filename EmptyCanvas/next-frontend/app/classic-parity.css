@@ -4786,3 +4786,412 @@ body.operations-orders-page .next-operations-creator-fields {
     max-width: none;
   }
 }
+
+/* Operations Orders — Classic action/receipt refinements --------------------
+ * Keep the existing workflow logic, but pin the React controls to the compact
+ * Classic proportions on touch devices as well as desktop.
+ */
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .ops-download-trigger {
+  min-width: 148px;
+  min-height: 44px;
+  gap: 8px;
+  padding: 0 10px 0 13px;
+  border-radius: 14px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .ops-download-trigger > svg:first-child {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .ops-download-trigger__arrow {
+  width: 23px !important;
+  height: 23px !important;
+  flex: 0 0 23px;
+  margin-left: auto;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .download-menu__panel {
+  top: calc(100% + 8px);
+  right: 0;
+  width: 218px;
+  min-width: 218px;
+  padding: 6px;
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .download-menu__item {
+  min-height: 44px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .download-menu__item svg {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px;
+  flex: 0 0 18px;
+  stroke-width: 2.1;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .download-menu__sep {
+  margin: 4px 7px;
+}
+
+/* Receive Components: purpose-built responsive sub-modal. The previous React
+   version reused the wide Operations edit dialog, which made the form clip
+   against the mobile viewport/sidebar. */
+body.operations-orders-page .next-operations-receive-modal {
+  padding: 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+body.operations-orders-page .next-operations-receive-dialog {
+  width: min(620px, calc(100vw - 36px));
+  max-width: 620px;
+  max-height: min(88dvh, 760px);
+  padding: 0;
+  overflow: hidden;
+  border-radius: 26px;
+  border: 1px solid rgba(15, 23, 42, .09);
+  background: #fff;
+  box-shadow: 0 32px 90px rgba(2, 6, 23, .30);
+  display: flex;
+  flex-direction: column;
+}
+
+body.operations-orders-page .next-operations-receive-dialog .co-submodal-close {
+  top: 15px;
+  right: 15px;
+  width: 38px;
+  height: 38px;
+  z-index: 3;
+}
+
+body.operations-orders-page .next-operations-receive-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 64px 16px 20px;
+  border-bottom: 1px solid #edf1f5;
+  background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
+}
+
+body.operations-orders-page .next-operations-receive-header .req-edit-icon {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
+body.operations-orders-page .next-operations-receive-header .req-edit-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+body.operations-orders-page .next-operations-receive-header .co-submodal-title {
+  padding-right: 0;
+  font-size: 19px;
+  line-height: 1.15;
+}
+
+body.operations-orders-page .next-operations-receive-header .co-submodal-sub {
+  max-width: 440px;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body.operations-orders-page .next-operations-receive-body {
+  min-height: 0;
+  margin-top: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body.operations-orders-page .next-operations-receive-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+body.operations-orders-page .next-operations-receive-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+body.operations-orders-page .next-operations-receive-field .co-submodal-label {
+  margin: 0;
+  color: #111827;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+body.operations-orders-page .next-operations-receive-field .co-submodal-label em {
+  margin-left: 4px;
+  color: #94a3b8;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+body.operations-orders-page .next-operations-receive-field .co-submodal-input {
+  width: 100%;
+  min-height: 44px;
+  height: 44px;
+  border-radius: 14px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+body.operations-orders-page .next-operations-receive-quantities {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f5;
+}
+
+body.operations-orders-page .next-operations-receive-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+body.operations-orders-page .next-operations-receive-section-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+body.operations-orders-page .next-operations-receive-kicker {
+  color: #94a3b8;
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+body.operations-orders-page .next-operations-receive-section-head strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+body.operations-orders-page .next-operations-receive-count {
+  min-width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+body.operations-orders-page .next-operations-receive-list {
+  display: grid;
+  gap: 8px;
+}
+
+body.operations-orders-page .next-operations-receive-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid #e8edf3;
+  border-radius: 16px;
+  background: #fbfcfe;
+}
+
+body.operations-orders-page .next-operations-receive-info {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+body.operations-orders-page .next-operations-receive-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+body.operations-orders-page .next-operations-receive-sub {
+  color: #64748b;
+  font-size: 9.5px;
+  font-weight: 750;
+  white-space: normal;
+}
+
+body.operations-orders-page .next-operations-receive-sub b {
+  padding: 0 3px;
+  color: #cbd5e1;
+}
+
+body.operations-orders-page .next-operations-receive-input-wrap {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+body.operations-orders-page .next-operations-receive-input-wrap > span {
+  color: #94a3b8;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+body.operations-orders-page .next-operations-receive-input {
+  width: 100%;
+  min-height: 38px !important;
+  height: 38px !important;
+  padding: 0 7px !important;
+  border-radius: 12px !important;
+  text-align: center;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+body.operations-orders-page .next-operations-receive-actions {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #edf1f5;
+  background: #fff;
+}
+
+body.operations-orders-page .next-operations-receive-actions .ro-action-btn {
+  min-height: 42px;
+  border-radius: 13px;
+}
+
+/* Keep the Classic quantity-diff language explicit on all three converted
+   order pages, even if later global styles are reorganized. */
+body.current-orders-page .next-classic-orders-parity .sv-qty-diff,
+body.orders-review-page .next-classic-orders-parity .sv-qty-diff,
+body.operations-orders-page .next-classic-orders-parity .sv-qty-diff {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+body.current-orders-page .next-classic-orders-parity .sv-qty-old,
+body.orders-review-page .next-classic-orders-parity .sv-qty-old,
+body.operations-orders-page .next-classic-orders-parity .sv-qty-old {
+  color: #9ca3af;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+body.current-orders-page .next-classic-orders-parity .sv-qty-new,
+body.orders-review-page .next-classic-orders-parity .sv-qty-new,
+body.operations-orders-page .next-classic-orders-parity .sv-qty-new {
+  color: #000;
+  font-weight: 900;
+}
+
+@media (max-width: 560px) {
+  body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .ops-download-trigger {
+    min-width: 126px;
+    min-height: 40px;
+    padding: 0 8px 0 10px;
+    border-radius: 13px;
+    font-size: 11px;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-download-menu .download-menu__panel {
+    width: 196px;
+    min-width: 196px;
+  }
+
+  body.operations-orders-page .next-operations-receive-modal {
+    align-items: center;
+    padding: 10px;
+  }
+
+  body.operations-orders-page .next-operations-receive-dialog {
+    width: calc(100vw - 20px);
+    max-width: none;
+    max-height: min(90dvh, 720px);
+    border-radius: 22px;
+  }
+
+  body.operations-orders-page .next-operations-receive-header {
+    gap: 10px;
+    padding: 16px 54px 13px 14px;
+  }
+
+  body.operations-orders-page .next-operations-receive-header .req-edit-icon {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  body.operations-orders-page .next-operations-receive-header .co-submodal-title {
+    font-size: 17px;
+  }
+
+  body.operations-orders-page .next-operations-receive-header .co-submodal-sub {
+    font-size: 10.5px;
+  }
+
+  body.operations-orders-page .next-operations-receive-body {
+    padding: 13px 14px;
+  }
+
+  body.operations-orders-page .next-operations-receive-fields {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  body.operations-orders-page .next-operations-receive-row {
+    grid-template-columns: minmax(0, 1fr) 88px;
+    gap: 8px;
+    padding: 9px;
+    border-radius: 14px;
+  }
+
+  body.operations-orders-page .next-operations-receive-name {
+    font-size: 11px;
+  }
+
+  body.operations-orders-page .next-operations-receive-sub {
+    font-size: 8.5px;
+  }
+
+  body.operations-orders-page .next-operations-receive-input {
+    min-height: 36px !important;
+    height: 36px !important;
+    font-size: 12px !important;
+  }
+
+  body.operations-orders-page .next-operations-receive-actions {
+    padding: 10px 14px 13px;
+  }
+}
