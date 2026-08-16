@@ -11,6 +11,17 @@ const EXPORT_COLUMNS = [
   ["totalPrice", "Total Cost"],
 ];
 
+const COMBINE_LOGICS = [
+  { value: "add", label: "Add", description: "Add quantities for components that appear in more than one proposal." },
+  { value: "max", label: "Max", description: "Keep the highest quantity found for each repeated component." },
+  { value: "min", label: "Min", description: "Keep the lowest quantity found where that component exists." },
+  { value: "separate", label: "Separate", description: "Keep each proposal quantity visible separately in the combined export." },
+];
+
+function combineLogicLabel(value) {
+  return COMBINE_LOGICS.find((option) => option.value === text(value))?.label || "Add";
+}
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -260,7 +271,7 @@ function AddItemsModal({ proposal, products, kits, tags, busy, onClose, onSubmit
   };
 
   return (
-    <Modal title={`Add Components to ${proposal.name}`} subtitle="Add one product, a complete product tag, or a reusable kit." icon="＋" onClose={onClose} wide>
+    <Modal title={`Add Components to ${proposal.name || "New Proposal"}`} subtitle="Add one product, a complete product tag, or a reusable kit." icon="＋" onClose={onClose} wide>
       <form className="next-proposals-form products-form-grid" onSubmit={submit}>
         <div className="next-proposals-segmented">
           {[["product", "Single Product"], ["tag", "Product Tag"], ["kit", "Kit"]].map(([value, label]) => (
@@ -367,6 +378,10 @@ export default function ProposalsClient({
   const [folderMenu, setFolderMenu] = useState("");
   const [combineOpen, setCombineOpen] = useState(false);
   const [detailEdit, setDetailEdit] = useState(false);
+  const [createMode, setCreateMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAdminPassword, setEditAdminPassword] = useState("");
+  const [draftErrors, setDraftErrors] = useState({ name: "", items: "" });
   const passwordResolver = useRef(null);
 
   useEffect(() => {
@@ -382,6 +397,12 @@ export default function ProposalsClient({
       input.placeholder = "Search";
     };
   }, []);
+
+  useEffect(() => {
+    const open = Boolean(activeDetail || detailBusy);
+    document.body.classList.toggle("proposal-detail-open", open);
+    return () => document.body.classList.remove("proposal-detail-open");
+  }, [activeDetail, detailBusy]);
 
   useEffect(() => {
     const close = (event) => {
@@ -460,16 +481,21 @@ export default function ProposalsClient({
     const proposal = normalizeProposal(body?.proposal || activeDetail?.proposal || {});
     const items = (Array.isArray(body?.items) ? body.items : []).map(normalizeItem);
     setActiveDetail({ proposal, items });
+    setEditName(proposal.name || "");
     syncProposal({ ...proposal, itemsCount: items.length });
+    return { proposal, items };
   };
 
   const loadProposal = async (proposalId, options = {}) => {
+    setCreateMode(false);
     setDetailEdit(Boolean(options.edit));
+    if (Object.prototype.hasOwnProperty.call(options, "adminPassword")) setEditAdminPassword(options.adminPassword || "");
     setFolderMenu("");
     setDetailBusy(true);
     try {
       const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposalId)}?_ts=${Date.now()}`);
       syncDetail(body);
+      setDraftErrors({ name: "", items: "" });
     } catch (error) {
       notify(error?.message || "The proposal could not be loaded.", "error");
     } finally {
@@ -523,6 +549,152 @@ export default function ProposalsClient({
     return await askPassword({ title: "Admin password required", message: message || "This proposal belongs to another user." });
   };
 
+  const backToProposals = () => {
+    setActiveDetail(null);
+    setDetailEdit(false);
+    setCreateMode(false);
+    setEditName("");
+    setEditAdminPassword("");
+    setDraftErrors({ name: "", items: "" });
+    setAddDialog(false);
+    setOrderDialog(false);
+  };
+
+  const startCreateProposal = async () => {
+    const adminPassword = await askPassword({
+      title: "Create New Proposal",
+      message: "Enter the Admin password to create a new proposal.",
+    });
+    if (adminPassword === null) return;
+    const createdBy = text(account?.name || account?.fullName || account?.username || account?.email);
+    setCreateMode(true);
+    setDetailEdit(true);
+    setEditAdminPassword(adminPassword);
+    setEditName("");
+    setDraftErrors({ name: "", items: "" });
+    setActiveDetail({
+      proposal: {
+        id: "",
+        name: "",
+        createdBy,
+        createdById: text(account?.id || account?.userSupabaseId),
+        createdAt: "",
+        updatedAt: "",
+        itemsCount: 0,
+        canEdit: true,
+        combinedSources: [],
+        combineLogic: "",
+        combineNote: "",
+        combinedMatrix: [],
+      },
+      items: [],
+    });
+  };
+
+  const enterEditProposal = async (proposal) => {
+    const adminPassword = await protectedPassword(proposal, `Enter the Admin password to edit “${proposal.name}”.`);
+    if (adminPassword === null) return;
+    setEditAdminPassword(adminPassword);
+    await loadProposal(proposal.id, { edit: true, adminPassword });
+  };
+
+  const mergedDraftQuantity = (existingQuantity, incomingQuantity, logic = "add") => {
+    const existing = Math.max(1, Math.round(number(existingQuantity) || 1));
+    const incoming = Math.max(1, Math.round(number(incomingQuantity) || 1));
+    if (logic === "max") return Math.max(existing, incoming);
+    if (logic === "min") return Math.min(existing, incoming);
+    return existing + incoming;
+  };
+
+  const addDraftProducts = (rows, mergeLogic = "add") => {
+    setActiveDetail((current) => {
+      const items = Array.isArray(current?.items) ? [...current.items] : [];
+      rows.forEach((entry) => {
+        const productId = text(entry?.productId);
+        if (!productId) return;
+        const quantity = Math.max(1, Math.round(number(entry?.quantity) || 1));
+        const product = productMap.get(productId);
+        const existingIndex = items.findIndex((item) => text(item.productId) === productId);
+        if (existingIndex >= 0) {
+          const existing = items[existingIndex];
+          items[existingIndex] = {
+            ...existing,
+            quantity: mergedDraftQuantity(existing.quantity, quantity, mergeLogic),
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          items.push(normalizeItem({
+            id: `draft-proposal-item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            proposalId: "",
+            productId,
+            productName: text(entry?.productName || product?.name) || "Untitled product",
+            quantity,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }, items.length));
+        }
+      });
+      return { ...(current || {}), items };
+    });
+    setDraftErrors((current) => ({ ...current, items: "" }));
+  };
+
+  const saveProposal = async () => {
+    const cleanName = text(editName);
+    const rows = Array.isArray(activeDetail?.items) ? activeDetail.items : [];
+    const errors = {
+      name: cleanName ? "" : "Proposal name is required.",
+      items: rows.length ? "" : createMode ? "Add at least one component before saving the proposal." : "Add at least one component before saving changes.",
+    };
+    setDraftErrors(errors);
+    if (errors.name || errors.items) return;
+
+    setBusy(true);
+    try {
+      if (createMode) {
+        const createdBody = await requestJson("/next/api/products/proposals", {
+          method: "POST",
+          body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
+        });
+        const created = normalizeProposal({ ...(createdBody.proposal || {}), canEdit: true });
+        if (!created.id) throw new Error("Proposal was created but the proposal ID was not returned.");
+        for (const row of rows) {
+          if (!row.productId) continue;
+          await requestJson(`/next/api/products/proposals/${encodeURIComponent(created.id)}/items`, {
+            method: "POST",
+            body: JSON.stringify({
+              productId: row.productId,
+              quantity: row.quantity,
+              mergeLogic: "add",
+              adminPassword: editAdminPassword,
+            }),
+          });
+        }
+        await refreshFolders();
+        backToProposals();
+        notify("Proposal saved successfully.");
+        return;
+      }
+
+      const proposal = activeDetail?.proposal;
+      if (!proposal?.id) return;
+      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
+      });
+      const updated = normalizeProposal(body.proposal || { ...proposal, name: cleanName });
+      setActiveDetail((current) => current ? { ...current, proposal: updated } : current);
+      setProposals((current) => current.map((entry) => entry.id === updated.id ? { ...updated, itemsCount: rows.length } : entry));
+      setEditName(updated.name);
+      setDraftErrors({ name: "", items: "" });
+      notify("Changes saved.");
+    } catch (error) {
+      notify(error?.message || `Failed to ${createMode ? "create" : "update"} proposal.`, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submitNameDialog = async (name) => {
     const dialog = nameDialog;
     if (!dialog) return;
@@ -542,8 +714,13 @@ export default function ProposalsClient({
         notify(`“${name}” was created.`);
       } else if (dialog.mode === "copy") {
         const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(dialog.proposal.id)}/copy`, { method: "POST", body: JSON.stringify({ name }) });
-        syncProposal(body.proposal);
+        const copied = syncProposal(body.proposal);
         notify(`A copy named “${name}” was created.`);
+        if (copied?.id) {
+          setNameDialog(null);
+          await loadProposal(copied.id, { edit: true, adminPassword: "" });
+          return;
+        }
       } else if (dialog.mode === "rename") {
         const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(dialog.proposal.id)}`, { method: "PATCH", body: JSON.stringify({ name, adminPassword }) });
         syncProposal(body.proposal);
@@ -590,9 +767,44 @@ export default function ProposalsClient({
 
   const submitAdd = async ({ mode, selected, quantity, mergeLogic }) => {
     const proposal = activeDetail?.proposal;
+    if (createMode) {
+      if (mode === "product") {
+        const product = productMap.get(selected);
+        if (!product) throw new Error("Product not found.");
+        addDraftProducts([{ productId: product.id, productName: product.name, quantity }], mergeLogic);
+        setAddDialog(false);
+        notify("Product added to proposal draft.");
+        return;
+      }
+      if (mode === "tag") {
+        const rows = products
+          .filter((product) => firstTag(product) === selected)
+          .map((product) => ({ productId: product.id, productName: product.name, quantity }));
+        if (!rows.length) throw new Error("No products were found under this tag.");
+        addDraftProducts(rows, mergeLogic);
+        setAddDialog(false);
+        notify(`${rows.length} products added from the selected tag.`);
+        return;
+      }
+      if (mode === "kit") {
+        const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(selected)}?_ts=${Date.now()}`);
+        const kitRows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: Math.max(1, Math.round(number(item.quantity) || 1)) * Math.max(1, Math.round(number(quantity) || 1)),
+        }));
+        if (!kitRows.length) throw new Error("The selected kit has no components.");
+        addDraftProducts(kitRows, mergeLogic);
+        setAddDialog(false);
+        notify(`${kitRows.length} kit components added to the proposal draft.`);
+        return;
+      }
+    }
+
     if (!proposal?.id) return;
-    const adminPassword = await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
+    const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
     if (adminPassword === null) return;
+    if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
     setBusy(true);
     try {
       let endpoint = `/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items`;
@@ -605,7 +817,9 @@ export default function ProposalsClient({
         payload = { kitId: selected, quantity, mergeLogic, adminPassword };
       }
       const body = await requestJson(endpoint, { method: "POST", body: JSON.stringify(payload) });
+      const pendingName = editName;
       syncDetail(body);
+      setEditName(pendingName);
       setAddDialog(false);
       notify(mode === "product" ? "Product added." : mode === "tag" ? `${body.addedCount || "Products"} added from the selected tag.` : `${body.addedCount || "Kit components"} added.`);
     } finally {
@@ -616,16 +830,27 @@ export default function ProposalsClient({
   const updateQuantity = async (row, value) => {
     const quantity = Math.max(1, Math.round(number(value) || 1));
     if (quantity === row.quantity) return;
+    if (createMode) {
+      setActiveDetail((current) => ({
+        ...(current || {}),
+        items: (current?.items || []).map((item) => item.id === row.id ? { ...item, quantity, updatedAt: new Date().toISOString() } : item),
+      }));
+      notify("Quantity updated.");
+      return;
+    }
     const proposal = activeDetail?.proposal;
-    const adminPassword = await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
+    const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
     if (adminPassword === null) return;
+    if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
     setBusy(true);
     try {
+      const pendingName = editName;
       const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
         body: JSON.stringify({ quantity, adminPassword }),
       });
       syncDetail(body);
+      setEditName(pendingName);
       notify("Quantity updated.");
     } catch (error) {
       notify(error?.message || "The quantity could not be updated.", "error");
@@ -643,16 +868,27 @@ export default function ProposalsClient({
       confirmLabel: "Remove Component",
     });
     if (!confirmed) return;
+    if (createMode) {
+      setActiveDetail((current) => ({
+        ...(current || {}),
+        items: (current?.items || []).filter((item) => item.id !== row.id),
+      }));
+      notify("Component removed.");
+      return;
+    }
     const proposal = activeDetail?.proposal;
-    const adminPassword = await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
+    const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
     if (adminPassword === null) return;
+    if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
     setBusy(true);
     try {
+      const pendingName = editName;
       const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "DELETE",
         body: JSON.stringify({ adminPassword }),
       });
       syncDetail(body);
+      setEditName(pendingName);
       notify("Component removed.");
     } catch (error) {
       notify(error?.message || "The component could not be removed.", "error");
@@ -707,7 +943,7 @@ export default function ProposalsClient({
         <Toast toast={toast} onClose={() => setToast(null)} />
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
-            <section className="products-proposal-detail">
+            <section className={`products-proposal-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>
               {detailBusy && !activeDetail ? (
                 <div className="products-loading-card" role="status" aria-live="polite">
                   <div className="products-spinner" aria-hidden="true" />
@@ -715,78 +951,164 @@ export default function ProposalsClient({
                 </div>
               ) : (
                 <>
-                  <header className="products-proposal-detail__head proposal-detail-head--compact">
-                    <button type="button" className="products-back-btn" onClick={() => { setActiveDetail(null); setDetailEdit(false); }} aria-label="Back to proposals">←</button>
-                    <div className="proposal-detail-actions">
-                      {detailEdit ? (
-                        <>
-                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>＋ <span>Add Components</span></button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => setNameDialog({ mode: "rename", proposal, value: proposal?.name || "" })}>Rename</button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(false)}>Done</button>
-                        </>
-                      ) : (
-                        <>
-                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("pdf")}>PDF</button>
-                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("excel")}>Excel</button>
-                          <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}>Make Order</button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(true)}>Edit</button>
-                        </>
-                      )}
+                  {createMode ? (
+                    <header className="products-proposal-detail__head proposal-create-label-head">
+                      <div className="proposal-create-title-pill">
+                        <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
+                        <span>Create New Proposal</span>
+                      </div>
+                    </header>
+                  ) : (
+                    <header className="products-proposal-detail__head proposal-detail-head--compact">
+                      <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
+                      <div className="proposal-detail-actions">
+                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("pdf")}>PDF</button>
+                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("excel")}>Excel</button>
+                        <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}>Make Order</button>
+                        {!detailEdit ? <button type="button" className="products-btn products-btn--light" onClick={() => enterEditProposal(proposal)}>Edit</button> : null}
+                      </div>
+                    </header>
+                  )}
+
+                  {!createMode && !detailEdit ? (
+                    <div className="proposal-classic-detail-title">
+                      <span className="proposal-create-title-pill"><span>{proposal?.name || "Proposal"}</span></span>
+                      <p>Created by {proposal?.createdBy || "Unknown"} · Updated {formatDate(proposal?.updatedAt || proposal?.createdAt)}</p>
                     </div>
-                  </header>
+                  ) : null}
 
-                  <div className="proposal-classic-detail-title">
-                    <span className="proposal-create-title-pill"><span>{proposal?.name || "Proposal"}</span></span>
-                    <p>Created by {proposal?.createdBy || "Unknown"} · Updated {formatDate(proposal?.updatedAt || proposal?.createdAt)}</p>
-                  </div>
-
-                  {proposal?.combinedSources?.length ? (
+                  {!createMode && proposal?.combinedSources?.length ? (
                     <div className="proposal-view-note">
                       <span aria-hidden="true">◎</span>
-                      <span>{proposal.combineNote || `Combined from ${proposal.combinedSources.map((source) => source.name || source.id).join(", ")}`}</span>
+                      <span>{proposal.combineNote || `Combined from ${proposal.combinedSources.map((source) => source.name || source.id).join(", ")} using ${combineLogicLabel(proposal.combineLogic)} logic.`}</span>
                     </div>
                   ) : null}
 
                   {detailEdit ? (
-                    <div className="products-proposal-tools proposals-one-tool">
-                      <div className="products-proposal-tool-card">
-                        <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Edit proposal components</span></div>
-                        <div className="proposal-classic-inline-actions">
-                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>Add product, tag or kit</button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => loadProposal(proposal.id, { edit: true })} disabled={detailBusy}>{detailBusy ? "Refreshing…" : "Refresh"}</button>
-                          <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button>
+                    <>
+                      <div className={`proposal-name-edit-block proposal-name-edit-block--footer-save ${createMode ? "proposal-name-edit-block--create proposal-name-edit-block--proposal-create" : "proposal-name-edit-block--proposal-edit"}`}>
+                        <label className="products-field products-field--wide">
+                          <span>Proposal name <em>*</em></span>
+                          <input
+                            value={editName}
+                            onChange={(event) => {
+                              setEditName(event.target.value);
+                              setDraftErrors((current) => ({ ...current, name: "" }));
+                            }}
+                            placeholder="Example: School supplies quotation"
+                            autoComplete="off"
+                          />
+                        </label>
+                        {draftErrors.name ? <div className="direct-create-inline-error">{draftErrors.name}</div> : null}
+                      </div>
+
+                      <div className="products-proposal-tools proposals-one-tool">
+                        <div className="products-proposal-tool-card">
+                          <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Add proposal components</span></div>
+                          <div className="proposal-classic-inline-actions">
+                            <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>Add product, tag or kit</button>
+                            {!createMode ? <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button> : null}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                      {draftErrors.items ? <div className="direct-create-inline-error direct-create-inline-error--items">{draftErrors.items}</div> : null}
+                    </>
                   ) : (
                     <div className="proposal-view-note"><span aria-hidden="true">◉</span><span>View only. Choose Edit to modify this proposal.</span></div>
                   )}
 
-                  <div className="products-proposal-table-card">
+                  <div className="products-proposal-table-card proposal-components-card">
                     <div className="products-proposal-table-head">
-                      <div><h3>Components table</h3><p>Saved products and quantities for this proposal.</p></div>
+                      <div><h3>Proposal components</h3><p>Saved products and quantities for this proposal.</p></div>
                       <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
                     </div>
-                    <div className="products-proposal-table-wrap">
-                      <table className="products-proposal-table">
-                        <thead><tr><th>Component name</th><th>Quantity</th><th>Unity Price</th><th>Total Price</th><th>Link</th><th /></tr></thead>
-                        <tbody>
-                          {enrichedRows.map((row) => (
-                            <tr key={row.id}>
-                              <td className="proposal-component-name">
-                                <strong>{row.name}</strong>
-                                <small className="proposal-classic-component-meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
-                              </td>
-                              <td>{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onBlur={(event) => updateQuantity(row, event.target.value)} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
-                              <td className="proposal-price-cell">{formatMoney(row.unitPrice)}</td>
-                              <td className="proposal-price-cell proposal-price-cell--total">{formatMoney(row.totalPrice)}</td>
-                              <td className="proposal-link-cell">{row.product?.url ? <a className="proposal-product-link" href={row.product.url} target="_blank" rel="noreferrer">Open ↗</a> : "—"}</td>
-                              <td><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`}>×</button> : null}</div></td>
-                            </tr>
-                          ))}
-                          {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component, tag or saved kit above." : "Choose Edit to add components."}</div></td></tr> : null}
-                        </tbody>
-                      </table>
+                    <div className="products-proposal-table-wrap proposal-components-wrap">
+                      <div className="proposal-components-grid">
+                        {enrichedRows.map((row) => {
+                          const matrixRow = Array.isArray(proposal?.combinedMatrix)
+                            ? proposal.combinedMatrix.find((entry) => {
+                                const entryProductId = text(entry?.productId || entry?.product_id);
+                                if (row.productId && entryProductId && row.productId === entryProductId) return true;
+                                return lower(entry?.name || entry?.productName || entry?.product_name) === lower(row.name);
+                              })
+                            : null;
+                          const sourceQuantities = proposal?.combineLogic === "separate" && matrixRow?.sourceQuantities && proposal?.combinedSources?.length
+                            ? proposal.combinedSources.map((source) => ({
+                                id: text(source?.id),
+                                name: text(source?.name) || "Proposal",
+                                quantity: number(matrixRow.sourceQuantities?.[text(source?.id)]),
+                              }))
+                            : [];
+                          return (
+                            <article className={`kit-component-card proposal-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+                              <header className="kit-component-card__head proposal-component-card__head">
+                                <div className="kit-component-card__title">
+                                  <span>Component</span>
+                                  <h4>{row.name}</h4>
+                                  {[row.displayId, row.tag, row.unit].filter(Boolean).length ? (
+                                    <small className="proposal-component-card__meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
+                                  ) : null}
+                                </div>
+                              </header>
+
+                              {sourceQuantities.length ? (
+                                <div className="proposal-component-card__sources">
+                                  {sourceQuantities.map((source) => (
+                                    <div key={source.id || source.name}>
+                                      <span>{source.name}</span>
+                                      <strong>{formatNumber(source.quantity)}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              <div className="kit-component-card__metrics proposal-component-card__metrics">
+                                <div className="kit-component-card__metric kit-component-card__metric--qty">
+                                  <span>{sourceQuantities.length ? "Total Qty" : "Qty"}</span>
+                                  {detailEdit ? (
+                                    <input
+                                      className="proposal-item-qty kit-component-card__qty-input"
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={row.quantity}
+                                      key={`${row.id}-${row.quantity}`}
+                                      onBlur={(event) => updateQuantity(row, event.target.value)}
+                                      aria-label={`Quantity for ${row.name}`}
+                                    />
+                                  ) : <strong>{formatNumber(row.quantity)}</strong>}
+                                </div>
+                                <div className="kit-component-card__metric">
+                                  <span>Unit price</span>
+                                  <strong>{formatMoney(row.unitPrice)}</strong>
+                                </div>
+                                <div className="kit-component-card__metric kit-component-card__metric--total">
+                                  <span>Total price</span>
+                                  <strong>{formatMoney(row.totalPrice)}</strong>
+                                </div>
+                              </div>
+
+                              <footer className="kit-component-card__actions proposal-component-card__actions">
+                                {row.product?.url ? (
+                                  <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
+                                    <span aria-hidden="true">↗</span><span>Open link</span>
+                                  </a>
+                                ) : (
+                                  <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
+                                    <span aria-hidden="true">—</span><span>No link</span>
+                                  </span>
+                                )}
+                                {detailEdit ? (
+                                  <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>
+                                    <span aria-hidden="true">×</span><span>Remove</span>
+                                  </button>
+                                ) : null}
+                              </footer>
+                            </article>
+                          );
+                        })}
+                        {!enrichedRows.length ? <div className="products-table-empty proposal-components-empty">No components yet. {detailEdit ? "Add one component, tag or saved kit above." : "Choose Edit to add components."}</div> : null}
+                      </div>
                     </div>
                     <div className="proposal-total-block">
                       <div><span>Components</span><strong>{formatNumber(detailTotals.items)}</strong></div>
@@ -794,6 +1116,15 @@ export default function ProposalsClient({
                       <div><span>Estimated Total</span><strong>{formatMoney(detailTotals.value)}</strong></div>
                     </div>
                   </div>
+
+                  {detailEdit ? (
+                    <div className={`direct-create-save-footer proposal-create-save-footer ${createMode ? "direct-create-save-footer--create" : "direct-create-save-footer--edit"}`}>
+                      <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={backToProposals} disabled={busy}>Cancel</button>
+                      <button type="button" className="products-btn products-btn--dark direct-create-save-btn" onClick={saveProposal} disabled={busy}>
+                        <span>{busy ? "Saving…" : createMode ? "Save" : "Save Changes"}</span>
+                      </button>
+                    </div>
+                  ) : null}
 
                   {!detailEdit ? (
                     <div className="proposal-classic-export-columns">
@@ -823,7 +1154,7 @@ export default function ProposalsClient({
 
       <div className="proposals-floating-actions">
         <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button>
-        <button type="button" className="products-add-btn proposals-create-btn" onClick={() => setNameDialog({ mode: "create", value: "" })}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button>
+        <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button>
       </div>
 
       {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a folder is missing.</span></div> : null}
@@ -838,7 +1169,7 @@ export default function ProposalsClient({
                     <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === proposal.id ? "" : proposal.id); }} aria-label={`Actions for ${proposal.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
                     {folderMenu === proposal.id ? (
                       <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-                        <button type="button" onClick={() => loadProposal(proposal.id, { edit: true })}><span>Edit</span></button>
+                        <button type="button" onClick={() => enterEditProposal(proposal)}><span>Edit</span></button>
                         <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><span>Make a copy</span></button>
                         <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><span>Delete</span></button>
                       </div>
@@ -875,7 +1206,31 @@ export default function ProposalsClient({
                 </label>
               ))}
             </div>
-            <label className="products-field"><span>Combine logic</span><select value={combineLogic} onChange={(event) => setCombineLogic(event.target.value)}><option value="add">Add quantities</option><option value="separate">Separate source quantities</option></select></label>
+            <div className="products-field proposal-combine-logic-field">
+              <span>Combine logic</span>
+              <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Combine logic">
+                {COMBINE_LOGICS.map((option) => {
+                  const active = combineLogic === option.value;
+                  return (
+                    <button
+                      type="button"
+                      key={option.value}
+                      className={`proposal-combine-logic-option ${active ? "is-selected" : ""}`}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setCombineLogic(option.value)}
+                    >
+                      <span className="proposal-combine-logic-option__check" aria-hidden="true">{active ? "✓" : ""}</span>
+                      <span className="proposal-combine-logic-option__copy">
+                        <strong>{option.label}</strong>
+                        <small>{option.description}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="proposal-combine-logic-summary">Selected logic: <strong>{combineLogicLabel(combineLogic)}</strong></div>
+            </div>
             <div className="proposal-classic-export-columns proposal-classic-export-columns--modal">
               <span>Columns</span>
               {EXPORT_COLUMNS.map(([key, label]) => (
