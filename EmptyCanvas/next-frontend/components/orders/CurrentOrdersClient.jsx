@@ -93,8 +93,17 @@ function formatMoney(value) {
   }).format(finite(value));
 }
 
+function formatQuantity(value) {
+  const number = Math.round(finite(value) * 1000) / 1000;
+  return Number.isInteger(number) ? String(number) : String(number);
+}
+
+function supervisorEditedQuantity(item) {
+  return item?.quantityEditedBySupervisor ?? item?.quantity_edited_by_supervisor ?? item?.quantityProgress ?? item?.quantity_progress;
+}
+
 function effectiveQuantity(item) {
-  const edited = item?.quantityEditedBySupervisor ?? item?.quantityProgress;
+  const edited = supervisorEditedQuantity(item);
   if (edited !== null && edited !== undefined && edited !== "") return finite(edited);
   return finite(item?.quantityRequested ?? item?.quantity);
 }
@@ -537,8 +546,8 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
           {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
           <div className="co-modal-items">
             {items.length ? items.map((item, index) => {
-              const qtyRequested = finite(item?.quantityRequested ?? item?.quantity);
-              const qtyEditedRaw = item?.quantityEditedBySupervisor ?? item?.quantityProgress;
+              const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
+              const qtyEditedRaw = supervisorEditedQuantity(item);
               const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
               const qty = effectiveQuantity(item);
               const itemStatus = statusTabForItem(item);
@@ -554,7 +563,7 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
                     {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}
                   </div>
                   <div className="co-item-right">
-                    {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {hasEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{qtyRequested}</span><strong className="sv-qty-new">{qty}</strong></span> : <strong>{qtyRequested}</strong>}</div>}
+                    {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {hasEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qty)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div>}
                     <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
                   </div>
                 </div>

@@ -392,8 +392,8 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
             const itemApproval = approvalKey(item?.approval ?? item?.svApproval ?? item?.sv_approval);
             const itemBusy = busyIds.has(text(item?.id));
             const itemReason = text(item?.rejectedReason ?? item?.rejected_reason);
-            const qtyRequested = finite(item?.quantityRequested ?? item?.quantity);
-            const qtyEdited = item?.quantityEdited;
+            const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
+            const qtyEdited = item?.quantityEdited ?? item?.quantity_edited_by_supervisor ?? item?.quantityEditedBySupervisor;
             const showEdited = qtyEdited !== null && qtyEdited !== undefined && qtyEdited !== "" && finite(qtyEdited) !== qtyRequested;
             const safeUrl = text(item?.productUrl ?? item?.product_url);
             return <div className="co-item next-review-order-item" key={text(item?.id) || index}>

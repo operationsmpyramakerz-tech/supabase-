@@ -112,9 +112,23 @@ function itemDecision(item) {
   return "not-started";
 }
 
-function baseQuantity(item) {
-  const value = item?.quantity ?? item?.quantityRequested ?? item?.quantity_requested;
+function requestedQuantity(item) {
+  const value = item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity;
   return roundQty(value);
+}
+
+function supervisorEditedQuantity(item) {
+  return item?.quantityEditedBySupervisor ?? item?.quantity_edited_by_supervisor ?? item?.quantityProgress ?? item?.quantity_progress;
+}
+
+function baseQuantity(item) {
+  const edited = supervisorEditedQuantity(item);
+  if (edited !== null && edited !== undefined && edited !== "") return roundQty(edited);
+  // The requested-orders API also exposes `quantity` as the effective quantity,
+  // so keep it as the legacy fallback when the original field is unavailable.
+  const original = item?.quantityRequested ?? item?.quantity_requested;
+  if (original !== null && original !== undefined && original !== "") return roundQty(original);
+  return roundQty(item?.quantity);
 }
 
 function receivedQuantity(item) {
@@ -137,8 +151,6 @@ function remainingQuantity(item) {
 }
 
 function effectiveQuantity(item) {
-  const edited = item?.quantityEditedBySupervisor ?? item?.quantityProgress;
-  if (edited !== null && edited !== undefined && edited !== "") return finite(edited);
   return baseQuantity(item);
 }
 
@@ -661,9 +673,9 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           </div>
 
           <div className="co-modal-actions ro-actions ro-actions--right">
-            {showDownload ? <div className="download-menu" ref={downloadRef}>
-              <button type="button" className="ro-action-btn ro-action-btn--light download-menu__btn" aria-haspopup="menu" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((value) => !value)} disabled={busy}>
-                <ClassicOrderIcon name="download" /><span>Download</span>
+            {showDownload ? <div className="download-menu download-menu--button next-operations-download-menu" ref={downloadRef}>
+              <button type="button" className="ro-action-btn ro-action-btn--light download-menu__btn ops-download-trigger" aria-haspopup="menu" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((value) => !value)} disabled={busy}>
+                <ClassicOrderIcon name="download" /><span>Download</span><ClassicOrderIcon name="chevron-down" className="ops-download-trigger__arrow" />
               </button>
               {downloadOpen ? <div className="download-menu__panel" role="menu" aria-label="Download options">
                 <button className="download-menu__item" role="menuitem" type="button" onClick={() => exportAction("pdf")} disabled={busy}><span>Download PDF</span><ClassicOrderIcon name="file-text" /></button>
@@ -690,19 +702,34 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
               const safeUrl = text(item?.productUrl ?? item?.product_url);
               const itemId = text(item?.id);
               const itemName = text(item?.productName) || "Product";
+              const receivedWasEdited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited) || Math.abs(received) > 1e-9;
+              const showReceivedValue = tab === "received" || tab === "delivered" || tab === "archive";
+              const visibleQty = tab === "remaining"
+                ? remaining
+                : showReceivedValue && receivedWasEdited
+                  ? received
+                  : base;
+              // Classic Operations Orders only uses the crossed-out comparison in
+              // the later completed workflow views. Approved/Rejected keep the
+              // approved base quantity clean, and Shipping shows the received qty.
+              const showReceivedDiff = (tab === "delivered" || tab === "archive") && receivedWasEdited && Math.abs(received - base) > 1e-9;
+              const qtyMarkup = showReceivedDiff
+                ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
+                : <strong>{formatQuantity(visibleQty)}</strong>;
+              const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
               return <div className="co-item" key={itemId || index}>
                 <div className="co-item-left">
                   <div className="co-item-title">
                     <div className="co-item-name">{itemName}</div>
                     {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
                   </div>
-                  <div className="co-item-sub">Requested: {formatQuantity(base)} · Received: {formatQuantity(received)} · Remaining: {formatQuantity(remaining)}</div>
+                  <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice ?? item?.unit_price ?? item?.price)} · Total: {formatMoney(displayTotal)}</div>
                   {text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}
                   {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
                   {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
                 </div>
                 <div className="co-item-right">
-                  <div className="co-item-total">{formatMoney(itemTotal(item))}</div>
+                  <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
                   <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
                   {canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={() => onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName })}><ClassicOrderIcon name="x" /> Reject</button> : null}
                 </div>
@@ -744,9 +771,51 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [receiptNumber, setReceiptNumber] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
   const [quantities, setQuantities] = useState({});
-  useEffect(() => { if (!group) return; const initial = {}; group.items.forEach((item) => { initial[text(item?.id)] = formatQuantity(Math.abs(remainingQuantity(item))); }); setQuantities(initial); setReceiptNumber(""); setIssueDescription(""); }, [group]);
+  useEffect(() => {
+    if (!group) return;
+    const initial = {};
+    group.items.forEach((item) => { initial[text(item?.id)] = formatQuantity(Math.abs(remainingQuantity(item))); });
+    setQuantities(initial);
+    setReceiptNumber("");
+    setIssueDescription("");
+  }, [group]);
+  useEffect(() => {
+    if (!group) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [group, busy, onCancel]);
   if (!group) return null;
-  return <div className="co-submodal-overlay is-open next-classic-wide-submodal" aria-hidden="false"><form className="co-submodal-dialog req-ops-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="package" /></div><div><div className="co-submodal-title">Receive components</div><div className="co-submodal-sub">Enter how much is being received now.</div></div></div><div className="co-submodal-body"><div className="co-submodal-fields"><label className="co-submodal-field"><span className="co-submodal-label">Receipt number (optional)</span><input className="co-submodal-input" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="One or more receipt numbers"/></label><label className="co-submodal-field"><span className="co-submodal-label">Issue description (optional)</span><input className="co-submodal-input" value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Shared note for received components"/></label><div className="co-submodal-field"><span className="co-submodal-label">Received quantities</span><div className="req-ops-edit-qty-list">{group.items.map((item) => { const id=text(item?.id); return <label className="req-ops-edit-qty-row" key={id}><span className="req-ops-edit-qty-info"><span className="req-ops-edit-qty-name">{text(item?.productName) || "Product"}</span><span className="req-ops-edit-qty-sub">Already received {formatQuantity(receivedQuantity(item))} · Remaining {formatQuantity(remainingQuantity(item))}</span></span><input className="co-submodal-input req-ops-edit-qty-input" type="number" min="0" step="any" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))}/></label>; })}</div></div></div><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Receiving…" : "Confirm receipt"}</button></div></form></div>;
+  return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
+      <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close receive components" disabled={busy}/>
+      <div className="co-submodal-header next-operations-receive-header">
+        <div className="req-edit-icon"><ClassicOrderIcon name="truck" /></div>
+        <div><div className="co-submodal-title" id="operations-receive-title">Receive components</div><div className="co-submodal-sub">Confirm the receipt details and the quantity received now.</div></div>
+      </div>
+      <div className="co-submodal-body next-operations-receive-body">
+        <div className="next-operations-receive-fields">
+          <label className="next-operations-receive-field"><span className="co-submodal-label">Receipt number <em>Optional</em></span><input className="co-submodal-input" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="One or more receipt numbers" autoComplete="off"/></label>
+          <label className="next-operations-receive-field"><span className="co-submodal-label">Issue description <em>Optional</em></span><input className="co-submodal-input" value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Shared note for received components"/></label>
+        </div>
+        <section className="next-operations-receive-quantities" aria-labelledby="operations-receive-quantities-title">
+          <div className="next-operations-receive-section-head"><div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div><span className="next-operations-receive-count">{group.items.length}</span></div>
+          <div className="next-operations-receive-list">{group.items.map((item) => {
+            const id = text(item?.id);
+            const received = receivedQuantity(item);
+            const remaining = remainingQuantity(item);
+            const maxNow = Math.abs(remaining);
+            return <label className="next-operations-receive-row" key={id}>
+              <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(received)} <b>·</b> Remaining {formatQuantity(remaining)}</span></span>
+              <span className="next-operations-receive-input-wrap"><span>Qty now</span><input className="co-submodal-input next-operations-receive-input" type="number" min="0" max={maxNow || undefined} step="any" inputMode="decimal" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} aria-label={`Quantity received now for ${text(item?.productName) || "component"}`}/></span>
+            </label>;
+          })}</div>
+        </section>
+        <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+      </div>
+      <div className="co-submodal-actions next-operations-receive-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Receiving…" : "Confirm receipt"}</button></div>
+    </form>
+  </div>;
 }
 
 function ConfirmModal({ state, busy, error, onCancel, onSubmit }) {
