@@ -7497,12 +7497,18 @@ async function _sbProductProposalExportData(proposalId, req = null) {
 
 function _proposalCombineLogic(value) {
   const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "-");
+  if (raw === "max" || raw === "max-logic") return "max";
+  if (raw === "min" || raw === "min-logic") return "min";
   if (raw === "separate" || raw === "separate-logic") return "separate";
   return "add";
 }
 
 function _proposalCombineLogicLabel(value) {
-  return _proposalCombineLogic(value) === "separate" ? "Separate logic" : "Add logic";
+  const logic = _proposalCombineLogic(value);
+  if (logic === "max") return "Max logic";
+  if (logic === "min") return "Min logic";
+  if (logic === "separate") return "Separate logic";
+  return "Add logic";
 }
 
 function _proposalIdsList(value) {
@@ -7527,7 +7533,7 @@ function _proposalCombinedMeta({ sources = [], logic = "add", matrix = [] } = {}
   return {
     sources: cleanSources,
     logic: cleanLogic,
-    note: `This proposal combines ${sourceText}.`,
+    note: `This proposal combines ${sourceText} using ${_proposalCombineLogicLabel(cleanLogic)}.`,
     matrix: Array.isArray(matrix) ? matrix : [],
   };
 }
@@ -7590,18 +7596,27 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     }
   }
 
+  const cleanLogic = _proposalCombineLogic(logic);
   const rows = Array.from(rowsMap.values()).map((row) => {
     const unitPrice = Number(row.unitPrice);
     const cleanUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null;
-    const totalQuantity = sources.reduce((sum, source) => sum + (Number(row.sourceQuantities[source.id]) || 0), 0);
+    const sourceQuantities = sources.reduce((acc, source) => {
+      acc[source.id] = Number(row.sourceQuantities[source.id]) || 0;
+      return acc;
+    }, {});
+    const quantities = sources.map((source) => Number(sourceQuantities[source.id]) || 0);
+    const presentQuantities = quantities.filter((quantity) => quantity > 0);
+    let combinedQuantity = quantities.reduce((sum, quantity) => sum + quantity, 0);
+    if (cleanLogic === "max") {
+      combinedQuantity = presentQuantities.length ? Math.max(...presentQuantities) : 0;
+    } else if (cleanLogic === "min") {
+      combinedQuantity = presentQuantities.length ? Math.min(...presentQuantities) : 0;
+    }
     return {
       ...row,
-      quantity: totalQuantity,
-      totalPrice: cleanUnitPrice === null ? null : cleanUnitPrice * totalQuantity,
-      sourceQuantities: sources.reduce((acc, source) => {
-        acc[source.id] = Number(row.sourceQuantities[source.id]) || 0;
-        return acc;
-      }, {}),
+      quantity: combinedQuantity,
+      totalPrice: cleanUnitPrice === null ? null : cleanUnitPrice * combinedQuantity,
+      sourceQuantities,
     };
   }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
 
@@ -7622,7 +7637,6 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     return acc;
   }, { items: 0, quantity: 0, total: 0 });
 
-  const cleanLogic = _proposalCombineLogic(logic);
   const matrix = rows.map((row) => ({
     productId: row.productId,
     name: row.name,
