@@ -1,4 +1,5 @@
 import NotificationsBell from "./notifications/NotificationsBell";
+import UserProfileMenu from "./UserProfileMenu";
 import {
   BodyClassSync,
   ClassicSidebarBootstrap,
@@ -270,11 +271,7 @@ export default function AppShell({
               </div>
               <div className="right topbar-right">
                 <NotificationsBell classic />
-                <a className="header-user" href="/next/account" aria-label="My account" title={account?.name || account?.username || "My account"}>
-                  <span className="header-user__avatar">
-                    {account?.photoUrl ? <img className="header-user__img" src={account.photoUrl} alt="" /> : <span className="header-user__fallback" aria-hidden="true">{initials}</span>}
-                  </span>
-                </a>
+                <UserProfileMenu account={account} />
               </div>
             </div>
             <div className="header-row2"><h1 className="page-title">{title}</h1></div>
