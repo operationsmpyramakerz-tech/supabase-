@@ -7004,3 +7004,178 @@ body.kits-page .next-kit-combine-btn svg{
     grid-template-columns:1fr;
   }
 }
+
+/* ===== Stage 2G.3 · Kits component cards cleanup ===== */
+body.kits-page .next-kits-classic-parity .products-proposal-table-card{
+  border-radius:22px;
+  border-color:rgba(15,23,42,.07);
+  box-shadow:0 14px 34px rgba(15,23,42,.055);
+}
+body.kits-page .next-kits-classic-parity .products-proposal-table-head{
+  padding:18px 20px;
+}
+body.kits-page .next-kits-classic-parity .products-proposal-table-head > span{
+  background:#f8fafc;
+  border-color:rgba(15,23,42,.07);
+}
+body.kits-page .next-kits-classic-parity .kit-component-row .proposal-component-name strong{
+  line-height:1.35;
+}
+
+@media (max-width: 760px){
+  body.kits-page .next-kits-classic-parity .products-proposal-table-wrap{
+    overflow:visible !important;
+    padding:12px !important;
+    background:#f8fafc;
+  }
+  body.kits-page .next-kits-classic-parity .products-proposal-table tbody{
+    display:grid !important;
+    gap:10px;
+  }
+  body.kits-page .next-kits-classic-parity .products-proposal-table tr.kit-component-row{
+    display:grid !important;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:9px;
+    margin:0 !important;
+    padding:13px !important;
+    border:1px solid rgba(15,23,42,.075) !important;
+    border-radius:18px;
+    background:#fff;
+    box-shadow:0 6px 18px rgba(15,23,42,.045);
+  }
+  body.kits-page .next-kits-classic-parity .products-proposal-table tr.kit-component-row > td{
+    min-width:0;
+    border:0 !important;
+    padding:0 !important;
+  }
+  body.kits-page .next-kits-classic-parity .products-proposal-table tr.kit-component-row > td::before{
+    margin:0;
+    color:#98a2b3;
+    font-size:.59rem;
+    line-height:1;
+    letter-spacing:.055em;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-name{
+    grid-column:1 / -1;
+    padding:0 2px 11px !important;
+    border-bottom:1px solid rgba(15,23,42,.065) !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-name strong{
+    font-size:.88rem !important;
+    font-weight:950;
+    line-height:1.35;
+    color:#0f172a;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-quantity,
+  body.kits-page .next-kits-classic-parity .kit-component-unit-price,
+  body.kits-page .next-kits-classic-parity .kit-component-total-price{
+    min-height:62px;
+    display:grid !important;
+    align-content:space-between;
+    gap:8px !important;
+    padding:9px 10px !important;
+    border:1px solid rgba(15,23,42,.06) !important;
+    border-radius:13px;
+    background:#f8fafc;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-quantity strong,
+  body.kits-page .next-kits-classic-parity .kit-component-unit-price,
+  body.kits-page .next-kits-classic-parity .kit-component-total-price{
+    color:#0f172a;
+    font-size:.75rem;
+    font-weight:950;
+    white-space:normal;
+  }
+  body.kits-page .next-kits-classic-parity .products-proposal-table .kit-component-quantity .proposal-item-qty{
+    width:100% !important;
+    min-width:0;
+    min-height:34px;
+    padding:0 7px;
+    border-radius:10px;
+    background:#fff;
+    font-size:.78rem;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-link-cell,
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell{
+    margin-top:1px;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-link-cell::before,
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell::before{
+    display:none !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-row.is-editable .kit-component-link-cell{
+    grid-column:1 / 2;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-row.is-editable .kit-component-actions-cell{
+    grid-column:2 / -1;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-row.is-view .kit-component-link-cell{
+    grid-column:1 / -1;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-row.is-view .kit-component-actions-cell{
+    display:none !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-link-cell,
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell,
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell .proposal-row-actions{
+    width:100%;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell .proposal-row-actions{
+    display:block;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-link-cell .proposal-row-link,
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell .proposal-row-delete{
+    width:100% !important;
+    min-width:0 !important;
+    height:40px !important;
+    min-height:40px;
+    display:flex !important;
+    align-items:center;
+    justify-content:center !important;
+    gap:7px;
+    padding:0 10px;
+    border-radius:12px !important;
+    box-shadow:none;
+    font-size:.7rem;
+    font-weight:900;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-link-cell .proposal-row-link:not(.proposal-row-link--disabled)::after{
+    content:'Open link';
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-link-cell .proposal-row-link--disabled::after{
+    content:'No link';
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-actions-cell .proposal-row-delete::after{
+    content:'Remove';
+  }
+  body.kits-page .next-kits-classic-parity .proposal-total-block{
+    margin:0;
+    padding:12px;
+    gap:8px;
+    background:#fff;
+    border-top:1px solid rgba(15,23,42,.07);
+  }
+  body.kits-page .next-kits-classic-parity .proposal-total-block > div{
+    min-width:0;
+    padding:10px;
+    border-radius:13px;
+    background:#f8fafc;
+  }
+}
+
+@media (max-width: 430px){
+  body.kits-page .next-kits-classic-parity .products-proposal-table tr.kit-component-row{
+    gap:7px;
+    padding:11px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-quantity,
+  body.kits-page .next-kits-classic-parity .kit-component-unit-price,
+  body.kits-page .next-kits-classic-parity .kit-component-total-price{
+    padding:8px !important;
+  }
+  body.kits-page .next-kits-classic-parity .kit-component-quantity strong,
+  body.kits-page .next-kits-classic-parity .kit-component-unit-price,
+  body.kits-page .next-kits-classic-parity .kit-component-total-price{
+    font-size:.7rem;
+  }
+}
