@@ -34,7 +34,7 @@ export default async function AccountPage() {
       activePath="/next/account"
       classicHrefOverride="/account"
       bodyClass="page-account"
-      classicStyles={["/css/account-classic-inline.css?v=next-stage-2n-account"]}
+      classicStyles={["/css/account-classic-inline.css?v=next-stage-2o-account"]}
     >
       <AccountClient initialAccount={response.data} />
     </AppShell>
