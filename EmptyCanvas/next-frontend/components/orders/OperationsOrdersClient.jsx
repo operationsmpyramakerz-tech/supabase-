@@ -480,6 +480,34 @@ function CreatorProfilePopover({ state, onClose }) {
   </div></div>;
 }
 
+function writeOperationsEditTransfer(data, group) {
+  try {
+    const products = Array.isArray(data?.products) ? data.products : [];
+    if (!products.length) return "";
+    const orderType = text(data?.orderType || group?.orderType);
+    const reason = text(group?.reason);
+    const patched = products.map((item) => ({ ...item, reason: text(item?.reason) || reason }));
+    const editKey = `ops-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload = JSON.stringify({ products: patched, orderType, reason, source: "operations-orders-next", ts: Date.now() });
+    const typeKey = orderTypeKey(orderType) || "default";
+    const keys = [
+      `shopping_cart:edit_payload:v2:${editKey}`,
+      `shopping_cart:edit_fallback:v1:${typeKey}`,
+      "shopping_cart:edit_fallback:v1:default",
+    ];
+    for (const storage of [window.sessionStorage, window.localStorage]) {
+      try {
+        keys.forEach((key) => storage.setItem(key, payload));
+        storage.setItem("shopping_cart:edit_pending:v2", JSON.stringify({ key: editKey, orderType, reason, ts: Date.now() }));
+        if (orderType) storage.setItem("shopping_cart:edit_target_type:v1", orderType);
+      } catch {}
+    }
+    return editKey;
+  } catch {
+    return "";
+  }
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -539,13 +567,40 @@ function Progress({ stage }) {
 }
 
 function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const moreRef = useRef(null);
+  const downloadRef = useRef(null);
+
   useEffect(() => {
     if (!group) return undefined;
     document.body.classList.add("co-modal-open");
-    const onKey = (event) => { if (event.key === "Escape") onClose(); };
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      if (downloadOpen || moreOpen) {
+        setDownloadOpen(false);
+        setMoreOpen(false);
+        return;
+      }
+      onClose();
+    };
+    const onPointerDown = (event) => {
+      if (moreOpen && moreRef.current && !moreRef.current.contains(event.target)) setMoreOpen(false);
+      if (downloadOpen && downloadRef.current && !downloadRef.current.contains(event.target)) setDownloadOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => { document.body.classList.remove("co-modal-open"); window.removeEventListener("keydown", onKey); };
-  }, [group, onClose]);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.body.classList.remove("co-modal-open");
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [group, onClose, moreOpen, downloadOpen]);
+
+  useEffect(() => {
+    setMoreOpen(false);
+    setDownloadOpen(false);
+  }, [group?.key, tab]);
 
   if (!group) return null;
   const maintenance = isMaintenance(group.orderType);
@@ -553,13 +608,41 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const archived = group.stage >= 5;
   const delivered = group.stage === 4;
   const shipping = group.stage === 3;
-  const canReceive = group.stage === 2 && group.hasApproved && !maintenance;
-  const canReview = group.stage <= 2 && !archived;
+
+  // Match the Classic Operations Orders action rules: workflow actions are
+  // tab-specific, while Archive/UnArchive live in the overflow menu.
+  const canReceive = tab === "approved" && group.stage === 2 && group.hasApproved && !maintenance;
+  const canRejectComponents = tab === "approved" && group.stage === 2 && !maintenance;
+  const canDeliver = tab === "received" && shipping;
+  const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
+  const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
+  const showDownload = !(maintenance && tab === "approved");
   const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
+
+  const menuAction = (action) => {
+    setMoreOpen(false);
+    onAction(action, group);
+  };
+
+  const exportAction = (kind) => {
+    setDownloadOpen(false);
+    onExport(kind, group, tab);
+  };
 
   return (
     <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
+        <div className="co-modal-more" ref={moreRef}>
+          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
+            <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
+          </button>
+          {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
+            {!archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+            {!archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+            {archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+          </div> : null}
+        </div>
+
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>
         <div className="next-operations-order-modal-summary" aria-label="Order summary">
@@ -578,17 +661,21 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           </div>
 
           <div className="co-modal-actions ro-actions ro-actions--right">
-            {canReview ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("approve", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Approve</button> : null}
-            {canReview ? <button type="button" className="ro-action-btn ro-action-btn--danger" onClick={() => onAction("reject", group)} disabled={busy}><ClassicOrderIcon name="x-circle" />Reject</button> : null}
-            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", group)} disabled={busy}><ClassicOrderIcon name="package" />Received by operations</button> : null}
+            {showDownload ? <div className="download-menu" ref={downloadRef}>
+              <button type="button" className="ro-action-btn ro-action-btn--light download-menu__btn" aria-haspopup="menu" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((value) => !value)} disabled={busy}>
+                <ClassicOrderIcon name="download" /><span>Download</span>
+              </button>
+              {downloadOpen ? <div className="download-menu__panel" role="menu" aria-label="Download options">
+                <button className="download-menu__item" role="menuitem" type="button" onClick={() => exportAction("pdf")} disabled={busy}><span>Download PDF</span><ClassicOrderIcon name="file-text" /></button>
+                <div className="download-menu__sep" role="separator" />
+                <button className="download-menu__item" role="menuitem" type="button" onClick={() => exportAction("excel")} disabled={busy}><span>Download Excel</span><ClassicOrderIcon name="grid" /></button>
+              </div> : null}
+            </div> : null}
+            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", group)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
             {maintenance && group.stage < 4 && !archived ? <a className="ro-action-btn ro-action-btn--light" href={`/next/maintenance-orders?tab=${shipping ? "in-progress" : "not-started"}`}><ClassicOrderIcon name="tool" />Open maintenance</a> : null}
-            {shipping ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
-            {delivered && orderTypeKey(group.orderType) === "requestproducts" ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("withdrawal", group)} disabled={busy}>Create Withdrawal</button> : null}
-            {delivered && orderTypeKey(group.orderType) === "withdrawproducts" ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("delivery", group)} disabled={busy}>Create Delivery</button> : null}
-            {!archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("archive", group)} disabled={busy}><ClassicOrderIcon name="archive" />Archive</button> : null}
-            {archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("unarchive", group)} disabled={busy}><ClassicOrderIcon name="rotate-ccw" />UnArchive</button> : null}
-            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport("pdf", group, tab)} disabled={busy}><ClassicOrderIcon name="download" />PDF</button>
-            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport("excel", group, tab)} disabled={busy}><ClassicOrderIcon name="download" />Excel</button>
+            {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
+            {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
+            {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
           </div>
 
           {group.receiptEntries.length ? <div className="next-classic-receipt-list"><div className="co-submodal-label">Receipt photos</div><div>{group.receiptEntries.map((entry, index) => <a className="ro-action-btn ro-action-btn--light" href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}><ClassicOrderIcon name="image" />{entry.name}</a>)}</div></div> : null}
@@ -600,7 +687,26 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
               const received = receivedQuantity(item);
               const remaining = remainingQuantity(item);
               const vars = STATUS_COLORS[state.className.replace(/^status-/, "")] || STATUS_COLORS["under-supervision"];
-              return <div className="co-item" key={text(item?.id) || index}><div className="co-item-left"><div className="co-item-title"><div className="co-item-name">{text(item?.productName) || "Product"}</div></div><div className="co-item-sub">Requested: {formatQuantity(base)} · Received: {formatQuantity(received)} · Remaining: {formatQuantity(remaining)}</div>{text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}{text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}{text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}</div><div className="co-item-right"><div className="co-item-total">{formatMoney(itemTotal(item))}</div><span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span></div></div>;
+              const safeUrl = text(item?.productUrl ?? item?.product_url);
+              const itemId = text(item?.id);
+              const itemName = text(item?.productName) || "Product";
+              return <div className="co-item" key={itemId || index}>
+                <div className="co-item-left">
+                  <div className="co-item-title">
+                    <div className="co-item-name">{itemName}</div>
+                    {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
+                  </div>
+                  <div className="co-item-sub">Requested: {formatQuantity(base)} · Received: {formatQuantity(received)} · Remaining: {formatQuantity(remaining)}</div>
+                  {text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}
+                  {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
+                  {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
+                </div>
+                <div className="co-item-right">
+                  <div className="co-item-total">{formatMoney(itemTotal(item))}</div>
+                  <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
+                  {canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={() => onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName })}><ClassicOrderIcon name="x" /> Reject</button> : null}
+                </div>
+              </div>;
             })}
           </div>
         </div>
@@ -613,7 +719,17 @@ function RejectModal({ state, busy, error, onCancel, onSubmit }) {
   const [reason, setReason] = useState("");
   useEffect(() => setReason(""), [state?.group?.key]);
   if (!state) return null;
-  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Reject operations order</div><div className="co-submodal-sub">Enter the reason that will be saved for every selected component.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Rejected reason</label><textarea className="co-submodal-input next-classic-textarea" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--danger" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button></div></form></div>;
+  const componentScope = state?.group?.actionScope === "component";
+  const title = componentScope ? "Reject component" : "Reject operations order";
+  const subtitle = componentScope ? `Write the reason before rejecting ${text(state?.group?.actionItemName) || "this component"}.` : "Enter the reason that will be saved for every selected component.";
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">{title}</div><div className="co-submodal-sub">{subtitle}</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Rejected reason</label><textarea className="co-submodal-input next-classic-textarea" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--danger" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button></div></form></div>;
+}
+
+function EditPasswordModal({ state, busy, error, onCancel, onSubmit }) {
+  const [password, setPassword] = useState("");
+  useEffect(() => setPassword(""), [state?.group?.key]);
+  if (!state) return null;
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit operations order</div><div className="co-submodal-sub">Enter the Operations Orders admin password to continue editing this order.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Checking…" : "Continue"}</button></div></form></div>;
 }
 
 function ArchiveModal({ state, busy, error, onCancel, onSubmit }) {
@@ -747,14 +863,33 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     setBusy(true);
     setActionError("");
     try {
-      if (action === "approve") {
+      if (action === "edit") {
+        const password = text(payload);
+        if (!password) throw new Error("Admin password is required.");
+        const response = await fetch("/api/orders/operations/edit/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }),
+        });
+        const data = await readJson(response);
+        if (response.status === 401) throw new Error("Wrong password. Please try again.");
+        if (!response.ok) throw new Error(data?.error || "Failed to start editing this order.");
+        const editKey = writeOperationsEditTransfer(data, group);
+        const editUrl = new URL("/next/orders/new", window.location.origin);
+        editUrl.searchParams.set("edit", "1");
+        if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
+        if (editKey) editUrl.searchParams.set("editKey", editKey);
+        window.location.href = `${editUrl.pathname}${editUrl.search}`;
+        return;
+      } else if (action === "approve") {
         await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Approved" });
         await completeAction("Order approved by operations.", "approved");
       } else if (action === "reject") {
         const reason = text(payload);
         if (!reason) throw new Error("Rejected reason is required.");
         await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Rejected", rejectedReason: reason });
-        await completeAction("Order rejected and the reason was saved.", "rejected");
+        await completeAction(group.actionScope === "component" ? "Component rejected and the reason was saved." : "Order rejected and the reason was saved.", group.actionScope === "component" ? "approved" : "rejected");
       } else if (action === "receive") {
         const quantities = {};
         group.items.forEach((item) => {
@@ -881,6 +1016,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
 
       <OrderModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onExport={exportOrder} />
       <RejectModal state={actionState?.action === "reject" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
+      <EditPasswordModal state={actionState?.action === "edit" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <ArchiveModal state={actionState?.action === "archive" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <ReceiveModal state={actionState?.action === "receive" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <ConfirmModal state={["approve", "deliver", "unarchive", "withdrawal", "delivery"].includes(actionState?.action) ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
