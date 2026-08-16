@@ -135,11 +135,45 @@ export default function UserProfileMenu({ account }) {
   const [panelStyle, setPanelStyle] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [profileAccount, setProfileAccount] = useState(() => account || {});
 
-  const displayName = String(account?.name || account?.username || "User").trim() || "User";
-  const role = String(account?.position || account?.department || "").trim();
-  const photoUrl = String(account?.photoUrl || "").trim();
-  const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
+  useEffect(() => {
+    setProfileAccount(account || {});
+  }, [account]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function handleUserUpdated(event) {
+      const supplied = event?.detail?.account;
+      if (supplied && typeof supplied === "object") {
+        if (!cancelled) setProfileAccount((current) => ({ ...current, ...supplied }));
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/account?_refresh=${encodeURIComponent(String(Date.now()))}`, {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+        });
+        if (!response.ok) return;
+        const fresh = await response.json().catch(() => null);
+        if (!cancelled && fresh && typeof fresh === "object") setProfileAccount((current) => ({ ...current, ...fresh }));
+      } catch {}
+    }
+
+    window.addEventListener("user:updated", handleUserUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("user:updated", handleUserUpdated);
+    };
+  }, []);
+
+  const displayName = String(profileAccount?.name || profileAccount?.username || "User").trim() || "User";
+  const role = String(profileAccount?.position || profileAccount?.department || "").trim();
+  const photoUrl = String(profileAccount?.photoUrl || "").trim();
+  const allowedPages = Array.isArray(profileAccount?.allowedPages) ? profileAccount.allowedPages : [];
   const canSeeHistory = useMemo(() => hasPermission(allowedPages, HISTORY_PERMISSIONS), [allowedPages]);
   const canSeeBackup = useMemo(() => hasPermission(allowedPages, BACKUP_PERMISSIONS), [allowedPages]);
 
