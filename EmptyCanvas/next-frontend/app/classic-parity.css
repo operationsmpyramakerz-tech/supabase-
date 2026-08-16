@@ -3397,6 +3397,13 @@ body.current-orders-page .next-classic-orders-parity .next-current-order-progres
   height: 12px;
 }
 
+body.current-orders-page .next-classic-orders-parity .next-current-order-progress--icon-only {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  gap: 0;
+}
+
 body.current-orders-page .next-classic-orders-parity .next-current-order-progress strong {
   font-size: 9px;
   font-weight: 900;
@@ -3621,6 +3628,12 @@ body.current-orders-page .next-classic-orders-parity .next-current-order-delete-
     min-width: 42px;
     height: 30px;
     padding: 0 7px;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-progress--icon-only {
+    width: 30px;
+    min-width: 30px;
+    padding: 0;
   }
 
   body.current-orders-page .next-classic-orders-parity .next-current-order-progress strong {
