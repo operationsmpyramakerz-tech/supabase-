@@ -5195,3 +5195,662 @@ body.operations-orders-page .next-classic-orders-parity .sv-qty-new {
     padding: 10px 14px 13px;
   }
 }
+
+/* Stage 2C — Maintenance Orders Classic workflow parity ---------------------
+ * React keeps the Classic Maintenance Orders workflow and actions while the
+ * controls remain touch-friendly inside the Next.js shell.
+ */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-orders-toolbar-wrap {
+  width: 100%;
+  margin: 0 0 14px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar {
+  gap: 9px;
+  margin: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar__scroll {
+  min-width: 0;
+  border-radius: 18px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .portfolio-tabs {
+  gap: 5px;
+  min-width: max-content;
+  padding: 4px;
+  border-radius: 18px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .tab-portfolio {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 92px;
+  min-height: 48px;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 14px;
+  font-family: inherit;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .order-status-tab__icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .order-status-tab__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .order-status-tab__label {
+  display: block !important;
+  max-width: none;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar__divider {
+  height: 42px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__button {
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 15px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__panel {
+  top: calc(100% + 9px);
+  width: min(330px, calc(100vw - 28px));
+  border-radius: 20px;
+  padding: 10px;
+  z-index: 180;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__option {
+  min-height: 58px;
+  padding: 9px 10px;
+  border-radius: 15px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-orders-list-surface {
+  width: 100%;
+  margin: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity #requested-list {
+  width: 100%;
+  margin: 0;
+  gap: 10px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-color: #e7ebf1;
+  border-radius: 20px;
+  padding: 12px 13px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .055);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card:hover {
+  transform: translateY(-1px);
+  border-color: #dce2ea;
+  box-shadow: 0 15px 30px rgba(15, 23, 42, .08);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb svg {
+  width: 22px;
+  height: 22px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-title {
+  font-size: 16px;
+  letter-spacing: -.015em;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-qty {
+  padding: 4px 7px;
+  border: 1px solid #edf1f5;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-divider {
+  margin: 9px 0;
+  background: #eef2f6;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-est-label {
+  font-size: 10px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-est-value {
+  margin-top: 3px;
+  font-size: 18px;
+  letter-spacing: -.025em;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-status-btn {
+  min-height: 30px;
+  padding: 6px 11px;
+  font-size: 10px;
+  box-shadow: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-btn {
+  display: grid !important;
+  place-items: center !important;
+  grid-template-columns: 1fr !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: #020617 !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(2, 6, 23, .14);
+  cursor: pointer;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-btn svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+body.page-maintenance-orders .next-maintenance-creator-popover {
+  z-index: 2200;
+  width: min(330px, calc(100vw - 24px));
+}
+
+body.page-maintenance-orders .next-maintenance-creator-popover .creator-profile-window {
+  max-height: min(520px, calc(100dvh - 28px));
+  overflow: auto;
+}
+
+body.page-maintenance-orders .next-maintenance-creator-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog {
+  width: min(680px, calc(100vw - 24px));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-track-pill {
+  grid-template-columns: auto 1fr auto 1fr auto 1fr auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-done-meta {
+  margin-bottom: 12px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-actions {
+  margin-bottom: 12px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-items {
+  margin-top: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+  align-items: center;
+  gap: 16px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item .co-item-left,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item .co-item-right {
+  min-width: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item .co-item-right {
+  flex: 1 1 46%;
+  text-align: right;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item .co-item-issue-desc {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-receipt-overlay {
+  z-index: 2400;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  width: min(760px, calc(100vw - 28px));
+  max-width: 760px;
+  max-height: min(90dvh, 820px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card {
+  overflow: visible;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__trigger {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid #dfe5ec;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__trigger svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: #64748b;
+  transition: transform .16s ease;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select.is-open .next-maintenance-modern-select__trigger {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, .15);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select.is-open .next-maintenance-modern-select__trigger svg {
+  transform: rotate(180deg);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 290px;
+  overflow: hidden;
+  padding: 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, .16);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__search {
+  padding: 2px 2px 7px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__search input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  outline: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__options {
+  max-height: 228px;
+  overflow: auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__option {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__option:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__option.is-selected {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__option svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__empty {
+  padding: 12px 10px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row .next-maintenance-modern-select__menu {
+  z-index: 95;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .req-maintenance-spare-add__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, .08);
+  font-size: 14px;
+  line-height: 1;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-receipt-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-receipt-numbers .co-submodal-inputs {
+  display: grid;
+  gap: 7px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-upload-field {
+  width: 100%;
+  font-family: inherit;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-upload-field .co-upload-field__meta {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-maintenance-receipt-photo {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+  color: #334155;
+  text-decoration: none;
+}
+
+body.page-maintenance-orders .next-maintenance-receipt-photo img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+body.page-maintenance-orders .next-maintenance-receipt-photo span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+@media (max-width: 768px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar {
+    gap: 7px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .portfolio-tabs {
+    gap: 4px;
+    padding: 3px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .tab-portfolio {
+    min-width: 82px;
+    min-height: 44px;
+    gap: 7px;
+    padding: 6px 8px;
+    border-radius: 12px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .order-status-tab__icon {
+    flex-basis: 27px;
+    width: 27px;
+    height: 27px;
+    border-radius: 9px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .order-status-tab__label {
+    font-size: 10px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar__divider {
+    height: 38px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__button {
+    min-height: 42px;
+    padding: 0 11px;
+    border-radius: 13px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+    align-items: flex-start;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item .co-item-right {
+    text-align: left;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+    width: min(100% - 16px, 760px);
+    max-height: 94dvh;
+  }
+}
+
+@media (max-width: 560px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .tab-portfolio {
+    min-width: 70px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .order-status-tab__label {
+    max-width: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar__divider {
+    display: none;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__button {
+    position: relative;
+    width: 42px;
+    min-width: 42px;
+    max-width: 42px;
+    height: 42px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__button-label {
+    display: none;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__panel {
+    position: fixed;
+    top: auto;
+    right: 10px;
+    bottom: 14px;
+    left: 10px;
+    width: auto;
+    max-height: min(72dvh, 520px);
+    overflow-y: auto;
+    border-radius: 22px;
+    padding: 12px;
+    box-shadow: 0 24px 70px rgba(2, 6, 23, .25);
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+    border-radius: 17px;
+    padding: 10px 11px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-title {
+    font-size: 14px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-est-value {
+    font-size: 16px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-status-btn {
+    min-height: 28px;
+    max-width: 105px;
+    padding: 5px 9px;
+    font-size: 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-btn {
+    width: 31px !important;
+    min-width: 31px !important;
+    height: 31px !important;
+  }
+
+  body.page-maintenance-orders .next-maintenance-creator-popover {
+    left: 10px !important;
+    right: 10px !important;
+    width: auto;
+  }
+
+  body.page-maintenance-orders .next-maintenance-creator-fields {
+    grid-template-columns: 1fr;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog {
+    width: min(100% - 12px, 680px);
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-actions .ro-action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modern-select__menu {
+    max-height: 250px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-receipt-dialog {
+    width: min(100% - 16px, 560px);
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-upload-field .co-upload-field__meta {
+    max-width: 205px;
+  }
+}
+
+/* Maintenance Orders — receipt number rows (classic parity) */
+.next-maintenance-receipt-inputs {
+  display: grid;
+  gap: 8px;
+}
+.next-maintenance-receipt-input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.next-maintenance-receipt-input-row .co-submodal-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.next-maintenance-receipt-input-remove {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #b42318;
+  font: 700 20px/1 Arial, sans-serif;
+  cursor: pointer;
+}
+.next-maintenance-receipt-input-remove:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
