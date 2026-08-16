@@ -438,12 +438,12 @@ function MaintenanceCard({ group, onOpen, onCreator }) {
     <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-thumb co-thumb--order-type" style={thumbStyle} title="Request Maintenance"><ClassicOrderIcon name="tool" /></div>
-        <div className="co-main"><div className="co-title">{group.orderIdLabel}</div><div className="co-sub">{formatDate(group.latestCreated)}</div><div className="co-createdby">{group.createdByName || "—"}</div></div>
+        <div className="co-main"><div className="co-title">{group.orderIdLabel}</div><div className="co-sub">{formatDate(group.latestCreated)}</div></div>
         <div className="co-qty">x{group.items.length}</div>
       </div>
       <div className="co-divider" />
       <div className="co-bottom">
-        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div>{group.operationsByName ? <div className="co-received-by">Received by: {group.operationsByName}</div> : null}</div>
+        <div className="co-est next-maintenance-card-note"><div className="co-est-label">Maintenance request</div></div>
         <div className="co-actions">
           <span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span>
           <button type="button" className="co-right-ico co-creator-btn next-maintenance-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
@@ -495,7 +495,13 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
       <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
         <div className="co-modal-dialog next-maintenance-details-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} maintenance details`}>
           <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-          <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Maintenance</div></div></div>
+          <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Request Maintenance</div></div></div>
+          <div className="next-maintenance-order-modal-summary" aria-label="Maintenance order summary">
+            <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
+            <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+            <div><span>Components</span><strong>{group.items.length}</strong></div>
+            <div className="next-maintenance-order-modal-summary__status"><span>Status</span><strong>{group.state.label}</strong></div>
+          </div>
           <Progress stage={group.stage} />
           <div className="co-modal-body">
             {showDoneMeta ? <div className="co-modal-meta next-maintenance-done-meta">
@@ -637,7 +643,7 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }
     <div className="co-submodal-overlay is-open next-maintenance-log-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
       <form className="co-submodal-dialog req-maintenance-log-dialog next-maintenance-log-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
         <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close" />
-        <div className="co-submodal-header"><div><div className="co-submodal-title">Log Maintenance</div><div className="co-submodal-sub">Save the maintenance work details for this order.</div></div></div>
+        <div className="co-submodal-header next-maintenance-log-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div><div className="co-submodal-sub">Save the maintenance work details for this order.</div></div></div>
         <div className="co-submodal-body req-maintenance-log-body">
           <div className="req-maintenance-log-items">
             {logs.map((entry, logIndex) => <section className="req-maintenance-log-card next-maintenance-log-card" key={entry.orderId || logIndex}>
@@ -989,7 +995,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         </div>
       </div>
 
-      <section className="card next-maintenance-orders-list-surface">
+      <section className="next-maintenance-orders-list-surface">
         <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
       </section>
 
