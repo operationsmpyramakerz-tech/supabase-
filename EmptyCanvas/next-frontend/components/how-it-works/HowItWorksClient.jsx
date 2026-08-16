@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MODULES, PAGE_FLOW } from "./how-it-works-data";
 
 const ROUTE_MAP = {
@@ -233,12 +233,44 @@ function routeFor(module) {
   return ROUTE_MAP[module?.id] || fallbackRoute(module?.route) || (String(module?.route || "").startsWith("/") ? module.route : "");
 }
 
+function GuideIcon({ name = "book", size = 18 }) {
+  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" };
+  const paths = {
+    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>,
+    home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></>,
+    user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+    external: <><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6"/></>,
+    chevron: <path d="m6 9 6 6 6-6"/>,
+    book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></>,
+    layers: <><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></>,
+    workflow: <><rect x="3" y="3" width="6" height="6" rx="2"/><rect x="15" y="15" width="6" height="6" rx="2"/><path d="M9 6h4a4 4 0 0 1 4 4v5"/><path d="m14 12 3 3 3-3"/></>,
+    list: <><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></>,
+    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></>,
+    check: <path d="m5 12 4 4L19 6"/>,
+    plus: <><path d="M12 5v14"/><path d="M5 12h14"/></>,
+    minus: <path d="M5 12h14"/>,
+  };
+  return <svg {...common}>{paths[name] || paths.book}</svg>;
+}
+
+function moduleIconName(module) {
+  if (module?.type === "shared") return "shield";
+  const key = normalize(`${module?.id || ""} ${module?.title || ""}`);
+  if (key.includes("home")) return "home";
+  if (key.includes("account") || key.includes("user")) return "user";
+  if (key.includes("order") || key.includes("task") || key.includes("event")) return "workflow";
+  return "layers";
+}
+
 function FlowCard({ flow, index }) {
   const steps = Array.isArray(flow?.steps) ? flow.steps : [];
   return (
     <article className="next-sop-flow-card">
       <header>
-        <div><span>Flow {index + 1}</span><h4>{flow?.title || `Process ${index + 1}`}</h4></div>
+        <div className="next-sop-flow-heading">
+          <span className="next-sop-flow-number">{index + 1}</span>
+          <div><small>Process flow</small><h4>{flow?.title || `Process ${index + 1}`}</h4></div>
+        </div>
         {flow?.outcome ? <em>{flow.outcome}</em> : null}
       </header>
       {flow?.summary ? <p>{flow.summary}</p> : null}
@@ -246,47 +278,105 @@ function FlowCard({ flow, index }) {
         {steps.map((step, stepIndex) => {
           const label = typeof step === "string" ? step : (step?.label || step?.title || `Step ${stepIndex + 1}`);
           const note = typeof step === "string" ? "" : (step?.note || step?.body || "");
-          return <div className="next-sop-flow-step" key={`${label}-${stepIndex}`}><b>{stepIndex + 1}</b><strong>{label}</strong>{note ? <small>{note}</small> : null}</div>;
+          return (
+            <div className="next-sop-flow-step" key={`${label}-${stepIndex}`}>
+              <b>{stepIndex + 1}</b>
+              <strong>{label}</strong>
+              {note ? <small>{note}</small> : null}
+            </div>
+          );
         })}
       </div>
     </article>
   );
 }
 
-function ModuleCard({ module }) {
+function ModuleCard({ module, expanded, onToggle }) {
   const destination = routeFor(module);
+  const flowTotal = Array.isArray(module?.flows) ? module.flows.length : 0;
+  const stepTotal = Array.isArray(module?.steps) ? module.steps.length : 0;
+  const ruleTotal = Array.isArray(module?.rules) ? module.rules.length : 0;
+
   return (
-    <section className="next-sop-module" id={module.id}>
+    <section className={`next-sop-module${expanded ? " is-expanded" : ""}`} id={module.id}>
       <div className="next-sop-module-head">
-        <div className="next-sop-module-title">
-          <span className="next-sop-module-icon">{String(module?.title || "G").slice(0, 1)}</span>
-          <div><small>{module?.eyebrow || "Guide"}</small><h3>{module?.title || "Guide section"}</h3><p>{module?.overview || ""}</p></div>
-        </div>
-        <div className="next-sop-route-wrap">
-          <code>{destination || module?.route || "In-app guide"}</code>
-          {destination ? <a href={destination}>Open module →</a> : null}
-        </div>
+        <button
+          type="button"
+          className="next-sop-module-toggle"
+          aria-expanded={expanded}
+          aria-controls={`${module.id}-details`}
+          onClick={onToggle}
+        >
+          <span className="next-sop-module-icon"><GuideIcon name={moduleIconName(module)} size={19} /></span>
+          <span className="next-sop-module-copy">
+            <small>{module?.eyebrow || "Guide"}</small>
+            <strong>{module?.title || "Guide section"}</strong>
+            <span>{module?.overview || ""}</span>
+          </span>
+          <span className="next-sop-module-counters" aria-hidden="true">
+            {flowTotal ? <span><GuideIcon name="workflow" size={13} />{flowTotal}</span> : null}
+            {stepTotal ? <span><GuideIcon name="list" size={13} />{stepTotal}</span> : null}
+            {ruleTotal ? <span><GuideIcon name="shield" size={13} />{ruleTotal}</span> : null}
+          </span>
+          <span className="next-sop-module-chevron"><GuideIcon name="chevron" size={18} /></span>
+        </button>
+        {destination ? (
+          <a className="next-sop-open-module" href={destination} title={`Open ${module?.title || "module"}`}>
+            <GuideIcon name="external" size={15} /><span>Open</span>
+          </a>
+        ) : null}
       </div>
 
-      {Array.isArray(module?.controls) && module.controls.length ? <div className="next-sop-controls">{module.controls.map((item) => <span key={item}>{item}</span>)}</div> : null}
+      {expanded ? (
+        <div className="next-sop-module-body" id={`${module.id}-details`}>
+          <div className="next-sop-module-meta">
+            {destination || module?.route ? <code>{destination || module.route}</code> : <span>In-app guide</span>}
+            {Array.isArray(module?.controls) && module.controls.length ? (
+              <div className="next-sop-controls">{module.controls.map((item) => <span key={item}>{item}</span>)}</div>
+            ) : null}
+          </div>
 
-      <div className="next-sop-summary-grid">
-        <article><span>Purpose</span><p>{module?.purpose || "—"}</p></article>
-        <article><span>When to use</span><p>{module?.whenToUse || "—"}</p></article>
-        <article><span>Expected result</span><p>{module?.result || "—"}</p></article>
-      </div>
+          <div className="next-sop-summary-grid">
+            <article><span>Purpose</span><p>{module?.purpose || "—"}</p></article>
+            <article><span>When to use</span><p>{module?.whenToUse || "—"}</p></article>
+            <article><span>Expected result</span><p>{module?.result || "—"}</p></article>
+          </div>
 
-      {Array.isArray(module?.flows) && module.flows.length ? <div className="next-sop-block"><div className="next-sop-block-title">Process flows</div><div className="next-sop-flows">{module.flows.map((flow, index) => <FlowCard flow={flow} index={index} key={`${module.id}-flow-${index}`} />)}</div></div> : null}
+          {flowTotal ? (
+            <div className="next-sop-block">
+              <div className="next-sop-block-title"><GuideIcon name="workflow" size={14} /> Process flows</div>
+              <div className="next-sop-flows">{module.flows.map((flow, index) => <FlowCard flow={flow} index={index} key={`${module.id}-flow-${index}`} />)}</div>
+            </div>
+          ) : null}
 
-      {Array.isArray(module?.steps) && module.steps.length ? <div className="next-sop-block"><div className="next-sop-block-title">Recommended workflow</div><div className="next-sop-steps">{module.steps.map((step, index) => <article key={`${module.id}-step-${index}`}><b>{index + 1}</b><h4>{step?.title || `Step ${index + 1}`}</h4><p>{step?.body || ""}</p></article>)}</div></div> : null}
+          {stepTotal ? (
+            <div className="next-sop-block">
+              <div className="next-sop-block-title"><GuideIcon name="list" size={14} /> Recommended workflow</div>
+              <div className="next-sop-steps">
+                {module.steps.map((step, index) => (
+                  <article key={`${module.id}-step-${index}`}>
+                    <b>{index + 1}</b><h4>{step?.title || `Step ${index + 1}`}</h4><p>{step?.body || ""}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
-      {Array.isArray(module?.rules) && module.rules.length ? <div className="next-sop-block"><div className="next-sop-block-title">Rules & controls</div><div className="next-sop-rules">{module.rules.map((rule, index) => <article key={`${module.id}-rule-${index}`}><span>✓</span><p>{rule}</p></article>)}</div></div> : null}
+          {ruleTotal ? (
+            <div className="next-sop-block">
+              <div className="next-sop-block-title"><GuideIcon name="shield" size={14} /> Rules & controls</div>
+              <div className="next-sop-rules">{module.rules.map((rule, index) => <article key={`${module.id}-rule-${index}`}><span><GuideIcon name="check" size={14} /></span><p>{rule}</p></article>)}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
 
 export default function HowItWorksClient({ account }) {
   const [query, setQuery] = useState("");
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
   const modules = useMemo(() => visibleModulesFor(account), [account]);
   const filtered = useMemo(() => {
     const needle = normalize(query);
@@ -295,46 +385,109 @@ export default function HowItWorksClient({ account }) {
 
   const flowCount = modules.reduce((sum, module) => sum + (Array.isArray(module?.flows) ? module.flows.length : 0), 0);
   const stepCount = modules.reduce((sum, module) => sum + (Array.isArray(module?.steps) ? module.steps.length : 0), 0);
+  const allowedCount = Array.isArray(account?.allowedPages) ? account.allowedPages.length : 0;
+
+  useEffect(() => {
+    if (!modules.length) return;
+    setExpandedIds((current) => current.size ? current : new Set([modules[0].id]));
+  }, [modules]);
+
+  const toggleModule = (id) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const jumpTo = (id) => {
-    const target = typeof document !== "undefined" ? document.getElementById(id) : null;
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    setExpandedIds((current) => {
+      if (current.has(id)) return current;
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target = document.getElementById(id);
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  };
+
+  const allFilteredExpanded = filtered.length > 0 && filtered.every((module) => expandedIds.has(module.id));
+  const toggleAll = () => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (allFilteredExpanded) filtered.forEach((module) => next.delete(module.id));
+      else filtered.forEach((module) => next.add(module.id));
+      return next;
+    });
   };
 
   return (
     <section className="next-sop-page">
       <article className="next-sop-hero">
-        <div>
-          <span className="pill">Permission-aware operations guide</span>
-          <h2>How the Operations Hub works for {account?.name || account?.username || "your account"}</h2>
-          <p>This guide keeps the original S.O.P content, but now it is rendered inside the Next.js workspace and filtered to the pages currently assigned to your account.</p>
-          <div className="next-sop-hero-actions"><a href="/next/home" className="primary-button">Open Home</a><a href="/next/account" className="secondary-button">My Account</a><a href="/how-it-works?classic=1" className="secondary-button">Classic guide</a></div>
+        <div className="next-sop-hero-copy">
+          <span className="next-sop-eyebrow"><GuideIcon name="book" size={14} /> Operations guide</span>
+          <h2>How it works</h2>
+          <p>A permission-aware guide for <strong>{account?.name || account?.username || "your account"}</strong>. Search a task, page, rule, proof, or status, then open only the section you need.</p>
+          <div className="next-sop-hero-actions">
+            <a href="/next/home" className="primary-button"><GuideIcon name="home" size={15} /> Open Home</a>
+            <a href="/next/account" className="secondary-button"><GuideIcon name="user" size={15} /> My Account</a>
+            <a href="/how-it-works?classic=1" className="secondary-button"><GuideIcon name="external" size={15} /> Classic guide</a>
+          </div>
         </div>
-        <div className="next-sop-kpis">
-          <article><strong>{modules.length}</strong><span>Visible sections</span></article>
-          <article><strong>{flowCount}</strong><span>Process flows</span></article>
-          <article><strong>{stepCount}</strong><span>Workflow steps</span></article>
-          <article><strong>{Array.isArray(account?.allowedPages) ? account.allowedPages.length : 0}</strong><span>Allowed pages</span></article>
+        <div className="next-sop-kpis" aria-label="Guide summary">
+          <article><span className="next-sop-kpi-icon"><GuideIcon name="layers" size={18} /></span><div><strong>{modules.length}</strong><span>Visible sections</span></div></article>
+          <article><span className="next-sop-kpi-icon"><GuideIcon name="workflow" size={18} /></span><div><strong>{flowCount}</strong><span>Process flows</span></div></article>
+          <article><span className="next-sop-kpi-icon"><GuideIcon name="list" size={18} /></span><div><strong>{stepCount}</strong><span>Workflow steps</span></div></article>
+          <article><span className="next-sop-kpi-icon"><GuideIcon name="shield" size={18} /></span><div><strong>{allowedCount}</strong><span>Allowed pages</span></div></article>
         </div>
       </article>
 
       <article className="next-sop-toolbar">
-        <label><span>Search the guide</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search pages, actions, rules, proofs..." /></label>
-        <div><strong>{filtered.length}</strong><span>{query ? ` of ${modules.length} matched` : " sections available"}</span></div>
+        <div className="next-sop-search-wrap">
+          <GuideIcon name="search" size={18} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search pages, actions, rules, proofs..."
+            aria-label="Search the guide"
+          />
+          {query ? <button type="button" className="next-sop-search-clear" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}
+        </div>
+        <div className="next-sop-toolbar-actions">
+          <span className="next-sop-result-count"><strong>{filtered.length}</strong><span>{query ? `of ${modules.length} matched` : "sections"}</span></span>
+          {filtered.length ? <button type="button" className="next-sop-expand-button" onClick={toggleAll}><GuideIcon name={allFilteredExpanded ? "minus" : "plus"} size={15} />{allFilteredExpanded ? "Collapse all" : "Expand all"}</button> : null}
+        </div>
       </article>
 
-      <div className="next-sop-jumpbar" aria-label="Guide sections">
-        {filtered.map((module) => <button type="button" key={`jump-${module.id}`} onClick={() => jumpTo(module.id)}>{module.title}</button>)}
-      </div>
+      {filtered.length ? (
+        <nav className="next-sop-jumpbar" aria-label="Guide sections">
+          {filtered.map((module) => (
+            <button type="button" key={`jump-${module.id}`} className={expandedIds.has(module.id) ? "is-active" : ""} onClick={() => jumpTo(module.id)}>{module.title}</button>
+          ))}
+        </nav>
+      ) : null}
 
       <div className="next-sop-sections">
-        {filtered.length ? filtered.map((module) => <ModuleCard module={module} key={module.id} />) : <article className="wide-card next-sop-empty"><h3>No guide section matched</h3><p>Try a page name, workflow action, proof type, or status.</p><button type="button" className="secondary-button" onClick={() => setQuery("")}>Clear search</button></article>}
+        {filtered.length ? filtered.map((module) => (
+          <ModuleCard module={module} expanded={expandedIds.has(module.id)} onToggle={() => toggleModule(module.id)} key={module.id} />
+        )) : (
+          <article className="wide-card next-sop-empty">
+            <span className="next-sop-empty-icon"><GuideIcon name="search" size={22} /></span>
+            <h3>No guide section matched</h3>
+            <p>Try a page name, workflow action, proof type, or status.</p>
+            <button type="button" className="secondary-button" onClick={() => setQuery("")}>Clear search</button>
+          </article>
+        )}
       </div>
 
       <article className="wide-card next-sop-note">
-        <strong>Permission-aware content</strong>
-        <p>If Users Center changes your page access, reload this page to rebuild the guide from the latest account permissions. Shared rules, Home, and Account remain visible to every signed-in user.</p>
+        <span><GuideIcon name="shield" size={17} /></span>
+        <div><strong>Permission-aware content</strong><p>The guide is rebuilt from the page access assigned to your account. If Users Center changes your permissions, reload this page to see the latest sections.</p></div>
       </article>
     </section>
   );
