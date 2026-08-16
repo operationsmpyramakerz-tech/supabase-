@@ -257,16 +257,23 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
   const [activeDetail, setActiveDetail] = useState(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("updated-desc");
   const [busy, setBusy] = useState(false);
   const [detailBusy, setDetailBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
-  const [addDialog, setAddDialog] = useState(false);
   const [folderMenu, setFolderMenu] = useState("");
   const [detailEdit, setDetailEdit] = useState(false);
+  const [createMode, setCreateMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editAdminPassword, setEditAdminPassword] = useState("");
+  const [draftErrors, setDraftErrors] = useState({ name: "", items: "" });
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [productQty, setProductQty] = useState(1);
   const passwordResolver = useRef(null);
+  const pickerRef = useRef(null);
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -285,30 +292,34 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   useEffect(() => {
     const close = (event) => {
       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+      if (pickerRef.current && !pickerRef.current.contains(event.target)) setProductPickerOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      setFolderMenu("");
+      setProductPickerOpen(false);
     };
     document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
   const filteredKits = useMemo(() => {
     const needle = lower(search);
-    const rows = kits.filter((kit) => !needle || [kit.name, kit.createdBy].some((value) => lower(value).includes(needle)));
-    return rows.sort((a, b) => {
-      if (sort === "name-asc") return a.name.localeCompare(b.name);
-      if (sort === "items-desc") return b.itemsCount - a.itemsCount || a.name.localeCompare(b.name);
-      if (sort === "created-desc") return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-    });
-  }, [kits, search, sort]);
+    return kits.filter((kit) => !needle || [kit.name, kit.createdBy].some((value) => lower(value).includes(needle)));
+  }, [kits, search]);
 
-  const stats = useMemo(() => ({
-    folders: kits.length,
-    components: kits.reduce((sum, kit) => sum + kit.itemsCount, 0),
-    owned: kits.filter((kit) => kit.canEdit).length,
-    average: kits.length ? kits.reduce((sum, kit) => sum + kit.itemsCount, 0) / kits.length : 0,
-  }), [kits]);
+  const filteredProducts = useMemo(() => {
+    const needle = lower(productSearch);
+    return products
+      .filter((product) => !needle || [product.name, product.displayId, product.unit, firstTag(product)].some((value) => lower(value).includes(needle)))
+      .slice(0, 120);
+  }, [products, productSearch]);
 
   const enrichedRows = useMemo(() => {
     const items = Array.isArray(activeDetail?.items) ? activeDetail.items.map(normalizeItem) : [];
@@ -335,6 +346,8 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     return acc;
   }, { items: 0, quantity: 0, value: 0 }), [enrichedRows]);
 
+  const selectedProduct = selectedProductId ? productMap.get(selectedProductId) : null;
+
   const notify = (message, type = "success", title = "Kits") => {
     setToast({ message, type, title });
     window.setTimeout(() => setToast((current) => current?.message === message ? null : current), 4500);
@@ -350,20 +363,43 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     return normalized;
   };
 
-  const syncDetail = (body) => {
-    const kit = normalizeKit(body?.kit || activeDetail?.kit || {});
+  const setDetailFromBody = (body) => {
+    const kit = normalizeKit(body?.kit || {});
     const items = (Array.isArray(body?.items) ? body.items : []).map(normalizeItem);
     setActiveDetail({ kit, items });
-    syncKit({ ...kit, itemsCount: items.length });
+    setEditName(kit.name || "");
+    setKits((current) => current.map((entry) => entry.id === kit.id ? { ...kit, itemsCount: items.length } : entry));
+    return { kit, items };
+  };
+
+  const resetDetailEditor = () => {
+    setDetailEdit(false);
+    setCreateMode(false);
+    setEditAdminPassword("");
+    setEditName("");
+    setDraftErrors({ name: "", items: "" });
+    setProductPickerOpen(false);
+    setProductSearch("");
+    setSelectedProductId("");
+    setProductQty(1);
+  };
+
+  const backToKits = () => {
+    setActiveDetail(null);
+    resetDetailEditor();
   };
 
   const loadKit = async (kitId, options = {}) => {
-    setDetailEdit(Boolean(options.edit));
+    const edit = Boolean(options.edit);
     setFolderMenu("");
+    setCreateMode(false);
+    setDetailEdit(edit);
+    if (Object.prototype.hasOwnProperty.call(options, "adminPassword")) setEditAdminPassword(options.adminPassword || "");
     setDetailBusy(true);
     try {
       const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
-      syncDetail(body);
+      setDetailFromBody(body);
+      setDraftErrors({ name: "", items: "" });
     } catch (error) {
       notify(error?.message || "The kit could not be loaded.", "error");
     } finally {
@@ -372,7 +408,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   };
 
   const refreshKits = async () => {
-    setBusy(true);
     try {
       const [kitBody, productBody] = await Promise.all([
         requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
@@ -380,12 +415,8 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
       ]);
       setKits((kitBody.kits || []).map(normalizeKit));
       setProducts((productBody.products || []).map(normalizeProduct));
-      if (activeDetail?.kit?.id) await loadKit(activeDetail.kit.id);
-      notify("Kit data has been refreshed.");
     } catch (error) {
       notify(error?.message || "The data could not be refreshed.", "error");
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -413,44 +444,57 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     return await askPassword({ title: "Admin password required", message: message || "This kit belongs to another user." });
   };
 
+  const startCreateKit = async () => {
+    const adminPassword = await askPassword({
+      title: "Create New Kit",
+      message: "Enter the Admin password to create a new kit.",
+    });
+    if (adminPassword === null) return;
+    const createdBy = text(account?.name || account?.fullName || account?.username || account?.email);
+    setCreateMode(true);
+    setDetailEdit(true);
+    setEditAdminPassword(adminPassword);
+    setEditName("");
+    setDraftErrors({ name: "", items: "" });
+    setActiveDetail({
+      kit: normalizeKit({ name: "", createdBy, canEdit: true }),
+      items: [],
+    });
+    setSelectedProductId("");
+    setProductSearch("");
+    setProductQty(1);
+  };
+
+  const enterEditKit = async (kit) => {
+    const adminPassword = await protectedPassword(kit, `Enter the Admin password to edit “${kit.name}”.`);
+    if (adminPassword === null) return;
+    setEditAdminPassword(adminPassword);
+    await loadKit(kit.id, { edit: true, adminPassword });
+  };
+
   const submitNameDialog = async (name) => {
     const dialog = nameDialog;
-    if (!dialog) return;
-    let adminPassword = "";
-    if (dialog.mode === "create") {
-      adminPassword = await askPassword({ title: "Create Kit", message: "Enter the Admin password to create a reusable kit." });
-      if (adminPassword === null) return;
-    } else if (dialog.mode === "rename") {
-      adminPassword = await protectedPassword(dialog.kit, "Enter the Admin password to rename a kit created by another user.");
-      if (adminPassword === null) return;
-    }
-
+    if (!dialog || dialog.mode !== "copy") return;
     setBusy(true);
     try {
-      if (dialog.mode === "create") {
-        const body = await requestJson("/next/api/products/kits", { method: "POST", body: JSON.stringify({ name, adminPassword }) });
-        const created = syncKit({ ...(body.kit || {}), canEdit: true });
-        setNameDialog(null);
-        notify(`“${name}” was created.`);
-        await loadKit(created.id, { edit: true });
-        return;
-      }
-      if (dialog.mode === "copy") {
-        const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(dialog.kit.id)}/copy`, { method: "POST", body: JSON.stringify({ name }) });
-        syncKit(body.kit);
-        notify(`A copy named “${name}” was created.`);
-      } else if (dialog.mode === "rename") {
-        const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(dialog.kit.id)}`, { method: "PATCH", body: JSON.stringify({ name, adminPassword }) });
-        syncKit(body.kit);
-        notify("Kit name updated.");
-      }
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(dialog.kit.id)}/copy`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      syncKit(body.kit);
       setNameDialog(null);
+      notify(`A copy named “${name}” was created.`);
+    } catch (error) {
+      notify(error?.message || "The kit copy could not be created.", "error");
+      throw error;
     } finally {
       setBusy(false);
     }
   };
 
   const deleteKit = async (kit) => {
+    const adminPassword = await protectedPassword(kit, `Enter the Admin password to delete “${kit.name}”.`);
+    if (adminPassword === null) return;
     const confirmed = await confirmDelete({
       itemName: kit.name,
       itemType: "kit",
@@ -459,13 +503,14 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
       confirmLabel: "Yes, Delete!",
     });
     if (!confirmed) return;
-    const adminPassword = await protectedPassword(kit, "Enter the Admin password to delete a kit created by another user.");
-    if (adminPassword === null) return;
     setBusy(true);
     try {
-      await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, { method: "DELETE", body: JSON.stringify({ adminPassword }) });
+      await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, {
+        method: "DELETE",
+        body: JSON.stringify({ adminPassword }),
+      });
       setKits((current) => current.filter((item) => item.id !== kit.id));
-      if (activeDetail?.kit?.id === kit.id) setActiveDetail(null);
+      if (activeDetail?.kit?.id === kit.id) backToKits();
       notify("Kit deleted.");
     } catch (error) {
       notify(error?.message || "The kit could not be deleted.", "error");
@@ -474,20 +519,60 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
     }
   };
 
-  const addProduct = async ({ productId, quantity }) => {
+  const addSelectedProduct = async () => {
+    const product = productMap.get(selectedProductId);
+    if (!product) {
+      setDraftErrors((current) => ({ ...current, items: "Select a product first." }));
+      return;
+    }
+    const quantity = Math.max(1, Math.round(number(productQty) || 1));
+    if (createMode) {
+      setActiveDetail((current) => {
+        const items = Array.isArray(current?.items) ? [...current.items] : [];
+        const existingIndex = items.findIndex((item) => text(item.productId) === product.id);
+        if (existingIndex >= 0) {
+          const existing = items[existingIndex];
+          items[existingIndex] = { ...existing, quantity: Math.max(1, number(existing.quantity) + quantity), updatedAt: new Date().toISOString() };
+        } else {
+          items.push(normalizeItem({
+            id: `draft-kit-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            productId: product.id,
+            productName: product.name,
+            quantity,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }, items.length));
+        }
+        return { ...(current || {}), items };
+      });
+      setDraftErrors((current) => ({ ...current, items: "" }));
+      setSelectedProductId("");
+      setProductSearch("");
+      setProductQty(1);
+      setProductPickerOpen(false);
+      notify("Product added to kit draft.");
+      return;
+    }
+
     const kit = activeDetail?.kit;
     if (!kit?.id) return;
-    const adminPassword = await protectedPassword(kit, "Enter the Admin password to modify a kit created by another user.");
-    if (adminPassword === null) return;
     setBusy(true);
     try {
+      const pendingName = editName;
       const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items`, {
         method: "POST",
-        body: JSON.stringify({ productId, quantity, adminPassword }),
+        body: JSON.stringify({ productId: product.id, quantity, adminPassword: editAdminPassword }),
       });
-      syncDetail(body);
-      setAddDialog(false);
+      setDetailFromBody(body);
+      setEditName(pendingName);
+      setDraftErrors((current) => ({ ...current, items: "" }));
+      setSelectedProductId("");
+      setProductSearch("");
+      setProductQty(1);
+      setProductPickerOpen(false);
       notify("Product added to kit.");
+    } catch (error) {
+      notify(error?.message || "The product could not be added.", "error");
     } finally {
       setBusy(false);
     }
@@ -496,16 +581,25 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
   const updateQuantity = async (row, value) => {
     const quantity = Math.max(1, Math.round(number(value) || 1));
     if (quantity === row.quantity) return;
+    if (createMode) {
+      setActiveDetail((current) => ({
+        ...(current || {}),
+        items: (current?.items || []).map((item) => item.id === row.id ? { ...item, quantity, updatedAt: new Date().toISOString() } : item),
+      }));
+      notify("Quantity updated.");
+      return;
+    }
     const kit = activeDetail?.kit;
-    const adminPassword = await protectedPassword(kit, "Enter the Admin password to modify a kit created by another user.");
-    if (adminPassword === null) return;
+    if (!kit?.id) return;
     setBusy(true);
     try {
+      const pendingName = editName;
       const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
-        body: JSON.stringify({ quantity, adminPassword }),
+        body: JSON.stringify({ quantity, adminPassword: editAdminPassword }),
       });
-      syncDetail(body);
+      setDetailFromBody(body);
+      setEditName(pendingName);
       notify("Quantity updated.");
     } catch (error) {
       notify(error?.message || "The quantity could not be updated.", "error");
@@ -523,19 +617,78 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
       confirmLabel: "Remove Component",
     });
     if (!confirmed) return;
+    if (createMode) {
+      setActiveDetail((current) => ({
+        ...(current || {}),
+        items: (current?.items || []).filter((item) => item.id !== row.id),
+      }));
+      notify("Component removed.");
+      return;
+    }
     const kit = activeDetail?.kit;
-    const adminPassword = await protectedPassword(kit, "Enter the Admin password to modify a kit created by another user.");
-    if (adminPassword === null) return;
+    if (!kit?.id) return;
     setBusy(true);
     try {
+      const pendingName = editName;
       const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/items/${encodeURIComponent(row.id)}`, {
         method: "DELETE",
-        body: JSON.stringify({ adminPassword }),
+        body: JSON.stringify({ adminPassword: editAdminPassword }),
       });
-      syncDetail(body);
+      setDetailFromBody(body);
+      setEditName(pendingName);
       notify("Component removed.");
     } catch (error) {
       notify(error?.message || "The component could not be removed.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveKit = async () => {
+    const cleanName = text(editName);
+    const rows = Array.isArray(activeDetail?.items) ? activeDetail.items : [];
+    const errors = {
+      name: cleanName ? "" : "Kit name is required.",
+      items: rows.length ? "" : createMode ? "Add at least one component before saving the kit." : "Add at least one component before saving changes.",
+    };
+    setDraftErrors(errors);
+    if (errors.name || errors.items) return;
+
+    setBusy(true);
+    try {
+      if (createMode) {
+        const createdBody = await requestJson("/next/api/products/kits", {
+          method: "POST",
+          body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
+        });
+        const created = normalizeKit({ ...(createdBody.kit || {}), canEdit: true });
+        if (!created.id) throw new Error("Kit was created but the kit ID was not returned.");
+        for (const row of rows) {
+          if (!row.productId) continue;
+          await requestJson(`/next/api/products/kits/${encodeURIComponent(created.id)}/items`, {
+            method: "POST",
+            body: JSON.stringify({ productId: row.productId, quantity: row.quantity, adminPassword: editAdminPassword }),
+          });
+        }
+        await refreshKits();
+        backToKits();
+        notify("Kit saved successfully.");
+        return;
+      }
+
+      const kit = activeDetail?.kit;
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
+      });
+      const updated = normalizeKit(body.kit || { ...kit, name: cleanName });
+      setActiveDetail((current) => current ? { ...current, kit: updated } : current);
+      setKits((current) => current.map((entry) => entry.id === updated.id ? { ...updated, itemsCount: rows.length } : entry));
+      setEditName(updated.name);
+      setDraftErrors({ name: "", items: "" });
+      notify("Changes saved.");
+    } catch (error) {
+      notify(error?.message || `Failed to ${createMode ? "create" : "update"} kit.`, "error");
     } finally {
       setBusy(false);
     }
@@ -548,7 +701,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
         <Toast toast={toast} onClose={() => setToast(null)} />
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
-            <section className="products-proposal-detail">
+            <section className={`products-proposal-detail next-kit-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>
               {detailBusy && !activeDetail ? (
                 <div className="products-loading-card" role="status" aria-live="polite">
                   <div className="products-spinner" aria-hidden="true" />
@@ -556,44 +709,103 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
                 </div>
               ) : (
                 <>
-                  <header className="products-proposal-detail__head">
-                    <button type="button" className="products-back-btn" onClick={() => { setActiveDetail(null); setDetailEdit(false); }} aria-label="Back to kits">←</button>
-                    <div className="proposal-classic-kit-heading">
-                      <h2>{kit?.name || "Kit"}</h2>
-                      <p>{formatNumber(enrichedRows.length)} saved component{enrichedRows.length === 1 ? "" : "s"} · {detailEdit ? "Edit mode" : "View only"}</p>
-                    </div>
-                    <div className="proposal-detail-actions">
-                      {detailEdit ? (
-                        <>
-                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>＋ <span>Add Product</span></button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => setNameDialog({ mode: "rename", kit, value: kit?.name || "" })}>Rename</button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(false)}>Done</button>
-                        </>
-                      ) : (
-                        <>
-                          <a className="products-btn products-btn--dark" href="/next/proposals">Use in Proposal</a>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => setDetailEdit(true)}>Edit</button>
-                        </>
-                      )}
-                    </div>
-                  </header>
-
-                  {detailEdit ? (
-                    <div className="products-proposal-tools proposals-one-tool">
-                      <div className="products-proposal-tool-card">
-                        <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Add kit component</span></div>
-                        <div className="proposal-classic-inline-actions">
-                          <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>Add Product</button>
-                          <button type="button" className="products-btn products-btn--light" onClick={() => loadKit(kit.id, { edit: true })} disabled={detailBusy}>{detailBusy ? "Refreshing…" : "Refresh"}</button>
-                          <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteKit(kit)}>Delete Kit</button>
-                        </div>
+                  {createMode ? (
+                    <header className="products-proposal-detail__head kit-create-label-head next-kit-create-head">
+                      <div className="kit-create-title-pill">
+                        <button type="button" className="products-back-btn" onClick={backToKits} aria-label="Back to kits">←</button>
+                        <span>Create New Kit</span>
                       </div>
-                    </div>
+                    </header>
                   ) : (
-                    <div className="proposal-view-note"><span aria-hidden="true">◉</span><span>View only. Use the 3-dot menu or choose Edit to modify this kit.</span></div>
+                    <header className="products-proposal-detail__head next-kit-detail-head">
+                      <button type="button" className="products-back-btn" onClick={backToKits} aria-label="Back to kits">←</button>
+                      <div className="proposal-classic-kit-heading">
+                        <h2>{kit?.name || "Kit"}</h2>
+                        <p>{formatNumber(enrichedRows.length)} saved component{enrichedRows.length === 1 ? "" : "s"}{detailEdit ? " • Edit mode" : " • View only"}</p>
+                      </div>
+                    </header>
                   )}
 
-                  <div className="products-proposal-table-card">
+                  {detailEdit ? (
+                    <>
+                      <div className="proposal-name-edit-block proposal-name-edit-block--footer-save next-kit-name-edit">
+                        <label className="products-field products-field--wide">
+                          <span>Kit name <em>*</em></span>
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(event) => {
+                              setEditName(event.target.value);
+                              if (text(event.target.value)) setDraftErrors((current) => ({ ...current, name: "" }));
+                            }}
+                            autoComplete="off"
+                            placeholder="Example: Arduino starter kit"
+                          />
+                        </label>
+                        {draftErrors.name ? <div className="direct-create-inline-error direct-create-inline-error--name">{draftErrors.name}</div> : null}
+                      </div>
+
+                      <div className="products-proposal-tools proposals-one-tool next-kit-add-tool">
+                        <div className="products-proposal-tool-card">
+                          <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Add kit component</span></div>
+                          <div className="products-proposal-control-grid next-kit-product-control">
+                            <div className="next-kit-product-select" ref={pickerRef}>
+                              <span className="next-kit-field-label">Component</span>
+                              <button
+                                type="button"
+                                className={`next-kit-product-select__button ${productPickerOpen ? "is-open" : ""}`}
+                                onClick={() => setProductPickerOpen((open) => !open)}
+                                aria-expanded={productPickerOpen}
+                              >
+                                <span>
+                                  <strong>{selectedProduct?.name || "Select component"}</strong>
+                                  <small>{selectedProduct ? [selectedProduct.displayId, firstTag(selectedProduct), selectedProduct.unit].filter(Boolean).join(" · ") : "Search products by name, ID, tag or unit"}</small>
+                                </span>
+                                <b aria-hidden="true">⌄</b>
+                              </button>
+                              {productPickerOpen ? (
+                                <div className="next-kit-product-select__panel">
+                                  <div className="next-kit-product-select__search">
+                                    <span aria-hidden="true">⌕</span>
+                                    <input autoFocus value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Search products..." />
+                                  </div>
+                                  <div className="next-kit-product-select__options">
+                                    {filteredProducts.map((product) => (
+                                      <button
+                                        type="button"
+                                        key={product.id}
+                                        className={selectedProductId === product.id ? "is-selected" : ""}
+                                        onClick={() => {
+                                          setSelectedProductId(product.id);
+                                          setProductPickerOpen(false);
+                                          setDraftErrors((current) => ({ ...current, items: "" }));
+                                        }}
+                                      >
+                                        <span>{product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : "▧"}</span>
+                                        <div><strong>{product.name}</strong><small>{[product.displayId, firstTag(product), product.unit].filter(Boolean).join(" · ")}</small></div>
+                                        <em>{formatMoney(product.unitPrice)}</em>
+                                      </button>
+                                    ))}
+                                    {!filteredProducts.length ? <div className="next-proposals-empty-inline">No matching catalogue products.</div> : null}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                            <label className="products-field products-field--qty next-kit-qty-field">
+                              <span>Qty</span>
+                              <input type="number" min="1" step="1" value={productQty} onChange={(event) => setProductQty(event.target.value)} inputMode="numeric" />
+                            </label>
+                            <button type="button" className="products-btn products-btn--dark next-kit-add-btn" onClick={addSelectedProduct} disabled={busy}><span aria-hidden="true">＋</span><span>Add</span></button>
+                          </div>
+                        </div>
+                      </div>
+                      {draftErrors.items ? <div className="direct-create-inline-error direct-create-inline-error--items">{draftErrors.items}</div> : null}
+                    </>
+                  ) : (
+                    <div className="proposal-view-note"><span aria-hidden="true">◉</span><span>View only. Use the 3-dot menu then Edit to modify this kit.</span></div>
+                  )}
+
+                  <div className="products-proposal-table-card next-kit-components-card">
                     <div className="products-proposal-table-head">
                       <div><h3>Kit components</h3><p>These quantities will be copied into any proposal when you add this kit.</p></div>
                       <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
@@ -604,34 +816,39 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
                         <tbody>
                           {enrichedRows.map((row) => (
                             <tr key={row.id}>
-                              <td className="proposal-component-name">
-                                <strong>{row.name}</strong>
-                                <small className="proposal-classic-component-meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
-                              </td>
-                              <td>{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onBlur={(event) => updateQuantity(row, event.target.value)} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
+                              <td className="proposal-component-name"><strong>{row.name}</strong></td>
+                              <td>{detailEdit ? <input className="proposal-item-qty" type="number" min="1" step="1" defaultValue={row.quantity} key={`${row.id}-${row.quantity}`} onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined} onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined} /> : <strong>{formatNumber(row.quantity)}</strong>}</td>
                               <td className="proposal-price-cell">{formatMoney(row.unitPrice)}</td>
                               <td className="proposal-price-cell proposal-price-cell--total">{formatMoney(row.totalPrice)}</td>
-                              <td className="proposal-link-cell">{row.product?.url ? <a className="proposal-product-link" href={row.product.url} target="_blank" rel="noreferrer">Open ↗</a> : "—"}</td>
+                              <td className="proposal-link-cell">{row.product?.url ? <a className="proposal-product-link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>↗</a> : <span className="proposal-product-link is-disabled">—</span>}</td>
                               <td><div className="proposal-row-actions">{detailEdit ? <button type="button" className="proposal-row-delete proposal-row-delete--icon" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`}>×</button> : null}</div></td>
                             </tr>
                           ))}
-                          {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component above." : "Choose Edit to add components."}</div></td></tr> : null}
+                          {!enrichedRows.length ? <tr><td colSpan="6"><div className="products-table-empty">No components yet. {detailEdit ? "Add one component above." : "This kit does not contain components yet."}</div></td></tr> : null}
                         </tbody>
                       </table>
                     </div>
                     <div className="proposal-total-block">
-                      <div><span>Components</span><strong>{formatNumber(detailTotals.items)}</strong></div>
-                      <div><span>Total Quantity</span><strong>{formatNumber(detailTotals.quantity)}</strong></div>
-                      <div><span>Estimated Total</span><strong>{formatMoney(detailTotals.value)}</strong></div>
+                      <div><span>Total requested items</span><strong>{formatNumber(detailTotals.items)} item{detailTotals.items === 1 ? "" : "s"}</strong></div>
+                      <div><span>Total quantity</span><strong>{formatNumber(detailTotals.quantity)}</strong></div>
+                      <div><span>Total cost</span><strong>{formatMoney(detailTotals.value)}</strong></div>
                     </div>
                   </div>
+
+                  {detailEdit ? (
+                    <div className={`kit-create-save-footer direct-create-save-footer ${createMode ? "direct-create-save-footer--create" : "direct-create-save-footer--edit"} next-kit-save-footer`}>
+                      <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={backToKits} disabled={busy}>Cancel</button>
+                      <button type="button" className="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" onClick={saveKit} disabled={busy}>
+                        <span aria-hidden="true">✓</span><span>{busy ? "Saving…" : createMode ? "Save" : "Save Changes"}</span>
+                      </button>
+                    </div>
+                  ) : null}
                 </>
               )}
             </section>
           </section>
         </section>
 
-        {addDialog && kit ? <AddProductModal kit={kit} products={products} busy={busy} onClose={() => setAddDialog(false)} onSubmit={addProduct} /> : null}
         {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
         {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
       </main>
@@ -643,7 +860,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="proposals-floating-actions">
-        <button type="button" className="products-add-btn proposals-create-btn" onClick={() => setNameDialog({ mode: "create", value: "" })}><span aria-hidden="true">＋</span><span>Create New Kit</span></button>
+        <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><span aria-hidden="true">＋</span><span>Create New Kit</span></button>
       </div>
 
       {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit is missing.</span></div> : null}
@@ -658,12 +875,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, boots
                     <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === kit.id ? "" : kit.id); }} aria-label={`Actions for ${kit.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
                     {folderMenu === kit.id ? (
                       <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-                        <button type="button" onClick={() => loadKit(kit.id, { edit: true })}><span>Edit</span></button>
-                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} Copy` }); }}><span>Make a copy</span></button>
-                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><span>Delete</span></button>
+                        <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><span className="next-kit-menu-icon" aria-hidden="true">✎</span><span>Edit</span></button>
+                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><span className="next-kit-menu-icon" aria-hidden="true">⧉</span><span>Make a copy</span></button>
+                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><span className="next-kit-menu-icon" aria-hidden="true">⌫</span><span>Delete</span></button>
                       </div>
                     ) : null}
-                    <button type="button" className="products-proposal-folder__main" onClick={() => loadKit(kit.id)} aria-label={`Open ${kit.name}`}>
+                    <button type="button" className="products-proposal-folder__main" onClick={() => loadKit(kit.id, { edit: false, adminPassword: "" })} aria-label={`Open ${kit.name}`}>
                       <span className="proposal-folder-figure" aria-hidden="true">
                         <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
                         <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
