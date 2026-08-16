@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const FIELD_META = [
   { key: "name", label: "Name", type: "text", required: true },
@@ -202,6 +202,14 @@ function EditFieldModal({ field, account, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [busy, onClose]);
+
   async function submit(event) {
     event.preventDefault();
     const nextValue = String(value ?? "").trim();
@@ -276,6 +284,14 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const kind = imageRequest?.kind === "cover" ? "cover" : "profile";
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [busy, onClose]);
   const label = kind === "cover" ? "Cover photo" : "Profile picture";
 
   async function submit(event) {
@@ -308,6 +324,11 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
     <div className="ex-modal" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <form className="ex-modal-box" role="dialog" aria-modal="true" aria-label={`Change ${label}`} onSubmit={submit}>
         <h3 className="ex-modal-title">Change {label}</h3>
+        {imageRequest?.preview ? (
+          <div className={`account-image-preview account-image-preview--${kind}`} aria-label={`${label} preview`}>
+            <img src={imageRequest.preview} alt={`${label} preview`} />
+          </div>
+        ) : null}
         <label className="field-label"><Icon name="image" size={16} /> Selected image</label>
         <div className="password-wrapper">
           <input className="ex-input" type="text" value={imageRequest?.file?.name || ""} readOnly />
@@ -327,6 +348,32 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
   );
 }
 
+function RemoveImageModal({ kind, busy, onClose, onConfirm }) {
+  const label = kind === "cover" ? "cover photo" : "profile picture";
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [busy, onClose]);
+
+  return (
+    <div className="account-confirm-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <section className="account-confirm-card" role="dialog" aria-modal="true" aria-labelledby="account-remove-title">
+        <span className="account-confirm-icon"><Icon name="alert" size={23} /></span>
+        <h3 id="account-remove-title">Remove {label}?</h3>
+        <p>You’re going to remove the current {label} and restore the default image. This action cannot be undone.</p>
+        <div className="account-confirm-actions">
+          <button className="account-confirm-cancel" type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="account-confirm-remove" type="button" onClick={onConfirm} disabled={busy}>{busy ? "Removing…" : "Remove"}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function fieldDisplay(account, field) {
   if (field.key === "password") return account.passwordSet ? "••••••••" : "—";
   return text(account?.[field.key]) || "—";
@@ -338,11 +385,24 @@ export default function AccountClient({ initialAccount }) {
   const [imageRequest, setImageRequest] = useState(null);
   const [toast, setToast] = useState(null);
   const [busyAction, setBusyAction] = useState("");
+  const [removeRequest, setRemoveRequest] = useState("");
   const profileInputRef = useRef(null);
   const coverInputRef = useRef(null);
 
   function showToast(type, title, message) {
     setToast({ type, title, message });
+  }
+
+  function syncAccountChrome(nextAccount) {
+    const next = normalizeAccount(nextAccount || {});
+    try {
+      if (next.name) localStorage.setItem("username", next.name);
+    } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent("user:updated", { detail: { account: next } }));
+    } catch {
+      try { window.dispatchEvent(new Event("user:updated")); } catch {}
+    }
   }
 
   function closeImageModal() {
@@ -362,12 +422,14 @@ export default function AccountClient({ initialAccount }) {
 
   async function removeImage(kind) {
     const label = kind === "cover" ? "cover photo" : "profile picture";
-    if (!window.confirm(`Remove the current ${label} and restore the default image?`)) return;
     setBusyAction(`remove-${kind}`);
     try {
       const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
       await requestJson(endpoint, { method: "DELETE" });
-      setAccount((current) => ({ ...current, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: "" }));
+      const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: "" };
+      setAccount(next);
+      syncAccountChrome(next);
+      setRemoveRequest("");
       showToast("success", "Removed", `${kind === "cover" ? "Cover photo" : "Profile picture"} removed successfully.`);
     } catch (error) {
       showToast("error", "Remove failed", error?.message || `The ${label} could not be removed.`);
@@ -392,7 +454,7 @@ export default function AccountClient({ initialAccount }) {
                 {account.coverPhotoUrl ? <img className="profile-cover-image" src={account.coverPhotoUrl} alt={`${displayName} cover photo`} /> : <span className="profile-cover-fallback" aria-hidden="true" />}
               </button>
               {account.coverPhotoUrl ? (
-                <button className="profile-cover-remove profile-image-remove" type="button" aria-label="Remove cover photo" title="Remove cover photo" onClick={() => removeImage("cover")} disabled={busyAction === "remove-cover"}>
+                <button className="profile-cover-remove profile-image-remove" type="button" aria-label="Remove cover photo" title="Remove cover photo" onClick={() => setRemoveRequest("cover")} disabled={busyAction === "remove-cover"}>
                   <Icon name="x" size={18} />
                 </button>
               ) : null}
@@ -412,7 +474,7 @@ export default function AccountClient({ initialAccount }) {
                     <Icon name="edit" size={18} />
                   </button>
                   {account.photoUrl ? (
-                    <button className="profile-avatar-remove profile-image-remove" type="button" aria-label="Remove profile picture" title="Remove profile picture" onClick={() => removeImage("profile")} disabled={busyAction === "remove-profile"}>
+                    <button className="profile-avatar-remove profile-image-remove" type="button" aria-label="Remove profile picture" title="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={busyAction === "remove-profile"}>
                       <Icon name="x" size={18} />
                     </button>
                   ) : null}
@@ -477,7 +539,7 @@ export default function AccountClient({ initialAccount }) {
           field={editField}
           account={account}
           onClose={() => setEditField(null)}
-          onSaved={(next, message) => { setAccount(next); showToast("success", "Saved", message); }}
+          onSaved={(next, message) => { setAccount(next); syncAccountChrome(next); showToast("success", "Saved", message); }}
         />
       ) : null}
 
@@ -486,9 +548,20 @@ export default function AccountClient({ initialAccount }) {
           imageRequest={imageRequest}
           onClose={closeImageModal}
           onSaved={(kind, url) => {
-            setAccount((current) => ({ ...current, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: url }));
+            const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: url };
+            setAccount(next);
+            syncAccountChrome(next);
             showToast("success", "Saved", kind === "cover" ? "Cover photo updated successfully." : "Profile picture updated successfully.");
           }}
+        />
+      ) : null}
+
+      {removeRequest ? (
+        <RemoveImageModal
+          kind={removeRequest}
+          busy={busyAction === `remove-${removeRequest}`}
+          onClose={() => { if (!busyAction) setRemoveRequest(""); }}
+          onConfirm={() => removeImage(removeRequest)}
         />
       ) : null}
     </section>
