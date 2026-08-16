@@ -4283,3 +4283,43 @@ body.orders-review-page .next-classic-orders-parity #sv-orders.card {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
+
+/* Stage 2B — Current Orders / Orders Review card parity cleanup -------------
+ * Orders Review uses the same full-width card footprint as Current Orders.
+ * The list surface remains transparent; only the actual order cards are white.
+ */
+body.orders-review-page .next-classic-orders-parity #sv-orders.orders-review-list-surface {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.orders-review-page .next-classic-orders-parity #sv-list {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* Keep Review cards on the exact same outer footprint as Current Orders. */
+body.orders-review-page .next-classic-orders-parity #sv-list > .next-review-order-card {
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Remove the decorative orange left accent from both order-card variants. */
+body.current-orders-page .next-classic-orders-parity .next-current-order-card::before,
+body.orders-review-page .next-classic-orders-parity .next-review-order-card::before {
+  content: none !important;
+  display: none !important;
+}
