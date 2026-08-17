@@ -383,14 +383,6 @@ function AddProductModal({ kit, products, busy, onClose, onSubmit }) {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
-  const folderKitCounts = useMemo(() => {
-    const counts = new Map();
-    kits.forEach((kit) => {
-      if (kit.folderId) counts.set(kit.folderId, (counts.get(kit.folderId) || 0) + 1);
-    });
-    return counts;
-  }, [kits]);
-
   const filteredProducts = useMemo(() => {
     const needle = lower(search);
     return products.filter((product) => !needle || [product.name, product.displayId, product.unit, firstTag(product)].some((value) => lower(value).includes(needle))).slice(0, 100);
@@ -500,6 +492,14 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   }, []);
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+
+  const folderKitCounts = useMemo(() => {
+    const counts = new Map();
+    kits.forEach((kit) => {
+      if (kit.folderId) counts.set(kit.folderId, (counts.get(kit.folderId) || 0) + 1);
+    });
+    return counts;
+  }, [kits]);
 
   const filteredKits = useMemo(() => {
     const needle = lower(search);
