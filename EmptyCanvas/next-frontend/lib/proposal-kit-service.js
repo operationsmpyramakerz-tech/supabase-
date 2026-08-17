@@ -494,6 +494,29 @@ export async function listKits(account) {
   return headers.map((row) => kitHeader(row, itemCounts.get(text(row.id)) || 0, account));
 }
 
+export async function listKitMembership() {
+  const [headers, items] = await Promise.all([
+    selectAll(kitsTable(), { limit: 5000, order: "name.asc,created_at.asc" }),
+    selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
+  ]);
+  const kitNames = new Map(headers.map((row) => [text(row.id), text(row.name) || "Untitled kit"]));
+  const byProduct = new Map();
+  for (const item of items || []) {
+    const productId = text(item?.product_id);
+    const kitId = text(item?.kit_id);
+    const kitName = kitNames.get(kitId);
+    if (!productId || !kitName) continue;
+    if (!byProduct.has(productId)) byProduct.set(productId, new Map());
+    byProduct.get(productId).set(kitId, kitName);
+  }
+  return [...byProduct.entries()].map(([productId, kitMap]) => ({
+    productId,
+    kits: [...kitMap.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  }));
+}
+
 export async function getKit(id, account) {
   const row = await selectById(kitsTable(), id);
   if (!row) {

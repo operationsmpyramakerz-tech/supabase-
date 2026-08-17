@@ -28,6 +28,9 @@ const PROPOSAL_ICON_PATHS = {
   trash: [<polyline key="pl" points="3 6 5 6 21 6" />, <path key="p1" d="M19 6l-1 14H6L5 6" />, <path key="p2" d="M10 11v6M14 11v6M9 6V4h6v2" />],
   file: [<path key="p1" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />, <polyline key="p2" points="14 2 14 8 20 8" />, <line key="l1" x1="8" y1="13" x2="16" y2="13" />, <line key="l2" x1="8" y1="17" x2="16" y2="17" />],
   grid: [<rect key="r1" x="3" y="3" width="7" height="7" rx="1" />, <rect key="r2" x="14" y="3" width="7" height="7" rx="1" />, <rect key="r3" x="3" y="14" width="7" height="7" rx="1" />, <rect key="r4" x="14" y="14" width="7" height="7" rx="1" />],
+  sort: [<line key="l1" x1="3" y1="6" x2="21" y2="6" />, <line key="l2" x1="6" y1="12" x2="18" y2="12" />, <line key="l3" x1="10" y1="18" x2="14" y2="18" />],
+  check: [<polyline key="p" points="20 6 9 17 4 12" />],
+  chevronDown: [<polyline key="p" points="6 9 12 15 18 9" />],
 };
 
 function ProposalIcon({ name, size = 18, className = "" }) {
@@ -863,6 +866,12 @@ export default function ProposalsClient({
   const [selectedIds, setSelectedIds] = useState([]);
   const [combineLogic, setCombineLogic] = useState("add");
   const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
+  const [groupBy, setGroupBy] = useState("component-tag");
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [kitMembership, setKitMembership] = useState(() => new Map());
+  const [kitMembershipLoaded, setKitMembershipLoaded] = useState(false);
+  const [kitMembershipBusy, setKitMembershipBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
@@ -903,6 +912,8 @@ export default function ProposalsClient({
   useEffect(() => {
     const close = (event) => {
       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+      if (!event.target.closest(".proposal-download-menu-wrap")) setDownloadMenuOpen(false);
+      if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
     };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
@@ -963,6 +974,66 @@ export default function ProposalsClient({
     if (Number.isFinite(Number(row.totalPrice))) acc.value += Number(row.totalPrice);
     return acc;
   }, { items: 0, quantity: 0, value: 0 }), [enrichedRows]);
+
+  const ensureKitMembership = async () => {
+    if (kitMembershipLoaded) return kitMembership;
+    if (kitMembershipBusy) return kitMembership;
+    setKitMembershipBusy(true);
+    try {
+      const body = await requestJson(`/next/api/products/kits/membership?_ts=${Date.now()}`);
+      const next = new Map();
+      (Array.isArray(body?.membership) ? body.membership : []).forEach((entry) => {
+        const productId = text(entry?.productId);
+        if (!productId) return;
+        const names = (Array.isArray(entry?.kits) ? entry.kits : [])
+          .map((kit) => text(kit?.name))
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b));
+        next.set(productId, names);
+      });
+      setKitMembership(next);
+      setKitMembershipLoaded(true);
+      return next;
+    } finally {
+      setKitMembershipBusy(false);
+    }
+  };
+
+  const groupLabelForRow = (row) => {
+    if (groupBy === "kit-tag") {
+      const names = kitMembership.get(text(row?.productId)) || [];
+      return names.length ? names.join(" / ") : "Unassigned kit";
+    }
+    return text(row?.tag) || "Uncategorized";
+  };
+
+  const groupedVisibleRows = useMemo(() => {
+    const map = new Map();
+    for (const row of visibleEnrichedRows) {
+      const label = groupBy === "kit-tag"
+        ? ((kitMembership.get(text(row?.productId)) || []).join(" / ") || "Unassigned kit")
+        : (text(row?.tag) || "Uncategorized");
+      const key = lower(label);
+      if (!map.has(key)) map.set(key, { label, rows: [] });
+      map.get(key).rows.push(row);
+    }
+    return [...map.values()]
+      .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [visibleEnrichedRows, groupBy, kitMembership]);
+
+  const chooseGroupBy = async (nextMode) => {
+    if (nextMode === "kit-tag" && !kitMembershipLoaded) {
+      try {
+        await ensureKitMembership();
+      } catch (error) {
+        notify(error?.message || "Kit grouping could not be loaded.", "error");
+        return;
+      }
+    }
+    setGroupBy(nextMode);
+    setSortMenuOpen(false);
+  };
 
   const notify = (message, type = "success", title = "Proposals") => {
     setToast({ message, type, title });
@@ -1506,7 +1577,9 @@ export default function ProposalsClient({
   const downloadSingle = (type) => {
     if (!activeDetail?.proposal?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
-    openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?columns=${encodeURIComponent(columns)}`);
+    const params = new URLSearchParams({ columns, groupBy });
+    openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?${params.toString()}`);
+    setDownloadMenuOpen(false);
   };
 
   const downloadCombined = (type) => {
@@ -1515,12 +1588,97 @@ export default function ProposalsClient({
       proposalIds: selectedIds.join(","),
       logic: combineLogic,
       columns: exportColumns.join(","),
+      groupBy,
     });
     openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
   };
 
   const toggleExportColumn = (key) => {
     setExportColumns((current) => current.includes(key) ? (current.length === 1 ? current : current.filter((item) => item !== key)) : [...current, key]);
+  };
+
+  const renderComponentCard = (row, proposalForCard = activeDetail?.proposal) => {
+    const matrixRow = Array.isArray(proposalForCard?.combinedMatrix)
+      ? proposalForCard.combinedMatrix.find((entry) => {
+          const entryProductId = text(entry?.productId || entry?.product_id);
+          if (row.productId && entryProductId && row.productId === entryProductId) return true;
+          return lower(entry?.name || entry?.productName || entry?.product_name) === lower(row.name);
+        })
+      : null;
+    const sourceQuantities = proposalForCard?.combineLogic === "separate" && matrixRow?.sourceQuantities && proposalForCard?.combinedSources?.length
+      ? proposalForCard.combinedSources.map((source) => ({
+          id: text(source?.id),
+          name: text(source?.name) || "Proposal",
+          quantity: number(matrixRow.sourceQuantities?.[text(source?.id)]),
+        }))
+      : [];
+    return (
+      <article className={`kit-component-card proposal-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+        <header className="kit-component-card__head proposal-component-card__head">
+          <div className="kit-component-card__title">
+            <span>Component</span>
+            <h4>{row.name}</h4>
+            {[row.displayId, row.tag, row.unit].filter(Boolean).length ? (
+              <small className="proposal-component-card__meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
+            ) : null}
+          </div>
+        </header>
+
+        {sourceQuantities.length ? (
+          <div className="proposal-component-card__sources">
+            {sourceQuantities.map((source) => (
+              <div key={source.id || source.name}>
+                <span>{source.name}</span>
+                <strong>{formatNumber(source.quantity)}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="kit-component-card__metrics proposal-component-card__metrics">
+          <div className="kit-component-card__metric kit-component-card__metric--qty">
+            <span>{sourceQuantities.length ? "Total Qty" : "Qty"}</span>
+            {detailEdit ? (
+              <input
+                className="proposal-item-qty kit-component-card__qty-input"
+                type="number"
+                min="1"
+                step="1"
+                defaultValue={row.quantity}
+                key={`${row.id}-${row.quantity}`}
+                onBlur={(event) => updateQuantity(row, event.target.value)}
+                aria-label={`Quantity for ${row.name}`}
+              />
+            ) : <strong>{formatNumber(row.quantity)}</strong>}
+          </div>
+          <div className="kit-component-card__metric">
+            <span>Unit price</span>
+            <strong>{formatMoney(row.unitPrice)}</strong>
+          </div>
+          <div className="kit-component-card__metric kit-component-card__metric--total">
+            <span>Total price</span>
+            <strong>{formatMoney(row.totalPrice)}</strong>
+          </div>
+        </div>
+
+        <footer className="kit-component-card__actions proposal-component-card__actions">
+          {row.product?.url ? (
+            <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
+              <span aria-hidden="true">↗</span><span>Open link</span>
+            </a>
+          ) : (
+            <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
+              <span aria-hidden="true">—</span><span>No link</span>
+            </span>
+          )}
+          {detailEdit ? (
+            <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>
+              <span aria-hidden="true">×</span><span>Remove</span>
+            </button>
+          ) : null}
+        </footer>
+      </article>
+    );
   };
 
   if (activeDetail || detailBusy) {
@@ -1551,8 +1709,45 @@ export default function ProposalsClient({
                     <header className="products-proposal-detail__head proposal-detail-head--compact">
                       <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
                       <div className="proposal-detail-actions proposal-detail-actions--classic">
-                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("pdf")}><ProposalIcon name="file" /><span>PDF</span></button>
-                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("excel")}><ProposalIcon name="grid" /><span>Excel</span></button>
+                        <div className="proposal-download-menu-wrap">
+                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => { setDownloadMenuOpen((open) => !open); setSortMenuOpen(false); }}>
+                            <ProposalIcon name="download" /><span>Download</span><ProposalIcon name="chevronDown" size={15} />
+                          </button>
+                          {downloadMenuOpen ? (
+                            <div className="proposal-download-menu" role="menu">
+                              <div className="proposal-download-menu__title"><strong>Download</strong><span>Choose columns and file type</span></div>
+                              <div className="proposal-download-menu__columns">
+                                <span>Columns</span>
+                                <div>
+                                  {EXPORT_COLUMNS.map(([key, label]) => (
+                                    <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="proposal-download-menu__actions">
+                                <button type="button" onClick={() => downloadSingle("pdf")}><ProposalIcon name="file" /><span>Download PDF</span></button>
+                                <button type="button" onClick={() => downloadSingle("excel")}><ProposalIcon name="grid" /><span>Download Excel</span></button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="proposal-sort-menu-wrap">
+                          <button type="button" className="products-btn products-btn--dark proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
+                            <ProposalIcon name="sort" /><span>Sort</span><ProposalIcon name="chevronDown" size={15} />
+                          </button>
+                          {sortMenuOpen ? (
+                            <div className="proposal-sort-menu" role="menu">
+                              <button type="button" className={groupBy === "component-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("component-tag")}>
+                                <span className="proposal-sort-menu__check">{groupBy === "component-tag" ? <ProposalIcon name="check" size={16} /> : null}</span>
+                                <span><strong>By components tag</strong><small>Group by product tag such as Electric components.</small></span>
+                              </button>
+                              <button type="button" className={groupBy === "kit-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("kit-tag")} disabled={kitMembershipBusy}>
+                                <span className="proposal-sort-menu__check">{groupBy === "kit-tag" ? <ProposalIcon name="check" size={16} /> : null}</span>
+                                <span><strong>{kitMembershipBusy ? "Loading kits…" : "By kits tag"}</strong><small>Group by kit membership such as Generic or Arduino kit.</small></span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                         <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make Order</span></button>
                         {!detailEdit ? <button type="button" className="products-btn products-btn--light proposal-edit-action-btn" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
                       </div>
@@ -1615,90 +1810,18 @@ export default function ProposalsClient({
                       <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
                     </div>
                     <div className="products-proposal-table-wrap proposal-components-wrap">
-                      <div className="proposal-components-grid">
-                        {visibleEnrichedRows.map((row) => {
-                          const matrixRow = Array.isArray(proposal?.combinedMatrix)
-                            ? proposal.combinedMatrix.find((entry) => {
-                                const entryProductId = text(entry?.productId || entry?.product_id);
-                                if (row.productId && entryProductId && row.productId === entryProductId) return true;
-                                return lower(entry?.name || entry?.productName || entry?.product_name) === lower(row.name);
-                              })
-                            : null;
-                          const sourceQuantities = proposal?.combineLogic === "separate" && matrixRow?.sourceQuantities && proposal?.combinedSources?.length
-                            ? proposal.combinedSources.map((source) => ({
-                                id: text(source?.id),
-                                name: text(source?.name) || "Proposal",
-                                quantity: number(matrixRow.sourceQuantities?.[text(source?.id)]),
-                              }))
-                            : [];
-                          return (
-                            <article className={`kit-component-card proposal-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
-                              <header className="kit-component-card__head proposal-component-card__head">
-                                <div className="kit-component-card__title">
-                                  <span>Component</span>
-                                  <h4>{row.name}</h4>
-                                  {[row.displayId, row.tag, row.unit].filter(Boolean).length ? (
-                                    <small className="proposal-component-card__meta">{[row.displayId, row.tag, row.unit].filter(Boolean).join(" · ")}</small>
-                                  ) : null}
-                                </div>
-                              </header>
-
-                              {sourceQuantities.length ? (
-                                <div className="proposal-component-card__sources">
-                                  {sourceQuantities.map((source) => (
-                                    <div key={source.id || source.name}>
-                                      <span>{source.name}</span>
-                                      <strong>{formatNumber(source.quantity)}</strong>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
-
-                              <div className="kit-component-card__metrics proposal-component-card__metrics">
-                                <div className="kit-component-card__metric kit-component-card__metric--qty">
-                                  <span>{sourceQuantities.length ? "Total Qty" : "Qty"}</span>
-                                  {detailEdit ? (
-                                    <input
-                                      className="proposal-item-qty kit-component-card__qty-input"
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                      defaultValue={row.quantity}
-                                      key={`${row.id}-${row.quantity}`}
-                                      onBlur={(event) => updateQuantity(row, event.target.value)}
-                                      aria-label={`Quantity for ${row.name}`}
-                                    />
-                                  ) : <strong>{formatNumber(row.quantity)}</strong>}
-                                </div>
-                                <div className="kit-component-card__metric">
-                                  <span>Unit price</span>
-                                  <strong>{formatMoney(row.unitPrice)}</strong>
-                                </div>
-                                <div className="kit-component-card__metric kit-component-card__metric--total">
-                                  <span>Total price</span>
-                                  <strong>{formatMoney(row.totalPrice)}</strong>
-                                </div>
-                              </div>
-
-                              <footer className="kit-component-card__actions proposal-component-card__actions">
-                                {row.product?.url ? (
-                                  <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
-                                    <span aria-hidden="true">↗</span><span>Open link</span>
-                                  </a>
-                                ) : (
-                                  <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
-                                    <span aria-hidden="true">—</span><span>No link</span>
-                                  </span>
-                                )}
-                                {detailEdit ? (
-                                  <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>
-                                    <span aria-hidden="true">×</span><span>Remove</span>
-                                  </button>
-                                ) : null}
-                              </footer>
-                            </article>
-                          );
-                        })}
+                      <div className="proposal-components-groups">
+                        {groupedVisibleRows.map((group) => (
+                          <section className="proposal-component-group" key={group.label}>
+                            <div className="proposal-component-group__head">
+                              <div><span>{groupBy === "kit-tag" ? "Kit tag" : "Component tag"}</span><strong>{group.label}</strong></div>
+                              <em>{group.rows.length} item{group.rows.length === 1 ? "" : "s"}</em>
+                            </div>
+                            <div className="proposal-components-grid">
+                              {group.rows.map((row) => renderComponentCard(row, proposal))}
+                            </div>
+                          </section>
+                        ))}
                         {!visibleEnrichedRows.length ? <div className="products-table-empty proposal-components-empty">{enrichedRows.length ? "No components match your search." : <>No components yet. {detailEdit ? "Add a product or saved kit above." : "Choose Edit to add components."}</>}</div> : null}
                       </div>
                     </div>
@@ -1718,14 +1841,6 @@ export default function ProposalsClient({
                     </div>
                   ) : null}
 
-                  {!detailEdit ? (
-                    <div className="proposal-classic-export-columns">
-                      <span>Download columns</span>
-                      {EXPORT_COLUMNS.map(([key, label]) => (
-                        <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
-                      ))}
-                    </div>
-                  ) : null}
                 </>
               )}
             </section>

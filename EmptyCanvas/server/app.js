@@ -7444,6 +7444,45 @@ function _proposalPdfColumnsForContent(selectedColumns, contentW) {
   return columns;
 }
 
+function _proposalExportGroupMode(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  return raw === "kit-tag" || raw === "kits-tag" || raw === "kit" ? "kit-tag" : "component-tag";
+}
+
+async function _sbProductKitMembershipNames() {
+  try {
+    const [kitRows, itemRows] = await Promise.all([_sbKitRows(), _sbKitItemRows(null)]);
+    const kitNames = new Map((kitRows || []).map((row) => [
+      String(_sbGet(row, ["id", "ID"]) ?? "").trim(),
+      _sbProposalText(_sbGet(row, ["name", "Name", "kit_name", "Kit Name"])) || "Untitled kit",
+    ]));
+    const byProduct = new Map();
+    for (const item of itemRows || []) {
+      const productId = String(_sbGet(item, ["product_id", "productId", "Product ID"]) ?? "").trim();
+      const kitId = String(_sbGet(item, ["kit_id", "kitId", "Kit ID"]) ?? "").trim();
+      const kitName = kitNames.get(kitId);
+      if (!productId || !kitName) continue;
+      if (!byProduct.has(productId)) byProduct.set(productId, new Set());
+      byProduct.get(productId).add(kitName);
+    }
+    return new Map([...byProduct.entries()].map(([productId, names]) => [
+      productId,
+      [...names].sort((a, b) => String(a).localeCompare(String(b))),
+    ]));
+  } catch (error) {
+    console.warn("Unable to load kit membership for proposal grouping:", error?.message || error);
+    return new Map();
+  }
+}
+
+function _proposalExportGroupLabel(row, groupMode, kitMembership) {
+  if (groupMode === "kit-tag") {
+    const names = kitMembership?.get(String(row?.productId || "").trim()) || [];
+    return names.length ? names.join(" / ") : "Unassigned kit";
+  }
+  return String(row?.tag || "Uncategorized").trim() || "Uncategorized";
+}
+
 async function _sbProductProposalExportData(proposalId, req = null) {
   const detail = await _sbProductProposalById(proposalId, req);
   if (!detail?.proposal) {
@@ -7452,7 +7491,11 @@ async function _sbProductProposalExportData(proposalId, req = null) {
     throw err;
   }
 
-  const productMap = await _sbProductsMapById();
+  const groupMode = _proposalExportGroupMode(req?.query?.groupBy || req?.query?.sortBy);
+  const [productMap, kitMembership] = await Promise.all([
+    _sbProductsMapById(),
+    groupMode === "kit-tag" ? _sbProductKitMembershipNames() : Promise.resolve(new Map()),
+  ]);
   const rows = (Array.isArray(detail.items) ? detail.items : []).map((item) => {
     const product = productMap.get(String(item?.productId || "")) || {};
     const quantity = _sbProposalQuantity(item?.quantity || 1);
@@ -7460,7 +7503,9 @@ async function _sbProductProposalExportData(proposalId, req = null) {
     const unitPrice = Number(unitPriceRaw);
     const cleanUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null;
     const totalPrice = cleanUnitPrice === null ? null : cleanUnitPrice * quantity;
-    return {
+    const productId = String(item?.productId || product?.id || "").trim();
+    const row = {
+      productId,
       idCode: String(product?.displayId || product?.idCode || product?.id_code || "").trim(),
       name: String(product?.name || item?.productName || item?.product_name || "Untitled Product").trim() || "Untitled Product",
       url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
@@ -7469,10 +7514,12 @@ async function _sbProductProposalExportData(proposalId, req = null) {
       unitPrice: cleanUnitPrice,
       totalPrice,
     };
+    row.groupLabel = _proposalExportGroupLabel(row, groupMode, kitMembership);
+    return row;
   });
 
   const groupedRows = Array.from(rows.reduce((map, row) => {
-    const tag = String(row.tag || "Uncategorized").trim() || "Uncategorized";
+    const tag = String(row.groupLabel || row.tag || "Uncategorized").trim() || "Uncategorized";
     const key = tag.toLowerCase();
     if (!map.has(key)) map.set(key, { tag, rows: [] });
     map.get(key).rows.push(row);
@@ -7546,7 +7593,11 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     throw err;
   }
 
-  const productMap = await _sbProductsMapById();
+  const groupMode = _proposalExportGroupMode(req?.query?.groupBy || req?.query?.sortBy);
+  const [productMap, kitMembership] = await Promise.all([
+    _sbProductsMapById(),
+    groupMode === "kit-tag" ? _sbProductKitMembershipNames() : Promise.resolve(new Map()),
+  ]);
   const details = [];
   for (const id of ids) {
     const detail = await _sbProductProposalById(id, req);
@@ -7618,10 +7669,13 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
       totalPrice: cleanUnitPrice === null ? null : cleanUnitPrice * combinedQuantity,
       sourceQuantities,
     };
-  }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }).map((row) => ({
+    ...row,
+    groupLabel: _proposalExportGroupLabel(row, groupMode, kitMembership),
+  })).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
 
   const groupedRows = Array.from(rows.reduce((map, row) => {
-    const tag = String(row.tag || "Uncategorized").trim() || "Uncategorized";
+    const tag = String(row.groupLabel || row.tag || "Uncategorized").trim() || "Uncategorized";
     const key = tag.toLowerCase();
     if (!map.has(key)) map.set(key, { tag, rows: [] });
     map.get(key).rows.push(row);
