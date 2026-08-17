@@ -7590,18 +7590,32 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
   };
 
   for (const row of rows || []) {
-    const primarySource = _sbProposalPrimarySourceKit(row?.sourceKits || row?.source_kits);
-    if (!primarySource) {
+    const sources = _sbProposalSourceKits(row?.sourceKits || row?.source_kits);
+    if (!sources.length) {
       addToHierarchy(row, { folderName: "Untracked / Direct", name: "Direct / legacy components" });
       continue;
     }
+
     const memberships = kitMembership?.get(String(row?.productId || "").trim()) || [];
-    const membership = memberships.find((entry) => String(entry?.id || entry?.kitId || "").trim() === String(primarySource.kitId || "").trim());
-    if (membership) addToHierarchy(row, membership);
-    else addToHierarchy(row, {
-      id: primarySource.kitId,
-      name: primarySource.kitName || (primarySource.kitId ? "Untitled kit" : "Direct / legacy components"),
-      folderName: primarySource.kitId ? "Unfiled Kits" : "Untracked / Direct",
+    sources.forEach((source, sourceIndex) => {
+      const sourceQuantity = _sbProposalQuantity(source?.quantity || 1);
+      const rawUnitPrice = row?.unitPrice;
+      const unitPrice = Number(rawUnitPrice);
+      const hasUnitPrice = rawUnitPrice !== null && rawUnitPrice !== undefined && rawUnitPrice !== "" && Number.isFinite(unitPrice);
+      const sourceRow = {
+        ...row,
+        quantity: sourceQuantity,
+        totalPrice: hasUnitPrice ? unitPrice * sourceQuantity : row?.totalPrice,
+        sourceKits: [source],
+        _sourceKey: `${String(source?.kitId || "").trim() || `name:${String(source?.kitName || "").toLowerCase()}`}:${sourceIndex}`,
+      };
+      const membership = memberships.find((entry) => String(entry?.id || entry?.kitId || "").trim() === String(source.kitId || "").trim());
+      if (membership) addToHierarchy(sourceRow, membership);
+      else addToHierarchy(sourceRow, {
+        id: source.kitId,
+        name: source.kitName || (source.kitId ? "Untitled kit" : "Direct / legacy components"),
+        folderName: source.kitId ? "Unfiled Kits" : "Untracked / Direct",
+      });
     });
   }
 

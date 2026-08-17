@@ -1058,15 +1058,28 @@ export default function ProposalsClient({
 
     for (const row of visibleEnrichedRows) {
       const sources = normalizeSourceKits(row?.sourceKits);
-      const primary = sources.slice().sort((a, b) => (b.quantity - a.quantity) || (a.order - b.order))[0] || null;
-      if (!primary) {
+      if (!sources.length) {
         addRow({ folderName: "Untracked / Direct", name: "Direct / legacy components" }, row);
         continue;
       }
-      const localKit = kitById.get(text(primary.kitId)) || null;
-      const folderId = text(localKit?.folderId);
-      const folderName = primary.kitId ? (folderId ? (text(folderById.get(folderId)?.name) || "Unfiled Kits") : "Unfiled Kits") : "Untracked / Direct";
-      addRow({ id: text(primary.kitId), name: text(localKit?.name) || text(primary.kitName) || "Direct / legacy components", folderId, folderName }, row);
+
+      sources.forEach((source, sourceIndex) => {
+        const sourceQuantity = Math.max(1, Math.round(number(source?.quantity) || 1));
+        const rawUnitPrice = row?.unitPrice;
+        const unitPrice = Number(rawUnitPrice);
+        const hasUnitPrice = rawUnitPrice !== null && rawUnitPrice !== undefined && rawUnitPrice !== "" && Number.isFinite(unitPrice);
+        const sourceRow = {
+          ...row,
+          quantity: sourceQuantity,
+          totalPrice: hasUnitPrice ? unitPrice * sourceQuantity : row?.totalPrice,
+          _renderKey: `${row.id || row.productId || row.name}::${text(source?.kitId) || `name:${lower(source?.kitName)}`}::${sourceIndex}`,
+          _sourceKit: source,
+        };
+        const localKit = kitById.get(text(source.kitId)) || null;
+        const folderId = text(localKit?.folderId);
+        const folderName = source.kitId ? (folderId ? (text(folderById.get(folderId)?.name) || "Unfiled Kits") : "Unfiled Kits") : "Untracked / Direct";
+        addRow({ id: text(source.kitId), name: text(localKit?.name) || text(source.kitName) || "Direct / legacy components", folderId, folderName }, sourceRow);
+      });
     }
 
     return [...foldersMap.values()]
@@ -1693,7 +1706,7 @@ export default function ProposalsClient({
         }))
       : [];
     return (
-      <article className={`kit-component-card proposal-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+      <article className={`kit-component-card proposal-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row._renderKey || row.id}>
         <header className="kit-component-card__head proposal-component-card__head">
           <div className="kit-component-card__title">
             <span>Component</span>
