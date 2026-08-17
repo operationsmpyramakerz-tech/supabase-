@@ -397,6 +397,8 @@ function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
 function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantityChange, onClose }) {
   const [activeFolderId, setActiveFolderId] = useState("");
   const [query, setQuery] = useState("");
+  const [bulkQuantity, setBulkQuantity] = useState("1");
+  const [bulkQuantityVisible, setBulkQuantityVisible] = useState(false);
   const activeFolder = folders.find((folder) => folder.id === activeFolderId) || null;
   const needle = lower(query);
   const selectedCount = Object.keys(selectedKits || {}).length;
@@ -412,6 +414,9 @@ function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantity
     if (!needle) return folders;
     return folders.filter((folder) => lower(folder.name).includes(needle));
   }, [activeFolderId, folders, needle]);
+  const currentScopeKits = useMemo(() => (
+    activeFolderId ? kits.filter((kit) => kit.folderId === activeFolderId) : kits.filter((kit) => !kit.folderId)
+  ), [activeFolderId, kits]);
   const visibleKits = useMemo(() => {
     let rows = activeFolderId
       ? kits.filter((kit) => kit.folderId === activeFolderId)
@@ -421,6 +426,38 @@ function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantity
     if (needle) rows = rows.filter((kit) => lower(kit.name).includes(needle));
     return rows;
   }, [activeFolderId, kits, needle]);
+  const selectedInScopeCount = currentScopeKits.filter((kit) => Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id)).length;
+  const allScopeSelected = currentScopeKits.length > 0 && selectedInScopeCount === currentScopeKits.length;
+
+  const normalizeQuantityInput = (value) => {
+    const raw = String(value ?? "").replace(/[^0-9]/g, "");
+    if (!raw) return "0";
+    return raw.replace(/^0+(?=\d)/, "") || "0";
+  };
+
+  const selectAllInScope = () => {
+    const nextQty = normalizeQuantityInput(bulkQuantity || "1");
+    currentScopeKits.forEach((kit) => {
+      if (!Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id)) onToggleKit(kit.id);
+      onQuantityChange(kit.id, nextQty);
+    });
+    setBulkQuantity(nextQty);
+    setBulkQuantityVisible(true);
+  };
+
+  const unselectAllInScope = () => {
+    Object.keys(selectedKits || {}).forEach((kitId) => onToggleKit(kitId));
+    setBulkQuantityVisible(false);
+    setBulkQuantity("1");
+  };
+
+  const changeBulkQuantity = (value) => {
+    const nextQty = normalizeQuantityInput(value);
+    setBulkQuantity(nextQty);
+    currentScopeKits.forEach((kit) => {
+      if (Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id)) onQuantityChange(kit.id, nextQty);
+    });
+  };
 
   useEffect(() => {
     const onKeyDown = (event) => { if (event.key === "Escape") onClose(); };
@@ -442,7 +479,7 @@ function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantity
 
         <div className="proposal-kit-browser__toolbar">
           {activeFolder ? (
-            <button type="button" className="proposal-kit-browser__back" onClick={() => { setActiveFolderId(""); setQuery(""); }}>
+            <button type="button" className="proposal-kit-browser__back" onClick={() => { setActiveFolderId(""); setQuery(""); setBulkQuantityVisible(false); }}>
               <span aria-hidden="true">←</span><span>All folders</span>
             </button>
           ) : <span className="proposal-kit-browser__location">Folders & kits</span>}
@@ -450,6 +487,24 @@ function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantity
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search kits..." autoComplete="off" />
           </label>
+          <div className="proposal-kit-browser__bulk-actions">
+            <button type="button" className="proposal-kit-browser__bulk-button" onClick={selectAllInScope} disabled={!currentScopeKits.length || allScopeSelected}>Select all</button>
+            <button type="button" className="proposal-kit-browser__bulk-button proposal-kit-browser__bulk-button--muted" onClick={unselectAllInScope} disabled={!selectedCount}>Unselect all</button>
+          </div>
+          {bulkQuantityVisible && selectedInScopeCount ? (
+            <label className="proposal-kit-browser__bulk-qty">
+              <span>Qty all</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={bulkQuantity}
+                onChange={(event) => changeBulkQuantity(event.target.value)}
+                onFocus={(event) => { if (event.currentTarget.value === "0") event.currentTarget.select(); }}
+              />
+            </label>
+          ) : null}
           <span className="proposal-kit-browser__selected-count">{selectedCount} selected</span>
         </div>
 
@@ -458,7 +513,7 @@ function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantity
             const kitCount = folderCounts.get(folder.id) || 0;
             return (
               <article className="products-proposal-folder kit-library-folder proposal-kit-browser-library-folder" key={folder.id}>
-                <button type="button" className="products-proposal-folder__main" onClick={() => { setActiveFolderId(folder.id); setQuery(""); }} aria-label={`Open folder ${folder.name}`}>
+                <button type="button" className="products-proposal-folder__main" onClick={() => { setActiveFolderId(folder.id); setQuery(""); setBulkQuantityVisible(false); setBulkQuantity("1"); }} aria-label={`Open folder ${folder.name}`}>
                   <span className="proposal-folder-figure" aria-hidden="true">
                     <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
                     <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
@@ -501,10 +556,12 @@ function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantity
                       <span>Qty</span>
                       <input
                         type="number"
-                        min="1"
+                        min="0"
                         step="1"
+                        inputMode="numeric"
                         value={qty}
-                        onChange={(event) => onQuantityChange(kit.id, event.target.value)}
+                        onChange={(event) => onQuantityChange(kit.id, normalizeQuantityInput(event.target.value))}
+                        onFocus={(event) => { if (event.currentTarget.value === "0") event.currentTarget.select(); }}
                         onClick={(event) => event.stopPropagation()}
                       />
                     </label>
@@ -556,8 +613,14 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
     setError("");
   };
 
+  const normalizeQuantityInput = (value) => {
+    const raw = String(value ?? "").replace(/[^0-9]/g, "");
+    if (!raw) return "0";
+    return raw.replace(/^0+(?=\d)/, "") || "0";
+  };
+
   const setProductQuantity = (productId, value) => {
-    setSelectedProducts((current) => ({ ...current, [productId]: Math.max(1, Math.round(number(value) || 1)) }));
+    setSelectedProducts((current) => ({ ...current, [productId]: normalizeQuantityInput(value) }));
   };
 
   const toggleKit = (kitId) => {
@@ -571,7 +634,7 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   };
 
   const setKitQuantity = (kitId, value) => {
-    setSelectedKits((current) => ({ ...current, [kitId]: Math.max(1, Math.round(number(value) || 1)) }));
+    setSelectedKits((current) => ({ ...current, [kitId]: normalizeQuantityInput(value) }));
   };
 
   const switchMode = (value) => {
@@ -659,7 +722,7 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
                         <span className="proposal-product-choice__selected-copy"><small>✓ Selected</small><strong>{product.name}</strong></span>
                         <label onClick={(event) => event.stopPropagation()}>
                           <span>Qty</span>
-                          <input type="number" min="1" step="1" value={selectedProducts[product.id]} onChange={(event) => setProductQuantity(product.id, event.target.value)} onClick={(event) => event.stopPropagation()} />
+                          <input type="number" min="0" step="1" inputMode="numeric" value={selectedProducts[product.id]} onChange={(event) => setProductQuantity(product.id, event.target.value)} onFocus={(event) => { if (event.currentTarget.value === "0") event.currentTarget.select(); }} onClick={(event) => event.stopPropagation()} />
                         </label>
                       </div>
                     ) : null}
