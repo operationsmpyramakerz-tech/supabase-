@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
+import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
 
 const EXPORT_COLUMNS = [
@@ -846,6 +847,7 @@ export default function ProposalsClient({
   const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
   const [busy, setBusy] = useState(false);
   const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
+  const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const [detailBusy, setDetailBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
@@ -864,16 +866,15 @@ export default function ProposalsClient({
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
     if (!input) return undefined;
-    input.value = "";
-    input.placeholder = "Search proposals...";
+    input.value = search;
+    input.placeholder = activeDetail ? "Search components..." : "Search proposals...";
     const handle = (event) => setSearch(event.target.value || "");
     input.addEventListener("input", handle);
     return () => {
       input.removeEventListener("input", handle);
-      input.value = "";
       input.placeholder = "Search";
     };
-  }, []);
+  }, [activeDetail?.proposal?.id, createMode]);
 
   useEffect(() => {
     const open = Boolean(activeDetail || detailBusy);
@@ -932,6 +933,12 @@ export default function ProposalsClient({
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [activeDetail, productMap]);
 
+  const visibleEnrichedRows = useMemo(() => {
+    const needle = lower(search);
+    if (!activeDetail || !needle) return enrichedRows;
+    return enrichedRows.filter((row) => lower(row.name).includes(needle));
+  }, [activeDetail, enrichedRows, search]);
+
   const detailTotals = useMemo(() => enrichedRows.reduce((acc, row) => {
     acc.items += 1;
     acc.quantity += row.quantity;
@@ -964,6 +971,7 @@ export default function ProposalsClient({
   };
 
   const loadProposal = async (proposalId, options = {}) => {
+    setSearch("");
     setCreateMode(false);
     setDetailEdit(Boolean(options.edit));
     if (Object.prototype.hasOwnProperty.call(options, "adminPassword")) setEditAdminPassword(options.adminPassword || "");
@@ -1029,6 +1037,7 @@ export default function ProposalsClient({
   };
 
   const backToProposals = () => {
+    setSearch("");
     setActiveDetail(null);
     setDetailEdit(false);
     setCreateMode(false);
@@ -1040,6 +1049,7 @@ export default function ProposalsClient({
   };
 
   const startCreateProposal = async () => {
+    setSearch("");
     const adminPassword = await askPassword({
       title: "Create New Proposal",
       message: "Enter the Admin password to create a new proposal.",
@@ -1261,58 +1271,83 @@ export default function ProposalsClient({
 
   const submitAdd = async ({ mode, selected, selections = [], quantity, mergeLogic }) => {
     const proposal = activeDetail?.proposal;
-    if (createMode) {
-      if (mode === "product") {
-        const rows = selections.map((entry) => {
-          const product = productMap.get(entry.selected);
-          if (!product) return null;
-          return { productId: product.id, productName: product.name, quantity: Math.max(1, Math.round(number(entry.quantity) || 1)) };
-        }).filter(Boolean);
-        if (!rows.length) throw new Error("No valid products were selected.");
-        addDraftProducts(rows, mergeLogic);
-        setAddDialog(false);
-        notify(`${rows.length} product${rows.length === 1 ? "" : "s"} added to proposal draft.`);
-        return;
-      }
-      if (mode === "tag") {
-        const rows = products
-          .filter((product) => firstTag(product) === selected)
-          .map((product) => ({ productId: product.id, productName: product.name, quantity }));
-        if (!rows.length) throw new Error("No products were found under this tag.");
-        addDraftProducts(rows, mergeLogic);
-        setAddDialog(false);
-        notify(`${rows.length} products added from the selected tag.`);
-        return;
-      }
-      if (mode === "kit") {
-        if (!selections.length) throw new Error("Choose at least one kit.");
-        const kitRows = [];
-        for (const entry of selections) {
-          const multiplier = Math.max(1, Math.round(number(entry.quantity) || 1));
-          const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(entry.selected)}?_ts=${Date.now()}`);
-          const rows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => ({
-            productId: item.productId,
-            productName: item.productName,
-            quantity: Math.max(1, Math.round(number(item.quantity) || 1)) * multiplier,
-          }));
-          kitRows.push(...rows);
-        }
-        if (!kitRows.length) throw new Error("The selected kits have no components.");
-        addDraftProducts(kitRows, mergeLogic);
-        setAddDialog(false);
-        notify(`${selections.length} kit${selections.length === 1 ? "" : "s"} added to the proposal draft.`);
-        return;
-      }
-    }
+    const selectionCount = mode === "product" || mode === "kit" ? selections.length : 1;
+    let loadingStarted = false;
 
-    if (!proposal?.id) return;
-    const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
-    if (adminPassword === null) return;
-    if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
-    setBusy(true);
+    const beginAddLoading = (message) => {
+      loadingStarted = true;
+      startActionLoading({
+        title: mode === "kit" ? "Adding kits" : "Adding components",
+        message: message || `Adding ${selectionCount} selection${selectionCount === 1 ? "" : "s"}…`,
+      });
+    };
+
+    const completeAdd = async (message) => {
+      setAddDialog(false);
+      await finishActionLoading("done", message);
+    };
+
     try {
+      if (createMode) {
+        if (mode === "product") {
+          const rows = selections.map((entry) => {
+            const product = productMap.get(entry.selected);
+            if (!product) return null;
+            return { productId: product.id, productName: product.name, quantity: Math.max(1, Math.round(number(entry.quantity) || 1)) };
+          }).filter(Boolean);
+          if (!rows.length) throw new Error("No valid products were selected.");
+          beginAddLoading(`Adding ${rows.length} product${rows.length === 1 ? "" : "s"} to the proposal…`);
+          addDraftProducts(rows, mergeLogic);
+          notify(`${rows.length} product${rows.length === 1 ? "" : "s"} added to proposal draft.`);
+          await completeAdd(`${rows.length} product${rows.length === 1 ? "" : "s"} added successfully.`);
+          return;
+        }
+        if (mode === "tag") {
+          const rows = products
+            .filter((product) => firstTag(product) === selected)
+            .map((product) => ({ productId: product.id, productName: product.name, quantity }));
+          if (!rows.length) throw new Error("No products were found under this tag.");
+          beginAddLoading(`Adding ${rows.length} products to the proposal…`);
+          addDraftProducts(rows, mergeLogic);
+          notify(`${rows.length} products added from the selected tag.`);
+          await completeAdd(`${rows.length} products added successfully.`);
+          return;
+        }
+        if (mode === "kit") {
+          if (!selections.length) throw new Error("Choose at least one kit.");
+          beginAddLoading(`Loading ${selections.length} kit${selections.length === 1 ? "" : "s"} and adding their components…`);
+          const kitRows = [];
+          for (const entry of selections) {
+            const multiplier = Math.max(1, Math.round(number(entry.quantity) || 1));
+            const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(entry.selected)}?_ts=${Date.now()}`);
+            const rows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: Math.max(1, Math.round(number(item.quantity) || 1)) * multiplier,
+            }));
+            kitRows.push(...rows);
+          }
+          if (!kitRows.length) throw new Error("The selected kits have no components.");
+          addDraftProducts(kitRows, mergeLogic);
+          notify(`${selections.length} kit${selections.length === 1 ? "" : "s"} added to the proposal draft.`);
+          await completeAdd(`${selections.length} kit${selections.length === 1 ? "" : "s"} added successfully.`);
+          return;
+        }
+      }
+
+      if (!proposal?.id) return;
+      if (mode === "product" && !selections.length) throw new Error("Choose at least one product.");
+      if (mode === "kit" && !selections.length) throw new Error("Choose at least one kit.");
+
+      const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to modify a proposal created by another user.");
+      if (adminPassword === null) return;
+      if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
+      setBusy(true);
+      beginAddLoading(mode === "kit"
+        ? `Adding ${selections.length} kit${selections.length === 1 ? "" : "s"} to the proposal…`
+        : `Adding ${selections.length || 1} component${(selections.length || 1) === 1 ? "" : "s"} to the proposal…`);
+
       if (mode === "product") {
-        if (!selections.length) throw new Error("Choose at least one product.");
         let body = null;
         for (const entry of selections) {
           body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items`, {
@@ -1328,13 +1363,12 @@ export default function ProposalsClient({
         const pendingName = editName;
         if (body) syncDetail(body);
         setEditName(pendingName);
-        setAddDialog(false);
         notify(`${selections.length} product${selections.length === 1 ? "" : "s"} added.`);
+        await completeAdd(`${selections.length} product${selections.length === 1 ? "" : "s"} added successfully.`);
         return;
       }
 
       if (mode === "kit") {
-        if (!selections.length) throw new Error("Choose at least one kit.");
         let body = null;
         for (const entry of selections) {
           body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`, {
@@ -1350,8 +1384,8 @@ export default function ProposalsClient({
         const pendingName = editName;
         if (body) syncDetail(body);
         setEditName(pendingName);
-        setAddDialog(false);
         notify(`${selections.length} kit${selections.length === 1 ? "" : "s"} added.`);
+        await completeAdd(`${selections.length} kit${selections.length === 1 ? "" : "s"} added successfully.`);
         return;
       }
 
@@ -1361,8 +1395,11 @@ export default function ProposalsClient({
       const pendingName = editName;
       syncDetail(body);
       setEditName(pendingName);
-      setAddDialog(false);
       notify(`${body.addedCount || "Components"} added.`);
+      await completeAdd("Components added successfully.");
+    } catch (error) {
+      if (loadingStarted) await finishActionLoading("failed", error?.message || "The components could not be added.");
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -1483,6 +1520,7 @@ export default function ProposalsClient({
       <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
+        <ActionLoadingModal state={actionLoading} />
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
             <section className={`products-proposal-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>
@@ -1569,7 +1607,7 @@ export default function ProposalsClient({
                     </div>
                     <div className="products-proposal-table-wrap proposal-components-wrap">
                       <div className="proposal-components-grid">
-                        {enrichedRows.map((row) => {
+                        {visibleEnrichedRows.map((row) => {
                           const matrixRow = Array.isArray(proposal?.combinedMatrix)
                             ? proposal.combinedMatrix.find((entry) => {
                                 const entryProductId = text(entry?.productId || entry?.product_id);
@@ -1652,7 +1690,7 @@ export default function ProposalsClient({
                             </article>
                           );
                         })}
-                        {!enrichedRows.length ? <div className="products-table-empty proposal-components-empty">No components yet. {detailEdit ? "Add a product or saved kit above." : "Choose Edit to add components."}</div> : null}
+                        {!visibleEnrichedRows.length ? <div className="products-table-empty proposal-components-empty">{enrichedRows.length ? "No components match your search." : <>No components yet. {detailEdit ? "Add a product or saved kit above." : "Choose Edit to add components."}</>}</div> : null}
                       </div>
                     </div>
                     <div className="proposal-total-block">

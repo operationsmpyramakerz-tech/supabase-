@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
+import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
 
 function text(value) {
@@ -515,6 +516,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
+  const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const [detailBusy, setDetailBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
@@ -996,36 +998,48 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       return;
     }
     const quantity = Math.max(1, Math.round(number(productQty) || 1));
+    startActionLoading({ title: "Adding component", message: `Adding ${product.name} to the kit…` });
+
     if (createMode) {
-      setActiveDetail((current) => {
-        const items = Array.isArray(current?.items) ? [...current.items] : [];
-        const existingIndex = items.findIndex((item) => text(item.productId) === product.id);
-        if (existingIndex >= 0) {
-          const existing = items[existingIndex];
-          items[existingIndex] = { ...existing, quantity: Math.max(1, number(existing.quantity) + quantity), updatedAt: new Date().toISOString() };
-        } else {
-          items.push(normalizeItem({
-            id: `draft-kit-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            productId: product.id,
-            productName: product.name,
-            quantity,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }, items.length));
-        }
-        return { ...(current || {}), items };
-      });
-      setDraftErrors((current) => ({ ...current, items: "" }));
-      setSelectedProductId("");
-      setProductSearch("");
-      setProductQty(1);
-      setProductPickerOpen(false);
-      notify("Product added to kit draft.");
+      try {
+        setActiveDetail((current) => {
+          const items = Array.isArray(current?.items) ? [...current.items] : [];
+          const existingIndex = items.findIndex((item) => text(item.productId) === product.id);
+          if (existingIndex >= 0) {
+            const existing = items[existingIndex];
+            items[existingIndex] = { ...existing, quantity: Math.max(1, number(existing.quantity) + quantity), updatedAt: new Date().toISOString() };
+          } else {
+            items.push(normalizeItem({
+              id: `draft-kit-item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              productId: product.id,
+              productName: product.name,
+              quantity,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }, items.length));
+          }
+          return { ...(current || {}), items };
+        });
+        setDraftErrors((current) => ({ ...current, items: "" }));
+        setSelectedProductId("");
+        setProductSearch("");
+        setProductQty(1);
+        setProductPickerOpen(false);
+        notify("Product added to kit draft.");
+        await finishActionLoading("done", `${product.name} added successfully.`);
+      } catch (error) {
+        const message = error?.message || "The product could not be added.";
+        await finishActionLoading("failed", message);
+        notify(message, "error");
+      }
       return;
     }
 
     const kit = activeDetail?.kit;
-    if (!kit?.id) return;
+    if (!kit?.id) {
+      await finishActionLoading("failed", "The kit could not be found.");
+      return;
+    }
     setBusy(true);
     try {
       const pendingName = editName;
@@ -1041,8 +1055,11 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       setProductQty(1);
       setProductPickerOpen(false);
       notify("Product added to kit.");
+      await finishActionLoading("done", `${product.name} added successfully.`);
     } catch (error) {
-      notify(error?.message || "The product could not be added.", "error");
+      const message = error?.message || "The product could not be added.";
+      await finishActionLoading("failed", message);
+      notify(message, "error");
     } finally {
       setBusy(false);
     }
@@ -1242,6 +1259,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
+        <ActionLoadingModal state={actionLoading} />
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
             <section className={`products-proposal-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>
