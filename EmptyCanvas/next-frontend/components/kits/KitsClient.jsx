@@ -80,8 +80,6 @@ const FEATHER_PATHS = {
   ],
   eye: [<path key="p" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z" />, <circle key="c" cx="12" cy="12" r="3" />],
   merge: [<circle key="c1" cx="18" cy="18" r="3" />, <circle key="c2" cx="6" cy="6" r="3" />, <path key="p" d="M6 21V9a9 9 0 0 0 9 9" />],
-  folder: [<path key="p" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
-  folderPlus: [<path key="p1" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />, <path key="p2" d="M12 10v6M9 13h6" />],
 };
 
 function FeatherIcon({ name, size = 18, className = "" }) {
@@ -118,21 +116,8 @@ function normalizeKit(kit, index = 0) {
     createdById: text(kit?.createdById),
     createdAt: text(kit?.createdAt),
     updatedAt: text(kit?.updatedAt),
-    folderId: text(kit?.folderId || kit?.folder_id),
     itemsCount: number(kit?.itemsCount),
     canEdit: kit?.canEdit === true,
-  };
-}
-
-function normalizeFolder(folder, index = 0) {
-  return {
-    id: text(folder?.id) || `folder-${index}`,
-    name: text(folder?.name) || "Untitled folder",
-    createdBy: text(folder?.createdBy),
-    createdById: text(folder?.createdById),
-    createdAt: text(folder?.createdAt),
-    updatedAt: text(folder?.updatedAt),
-    canEdit: folder?.canEdit === true,
   };
 }
 
@@ -228,36 +213,6 @@ function NameModal({ dialog, busy, onClose, onSubmit }) {
         <div className="next-proposals-form__actions products-modal__actions">
           <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : action}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
-  const [value, setValue] = useState(dialog?.value || "");
-  const [error, setError] = useState("");
-  const creating = dialog?.mode !== "rename";
-  const submit = async (event) => {
-    event.preventDefault();
-    const name = text(value);
-    if (!name) return setError("Folder name is required.");
-    setError("");
-    try { await onSubmit(name); } catch (submitError) { setError(submitError?.message || "The folder could not be saved."); }
-  };
-  return (
-    <Modal
-      title={creating ? "Create Folder" : "Rename Folder"}
-      subtitle={creating ? "Enter a name only. You can create kits after opening the folder." : "Change the folder name without changing the kits inside it."}
-      icon={<FeatherIcon name="folder" size={20} />}
-      onClose={onClose}
-    >
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Folder Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: TH1 Kits" /></label>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : creating ? "Create Folder" : "Save Name"}</button>
         </div>
       </form>
     </Modal>
@@ -383,14 +338,6 @@ function AddProductModal({ kit, products, busy, onClose, onSubmit }) {
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
-  const folderKitCounts = useMemo(() => {
-    const counts = new Map();
-    kits.forEach((kit) => {
-      if (kit.folderId) counts.set(kit.folderId, (counts.get(kit.folderId) || 0) + 1);
-    });
-    return counts;
-  }, [kits]);
-
   const filteredProducts = useMemo(() => {
     const needle = lower(search);
     return products.filter((product) => !needle || [product.name, product.displayId, product.unit, firstTag(product)].some((value) => lower(value).includes(needle))).slice(0, 100);
@@ -435,18 +382,15 @@ function AddProductModal({ kit, products, busy, onClose, onSubmit }) {
   );
 }
 
-export default function KitsClient({ account, initialCatalog, initialKits, initialFolders, bootstrapWarnings = [] }) {
+export default function KitsClient({ account, initialCatalog, initialKits, bootstrapWarnings = [] }) {
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
-  const [folders, setFolders] = useState(() => (Array.isArray(initialFolders?.folders) ? initialFolders.folders : []).map(normalizeFolder));
-  const [activeFolder, setActiveFolder] = useState(null);
   const [activeDetail, setActiveDetail] = useState(null);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [detailBusy, setDetailBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
-  const [folderDialog, setFolderDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
   const [combineOpen, setCombineOpen] = useState(false);
@@ -465,15 +409,16 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
     if (!input) return undefined;
-    input.value = search;
-    input.placeholder = activeDetail ? "Search components..." : activeFolder ? `Search kits in ${activeFolder.name}...` : "Search folders or kits...";
+    input.value = "";
+    input.placeholder = "Search kits...";
     const handle = (event) => setSearch(event.target.value || "");
     input.addEventListener("input", handle);
     return () => {
       input.removeEventListener("input", handle);
+      input.value = "";
       input.placeholder = "Search";
     };
-  }, [activeDetail?.kit?.id, activeFolder?.id]);
+  }, []);
 
   useEffect(() => {
     const open = Boolean(activeDetail || detailBusy);
@@ -503,17 +448,8 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   const filteredKits = useMemo(() => {
     const needle = lower(search);
-    const scoped = activeFolder
-      ? kits.filter((kit) => kit.folderId === activeFolder.id)
-      : kits.filter((kit) => !kit.folderId);
-    return scoped.filter((kit) => !needle || [kit.name, kit.createdBy].some((value) => lower(value).includes(needle)));
-  }, [kits, search, activeFolder]);
-
-  const filteredFolders = useMemo(() => {
-    if (activeFolder) return [];
-    const needle = lower(search);
-    return folders.filter((folder) => !needle || [folder.name, folder.createdBy].some((value) => lower(value).includes(needle)));
-  }, [folders, search, activeFolder]);
+    return kits.filter((kit) => !needle || [kit.name, kit.createdBy].some((value) => lower(value).includes(needle)));
+  }, [kits, search]);
 
   const filteredProducts = useMemo(() => {
     const needle = lower(productSearch);
@@ -539,12 +475,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       };
     });
   }, [activeDetail, productMap]);
-
-  const visibleEnrichedRows = useMemo(() => {
-    const needle = lower(search);
-    if (!activeDetail || !needle) return enrichedRows;
-    return enrichedRows.filter((row) => lower(row.name).includes(needle));
-  }, [activeDetail, enrichedRows, search]);
 
   const detailTotals = useMemo(() => enrichedRows.reduce((acc, row) => {
     acc.items += 1;
@@ -593,13 +523,11 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   const backToKits = () => {
     setActiveDetail(null);
-    setSearch("");
     resetDetailEditor();
   };
 
   const loadKit = async (kitId, options = {}) => {
     const edit = Boolean(options.edit);
-    setSearch("");
     setFolderMenu("");
     setCreateMode(false);
     setDetailEdit(edit);
@@ -618,14 +546,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   const refreshKits = async () => {
     try {
-      const [kitBody, productBody, folderBody] = await Promise.all([
+      const [kitBody, productBody] = await Promise.all([
         requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
         requestJson(`/next/api/products?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
       ]);
       setKits((kitBody.kits || []).map(normalizeKit));
       setProducts((productBody.products || []).map(normalizeProduct));
-      setFolders((folderBody.folders || []).map(normalizeFolder));
     } catch (error) {
       notify(error?.message || "The data could not be refreshed.", "error");
     }
@@ -665,7 +591,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
       const createdBody = await requestJson("/next/api/products/kits", {
         method: "POST",
-        body: JSON.stringify({ name: cleanName, adminPassword, folderId: activeFolder?.id || "" }),
+        body: JSON.stringify({ name: cleanName, adminPassword }),
       });
       createdId = text(createdBody?.kit?.id);
       if (!createdId) throw new Error("The combined kit was created but its ID was not returned.");
@@ -690,90 +616,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         } catch {}
       }
       throw error;
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openFolder = (folder) => {
-    setFolderMenu("");
-    setSearch("");
-    setActiveFolder(normalizeFolder(folder));
-  };
-
-  const backToFolderRoot = () => {
-    setFolderMenu("");
-    setSearch("");
-    setActiveFolder(null);
-  };
-
-  const submitFolderDialog = async (name) => {
-    const dialog = folderDialog;
-    if (!dialog) return;
-    setBusy(true);
-    try {
-      if (dialog.mode === "rename" && dialog.folder?.id) {
-        const body = await requestJson(`/next/api/products/kit-folders/${encodeURIComponent(dialog.folder.id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name, adminPassword: dialog.adminPassword || "" }),
-        });
-        const updated = normalizeFolder(body.folder || { ...dialog.folder, name });
-        setFolders((current) => current.map((folder) => folder.id === updated.id ? updated : folder));
-        setActiveFolder((current) => current?.id === updated.id ? updated : current);
-        notify("Folder name updated.");
-      } else {
-        const body = await requestJson("/next/api/products/kit-folders", {
-          method: "POST",
-          body: JSON.stringify({ name }),
-        });
-        const created = normalizeFolder(body.folder || { name, canEdit: true });
-        setFolders((current) => [created, ...current.filter((folder) => folder.id !== created.id)]);
-        notify(`Folder “${created.name}” created.`);
-      }
-      setFolderDialog(null);
-    } catch (error) {
-      notify(error?.message || "The folder could not be saved.", "error");
-      throw error;
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const renameFolder = async (folder) => {
-    let adminPassword = "";
-    if (!folder?.canEdit) {
-      adminPassword = await askPassword({ title: "Admin password required", message: `Enter the Admin password to rename “${folder.name}”.` });
-      if (adminPassword === null) return;
-    }
-    setFolderDialog({ mode: "rename", folder, value: folder.name, adminPassword });
-  };
-
-  const deleteFolder = async (folder) => {
-    let adminPassword = "";
-    if (!folder?.canEdit) {
-      adminPassword = await askPassword({ title: "Admin password required", message: `Enter the Admin password to delete “${folder.name}”.` });
-      if (adminPassword === null) return;
-    }
-    const confirmed = await confirmDelete({
-      itemName: folder.name,
-      itemType: "folder",
-      title: "Delete folder?",
-      message: `Delete “${folder.name}”? Kits inside it will not be deleted; they will return to the main Kits page.`,
-      confirmLabel: "Delete Folder",
-    });
-    if (!confirmed) return;
-    setBusy(true);
-    try {
-      await requestJson(`/next/api/products/kit-folders/${encodeURIComponent(folder.id)}`, {
-        method: "DELETE",
-        body: JSON.stringify({ adminPassword }),
-      });
-      setFolders((current) => current.filter((entry) => entry.id !== folder.id));
-      setKits((current) => current.map((kit) => kit.folderId === folder.id ? { ...kit, folderId: "" } : kit));
-      if (activeFolder?.id === folder.id) setActiveFolder(null);
-      notify("Folder deleted. Its kits were moved back to the main Kits page.");
-    } catch (error) {
-      notify(error?.message || "The folder could not be deleted.", "error");
     } finally {
       setBusy(false);
     }
@@ -816,7 +658,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     setEditName("");
     setDraftErrors({ name: "", items: "" });
     setActiveDetail({
-      kit: normalizeKit({ name: "", createdBy, canEdit: true, folderId: activeFolder?.id || "" }),
+      kit: normalizeKit({ name: "", createdBy, canEdit: true }),
       items: [],
     });
     setSelectedProductId("");
@@ -1018,7 +860,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       if (createMode) {
         const createdBody = await requestJson("/next/api/products/kits", {
           method: "POST",
-          body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword, folderId: activeDetail?.kit?.folderId || activeFolder?.id || "" }),
+          body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
         });
         const created = normalizeKit({ ...(createdBody.kit || {}), canEdit: true });
         if (!created.id) throw new Error("Kit was created but the kit ID was not returned.");
@@ -1051,62 +893,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     } finally {
       setBusy(false);
     }
-  };
-
-  const renderKitCard = (kit) => {
-    const menuKey = `kit:${kit.id}`;
-    const menuOpen = folderMenu === menuKey;
-    return (
-      <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
-        <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === menuKey ? "" : menuKey); }} aria-expanded={menuOpen} aria-label={`Actions for ${kit.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
-        {menuOpen ? (
-          <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button>
-            <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button>
-            <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button>
-          </div>
-        ) : null}
-        <button type="button" className="products-proposal-folder__main" onClick={() => loadKit(kit.id, { edit: false, adminPassword: "" })} aria-label={`Open ${kit.name}`}>
-          <span className="proposal-folder-figure" aria-hidden="true">
-            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
-            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
-            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
-            <span className="proposal-folder-figure__back" />
-            <span className="proposal-folder-figure__front"><small>K</small></span>
-          </span>
-          <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
-          <span className="proposal-folder-count"><FeatherIcon name="copy" /><span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span></span>
-        </button>
-      </article>
-    );
-  };
-
-  const renderLibraryFolder = (folder) => {
-    const menuKey = `folder:${folder.id}`;
-    const menuOpen = folderMenu === menuKey;
-    const kitCount = folderKitCounts.get(folder.id) || 0;
-    return (
-      <article className={`products-proposal-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
-        <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === menuKey ? "" : menuKey); }} aria-expanded={menuOpen} aria-label={`Actions for folder ${folder.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
-        {menuOpen ? (
-          <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button>
-            <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button>
-          </div>
-        ) : null}
-        <button type="button" className="products-proposal-folder__main" onClick={() => openFolder(folder)} aria-label={`Open folder ${folder.name}`}>
-          <span className="proposal-folder-figure" aria-hidden="true">
-            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
-            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
-            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
-            <span className="proposal-folder-figure__back" />
-            <span className="proposal-folder-figure__front"><small>F</small></span>
-          </span>
-          <span className="proposal-folder-copy"><strong>{folder.name}</strong><em>Kit folder</em></span>
-          <span className="proposal-folder-count"><FeatherIcon name="folder" /><span>{formatNumber(kitCount)} kit{kitCount === 1 ? "" : "s"}</span></span>
-        </button>
-      </article>
-    );
   };
 
   if (activeDetail || detailBusy) {
@@ -1226,7 +1012,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                     </div>
                     <div className="products-proposal-table-wrap kit-components-wrap">
                       <div className="kit-components-grid">
-                        {visibleEnrichedRows.map((row) => (
+                        {enrichedRows.map((row) => (
                           <article className={`kit-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
                             <header className="kit-component-card__head">
                               <div className="kit-component-card__title">
@@ -1280,7 +1066,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                             </footer>
                           </article>
                         ))}
-                        {!visibleEnrichedRows.length ? <div className="products-table-empty kit-components-empty">{enrichedRows.length ? "No components match your search." : <>No components yet. {detailEdit ? "Add one component above." : "Open Edit from the folder menu to add components."}</>}</div> : null}
+                        {!enrichedRows.length ? <div className="products-table-empty kit-components-empty">No components yet. {detailEdit ? "Add one component above." : "Open Edit from the folder menu to add components."}</div> : null}
                       </div>
                     </div>
                     <div className="proposal-total-block">
@@ -1314,44 +1100,53 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="proposals-floating-actions kit-library-actions">
-        {activeFolder ? (
-          <>
-            <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button>
-            <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
-          </>
-        ) : (
-          <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button>
-        )}
+      <div className="proposals-floating-actions">
+        <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button>
+        <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
       </div>
 
-      {activeFolder ? (
-        <div className="kit-folder-context">
-          <button type="button" className="products-back-btn" onClick={backToFolderRoot} aria-label="Back to kit folders"><FeatherIcon name="arrowLeft" /></button>
-          <div className="kit-folder-context__icon"><FeatherIcon name="folder" /></div>
-          <div><span>Kit folder</span><h2>{activeFolder.name}</h2><p>{formatNumber(folderKitCounts.get(activeFolder.id) || 0)} kit{(folderKitCounts.get(activeFolder.id) || 0) === 1 ? "" : "s"}</p></div>
-        </div>
-      ) : null}
-
-      {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit or folder is missing.</span></div> : null}
+      {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit is missing.</span></div> : null}
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
         <section className="proposals-panel">
           <div className="products-proposals-list">
-            {(filteredFolders.length || filteredKits.length) ? (
-              <div className="products-proposal-folders kit-library-grid">
-                {!activeFolder ? filteredFolders.map(renderLibraryFolder) : null}
-                {filteredKits.map(renderKitCard)}
+            {filteredKits.length ? (
+              <div className="products-proposal-folders">
+                {filteredKits.map((kit) => {
+                  const menuOpen = folderMenu === kit.id;
+                  return (
+                    <article className={`products-proposal-folder ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
+                      <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === kit.id ? "" : kit.id); }} aria-expanded={menuOpen} aria-label={`Actions for ${kit.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
+                      {menuOpen ? (
+                        <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
+                          <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button>
+                          <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button>
+                          <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button>
+                        </div>
+                      ) : null}
+                      <button type="button" className="products-proposal-folder__main" onClick={() => loadKit(kit.id, { edit: false, adminPassword: "" })} aria-label={`Open ${kit.name}`}>
+                        <span className="proposal-folder-figure" aria-hidden="true">
+                          <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                          <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                          <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                          <span className="proposal-folder-figure__back" />
+                          <span className="proposal-folder-figure__front"><small>K</small></span>
+                        </span>
+                        <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
+                        <span className="proposal-folder-count"><FeatherIcon name="copy" /><span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span></span>
+                      </button>
+                    </article>
+                  );
+                })}
               </div>
             ) : (
-              <div className="products-proposals-empty">{activeFolder ? "No kits in this folder yet. Use Create New Kit to add one." : "No folders or unfiled kits match your search."}</div>
+              <div className="products-proposals-empty">Sorry, No data available</div>
             )}
           </div>
         </section>
       </section>
 
       {combineOpen ? <CombineKitsModal kits={kits} busy={busy} onClose={() => setCombineOpen(false)} onCreate={createCombinedKit} /> : null}
-      {folderDialog ? <FolderNameModal key={`${folderDialog.mode}-${folderDialog.folder?.id || "new"}`} dialog={folderDialog} busy={busy} onClose={() => setFolderDialog(null)} onSubmit={submitFolderDialog} /> : null}
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
     </main>
