@@ -80,6 +80,14 @@ const FEATHER_PATHS = {
   ],
   eye: [<path key="p" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z" />, <circle key="c" cx="12" cy="12" r="3" />],
   merge: [<circle key="c1" cx="18" cy="18" r="3" />, <circle key="c2" cx="6" cy="6" r="3" />, <path key="p" d="M6 21V9a9 9 0 0 0 9 9" />],
+  move: [
+    <polyline key="p1" points="5 9 2 12 5 15" />,
+    <polyline key="p2" points="9 5 12 2 15 5" />,
+    <polyline key="p3" points="15 19 12 22 9 19" />,
+    <polyline key="p4" points="19 9 22 12 19 15" />,
+    <line key="l1" x1="2" y1="12" x2="22" y2="12" />,
+    <line key="l2" x1="12" y1="2" x2="12" y2="22" />,
+  ],
   folder: [<path key="p" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
   folderPlus: [<path key="p1" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />, <path key="p2" d="M12 10v6M9 13h6" />],
 };
@@ -264,6 +272,76 @@ function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
   );
 }
 
+function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
+  const kit = dialog?.kit;
+  const currentFolderId = text(kit?.folderId);
+  const [selectedFolderId, setSelectedFolderId] = useState(currentFolderId);
+  const [error, setError] = useState("");
+
+  const destinations = useMemo(() => [
+    { id: "", name: "Main Kits", description: "No folder" },
+    ...folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      description: `${formatNumber(folder.kitCount || 0)} kit${number(folder.kitCount) === 1 ? "" : "s"}`,
+    })),
+  ], [folders]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (selectedFolderId === currentFolderId) return setError("Choose a different destination.");
+    setError("");
+    try {
+      await onSubmit(selectedFolderId);
+    } catch (submitError) {
+      setError(submitError?.message || "The kit could not be moved.");
+    }
+  };
+
+  return (
+    <Modal
+      title="Move Kit"
+      subtitle={`Choose where “${kit?.name || "this kit"}” should be moved.`}
+      icon={<FeatherIcon name="move" size={20} />}
+      onClose={onClose}
+    >
+      <form className="next-kit-move-form" onSubmit={submit}>
+        <div className="next-kit-move-list" role="radiogroup" aria-label="Move kit destination">
+          {destinations.map((destination) => {
+            const selected = selectedFolderId === destination.id;
+            const current = currentFolderId === destination.id;
+            return (
+              <button
+                type="button"
+                key={destination.id || "root"}
+                className={`${selected ? "is-selected" : ""} ${current ? "is-current" : ""}`}
+                onClick={() => { setSelectedFolderId(destination.id); setError(""); }}
+                disabled={busy}
+                role="radio"
+                aria-checked={selected}
+              >
+                <span className="next-kit-move-list__icon"><FeatherIcon name="folder" size={18} /></span>
+                <span className="next-kit-move-list__copy">
+                  <strong>{destination.name}</strong>
+                  <small>{current ? "Current location" : destination.description}</small>
+                </span>
+                <span className="next-kit-move-list__check" aria-hidden="true">{selected ? "✓" : ""}</span>
+              </button>
+            );
+          })}
+        </div>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="products-modal__actions next-kit-move-actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy || selectedFolderId === currentFolderId}>
+            <FeatherIcon name="move" size={17} /><span>{busy ? "Moving…" : "Move Kit"}</span>
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function PasswordModal({ request, busy, onClose, onVerified }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -439,6 +517,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
   const [folderDialog, setFolderDialog] = useState(null);
+  const [moveDialog, setMoveDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
   const [combineOpen, setCombineOpen] = useState(false);
@@ -831,6 +910,36 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     await loadKit(kit.id, { edit: true, adminPassword });
   };
 
+  const startMoveKit = async (kit) => {
+    const adminPassword = await protectedPassword(kit, `Enter the Admin password to move “${kit.name}”.`);
+    if (adminPassword === null) return;
+    setMoveDialog({ kit, adminPassword });
+  };
+
+  const submitMoveKit = async (folderId) => {
+    const dialog = moveDialog;
+    const kit = dialog?.kit;
+    if (!kit?.id) return;
+    const targetFolderId = text(folderId);
+    if (targetFolderId === text(kit.folderId)) return;
+    setBusy(true);
+    try {
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ folderId: targetFolderId, adminPassword: dialog.adminPassword || "" }),
+      });
+      const updated = syncKit(body.kit || { ...kit, folderId: targetFolderId });
+      setMoveDialog(null);
+      const destination = targetFolderId ? folders.find((folder) => folder.id === targetFolderId)?.name || "the selected folder" : "Main Kits";
+      notify(`“${updated.name}” moved to ${destination}.`);
+    } catch (error) {
+      notify(error?.message || "The kit could not be moved.", "error");
+      throw error;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submitNameDialog = async (name) => {
     const dialog = nameDialog;
     if (!dialog || dialog.mode !== "copy") return;
@@ -1062,6 +1171,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         {menuOpen ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button>
+            <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button>
             <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button>
             <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button>
           </div>
@@ -1352,6 +1462,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
       {combineOpen ? <CombineKitsModal kits={kits} busy={busy} onClose={() => setCombineOpen(false)} onCreate={createCombinedKit} /> : null}
       {folderDialog ? <FolderNameModal key={`${folderDialog.mode}-${folderDialog.folder?.id || "new"}`} dialog={folderDialog} busy={busy} onClose={() => setFolderDialog(null)} onSubmit={submitFolderDialog} /> : null}
+      {moveDialog ? <MoveKitModal key={`move-${moveDialog.kit?.id || "kit"}`} dialog={moveDialog} folders={folders.map((folder) => ({ ...folder, kitCount: folderKitCounts.get(folder.id) || 0 }))} busy={busy} onClose={() => setMoveDialog(null)} onSubmit={submitMoveKit} /> : null}
       {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
       {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
     </main>
