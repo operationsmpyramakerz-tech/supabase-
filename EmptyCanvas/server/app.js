@@ -6585,6 +6585,47 @@ function _sbProposalJsonValue(row = {}, aliases = [], fallback = null) {
   }
 }
 
+function _sbProposalSourceKits(value) {
+  const raw = Array.isArray(value) ? value : (typeof value === "object" && value ? value : (() => {
+    const textValue = String(value || "").trim();
+    if (!textValue) return [];
+    try { return JSON.parse(textValue); } catch { return []; }
+  })());
+  return (Array.isArray(raw) ? raw : [])
+    .map((source, index) => ({
+      kitId: String(source?.kitId || source?.kit_id || source?.id || "").trim(),
+      kitName: _sbProposalText(source?.kitName || source?.kit_name || source?.name) || "",
+      quantity: _sbProposalQuantity(source?.quantity || source?.qty || 1),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.kitId || source.kitName);
+}
+
+function _sbProposalMergeSourceKits(existingSources, incomingSources, existingQuantity, incomingQuantity, mergeLogic = "add") {
+  const existing = _sbProposalSourceKits(existingSources);
+  const incoming = _sbProposalSourceKits(incomingSources);
+  const existingQty = _sbProposalQuantity(existingQuantity);
+  const incomingQty = _sbProposalQuantity(incomingQuantity);
+  const logic = _sbProposalMergeLogic(mergeLogic);
+  if (logic === "max") return incomingQty > existingQty ? incoming : existing;
+  if (logic === "min") return incomingQty < existingQty ? incoming : existing;
+  if (!incoming.length) return existing;
+  const merged = new Map();
+  [...existing, ...incoming].forEach((source, index) => {
+    const key = source.kitId || `name:${String(source.kitName || "").toLowerCase()}`;
+    const current = merged.get(key);
+    if (current) current.quantity += _sbProposalQuantity(source.quantity);
+    else merged.set(key, { ...source, order: Number.isFinite(Number(source.order)) ? Number(source.order) : index });
+  });
+  return [...merged.values()].sort((a, b) => a.order - b.order);
+}
+
+function _sbProposalPrimarySourceKit(value) {
+  const sources = _sbProposalSourceKits(value);
+  if (!sources.length) return null;
+  return sources.slice().sort((a, b) => (Number(b.quantity || 0) - Number(a.quantity || 0)) || (Number(a.order || 0) - Number(b.order || 0)))[0] || null;
+}
+
 function _sbProposalOwnerInfo(row = {}) {
   return {
     createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
@@ -6644,6 +6685,7 @@ function _sbSerializeProductProposalItem(row = {}) {
     productId: String(_sbGet(row, ["product_id", "productId", "Product ID"]) ?? "").trim() || null,
     productName: _sbProposalText(_sbGet(row, ["product_name", "productName", "Product Name", "name", "Name"])) || "Untitled Product",
     quantity: _sbProposalQuantity(_sbGet(row, ["quantity", "qty", "Quantity", "Qty"])),
+    sourceKits: _sbProposalSourceKits(_sbGet(row, ["source_kits", "sourceKits", "Source Kits"])),
     createdAt: _sbProposalText(_sbGet(row, ["created_at", "createdAt", "Created At"])) || null,
     updatedAt: _sbProposalText(_sbGet(row, ["updated_at", "updatedAt", "Updated At"])) || null,
   };
@@ -6798,7 +6840,9 @@ async function _sbCopyProductProposal(proposalId, body = {}, req = null) {
     const productId = String(_sbGet(item, ["product_id", "productId", "Product ID"]) ?? "").trim();
     const product = productMap.get(productId) || { id: productId, name: _sbProposalText(_sbGet(item, ["product_name", "Product Name", "name", "Name"])) };
     if (!product?.id) continue;
-    await _sbUpsertProductProposalItem(newId, product, _sbProposalQuantity(_sbGet(item, ["quantity", "qty", "Quantity", "Qty"])));
+    await _sbUpsertProductProposalItem(newId, product, _sbProposalQuantity(_sbGet(item, ["quantity", "qty", "Quantity", "Qty"])), {
+      sourceKits: _sbProposalSourceKits(_sbGet(item, ["source_kits", "sourceKits", "Source Kits"])),
+    });
   }
   return (await _sbProductProposalById(newId, req)).proposal;
 }
@@ -6836,6 +6880,13 @@ async function _sbUpsertProductProposalItem(proposalId, product, quantity, optio
     const updated = await supabaseDb.updateById(_sbProductProposalItemsTable(), String(_sbGet(existing, ["id", "ID"])), {
       quantity: _sbProposalMergedQuantity(existingQty, qty, mergeLogic),
       product_name: product.name || "Untitled Product",
+      source_kits: _sbProposalMergeSourceKits(
+        _sbGet(existing, ["source_kits", "sourceKits", "Source Kits"]),
+        options?.sourceKits || options?.source_kits || [],
+        existingQty,
+        qty,
+        mergeLogic,
+      ),
       updated_at: now,
     });
     return _sbSerializeProductProposalItem(updated || existing);
@@ -6845,6 +6896,7 @@ async function _sbUpsertProductProposalItem(proposalId, product, quantity, optio
     product_id: productId,
     product_name: product.name || "Untitled Product",
     quantity: qty,
+    source_kits: _sbProposalSourceKits(options?.sourceKits || options?.source_kits || []),
     created_at: now,
     updated_at: now,
   };
@@ -6861,7 +6913,11 @@ async function _sbAddProductProposalItem(proposalId, body = {}, req = null) {
     throw err;
   }
   await _sbRequireEditableProductProposal(proposalId, req, body);
-  await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1, { mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic });
+  const directQuantity = _sbProposalQuantity(body?.quantity || body?.qty || 1);
+  await _sbUpsertProductProposalItem(proposalId, product, directQuantity, {
+    mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic,
+    sourceKits: [{ kitId: "", kitName: "Direct components", quantity: directQuantity, order: 0 }],
+  });
   await _sbTouchProductProposal(proposalId);
   return await _sbProductProposalById(proposalId, req);
 }
@@ -6880,8 +6936,12 @@ async function _sbAddProductProposalItemsByTag(proposalId, body = {}, req = null
     err.status = 404;
     throw err;
   }
+  const directQuantity = _sbProposalQuantity(body?.quantity || body?.qty || 1);
   for (const product of products) {
-    await _sbUpsertProductProposalItem(proposalId, product, body?.quantity || body?.qty || 1, { mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic });
+    await _sbUpsertProductProposalItem(proposalId, product, directQuantity, {
+      mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic,
+      sourceKits: [{ kitId: "", kitName: "Direct components", quantity: directQuantity, order: 0 }],
+    });
   }
   await _sbTouchProductProposal(proposalId);
   const detail = await _sbProductProposalById(proposalId, req);
@@ -7254,7 +7314,11 @@ async function _sbAddProductProposalItemsByKit(proposalId, body = {}, req = null
     const product = productMap.get(String(item.productId || "")) || { id: item.productId, name: item.productName };
     if (!product?.id) continue;
     const itemQty = _sbProposalQuantity(item.quantity || 1);
-    await _sbUpsertProductProposalItem(proposalId, product, itemQty * kitMultiplier, { mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic });
+    const sourceQuantity = itemQty * kitMultiplier;
+    await _sbUpsertProductProposalItem(proposalId, product, sourceQuantity, {
+      mergeLogic: body?.mergeLogic || body?.logic || body?.quantityLogic,
+      sourceKits: [{ kitId, kitName: detail?.kit?.name || "Untitled kit", quantity: sourceQuantity }],
+    });
     addedCount += 1;
   }
   await _sbTouchProductProposal(proposalId);
@@ -7526,9 +7590,19 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
   };
 
   for (const row of rows || []) {
+    const primarySource = _sbProposalPrimarySourceKit(row?.sourceKits || row?.source_kits);
+    if (!primarySource) {
+      addToHierarchy(row, { folderName: "Untracked / Direct", name: "Direct / legacy components" });
+      continue;
+    }
     const memberships = kitMembership?.get(String(row?.productId || "").trim()) || [];
-    if (memberships.length) memberships.forEach((membership) => addToHierarchy(row, membership));
-    else addToHierarchy(row, { folderName: "Unfiled Kits", name: "Unassigned kit" });
+    const membership = memberships.find((entry) => String(entry?.id || entry?.kitId || "").trim() === String(primarySource.kitId || "").trim());
+    if (membership) addToHierarchy(row, membership);
+    else addToHierarchy(row, {
+      id: primarySource.kitId,
+      name: primarySource.kitName || (primarySource.kitId ? "Untitled kit" : "Direct / legacy components"),
+      folderName: primarySource.kitId ? "Unfiled Kits" : "Untracked / Direct",
+    });
   }
 
   return [...folders.values()]
@@ -7574,6 +7648,7 @@ async function _sbProductProposalExportData(proposalId, req = null) {
       url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
       tag: firstProductTagForServer(product),
       quantity,
+      sourceKits: _sbProposalSourceKits(item?.sourceKits || item?.source_kits),
       unitPrice: cleanUnitPrice,
       totalPrice,
     };
@@ -7686,6 +7761,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
           url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
           tag: firstProductTagForServer(product),
           sourceQuantities: {},
+          sourceKits: [],
           quantity: 0,
           unitPrice: cleanUnitPrice,
           totalPrice: cleanUnitPrice === null ? null : 0,
@@ -7693,6 +7769,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
       }
       const row = rowsMap.get(key);
       row.sourceQuantities[sourceId] = (Number(row.sourceQuantities[sourceId]) || 0) + quantity;
+      row.sourceKits = _sbProposalMergeSourceKits(row.sourceKits, item?.sourceKits || item?.source_kits || [], row.quantity || 1, quantity, "add");
       row.quantity += quantity;
       if (row.unitPrice === null && cleanUnitPrice !== null) row.unitPrice = cleanUnitPrice;
     }
@@ -7815,7 +7892,7 @@ async function _sbSaveCombinedProductProposal(body = {}, req = null) {
   for (const row of data.rows || []) {
     const product = productMap.get(String(row.productId || ""));
     if (!product?.id) continue;
-    await _sbUpsertProductProposalItem(newId, product, row.quantity || 1, { mergeLogic: "add" });
+    await _sbUpsertProductProposalItem(newId, product, row.quantity || 1, { mergeLogic: "add", sourceKits: row.sourceKits || [] });
   }
   await _sbTryAttachCombinedProposalMeta(newId, data.combinedMeta);
   await _sbTouchProductProposal(newId);

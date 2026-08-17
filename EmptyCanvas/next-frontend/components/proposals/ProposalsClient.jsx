@@ -136,6 +136,18 @@ function normalizeKitFolder(folder, index = 0) {
   };
 }
 
+function normalizeSourceKits(value) {
+  const rows = Array.isArray(value) ? value : [];
+  return rows
+    .map((source, index) => ({
+      kitId: text(source?.kitId || source?.kit_id || source?.id),
+      kitName: text(source?.kitName || source?.kit_name || source?.name),
+      quantity: Math.max(1, Math.round(number(source?.quantity || source?.qty) || 1)),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.kitId || source.kitName);
+}
+
 function normalizeItem(item, index = 0) {
   return {
     id: text(item?.id) || `item-${index}`,
@@ -143,6 +155,7 @@ function normalizeItem(item, index = 0) {
     productId: text(item?.productId),
     productName: text(item?.productName) || "Untitled product",
     quantity: Math.max(1, Math.round(number(item?.quantity) || 1)),
+    sourceKits: normalizeSourceKits(item?.sourceKits || item?.source_kits),
     createdAt: text(item?.createdAt),
     updatedAt: text(item?.updatedAt),
   };
@@ -1027,14 +1040,16 @@ export default function ProposalsClient({
 
   const kitGroupedVisibleRows = useMemo(() => {
     const foldersMap = new Map();
+    const kitById = new Map(kits.map((kit) => [text(kit?.id), kit]));
+    const folderById = new Map(kitFolders.map((folder) => [text(folder?.id), folder]));
     const addRow = (membership, row) => {
       const folderName = text(membership?.folderName) || "Unfiled Kits";
       const folderId = text(membership?.folderId);
       const folderKey = `${folderId || "unfiled"}:${lower(folderName)}`;
       if (!foldersMap.has(folderKey)) foldersMap.set(folderKey, { id: folderId, label: folderName, kits: new Map() });
       const folder = foldersMap.get(folderKey);
-      const kitId = text(membership?.id);
-      const kitName = text(membership?.name) || "Unassigned kit";
+      const kitId = text(membership?.id || membership?.kitId);
+      const kitName = text(membership?.name || membership?.kitName) || "Direct / legacy components";
       const kitKey = `${kitId || "unassigned"}:${lower(kitName)}`;
       if (!folder.kits.has(kitKey)) folder.kits.set(kitKey, { id: kitId, label: kitName, rows: [] });
       const kit = folder.kits.get(kitKey);
@@ -1042,9 +1057,16 @@ export default function ProposalsClient({
     };
 
     for (const row of visibleEnrichedRows) {
-      const memberships = kitMembership.get(text(row?.productId)) || [];
-      if (memberships.length) memberships.forEach((membership) => addRow(membership, row));
-      else addRow({ folderName: "Unfiled Kits", name: "Unassigned kit" }, row);
+      const sources = normalizeSourceKits(row?.sourceKits);
+      const primary = sources.slice().sort((a, b) => (b.quantity - a.quantity) || (a.order - b.order))[0] || null;
+      if (!primary) {
+        addRow({ folderName: "Untracked / Direct", name: "Direct / legacy components" }, row);
+        continue;
+      }
+      const localKit = kitById.get(text(primary.kitId)) || null;
+      const folderId = text(localKit?.folderId);
+      const folderName = primary.kitId ? (folderId ? (text(folderById.get(folderId)?.name) || "Unfiled Kits") : "Unfiled Kits") : "Untracked / Direct";
+      addRow({ id: text(primary.kitId), name: text(localKit?.name) || text(primary.kitName) || "Direct / legacy components", folderId, folderName }, row);
     }
 
     return [...foldersMap.values()]
@@ -1059,17 +1081,9 @@ export default function ProposalsClient({
         if (!a.id && b.id) return 1;
         return a.label.localeCompare(b.label);
       });
-  }, [visibleEnrichedRows, kitMembership]);
+  }, [visibleEnrichedRows, kits, kitFolders]);
 
   const chooseGroupBy = async (nextMode) => {
-    if (nextMode === "kit-tag" && !kitMembershipLoaded) {
-      try {
-        await ensureKitMembership();
-      } catch (error) {
-        notify(error?.message || "Kit grouping could not be loaded.", "error");
-        return;
-      }
-    }
     setGroupBy(nextMode);
     setSortMenuOpen(false);
   };
@@ -1223,6 +1237,24 @@ export default function ProposalsClient({
     return existing + incoming;
   };
 
+  const mergeDraftSourceKits = (existingSources, incomingSources, existingQuantity, incomingQuantity, logic = "add") => {
+    const existing = normalizeSourceKits(existingSources);
+    const incoming = normalizeSourceKits(incomingSources);
+    const existingQty = Math.max(1, Math.round(number(existingQuantity) || 1));
+    const incomingQty = Math.max(1, Math.round(number(incomingQuantity) || 1));
+    if (logic === "max") return incomingQty > existingQty ? incoming : existing;
+    if (logic === "min") return incomingQty < existingQty ? incoming : existing;
+    if (!incoming.length) return existing;
+    const merged = new Map();
+    [...existing, ...incoming].forEach((source, index) => {
+      const key = text(source.kitId) || `name:${lower(source.kitName)}`;
+      const current = merged.get(key);
+      if (current) current.quantity += Math.max(1, Math.round(number(source.quantity) || 1));
+      else merged.set(key, { ...source, order: Number.isFinite(Number(source.order)) ? Number(source.order) : index });
+    });
+    return [...merged.values()].sort((a, b) => a.order - b.order);
+  };
+
   const addDraftProducts = (rows, mergeLogic = "add") => {
     setActiveDetail((current) => {
       const items = Array.isArray(current?.items) ? [...current.items] : [];
@@ -1230,6 +1262,8 @@ export default function ProposalsClient({
         const productId = text(entry?.productId);
         if (!productId) return;
         const quantity = Math.max(1, Math.round(number(entry?.quantity) || 1));
+        const incomingSources = normalizeSourceKits(entry?.sourceKits);
+        const effectiveSources = incomingSources.length ? incomingSources : [{ kitId: "", kitName: "Direct components", quantity, order: 0 }];
         const product = productMap.get(productId);
         const existingIndex = items.findIndex((item) => text(item.productId) === productId);
         if (existingIndex >= 0) {
@@ -1237,6 +1271,7 @@ export default function ProposalsClient({
           items[existingIndex] = {
             ...existing,
             quantity: mergedDraftQuantity(existing.quantity, quantity, mergeLogic),
+            sourceKits: mergeDraftSourceKits(existing.sourceKits, effectiveSources, existing.quantity, quantity, mergeLogic),
             updatedAt: new Date().toISOString(),
           };
         } else {
@@ -1246,6 +1281,7 @@ export default function ProposalsClient({
             productId,
             productName: text(entry?.productName || product?.name) || "Untitled product",
             quantity,
+            sourceKits: effectiveSources,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           }, items.length));
@@ -1280,7 +1316,7 @@ export default function ProposalsClient({
           body: JSON.stringify({
             name: cleanName,
             adminPassword: editAdminPassword,
-            items: validRows.map((row) => ({ productId: row.productId, quantity: row.quantity })),
+            items: validRows.map((row) => ({ productId: row.productId, quantity: row.quantity, sourceKits: normalizeSourceKits(row.sourceKits) })),
           }),
         });
         updateSaveProgress(88, "Components saved. Finalizing proposal…");
@@ -1439,11 +1475,16 @@ export default function ProposalsClient({
           for (const entry of selections) {
             const multiplier = Math.max(1, Math.round(number(entry.quantity) || 1));
             const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(entry.selected)}?_ts=${Date.now()}`);
-            const rows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => ({
-              productId: item.productId,
-              productName: item.productName,
-              quantity: Math.max(1, Math.round(number(item.quantity) || 1)) * multiplier,
-            }));
+            const localKit = kits.find((kit) => text(kit?.id) === text(entry.selected)) || null;
+            const rows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => {
+              const sourceQuantity = Math.max(1, Math.round(number(item.quantity) || 1)) * multiplier;
+              return {
+                productId: item.productId,
+                productName: item.productName,
+                quantity: sourceQuantity,
+                sourceKits: [{ kitId: text(entry.selected), kitName: text(localKit?.name) || text(kitBody?.kit?.name) || "Untitled kit", quantity: sourceQuantity }],
+              };
+            });
             kitRows.push(...rows);
           }
           if (!kitRows.length) throw new Error("The selected kits have no components.");

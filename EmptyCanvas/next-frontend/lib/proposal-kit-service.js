@@ -23,6 +23,40 @@ function positiveInt(value, fallback = 1) {
   return Math.max(1, Math.round(number(value) || fallback));
 }
 
+function sourceKits(value) {
+  const raw = Array.isArray(value) ? value : (() => {
+    if (!value || typeof value !== "string") return [];
+    try { return JSON.parse(value); } catch { return []; }
+  })();
+  return (Array.isArray(raw) ? raw : [])
+    .map((source, index) => ({
+      kitId: text(source?.kitId || source?.kit_id || source?.id),
+      kitName: text(source?.kitName || source?.kit_name || source?.name),
+      quantity: positiveInt(source?.quantity || source?.qty),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.kitId || source.kitName);
+}
+
+function mergeSourceKits(existingSources, incomingSources, existingQuantity, incomingQuantity, logic = "add") {
+  const existing = sourceKits(existingSources);
+  const incoming = sourceKits(incomingSources);
+  const existingQty = positiveInt(existingQuantity);
+  const incomingQty = positiveInt(incomingQuantity);
+  const cleanLogic = text(logic).toLowerCase();
+  if (cleanLogic === "max") return incomingQty > existingQty ? incoming : existing;
+  if (cleanLogic === "min") return incomingQty < existingQty ? incoming : existing;
+  if (!incoming.length) return existing;
+  const merged = new Map();
+  [...existing, ...incoming].forEach((source, index) => {
+    const key = source.kitId || `name:${source.kitName.toLowerCase()}`;
+    const current = merged.get(key);
+    if (current) current.quantity += positiveInt(source.quantity);
+    else merged.set(key, { ...source, order: Number.isFinite(Number(source.order)) ? Number(source.order) : index });
+  });
+  return [...merged.values()].sort((a, b) => a.order - b.order);
+}
+
 function encode(value) {
   return encodeURIComponent(text(value));
 }
@@ -108,6 +142,7 @@ function proposalItem(row = {}) {
     productId: text(row.product_id),
     productName: text(row.product_name) || "Untitled product",
     quantity: positiveInt(row.quantity),
+    sourceKits: sourceKits(row.source_kits),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
   };
@@ -254,9 +289,12 @@ export async function createProposalWithItems(name, items, account) {
     const productId = text(raw?.productId);
     if (!productId) continue;
     const quantity = positiveInt(raw?.quantity);
+    const incomingSources = sourceKits(raw?.sourceKits || raw?.source_kits);
     const current = merged.get(productId);
-    if (current) current.quantity += quantity;
-    else merged.set(productId, { productId, quantity });
+    if (current) {
+      current.sourceKits = mergeSourceKits(current.sourceKits, incomingSources, current.quantity, quantity, "add");
+      current.quantity += quantity;
+    } else merged.set(productId, { productId, quantity, sourceKits: incomingSources });
   }
 
   if (!merged.size) return await createProposal(name, account);
@@ -280,6 +318,7 @@ export async function createProposalWithItems(name, items, account) {
         product_id: item.productId,
         product_name: text(product.name) || "Untitled product",
         quantity: positiveInt(item.quantity),
+        source_kits: sourceKits(item.sourceKits),
         created_at: now,
         updated_at: now,
       };
@@ -346,6 +385,7 @@ export async function copyProposal(id, name, account) {
       product_id: item.product_id,
       product_name: item.product_name,
       quantity: positiveInt(item.quantity),
+      source_kits: sourceKits(item.source_kits),
       created_at: now,
       updated_at: now,
     });
@@ -381,9 +421,12 @@ export async function addProposalProduct(proposalId, body, account) {
   const quantity = positiveInt(body?.quantity);
   const now = new Date().toISOString();
   if (existing) {
+    const mergeLogic = text(body?.mergeLogic).toLowerCase();
+    const directSource = [{ kitId: "", kitName: "Direct components", quantity, order: 0 }];
     await updateById(proposalItemsTable(), existing.id, {
-      quantity: mergedQuantity(existing.quantity, quantity, text(body?.mergeLogic).toLowerCase()),
+      quantity: mergedQuantity(existing.quantity, quantity, mergeLogic),
       product_name: text(product.name) || text(existing.product_name),
+      source_kits: mergeSourceKits(existing.source_kits, directSource, existing.quantity, quantity, mergeLogic),
       updated_at: now,
     });
   } else {
@@ -392,6 +435,7 @@ export async function addProposalProduct(proposalId, body, account) {
       product_id: productId,
       product_name: text(product.name) || "Untitled product",
       quantity,
+      source_kits: [{ kitId: "", kitName: "Direct components", quantity, order: 0 }],
       created_at: now,
       updated_at: now,
     });
