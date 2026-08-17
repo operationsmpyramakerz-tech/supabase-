@@ -43,6 +43,10 @@ function kitItemsTable() {
   return text(process.env.SUPABASE_PRODUCT_KIT_ITEMS_TABLE || "product_kit_items") || "product_kit_items";
 }
 
+function kitFoldersTable() {
+  return text(process.env.SUPABASE_PRODUCT_KIT_FOLDERS_TABLE || "product_kit_folders") || "product_kit_folders";
+}
+
 function accountIdentity(account = {}) {
   const id = text(
     account.id ?? account.userId ?? account.user_id ?? account.memberId ?? account.member_id ??
@@ -147,10 +151,36 @@ function kitHeader(row = {}, itemCount = 0, account = {}) {
     createdById: text(row.created_by_id),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
+    folderId: text(row.folder_id),
     itemsCount: Number(itemCount) || 0,
     canEdit: isOwner(row, account),
     source: "supabase-next",
   };
+}
+
+function kitFolderHeader(row = {}, account = {}) {
+  return {
+    id: text(row.id),
+    name: text(row.name) || "Untitled folder",
+    createdBy: text(row.created_by),
+    createdById: text(row.created_by_id),
+    createdAt: text(row.created_at),
+    updatedAt: text(row.updated_at),
+    canEdit: isOwner(row, account),
+    source: "supabase-next",
+  };
+}
+
+async function requireKitFolder(folderId) {
+  const id = text(folderId);
+  if (!id) return null;
+  const folder = await selectById(kitFoldersTable(), id);
+  if (!folder) {
+    const error = new Error("Kit folder not found.");
+    error.status = 404;
+    throw error;
+  }
+  return folder;
 }
 
 function counts(rows, foreignKey) {
@@ -337,6 +367,52 @@ export async function deleteProposalItem(proposalId, itemId, body, account) {
   return await getProposal(proposalId, account);
 }
 
+export async function listKitFolders(account) {
+  const rows = await selectAll(kitFoldersTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
+  return rows.map((row) => kitFolderHeader(row, account));
+}
+
+export async function createKitFolder(name, account) {
+  const clean = text(name);
+  if (!clean) {
+    const error = new Error("Folder name is required.");
+    error.status = 400;
+    throw error;
+  }
+  const identity = accountIdentity(account);
+  const now = new Date().toISOString();
+  const row = { name: clean, created_at: now, updated_at: now };
+  if (identity.id) row.created_by_id = identity.id;
+  if (identity.name) row.created_by = identity.name;
+  const created = await insert(kitFoldersTable(), row);
+  return kitFolderHeader(created || row, account);
+}
+
+export async function updateKitFolder(id, body, account) {
+  const current = await selectById(kitFoldersTable(), id);
+  if (!current) {
+    const error = new Error("Kit folder not found.");
+    error.status = 404;
+    throw error;
+  }
+  await requireOwnerOrAdmin(current, account, body?.adminPassword);
+  const name = text(body?.name);
+  if (!name) {
+    const error = new Error("Folder name is required.");
+    error.status = 400;
+    throw error;
+  }
+  const updated = await updateById(kitFoldersTable(), id, { name, updated_at: new Date().toISOString() });
+  return kitFolderHeader(updated || { ...current, name }, account);
+}
+
+export async function deleteKitFolder(id, body, account) {
+  const current = await selectById(kitFoldersTable(), id);
+  if (!current) return;
+  await requireOwnerOrAdmin(current, account, body?.adminPassword);
+  await deleteById(kitFoldersTable(), id);
+}
+
 export async function listKits(account) {
   const [headers, items] = await Promise.all([
     selectAll(kitsTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
@@ -357,16 +433,19 @@ export async function getKit(id, account) {
   return { kit: kitHeader(row, items.length, account), items: items.map(kitItem) };
 }
 
-export async function createKit(name, account) {
+export async function createKit(name, account, folderId = "") {
   const clean = text(name);
   if (!clean) {
     const error = new Error("Kit name is required.");
     error.status = 400;
     throw error;
   }
+  const cleanFolderId = text(folderId);
+  if (cleanFolderId) await requireKitFolder(cleanFolderId);
   const identity = accountIdentity(account);
   const now = new Date().toISOString();
   const row = { name: clean, created_at: now, updated_at: now };
+  if (cleanFolderId) row.folder_id = cleanFolderId;
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(kitsTable(), row);
@@ -381,13 +460,20 @@ export async function updateKit(id, body, account) {
     throw error;
   }
   await requireOwnerOrAdmin(current, account, body?.adminPassword);
-  const name = text(body?.name);
+  const hasName = Object.prototype.hasOwnProperty.call(body || {}, "name");
+  const name = hasName ? text(body?.name) : text(current.name);
   if (!name) {
     const error = new Error("Kit name is required.");
     error.status = 400;
     throw error;
   }
-  const updated = await updateById(kitsTable(), id, { name, updated_at: new Date().toISOString() });
+  const patch = { name, updated_at: new Date().toISOString() };
+  if (Object.prototype.hasOwnProperty.call(body || {}, "folderId")) {
+    const folderId = text(body?.folderId);
+    if (folderId) await requireKitFolder(folderId);
+    patch.folder_id = folderId || null;
+  }
+  const updated = await updateById(kitsTable(), id, patch);
   const items = await rowsByForeignKey(kitItemsTable(), "kit_id", id);
   return kitHeader(updated || { ...current, name }, items.length, account);
 }
@@ -407,7 +493,7 @@ export async function copyKit(id, name, account) {
     error.status = 404;
     throw error;
   }
-  const created = await createKit(name, account);
+  const created = await createKit(name, account, text(source.folder_id));
   const sourceItems = await rowsByForeignKey(kitItemsTable(), "kit_id", id);
   const now = new Date().toISOString();
   for (const item of sourceItems) {
