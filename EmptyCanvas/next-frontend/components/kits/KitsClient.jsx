@@ -1431,7 +1431,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
           </>
         ) : (
-          <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button>
+          <>
+            <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
+            <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button>
+          </>
         )}
       </div>
 

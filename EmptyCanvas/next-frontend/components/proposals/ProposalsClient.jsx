@@ -474,11 +474,23 @@ function KitBrowserDialog({ folders, kits, selectedId, onSelect, onClose }) {
             );
           })}
           {visibleKits.map((kit) => (
-            <button type="button" className={`proposal-kit-browser-card is-kit ${selectedId === kit.id ? "is-selected" : ""}`} key={kit.id} onClick={() => onSelect(kit.id)}>
-              <span className="proposal-kit-browser-card__figure" aria-hidden="true"><i /><i /><i /></span>
-              <span className="proposal-kit-browser-card__copy"><strong>{kit.name}</strong><small>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</small></span>
-              <span className="proposal-kit-browser-card__check" aria-hidden="true">{selectedId === kit.id ? "✓" : ""}</span>
-            </button>
+            <article className={`products-proposal-folder kit-library-kit proposal-kit-browser-library-kit ${selectedId === kit.id ? "is-selected" : ""}`} key={kit.id}>
+              <button type="button" className="products-proposal-folder__main" onClick={() => onSelect(kit.id)} aria-pressed={selectedId === kit.id} aria-label={`Select kit ${kit.name}`}>
+                <span className="proposal-folder-figure" aria-hidden="true">
+                  <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                  <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                  <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                  <span className="proposal-folder-figure__back" />
+                  <span className="proposal-folder-figure__front"><small>K</small></span>
+                </span>
+                <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
+                <span className="proposal-folder-count">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+                  <span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span>
+                </span>
+                {selectedId === kit.id ? <span className="proposal-kit-browser-library-kit__check" aria-hidden="true">✓</span> : null}
+              </button>
+            </article>
           ))}
           {!visibleFolders.length && !visibleKits.length ? <div className="proposal-kit-browser__empty">No kits found here.</div> : null}
         </div>
@@ -552,10 +564,10 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   };
 
   return (
-    <Modal title={`Add Components to ${proposal.name || "New Proposal"}`} subtitle="Add one product, a complete product tag, or a reusable kit." icon="＋" onClose={onClose} wide className="proposal-add-items-modal">
+    <Modal title={`Add Components to ${proposal.name || "New Proposal"}`} subtitle="Add one product or a reusable kit." icon="＋" onClose={onClose} wide className="proposal-add-items-modal">
       <form className="next-proposals-form products-form-grid proposal-add-items-form" onSubmit={submit}>
         <div className="next-proposals-segmented">
-          {[["product", "Single Product"], ["tag", "Product Tag"], ["kit", "Kit"]].map(([value, label]) => (
+          {[["product", "Single Product"], ["kit", "Kit"]].map(([value, label]) => (
             <button type="button" key={value} className={mode === value ? "active" : ""} onClick={() => switchMode(value)}>{label}</button>
           ))}
         </div>
@@ -590,7 +602,7 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
                           }
                         }}
                       >
-                        <span className="proposal-product-choice__selected-copy"><small>✓ Selected</small><strong>Tap again to unselect</strong></span>
+                        <span className="proposal-product-choice__selected-copy"><small>✓ Selected</small><strong>{product.name}</strong></span>
                         <label onClick={(event) => event.stopPropagation()}>
                           <span>Qty</span>
                           <input type="number" min="1" step="1" value={selectedProducts[product.id]} onChange={(event) => setProductQuantity(product.id, event.target.value)} onClick={(event) => event.stopPropagation()} />
@@ -603,17 +615,6 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
               {!filteredProducts.length ? <p className="next-proposals-empty-inline">No products match your search.</p> : null}
             </div>
           </>
-        ) : null}
-
-        {mode === "tag" ? (
-          <ModernSelect
-            label="Product Tag *"
-            value={selected}
-            placeholder="Choose a tag"
-            searchable
-            options={tags.map((tag) => ({ value: tag, label: tag }))}
-            onChange={setSelected}
-          />
         ) : null}
 
         {mode === "kit" ? (
