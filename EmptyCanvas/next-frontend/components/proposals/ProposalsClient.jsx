@@ -20,6 +20,24 @@ const COMBINE_LOGICS = [
   { value: "separate", label: "Separate", description: "Keep each proposal quantity visible separately in the combined export." },
 ];
 
+const PROPOSAL_ICON_PATHS = {
+  download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
+  shoppingBag: [<path key="p1" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />, <line key="l" x1="3" y1="6" x2="21" y2="6" />, <path key="p2" d="M16 10a4 4 0 0 1-8 0" />],
+  edit: [<path key="p1" d="M12 20h9" />, <path key="p2" d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />],
+  copy: [<rect key="r" x="9" y="9" width="13" height="13" rx="2" ry="2" />, <path key="p" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />],
+  trash: [<polyline key="pl" points="3 6 5 6 21 6" />, <path key="p1" d="M19 6l-1 14H6L5 6" />, <path key="p2" d="M10 11v6M14 11v6M9 6V4h6v2" />],
+  file: [<path key="p1" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />, <polyline key="p2" points="14 2 14 8 20 8" />, <line key="l1" x1="8" y1="13" x2="16" y2="13" />, <line key="l2" x1="8" y1="17" x2="16" y2="17" />],
+  grid: [<rect key="r1" x="3" y="3" width="7" height="7" rx="1" />, <rect key="r2" x="14" y="3" width="7" height="7" rx="1" />, <rect key="r3" x="3" y="14" width="7" height="7" rx="1" />, <rect key="r4" x="14" y="14" width="7" height="7" rx="1" />],
+};
+
+function ProposalIcon({ name, size = 18, className = "" }) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {PROPOSAL_ICON_PATHS[name] || PROPOSAL_ICON_PATHS.file}
+    </svg>
+  );
+}
+
 function combineLogicLabel(value) {
   return COMBINE_LOGICS.find((option) => option.value === text(value))?.label || "Add";
 }
@@ -1146,30 +1164,21 @@ export default function ProposalsClient({
     });
     try {
       if (createMode) {
+        updateSaveProgress(22, `Preparing ${validRows.length} components for bulk save…`);
         const createdBody = await requestJson("/next/api/products/proposals", {
           method: "POST",
-          body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
+          body: JSON.stringify({
+            name: cleanName,
+            adminPassword: editAdminPassword,
+            items: validRows.map((row) => ({ productId: row.productId, quantity: row.quantity })),
+          }),
         });
-        const created = normalizeProposal({ ...(createdBody.proposal || {}), canEdit: true });
+        updateSaveProgress(88, "Components saved. Finalizing proposal…");
+        const created = normalizeProposal({ ...(createdBody.proposal || {}), canEdit: true, itemsCount: validRows.length });
         if (!created.id) throw new Error("Proposal was created but the proposal ID was not returned.");
 
-        updateSaveProgress(16, "Proposal created. Saving components…");
-        for (let index = 0; index < validRows.length; index += 1) {
-          const row = validRows[index];
-          await requestJson(`/next/api/products/proposals/${encodeURIComponent(created.id)}/items`, {
-            method: "POST",
-            body: JSON.stringify({
-              productId: row.productId,
-              quantity: row.quantity,
-              mergeLogic: "add",
-              adminPassword: editAdminPassword,
-            }),
-          });
-          const componentProgress = 16 + Math.round(((index + 1) / Math.max(1, validRows.length)) * 70);
-          updateSaveProgress(componentProgress, `Saving component ${index + 1} of ${validRows.length}…`);
-        }
-        await refreshFolders();
-        updateSaveProgress(95, "Refreshing proposals…");
+        setProposals((current) => [created, ...current.filter((entry) => entry.id !== created.id)]);
+        updateSaveProgress(97, "Proposal is ready.");
         notify("Proposal saved successfully.");
         await finishSaveProgress("done", "Proposal saved successfully.");
         backToProposals();
@@ -1180,7 +1189,7 @@ export default function ProposalsClient({
       if (!proposal?.id) throw new Error("Proposal ID is missing.");
       const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}`, {
         method: "PATCH",
-        body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
+        body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword, itemsCount: rows.length }),
       });
       updateSaveProgress(86, "Applying the latest changes…");
       const updated = normalizeProposal(body.proposal || { ...proposal, name: cleanName });
@@ -1541,11 +1550,11 @@ export default function ProposalsClient({
                   ) : (
                     <header className="products-proposal-detail__head proposal-detail-head--compact">
                       <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
-                      <div className="proposal-detail-actions">
-                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("pdf")}>PDF</button>
-                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("excel")}>Excel</button>
-                        <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}>Make Order</button>
-                        {!detailEdit ? <button type="button" className="products-btn products-btn--light" onClick={() => enterEditProposal(proposal)}>Edit</button> : null}
+                      <div className="proposal-detail-actions proposal-detail-actions--classic">
+                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("pdf")}><ProposalIcon name="file" /><span>PDF</span></button>
+                        <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => downloadSingle("excel")}><ProposalIcon name="grid" /><span>Excel</span></button>
+                        <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make Order</span></button>
+                        {!detailEdit ? <button type="button" className="products-btn products-btn--light proposal-edit-action-btn" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
                       </div>
                     </header>
                   )}
@@ -1751,9 +1760,9 @@ export default function ProposalsClient({
                     <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === proposal.id ? "" : proposal.id); }} aria-label={`Actions for ${proposal.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
                     {folderMenu === proposal.id ? (
                       <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-                        <button type="button" onClick={() => enterEditProposal(proposal)}><span>Edit</span></button>
-                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><span>Make a copy</span></button>
-                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><span>Delete</span></button>
+                        <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button>
+                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button>
+                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button>
                       </div>
                     ) : null}
                     <button type="button" className="products-proposal-folder__main" onClick={() => loadProposal(proposal.id)} aria-label={`Open ${proposal.name}`}>

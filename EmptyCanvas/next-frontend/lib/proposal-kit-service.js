@@ -231,6 +231,75 @@ export async function createProposal(name, account) {
   return proposalHeader(created || row, 0, account);
 }
 
+function postgrestInList(values = []) {
+  return [...new Set((values || []).map((value) => text(value)).filter(Boolean))]
+    .map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+    .join(",");
+}
+
+async function productsForProposalItems(items = []) {
+  const productIds = [...new Set((items || []).map((item) => text(item?.productId)).filter(Boolean))];
+  if (!productIds.length) return new Map();
+  const inList = postgrestInList(productIds);
+  const rows = await supabaseRequest(
+    `/${encodeURIComponent(getSupabaseConfig().productsTable)}?select=id,name&id=in.(${encodeURIComponent(inList)})`,
+    { timeoutMs: 30000 },
+  );
+  return new Map((Array.isArray(rows) ? rows : []).map((row) => [text(row.id), row]));
+}
+
+export async function createProposalWithItems(name, items, account) {
+  const merged = new Map();
+  for (const raw of Array.isArray(items) ? items : []) {
+    const productId = text(raw?.productId);
+    if (!productId) continue;
+    const quantity = positiveInt(raw?.quantity);
+    const current = merged.get(productId);
+    if (current) current.quantity += quantity;
+    else merged.set(productId, { productId, quantity });
+  }
+
+  if (!merged.size) return await createProposal(name, account);
+
+  const created = await createProposal(name, account);
+  try {
+    const cleanItems = [...merged.values()];
+    const products = await productsForProposalItems(cleanItems);
+    const missing = cleanItems.find((item) => !products.has(item.productId));
+    if (missing) {
+      const error = new Error(`Product not found: ${missing.productId}`);
+      error.status = 404;
+      throw error;
+    }
+
+    const now = new Date().toISOString();
+    const rows = cleanItems.map((item) => {
+      const product = products.get(item.productId) || {};
+      return {
+        proposal_id: created.id,
+        product_id: item.productId,
+        product_name: text(product.name) || "Untitled product",
+        quantity: positiveInt(item.quantity),
+        created_at: now,
+        updated_at: now,
+      };
+    });
+
+    await supabaseRequest(`/${encodeURIComponent(proposalItemsTable())}`, {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: rows,
+      timeoutMs: 120000,
+    });
+    await updateById(proposalTable(), created.id, { updated_at: now });
+    return { ...created, itemsCount: rows.length, updatedAt: now };
+  } catch (error) {
+    try { await deleteRowsByForeignKey(proposalItemsTable(), "proposal_id", created.id); } catch {}
+    try { await deleteById(proposalTable(), created.id); } catch {}
+    throw error;
+  }
+}
+
 export async function updateProposal(id, body, account) {
   const current = await selectById(proposalTable(), id);
   if (!current) {
@@ -246,8 +315,11 @@ export async function updateProposal(id, body, account) {
     throw error;
   }
   const updated = await updateById(proposalTable(), id, { name, updated_at: new Date().toISOString() });
-  const items = await rowsByForeignKey(proposalItemsTable(), "proposal_id", id);
-  return proposalHeader(updated || { ...current, name }, items.length, account);
+  const suppliedCount = Number(body?.itemsCount);
+  const itemCount = Number.isFinite(suppliedCount) && suppliedCount >= 0
+    ? Math.round(suppliedCount)
+    : (await rowsByForeignKey(proposalItemsTable(), "proposal_id", id)).length;
+  return proposalHeader(updated || { ...current, name }, itemCount, account);
 }
 
 export async function deleteProposal(id, body, account) {

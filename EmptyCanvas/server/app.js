@@ -7882,60 +7882,133 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   const excelColumns = [];
   for (const col of selectedExportColumns) {
     if (_proposalCombineLogic(logic) === "separate" && col.key === "quantity") {
-      for (const source of sources) excelColumns.push({ header: `${source.name || "Proposal"} Qty`, key: `sourceQty_${source.id}`, width: 16, align: "right", sourceId: source.id, sourceQty: true });
+      for (const source of sources) excelColumns.push({ header: `${source.name || "Proposal"} Qty`, key: `sourceQty_${source.id}`, width: 16, align: "center", sourceId: source.id, sourceQty: true });
     } else {
-      excelColumns.push({ header: col.label, key: col.key, width: col.excelWidth || 16, align: col.align || "left" });
+      excelColumns.push({ header: col.label, key: col.key, width: col.excelWidth || 16, align: "center" });
     }
   }
-  worksheet.columns = excelColumns.map((col) => ({ header: col.header, key: col.key, width: col.width || 16 }));
-  worksheet.spliceRows(1, 0,
-    ["Combined Proposals", sources.map((source) => source.name).join(", ")],
-    ["Logic", _proposalCombineLogicLabel(logic)],
-    ["Date", formatDateTime(generatedAt)],
-    ["Total items", `${totals.items} item${totals.items === 1 ? "" : "s"}`],
-    ["Total quantity", totals.quantity],
-    ["Total cost", totals.total],
-    []
-  );
+
+  const BORDER_COLOR = { argb: "FF9CA3AF" };
+  const borderThin = {
+    top: { style: "thin", color: BORDER_COLOR },
+    left: { style: "thin", color: BORDER_COLOR },
+    bottom: { style: "thin", color: BORDER_COLOR },
+    right: { style: "thin", color: BORDER_COLOR },
+  };
+  const numberFmtInt = '#,##0;-#,##0;0';
+  const numberFmtDec = '#,##0.##;-#,##0.##;0';
+  const numFmtFor = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && Math.abs(n - Math.round(n)) < 1e-9 ? numberFmtInt : numberFmtDec;
+  };
+  const lastTableCol = Math.max(1, excelColumns.length);
+  const visualLastCol = Math.max(2, lastTableCol);
+  excelColumns.forEach((col, index) => { worksheet.getColumn(index + 1).width = col.width || 16; });
+
+  worksheet.mergeCells(1, 1, 1, visualLastCol);
+  const titleCell = worksheet.getCell(1, 1);
+  titleCell.value = "Combined Proposals Report";
+  titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+  worksheet.getRow(1).height = 26;
+
+  worksheet.mergeCells(2, 1, 2, visualLastCol);
+  const metaCell = worksheet.getCell(2, 1);
+  metaCell.value = `${sources.map((source) => source.name).join(", ")}  •  Logic: ${_proposalCombineLogicLabel(logic)}  •  ${formatDateTime(generatedAt)}`;
+  metaCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
+  metaCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  worksheet.getRow(2).height = 28;
+
+  worksheet.mergeCells("A3:B3");
+  const summaryHead = worksheet.getCell("A3");
+  summaryHead.value = "Summary";
+  summaryHead.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  summaryHead.alignment = { horizontal: "center", vertical: "middle" };
+  summaryHead.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E79" } };
+
+  const summaryRows = [
+    ["Total requested items", Number(totals.items || 0)],
+    ["Total quantity", Number(totals.quantity || 0)],
+    ["Total cost", Number(totals.total || 0)],
+  ];
+  summaryRows.forEach(([label, value], index) => {
+    const rowIndex = 4 + index;
+    const labelCell = worksheet.getCell(rowIndex, 1);
+    const valueCell = worksheet.getCell(rowIndex, 2);
+    labelCell.value = label;
+    labelCell.font = { bold: true, color: { argb: "FF111827" } };
+    labelCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+    valueCell.value = value;
+    valueCell.numFmt = numFmtFor(value);
+    valueCell.font = { bold: true, color: { argb: index === 2 ? "FFC2410C" : "FF2563EB" } };
+    valueCell.alignment = { horizontal: "center", vertical: "middle" };
+    labelCell.border = borderThin;
+    valueCell.border = borderThin;
+    worksheet.getRow(rowIndex).height = 18;
+  });
+  worksheet.getCell("A3").border = borderThin;
+  worksheet.getCell("B3").border = borderThin;
+
   const headerRowIndex = 8;
   const headerRow = worksheet.getRow(headerRowIndex);
+  headerRow.height = 20;
   excelColumns.forEach((col, index) => {
     const cell = headerRow.getCell(index + 1);
     cell.value = col.header;
-    cell.font = { bold: true, color: { argb: "FF111827" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
-    cell.border = { top: { style: "thin", color: { argb: "FFE5E7EB" } }, left: { style: "thin", color: { argb: "FFE5E7EB" } }, bottom: { style: "thin", color: { argb: "FFE5E7EB" } }, right: { style: "thin", color: { argb: "FFE5E7EB" } } };
-    cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
+    cell.border = borderThin;
   });
+  worksheet.autoFilter = { from: { row: headerRowIndex, column: 1 }, to: { row: headerRowIndex, column: lastTableCol } };
+
+  let visualIndex = 0;
   if (!rows.length) {
     const row = worksheet.addRow(["No components found."]);
     row.font = { italic: true, color: { argb: "FF6B7280" } };
   } else {
     for (const group of groupedRows) {
       const groupRow = worksheet.addRow([`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
-      const lastColumn = Math.max(1, excelColumns.length);
-      if (lastColumn > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastColumn);
+      if (lastTableCol > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastTableCol);
       groupRow.font = { bold: true, color: { argb: "FF9A3412" } };
+      groupRow.alignment = { horizontal: "left", vertical: "middle" };
       groupRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-      groupRow.eachCell((cell) => { cell.border = { top: { style: "thin", color: { argb: "FFFED7AA" } }, left: { style: "thin", color: { argb: "FFFED7AA" } }, bottom: { style: "thin", color: { argb: "FFFED7AA" } }, right: { style: "thin", color: { argb: "FFFED7AA" } } }; });
+      groupRow.height = 19;
+      for (let c = 1; c <= lastTableCol; c++) groupRow.getCell(c).border = borderThin;
+
       for (const item of group.rows) {
-        const payload = {};
-        for (const col of excelColumns) {
-          if (col.sourceQty) payload[col.key] = Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0;
-          else payload[col.key] = _proposalExportCellValue(item, col.key);
-        }
-        const row = worksheet.addRow(payload);
+        const values = excelColumns.map((col) => col.sourceQty
+          ? Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0
+          : _proposalExportCellValue(item, col.key));
+        const row = worksheet.addRow(values);
+        row.height = 18;
         excelColumns.forEach((col, index) => {
           const cell = row.getCell(index + 1);
-          if (col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = '£#,##0.00;[Red]-£#,##0.00';
-          cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
-          cell.border = { top: { style: "thin", color: { argb: "FFE5E7EB" } }, left: { style: "thin", color: { argb: "FFE5E7EB" } }, bottom: { style: "thin", color: { argb: "FFE5E7EB" } }, right: { style: "thin", color: { argb: "FFE5E7EB" } } };
+          cell.border = borderThin;
+          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+          if (col.key === "quantity" || col.sourceQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
+          if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
         });
+        visualIndex += 1;
       }
     }
   }
-  worksheet.getColumn(1).eachCell((cell, rowNumber) => { if (rowNumber <= 6) cell.font = { ...(cell.font || {}), bold: rowNumber <= 6 }; });
-  worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
+
+  const AUTO_FROM_ROW = 3;
+  const AUTO_TO_ROW = worksheet.rowCount;
+  for (let c = 1; c <= lastTableCol; c++) {
+    let maxLen = String(excelColumns[c - 1]?.header || "").length;
+    for (let r = AUTO_FROM_ROW; r <= AUTO_TO_ROW; r++) {
+      const value = worksheet.getRow(r).getCell(c).value;
+      const textValue = value && typeof value === "object" && value.text ? value.text : String(value ?? "");
+      if (textValue) maxLen = Math.max(maxLen, textValue.length);
+    }
+    worksheet.getColumn(c).width = Math.min(42, Math.max(11, maxLen + 2));
+  }
+
   const dateStr = generatedAt.toISOString().slice(0, 10);
   const fileName = `combined-proposals-${dateStr}.xlsx`;
   const buffer = await workbook.xlsx.writeBuffer();
@@ -8172,80 +8245,133 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
   const worksheet = workbook.addWorksheet("Proposal");
   const proposalName = String(detail.proposal.name || "Proposal").trim() || "Proposal";
   const generatedAt = new Date();
+  const excelColumns = selectedExportColumns.map((col) => ({ ...col, header: col.label, width: col.excelWidth || 16 }));
 
-  worksheet.columns = selectedExportColumns.map((col) => ({
-    header: col.label,
-    key: col.key,
-    width: col.excelWidth || 16,
-  }));
+  const BORDER_COLOR = { argb: "FF9CA3AF" };
+  const borderThin = {
+    top: { style: "thin", color: BORDER_COLOR },
+    left: { style: "thin", color: BORDER_COLOR },
+    bottom: { style: "thin", color: BORDER_COLOR },
+    right: { style: "thin", color: BORDER_COLOR },
+  };
+  const numberFmtInt = '#,##0;-#,##0;0';
+  const numberFmtDec = '#,##0.##;-#,##0.##;0';
+  const numFmtFor = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && Math.abs(n - Math.round(n)) < 1e-9 ? numberFmtInt : numberFmtDec;
+  };
+  const lastTableCol = Math.max(1, excelColumns.length);
+  const visualLastCol = Math.max(2, lastTableCol);
+  excelColumns.forEach((col, index) => { worksheet.getColumn(index + 1).width = col.width || 16; });
 
-  worksheet.spliceRows(1, 0,
-    ["Proposal", proposalName],
-    ["Date", formatDateTime(generatedAt)],
-    ["Total requested items", `${totals.items} item${totals.items === 1 ? "" : "s"}`],
-    ["Total quantity", totals.quantity],
-    ["Total cost", totals.total],
-    []
-  );
+  worksheet.mergeCells(1, 1, 1, visualLastCol);
+  const titleCell = worksheet.getCell(1, 1);
+  titleCell.value = `Proposal Report — ${proposalName}`;
+  titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+  worksheet.getRow(1).height = 26;
 
-  const headerRowIndex = 7;
-  const headerRow = worksheet.getRow(headerRowIndex);
-  selectedExportColumns.forEach((col, index) => {
-    const cell = headerRow.getCell(index + 1);
-    cell.value = col.label;
-    cell.font = { bold: true, color: { argb: "FF111827" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
-    cell.border = {
-      top: { style: "thin", color: { argb: "FFE5E7EB" } },
-      left: { style: "thin", color: { argb: "FFE5E7EB" } },
-      bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
-      right: { style: "thin", color: { argb: "FFE5E7EB" } },
-    };
-    cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
+  worksheet.mergeCells(2, 1, 2, visualLastCol);
+  const metaCell = worksheet.getCell(2, 1);
+  metaCell.value = `Generated: ${formatDateTime(generatedAt)}`;
+  metaCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
+  metaCell.alignment = { horizontal: "center", vertical: "middle" };
+  worksheet.getRow(2).height = 20;
+
+  worksheet.mergeCells("A3:B3");
+  const summaryHead = worksheet.getCell("A3");
+  summaryHead.value = "Summary";
+  summaryHead.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  summaryHead.alignment = { horizontal: "center", vertical: "middle" };
+  summaryHead.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E79" } };
+
+  const summaryRows = [
+    ["Total requested items", Number(totals.items || 0)],
+    ["Total quantity", Number(totals.quantity || 0)],
+    ["Total cost", Number(totals.total || 0)],
+  ];
+  summaryRows.forEach(([label, value], index) => {
+    const rowIndex = 4 + index;
+    const labelCell = worksheet.getCell(rowIndex, 1);
+    const valueCell = worksheet.getCell(rowIndex, 2);
+    labelCell.value = label;
+    labelCell.font = { bold: true, color: { argb: "FF111827" } };
+    labelCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+    valueCell.value = value;
+    valueCell.numFmt = numFmtFor(value);
+    valueCell.font = { bold: true, color: { argb: index === 2 ? "FFC2410C" : "FF2563EB" } };
+    valueCell.alignment = { horizontal: "center", vertical: "middle" };
+    labelCell.border = borderThin;
+    valueCell.border = borderThin;
+    worksheet.getRow(rowIndex).height = 18;
   });
+  worksheet.getCell("A3").border = borderThin;
+  worksheet.getCell("B3").border = borderThin;
 
+  const headerRowIndex = 8;
+  const headerRow = worksheet.getRow(headerRowIndex);
+  headerRow.height = 20;
+  excelColumns.forEach((col, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = col.header;
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
+    cell.border = borderThin;
+  });
+  worksheet.autoFilter = { from: { row: headerRowIndex, column: 1 }, to: { row: headerRowIndex, column: lastTableCol } };
+
+  let visualIndex = 0;
   if (!rows.length) {
     const row = worksheet.addRow(["No components yet."]);
     row.font = { italic: true, color: { argb: "FF6B7280" } };
   } else {
     for (const group of groupedRows) {
       const groupRow = worksheet.addRow([`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
-      const lastColumn = Math.max(1, selectedExportColumns.length);
-      if (lastColumn > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastColumn);
+      if (lastTableCol > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastTableCol);
       groupRow.font = { bold: true, color: { argb: "FF9A3412" } };
+      groupRow.alignment = { horizontal: "left", vertical: "middle" };
       groupRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-      groupRow.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFFED7AA" } },
-          left: { style: "thin", color: { argb: "FFFED7AA" } },
-          bottom: { style: "thin", color: { argb: "FFFED7AA" } },
-          right: { style: "thin", color: { argb: "FFFED7AA" } },
-        };
-      });
+      groupRow.height = 19;
+      for (let c = 1; c <= lastTableCol; c++) groupRow.getCell(c).border = borderThin;
 
       for (const item of group.rows) {
-        const payload = {};
-        for (const col of selectedExportColumns) payload[col.key] = _proposalExportCellValue(item, col.key);
-        const row = worksheet.addRow(payload);
-        selectedExportColumns.forEach((col, index) => {
+        const values = excelColumns.map((col) => _proposalExportCellValue(item, col.key));
+        const row = worksheet.addRow(values);
+        row.height = 18;
+        excelColumns.forEach((col, index) => {
           const cell = row.getCell(index + 1);
-          if (col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = '£#,##0.00;[Red]-£#,##0.00';
-          cell.alignment = { horizontal: col.align === "right" ? "right" : "left" };
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFE5E7EB" } },
-            left: { style: "thin", color: { argb: "FFE5E7EB" } },
-            bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
-            right: { style: "thin", color: { argb: "FFE5E7EB" } },
-          };
+          cell.border = borderThin;
+          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+          if (col.key === "quantity" || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
+          if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
+          if (col.key === "name" && item.url) {
+            const url = String(item.url || "").trim();
+            if (/^https?:\/\//i.test(url)) {
+              cell.value = { text: String(cell.value || item.name || "Component"), hyperlink: url };
+              cell.font = { color: { argb: "FF2563EB" }, underline: true };
+            }
+          }
         });
+        visualIndex += 1;
       }
     }
   }
 
-  worksheet.getColumn(1).eachCell((cell, rowNumber) => {
-    if (rowNumber <= 5) cell.font = { ...(cell.font || {}), bold: rowNumber <= 5 };
-  });
-  worksheet.views = [{ state: "frozen", ySplit: headerRowIndex }];
+  const AUTO_FROM_ROW = 3;
+  const AUTO_TO_ROW = worksheet.rowCount;
+  for (let c = 1; c <= lastTableCol; c++) {
+    let maxLen = String(excelColumns[c - 1]?.header || "").length;
+    for (let r = AUTO_FROM_ROW; r <= AUTO_TO_ROW; r++) {
+      const value = worksheet.getRow(r).getCell(c).value;
+      const textValue = value && typeof value === "object" && value.text ? value.text : String(value ?? "");
+      if (textValue) maxLen = Math.max(maxLen, textValue.length);
+    }
+    worksheet.getColumn(c).width = Math.min(42, Math.max(11, maxLen + 2));
+  }
 
   const dateStr = generatedAt.toISOString().slice(0, 10);
   const fileBase = _proposalPdfSafeFilename(proposalName);
