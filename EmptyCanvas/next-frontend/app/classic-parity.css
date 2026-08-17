@@ -9716,3 +9716,185 @@ body.proposals-page .proposal-kit-browser-library-kit .products-proposal-folder_
     margin-left:auto;
   }
 }
+
+/* Shared save progress feedback — Kits + Proposals */
+.save-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 25000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 7, 18, 0.34);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: saveProgressOverlayIn 180ms ease-out both;
+}
+
+.save-progress-modal {
+  width: min(330px, calc(100vw - 36px));
+  min-height: 286px;
+  padding: 28px 26px 24px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  text-align: center;
+  transform-origin: center;
+  animation: saveProgressModalIn 220ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.save-progress-ring-wrap {
+  width: 142px;
+  height: 142px;
+  display: grid;
+  place-items: center;
+}
+
+.save-progress-ring {
+  --save-progress: 0deg;
+  width: 132px;
+  height: 132px;
+  padding: 8px;
+  border-radius: 999px;
+  background: conic-gradient(#f97316 var(--save-progress), #e9edf3 0deg);
+  box-shadow: 0 16px 34px rgba(249, 115, 22, 0.16);
+  transition: background 180ms linear, transform 260ms ease, box-shadow 260ms ease;
+  position: relative;
+}
+
+.save-progress-ring::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 1px solid rgba(249, 115, 22, 0.14);
+  border-radius: inherit;
+  opacity: .8;
+}
+
+.save-progress-ring__inner {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+}
+
+.save-progress-percent {
+  color: #0f172a;
+  font-size: 31px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.save-progress-percent small {
+  margin-left: 2px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.save-progress-result {
+  width: 74px;
+  height: 74px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 47px;
+  font-weight: 700;
+  line-height: 1;
+  animation: saveProgressResultPop 430ms cubic-bezier(.2,1.45,.45,1) both;
+}
+
+.save-progress-result--done { background: #16a34a; }
+.save-progress-result--failed { background: #dc2626; }
+
+.save-progress-modal.is-done .save-progress-ring {
+  background: #dcfce7;
+  box-shadow: 0 18px 42px rgba(22, 163, 74, 0.18);
+  transform: scale(1.04);
+}
+
+.save-progress-modal.is-done .save-progress-ring::after {
+  border-color: rgba(22, 163, 74, 0.16);
+}
+
+.save-progress-modal.is-failed .save-progress-ring {
+  background: #fee2e2;
+  box-shadow: 0 18px 42px rgba(220, 38, 38, 0.16);
+  transform: scale(1.04);
+}
+
+.save-progress-modal.is-failed .save-progress-ring::after {
+  border-color: rgba(220, 38, 38, 0.16);
+}
+
+.save-progress-copy {
+  display: grid;
+  gap: 8px;
+  max-width: 260px;
+}
+
+.save-progress-copy strong {
+  color: #0f172a;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.save-progress-copy span {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.save-progress-modal.is-done .save-progress-copy strong { color: #15803d; }
+.save-progress-modal.is-failed .save-progress-copy strong { color: #b91c1c; }
+
+@keyframes saveProgressOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes saveProgressModalIn {
+  from { opacity: 0; transform: translateY(12px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes saveProgressResultPop {
+  0% { opacity: 0; transform: scale(.45) rotate(-12deg); }
+  65% { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@media (max-width: 640px) {
+  .save-progress-overlay { padding: 18px; }
+  .save-progress-modal {
+    width: min(300px, calc(100vw - 30px));
+    min-height: 260px;
+    padding: 24px 20px 22px;
+    border-radius: 26px;
+  }
+  .save-progress-ring-wrap { width: 128px; height: 128px; }
+  .save-progress-ring { width: 118px; height: 118px; }
+  .save-progress-copy strong { font-size: 19px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-progress-overlay,
+  .save-progress-modal,
+  .save-progress-result { animation: none !important; }
+  .save-progress-ring { transition: none !important; }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import { confirmDelete } from "../../lib/client-confirm";
 
 function text(value) {
@@ -513,6 +514,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [activeDetail, setActiveDetail] = useState(null);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
+  const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
   const [detailBusy, setDetailBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
@@ -1122,7 +1124,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     setDraftErrors(errors);
     if (errors.name || errors.items) return;
 
+    const validRows = rows.filter((row) => row.productId);
     setBusy(true);
+    startSaveProgress({
+      title: createMode ? "Saving kit" : "Saving changes",
+      message: createMode ? `Preparing ${validRows.length} component${validRows.length === 1 ? "" : "s"}…` : "Updating your kit…",
+    });
     try {
       if (createMode) {
         const createdBody = await requestJson("/next/api/products/kits", {
@@ -1131,16 +1138,22 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         });
         const created = normalizeKit({ ...(createdBody.kit || {}), canEdit: true });
         if (!created.id) throw new Error("Kit was created but the kit ID was not returned.");
-        for (const row of rows) {
-          if (!row.productId) continue;
+
+        updateSaveProgress(18, "Kit created. Saving components…");
+        for (let index = 0; index < validRows.length; index += 1) {
+          const row = validRows[index];
           await requestJson(`/next/api/products/kits/${encodeURIComponent(created.id)}/items`, {
             method: "POST",
             body: JSON.stringify({ productId: row.productId, quantity: row.quantity, adminPassword: editAdminPassword }),
           });
+          const componentProgress = 18 + Math.round(((index + 1) / Math.max(1, validRows.length)) * 68);
+          updateSaveProgress(componentProgress, `Saving component ${index + 1} of ${validRows.length}…`);
         }
         await refreshKits();
-        backToKits();
+        updateSaveProgress(94, "Refreshing kits…");
         notify("Kit saved successfully.");
+        await finishSaveProgress("done", "Kit saved successfully.");
+        backToKits();
         return;
       }
 
@@ -1149,14 +1162,18 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         method: "PATCH",
         body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
       });
+      updateSaveProgress(86, "Applying the latest changes…");
       const updated = normalizeKit(body.kit || { ...kit, name: cleanName });
       setActiveDetail((current) => current ? { ...current, kit: updated } : current);
       setKits((current) => current.map((entry) => entry.id === updated.id ? { ...updated, itemsCount: rows.length } : entry));
       setEditName(updated.name);
       setDraftErrors({ name: "", items: "" });
       notify("Changes saved.");
+      await finishSaveProgress("done", "Kit changes saved successfully.");
     } catch (error) {
-      notify(error?.message || `Failed to ${createMode ? "create" : "update"} kit.`, "error");
+      const message = error?.message || `Failed to ${createMode ? "create" : "update"} kit.`;
+      await finishSaveProgress("failed", message);
+      notify(message, "error");
     } finally {
       setBusy(false);
     }
@@ -1224,6 +1241,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
+        <SaveProgressModal state={saveProgress} />
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
             <section className={`products-proposal-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>

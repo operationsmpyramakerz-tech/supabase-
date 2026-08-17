@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import { confirmDelete } from "../../lib/client-confirm";
 
 const EXPORT_COLUMNS = [
@@ -844,6 +845,7 @@ export default function ProposalsClient({
   const [combineLogic, setCombineLogic] = useState("add");
   const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
   const [busy, setBusy] = useState(false);
+  const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
   const [detailBusy, setDetailBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
@@ -1126,7 +1128,12 @@ export default function ProposalsClient({
     setDraftErrors(errors);
     if (errors.name || errors.items) return;
 
+    const validRows = rows.filter((row) => row.productId);
     setBusy(true);
+    startSaveProgress({
+      title: createMode ? "Saving proposal" : "Saving changes",
+      message: createMode ? `Preparing ${validRows.length} component${validRows.length === 1 ? "" : "s"}…` : "Updating your proposal…",
+    });
     try {
       if (createMode) {
         const createdBody = await requestJson("/next/api/products/proposals", {
@@ -1135,8 +1142,10 @@ export default function ProposalsClient({
         });
         const created = normalizeProposal({ ...(createdBody.proposal || {}), canEdit: true });
         if (!created.id) throw new Error("Proposal was created but the proposal ID was not returned.");
-        for (const row of rows) {
-          if (!row.productId) continue;
+
+        updateSaveProgress(16, "Proposal created. Saving components…");
+        for (let index = 0; index < validRows.length; index += 1) {
+          const row = validRows[index];
           await requestJson(`/next/api/products/proposals/${encodeURIComponent(created.id)}/items`, {
             method: "POST",
             body: JSON.stringify({
@@ -1146,27 +1155,35 @@ export default function ProposalsClient({
               adminPassword: editAdminPassword,
             }),
           });
+          const componentProgress = 16 + Math.round(((index + 1) / Math.max(1, validRows.length)) * 70);
+          updateSaveProgress(componentProgress, `Saving component ${index + 1} of ${validRows.length}…`);
         }
         await refreshFolders();
-        backToProposals();
+        updateSaveProgress(95, "Refreshing proposals…");
         notify("Proposal saved successfully.");
+        await finishSaveProgress("done", "Proposal saved successfully.");
+        backToProposals();
         return;
       }
 
       const proposal = activeDetail?.proposal;
-      if (!proposal?.id) return;
+      if (!proposal?.id) throw new Error("Proposal ID is missing.");
       const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}`, {
         method: "PATCH",
         body: JSON.stringify({ name: cleanName, adminPassword: editAdminPassword }),
       });
+      updateSaveProgress(86, "Applying the latest changes…");
       const updated = normalizeProposal(body.proposal || { ...proposal, name: cleanName });
       setActiveDetail((current) => current ? { ...current, proposal: updated } : current);
       setProposals((current) => current.map((entry) => entry.id === updated.id ? { ...updated, itemsCount: rows.length } : entry));
       setEditName(updated.name);
       setDraftErrors({ name: "", items: "" });
       notify("Changes saved.");
+      await finishSaveProgress("done", "Proposal changes saved successfully.");
     } catch (error) {
-      notify(error?.message || `Failed to ${createMode ? "create" : "update"} proposal.`, "error");
+      const message = error?.message || `Failed to ${createMode ? "create" : "update"} proposal.`;
+      await finishSaveProgress("failed", message);
+      notify(message, "error");
     } finally {
       setBusy(false);
     }
@@ -1465,6 +1482,7 @@ export default function ProposalsClient({
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
+        <SaveProgressModal state={saveProgress} />
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
             <section className={`products-proposal-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>
