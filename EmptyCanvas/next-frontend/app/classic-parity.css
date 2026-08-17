@@ -9412,3 +9412,182 @@ body.proposals-page .proposal-kit-browser-library-kit__check{
     max-width:154px;
   }
 }
+
+/* ===== Proposal multi-kit picker + add-component launcher ===== */
+body.proposals-page .proposal-kit-browser--multi .proposal-kit-browser__toolbar{
+  flex-wrap:wrap;
+}
+body.proposals-page .proposal-kit-browser__selected-count{
+  flex:0 0 auto;
+  min-width:84px;
+  height:38px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 12px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:11px;
+  background:#fff;
+  color:#344054;
+  font-size:.68rem;
+  font-weight:900;
+  white-space:nowrap;
+}
+body.proposals-page .proposal-kit-browser-library-kit.is-selected{
+  overflow:hidden !important;
+  border-color:#e45512 !important;
+  box-shadow:0 0 0 3px rgba(228,85,18,.18),0 22px 42px rgba(0,0,0,.2) !important;
+}
+body.proposals-page .proposal-kit-browser-library-kit.is-selected .products-proposal-folder__main{
+  filter:blur(1.25px) brightness(.72) saturate(.82);
+  transform:scale(.985);
+  transition:filter .16s ease,transform .16s ease;
+}
+body.proposals-page .proposal-kit-browser-library-kit__selected-panel{
+  position:absolute;
+  inset:auto 8px 8px;
+  z-index:12;
+  min-width:0;
+  height:40px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 76px;
+  align-items:center;
+  gap:7px;
+  padding:5px 6px 5px 9px;
+  border:1px solid rgba(255,255,255,.55);
+  border-radius:11px;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 9px 22px rgba(15,23,42,.22);
+  backdrop-filter:blur(10px);
+  pointer-events:none;
+}
+body.proposals-page .proposal-kit-browser-library-kit__selected-name{
+  min-width:0;
+  overflow:hidden;
+  color:#101828;
+  font-size:.61rem;
+  font-weight:950;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+body.proposals-page .proposal-kit-browser-library-kit__selected-panel label{
+  min-width:0;
+  height:30px;
+  display:grid;
+  grid-template-columns:auto 1fr;
+  align-items:center;
+  gap:4px;
+  padding:2px 3px 2px 6px;
+  border:1px solid #e4e7ec;
+  border-radius:8px;
+  background:#f8fafc;
+  pointer-events:auto;
+}
+body.proposals-page .proposal-kit-browser-library-kit__selected-panel label > span{
+  color:#475467;
+  font-size:.55rem;
+  font-weight:950;
+}
+body.proposals-page .proposal-kit-browser-library-kit__selected-panel input{
+  width:38px !important;
+  height:24px !important;
+  min-height:24px !important;
+  padding:0 3px !important;
+  border:0 !important;
+  border-radius:6px !important;
+  background:#fff !important;
+  box-shadow:none !important;
+  color:#101828 !important;
+  font-size:.67rem !important;
+  font-weight:950 !important;
+  text-align:center;
+  outline:0 !important;
+}
+body.proposals-page .proposal-kit-browser__footer{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:11px 16px;
+  border-top:1px solid #eef1f5;
+  background:#fff;
+  box-shadow:0 -10px 24px rgba(15,23,42,.06);
+}
+body.proposals-page .proposal-kit-browser__footer > span{
+  color:#667085;
+  font-size:.7rem;
+  font-weight:850;
+}
+body.proposals-page .proposal-kit-browser__footer .products-btn{
+  min-width:92px;
+  height:38px;
+}
+body.proposals-page .proposal-add-items-settings--kit{
+  grid-template-columns:minmax(0,1fr) !important;
+}
+body.proposals-page .proposal-add-components-tool-card{
+  padding:0 !important;
+  overflow:hidden;
+}
+body.proposals-page .proposal-add-components-launch{
+  width:100%;
+  min-height:84px;
+  display:flex !important;
+  align-items:center;
+  justify-content:flex-start;
+  gap:10px;
+  padding:18px 22px;
+  border:0;
+  border-radius:inherit;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+  transition:background .16s ease,transform .16s ease;
+}
+body.proposals-page .proposal-add-components-launch:hover{
+  background:rgba(255,255,255,.035);
+}
+body.proposals-page .proposal-add-components-launch:active{
+  transform:scale(.995);
+}
+body.proposals-page .proposal-add-components-launch > span:first-child{
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+  flex:0 0 30px;
+  border:1px solid rgba(228,85,18,.28);
+  border-radius:10px;
+  background:rgba(228,85,18,.08);
+  color:#e45512;
+  font-size:1rem;
+  font-weight:900;
+}
+body.proposals-page .proposal-add-components-launch > span:last-child{
+  font-size:1rem;
+  font-weight:950;
+}
+body.proposals-page .proposal-classic-inline-actions--delete-only{
+  padding:0 18px 16px;
+}
+@media(max-width:760px){
+  body.proposals-page .proposal-kit-browser__selected-count{
+    width:max-content;
+    min-width:0;
+    align-self:flex-end;
+  }
+  body.proposals-page .proposal-kit-browser-library-kit__selected-panel{
+    inset:auto 6px 6px;
+    grid-template-columns:minmax(0,1fr) 70px;
+  }
+  body.proposals-page .proposal-kit-browser__footer{
+    padding-bottom:max(11px,env(safe-area-inset-bottom));
+  }
+  body.proposals-page .proposal-add-components-launch{
+    min-height:70px;
+    padding:15px 16px;
+  }
+}

@@ -394,11 +394,12 @@ function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
   );
 }
 
-function KitBrowserDialog({ folders, kits, selectedId, onSelect, onClose }) {
+function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantityChange, onClose }) {
   const [activeFolderId, setActiveFolderId] = useState("");
   const [query, setQuery] = useState("");
   const activeFolder = folders.find((folder) => folder.id === activeFolderId) || null;
   const needle = lower(query);
+  const selectedCount = Object.keys(selectedKits || {}).length;
   const folderCounts = useMemo(() => {
     const map = new Map();
     kits.forEach((kit) => {
@@ -429,12 +430,12 @@ function KitBrowserDialog({ folders, kits, selectedId, onSelect, onClose }) {
 
   return (
     <div className="proposal-kit-browser-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="proposal-kit-browser" role="dialog" aria-modal="true" aria-label="Select kit">
+      <section className="proposal-kit-browser proposal-kit-browser--multi" role="dialog" aria-modal="true" aria-label="Select kits">
         <header className="proposal-kit-browser__head">
           <div>
             <span className="proposal-kit-browser__eyebrow">Kit library</span>
-            <h3>{activeFolder ? activeFolder.name : "Select a kit"}</h3>
-            <p>{activeFolder ? "Choose a kit from this folder." : "Open a folder or choose an unfiled kit."}</p>
+            <h3>{activeFolder ? activeFolder.name : "Select kits"}</h3>
+            <p>{activeFolder ? "Select one or more kits from this folder." : "Open a folder or select one or more unfiled kits."}</p>
           </div>
           <button type="button" className="proposal-kit-browser__close" onClick={onClose} aria-label="Close">×</button>
         </header>
@@ -449,6 +450,7 @@ function KitBrowserDialog({ folders, kits, selectedId, onSelect, onClose }) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search kits..." autoComplete="off" />
           </label>
+          <span className="proposal-kit-browser__selected-count">{selectedCount} selected</span>
         </div>
 
         <div className="proposal-kit-browser__grid">
@@ -473,27 +475,51 @@ function KitBrowserDialog({ folders, kits, selectedId, onSelect, onClose }) {
               </article>
             );
           })}
-          {visibleKits.map((kit) => (
-            <article className={`products-proposal-folder kit-library-kit proposal-kit-browser-library-kit ${selectedId === kit.id ? "is-selected" : ""}`} key={kit.id}>
-              <button type="button" className="products-proposal-folder__main" onClick={() => onSelect(kit.id)} aria-pressed={selectedId === kit.id} aria-label={`Select kit ${kit.name}`}>
-                <span className="proposal-folder-figure" aria-hidden="true">
-                  <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
-                  <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
-                  <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
-                  <span className="proposal-folder-figure__back" />
-                  <span className="proposal-folder-figure__front"><small>K</small></span>
-                </span>
-                <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
-                <span className="proposal-folder-count">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
-                  <span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span>
-                </span>
-                {selectedId === kit.id ? <span className="proposal-kit-browser-library-kit__check" aria-hidden="true">✓</span> : null}
-              </button>
-            </article>
-          ))}
+          {visibleKits.map((kit) => {
+            const isSelected = Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id);
+            const qty = isSelected ? selectedKits[kit.id] : 1;
+            return (
+              <article className={`products-proposal-folder kit-library-kit proposal-kit-browser-library-kit ${isSelected ? "is-selected" : ""}`} key={kit.id}>
+                <button type="button" className="products-proposal-folder__main" onClick={() => onToggleKit(kit.id)} aria-pressed={isSelected} aria-label={`${isSelected ? "Unselect" : "Select"} kit ${kit.name}`}>
+                  <span className="proposal-folder-figure" aria-hidden="true">
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                    <span className="proposal-folder-figure__back" />
+                    <span className="proposal-folder-figure__front"><small>K</small></span>
+                  </span>
+                  <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
+                  <span className="proposal-folder-count">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+                    <span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span>
+                  </span>
+                </button>
+                {isSelected ? (
+                  <div className="proposal-kit-browser-library-kit__selected-panel">
+                    <span className="proposal-kit-browser-library-kit__selected-name">{kit.name}</span>
+                    <label onClick={(event) => event.stopPropagation()}>
+                      <span>Qty</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={qty}
+                        onChange={(event) => onQuantityChange(kit.id, event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
           {!visibleFolders.length && !visibleKits.length ? <div className="proposal-kit-browser__empty">No kits found here.</div> : null}
         </div>
+
+        <footer className="proposal-kit-browser__footer">
+          <span>{selectedCount} kit{selectedCount === 1 ? "" : "s"} selected</span>
+          <button type="button" className="products-btn products-btn--dark" onClick={onClose} disabled={!selectedCount}>Done</button>
+        </footer>
       </section>
     </div>
   );
@@ -503,6 +529,7 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   const [mode, setMode] = useState("product");
   const [selected, setSelected] = useState("");
   const [selectedProducts, setSelectedProducts] = useState({});
+  const [selectedKits, setSelectedKits] = useState({});
   const [quantity, setQuantity] = useState(1);
   const [mergeLogic, setMergeLogic] = useState("add");
   const [search, setSearch] = useState("");
@@ -516,7 +543,8 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   }).slice(0, 120), [products, search]);
 
   const selectedProductCount = Object.keys(selectedProducts).length;
-  const selectedKit = kits.find((kit) => kit.id === selected) || null;
+  const selectedKitCount = Object.keys(selectedKits).length;
+  const selectedKitNames = Object.keys(selectedKits).map((id) => kits.find((kit) => kit.id === id)?.name).filter(Boolean);
 
   const toggleProduct = (productId) => {
     setSelectedProducts((current) => {
@@ -532,10 +560,25 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
     setSelectedProducts((current) => ({ ...current, [productId]: Math.max(1, Math.round(number(value) || 1)) }));
   };
 
+  const toggleKit = (kitId) => {
+    setSelectedKits((current) => {
+      const next = { ...current };
+      if (Object.prototype.hasOwnProperty.call(next, kitId)) delete next[kitId];
+      else next[kitId] = 1;
+      return next;
+    });
+    setError("");
+  };
+
+  const setKitQuantity = (kitId, value) => {
+    setSelectedKits((current) => ({ ...current, [kitId]: Math.max(1, Math.round(number(value) || 1)) }));
+  };
+
   const switchMode = (value) => {
     setMode(value);
     setSelected("");
     setSelectedProducts({});
+    setSelectedKits({});
     setQuantity(1);
     setSearch("");
     setError("");
@@ -546,6 +589,17 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
     if (mode === "product") {
       const selections = Object.entries(selectedProducts).map(([productId, qty]) => ({ selected: productId, quantity: Math.max(1, Math.round(number(qty) || 1)) }));
       if (!selections.length) return setError("Choose at least one product.");
+      setError("");
+      try {
+        await onSubmit({ mode, selections, mergeLogic });
+      } catch (submitError) {
+        setError(submitError?.message || "The components could not be added.");
+      }
+      return;
+    }
+    if (mode === "kit") {
+      const selections = Object.entries(selectedKits).map(([kitId, qty]) => ({ selected: kitId, quantity: Math.max(1, Math.round(number(qty) || 1)) }));
+      if (!selections.length) return setError("Choose at least one kit.");
       setError("");
       try {
         await onSubmit({ mode, selections, mergeLogic });
@@ -619,12 +673,12 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
 
         {mode === "kit" ? (
           <div className="proposal-kit-select-field">
-            <span className="proposal-kit-select-field__label">Kit *</span>
-            <button type="button" className={`proposal-kit-select-trigger ${selectedKit ? "has-value" : ""}`} onClick={() => setKitBrowserOpen(true)}>
+            <span className="proposal-kit-select-field__label">Kits *</span>
+            <button type="button" className={`proposal-kit-select-trigger ${selectedKitCount ? "has-value" : ""}`} onClick={() => setKitBrowserOpen(true)}>
               <span className="proposal-kit-select-trigger__icon" aria-hidden="true">▣</span>
               <span className="proposal-kit-select-trigger__copy">
-                <strong>{selectedKit ? selectedKit.name : "Select Kit"}</strong>
-                <small>{selectedKit ? `${formatNumber(selectedKit.itemsCount)} component${selectedKit.itemsCount === 1 ? "" : "s"}` : "Browse folders and kits"}</small>
+                <strong>{selectedKitCount ? `${selectedKitCount} kit${selectedKitCount === 1 ? "" : "s"} selected` : "Select Kits"}</strong>
+                <small>{selectedKitCount ? selectedKitNames.slice(0, 3).join(" · ") + (selectedKitCount > 3 ? ` +${selectedKitCount - 3}` : "") : "Browse folders and kits"}</small>
               </span>
               <span className="proposal-kit-select-trigger__arrow" aria-hidden="true">›</span>
             </button>
@@ -632,8 +686,7 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
         ) : null}
 
         {mode !== "product" ? (
-          <div className="next-proposals-form-grid products-form-grid proposal-add-items-settings">
-            <label><span>{mode === "kit" ? "Kit Multiplier" : "Quantity"}</span><input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+          <div className="next-proposals-form-grid products-form-grid proposal-add-items-settings proposal-add-items-settings--kit">
             <ModernSelect
               label="When Product Already Exists"
               value={mergeLogic}
@@ -661,10 +714,10 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className="next-proposals-form__actions products-modal__actions proposal-add-items-actions">
           <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Adding…" : mode === "product" && selectedProductCount > 1 ? `Add ${selectedProductCount} Components` : "Add Components"}</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Adding…" : mode === "product" && selectedProductCount > 1 ? `Add ${selectedProductCount} Components` : mode === "kit" && selectedKitCount > 1 ? `Add ${selectedKitCount} Kits` : "Add Components"}</button>
         </div>
       </form>
-      {kitBrowserOpen ? <KitBrowserDialog folders={kitFolders} kits={kits} selectedId={selected} onSelect={(kitId) => { setSelected(kitId); setKitBrowserOpen(false); setError(""); }} onClose={() => setKitBrowserOpen(false)} /> : null}
+      {kitBrowserOpen ? <KitBrowserDialog folders={kitFolders} kits={kits} selectedKits={selectedKits} onToggleKit={toggleKit} onQuantityChange={setKitQuantity} onClose={() => setKitBrowserOpen(false)} /> : null}
     </Modal>
   );
 }
@@ -1152,16 +1205,22 @@ export default function ProposalsClient({
         return;
       }
       if (mode === "kit") {
-        const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(selected)}?_ts=${Date.now()}`);
-        const kitRows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => ({
-          productId: item.productId,
-          productName: item.productName,
-          quantity: Math.max(1, Math.round(number(item.quantity) || 1)) * Math.max(1, Math.round(number(quantity) || 1)),
-        }));
-        if (!kitRows.length) throw new Error("The selected kit has no components.");
+        if (!selections.length) throw new Error("Choose at least one kit.");
+        const kitRows = [];
+        for (const entry of selections) {
+          const multiplier = Math.max(1, Math.round(number(entry.quantity) || 1));
+          const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(entry.selected)}?_ts=${Date.now()}`);
+          const rows = (Array.isArray(kitBody?.items) ? kitBody.items : []).map(normalizeItem).map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: Math.max(1, Math.round(number(item.quantity) || 1)) * multiplier,
+          }));
+          kitRows.push(...rows);
+        }
+        if (!kitRows.length) throw new Error("The selected kits have no components.");
         addDraftProducts(kitRows, mergeLogic);
         setAddDialog(false);
-        notify(`${kitRows.length} kit components added to the proposal draft.`);
+        notify(`${selections.length} kit${selections.length === 1 ? "" : "s"} added to the proposal draft.`);
         return;
       }
     }
@@ -1194,21 +1253,36 @@ export default function ProposalsClient({
         return;
       }
 
-      let endpoint = `/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items`;
-      let payload = { productId: selected, quantity, mergeLogic, adminPassword };
-      if (mode === "tag") {
-        endpoint = `/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-tag`;
-        payload = { tag: selected, quantity, mergeLogic, adminPassword };
-      } else if (mode === "kit") {
-        endpoint = `/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`;
-        payload = { kitId: selected, quantity, mergeLogic, adminPassword };
+      if (mode === "kit") {
+        if (!selections.length) throw new Error("Choose at least one kit.");
+        let body = null;
+        for (const entry of selections) {
+          body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`, {
+            method: "POST",
+            body: JSON.stringify({
+              kitId: entry.selected,
+              quantity: Math.max(1, Math.round(number(entry.quantity) || 1)),
+              mergeLogic,
+              adminPassword,
+            }),
+          });
+        }
+        const pendingName = editName;
+        if (body) syncDetail(body);
+        setEditName(pendingName);
+        setAddDialog(false);
+        notify(`${selections.length} kit${selections.length === 1 ? "" : "s"} added.`);
+        return;
       }
+
+      const endpoint = `/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items`;
+      const payload = { productId: selected, quantity, mergeLogic, adminPassword };
       const body = await requestJson(endpoint, { method: "POST", body: JSON.stringify(payload) });
       const pendingName = editName;
       syncDetail(body);
       setEditName(pendingName);
       setAddDialog(false);
-      notify(mode === "tag" ? `${body.addedCount || "Products"} added from the selected tag.` : `${body.addedCount || "Kit components"} added.`);
+      notify(`${body.addedCount || "Components"} added.`);
     } finally {
       setBusy(false);
     }
@@ -1390,12 +1464,15 @@ export default function ProposalsClient({
                       </div>
 
                       <div className="products-proposal-tools proposals-one-tool">
-                        <div className="products-proposal-tool-card">
-                          <div className="products-proposal-tool-title"><span aria-hidden="true">＋</span><span>Add proposal components</span></div>
-                          <div className="proposal-classic-inline-actions">
-                            <button type="button" className="products-btn products-btn--dark" onClick={() => setAddDialog(true)}>Add product, tag or kit</button>
-                            {!createMode ? <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button> : null}
-                          </div>
+                        <div className="products-proposal-tool-card proposal-add-components-tool-card">
+                          <button type="button" className="products-proposal-tool-title proposal-add-components-launch" onClick={() => setAddDialog(true)}>
+                            <span aria-hidden="true">＋</span><span>Add proposal components</span>
+                          </button>
+                          {!createMode ? (
+                            <div className="proposal-classic-inline-actions proposal-classic-inline-actions--delete-only">
+                              <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       {draftErrors.items ? <div className="direct-create-inline-error direct-create-inline-error--items">{draftErrors.items}</div> : null}
@@ -1494,7 +1571,7 @@ export default function ProposalsClient({
                             </article>
                           );
                         })}
-                        {!enrichedRows.length ? <div className="products-table-empty proposal-components-empty">No components yet. {detailEdit ? "Add one component, tag or saved kit above." : "Choose Edit to add components."}</div> : null}
+                        {!enrichedRows.length ? <div className="products-table-empty proposal-components-empty">No components yet. {detailEdit ? "Add a product or saved kit above." : "Choose Edit to add components."}</div> : null}
                       </div>
                     </div>
                     <div className="proposal-total-block">
