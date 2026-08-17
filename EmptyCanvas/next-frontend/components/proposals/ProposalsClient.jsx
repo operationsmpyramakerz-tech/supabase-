@@ -452,13 +452,27 @@ function KitBrowserDialog({ folders, kits, selectedId, onSelect, onClose }) {
         </div>
 
         <div className="proposal-kit-browser__grid">
-          {visibleFolders.map((folder) => (
-            <button type="button" className="proposal-kit-browser-card is-folder" key={folder.id} onClick={() => { setActiveFolderId(folder.id); setQuery(""); }}>
-              <span className="proposal-kit-browser-card__figure" aria-hidden="true"><i /><i /><i /></span>
-              <span className="proposal-kit-browser-card__copy"><strong>{folder.name}</strong><small>{formatNumber(folderCounts.get(folder.id) || 0)} kit{(folderCounts.get(folder.id) || 0) === 1 ? "" : "s"}</small></span>
-              <span className="proposal-kit-browser-card__arrow" aria-hidden="true">›</span>
-            </button>
-          ))}
+          {visibleFolders.map((folder) => {
+            const kitCount = folderCounts.get(folder.id) || 0;
+            return (
+              <article className="products-proposal-folder kit-library-folder proposal-kit-browser-library-folder" key={folder.id}>
+                <button type="button" className="products-proposal-folder__main" onClick={() => { setActiveFolderId(folder.id); setQuery(""); }} aria-label={`Open folder ${folder.name}`}>
+                  <span className="proposal-folder-figure" aria-hidden="true">
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                    <span className="proposal-folder-figure__back" />
+                    <span className="proposal-folder-figure__front"><small>F</small></span>
+                  </span>
+                  <span className="proposal-folder-copy"><strong>{folder.name}</strong><em>Kit folder</em></span>
+                  <span className="proposal-folder-count">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></svg>
+                    <span>{formatNumber(kitCount)} kit{kitCount === 1 ? "" : "s"}</span>
+                  </span>
+                </button>
+              </article>
+            );
+          })}
           {visibleKits.map((kit) => (
             <button type="button" className={`proposal-kit-browser-card is-kit ${selectedId === kit.id ? "is-selected" : ""}`} key={kit.id} onClick={() => onSelect(kit.id)}>
               <span className="proposal-kit-browser-card__figure" aria-hidden="true"><i /><i /><i /></span>
@@ -563,10 +577,24 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
                       <b>{formatMoney(product.unitPrice)}</b>
                     </button>
                     {isSelected ? (
-                      <div className="proposal-product-choice__selected-panel">
-                        <span className="proposal-product-choice__selected-copy"><small>✓ Selected</small><strong>{product.name}</strong></span>
-                        <label><span>Qty</span><input type="number" min="1" step="1" value={selectedProducts[product.id]} onChange={(event) => setProductQuantity(product.id, event.target.value)} onClick={(event) => event.stopPropagation()} /></label>
-                        <button type="button" onClick={() => toggleProduct(product.id)} aria-label={`Remove ${product.name}`}>×</button>
+                      <div
+                        className="proposal-product-choice__selected-panel"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Unselect ${product.name}`}
+                        onClick={() => toggleProduct(product.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            toggleProduct(product.id);
+                          }
+                        }}
+                      >
+                        <span className="proposal-product-choice__selected-copy"><small>✓ Selected</small><strong>Tap again to unselect</strong></span>
+                        <label onClick={(event) => event.stopPropagation()}>
+                          <span>Qty</span>
+                          <input type="number" min="1" step="1" value={selectedProducts[product.id]} onChange={(event) => setProductQuantity(product.id, event.target.value)} onClick={(event) => event.stopPropagation()} />
+                        </label>
                       </div>
                     ) : null}
                   </article>

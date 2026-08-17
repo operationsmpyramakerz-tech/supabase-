@@ -9162,3 +9162,122 @@ body.proposals-page .proposal-product-choice__selected-copy strong{
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+
+/* ===== Proposal add-items polish: click-again selection + exact Kits folder cards ===== */
+body.proposals-page .proposal-product-choice__selected-panel{
+  grid-template-columns:minmax(0,1fr) 88px;
+  gap:10px;
+  padding:10px 12px;
+  cursor:pointer;
+  outline:0;
+}
+body.proposals-page .proposal-product-choice__selected-panel:focus-visible{
+  box-shadow:inset 0 0 0 2px rgba(228,85,18,.42);
+}
+body.proposals-page .proposal-product-choice__selected-copy{
+  gap:4px;
+}
+body.proposals-page .proposal-product-choice__selected-copy small{
+  font-size:.62rem;
+}
+body.proposals-page .proposal-product-choice__selected-copy strong{
+  color:#667085;
+  font-size:.61rem;
+  font-weight:800;
+  letter-spacing:0;
+}
+body.proposals-page .proposal-product-choice__selected-panel label{
+  min-width:0;
+  justify-content:space-between;
+  gap:5px;
+  padding:4px 5px 4px 8px;
+  border-radius:10px;
+  cursor:default;
+}
+body.proposals-page .proposal-product-choice__selected-panel label > span{
+  font-size:.58rem;
+}
+body.proposals-page .proposal-product-choice__selected-panel input{
+  width:44px !important;
+  height:30px !important;
+  min-height:30px !important;
+  padding:0 4px !important;
+  border-radius:7px !important;
+  font-size:.72rem !important;
+}
+body.proposals-page .proposal-product-choice__selected-panel > button{
+  display:none !important;
+}
+
+/* Use the exact folder construction from Kits inside the proposal Kit browser. */
+body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder,
+body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder:nth-child(3n+2),
+body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder:nth-child(3n){
+  width:154px !important;
+  height:144px !important;
+  min-height:144px !important;
+  justify-self:start;
+  position:relative;
+  overflow:visible;
+  border:5px solid #101217 !important;
+  border-radius:20px !important;
+  background:
+    radial-gradient(circle at 22% 5%, rgba(255,255,255,.18) 0 13%, rgba(255,255,255,0) 35%),
+    radial-gradient(circle at 80% 0%, rgba(255,255,255,.09) 0 10%, rgba(255,255,255,0) 30%),
+    linear-gradient(135deg,#565b63 0%,#41464d 48%,#2c3036 100%) !important;
+  box-shadow:0 22px 42px rgba(0,0,0,.24) !important;
+}
+body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder:hover{
+  transform:translateY(-2px) !important;
+  box-shadow:0 28px 50px rgba(0,0,0,.32) !important;
+}
+body.proposals-page .proposal-kit-browser-library-folder .products-proposal-folder__main{
+  position:absolute !important;
+  inset:0 !important;
+  min-height:0 !important;
+  width:100% !important;
+  height:100% !important;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:15px !important;
+  overflow:hidden !important;
+  background:transparent !important;
+  cursor:pointer;
+}
+body.proposals-page .proposal-kit-browser-library-folder .products-proposal-folder__main::before,
+body.proposals-page .proposal-kit-browser-library-folder .products-proposal-folder__main::after{
+  background:#24272c !important;
+}
+body.proposals-page .proposal-kit-browser-library-folder .proposal-folder-figure__paper{
+  border-color:rgba(255,255,255,.09) !important;
+  box-shadow:0 14px 24px rgba(0,0,0,.22) !important;
+}
+body.proposals-page .proposal-kit-browser-library-folder .proposal-folder-copy strong{
+  color:#fff !important;
+}
+body.proposals-page .proposal-kit-browser-library-folder .proposal-folder-copy em,
+body.proposals-page .proposal-kit-browser-library-folder .proposal-folder-count{
+  color:rgba(255,255,255,.62) !important;
+}
+body.proposals-page .proposal-kit-browser-library-folder .proposal-folder-count svg{
+  color:#d0d5dd !important;
+}
+
+@media (max-width:760px){
+  body.proposals-page .proposal-product-choice__selected-panel{
+    grid-template-columns:minmax(0,1fr) 80px;
+    gap:7px;
+    padding:8px 9px;
+  }
+  body.proposals-page .proposal-product-choice__selected-panel input{
+    width:40px !important;
+    height:28px !important;
+    min-height:28px !important;
+  }
+  body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder,
+  body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder:nth-child(3n+2),
+  body.proposals-page .proposal-kit-browser__grid > .proposal-kit-browser-library-folder:nth-child(3n){
+    width:100% !important;
+    max-width:154px;
+  }
+}
