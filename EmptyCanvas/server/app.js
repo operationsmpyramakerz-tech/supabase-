@@ -6934,6 +6934,10 @@ function _sbProductKitItemsTable() {
   return String(process.env.SUPABASE_PRODUCT_KIT_ITEMS_TABLE || "product_kit_items").trim() || "product_kit_items";
 }
 
+function _sbProductKitFoldersTable() {
+  return String(process.env.SUPABASE_PRODUCT_KIT_FOLDERS_TABLE || "product_kit_folders").trim() || "product_kit_folders";
+}
+
 function _sbKitMissingTableError(error) {
   if (_sbIsMissingTableError(error)) {
     const err = new Error("Products kits tables are not created yet. Please run proposals_kits_migration.sql in Supabase first.");
@@ -7449,25 +7453,42 @@ function _proposalExportGroupMode(value) {
   return raw === "kit-tag" || raw === "kits-tag" || raw === "kit" ? "kit-tag" : "component-tag";
 }
 
-async function _sbProductKitMembershipNames() {
+async function _sbProductKitMembershipHierarchy() {
   try {
-    const [kitRows, itemRows] = await Promise.all([_sbKitRows(), _sbKitItemRows(null)]);
-    const kitNames = new Map((kitRows || []).map((row) => [
+    const [kitRows, itemRows, folderRows] = await Promise.all([
+      _sbKitRows(),
+      _sbKitItemRows(null),
+      supabaseDb.selectAll(_sbProductKitFoldersTable(), { limit: 5000, order: "name.asc,created_at.asc" }).catch((error) => {
+        console.warn("Unable to load kit folders for proposal grouping:", error?.message || error);
+        return [];
+      }),
+    ]);
+    const folderNames = new Map((folderRows || []).map((row) => [
       String(_sbGet(row, ["id", "ID"]) ?? "").trim(),
-      _sbProposalText(_sbGet(row, ["name", "Name", "kit_name", "Kit Name"])) || "Untitled kit",
+      _sbProposalText(_sbGet(row, ["name", "Name"])) || "Untitled folder",
     ]));
+    const kitMeta = new Map((kitRows || []).map((row) => {
+      const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+      const folderId = String(_sbGet(row, ["folder_id", "folderId", "Folder ID"]) ?? "").trim();
+      return [id, {
+        id,
+        name: _sbProposalText(_sbGet(row, ["name", "Name", "kit_name", "Kit Name"])) || "Untitled kit",
+        folderId,
+        folderName: folderId ? (folderNames.get(folderId) || "Unfiled Kits") : "Unfiled Kits",
+      }];
+    }));
     const byProduct = new Map();
     for (const item of itemRows || []) {
       const productId = String(_sbGet(item, ["product_id", "productId", "Product ID"]) ?? "").trim();
       const kitId = String(_sbGet(item, ["kit_id", "kitId", "Kit ID"]) ?? "").trim();
-      const kitName = kitNames.get(kitId);
-      if (!productId || !kitName) continue;
-      if (!byProduct.has(productId)) byProduct.set(productId, new Set());
-      byProduct.get(productId).add(kitName);
+      const meta = kitMeta.get(kitId);
+      if (!productId || !meta) continue;
+      if (!byProduct.has(productId)) byProduct.set(productId, new Map());
+      byProduct.get(productId).set(kitId, meta);
     }
-    return new Map([...byProduct.entries()].map(([productId, names]) => [
+    return new Map([...byProduct.entries()].map(([productId, kitsMap]) => [
       productId,
-      [...names].sort((a, b) => String(a).localeCompare(String(b))),
+      [...kitsMap.values()].sort((a, b) => String(a.folderName || "").localeCompare(String(b.folderName || "")) || String(a.name || "").localeCompare(String(b.name || ""))),
     ]));
   } catch (error) {
     console.warn("Unable to load kit membership for proposal grouping:", error?.message || error);
@@ -7475,12 +7496,54 @@ async function _sbProductKitMembershipNames() {
   }
 }
 
-function _proposalExportGroupLabel(row, groupMode, kitMembership) {
-  if (groupMode === "kit-tag") {
-    const names = kitMembership?.get(String(row?.productId || "").trim()) || [];
-    return names.length ? names.join(" / ") : "Unassigned kit";
+function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMembership = new Map()) {
+  if (groupMode !== "kit-tag") {
+    return Array.from((rows || []).reduce((map, row) => {
+      const tag = String(row?.tag || "Uncategorized").trim() || "Uncategorized";
+      const key = tag.toLowerCase();
+      if (!map.has(key)) map.set(key, { tag, rows: [] });
+      map.get(key).rows.push(row);
+      return map;
+    }, new Map()).values())
+      .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))) }))
+      .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
   }
-  return String(row?.tag || "Uncategorized").trim() || "Uncategorized";
+
+  const folders = new Map();
+  const addToHierarchy = (row, membership = {}) => {
+    const folderId = String(membership?.folderId || "").trim();
+    const folderName = String(membership?.folderName || "Unfiled Kits").trim() || "Unfiled Kits";
+    const folderKey = `${folderId || "unfiled"}:${folderName.toLowerCase()}`;
+    if (!folders.has(folderKey)) folders.set(folderKey, { folderId, folderName, kits: new Map() });
+    const folder = folders.get(folderKey);
+    const kitId = String(membership?.id || membership?.kitId || "").trim();
+    const kitName = String(membership?.name || membership?.kitName || "Unassigned kit").trim() || "Unassigned kit";
+    const kitKey = `${kitId || "unassigned"}:${kitName.toLowerCase()}`;
+    if (!folder.kits.has(kitKey)) folder.kits.set(kitKey, { kitId, kitName, rows: [] });
+    const kit = folder.kits.get(kitKey);
+    const rowKey = String(row?.productId || row?.idCode || row?.name || "").trim().toLowerCase();
+    if (!kit.rows.some((existing) => String(existing?.productId || existing?.idCode || existing?.name || "").trim().toLowerCase() === rowKey)) kit.rows.push(row);
+  };
+
+  for (const row of rows || []) {
+    const memberships = kitMembership?.get(String(row?.productId || "").trim()) || [];
+    if (memberships.length) memberships.forEach((membership) => addToHierarchy(row, membership));
+    else addToHierarchy(row, { folderName: "Unfiled Kits", name: "Unassigned kit" });
+  }
+
+  return [...folders.values()]
+    .map((folder) => ({
+      folderId: folder.folderId,
+      folderName: folder.folderName,
+      kits: [...folder.kits.values()]
+        .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))) }))
+        .sort((a, b) => String(a.kitName || "").localeCompare(String(b.kitName || ""))),
+    }))
+    .sort((a, b) => {
+      if (a.folderId && !b.folderId) return -1;
+      if (!a.folderId && b.folderId) return 1;
+      return String(a.folderName || "").localeCompare(String(b.folderName || ""));
+    });
 }
 
 async function _sbProductProposalExportData(proposalId, req = null) {
@@ -7494,7 +7557,7 @@ async function _sbProductProposalExportData(proposalId, req = null) {
   const groupMode = _proposalExportGroupMode(req?.query?.groupBy || req?.query?.sortBy);
   const [productMap, kitMembership] = await Promise.all([
     _sbProductsMapById(),
-    groupMode === "kit-tag" ? _sbProductKitMembershipNames() : Promise.resolve(new Map()),
+    groupMode === "kit-tag" ? _sbProductKitMembershipHierarchy() : Promise.resolve(new Map()),
   ]);
   const rows = (Array.isArray(detail.items) ? detail.items : []).map((item) => {
     const product = productMap.get(String(item?.productId || "")) || {};
@@ -7514,22 +7577,10 @@ async function _sbProductProposalExportData(proposalId, req = null) {
       unitPrice: cleanUnitPrice,
       totalPrice,
     };
-    row.groupLabel = _proposalExportGroupLabel(row, groupMode, kitMembership);
     return row;
   });
 
-  const groupedRows = Array.from(rows.reduce((map, row) => {
-    const tag = String(row.groupLabel || row.tag || "Uncategorized").trim() || "Uncategorized";
-    const key = tag.toLowerCase();
-    if (!map.has(key)) map.set(key, { tag, rows: [] });
-    map.get(key).rows.push(row);
-    return map;
-  }, new Map()).values())
-    .map((group) => ({
-      ...group,
-      rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))),
-    }))
-    .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
+  const groupedRows = _proposalBuildGroupedRows(rows, groupMode, kitMembership);
 
   const totals = rows.reduce((acc, row) => {
     acc.items += 1;
@@ -7538,7 +7589,7 @@ async function _sbProductProposalExportData(proposalId, req = null) {
     return acc;
   }, { items: 0, quantity: 0, total: 0 });
 
-  return { detail, rows, groupedRows, totals };
+  return { detail, rows, groupedRows, totals, groupMode };
 }
 
 
@@ -7596,7 +7647,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
   const groupMode = _proposalExportGroupMode(req?.query?.groupBy || req?.query?.sortBy);
   const [productMap, kitMembership] = await Promise.all([
     _sbProductsMapById(),
-    groupMode === "kit-tag" ? _sbProductKitMembershipNames() : Promise.resolve(new Map()),
+    groupMode === "kit-tag" ? _sbProductKitMembershipHierarchy() : Promise.resolve(new Map()),
   ]);
   const details = [];
   for (const id of ids) {
@@ -7669,20 +7720,9 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
       totalPrice: cleanUnitPrice === null ? null : cleanUnitPrice * combinedQuantity,
       sourceQuantities,
     };
-  }).map((row) => ({
-    ...row,
-    groupLabel: _proposalExportGroupLabel(row, groupMode, kitMembership),
-  })).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
 
-  const groupedRows = Array.from(rows.reduce((map, row) => {
-    const tag = String(row.groupLabel || row.tag || "Uncategorized").trim() || "Uncategorized";
-    const key = tag.toLowerCase();
-    if (!map.has(key)) map.set(key, { tag, rows: [] });
-    map.get(key).rows.push(row);
-    return map;
-  }, new Map()).values())
-    .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))) }))
-    .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
+  const groupedRows = _proposalBuildGroupedRows(rows, groupMode, kitMembership);
 
   const totals = rows.reduce((acc, row) => {
     acc.items += 1;
@@ -7699,7 +7739,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     sourceQuantities: row.sourceQuantities,
   }));
 
-  return { sources, rows, groupedRows, totals, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
+  return { sources, rows, groupedRows, totals, groupMode, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
 }
 
 function _proposalCombinedPdfColumnsForContent(selectedColumns, contentW, sources = [], logic = "add") {
@@ -7786,7 +7826,7 @@ async function _sbSaveCombinedProductProposal(body = {}, req = null) {
 async function _sbRenderCombinedProductProposalsPdf(req, res) {
   const proposalIds = _proposalIdsList(req?.query?.proposalIds || req?.query?.ids);
   const logic = _proposalCombineLogic(req?.query?.logic || req?.query?.combineLogic);
-  const { sources, rows, groupedRows, totals } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
+  const { sources, rows, groupedRows, totals, groupMode } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
   const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
 
   await ensurePdfArabicSupport();
@@ -7866,41 +7906,71 @@ async function _sbRenderCombinedProductProposalsPdf(req, res) {
     doc.y = y + 24;
   };
 
+  const drawFolderHeader = (folderName, count = 0) => {
+    ensureSpace(50, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    doc.rect(startX, y, tableW, 27).fillColor("#07101F").fill();
+    doc.rect(startX, y, tableW, 27).lineWidth(0.5).strokeColor("#1F2937").stroke();
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(10).text(String(folderName || "Unfiled Kits"), startX + cellPad, y + 8, { width: tableW - 125 });
+    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(`${count} kit${count === 1 ? "" : "s"}`, startX + tableW - 110, y + 9, { width: 103, align: "right" });
+    doc.y = y + 27;
+  };
+  const drawKitHeader = (kitName, count = 0) => {
+    ensureSpace(46, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    doc.rect(startX, y, tableW, 24).fillColor("#FFF7ED").fill();
+    doc.rect(startX, y, tableW, 24).lineWidth(0.5).strokeColor("#FED7AA").stroke();
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(9.2).text(String(kitName || "Unassigned kit"), startX + cellPad, y + 7, { width: tableW - 110 });
+    doc.fillColor("#C2410C").font("Helvetica-Bold").fontSize(8).text(`${count} item${count === 1 ? "" : "s"}`, startX + tableW - 98, y + 8, { width: 92, align: "right" });
+    doc.y = y + 24;
+  };
+
   if (!rows.length) {
     doc.fillColor(COLORS.muted).font("Helvetica").fontSize(11).text("No components found.", mL, doc.y);
   } else {
     drawTableHeader();
     let visualIndex = 0;
-    for (const group of groupedRows) {
-      drawTagHeader(group.tag, group.rows.length);
-      for (const row of group.rows) {
-        doc.font("Helvetica").fontSize(8.2);
-        const values = columns.reduce((acc, col) => {
-          const formattedMoney = col.key === "unitPrice" || col.key === "totalPrice";
-          acc[col.key] = _proposalCombinedCellValue(row, col, { formattedMoney });
-          return acc;
-        }, {});
-        const heights = columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPad * 2, align: col.align }));
-        const rowH = Math.max(22, ...heights) + 8;
-        ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
-        const y = doc.y;
-        if (visualIndex % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
-        doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
-        let x = startX;
-        for (const col of columns) {
-          const text = String(values[col.key] ?? "");
-          const opts = { width: col.width - cellPad * 2, align: col.align };
-          if (col.key === "name") {
-            const link = normalizeUrlForPdf(row.url);
-            if (link) { opts.link = link; opts.underline = true; doc.fillColor(COLORS.link); }
-            else doc.fillColor(COLORS.text);
-          } else doc.fillColor(COLORS.text);
-          doc.font("Helvetica").fontSize(8.2).text(text, x + cellPad, y + 6, opts);
-          x += col.width;
-          if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    const drawCombinedRow = (row) => {
+      doc.font("Helvetica").fontSize(8.2);
+      const values = columns.reduce((acc, col) => {
+        const formattedMoney = col.key === "unitPrice" || col.key === "totalPrice";
+        acc[col.key] = _proposalCombinedCellValue(row, col, { formattedMoney });
+        return acc;
+      }, {});
+      const heights = columns.map((col) => doc.heightOfString(String(values[col.key] ?? ""), { width: col.width - cellPad * 2, align: col.align }));
+      const rowH = Math.max(22, ...heights) + 8;
+      ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
+      const y = doc.y;
+      if (visualIndex % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
+      doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+      let x = startX;
+      for (const col of columns) {
+        const text = String(values[col.key] ?? "");
+        const opts = { width: col.width - cellPad * 2, align: col.align };
+        if (col.key === "name") {
+          const link = normalizeUrlForPdf(row.url);
+          if (link) { opts.link = link; opts.underline = true; doc.fillColor(COLORS.link); }
+          else doc.fillColor(COLORS.text);
+        } else doc.fillColor(COLORS.text);
+        doc.font("Helvetica").fontSize(8.2).text(text, x + cellPad, y + 6, opts);
+        x += col.width;
+        if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+      }
+      doc.y = y + rowH;
+      visualIndex += 1;
+    };
+    if (groupMode === "kit-tag") {
+      for (const folder of groupedRows) {
+        drawFolderHeader(folder.folderName, folder.kits.length);
+        for (const kit of folder.kits) {
+          drawKitHeader(kit.kitName, kit.rows.length);
+          kit.rows.forEach(drawCombinedRow);
         }
-        doc.y = y + rowH;
-        visualIndex += 1;
+      }
+    } else {
+      for (const group of groupedRows) {
+        drawTagHeader(group.tag, group.rows.length);
+        group.rows.forEach(drawCombinedRow);
       }
     }
   }
@@ -7925,7 +7995,7 @@ async function _sbRenderCombinedProductProposalsPdf(req, res) {
 async function _sbRenderCombinedProductProposalsExcel(req, res) {
   const proposalIds = _proposalIdsList(req?.query?.proposalIds || req?.query?.ids);
   const logic = _proposalCombineLogic(req?.query?.logic || req?.query?.combineLogic);
-  const { sources, rows, groupedRows, totals } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
+  const { sources, rows, groupedRows, totals, groupMode } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
   const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
@@ -8019,35 +8089,48 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   worksheet.autoFilter = { from: { row: headerRowIndex, column: 1 }, to: { row: headerRowIndex, column: lastTableCol } };
 
   let visualIndex = 0;
+  const addCombinedExcelRow = (item) => {
+    const values = excelColumns.map((col) => col.sourceQty
+      ? Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0
+      : _proposalExportCellValue(item, col.key));
+    const row = worksheet.addRow(values);
+    row.height = 18;
+    excelColumns.forEach((col, index) => {
+      const cell = row.getCell(index + 1);
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      if (col.key === "quantity" || col.sourceQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
+      if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
+    });
+    visualIndex += 1;
+  };
+  const addCombinedHeaderRow = (label, { fill, color, height = 19 } = {}) => {
+    const row = worksheet.addRow([label]);
+    if (lastTableCol > 1) worksheet.mergeCells(row.number, 1, row.number, lastTableCol);
+    row.font = { bold: true, color: { argb: color } };
+    row.alignment = { horizontal: "left", vertical: "middle" };
+    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+    row.height = height;
+    for (let c = 1; c <= lastTableCol; c++) row.getCell(c).border = borderThin;
+    return row;
+  };
+
   if (!rows.length) {
     const row = worksheet.addRow(["No components found."]);
     row.font = { italic: true, color: { argb: "FF6B7280" } };
+  } else if (groupMode === "kit-tag") {
+    for (const folder of groupedRows) {
+      addCombinedHeaderRow(`${folder.folderName || "Unfiled Kits"} (${folder.kits.length} kit${folder.kits.length === 1 ? "" : "s"})`, { fill: "FF07101F", color: "FFFFFFFF", height: 21 });
+      for (const kit of folder.kits) {
+        addCombinedHeaderRow(`${kit.kitName || "Unassigned kit"} (${kit.rows.length} item${kit.rows.length === 1 ? "" : "s"})`, { fill: "FFFFF7ED", color: "FF9A3412", height: 19 });
+        kit.rows.forEach(addCombinedExcelRow);
+      }
+    }
   } else {
     for (const group of groupedRows) {
-      const groupRow = worksheet.addRow([`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
-      if (lastTableCol > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastTableCol);
-      groupRow.font = { bold: true, color: { argb: "FF9A3412" } };
-      groupRow.alignment = { horizontal: "left", vertical: "middle" };
-      groupRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-      groupRow.height = 19;
-      for (let c = 1; c <= lastTableCol; c++) groupRow.getCell(c).border = borderThin;
-
-      for (const item of group.rows) {
-        const values = excelColumns.map((col) => col.sourceQty
-          ? Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0
-          : _proposalExportCellValue(item, col.key));
-        const row = worksheet.addRow(values);
-        row.height = 18;
-        excelColumns.forEach((col, index) => {
-          const cell = row.getCell(index + 1);
-          cell.border = borderThin;
-          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-          if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
-          if (col.key === "quantity" || col.sourceQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
-          if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
-        });
-        visualIndex += 1;
-      }
+      addCombinedHeaderRow(`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`, { fill: "FFFFF7ED", color: "FF9A3412", height: 19 });
+      group.rows.forEach(addCombinedExcelRow);
     }
   }
 
@@ -8089,7 +8172,7 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
     throw err;
   }
 
-  const { detail, rows, groupedRows, totals } = await _sbProductProposalExportData(id, req);
+  const { detail, rows, groupedRows, totals, groupMode } = await _sbProductProposalExportData(id, req);
   const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
 
   await ensurePdfArabicSupport();
@@ -8233,48 +8316,72 @@ async function _sbRenderProductProposalPdf(proposalId, req, res) {
     doc.y = y + tagHeaderH;
   };
 
+  const drawFolderHeader = (folderName, count = 0) => {
+    ensureSpace(50, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    doc.rect(startX, y, tableW, 27).fillColor("#07101F").fill();
+    doc.rect(startX, y, tableW, 27).lineWidth(0.5).strokeColor("#1F2937").stroke();
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(10).text(String(folderName || "Unfiled Kits"), startX + cellPad, y + 8, { width: tableW - 125 });
+    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(`${count} kit${count === 1 ? "" : "s"}`, startX + tableW - 110, y + 9, { width: 103, align: "right" });
+    doc.y = y + 27;
+  };
+  const drawKitHeader = (kitName, count = 0) => {
+    ensureSpace(46, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    doc.rect(startX, y, tableW, 24).fillColor("#FFF7ED").fill();
+    doc.rect(startX, y, tableW, 24).lineWidth(0.5).strokeColor("#FED7AA").stroke();
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(9.3).text(String(kitName || "Unassigned kit"), startX + cellPad, y + 7, { width: tableW - 110 });
+    doc.fillColor("#C2410C").font("Helvetica-Bold").fontSize(8).text(`${count} item${count === 1 ? "" : "s"}`, startX + tableW - 98, y + 8, { width: 92, align: "right" });
+    doc.y = y + 24;
+  };
+
   drawTableHeader();
 
   let visualIndex = 0;
-  groupedRows.forEach((group) => {
-    drawTagHeader(group.tag, group.rows.length);
-    group.rows.forEach((row) => {
-      doc.font("Helvetica").fontSize(8.5);
-      const values = columns.reduce((acc, col) => {
-        const formattedMoney = col.key === "unitPrice" || col.key === "totalPrice";
-        acc[col.key] = _proposalExportCellValue(row, col.key, { formattedMoney });
-        return acc;
-      }, {});
-      const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || ""), { width: col.width - cellPad * 2, align: col.align }));
-      const rowH = Math.max(22, ...heights) + 8;
-      ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
-      const y = doc.y;
-      if (visualIndex % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
-      doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
-      let x = startX;
-      for (const col of columns) {
-        const text = String(values[col.key] || "");
-        const opts = { width: col.width - cellPad * 2, align: col.align };
-        if (col.key === "name") {
-          const link = normalizeUrlForPdf(row.url);
-          if (link) {
-            opts.link = link;
-            opts.underline = true;
-            doc.fillColor(COLORS.link);
-          } else {
-            doc.fillColor(COLORS.text);
-          }
-        } else {
-          doc.fillColor(COLORS.text);
-        }
-        doc.font("Helvetica").fontSize(8.5).text(text, x + cellPad, y + 6, opts);
-        x += col.width;
-        if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
-      }
-      doc.y = y + rowH;
-      visualIndex += 1;
+  const drawComponentRow = (row) => {
+    doc.font("Helvetica").fontSize(8.5);
+    const values = columns.reduce((acc, col) => {
+      const formattedMoney = col.key === "unitPrice" || col.key === "totalPrice";
+      acc[col.key] = _proposalExportCellValue(row, col.key, { formattedMoney });
+      return acc;
+    }, {});
+    const heights = columns.map((col) => doc.heightOfString(String(values[col.key] || ""), { width: col.width - cellPad * 2, align: col.align }));
+    const rowH = Math.max(22, ...heights) + 8;
+    ensureSpace(rowH + 2, { repeatTableHeader: drawTableHeader });
+    const y = doc.y;
+    if (visualIndex % 2 === 0) doc.rect(startX, y, tableW, rowH).fillColor(COLORS.rowAlt).fill();
+    doc.rect(startX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    let x = startX;
+    for (const col of columns) {
+      const text = String(values[col.key] || "");
+      const opts = { width: col.width - cellPad * 2, align: col.align };
+      if (col.key === "name") {
+        const link = normalizeUrlForPdf(row.url);
+        if (link) { opts.link = link; opts.underline = true; doc.fillColor(COLORS.link); }
+        else doc.fillColor(COLORS.text);
+      } else doc.fillColor(COLORS.text);
+      doc.font("Helvetica").fontSize(8.5).text(text, x + cellPad, y + 6, opts);
+      x += col.width;
+      if (x < startX + tableW) doc.moveTo(x, y).lineTo(x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    }
+    doc.y = y + rowH;
+    visualIndex += 1;
+  };
+
+  if (groupMode === "kit-tag") {
+    groupedRows.forEach((folder) => {
+      drawFolderHeader(folder.folderName, folder.kits.length);
+      folder.kits.forEach((kit) => {
+        drawKitHeader(kit.kitName, kit.rows.length);
+        kit.rows.forEach(drawComponentRow);
+      });
     });
-  });
+  } else {
+    groupedRows.forEach((group) => {
+      drawTagHeader(group.tag, group.rows.length);
+      group.rows.forEach(drawComponentRow);
+    });
+  }
 
   doc.moveDown(1.2);
   drawStats();
@@ -8290,7 +8397,7 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
     throw err;
   }
 
-  const { detail, rows, groupedRows, totals } = await _sbProductProposalExportData(id, req);
+  const { detail, rows, groupedRows, totals, groupMode } = await _sbProductProposalExportData(id, req);
   const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
@@ -8378,40 +8485,53 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
   worksheet.autoFilter = { from: { row: headerRowIndex, column: 1 }, to: { row: headerRowIndex, column: lastTableCol } };
 
   let visualIndex = 0;
+  const addExcelComponentRow = (item) => {
+    const values = excelColumns.map((col) => _proposalExportCellValue(item, col.key));
+    const row = worksheet.addRow(values);
+    row.height = 18;
+    excelColumns.forEach((col, index) => {
+      const cell = row.getCell(index + 1);
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+      if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      if (col.key === "quantity" || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
+      if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
+      if (col.key === "name" && item.url) {
+        const url = String(item.url || "").trim();
+        if (/^https?:\/\//i.test(url)) {
+          cell.value = { text: String(cell.value || item.name || "Component"), hyperlink: url };
+          cell.font = { color: { argb: "FF2563EB" }, underline: true };
+        }
+      }
+    });
+    visualIndex += 1;
+  };
+  const addMergedHeaderRow = (label, { fill, color, height = 19 } = {}) => {
+    const row = worksheet.addRow([label]);
+    if (lastTableCol > 1) worksheet.mergeCells(row.number, 1, row.number, lastTableCol);
+    row.font = { bold: true, color: { argb: color } };
+    row.alignment = { horizontal: "left", vertical: "middle" };
+    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+    row.height = height;
+    for (let c = 1; c <= lastTableCol; c++) row.getCell(c).border = borderThin;
+    return row;
+  };
+
   if (!rows.length) {
     const row = worksheet.addRow(["No components yet."]);
     row.font = { italic: true, color: { argb: "FF6B7280" } };
+  } else if (groupMode === "kit-tag") {
+    for (const folder of groupedRows) {
+      addMergedHeaderRow(`${folder.folderName || "Unfiled Kits"} (${folder.kits.length} kit${folder.kits.length === 1 ? "" : "s"})`, { fill: "FF07101F", color: "FFFFFFFF", height: 21 });
+      for (const kit of folder.kits) {
+        addMergedHeaderRow(`${kit.kitName || "Unassigned kit"} (${kit.rows.length} item${kit.rows.length === 1 ? "" : "s"})`, { fill: "FFFFF7ED", color: "FF9A3412", height: 19 });
+        kit.rows.forEach(addExcelComponentRow);
+      }
+    }
   } else {
     for (const group of groupedRows) {
-      const groupRow = worksheet.addRow([`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
-      if (lastTableCol > 1) worksheet.mergeCells(groupRow.number, 1, groupRow.number, lastTableCol);
-      groupRow.font = { bold: true, color: { argb: "FF9A3412" } };
-      groupRow.alignment = { horizontal: "left", vertical: "middle" };
-      groupRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-      groupRow.height = 19;
-      for (let c = 1; c <= lastTableCol; c++) groupRow.getCell(c).border = borderThin;
-
-      for (const item of group.rows) {
-        const values = excelColumns.map((col) => _proposalExportCellValue(item, col.key));
-        const row = worksheet.addRow(values);
-        row.height = 18;
-        excelColumns.forEach((col, index) => {
-          const cell = row.getCell(index + 1);
-          cell.border = borderThin;
-          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-          if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
-          if (col.key === "quantity" || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
-          if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
-          if (col.key === "name" && item.url) {
-            const url = String(item.url || "").trim();
-            if (/^https?:\/\//i.test(url)) {
-              cell.value = { text: String(cell.value || item.name || "Component"), hyperlink: url };
-              cell.font = { color: { argb: "FF2563EB" }, underline: true };
-            }
-          }
-        });
-        visualIndex += 1;
-      }
+      addMergedHeaderRow(`${group.tag || "Uncategorized"} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`, { fill: "FFFFF7ED", color: "FF9A3412", height: 19 });
+      group.rows.forEach(addExcelComponentRow);
     }
   }
 

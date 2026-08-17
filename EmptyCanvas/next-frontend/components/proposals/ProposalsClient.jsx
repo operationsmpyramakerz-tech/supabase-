@@ -981,15 +981,28 @@ export default function ProposalsClient({
     setKitMembershipBusy(true);
     try {
       const body = await requestJson(`/next/api/products/kits/membership?_ts=${Date.now()}`);
+      const kitById = new Map(kits.map((kit) => [text(kit?.id), kit]));
+      const folderById = new Map(kitFolders.map((folder) => [text(folder?.id), folder]));
       const next = new Map();
       (Array.isArray(body?.membership) ? body.membership : []).forEach((entry) => {
         const productId = text(entry?.productId);
         if (!productId) return;
-        const names = (Array.isArray(entry?.kits) ? entry.kits : [])
-          .map((kit) => text(kit?.name))
-          .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b));
-        next.set(productId, names);
+        const memberships = (Array.isArray(entry?.kits) ? entry.kits : [])
+          .map((kit) => {
+            const id = text(kit?.id);
+            const localKit = kitById.get(id) || null;
+            const folderId = text(localKit?.folderId);
+            const folderName = folderId ? text(folderById.get(folderId)?.name) || "Unfiled Kits" : "Unfiled Kits";
+            return {
+              id,
+              name: text(kit?.name) || text(localKit?.name) || "Untitled kit",
+              folderId,
+              folderName,
+            };
+          })
+          .filter((kit) => kit.id || kit.name)
+          .sort((a, b) => a.folderName.localeCompare(b.folderName) || a.name.localeCompare(b.name));
+        next.set(productId, memberships);
       });
       setKitMembership(next);
       setKitMembershipLoaded(true);
@@ -999,15 +1012,7 @@ export default function ProposalsClient({
     }
   };
 
-  const groupLabelForRow = (row) => {
-    if (groupBy === "kit-tag") {
-      const names = kitMembership.get(text(row?.productId)) || [];
-      return names.length ? names.join(" / ") : "Unassigned kit";
-    }
-    return text(row?.tag) || "Uncategorized";
-  };
-
-  const groupedVisibleRows = useMemo(() => {
+  const componentGroupedVisibleRows = useMemo(() => {
     const map = new Map();
     for (const row of visibleEnrichedRows) {
       const label = text(row?.tag) || "Uncategorized";
@@ -1019,6 +1024,42 @@ export default function ProposalsClient({
       .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => a.name.localeCompare(b.name)) }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [visibleEnrichedRows]);
+
+  const kitGroupedVisibleRows = useMemo(() => {
+    const foldersMap = new Map();
+    const addRow = (membership, row) => {
+      const folderName = text(membership?.folderName) || "Unfiled Kits";
+      const folderId = text(membership?.folderId);
+      const folderKey = `${folderId || "unfiled"}:${lower(folderName)}`;
+      if (!foldersMap.has(folderKey)) foldersMap.set(folderKey, { id: folderId, label: folderName, kits: new Map() });
+      const folder = foldersMap.get(folderKey);
+      const kitId = text(membership?.id);
+      const kitName = text(membership?.name) || "Unassigned kit";
+      const kitKey = `${kitId || "unassigned"}:${lower(kitName)}`;
+      if (!folder.kits.has(kitKey)) folder.kits.set(kitKey, { id: kitId, label: kitName, rows: [] });
+      const kit = folder.kits.get(kitKey);
+      if (!kit.rows.some((existing) => existing.id === row.id)) kit.rows.push(row);
+    };
+
+    for (const row of visibleEnrichedRows) {
+      const memberships = kitMembership.get(text(row?.productId)) || [];
+      if (memberships.length) memberships.forEach((membership) => addRow(membership, row));
+      else addRow({ folderName: "Unfiled Kits", name: "Unassigned kit" }, row);
+    }
+
+    return [...foldersMap.values()]
+      .map((folder) => ({
+        ...folder,
+        kits: [...folder.kits.values()]
+          .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => a.name.localeCompare(b.name)) }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+      }))
+      .sort((a, b) => {
+        if (a.id && !b.id) return -1;
+        if (!a.id && b.id) return 1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [visibleEnrichedRows, kitMembership]);
 
   const chooseGroupBy = async (nextMode) => {
     if (nextMode === "kit-tag" && !kitMembershipLoaded) {
@@ -1575,7 +1616,7 @@ export default function ProposalsClient({
   const downloadSingle = (type) => {
     if (!activeDetail?.proposal?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
-    const params = new URLSearchParams({ columns, groupBy: "component-tag" });
+    const params = new URLSearchParams({ columns, groupBy });
     openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?${params.toString()}`);
     setDownloadMenuOpen(false);
   };
@@ -1729,6 +1770,23 @@ export default function ProposalsClient({
                             </div>
                           ) : null}
                         </div>
+                        <div className="proposal-sort-menu-wrap">
+                          <button type="button" className="products-btn proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
+                            <ProposalIcon name="sort" /><span>Sort</span><ProposalIcon name="chevronDown" size={15} />
+                          </button>
+                          {sortMenuOpen ? (
+                            <div className="proposal-sort-menu" role="menu">
+                              <button type="button" className={groupBy === "component-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("component-tag")}>
+                                <span className="proposal-sort-menu__check">{groupBy === "component-tag" ? "✓" : ""}</span>
+                                <span><strong>By components tag</strong><small>Group by the product component tag.</small></span>
+                              </button>
+                              <button type="button" className={groupBy === "kit-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("kit-tag")} disabled={kitMembershipBusy}>
+                                <span className="proposal-sort-menu__check">{groupBy === "kit-tag" ? "✓" : ""}</span>
+                                <span><strong>By kits tag</strong><small>Folder → kit → components.</small></span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                         <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make Order</span></button>
                       </div>
                     </header>
@@ -1791,17 +1849,41 @@ export default function ProposalsClient({
                     </div>
                     <div className="products-proposal-table-wrap proposal-components-wrap">
                       <div className="proposal-components-groups">
-                        {groupedVisibleRows.map((group) => (
-                          <section className="proposal-component-group" key={group.label}>
-                            <div className="proposal-component-group__head">
-                              <div><span>Component tag</span><strong>{group.label}</strong></div>
-                              <em>{group.rows.length} item{group.rows.length === 1 ? "" : "s"}</em>
-                            </div>
-                            <div className="proposal-components-grid">
-                              {group.rows.map((row) => renderComponentCard(row, proposal))}
-                            </div>
-                          </section>
-                        ))}
+                        {groupBy === "kit-tag" ? (
+                          kitGroupedVisibleRows.map((folder) => (
+                            <section className="proposal-kit-folder-group" key={`${folder.id || "unfiled"}-${folder.label}`}>
+                              <div className="proposal-kit-folder-group__head">
+                                <div><span>Kit folder</span><strong>{folder.label}</strong></div>
+                                <em>{folder.kits.length} kit{folder.kits.length === 1 ? "" : "s"}</em>
+                              </div>
+                              <div className="proposal-kit-folder-group__body">
+                                {folder.kits.map((kit) => (
+                                  <div className="proposal-kit-group" key={`${kit.id || "unassigned"}-${kit.label}`}>
+                                    <div className="proposal-kit-group__head">
+                                      <div><span>Kit</span><strong>{kit.label}</strong></div>
+                                      <em>{kit.rows.length} item{kit.rows.length === 1 ? "" : "s"}</em>
+                                    </div>
+                                    <div className="proposal-components-grid">
+                                      {kit.rows.map((row) => renderComponentCard(row, proposal))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </section>
+                          ))
+                        ) : (
+                          componentGroupedVisibleRows.map((group) => (
+                            <section className="proposal-component-group" key={group.label}>
+                              <div className="proposal-component-group__head">
+                                <div><span>Component tag</span><strong>{group.label}</strong></div>
+                                <em>{group.rows.length} item{group.rows.length === 1 ? "" : "s"}</em>
+                              </div>
+                              <div className="proposal-components-grid">
+                                {group.rows.map((row) => renderComponentCard(row, proposal))}
+                              </div>
+                            </section>
+                          ))
+                        )}
                         {!visibleEnrichedRows.length ? <div className="products-table-empty proposal-components-empty">{enrichedRows.length ? "No components match your search." : <>No components yet. {detailEdit ? "Add a product or saved kit above." : "Choose Edit to add components."}</>}</div> : null}
                       </div>
                     </div>
