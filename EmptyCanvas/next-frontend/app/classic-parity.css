@@ -10421,3 +10421,33 @@ body.proposals-page .next-proposals-classic-parity .proposal-component-group__he
     border-radius:12px;
   }
 }
+
+
+/* ===== Proposals · fixed component grouping + download menu layering ===== */
+body.proposals-page .next-proposals-classic-parity .proposal-detail-head--compact{
+  position:relative !important;
+  z-index:520 !important;
+  overflow:visible !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic{
+  position:relative !important;
+  z-index:530 !important;
+  overflow:visible !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-download-menu-wrap{
+  position:relative !important;
+  z-index:540 !important;
+  overflow:visible !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-download-menu{
+  z-index:6000 !important;
+  opacity:1 !important;
+  background:#fff !important;
+  isolation:isolate !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-classic-detail-title,
+body.proposals-page .next-proposals-classic-parity .proposal-view-note,
+body.proposals-page .next-proposals-classic-parity .proposal-components-card{
+  position:relative !important;
+  z-index:1 !important;
+}

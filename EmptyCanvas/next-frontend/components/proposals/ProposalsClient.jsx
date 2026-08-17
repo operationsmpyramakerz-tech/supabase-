@@ -1010,9 +1010,7 @@ export default function ProposalsClient({
   const groupedVisibleRows = useMemo(() => {
     const map = new Map();
     for (const row of visibleEnrichedRows) {
-      const label = groupBy === "kit-tag"
-        ? ((kitMembership.get(text(row?.productId)) || []).join(" / ") || "Unassigned kit")
-        : (text(row?.tag) || "Uncategorized");
+      const label = text(row?.tag) || "Uncategorized";
       const key = lower(label);
       if (!map.has(key)) map.set(key, { label, rows: [] });
       map.get(key).rows.push(row);
@@ -1020,7 +1018,7 @@ export default function ProposalsClient({
     return [...map.values()]
       .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => a.name.localeCompare(b.name)) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [visibleEnrichedRows, groupBy, kitMembership]);
+  }, [visibleEnrichedRows]);
 
   const chooseGroupBy = async (nextMode) => {
     if (nextMode === "kit-tag" && !kitMembershipLoaded) {
@@ -1577,7 +1575,7 @@ export default function ProposalsClient({
   const downloadSingle = (type) => {
     if (!activeDetail?.proposal?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
-    const params = new URLSearchParams({ columns, groupBy });
+    const params = new URLSearchParams({ columns, groupBy: "component-tag" });
     openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?${params.toString()}`);
     setDownloadMenuOpen(false);
   };
@@ -1588,7 +1586,7 @@ export default function ProposalsClient({
       proposalIds: selectedIds.join(","),
       logic: combineLogic,
       columns: exportColumns.join(","),
-      groupBy,
+      groupBy: "component-tag",
     });
     openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
   };
@@ -1731,25 +1729,7 @@ export default function ProposalsClient({
                             </div>
                           ) : null}
                         </div>
-                        <div className="proposal-sort-menu-wrap">
-                          <button type="button" className="products-btn products-btn--dark proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
-                            <ProposalIcon name="sort" /><span>Sort</span><ProposalIcon name="chevronDown" size={15} />
-                          </button>
-                          {sortMenuOpen ? (
-                            <div className="proposal-sort-menu" role="menu">
-                              <button type="button" className={groupBy === "component-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("component-tag")}>
-                                <span className="proposal-sort-menu__check">{groupBy === "component-tag" ? <ProposalIcon name="check" size={16} /> : null}</span>
-                                <span><strong>By components tag</strong><small>Group by product tag such as Electric components.</small></span>
-                              </button>
-                              <button type="button" className={groupBy === "kit-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("kit-tag")} disabled={kitMembershipBusy}>
-                                <span className="proposal-sort-menu__check">{groupBy === "kit-tag" ? <ProposalIcon name="check" size={16} /> : null}</span>
-                                <span><strong>{kitMembershipBusy ? "Loading kits…" : "By kits tag"}</strong><small>Group by kit membership such as Generic or Arduino kit.</small></span>
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
                         <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make Order</span></button>
-                        {!detailEdit ? <button type="button" className="products-btn products-btn--light proposal-edit-action-btn" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
                       </div>
                     </header>
                   )}
@@ -1814,7 +1794,7 @@ export default function ProposalsClient({
                         {groupedVisibleRows.map((group) => (
                           <section className="proposal-component-group" key={group.label}>
                             <div className="proposal-component-group__head">
-                              <div><span>{groupBy === "kit-tag" ? "Kit tag" : "Component tag"}</span><strong>{group.label}</strong></div>
+                              <div><span>Component tag</span><strong>{group.label}</strong></div>
                               <em>{group.rows.length} item{group.rows.length === 1 ? "" : "s"}</em>
                             </div>
                             <div className="proposal-components-grid">
