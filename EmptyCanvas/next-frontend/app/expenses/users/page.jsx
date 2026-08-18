@@ -59,7 +59,7 @@ export default async function ExpensesUsersPage() {
   if (!account) redirect("/login?next=/next/expenses/users");
 
   return (
-    <AppShell account={account} title="Expenses Users" eyebrow="Team cash-flow supervision" activePath="/next/expenses/users" bodyClass="expenses-users-page" classicStyles={["/next/css/expenses-users-classic-inline.css?v=stage2f"]}>
+    <AppShell account={account} title="Expenses by User" eyebrow="Review expenses by team member" activePath="/next/expenses/users" bodyClass="expenses-users-page" classicStyles={["/next/css/expenses-users-classic-inline.css?v=stage2f"]}>
       <ExpensesUsersClient
         account={account}
         initialUsersPayload={usersPayload || { success: true, users: [] }}
