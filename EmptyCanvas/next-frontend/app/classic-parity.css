@@ -10567,3 +10567,31 @@ body.proposals-page .next-proposals-classic-parity .proposal-kit-group__head em{
     border-radius:11px;
   }
 }
+
+
+/* Combine proposals: keep long modal content reachable on tablet/mobile */
+body.proposals-page .proposal-combine-modal{
+  max-height:min(90dvh,900px);
+  overflow:hidden !important;
+  display:flex;
+  flex-direction:column;
+}
+body.proposals-page .proposal-combine-modal > .products-modal__header{
+  flex:0 0 auto;
+}
+body.proposals-page .proposal-combine-modal > .next-proposals-modal__body{
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding-right:4px;
+}
+body.proposals-page .proposal-combine-modal .proposal-classic-combine-form{
+  padding-bottom:2px;
+}
+@media (max-width:640px){
+  body.proposals-page .proposal-combine-modal{
+    max-height:calc(100dvh - 24px);
+  }
+}
