@@ -879,6 +879,7 @@ export default function ProposalsClient({
   const [selectedIds, setSelectedIds] = useState([]);
   const [combineLogic, setCombineLogic] = useState("add");
   const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
+  const [combineTotalQty, setCombineTotalQty] = useState(true);
   const [groupBy, setGroupBy] = useState("component-tag");
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -1681,6 +1682,7 @@ export default function ProposalsClient({
       proposalIds: selectedIds.join(","),
       logic: combineLogic,
       columns: exportColumns.join(","),
+      totalQty: combineTotalQty ? "1" : "0",
       groupBy,
     });
     openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
@@ -2082,6 +2084,7 @@ export default function ProposalsClient({
               {EXPORT_COLUMNS.map(([key, label]) => (
                 <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
               ))}
+              <label><input type="checkbox" checked={combineTotalQty} onChange={(event) => setCombineTotalQty(event.target.checked)} /><span>Total Qty</span></label>
             </div>
             <div className="products-modal__actions">
               <button type="button" className="products-btn products-btn--light" onClick={() => setCombineOpen(false)}>Cancel</button>
