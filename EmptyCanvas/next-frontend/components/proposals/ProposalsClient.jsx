@@ -2018,7 +2018,7 @@ export default function ProposalsClient({
       </section>
 
       {combineOpen ? (
-        <Modal title="Combine proposals" subtitle="Select two or more proposals, choose the quantity logic, then download or save the result." icon="▦" onClose={() => setCombineOpen(false)} wide>
+        <Modal title="Combine proposals" subtitle="Select two or more proposals, choose the quantity logic, then download or save the result." icon="▦" onClose={() => setCombineOpen(false)} wide className="proposal-combine-modal">
           <div className="proposal-classic-combine-form">
             <ProposalMultiSelect proposals={proposals} selectedIds={selectedIds} onToggle={toggleSelected} />
             <div className="products-field proposal-combine-logic-field">
