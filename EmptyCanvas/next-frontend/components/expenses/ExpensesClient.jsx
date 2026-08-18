@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_FUNDS_TYPES = [
   "Online Transfer", "SWVL", "Go Bus", "By Bus", "ترام", "Train", "Metro", "Indrive",
@@ -83,8 +83,62 @@ function routeEndpoints(item) {
   return { from, to };
 }
 function displayReason(item) {
-  const orders = Array.isArray(item?.orders) ? item.orders : [];
-  return text(item?.reason) || text(orders[0]?.label) || (number(item?.cashIn) > 0 ? "Cash in" : text(item?.fundsType) || "Cash out");
+  const orders = Array.isArray(item?.orders) ? item.orders.filter(Boolean) : [];
+  const rawReason = text(item?.reason);
+  const primaryLabel = text(orders[0]?.label);
+  if (rawReason && primaryLabel) {
+    const normalizedReason = lower(rawReason).replace(/\s+/g, " ");
+    const normalizedLabel = lower(primaryLabel).replace(/\s+/g, " ");
+    if (normalizedReason === normalizedLabel || normalizedReason.startsWith(`${normalizedLabel} •`)) return primaryLabel;
+  }
+  return rawReason || primaryLabel || (number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out");
+}
+function niceChartMax(value) {
+  const raw = Math.max(0, number(value));
+  if (!raw) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const normalized = raw / magnitude;
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  return niceNormalized * magnitude;
+}
+function selectedMonthLabel(monthKeyValue) {
+  const match = text(monthKeyValue).match(/^(\d{4})-(\d{2})$/);
+  if (!match) return "—";
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return date.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+}
+function settlementReceiptNumber(item) {
+  return text(item?.receiptNumber || item?.receipt || item?.ordersRaw);
+}
+function latestSettlementReceipt(items, lastSettledAt) {
+  const source = Array.isArray(items) ? items : [];
+  const exact = text(lastSettledAt);
+  if (exact) {
+    const match = source.find((item) => isSettlement(item) && text(item?.createdTime) === exact && settlementReceiptNumber(item));
+    if (match) return settlementReceiptNumber(match);
+  }
+  let receipt = "";
+  let latest = Number.NEGATIVE_INFINITY;
+  source.forEach((item) => {
+    if (!isSettlement(item)) return;
+    const candidate = settlementReceiptNumber(item);
+    if (!candidate) return;
+    const stamp = transactionTime(item);
+    if (stamp >= latest) { latest = stamp; receipt = candidate; }
+  });
+  return receipt;
+}
+function fundsTypeOption(value) {
+  const key = typeKey(value);
+  const ownCar = key === "owncar";
+  const required = SCREENSHOT_REQUIRED_KEYS.has(key);
+  return {
+    value,
+    label: value,
+    note: ownCar ? "Google Maps screenshot required" : required ? "Screenshot is required" : "Screenshot upload is optional",
+    badge: ownCar ? "Maps required" : required ? "Required" : "Optional",
+    tone: ownCar ? "violet" : required ? "orange" : "neutral",
+  };
 }
 function transactionValue(item) {
   const cashIn = number(item?.cashIn);
@@ -178,6 +232,53 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
   );
 }
 
+function ModernSelect({ value, onChange, options = [], placeholder = "Select…", searchable = false, searchPlaceholder = "Search…", emptyText = "No options available" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const normalized = useMemo(() => (Array.isArray(options) ? options : []).map((option) => {
+    if (typeof option === "string") return { value: option, label: option };
+    return { ...option, value: text(option?.value), label: text(option?.label || option?.value) };
+  }).filter((option) => option.value), [options]);
+  const selected = normalized.find((option) => option.value === text(value)) || null;
+  const filtered = useMemo(() => {
+    const q = lower(query);
+    if (!q) return normalized;
+    return normalized.filter((option) => lower([option.label, option.note, option.badge].join(" ")).includes(q));
+  }, [normalized, query]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOutside = (event) => { if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false); };
+    const closeEscape = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", closeOutside);
+    document.addEventListener("keydown", closeEscape);
+    return () => { document.removeEventListener("mousedown", closeOutside); document.removeEventListener("keydown", closeEscape); };
+  }, [open]);
+
+  return (
+    <div className={`expense-modern-select${open ? " is-open" : ""}`} ref={rootRef}>
+      <button type="button" className={`expense-modern-select__trigger${selected ? " is-selected" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <span className="expense-modern-select__selected">
+          <strong>{selected?.label || placeholder}</strong>
+          {selected?.note ? <small>{selected.note}</small> : null}
+        </span>
+        {selected?.badge ? <span className={`expense-modern-select__badge is-${selected.tone || "neutral"}`}>{selected.badge}</span> : null}
+        <ClassicExpenseIcon name="chevron-down" size={15} />
+      </button>
+      {open ? <div className="expense-modern-select__menu" role="listbox">
+        {searchable ? <div className="expense-modern-select__search"><ClassicExpenseIcon name="search" size={15}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} /></div> : null}
+        <div className="expense-modern-select__options">
+          {filtered.length ? filtered.map((option) => <button type="button" className={`expense-modern-select__option${option.value === text(value) ? " is-selected" : ""}`} role="option" aria-selected={option.value === text(value)} key={option.value} onClick={() => { onChange(option.value); setOpen(false); setQuery(""); }}>
+            <span><strong>{option.label}</strong>{option.note ? <small>{option.note}</small> : null}</span>
+            {option.badge ? <em className={`expense-modern-select__badge is-${option.tone || "neutral"}`}>{option.badge}</em> : option.value === text(value) ? <ClassicExpenseIcon name="check-circle" size={16}/> : null}
+          </button>) : <div className="expense-modern-select__empty">{emptyText}</div>}
+        </div>
+      </div> : null}
+    </div>
+  );
+}
+
 function FileField({ files, onChange, required = false, hint = "Upload receipt screenshots (JPG/PNG)." }) {
   return (
     <label className={`expense-file-field ${required ? "is-required" : ""}`}>
@@ -190,7 +291,7 @@ function FileField({ files, onChange, required = false, hint = "Upload receipt s
 }
 
 function CashInModal({ options, onClose, onSaved, notify }) {
-  const [form, setForm] = useState({ date: today(), amount: "", fundsType: "", paymentBy: "", receiptNumber: "" });
+  const [form, setForm] = useState({ date: "", amount: "", fundsType: "", paymentBy: "", receiptNumber: "" });
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const isTransfer = typeKey(form.fundsType) === "onlinetransfer";
@@ -220,10 +321,10 @@ function CashInModal({ options, onClose, onSaved, notify }) {
       <div className="expense-form-grid">
         <label><span>Date *</span><input type="date" value={form.date} onChange={update("date")} /></label>
         <label><span>Amount *</span><input type="number" min="0" step="0.01" value={form.amount} onChange={update("amount")} placeholder="0" /></label>
-        <label><span>Funds type *</span><select value={form.fundsType} onChange={update("fundsType")}><option value="">Select type…</option>{CASH_IN_TYPES.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <div className="expense-field"><span>Funds type *</span><ModernSelect value={form.fundsType} onChange={(value) => { setForm((current) => ({ ...current, fundsType: value, receiptNumber: value === "Cash Payment" ? current.receiptNumber : "" })); if (value !== "Online Transfer") setFiles([]); }} options={CASH_IN_TYPES.map((value) => ({ value, label: value, note: value === "Online Transfer" ? "Screenshot is required for this transfer" : "Receipt number is required for this payment", badge: value === "Online Transfer" ? "Required" : "Receipt", tone: value === "Online Transfer" ? "orange" : "neutral" }))} placeholder="Select funds type…" /></div>
         <label><span>Payment by *</span><input list="expense-cash-in-people" value={form.paymentBy} onChange={update("paymentBy")} placeholder="Person or company" /><datalist id="expense-cash-in-people">{options.map((item) => <option value={text(item?.name)} key={text(item?.id || item?.name)} />)}</datalist></label>
         {isCash ? <label className="expense-form-full"><span>Receipt number *</span><input value={form.receiptNumber} onChange={update("receiptNumber")} placeholder="Enter receipt number" /></label> : null}
-        {(isTransfer || form.fundsType) ? <div className="expense-form-full"><FileField files={files} onChange={setFiles} required={isTransfer} hint={isTransfer ? "Upload the transfer screenshot." : "Optional supporting images."} /></div> : null}
+        {isTransfer ? <div className="expense-form-full"><FileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)." /></div> : null}
       </div>
     </Modal>
   );
@@ -231,7 +332,7 @@ function CashInModal({ options, onClose, onSaved, notify }) {
 
 function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
   const [scopeId, setScopeId] = useState("");
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState("");
   const [manualReason, setManualReason] = useState("");
   const [drafts, setDrafts] = useState([]);
   const [form, setForm] = useState({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
@@ -241,13 +342,24 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
   const isManual = scopeId === OTHER_SCOPE_ID;
   const isOwnCar = typeKey(form.fundsType) === "owncar";
   const screenshotRequired = SCREENSHOT_REQUIRED_KEYS.has(typeKey(form.fundsType));
+  const scopeOptions = useMemo(() => [
+    ...(Array.isArray(orderOptions) ? orderOptions : []).map((item) => ({
+      value: text(item?.id),
+      label: text(item?.orderId) || text(item?.label) || "Order",
+      note: [text(item?.orderType), text(item?.productName)].filter(Boolean).join(" · "),
+      badge: text(item?.orderType) || "Order",
+      tone: typeKey(item?.orderType).includes("maintenance") ? "orange" : "neutral",
+    })),
+    { value: OTHER_SCOPE_ID, label: "Other reason", note: "Write the reason manually", badge: "Manual", tone: "neutral" },
+  ], [orderOptions]);
+  const fundsTypeOptions = useMemo(() => fundsTypes.map(fundsTypeOption), [fundsTypes]);
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   const addDraft = async () => {
     if (!scopeId || (!selectedOrder && !isManual)) return notify("Choose an order or Other reason first.", "error");
     if (isManual && !text(manualReason)) return notify("Write the expense reason.", "error");
     if (!date || !form.fundsType) return notify("Date and funds type are required.", "error");
-    if (isOwnCar ? number(form.kilometer) <= 0 : number(form.amount) <= 0) return notify(isOwnCar ? "Kilometer is required for Own car." : "Cash out amount is required.", "error");
+    if (!isOwnCar && number(form.amount) <= 0) return notify("Cash out amount is required.", "error");
     if (screenshotRequired && !files.length) return notify(isOwnCar ? "A Google Maps screenshot is required for Own car." : "Screenshot is required for this funds type.", "error");
     setBusy(true);
     try {
@@ -288,8 +400,7 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
             date,
             from: draft.from,
             to: draft.to,
-            amount: draft.amount,
-            kilometer: draft.kilometer,
+            ...(typeKey(draft.fundsType) === "owncar" ? { kilometer: draft.kilometer } : { amount: draft.amount }),
             screenshots: draft.screenshots,
           }),
         });
@@ -308,18 +419,19 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
   return (
     <Modal title="Add Cash out" subtitle="Link the expense to an approved order or use a manual reason." onClose={onClose} wide footer={<><button className="secondary-button" onClick={onClose} disabled={busy}>Close</button><button className="primary-button" onClick={confirm} disabled={busy || !drafts.length}>{busy ? "Saving…" : `Confirm ${drafts.length || ""}`}</button></>}>
       <div className="expense-form-grid">
-        <label className="expense-form-full"><span>Order / reason *</span><select value={scopeId} onChange={(event) => { setScopeId(event.target.value); setDrafts([]); }}><option value="">Choose scope…</option>{orderOptions.map((item) => <option value={text(item?.id)} key={text(item?.id)}>{text(item?.label) || text(item?.orderId) || "Order"}</option>)}<option value={OTHER_SCOPE_ID}>Other reason</option></select></label>
+        <div className="expense-form-full expense-field"><span>Order / reason *</span><ModernSelect value={scopeId} onChange={(value) => { setScopeId(value); setDrafts([]); }} options={scopeOptions} placeholder="Select order…" searchable searchPlaceholder="Search orders…" emptyText="No approved orders available. Use Other reason." /></div>
         <label><span>Expense date *</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
         {isManual ? <label><span>Reason *</span><input value={manualReason} onChange={(event) => setManualReason(event.target.value)} placeholder="Write the expense reason" /></label> : <div className="expense-selected-order"><span>Selected order</span><strong>{text(selectedOrder?.label) || "Choose an order"}</strong></div>}
       </div>
 
       <div className="expense-draft-builder">
         <div className="expense-form-grid">
-          <label><span>Funds type *</span><select value={form.fundsType} onChange={update("fundsType")}><option value="">Select type…</option>{fundsTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
-          {isOwnCar ? <label><span>Kilometer *</span><input type="number" min="0" step="0.1" value={form.kilometer} onChange={update("kilometer")} /></label> : <label><span>Cash out *</span><input type="number" min="0" step="0.01" value={form.amount} onChange={update("amount")} /></label>}
+          <div className="expense-field"><span>Funds type *</span><ModernSelect value={form.fundsType} onChange={(value) => setForm((current) => ({ ...current, fundsType: value, amount: value === "Own car" ? "" : current.amount }))} options={fundsTypeOptions} placeholder="Select funds type…" searchable searchPlaceholder="Search funds types…" /></div>
+          {isOwnCar ? <label><span>Kilometer <small>(Optional)</small></span><input type="number" min="0" step="0.1" value={form.kilometer} onChange={update("kilometer")} /></label> : <label><span>Cash out *</span><input type="number" min="0" step="0.01" value={form.amount} onChange={update("amount")} /></label>}
           <label><span>From</span><input value={form.from} onChange={update("from")} placeholder="Optional" /></label>
           <label><span>To</span><input value={form.to} onChange={update("to")} placeholder="Optional" /></label>
-          <div className="expense-form-full"><FileField files={files} onChange={setFiles} required={screenshotRequired} hint={isOwnCar ? "Upload a Google Maps distance screenshot." : "Up to 6 supporting images."} /></div>
+          {isOwnCar ? <div className="expense-own-car-note expense-form-full"><ClassicExpenseIcon name="navigation" size={17}/><div><strong>Google Maps screenshot required</strong><span>Upload a screenshot showing the distance between the starting point and destination.</span></div></div> : null}
+          <div className="expense-form-full"><FileField files={files} onChange={setFiles} required={screenshotRequired} hint={isOwnCar ? "Upload a Google Maps distance screenshot." : screenshotRequired ? "Upload a screenshot or receipt for this funds type." : "Upload receipt screenshots (JPG/PNG)."} /></div>
         </div>
         <button className="expense-add-draft" type="button" onClick={addDraft} disabled={busy}>+ Add expense</button>
       </div>
@@ -353,10 +465,10 @@ function SettleModal({ onClose, onSaved, notify }) {
     <Modal title="Settle my account" subtitle="A balancing transaction will reset the current balance to zero." onClose={onClose} footer={<><button className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" onClick={submit} disabled={busy}>{busy ? "Saving…" : "Save settlement"}</button></>}>
       <div className="expense-form-grid">
         <label><span>Date *</span><input type="date" value={form.date} onChange={update("date")} /></label>
-        <label><span>Funds type *</span><select value={form.fundsType} onChange={update("fundsType")}><option value="">Select type…</option>{CASH_IN_TYPES.map((value) => <option key={value}>{value}</option>)}</select></label>
+        <div className="expense-field"><span>Funds type *</span><ModernSelect value={form.fundsType} onChange={(value) => { setForm((current) => ({ ...current, fundsType: value, receiptNumber: value === "Cash Payment" ? current.receiptNumber : "" })); if (value !== "Online Transfer") setFiles([]); }} options={CASH_IN_TYPES.map((value) => ({ value, label: value, note: value === "Online Transfer" ? "Screenshot is required for this transfer" : "Receipt number is required for this payment", badge: value === "Online Transfer" ? "Required" : "Receipt", tone: value === "Online Transfer" ? "orange" : "neutral" }))} placeholder="Select funds type…" /></div>
         <label className="expense-form-full"><span>Settled by *</span><input value={form.settledBy} onChange={update("settledBy")} placeholder="Person name" /></label>
         {isCash ? <label className="expense-form-full"><span>Receipt number *</span><input value={form.receiptNumber} onChange={update("receiptNumber")} /></label> : null}
-        {form.fundsType ? <div className="expense-form-full"><FileField files={files} onChange={setFiles} required={isTransfer} hint={isTransfer ? "Upload the transfer screenshot." : "Optional receipt images."} /></div> : null}
+        {isTransfer ? <div className="expense-form-full"><FileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)." /></div> : null}
       </div>
     </Modal>
   );
@@ -454,6 +566,8 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     "check-circle": <><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><polyline points="22 4 12 14.01 9 11.01"/></>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
     image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+    search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+    navigation: <polygon points="3 11 22 2 13 21 11 13 3 11"/>,
     "credit-card": <><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></>,
     car: <><path d="M5 17h14"/><path d="M6 17l1-6h10l1 6"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></>,
     tag: <><path d="M20.6 13.4L11 3H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,
@@ -564,9 +678,18 @@ function ExpenseTicket({ group, onScreenshots, compact = false }) {
   </article>;
 }
 
-function AllExpensesSheet({ items, onClose, onScreenshots, onExport }) {
-  const groups = groupTransactions(items);
-  return <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="ios-sheet"><div className="ios-drag"/><h3 className="ex-modal-title" style={{ textAlign: "center" }}>All Expenses</h3><div className="next-all-expenses-sheet-actions"><button className="view-all-chip" type="button" onClick={onExport}>Export</button></div><div id="allExpensesList">{groups.length ? groups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} compact key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}</div><button className="next-all-expenses-close" type="button" onClick={onClose}>Close</button></div></div>;
+function AllExpensesSheet({ items, lastSettledAt, onClose, onScreenshots, onExport }) {
+  const [showPast, setShowPast] = useState(false);
+  const boundary = lastSettledAt ? new Date(lastSettledAt).getTime() : Number.NaN;
+  const recentItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) > boundary) : items;
+  const pastItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) <= boundary) : [];
+  const recentGroups = groupTransactions(recentItems);
+  const pastGroups = showPast ? groupTransactions(pastItems) : [];
+  return <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="ios-sheet"><div className="ios-drag"/><h3 className="ex-modal-title" style={{ textAlign: "center" }}>All Expenses</h3><div className="next-all-expenses-sheet-actions"><button className="view-all-chip" type="button" onClick={onExport}>Export</button></div><div id="allExpensesList">
+    {recentGroups.length ? recentGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} compact key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}
+    {showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{pastGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} compact key={`past-${group.key}`}/>)}</> : null}
+    {pastItems.length ? <div className="past-expenses-wrapper"><button type="button" className="past-expenses-btn" onClick={() => setShowPast((current) => !current)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
+  </div><button className="next-all-expenses-close" type="button" onClick={onClose}>Close</button></div></div>;
 }
 
 export default function ExpensesClient({ account, initialPayload = {}, initialTypes = [], cashInFromOptions = [], orderOptions = [], bootstrapWarnings = [] }) {
@@ -578,12 +701,29 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
   const [modal, setModal] = useState("");
   const [screenshotTransaction, setScreenshotTransaction] = useState(null);
   const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+    if (!input) return undefined;
+    input.value = search;
+    input.placeholder = "Search expenses, funds type, route, order, or receipt…";
+    const handle = (event) => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.placeholder = "Search";
+    };
+  }, []);
+
   const years = useMemo(() => {
     const found = new Set(items.filter((item) => number(item?.cashOut) > 0 && !isSettlement(item)).map((item) => Number(monthKey(item).slice(0, 4))).filter(Number.isFinite));
     found.add(new Date().getFullYear());
     return [...found].sort((a, b) => b - a);
   }, [items]);
   const [selectedYear, setSelectedYear] = useState(years[0] || new Date().getFullYear());
+  useEffect(() => {
+    if (!years.includes(Number(selectedYear))) setSelectedYear(years[0] || new Date().getFullYear());
+  }, [years, selectedYear]);
   const monthlyTotals = useMemo(() => MONTHS.map((_, monthIndex) => items.reduce((sum, item) => {
     if (isSettlement(item) || number(item?.cashOut) <= 0) return sum;
     return monthKey(item) === `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}` ? sum + number(item?.cashOut) : sum;
@@ -619,6 +759,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
     const cashOut = currentCycle.reduce((sum, item) => sum + number(item?.cashOut), 0);
     return { cashIn, cashOut, balance: cashIn - cashOut };
   }, [currentCycle]);
+  const lastSettlementReceipt = useMemo(() => latestSettlementReceipt(items, lastSettledAt), [items, lastSettledAt]);
   const typeRows = useMemo(() => {
     const totals = new Map();
     items.forEach((item) => {
@@ -643,12 +784,13 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
     return items.filter((item) => {
       if (filter === "recent" && now - transactionTime(item) > sevenDays) return false;
       if (filter === "cash-in" && number(item?.cashIn) <= 0) return false;
-      if (filter === "cash-out" && number(item?.cashOut) <= 0) return false;
-      if (query && !lower([displayReason(item), item?.fundsType, item?.from, item?.to, item?.receiptNumber, item?.ordersRaw].join(" ")).includes(query)) return false;
+      if (filter === "cash-out" && number(item?.cashOut) <= 0 && !(typeKey(item?.fundsType) === "owncar" && number(item?.kilometer) > 0)) return false;
+      const orderSearch = (Array.isArray(item?.orders) ? item.orders : []).map((order) => [order?.orderId, order?.orderType, order?.label].join(" ")).join(" ");
+      if (query && !lower([displayReason(item), item?.fundsType, item?.from, item?.to, item?.receiptNumber, item?.ordersRaw, orderSearch].join(" ")).includes(query)) return false;
       return true;
     });
   }, [items, filter, search]);
-  const maxMonthly = Math.max(1, ...monthlyTotals);
+  const maxMonthly = niceChartMax(Math.max(0, ...monthlyTotals));
 
   const filteredGroups = useMemo(() => groupTransactions(filteredItems), [filteredItems]);
 
@@ -666,7 +808,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
               <div className="summary-pill summary-pill--in"><span className="summary-pill__icon"><ClassicExpenseIcon name="arrow-down-left"/></span><span className="summary-pill__copy"><span className="summary-pill__label">Cash in</span><span className="summary-pill__value">+{money(summary.cashIn)}</span></span></div>
               <div className="summary-pill summary-pill--out"><span className="summary-pill__icon"><ClassicExpenseIcon name="arrow-up-right"/></span><span className="summary-pill__copy"><span className="summary-pill__label">Cash out</span><span className="summary-pill__value">-{money(summary.cashOut)}</span></span></div>
             </div>
-            <div className="total-card__actions"><button className="settle-btn" type="button" onClick={() => setModal("settle")}><ClassicExpenseIcon name="check-circle" size={15}/><span>Settled my account</span></button><div className={`last-settled ${lastSettledDate || lastSettledAt ? "" : "last-settled--empty"}`}><span className="last-settled__label">Last settlement</span><span className="last-settled__date">{formatDate(lastSettledDate || lastSettledAt, "No settlements yet")}</span><span className="last-settled__receipt" /></div></div>
+            <div className="total-card__actions"><button className="settle-btn" type="button" onClick={() => setModal("settle")}><ClassicExpenseIcon name="check-circle" size={15}/><span>Settled my account</span></button><div className={`last-settled ${lastSettledDate || lastSettledAt ? "" : "last-settled--empty"}`}><span className="last-settled__label">Last settlement</span><span className="last-settled__date">{formatDate(lastSettledDate || lastSettledAt, "No settlements yet")}</span><span className="last-settled__receipt">{lastSettlementReceipt ? `Receipt #${lastSettlementReceipt}` : ""}</span></div></div>
           </section>
 
           <section className="expenses-analytics-card expenses-monthly-card" aria-labelledby="monthlyExpenseTitle">
@@ -675,7 +817,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
           </section>
 
           <section className="expenses-analytics-card expenses-types-card" aria-labelledby="expenseTypesTitle">
-            <div className="expenses-card-head"><div><span className="expenses-eyebrow">Selected month</span><h2 id="expenseTypesTitle">Expense types</h2></div><span className="expenses-selected-month">{formatDate(`${effectiveSelectedMonth}-01`, "—")}</span></div>
+            <div className="expenses-card-head"><div><span className="expenses-eyebrow">Selected month</span><h2 id="expenseTypesTitle">Expense types</h2></div><span className="expenses-selected-month">{selectedMonthLabel(effectiveSelectedMonth)}</span></div>
             <div className="expense-types-chart">{typeRows.length ? <div className="expense-types-layout"><div className="expense-donut" style={{ "--donut-gradient": donutGradient }}><div className="expense-donut__center"><span>Total</span><strong>{compactMoney(typeTotal)}</strong></div></div><div className="expense-types-legend">{typeRows.map((row, index) => <div className="expense-type-legend-row" key={row.label}><span className="expense-type-legend-row__dot" style={{ "--legend-color": TYPE_COLORS[index % TYPE_COLORS.length] }}/><span className="expense-type-legend-row__name">{row.label}</span><span className="expense-type-legend-row__value">{typeTotal ? `${(row.value / typeTotal * 100).toFixed(row.value / typeTotal >= .1 ? 0 : 1)}%` : "0%"}</span></div>)}</div></div> : <div className="expense-chart-empty"><ClassicExpenseIcon name="tag" size={20}/><span>No cash-out expenses in this month.</span></div>}</div>
           </section>
         </aside>
@@ -699,7 +841,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
       {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "settle" ? <SettleModal onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "export" ? <ExportModal account={account} items={items} onClose={() => setModal("")} notify={notify} /> : null}
-      {modal === "all" ? <AllExpensesSheet items={items} onClose={() => setModal("")} onScreenshots={setScreenshotTransaction} onExport={() => setModal("export")} /> : null}
+      {modal === "all" ? <AllExpensesSheet items={items} lastSettledAt={lastSettledAt} onClose={() => setModal("")} onScreenshots={setScreenshotTransaction} onExport={() => setModal("export")} /> : null}
       {screenshotTransaction ? <ScreenshotModal transaction={screenshotTransaction} onClose={() => setScreenshotTransaction(null)} /> : null}
     </>
   );
