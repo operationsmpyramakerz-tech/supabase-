@@ -70,12 +70,25 @@ function monthKey(item) {
 function screenshotsFor(item) {
   const entries = Array.isArray(item?.screenshots) ? item.screenshots : [];
   const normalized = entries.map((shot, index) => ({
-    name: text(shot?.name) || `Receipt ${index + 1}`,
-    url: text(shot?.url),
+    name: text(shot?.name || shot?.filename || shot?.fileName) || `Receipt ${index + 1}`,
+    url: text(
+      shot?.url ||
+      shot?.href ||
+      shot?.publicUrl ||
+      shot?.public_url ||
+      shot?.signedUrl ||
+      shot?.signedURL ||
+      shot?.downloadUrl ||
+      shot?.downloadURL ||
+      shot?.file?.url ||
+      shot?.external?.url ||
+      shot?.dataUrl ||
+      shot?.data_url
+    ),
   })).filter((shot) => shot.url);
   if (normalized.length) return normalized;
-  const fallback = text(item?.screenshotUrl);
-  return fallback ? [{ name: text(item?.screenshotName) || "Receipt", url: fallback }] : [];
+  const fallback = text(item?.screenshotUrl || item?.screenshot_url);
+  return fallback ? [{ name: text(item?.screenshotName || item?.screenshot_name) || "Receipt", url: fallback }] : [];
 }
 function routeEndpoints(item) {
   const cashIn = number(item?.cashIn) > 0;
@@ -739,7 +752,23 @@ function ExportModal({ account, items, onClose, notify }) {
 
 function ScreenshotModal({ transaction, onClose }) {
   const screenshots = screenshotsFor(transaction);
-  return (
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    document.body.classList.add("expense-shots-modal-open");
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.classList.remove("expense-shots-modal-open");
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="expense-shots-modal is-open" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="expense-shots-modal__card" role="dialog" aria-modal="true">
         <div className="expense-shots-modal__head">
@@ -752,11 +781,13 @@ function ScreenshotModal({ transaction, onClose }) {
         <div className="expense-shots-modal__body">
           {screenshots.length ? <div className="expense-shots-modal__grid">{screenshots.map((shot, index) => {
             const fallback = `/api/expenses/screenshot/${encodeURIComponent(text(transaction?.id))}?index=${index}`;
-            return <a className="expense-shots-modal__item" href={shot.url || fallback} target="_blank" rel="noreferrer" key={`${shot.url}-${index}`}><span className="expense-shots-modal__image-wrap"><img className="expense-shots-modal__image" src={shot.url || fallback} alt={shot.name} /></span><span className="expense-shots-modal__caption">{shot.name}</span></a>;
+            const href = shot.url || fallback;
+            return <a className="expense-shots-modal__item" href={href} target="_blank" rel="noreferrer" key={`${href}-${index}`}><span className="expense-shots-modal__image-wrap"><img className="expense-shots-modal__image" src={href} alt={shot.name} /></span><span className="expense-shots-modal__caption">{shot.name}</span></a>;
           })}</div> : <div className="expense-shots-modal__empty"><div className="expense-shots-modal__empty-icon"><ClassicExpenseIcon name="image" size={24}/></div><div>No screenshots uploaded for this expense.</div></div>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1118,8 +1149,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
           <section className="expenses-activity-card">
             <div className="expenses-activity-head"><div><span className="expenses-eyebrow">Transactions</span><h2>Expense details</h2></div><button className="view-all-chip" type="button" onClick={() => setModal("all")}><span>View all</span><ClassicExpenseIcon name="external-link" size={13}/></button></div>
             <div className="expenses-overview" aria-label="Expenses overview controls"><div className="expenses-filters" role="tablist">{[["recent","Recent"],["cash-in","Cash in"],["cash-out","Cash out"]].map(([key,label]) => <button className={`expenses-filter${filter === key ? " is-active" : ""}`} aria-selected={filter === key} type="button" onClick={() => setFilter(key)} key={key}>{label}</button>)}</div><span className="expenses-period-note"><ClassicExpenseIcon name="clock" size={13}/>Last 7 days</span></div>
-            <div className="expenses-ledger-head" aria-hidden="true"><span>Date / Reason</span><span>Type &amp; route</span><span>Amount</span><span>Receipt</span></div>
-            <div className="expenses-content">{filteredGroups.length ? filteredGroups.map((group) => <LedgerGroup group={group} onScreenshots={setScreenshotTransaction} key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}</div>
+            <div className="expenses-content expenses-content--tickets">{filteredGroups.length ? filteredGroups.map((group) => <ExpenseTicket group={group} onScreenshots={setScreenshotTransaction} compact key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}</div>
           </section>
         </section>
       </div>

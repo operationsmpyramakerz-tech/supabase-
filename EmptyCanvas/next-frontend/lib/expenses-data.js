@@ -1,5 +1,5 @@
 import "server-only";
-import { select, selectAll } from "./supabase-rest";
+import { getSupabaseConfig, select, selectAll, storagePublicUrl } from "./supabase-rest";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -57,21 +57,85 @@ function splitValues(value) {
   return raw.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
 }
 
-function parseScreenshots(value) {
-  if (Array.isArray(value)) {
-    return value.map((entry, index) => ({
-      name: text(entry?.name) || `Receipt ${index + 1}`,
-      url: text(entry?.url || entry?.href || entry?.publicUrl),
-    })).filter((entry) => entry.url);
-  }
-  if (value && typeof value === "object") return parseScreenshots([value]);
+function screenshotPublicUrl(value, bucketOverride = "") {
   const raw = text(value);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) || (parsed && typeof parsed === "object")) return parseScreenshots(parsed);
-  } catch {}
-  return splitValues(raw).map((url, index) => ({ name: `Receipt ${index + 1}`, url })).filter((entry) => /^https?:\/\//i.test(entry.url));
+  if (!raw || /^null$/i.test(raw)) return "";
+  if (/^(https?:|data:image\/)/i.test(raw)) return raw;
+
+  const config = getSupabaseConfig();
+  const bucket = text(bucketOverride) || text(config.storageBucket);
+  if (!config.url || !bucket) return "";
+
+  if (/^\/?storage\/v1\/object\/public\//i.test(raw)) {
+    const clean = raw.replace(/^\/+/, "");
+    return `${config.url}/${clean}`;
+  }
+
+  if (/^\/?object\/public\//i.test(raw)) {
+    const clean = raw.replace(/^\/+/, "").replace(/^object\/public\//i, "");
+    return `${config.url}/storage/v1/object/public/${clean}`;
+  }
+
+  const looksLikeStoragePath = raw.includes("/") && !/^[A-Za-z]:[\\/]/.test(raw) && !/\s/.test(raw);
+  if (!looksLikeStoragePath) return "";
+  let objectPath = raw.replace(/^\/+/, "");
+  if (objectPath.toLowerCase().startsWith(`${bucket.toLowerCase()}/`)) objectPath = objectPath.slice(bucket.length + 1);
+  return storagePublicUrl(objectPath, bucket);
+}
+
+function parseScreenshots(value) {
+  const out = [];
+  const seen = new Set();
+
+  const add = (entry, index = 0) => {
+    if (entry === null || typeof entry === "undefined") return;
+
+    if (typeof entry === "string") {
+      const raw = text(entry);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) || (parsed && typeof parsed === "object")) {
+          add(parsed, index);
+          return;
+        }
+      } catch {}
+      const url = screenshotPublicUrl(raw);
+      if (!url) return;
+      const key = url;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name: `Receipt ${index + 1}`, url });
+      return;
+    }
+
+    if (Array.isArray(entry)) {
+      entry.forEach((item, itemIndex) => add(item, itemIndex));
+      return;
+    }
+
+    if (typeof entry === "object") {
+      const rawUrl = entry.url || entry.href || entry.publicUrl || entry.public_url || entry.signedUrl || entry.signedURL || entry.downloadUrl || entry.downloadURL || entry.file?.url || entry.external?.url || entry.dataUrl || entry.data_url || entry.path || entry.fullPath || entry.full_path || entry.storagePath || entry.storage_path || entry.key || entry.Key || "";
+      const bucket = entry.bucket || entry.bucketName || entry.bucket_name || "";
+      const url = screenshotPublicUrl(rawUrl, bucket);
+      if (!url) return;
+      const name = text(entry.name || entry.filename || entry.fileName || entry.originalName || entry.original_name) || `Receipt ${index + 1}`;
+      const key = `${url}::${name}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ name, url });
+    }
+  };
+
+  add(value, 0);
+
+  if (!out.length && typeof value === "string") {
+    const raw = text(value);
+    const urlMatches = raw.match(/https?:\/\/[^\s,"'<>]+/gi) || [];
+    urlMatches.forEach((url, index) => add(url, index));
+  }
+
+  return out;
 }
 
 function expenseOrders(row = {}) {
