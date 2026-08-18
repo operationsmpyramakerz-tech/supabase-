@@ -6626,6 +6626,37 @@ function _sbProposalPrimarySourceKit(value) {
   return sources.slice().sort((a, b) => (Number(b.quantity || 0) - Number(a.quantity || 0)) || (Number(a.order || 0) - Number(b.order || 0)))[0] || null;
 }
 
+function _sbProposalSourceKitsForTotal(value, totalQuantity) {
+  const target = _sbProposalQuantity(totalQuantity || 1);
+  const sources = _sbProposalSourceKits(value);
+  if (!sources.length) {
+    return [{ kitId: "", kitName: "Direct / legacy components", quantity: target, order: 0 }];
+  }
+
+  const currentTotal = sources.reduce((sum, source) => sum + _sbProposalQuantity(source?.quantity || 1), 0);
+  if (currentTotal === target) return sources;
+  if (sources.length === 1) return [{ ...sources[0], quantity: target }];
+
+  // Keep the saved kit split proportional when an older/manual edit left source_kits
+  // out of sync with the proposal item's total quantity. This guarantees the kit
+  // quantities used by combined exports add back up to the real proposal quantity.
+  const scaled = sources.map((source, index) => {
+    const raw = (_sbProposalQuantity(source?.quantity || 1) * target) / Math.max(1, currentTotal);
+    const base = Math.floor(raw);
+    return { ...source, quantity: base, _fraction: raw - base, _index: index };
+  });
+  let assigned = scaled.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+  let remaining = target - assigned;
+  const byFraction = scaled.slice().sort((a, b) => (b._fraction - a._fraction) || (a._index - b._index));
+  for (let i = 0; remaining > 0 && byFraction.length; i = (i + 1) % byFraction.length) {
+    byFraction[i].quantity += 1;
+    remaining -= 1;
+  }
+  return scaled
+    .filter((source) => Number(source.quantity || 0) > 0)
+    .map(({ _fraction, _index, ...source }) => source);
+}
+
 function _sbProposalOwnerInfo(row = {}) {
   return {
     createdBy: _sbProposalText(_sbGet(row, ["created_by", "createdBy", "Created By"])) || null,
@@ -7634,6 +7665,176 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
     });
 }
 
+function _proposalBuildCombinedGroupedRows(rows = [], groupMode = "component-tag", kitMembership = new Map(), sources = [], logic = "add") {
+  if (groupMode !== "kit-tag") return _proposalBuildGroupedRows(rows, groupMode, kitMembership);
+
+  const cleanLogic = _proposalCombineLogic(logic);
+  const cleanSources = (Array.isArray(sources) ? sources : []).map((source, index) => ({
+    id: String(source?.id || "").trim(),
+    name: String(source?.name || "Proposal").trim() || "Proposal",
+    index,
+  }));
+  const folders = new Map();
+
+  const addToHierarchy = (row, membership = {}) => {
+    const folderId = String(membership?.folderId || "").trim();
+    const folderName = String(membership?.folderName || "Unfiled Kits").trim() || "Unfiled Kits";
+    const folderKey = `${folderId || "unfiled"}:${folderName.toLowerCase()}`;
+    if (!folders.has(folderKey)) folders.set(folderKey, { folderId, folderName, kits: new Map() });
+    const folder = folders.get(folderKey);
+    const kitId = String(membership?.id || membership?.kitId || "").trim();
+    const kitName = String(membership?.name || membership?.kitName || "Unassigned kit").trim() || "Unassigned kit";
+    const kitKey = `${kitId || "unassigned"}:${kitName.toLowerCase()}`;
+    if (!folder.kits.has(kitKey)) folder.kits.set(kitKey, { kitId, kitName, rows: [] });
+    folder.kits.get(kitKey).rows.push(row);
+  };
+
+  const membershipFor = (row, source) => {
+    const memberships = kitMembership?.get(String(row?.productId || "").trim()) || [];
+    const sourceKitId = String(source?.kitId || "").trim();
+    const sourceKitName = String(source?.kitName || "").trim();
+    const membership = memberships.find((entry) => sourceKitId && String(entry?.id || entry?.kitId || "").trim() === sourceKitId)
+      || memberships.find((entry) => !sourceKitId && sourceKitName && String(entry?.name || entry?.kitName || "").trim().toLowerCase() === sourceKitName.toLowerCase());
+    if (membership) return membership;
+    return {
+      id: sourceKitId,
+      name: sourceKitName || (sourceKitId ? "Untitled kit" : "Direct / legacy components"),
+      folderName: sourceKitId ? "Unfiled Kits" : "Untracked / Direct",
+    };
+  };
+
+  const combinedQtyFor = (sourceQuantities = {}) => {
+    const quantities = cleanSources.map((source) => Number(sourceQuantities?.[source.id]) || 0);
+    const present = quantities.filter((quantity) => quantity > 0);
+    if (cleanLogic === "max") return present.length ? Math.max(...present) : 0;
+    if (cleanLogic === "min") return present.length ? Math.min(...present) : 0;
+    return quantities.reduce((sum, quantity) => sum + quantity, 0);
+  };
+
+  for (const row of rows || []) {
+    const perProposal = new Map();
+    for (const source of cleanSources) {
+      const totalForProposal = Number(row?.sourceQuantities?.[source.id]) || 0;
+      if (totalForProposal <= 0) continue;
+      const tracked = _sbProposalSourceKitsForTotal(row?.sourceKitQuantities?.[source.id] || [], totalForProposal);
+      perProposal.set(source.id, tracked);
+    }
+
+    // Max/min chooses one proposal at the product level. Keep only that winning
+    // proposal's kit split; applying max/min separately per kit can inflate totals.
+    if (cleanLogic === "max" || cleanLogic === "min") {
+      const candidates = cleanSources
+        .map((source) => ({ source, quantity: Number(row?.sourceQuantities?.[source.id]) || 0 }))
+        .filter((entry) => entry.quantity > 0)
+        .sort((a, b) => cleanLogic === "max"
+          ? (b.quantity - a.quantity) || (a.source.index - b.source.index)
+          : (a.quantity - b.quantity) || (a.source.index - b.source.index));
+      const winner = candidates[0]?.source;
+      const winnerSources = winner ? (perProposal.get(winner.id) || []) : [];
+      for (const kitSource of winnerSources) {
+        const sourceQuantity = Number(kitSource?.quantity) || 0;
+        if (sourceQuantity <= 0) continue;
+        const sourceQuantities = Object.fromEntries(cleanSources.map((source) => [source.id, source.id === winner.id ? sourceQuantity : 0]));
+        const groupedRow = {
+          ...row,
+          quantity: sourceQuantity,
+          sourceQuantities,
+          sourceKits: [kitSource],
+          totalPrice: Number.isFinite(Number(row?.unitPrice)) ? Number(row.unitPrice) * sourceQuantity : row?.totalPrice,
+        };
+        addToHierarchy(groupedRow, membershipFor(row, kitSource));
+      }
+      continue;
+    }
+
+    const allTrackedLists = [...perProposal.values()];
+    const hasIntentionalMultiKitSplit = allTrackedLists.some((list) => list.length > 1);
+
+    if (!hasIntentionalMultiKitSplit) {
+      // When every source proposal has a single kit for the product, do not create
+      // duplicate rows just because older proposals disagree on that kit. Pick a
+      // deterministic canonical kit (most proposals, then most quantity, then first
+      // selected proposal) and keep every proposal's quantity on that one row.
+      const candidates = new Map();
+      for (const source of cleanSources) {
+        const tracked = perProposal.get(source.id) || [];
+        const kitSource = tracked[0];
+        if (!kitSource) continue;
+        const key = String(kitSource.kitId || "").trim() || `name:${String(kitSource.kitName || "").trim().toLowerCase()}`;
+        if (!candidates.has(key)) candidates.set(key, { kitSource, proposalCount: 0, quantity: 0, firstSourceIndex: source.index });
+        const candidate = candidates.get(key);
+        candidate.proposalCount += 1;
+        candidate.quantity += Number(row?.sourceQuantities?.[source.id]) || Number(kitSource.quantity) || 0;
+        candidate.firstSourceIndex = Math.min(candidate.firstSourceIndex, source.index);
+      }
+      const canonical = [...candidates.values()].sort((a, b) =>
+        (b.proposalCount - a.proposalCount)
+        || (b.quantity - a.quantity)
+        || (a.firstSourceIndex - b.firstSourceIndex)
+        || (Number(a.kitSource?.order || 0) - Number(b.kitSource?.order || 0))
+      )[0]?.kitSource;
+      if (canonical) {
+        const sourceQuantities = Object.fromEntries(cleanSources.map((source) => [source.id, Number(row?.sourceQuantities?.[source.id]) || 0]));
+        const quantity = combinedQtyFor(sourceQuantities);
+        const groupedRow = {
+          ...row,
+          quantity,
+          sourceQuantities,
+          sourceKits: [{ ...canonical, quantity }],
+          totalPrice: Number.isFinite(Number(row?.unitPrice)) ? Number(row.unitPrice) * quantity : row?.totalPrice,
+        };
+        addToHierarchy(groupedRow, membershipFor(row, canonical));
+        continue;
+      }
+    }
+
+    // At least one source proposal intentionally contains this component in more
+    // than one kit (Add logic). Preserve those kit rows, but split each proposal's
+    // quantity by its own source_kits so a product total is never repeated in every kit.
+    const kitRows = new Map();
+    for (const source of cleanSources) {
+      const tracked = perProposal.get(source.id) || [];
+      for (const kitSource of tracked) {
+        const kitKey = String(kitSource.kitId || "").trim() || `name:${String(kitSource.kitName || "").trim().toLowerCase()}`;
+        if (!kitRows.has(kitKey)) {
+          kitRows.set(kitKey, {
+            kitSource,
+            sourceQuantities: Object.fromEntries(cleanSources.map((entry) => [entry.id, 0])),
+          });
+        }
+        const target = kitRows.get(kitKey);
+        target.sourceQuantities[source.id] += Number(kitSource.quantity) || 0;
+      }
+    }
+    for (const entry of kitRows.values()) {
+      const quantity = combinedQtyFor(entry.sourceQuantities);
+      if (quantity <= 0) continue;
+      const groupedRow = {
+        ...row,
+        quantity,
+        sourceQuantities: entry.sourceQuantities,
+        sourceKits: [{ ...entry.kitSource, quantity }],
+        totalPrice: Number.isFinite(Number(row?.unitPrice)) ? Number(row.unitPrice) * quantity : row?.totalPrice,
+      };
+      addToHierarchy(groupedRow, membershipFor(row, entry.kitSource));
+    }
+  }
+
+  return [...folders.values()]
+    .map((folder) => ({
+      folderId: folder.folderId,
+      folderName: folder.folderName,
+      kits: [...folder.kits.values()]
+        .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")) ) }))
+        .sort((a, b) => String(a.kitName || "").localeCompare(String(b.kitName || ""))),
+    }))
+    .sort((a, b) => {
+      if (a.folderId && !b.folderId) return -1;
+      if (!a.folderId && b.folderId) return 1;
+      return String(a.folderName || "").localeCompare(String(b.folderName || ""));
+    });
+}
+
 async function _sbProductProposalExportData(proposalId, req = null) {
   const detail = await _sbProductProposalById(proposalId, req);
   if (!detail?.proposal) {
@@ -7775,6 +7976,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
           url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
           tag: firstProductTagForServer(product),
           sourceQuantities: {},
+          sourceKitQuantities: {},
           sourceKits: [],
           quantity: 0,
           unitPrice: cleanUnitPrice,
@@ -7782,8 +7984,16 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
         });
       }
       const row = rowsMap.get(key);
-      row.sourceQuantities[sourceId] = (Number(row.sourceQuantities[sourceId]) || 0) + quantity;
-      row.sourceKits = _sbProposalMergeSourceKits(row.sourceKits, item?.sourceKits || item?.source_kits || [], row.quantity || 1, quantity, "add");
+      const existingSourceQuantity = Number(row.sourceQuantities[sourceId]) || 0;
+      const itemSourceKits = _sbProposalSourceKitsForTotal(item?.sourceKits || item?.source_kits || [], quantity);
+      row.sourceQuantities[sourceId] = existingSourceQuantity + quantity;
+      row.sourceKitQuantities[sourceId] = _sbProposalMergeSourceKits(
+        row.sourceKitQuantities[sourceId] || [],
+        itemSourceKits,
+        existingSourceQuantity || 1,
+        quantity,
+        "add",
+      );
       row.quantity += quantity;
       if (row.unitPrice === null && cleanUnitPrice !== null) row.unitPrice = cleanUnitPrice;
     }
@@ -7805,15 +8015,69 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     } else if (cleanLogic === "min") {
       combinedQuantity = presentQuantities.length ? Math.min(...presentQuantities) : 0;
     }
+    const sourceKitQuantities = sources.reduce((acc, source) => {
+      const sourceQuantity = Number(sourceQuantities[source.id]) || 0;
+      acc[source.id] = sourceQuantity > 0
+        ? _sbProposalSourceKitsForTotal(row.sourceKitQuantities?.[source.id] || [], sourceQuantity)
+        : [];
+      return acc;
+    }, {});
+
+    let effectiveSourceKits = [];
+    if (cleanLogic === "max" || cleanLogic === "min") {
+      const candidates = sources
+        .map((source, index) => ({ source, index, quantity: Number(sourceQuantities[source.id]) || 0 }))
+        .filter((entry) => entry.quantity > 0)
+        .sort((a, b) => cleanLogic === "max"
+          ? (b.quantity - a.quantity) || (a.index - b.index)
+          : (a.quantity - b.quantity) || (a.index - b.index));
+      const winnerId = candidates[0]?.source?.id;
+      effectiveSourceKits = winnerId ? _sbProposalSourceKits(sourceKitQuantities[winnerId]) : [];
+    } else {
+      const trackedLists = sources
+        .map((source, index) => ({ source, index, kits: _sbProposalSourceKits(sourceKitQuantities[source.id] || []) }))
+        .filter((entry) => Number(sourceQuantities[entry.source.id]) > 0);
+      const hasIntentionalMultiKitSplit = trackedLists.some((entry) => entry.kits.length > 1);
+      if (!hasIntentionalMultiKitSplit && trackedLists.length) {
+        const candidates = new Map();
+        for (const entry of trackedLists) {
+          const kit = entry.kits[0];
+          if (!kit) continue;
+          const key = String(kit.kitId || "").trim() || `name:${String(kit.kitName || "").trim().toLowerCase()}`;
+          if (!candidates.has(key)) candidates.set(key, { kit, count: 0, quantity: 0, firstIndex: entry.index });
+          const candidate = candidates.get(key);
+          candidate.count += 1;
+          candidate.quantity += Number(sourceQuantities[entry.source.id]) || 0;
+          candidate.firstIndex = Math.min(candidate.firstIndex, entry.index);
+        }
+        const canonical = [...candidates.values()].sort((a, b) =>
+          (b.count - a.count) || (b.quantity - a.quantity) || (a.firstIndex - b.firstIndex) || (Number(a.kit?.order || 0) - Number(b.kit?.order || 0))
+        )[0]?.kit;
+        if (canonical) effectiveSourceKits = [{ ...canonical, quantity: combinedQuantity }];
+      } else {
+        for (const source of sources) {
+          effectiveSourceKits = _sbProposalMergeSourceKits(
+            effectiveSourceKits,
+            sourceKitQuantities[source.id] || [],
+            effectiveSourceKits.reduce((sum, kit) => sum + (Number(kit.quantity) || 0), 0) || 1,
+            Number(sourceQuantities[source.id]) || 1,
+            "add",
+          );
+        }
+      }
+    }
+
     return {
       ...row,
       quantity: combinedQuantity,
       totalPrice: cleanUnitPrice === null ? null : cleanUnitPrice * combinedQuantity,
       sourceQuantities,
+      sourceKitQuantities,
+      sourceKits: effectiveSourceKits,
     };
   }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
 
-  const groupedRows = _proposalBuildGroupedRows(rows, groupMode, kitMembership);
+  const groupedRows = _proposalBuildCombinedGroupedRows(rows, groupMode, kitMembership, sources, cleanLogic);
 
   const totals = rows.reduce((acc, row) => {
     acc.items += 1;
@@ -7828,6 +8092,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     tag: row.tag,
     quantity: row.quantity,
     sourceQuantities: row.sourceQuantities,
+    sourceKitQuantities: row.sourceKitQuantities,
   }));
 
   return { sources, rows, groupedRows, totals, groupMode, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
