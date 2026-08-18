@@ -145,6 +145,7 @@ async function prepareProductImage(file) {
     const dataUrl = await blobToDataUrl(blob);
     return {
       dataUrl,
+      blob,
       name: `${text(file.name).replace(/\.[^.]+$/, "") || "product-image"}.webp`,
       type: "image/webp",
       size: blob.size,
@@ -153,6 +154,54 @@ async function prepareProductImage(file) {
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+async function uploadPreparedProductImage(image) {
+  if (!image?.blob || !image?.size) return "";
+
+  const ticket = await requestJson("/next/api/products/image-upload", {
+    method: "POST",
+    body: JSON.stringify({
+      filename: image.name || "product-image.webp",
+      mime: image.type || "image/webp",
+      size: Number(image.size || 0),
+    }),
+  });
+  const upload = ticket?.upload || {};
+  if (!upload?.signedUrl || !upload?.publicUrl) {
+    throw new Error("The image upload could not be prepared.");
+  }
+
+  let response;
+  try {
+    response = await fetch(upload.signedUrl, {
+      method: String(upload.method || "PUT").toUpperCase(),
+      credentials: "omit",
+      cache: "no-store",
+      headers: {
+        ...(upload.headers || {}),
+        "Content-Type": image.type || "image/webp",
+      },
+      body: image.blob,
+    });
+  } catch (error) {
+    throw new Error(error?.message || "The browser could not upload the image to storage.");
+  }
+
+  if (!response.ok) {
+    const raw = await response.text().catch(() => "");
+    let detail = raw;
+    try {
+      const parsed = raw ? JSON.parse(raw) : null;
+      detail = text(parsed?.message || parsed?.error || raw);
+    } catch {}
+    if (response.status === 413) {
+      throw new Error(detail || "Storage rejected the image because its file-size limit is lower than this image.");
+    }
+    throw new Error(detail || `Storage upload failed with status ${response.status}.`);
+  }
+
+  return upload.publicUrl;
 }
 
 function ClassicIcon({ name }) {
@@ -203,6 +252,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
   }));
   const [image, setImage] = useState(() => ({
     dataUrl: "",
+    blob: null,
     previewUrl: product?.imageUrl || "",
     name: product?.imageUrl ? "Current product image" : "",
     type: "",
@@ -236,7 +286,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
   };
 
   const removeImage = () => {
-    setImage({ dataUrl: "", previewUrl: "", name: "", type: "", size: 0, removed: !!product?.imageUrl });
+    setImage({ dataUrl: "", blob: null, previewUrl: "", name: "", type: "", size: 0, removed: !!product?.imageUrl });
   };
 
   const addUnit = async () => {
@@ -272,6 +322,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
     setBusy(true);
     setError("");
     try {
+      const uploadedImageUrl = image?.blob ? await uploadPreparedProductImage(image) : "";
       const payload = {
         name,
         idCode: text(form.idCode) || null,
@@ -279,10 +330,8 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
         unit: text(form.unit) || null,
         tags: text(form.tag) || null,
         url: text(form.url) || null,
-        imageData: image.dataUrl || null,
-        imageName: image.name || null,
-        imageType: image.type || null,
-        removeImage: !!image.removed,
+        ...(uploadedImageUrl ? { imageUrl: uploadedImageUrl } : {}),
+        removeImage: !uploadedImageUrl && !!image.removed,
       };
       const endpoint = isEdit ? `/next/api/products/${encodeURIComponent(product.id)}` : "/next/api/products";
       const body = await requestJson(endpoint, {

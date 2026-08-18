@@ -209,6 +209,68 @@ export function storagePublicUrl(objectPath, bucketName = null) {
   return `${url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodeStoragePath(key)}`;
 }
 
+export async function createSignedUploadUrl(objectPath, { bucketName = null } = {}) {
+  const { url, key, storageBucket } = ensureConfigured();
+  const bucket = String(bucketName || storageBucket || "").trim();
+  const cleanPath = String(objectPath || "").replace(/^\/+/, "");
+  if (!bucket || !cleanPath) {
+    const error = new Error("Supabase Storage bucket and object path are required.");
+    error.status = 500;
+    throw error;
+  }
+
+  const response = await fetch(
+    `${url}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`,
+    {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    },
+  );
+
+  const raw = await response.text();
+  let data = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+  if (!response.ok) {
+    const error = new Error(
+      data && typeof data === "object"
+        ? (data.message || data.error || JSON.stringify(data))
+        : (raw || `Failed to create signed upload URL with status ${response.status}`),
+    );
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
+  const token = String(data?.token || "").trim();
+  let signedUrl = String(data?.signedUrl || data?.signedURL || data?.url || "").trim();
+  const endpoint = `${url}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`;
+  if (!signedUrl && token) signedUrl = `${endpoint}?token=${encodeURIComponent(token)}`;
+  else if (signedUrl.startsWith("/storage/v1/")) signedUrl = `${url}${signedUrl}`;
+  else if (signedUrl.startsWith("/object/")) signedUrl = `${url}/storage/v1${signedUrl}`;
+  else if (signedUrl && !/^https?:\/\//i.test(signedUrl)) signedUrl = `${url}/storage/v1/${signedUrl.replace(/^\/+/, "")}`;
+  if (token && signedUrl && !/[?&]token=/.test(signedUrl)) {
+    signedUrl += `${signedUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  }
+  if (!signedUrl) {
+    const error = new Error("Supabase Storage did not return a signed upload URL.");
+    error.status = 502;
+    throw error;
+  }
+
+  return {
+    bucket,
+    path: cleanPath,
+    signedUrl,
+    publicUrl: storagePublicUrl(cleanPath, bucket),
+  };
+}
+
 export async function uploadStorageObject(objectPath, buffer, {
   contentType = "application/octet-stream",
   bucketName = null,
@@ -240,7 +302,7 @@ export async function uploadStorageObject(objectPath, buffer, {
           apikey: key,
           Authorization: `Bearer ${key}`,
           "Content-Type": contentType,
-          "x-upsert": upsert ? "true" : "false",
+          ...(upsert ? { "x-upsert": "true" } : {}),
         },
         body: buffer,
       },

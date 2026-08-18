@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  createSignedUploadUrl,
   deleteById,
   getSupabaseConfig,
   insert,
@@ -161,6 +162,16 @@ function normalizeProductPayload(body = {}, { partial = false } = {}) {
   return out;
 }
 
+export function getProductsStorageBucket() {
+  return text(
+    process.env.SUPABASE_PRODUCTS_STORAGE_BUCKET ||
+    process.env.SUPABASE_PRODUCTS_BUCKET ||
+    process.env.SUPABASE_STORAGE_BUCKET ||
+    process.env.SUPABASE_BUCKET ||
+    "Data"
+  ) || "Data";
+}
+
 function storageObjectName(originalName = "product-image") {
   const safe = text(originalName)
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
@@ -185,7 +196,8 @@ async function uploadProductImage(dataUrl, originalName) {
 
   const uploaded = await uploadStorageObject(storageObjectName(originalName), buffer, {
     contentType: match[1],
-    upsert: true,
+    bucketName: getProductsStorageBucket(),
+    upsert: false,
   });
   if (!uploaded?.publicUrl) {
     const error = new Error("Supabase Storage did not return a public product image URL.");
@@ -193,6 +205,44 @@ async function uploadProductImage(dataUrl, originalName) {
     throw error;
   }
   return uploaded.publicUrl;
+}
+
+export async function createProductImageUploadTicket({ filename, mime, size } = {}) {
+  const cleanMime = text(mime || "application/octet-stream").toLowerCase();
+  const fileSize = Math.max(0, Number(size) || 0);
+  if (!/^image\/(png|jpe?g|webp)$/i.test(cleanMime)) {
+    const error = new Error("Choose a PNG, JPG, or WEBP image.");
+    error.status = 400;
+    throw error;
+  }
+  if (!fileSize) {
+    const error = new Error("The selected image is empty.");
+    error.status = 400;
+    throw error;
+  }
+  if (fileSize > 10 * 1024 * 1024) {
+    const error = new Error("Product image must not exceed 10 MB.");
+    error.status = 413;
+    throw error;
+  }
+
+  const ticket = await createSignedUploadUrl(storageObjectName(filename || "product-image.webp"), {
+    bucketName: getProductsStorageBucket(),
+  });
+  if (!ticket?.signedUrl || !ticket?.publicUrl) {
+    const error = new Error("Supabase Storage did not return a valid product image upload URL.");
+    error.status = 502;
+    throw error;
+  }
+
+  return {
+    method: "PUT",
+    signedUrl: ticket.signedUrl,
+    publicUrl: ticket.publicUrl,
+    headers: { "Content-Type": cleanMime },
+    bucket: ticket.bucket,
+    path: ticket.path,
+  };
 }
 
 async function prepareProductBody(body = {}) {
