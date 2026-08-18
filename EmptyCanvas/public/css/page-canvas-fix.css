@@ -187,3 +187,18 @@ body:not(.login-page):not(.pwa-offline):not(.pwa-start) .main-content > main:not
 :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) :where(#orders-list, #requested-list, #sv-list){
   background: transparent !important;
 }
+
+
+/* =========================================================
+   2026-08-18: default system background when no user cover exists
+   - A real user cover keeps the existing cover-photo backdrop.
+   - Without a cover, use a clean white system background instead of exposing
+     the dark shell through the transparent content surface.
+   - Embedded iframe pages stay transparent so a parent shell cover can still
+     remain visible behind them.
+   ========================================================= */
+body:not(.login-page):not(.pwa-offline):not(.pwa-start):not(.shell-embedded):not(.ops-has-system-cover) .main-content{
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+}

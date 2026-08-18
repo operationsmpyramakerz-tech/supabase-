@@ -169,6 +169,10 @@ export default function AppShell({
     ? permittedLmsLinks
     : permittedLmsLinks.filter((link) => !link.alwaysVisible);
   const showLmsSubmenu = lmsLinks.length > 0;
+  const systemCoverUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
+  const systemCoverStyle = systemCoverUrl
+    ? { "--ops-system-cover-image": `url(${JSON.stringify(systemCoverUrl)})` }
+    : undefined;
 
   // Keep the existing pilot LMS shell untouched in this stage.  LMS has its own
   // Classic workspace chrome and will be parity-migrated as a dedicated stage.
@@ -222,7 +226,7 @@ export default function AppShell({
   }
 
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSee(link, allowedPages));
-  const combinedBodyClass = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
+  const combinedBodyClass = [bodyClass, "next-classic-shell-active", systemCoverUrl ? "ops-has-system-cover" : ""].filter(Boolean).join(" ");
 
   return (
     <>
@@ -258,7 +262,7 @@ export default function AppShell({
           <div className="sidebar-footer" />
         </aside>
 
-        <div className="main-content">
+        <div className="main-content" style={systemCoverStyle}>
           <header className="main-header dash-header dash-hide-row2">
             <div className="header-row1">
               <div className="left">

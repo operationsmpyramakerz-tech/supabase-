@@ -623,10 +623,7 @@
   }
 
   .page-account .profile-cover-fallback{
-    background:
-      radial-gradient(circle at 50% 115%, rgba(255,255,255,0.88) 0 11%, transparent 12%),
-      linear-gradient(135deg, rgba(15,23,42,0.86), rgba(17,24,39,0.74)),
-      linear-gradient(135deg, rgba(249,115,22,0.34), rgba(251,146,60,0.12));
+    background: #FFFFFF;
   }
 
   .page-account .profile-cover-edit{

@@ -908,7 +908,7 @@ export default function ProposalsClient({
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
     if (!input) return undefined;
     input.value = search;
-    input.placeholder = activeDetail ? "Search components..." : "Search proposals...";
+    input.placeholder = activeDetail ? "Search components, tags, kits, or ID..." : "Search proposals...";
     const handle = (event) => setSearch(event.target.value || "");
     input.addEventListener("input", handle);
     return () => {
@@ -979,8 +979,24 @@ export default function ProposalsClient({
   const visibleEnrichedRows = useMemo(() => {
     const needle = lower(search);
     if (!activeDetail || !needle) return enrichedRows;
-    return enrichedRows.filter((row) => lower(row.name).includes(needle));
-  }, [activeDetail, enrichedRows, search]);
+
+    const kitNameById = new Map(kits.map((kit) => [text(kit?.id), text(kit?.name)]));
+    return enrichedRows.filter((row) => {
+      const sourceKitNames = normalizeSourceKits(row?.sourceKits).flatMap((source) => {
+        const localName = kitNameById.get(text(source?.kitId));
+        return [source?.kitName, localName].map(text).filter(Boolean);
+      });
+      const productTags = Array.isArray(row?.product?.tags) ? row.product.tags.map(text).filter(Boolean) : [];
+      const searchableValues = [
+        row?.name,
+        row?.displayId,
+        row?.tag,
+        ...productTags,
+        ...sourceKitNames,
+      ];
+      return searchableValues.some((value) => lower(value).includes(needle));
+    });
+  }, [activeDetail, enrichedRows, kits, search]);
 
   const detailTotals = useMemo(() => enrichedRows.reduce((acc, row) => {
     acc.items += 1;
