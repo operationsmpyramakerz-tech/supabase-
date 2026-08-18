@@ -8094,7 +8094,10 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet("Combined Proposals");
   const generatedAt = new Date();
-  const excelColumns = [];
+  const includeKitColumn = groupMode === "kit-tag";
+  const excelColumns = includeKitColumn
+    ? [{ header: "Kit", key: "__kitTag", width: 16, align: "center", kitTag: true }]
+    : [];
   for (const col of selectedExportColumns) {
     if (_proposalCombineLogic(logic) === "separate" && col.key === "quantity") {
       for (const source of sources) excelColumns.push({ header: `${source.name || "Proposal"} Qty`, key: `sourceQty_${source.id}`, width: 16, align: "center", sourceId: source.id, sourceQty: true });
@@ -8179,18 +8182,38 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   });
   worksheet.autoFilter = { from: { row: headerRowIndex, column: 1 }, to: { row: headerRowIndex, column: lastTableCol } };
 
+  const KIT_CELL_STYLES = [
+    { fill: "FFD9EAF7", color: "FF1F4E79" },
+    { fill: "FFE2F0D9", color: "FF375623" },
+    { fill: "FFFFE5D0", color: "FF9A3412" },
+    { fill: "FFEDE9FE", color: "FF5B21B6" },
+    { fill: "FFFCE7F3", color: "FF9D174D" },
+    { fill: "FFE0F2FE", color: "FF075985" },
+    { fill: "FFFEF3C7", color: "FF92400E" },
+    { fill: "FFDCFCE7", color: "FF166534" },
+    { fill: "FFFEE2E2", color: "FF991B1B" },
+    { fill: "FFE0E7FF", color: "FF3730A3" },
+  ];
   let visualIndex = 0;
-  const addCombinedExcelRow = (item) => {
-    const values = excelColumns.map((col) => col.sourceQty
-      ? Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0
-      : _proposalExportCellValue(item, col.key));
+  const addCombinedExcelRow = (item, kitName = "", kitStyle = null) => {
+    const values = excelColumns.map((col) => col.kitTag
+      ? String(kitName || "")
+      : col.sourceQty
+        ? Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0
+        : _proposalExportCellValue(item, col.key));
     const row = worksheet.addRow(values);
     row.height = 18;
     excelColumns.forEach((col, index) => {
       const cell = row.getCell(index + 1);
       cell.border = borderThin;
       cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      if (col.kitTag) {
+        const style = kitStyle || KIT_CELL_STYLES[0];
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.fill } };
+        cell.font = { bold: true, color: { argb: style.color } };
+      } else if (visualIndex % 2 === 1) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      }
       if (col.key === "quantity" || col.sourceQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
       if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
     });
@@ -8199,11 +8222,14 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   const addCombinedHeaderRow = (label, { fill, color, height = 19 } = {}) => {
     const row = worksheet.addRow([label]);
     if (lastTableCol > 1) worksheet.mergeCells(row.number, 1, row.number, lastTableCol);
-    row.font = { bold: true, color: { argb: color } };
-    row.alignment = { horizontal: "left", vertical: "middle" };
-    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
     row.height = height;
-    for (let c = 1; c <= lastTableCol; c++) row.getCell(c).border = borderThin;
+    for (let c = 1; c <= lastTableCol; c++) {
+      const cell = row.getCell(c);
+      cell.font = { bold: true, color: { argb: color } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+      cell.border = borderThin;
+    }
     return row;
   };
 
@@ -8213,10 +8239,10 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   } else if (groupMode === "kit-tag") {
     for (const folder of groupedRows) {
       addCombinedHeaderRow(`${folder.folderName || "Unfiled Kits"} (${folder.kits.length} kit${folder.kits.length === 1 ? "" : "s"})`, { fill: "FF07101F", color: "FFFFFFFF", height: 21 });
-      for (const kit of folder.kits) {
-        addCombinedHeaderRow(`${kit.kitName || "Unassigned kit"} (${kit.rows.length} item${kit.rows.length === 1 ? "" : "s"})`, { fill: "FFFFF7ED", color: "FF9A3412", height: 19 });
-        kit.rows.forEach(addCombinedExcelRow);
-      }
+      folder.kits.forEach((kit, kitIndex) => {
+        const kitStyle = KIT_CELL_STYLES[kitIndex % KIT_CELL_STYLES.length];
+        kit.rows.forEach((item) => addCombinedExcelRow(item, kit.kitName || "Unassigned kit", kitStyle));
+      });
     }
   } else {
     for (const group of groupedRows) {
@@ -8497,7 +8523,11 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
   const worksheet = workbook.addWorksheet("Proposal");
   const proposalName = String(detail.proposal.name || "Proposal").trim() || "Proposal";
   const generatedAt = new Date();
-  const excelColumns = selectedExportColumns.map((col) => ({ ...col, header: col.label, width: col.excelWidth || 16 }));
+  const includeKitColumn = groupMode === "kit-tag";
+  const excelColumns = [
+    ...(includeKitColumn ? [{ key: "__kitTag", header: "Kit", width: 16, align: "center", kitTag: true }] : []),
+    ...selectedExportColumns.map((col) => ({ ...col, header: col.label, width: col.excelWidth || 16 })),
+  ];
 
   const BORDER_COLOR = { argb: "FF9CA3AF" };
   const borderThin = {
@@ -8575,16 +8605,34 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
   });
   worksheet.autoFilter = { from: { row: headerRowIndex, column: 1 }, to: { row: headerRowIndex, column: lastTableCol } };
 
+  const KIT_CELL_STYLES = [
+    { fill: "FFD9EAF7", color: "FF1F4E79" },
+    { fill: "FFE2F0D9", color: "FF375623" },
+    { fill: "FFFFE5D0", color: "FF9A3412" },
+    { fill: "FFEDE9FE", color: "FF5B21B6" },
+    { fill: "FFFCE7F3", color: "FF9D174D" },
+    { fill: "FFE0F2FE", color: "FF075985" },
+    { fill: "FFFEF3C7", color: "FF92400E" },
+    { fill: "FFDCFCE7", color: "FF166534" },
+    { fill: "FFFEE2E2", color: "FF991B1B" },
+    { fill: "FFE0E7FF", color: "FF3730A3" },
+  ];
   let visualIndex = 0;
-  const addExcelComponentRow = (item) => {
-    const values = excelColumns.map((col) => _proposalExportCellValue(item, col.key));
+  const addExcelComponentRow = (item, kitName = "", kitStyle = null) => {
+    const values = excelColumns.map((col) => col.kitTag ? String(kitName || "") : _proposalExportCellValue(item, col.key));
     const row = worksheet.addRow(values);
     row.height = 18;
     excelColumns.forEach((col, index) => {
       const cell = row.getCell(index + 1);
       cell.border = borderThin;
       cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      if (col.kitTag) {
+        const style = kitStyle || KIT_CELL_STYLES[0];
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.fill } };
+        cell.font = { bold: true, color: { argb: style.color } };
+      } else if (visualIndex % 2 === 1) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      }
       if (col.key === "quantity" || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
       if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
       if (col.key === "name" && item.url) {
@@ -8600,11 +8648,14 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
   const addMergedHeaderRow = (label, { fill, color, height = 19 } = {}) => {
     const row = worksheet.addRow([label]);
     if (lastTableCol > 1) worksheet.mergeCells(row.number, 1, row.number, lastTableCol);
-    row.font = { bold: true, color: { argb: color } };
-    row.alignment = { horizontal: "left", vertical: "middle" };
-    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
     row.height = height;
-    for (let c = 1; c <= lastTableCol; c++) row.getCell(c).border = borderThin;
+    for (let c = 1; c <= lastTableCol; c++) {
+      const cell = row.getCell(c);
+      cell.font = { bold: true, color: { argb: color } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+      cell.border = borderThin;
+    }
     return row;
   };
 
@@ -8614,10 +8665,10 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
   } else if (groupMode === "kit-tag") {
     for (const folder of groupedRows) {
       addMergedHeaderRow(`${folder.folderName || "Unfiled Kits"} (${folder.kits.length} kit${folder.kits.length === 1 ? "" : "s"})`, { fill: "FF07101F", color: "FFFFFFFF", height: 21 });
-      for (const kit of folder.kits) {
-        addMergedHeaderRow(`${kit.kitName || "Unassigned kit"} (${kit.rows.length} item${kit.rows.length === 1 ? "" : "s"})`, { fill: "FFFFF7ED", color: "FF9A3412", height: 19 });
-        kit.rows.forEach(addExcelComponentRow);
-      }
+      folder.kits.forEach((kit, kitIndex) => {
+        const kitStyle = KIT_CELL_STYLES[kitIndex % KIT_CELL_STYLES.length];
+        kit.rows.forEach((item) => addExcelComponentRow(item, kit.kitName || "Unassigned kit", kitStyle));
+      });
     }
   } else {
     for (const group of groupedRows) {
