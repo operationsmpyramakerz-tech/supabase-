@@ -1681,7 +1681,7 @@ export default function ProposalsClient({
       proposalIds: selectedIds.join(","),
       logic: combineLogic,
       columns: exportColumns.join(","),
-      groupBy: "component-tag",
+      groupBy,
     });
     openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
   };
@@ -2045,6 +2045,37 @@ export default function ProposalsClient({
                 })}
               </div>
               <div className="proposal-combine-logic-summary">Selected logic: <strong>{combineLogicLabel(combineLogic)}</strong></div>
+            </div>
+            <div className="products-field proposal-combine-logic-field">
+              <span>Group export by</span>
+              <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Group combined export by">
+                <button
+                  type="button"
+                  className={`proposal-combine-logic-option ${groupBy === "component-tag" ? "is-selected" : ""}`}
+                  role="radio"
+                  aria-checked={groupBy === "component-tag"}
+                  onClick={() => setGroupBy("component-tag")}
+                >
+                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{groupBy === "component-tag" ? "✓" : ""}</span>
+                  <span className="proposal-combine-logic-option__copy">
+                    <strong>By components tag</strong>
+                    <small>Group rows by the product/component tag.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`proposal-combine-logic-option ${groupBy === "kit-tag" ? "is-selected" : ""}`}
+                  role="radio"
+                  aria-checked={groupBy === "kit-tag"}
+                  onClick={() => setGroupBy("kit-tag")}
+                >
+                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{groupBy === "kit-tag" ? "✓" : ""}</span>
+                  <span className="proposal-combine-logic-option__copy">
+                    <strong>By kits tag</strong>
+                    <small>Use Folder → Kit grouping and the Kit column in Excel.</small>
+                  </span>
+                </button>
+              </div>
             </div>
             <div className="proposal-classic-export-columns proposal-classic-export-columns--modal">
               <span>Columns</span>
