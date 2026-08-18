@@ -43,6 +43,50 @@ body.next-classic-shell-active .classic-app-shell .notif-center-footer a {
   cursor: pointer;
 }
 
+/* Route-loading shells must be stable before BodyClassSync/useEffect runs.
+   During client navigation there is a short frame where the previous body classes
+   are already gone but the new loading body classes have not mounted yet. The
+   legacy stylesheet makes .sidebar position:fixed in that frame, which lets the
+   black rail escape below the rounded app shell. Anchor every Classic loading
+   sidebar to its own shell directly, without depending on a body class. */
+.classic-app-shell[class*="next-classic-"][class*="-loading"] {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.classic-app-shell[class*="next-classic-"][class*="-loading"] > .main-content {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+@media (min-width: 769px) {
+  .classic-app-shell[class*="next-classic-"][class*="-loading"] > .sidebar,
+  body.sidebar-collapsed .classic-app-shell[class*="next-classic-"][class*="-loading"] > .sidebar {
+    position: absolute !important;
+    top: 18px !important;
+    bottom: 18px !important;
+    left: 18px !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: hidden !important;
+    z-index: 70 !important;
+  }
+
+  body.sidebar-collapsed .classic-app-shell[class*="next-classic-"][class*="-loading"] > .sidebar {
+    transform: translateX(calc(-100% - 24px)) !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 900px) {
+  .classic-app-shell[class*="next-classic-"][class*="-loading"] > .sidebar,
+  body.sidebar-collapsed .classic-app-shell[class*="next-classic-"][class*="-loading"] > .sidebar {
+    top: 14px !important;
+    bottom: 14px !important;
+    left: 14px !important;
+  }
+}
 
 
 /* -------------------------------------------------------------------------
@@ -10596,205 +10640,110 @@ body.proposals-page .proposal-combine-modal .proposal-classic-combine-form{
   }
 }
 
-/* ==========================================================================
-   Route loading polish — keep the shell bounded and avoid legacy content flash
-   ========================================================================== */
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] {
-  isolation: isolate;
-  contain: layout paint;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading > .sidebar,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] > .sidebar {
-  min-height: 0 !important;
-  max-height: calc(100% - 36px) !important;
-  box-sizing: border-box !important;
-  overflow: hidden !important;
-  contain: layout paint;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .next-classic-loading-brand,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .next-classic-loading-brand,
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .next-classic-loading-nav,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .next-classic-loading-nav {
-  pointer-events: none !important;
-  cursor: default !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .next-classic-loading-nav-icon,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .next-classic-loading-nav-icon {
-  display: block !important;
-  width: 22px !important;
-  height: 22px !important;
-  flex: 0 0 22px !important;
-  border-radius: 7px !important;
-  background: rgba(255,255,255,.17) !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .next-classic-loading-nav.active .next-classic-loading-nav-icon,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .next-classic-loading-nav.active .next-classic-loading-nav-icon {
-  background: #e7eaf0 !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .sidebar-nav,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .sidebar-nav {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  height: auto !important;
-  max-height: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  scrollbar-width: none !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .sidebar-nav::-webkit-scrollbar,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .sidebar-nav::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .sidebar-nav .nav-list,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .sidebar-nav .nav-list {
-  min-height: 0 !important;
-  height: max-content !important;
-  max-height: none !important;
-  padding-bottom: 10px !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .main-content,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .main-content {
-  min-width: 0 !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
-}
-
-body.next-classic-shell-active .classic-app-shell.next-classic-route-loading .next-classic-page-content,
-body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] .next-classic-page-content {
-  min-height: 0 !important;
-  scrollbar-gutter: stable;
-}
-
-@media (min-width: 769px) and (max-width: 900px) {
-  body.next-classic-shell-active .classic-app-shell.next-classic-route-loading > .sidebar,
-  body.next-classic-shell-active .classic-app-shell[aria-label^="Loading"] > .sidebar {
-    max-height: calc(100% - 28px) !important;
-  }
-}
-
-/* Kits + Proposals loading now uses neutral empty blocks, matching Home loading.
-   Do not render the old folder/file artwork while the route is resolving. */
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-layout {
+/* ========================================================================== */
+/* 2026-08-18 — Kits / Proposals route-loading polish                         */
+/* Use neutral empty blocks during navigation. Never render the real folder   */
+/* artwork or dark action controls while data is still loading.               */
+/* ========================================================================== */
+.next-classic-proposals-loading .next-proposals-route-skeleton {
   width: 100%;
   min-width: 0;
   display: grid;
   gap: 16px;
-  padding: 4px 0 20px;
+  padding: 0 4px 28px;
+  box-sizing: border-box;
 }
 
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-actions {
-  min-height: 54px;
+.next-classic-proposals-loading .next-proposals-route-skeleton__toolbar {
+  min-height: 50px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 4px;
 }
 
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-action {
+.next-classic-proposals-loading .next-proposals-route-skeleton__action,
+.next-classic-proposals-loading .next-proposals-route-skeleton__card {
   position: relative;
   display: block;
-  width: 154px;
-  height: 42px;
   overflow: hidden;
-  border: 1px solid #e8ebf0;
-  border-radius: 14px;
-  background: #f1f3f6;
+  border: 1px solid #e6eaf0;
+  background: #f4f6f8;
+  box-shadow: none;
 }
 
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-surface {
-  width: 100%;
-  min-width: 0;
-  min-height: 500px;
-  padding: 28px;
-  border: 1px solid #e7e9ee;
-  border-radius: 26px;
-  background: #fff;
-  box-shadow: 0 12px 34px rgba(15, 23, 42, .055);
+.next-classic-proposals-loading .next-proposals-route-skeleton__action {
+  width: 168px;
+  height: 46px;
+  border-radius: 16px;
 }
 
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-grid {
+.next-classic-proposals-loading .next-proposals-route-skeleton__surface {
+  min-height: 420px;
+  padding: 20px 24px 28px;
+  border: 1px solid rgba(229, 231, 235, .88);
+  border-radius: 24px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 14px 34px rgba(15,23,42,.06);
+  box-sizing: border-box;
+}
+
+.next-classic-proposals-loading .next-proposals-route-skeleton__grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-  align-items: stretch;
+  grid-template-columns: repeat(auto-fill, minmax(154px, 154px));
+  gap: 18px 16px;
+  align-items: start;
+  justify-content: start;
 }
 
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-card {
-  position: relative;
-  display: block;
-  min-width: 0;
-  height: 220px;
-  overflow: hidden;
-  border: 1px solid #e4e7ec;
+.next-classic-proposals-loading .next-proposals-route-skeleton__card {
+  width: 154px;
+  height: 144px;
   border-radius: 20px;
-  background: #f7f8fa;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, .035);
 }
 
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-action::after,
-.proposals-page .next-classic-proposals-loading .next-proposals-loading-card::after {
+.next-classic-proposals-loading .next-proposals-route-skeleton__action::after,
+.next-classic-proposals-loading .next-proposals-route-skeleton__card::after {
   content: "";
   position: absolute;
   inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.78), transparent);
-  animation: nextClassicShimmer 1.35s infinite;
+  transform: translateX(-105%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.92), transparent);
+  animation: nextProposalsRouteShimmer 1.25s ease-in-out infinite;
 }
 
-@media (max-width: 1180px) {
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+@keyframes nextProposalsRouteShimmer {
+  100% { transform: translateX(105%); }
 }
 
 @media (max-width: 900px) {
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-surface {
-    padding: 20px;
-    border-radius: 22px;
+  .next-classic-proposals-loading .next-proposals-route-skeleton {
+    padding-inline: 0;
   }
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+  .next-classic-proposals-loading .next-proposals-route-skeleton__toolbar {
+    justify-content: stretch;
   }
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-card {
-    height: 190px;
+  .next-classic-proposals-loading .next-proposals-route-skeleton__action {
+    width: 100%;
+  }
+  .next-classic-proposals-loading .next-proposals-route-skeleton__surface {
+    padding: 18px 16px 24px;
   }
 }
 
-@media (max-width: 620px) {
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-actions {
-    min-height: 42px;
+@media (max-width: 640px) {
+  .next-classic-proposals-loading .next-proposals-route-skeleton__grid {
+    grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
+    gap: 14px;
   }
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-action {
-    width: 124px;
-    height: 36px;
-  }
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-surface {
-    min-height: 420px;
-    padding: 14px;
-  }
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-grid {
-    grid-template-columns: 1fr;
-  }
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-card {
-    height: 150px;
+  .next-classic-proposals-loading .next-proposals-route-skeleton__card {
+    width: 100%;
+    height: 136px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-action::after,
-  .proposals-page .next-classic-proposals-loading .next-proposals-loading-card::after {
+  .next-classic-proposals-loading .next-proposals-route-skeleton__action::after,
+  .next-classic-proposals-loading .next-proposals-route-skeleton__card::after {
     animation: none !important;
   }
 }

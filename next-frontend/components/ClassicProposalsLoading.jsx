@@ -3,7 +3,6 @@
 import { BodyClassSync } from "./ClassicShellControls";
 
 const SIDEBAR_ITEMS = 18;
-const CONTENT_BLOCKS = 6;
 
 export default function ClassicProposalsLoading({ title = "Proposals", kits = false }) {
   const activeIndex = kits ? 11 : 12;
@@ -18,7 +17,7 @@ export default function ClassicProposalsLoading({ title = "Proposals", kits = fa
       <link rel="stylesheet" href="/css/proposals.css?v=b2b-addname-transparent-pdf-v1" />
       <BodyClassSync className={bodyClass} />
 
-      <div className="app-container classic-app-shell next-classic-proposals-loading next-classic-route-loading" aria-label={`Loading ${title}`}>
+      <div className="app-container classic-app-shell next-classic-proposals-loading" aria-label={`Loading ${title}`}>
         <aside className="sidebar" aria-hidden="true">
           <div className="sidebar-header">
             <div className="sidebar-brand-toggle next-classic-loading-brand">
@@ -52,18 +51,17 @@ export default function ClassicProposalsLoading({ title = "Proposals", kits = fa
           </header>
 
           <main className="container-full-width next-classic-page-content">
-            <section className="next-proposals-loading-layout" aria-busy="true">
-              <div className="next-proposals-loading-actions" aria-hidden="true">
-                <span className="next-proposals-loading-action" />
+            <section className="next-proposals-route-skeleton" aria-busy="true" aria-label={`Loading ${title} content`}>
+              <div className="next-proposals-route-skeleton__toolbar" aria-hidden="true">
+                <span className="next-proposals-route-skeleton__action" />
               </div>
-
-              <section className="next-proposals-loading-surface" aria-hidden="true">
-                <div className="next-proposals-loading-grid">
-                  {Array.from({ length: CONTENT_BLOCKS }).map((_, index) => (
-                    <span className="next-proposals-loading-card" key={index} />
+              <div className="next-proposals-route-skeleton__surface" aria-hidden="true">
+                <div className="next-proposals-route-skeleton__grid">
+                  {Array.from({ length: 14 }).map((_, index) => (
+                    <span className="next-proposals-route-skeleton__card" key={index} />
                   ))}
                 </div>
-              </section>
+              </div>
             </section>
           </main>
         </div>
