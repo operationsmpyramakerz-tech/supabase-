@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const DEFAULT_FUNDS_TYPES = [
   "Online Transfer", "SWVL", "Go Bus", "By Bus", "ترام", "Train", "Metro", "Indrive",
@@ -232,6 +233,116 @@ function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
   );
 }
 
+function ClassicModal({ title, onClose, children, compact = false }) {
+  return (
+    <div className="ex-modal" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className={`ex-modal-box${compact ? " ex-modal-box--compact" : ""}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+        <h3 className="ex-modal-title">{title}</h3>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function ClassicFieldLabel({ icon, children, compact = false }) {
+  return <span className={`field-label${compact ? " field-label--compact" : ""}`}><ClassicExpenseIcon name={icon} size={compact ? 14 : 16}/>{children}</span>;
+}
+
+function ClassicSelect({ value, onChange, options = [], placeholder = "Select…", ariaLabel = "Options" }) {
+  const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState(null);
+  const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const normalized = useMemo(() => (Array.isArray(options) ? options : []).map((option) => {
+    if (typeof option === "string") return { value: option, label: option };
+    return { ...option, value: text(option?.value), label: text(option?.label || option?.value) };
+  }).filter((option) => option.value), [options]);
+  const selected = normalized.find((option) => option.value === text(value)) || null;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const position = () => {
+      const trigger = rootRef.current?.querySelector(".order-select__trigger");
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewportPad = 16;
+      const width = Math.min(rect.width, window.innerWidth - viewportPad * 2);
+      const left = Math.min(Math.max(viewportPad, rect.left), window.innerWidth - viewportPad - width);
+      const spaceBelow = Math.max(120, window.innerHeight - rect.bottom - viewportPad);
+      const spaceAbove = Math.max(120, rect.top - viewportPad);
+      const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+      const availableSpace = placeAbove ? spaceAbove : spaceBelow;
+      const maxHeight = Math.min(360, availableSpace);
+      const top = placeAbove ? Math.max(viewportPad, rect.top - maxHeight - 8) : Math.min(window.innerHeight - viewportPad - maxHeight, rect.bottom + 8);
+      setMenuStyle({ left, top, width, maxHeight, zIndex: 100500 });
+    };
+    const closeOutside = (event) => {
+      if (rootRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const closeEscape = (event) => { if (event.key === "Escape") setOpen(false); };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    document.addEventListener("mousedown", closeOutside);
+    document.addEventListener("keydown", closeEscape);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      document.removeEventListener("mousedown", closeOutside);
+      document.removeEventListener("keydown", closeEscape);
+    };
+  }, [open]);
+
+  const dropdown = open && menuStyle && typeof document !== "undefined" ? createPortal(
+    <div ref={menuRef} className="order-select__dropdown" style={menuStyle} role="listbox" aria-label={ariaLabel}>
+      <div className="order-select__options" style={{ maxHeight: Math.max(120, Math.min(260, menuStyle.maxHeight - 24)) }}>
+        {normalized.length ? normalized.map((option) => {
+          const active = option.value === text(value);
+          return <button type="button" className={`order-select__option${active ? " is-selected" : ""}`} role="option" aria-selected={active} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>
+            <span className={option.note ? "funds-select__option-main" : "order-select__option-main"}>
+              <span className="order-select__option-id">{option.label}</span>
+              {option.note ? <span className="funds-select__option-note">{option.note}</span> : null}
+            </span>
+            {option.badge ? <span className="order-select__chip" style={option.tone === "orange" ? { "--order-chip-bg": "#fff7ed", "--order-chip-fg": "#c2410c", "--order-chip-border": "#fed7aa" } : undefined}>{option.badge}</span> : null}
+          </button>;
+        }) : <div className="order-select__status">No options available right now.</div>}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <div className="order-select funds-select" ref={rootRef}>
+      <button type="button" className={`order-select__trigger${selected ? " is-selected" : " is-placeholder"}${open ? " is-open" : ""}`} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <span className="order-select__trigger-label">
+          {selected ? <span className="funds-type-summary"><span className="funds-type-summary__name">{selected.label}</span></span> : placeholder}
+        </span>
+        <ClassicExpenseIcon name="chevron-down" size={18}/>
+      </button>
+      {dropdown}
+    </div>
+  );
+}
+
+function ClassicFileField({ files, onChange, required = false, hint = "Upload receipt screenshots (JPG/PNG)." }) {
+  const inputRef = useRef(null);
+  const names = files.length ? files.map((file) => file?.name).filter(Boolean).join(", ") : "No file chosen";
+  return (
+    <div>
+      <ClassicFieldLabel icon="image">Screenshot <span className={required ? "req-text" : "opt-tag"}>({required ? "Required" : "Optional"})</span></ClassicFieldLabel>
+      <div className={`upload-control${required ? " is-required" : ""}`}>
+        <input ref={inputRef} className="upload-input" type="file" accept="image/*" multiple onChange={(event) => onChange(Array.from(event.target.files || []))}/>
+        <div className="upload-row">
+          <button type="button" className="upload-btn" onClick={() => inputRef.current?.click()}><ClassicExpenseIcon name="upload" size={18}/><span>Upload screenshot</span></button>
+          <span className="upload-filename" title={names}>{names}</span>
+        </div>
+      </div>
+      <small className={`help${required ? " is-emphasis" : ""}`}>{hint}</small>
+    </div>
+  );
+}
+
 function ModernSelect({ value, onChange, options = [], placeholder = "Select…", searchable = false, searchPlaceholder = "Search…", emptyText = "No options available" }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -297,6 +408,13 @@ function CashInModal({ options, onClose, onSaved, notify }) {
   const isTransfer = typeKey(form.fundsType) === "onlinetransfer";
   const isCash = typeKey(form.fundsType) === "cashpayment";
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const typeOptions = CASH_IN_TYPES.map((value) => ({
+    value,
+    label: value,
+    note: value === "Online Transfer" ? "Screenshot is required for this transfer" : "Receipt number is required for this payment",
+    badge: value === "Online Transfer" ? "Required" : "Receipt",
+    tone: value === "Online Transfer" ? "orange" : "neutral",
+  }));
 
   const submit = async () => {
     if (!form.date || number(form.amount) <= 0 || !form.fundsType || !text(form.paymentBy)) return notify("Fill all required Cash in fields.", "error");
@@ -317,16 +435,41 @@ function CashInModal({ options, onClose, onSaved, notify }) {
   };
 
   return (
-    <Modal title="Add Cash in" subtitle="Record incoming money in your current account." onClose={onClose} footer={<><button className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" onClick={submit} disabled={busy}>{busy ? "Saving…" : "Save Cash in"}</button></>}>
-      <div className="expense-form-grid">
-        <label><span>Date *</span><input type="date" value={form.date} onChange={update("date")} /></label>
-        <label><span>Amount *</span><input type="number" min="0" step="0.01" value={form.amount} onChange={update("amount")} placeholder="0" /></label>
-        <div className="expense-field"><span>Funds type *</span><ModernSelect value={form.fundsType} onChange={(value) => { setForm((current) => ({ ...current, fundsType: value, receiptNumber: value === "Cash Payment" ? current.receiptNumber : "" })); if (value !== "Online Transfer") setFiles([]); }} options={CASH_IN_TYPES.map((value) => ({ value, label: value, note: value === "Online Transfer" ? "Screenshot is required for this transfer" : "Receipt number is required for this payment", badge: value === "Online Transfer" ? "Required" : "Receipt", tone: value === "Online Transfer" ? "orange" : "neutral" }))} placeholder="Select funds type…" /></div>
-        <label><span>Payment by *</span><input list="expense-cash-in-people" value={form.paymentBy} onChange={update("paymentBy")} placeholder="Person or company" /><datalist id="expense-cash-in-people">{options.map((item) => <option value={text(item?.name)} key={text(item?.id || item?.name)} />)}</datalist></label>
-        {isCash ? <label className="expense-form-full"><span>Receipt number *</span><input value={form.receiptNumber} onChange={update("receiptNumber")} placeholder="Enter receipt number" /></label> : null}
-        {isTransfer ? <div className="expense-form-full"><FileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)." /></div> : null}
+    <ClassicModal title="Add Cash In" onClose={onClose}>
+      <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
+      <input type="date" className="ex-input" value={form.date} onChange={update("date")}/>
+
+      <ClassicFieldLabel icon="plus-circle">Cash in <span className="req-star">*</span></ClassicFieldLabel>
+      <input type="number" min="0" step="0.01" className="ex-input" value={form.amount} onChange={update("amount")}/>
+
+      <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel>
+      <ClassicSelect
+        value={form.fundsType}
+        onChange={(value) => {
+          setForm((current) => ({ ...current, fundsType: value, receiptNumber: value === "Cash Payment" ? current.receiptNumber : "" }));
+          if (value !== "Online Transfer") setFiles([]);
+        }}
+        options={typeOptions}
+        placeholder="Select funds type..."
+        ariaLabel="Cash in funds types"
+      />
+
+      <ClassicFieldLabel icon="user">Payment by <span className="req-star">*</span></ClassicFieldLabel>
+      <input className="ex-input" list="expense-cash-in-people" value={form.paymentBy} onChange={update("paymentBy")} placeholder="Enter the person name"/>
+      <datalist id="expense-cash-in-people">{options.map((item) => <option value={text(item?.name)} key={text(item?.id || item?.name)}/>)}</datalist>
+
+      {isCash ? <>
+        <ClassicFieldLabel icon="hash">Receipt number <span className="req-star">*</span></ClassicFieldLabel>
+        <input className="ex-input" value={form.receiptNumber} onChange={update("receiptNumber")} placeholder="Enter receipt number"/>
+      </> : null}
+
+      {isTransfer ? <ClassicFileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)."/> : null}
+
+      <div className="ex-modal-actions">
+        <button type="button" className="ex-btn ex-primary" onClick={submit} disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
+        <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Close</button>
       </div>
-    </Modal>
+    </ClassicModal>
   );
 }
 
@@ -338,11 +481,14 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
   const [form, setForm] = useState({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState("order");
+  const [showOwnCarInfo, setShowOwnCarInfo] = useState(false);
   const selectedOrder = scopeId === OTHER_SCOPE_ID ? null : orderOptions.find((item) => text(item?.id) === scopeId) || null;
   const isManual = scopeId === OTHER_SCOPE_ID;
   const isOwnCar = typeKey(form.fundsType) === "owncar";
   const screenshotRequired = SCREENSHOT_REQUIRED_KEYS.has(typeKey(form.fundsType));
   const scopeOptions = useMemo(() => [
+    { value: OTHER_SCOPE_ID, label: "Other reason", note: "Write the reason manually", badge: "Manual", tone: "neutral" },
     ...(Array.isArray(orderOptions) ? orderOptions : []).map((item) => ({
       value: text(item?.id),
       label: text(item?.orderId) || text(item?.label) || "Order",
@@ -350,14 +496,18 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
       badge: text(item?.orderType) || "Order",
       tone: typeKey(item?.orderType).includes("maintenance") ? "orange" : "neutral",
     })),
-    { value: OTHER_SCOPE_ID, label: "Other reason", note: "Write the reason manually", badge: "Manual", tone: "neutral" },
   ], [orderOptions]);
   const fundsTypeOptions = useMemo(() => fundsTypes.map(fundsTypeOption), [fundsTypes]);
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
-  const addDraft = async () => {
+  const openExpenseStep = () => {
     if (!scopeId || (!selectedOrder && !isManual)) return notify("Choose an order or Other reason first.", "error");
     if (isManual && !text(manualReason)) return notify("Write the expense reason.", "error");
+    if (!date) return notify("Choose the expense date first.", "error");
+    setStep("expense");
+  };
+
+  const addDraft = async () => {
     if (!date || !form.fundsType) return notify("Date and funds type are required.", "error");
     if (!isOwnCar && number(form.amount) <= 0) return notify("Cash out amount is required.", "error");
     if (screenshotRequired && !files.length) return notify(isOwnCar ? "A Google Maps screenshot is required for Own car." : "Screenshot is required for this funds type.", "error");
@@ -374,6 +524,8 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
       }]);
       setForm({ fundsType: "", from: "", to: "", amount: "", kilometer: "" });
       setFiles([]);
+      setShowOwnCarInfo(false);
+      setStep("order");
       notify("Expense added to the pending list.", "success");
     } catch (error) { notify(error?.message || "Failed to prepare the expense.", "error"); }
     finally { setBusy(false); }
@@ -416,28 +568,107 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
     setBusy(false);
   };
 
-  return (
-    <Modal title="Add Cash out" subtitle="Link the expense to an approved order or use a manual reason." onClose={onClose} wide footer={<><button className="secondary-button" onClick={onClose} disabled={busy}>Close</button><button className="primary-button" onClick={confirm} disabled={busy || !drafts.length}>{busy ? "Saving…" : `Confirm ${drafts.length || ""}`}</button></>}>
-      <div className="expense-form-grid">
-        <div className="expense-form-full expense-field"><span>Order / reason *</span><ModernSelect value={scopeId} onChange={(value) => { setScopeId(value); setDrafts([]); }} options={scopeOptions} placeholder="Select order…" searchable searchPlaceholder="Search orders…" emptyText="No approved orders available. Use Other reason." /></div>
-        <label><span>Expense date *</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        {isManual ? <label><span>Reason *</span><input value={manualReason} onChange={(event) => setManualReason(event.target.value)} placeholder="Write the expense reason" /></label> : <div className="expense-selected-order"><span>Selected order</span><strong>{text(selectedOrder?.label) || "Choose an order"}</strong></div>}
-      </div>
-
-      <div className="expense-draft-builder">
-        <div className="expense-form-grid">
-          <div className="expense-field"><span>Funds type *</span><ModernSelect value={form.fundsType} onChange={(value) => setForm((current) => ({ ...current, fundsType: value, amount: value === "Own car" ? "" : current.amount }))} options={fundsTypeOptions} placeholder="Select funds type…" searchable searchPlaceholder="Search funds types…" /></div>
-          {isOwnCar ? <label><span>Kilometer <small>(Optional)</small></span><input type="number" min="0" step="0.1" value={form.kilometer} onChange={update("kilometer")} /></label> : <label><span>Cash out *</span><input type="number" min="0" step="0.01" value={form.amount} onChange={update("amount")} /></label>}
-          <label><span>From</span><input value={form.from} onChange={update("from")} placeholder="Optional" /></label>
-          <label><span>To</span><input value={form.to} onChange={update("to")} placeholder="Optional" /></label>
-          {isOwnCar ? <div className="expense-own-car-note expense-form-full"><ClassicExpenseIcon name="navigation" size={17}/><div><strong>Google Maps screenshot required</strong><span>Upload a screenshot showing the distance between the starting point and destination.</span></div></div> : null}
-          <div className="expense-form-full"><FileField files={files} onChange={setFiles} required={screenshotRequired} hint={isOwnCar ? "Upload a Google Maps distance screenshot." : screenshotRequired ? "Upload a screenshot or receipt for this funds type." : "Upload receipt screenshots (JPG/PNG)."} /></div>
+  if (step === "expense") {
+    return <>
+      <ClassicModal title="Add Expense" onClose={() => setStep("order")}>
+        <div className="order-preview-card order-preview-card--inline">
+          <div className="order-preview-row">
+            <div>
+              <div className="order-preview-label">Selected order</div>
+              <div className="order-preview-text">{isManual ? "Other reason" : (text(selectedOrder?.label) || text(selectedOrder?.orderId) || "Order")}</div>
+              <div className="order-preview-meta">{isManual ? text(manualReason) : [text(selectedOrder?.orderType), formatDate(date, date)].filter(Boolean).join(" · ")}</div>
+            </div>
+            <button type="button" className="order-change-btn" onClick={() => setStep("order")} disabled={busy}>Change</button>
+          </div>
         </div>
-        <button className="expense-add-draft" type="button" onClick={addDraft} disabled={busy}>+ Add expense</button>
-      </div>
 
-      {drafts.length ? <div className="expense-pending-list"><div className="expense-pending-head"><strong>Pending expenses</strong><span>{drafts.length}</span></div>{drafts.map((draft) => <article key={draft.id}><div><strong>{draft.fundsType}</strong><span>{draft.reason}</span><small>{draft.from || "—"} → {draft.to || "—"}</small></div><b>{typeKey(draft.fundsType) === "owncar" ? `${draft.kilometer} km` : money(draft.amount)}</b><button type="button" onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))}>×</button></article>)}</div> : null}
-    </Modal>
+        <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel>
+        <ClassicSelect
+          value={form.fundsType}
+          onChange={(value) => {
+            setForm((current) => ({ ...current, fundsType: value, amount: typeKey(value) === "owncar" ? "" : current.amount }));
+            if (typeKey(value) === "owncar") setShowOwnCarInfo(true);
+          }}
+          options={fundsTypeOptions}
+          placeholder="Select funds type..."
+          ariaLabel="Funds types"
+        />
+
+        <ClassicFieldLabel icon="log-out" compact>From <span className="opt-tag">(Optional)</span></ClassicFieldLabel>
+        <input className="ex-input ex-input--compact" value={form.from} onChange={update("from")}/>
+
+        <ClassicFieldLabel icon="log-in" compact>To <span className="opt-tag">(Optional)</span></ClassicFieldLabel>
+        <input className="ex-input ex-input--compact" value={form.to} onChange={update("to")}/>
+
+        {isOwnCar ? <>
+          <ClassicFieldLabel icon="navigation">Kilometer <span className="opt-tag">(Optional)</span></ClassicFieldLabel>
+          <input type="number" min="0" step="0.1" className="ex-input" value={form.kilometer} onChange={update("kilometer")}/>
+        </> : <>
+          <ClassicFieldLabel icon="minus-circle">Cash out <span className="req-text">(Required)</span></ClassicFieldLabel>
+          <input type="number" min="0" step="0.01" className="ex-input" value={form.amount} onChange={update("amount")}/>
+        </>}
+
+        <ClassicFileField
+          files={files}
+          onChange={setFiles}
+          required={screenshotRequired}
+          hint={isOwnCar ? "Upload a Google Maps screenshot showing the distance between the starting point and destination." : screenshotRequired ? "Upload a screenshot or receipt for this funds type." : "Upload receipt screenshots (JPG/PNG)."}
+        />
+
+        <div className="ex-modal-actions">
+          <button type="button" className="ex-btn ex-dark" onClick={addDraft} disabled={busy}>{busy ? "Adding..." : "Add Expense"}</button>
+          <button type="button" className="ex-btn ex-danger" onClick={() => setStep("order")} disabled={busy}>Back</button>
+        </div>
+      </ClassicModal>
+
+      {showOwnCarInfo ? <div className="mini-info-modal" style={{ display: "flex" }} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowOwnCarInfo(false)}>
+        <div className="mini-info-modal__card" role="dialog" aria-modal="true" aria-label="Own car notice">
+          <div className="mini-info-modal__badge">Own car notice</div>
+          <h4 className="mini-info-modal__title">Google Maps screenshot required</h4>
+          <p className="mini-info-modal__text">For <strong>Own car</strong> expenses, please upload a screenshot from Google Maps showing the distance between the starting point and destination.</p>
+          <div className="mini-info-modal__actions"><button type="button" className="ex-btn ex-primary" onClick={() => setShowOwnCarInfo(false)}>Got it</button></div>
+        </div>
+      </div> : null}
+    </>;
+  }
+
+  return (
+    <ClassicModal title="Choose Order" onClose={onClose} compact>
+      <p className="order-picker-hint">Select the order and date first, then add one or more expenses before confirming.</p>
+
+      <ClassicFieldLabel icon="file-text">Order <span className="req-star">*</span></ClassicFieldLabel>
+      <ClassicSelect
+        value={scopeId}
+        onChange={(value) => { setScopeId(value); setDrafts([]); }}
+        options={scopeOptions}
+        placeholder="Select order..."
+        ariaLabel="Orders"
+      />
+
+      {isManual ? <div className="cashout-manual-reason">
+        <ClassicFieldLabel icon="edit-3">Reason <span className="req-star">*</span></ClassicFieldLabel>
+        <input className="ex-input" value={manualReason} onChange={(event) => setManualReason(event.target.value)} placeholder="Write the reason manually"/>
+      </div> : null}
+
+      <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
+      <input type="date" className="ex-input" value={date} onChange={(event) => { setDate(event.target.value); setDrafts([]); }}/>
+
+      <button type="button" className="ex-btn ex-dark ex-btn--block" onClick={openExpenseStep} disabled={busy}>Add Expense</button>
+
+      {drafts.length ? <div className="expense-drafts">
+        <div className="expense-drafts__header"><span className="expense-drafts__title">Added expenses</span><span className="expense-drafts__count">{drafts.length}</span></div>
+        <div className="expense-drafts__list">{drafts.map((draft) => <div className="expense-draft-card" key={draft.id}>
+          <div className="expense-draft-card__main"><div className="expense-draft-card__title">{draft.fundsType}</div><div className="expense-draft-card__meta">{[draft.reason, [draft.from, draft.to].filter(Boolean).join(draft.from && draft.to ? " → " : " ")].filter(Boolean).join(" • ") || "Ready to save"}</div></div>
+          <div className="expense-draft-card__value">{typeKey(draft.fundsType) === "owncar" ? `${number(draft.kilometer)} km` : money(draft.amount)}</div>
+          <button type="button" className="expense-draft-card__remove" onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))} aria-label="Remove expense">×</button>
+        </div>)}</div>
+      </div> : null}
+
+      <div className="ex-modal-actions">
+        <button type="button" className="ex-btn ex-primary" onClick={confirm} disabled={busy || !drafts.length}>{busy ? "Saving..." : drafts.length ? `Confirm (${drafts.length})` : "Confirm"}</button>
+        <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Close</button>
+      </div>
+    </ClassicModal>
   );
 }
 
@@ -571,6 +802,22 @@ function ClassicExpenseIcon({ name, size = 18 }) {
     "credit-card": <><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></>,
     car: <><path d="M5 17h14"/><path d="M6 17l1-6h10l1 6"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></>,
     tag: <><path d="M20.6 13.4L11 3H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,
+    "plus-circle": <><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>,
+    user: <><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></>,
+    hash: <><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>,
+    upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+    "file-text": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></>,
+    "edit-3": <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+    "log-out": <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+    "log-in": <><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></>,
+    "minus-circle": <><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></>,
+    "more-horizontal": <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></>,
+    truck: <><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></>,
+    coffee: <><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></>,
+    monitor: <><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
+    "shopping-cart": <><circle cx="9" cy="20" r="1"/><circle cx="20" cy="20" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 6H6"/></>,
+    tool: <><path d="M14.7 6.3a4 4 0 0 0-5-5L7 4 4 1 1 4l3 3-2.7 2.7a4 4 0 0 0 5 5L16 5z"/><path d="M12 12l8.5 8.5"/></>,
+    package: <><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
   };
   return <svg {...common}>{icons[name] || icons.tag}</svg>;
 }
@@ -626,9 +873,11 @@ function groupAmount(group) {
 
 function orderMeta(order) {
   const key = typeKey(order?.orderType);
-  if (key.includes("withdraw")) return { bg: "#fff1f2", fg: "#be123c", border: "#fecdd3" };
-  if (key.includes("maintenance")) return { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa" };
-  return { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" };
+  if (key === "manualreason" || key === "otherreason" || key === "manual") return { icon: "edit-3", bg: "#F3F4F6", fg: "#111827", border: "#D1D5DB" };
+  if (key === "requestproducts" || key === "delivery") return { icon: "shopping-cart", bg: "#DCFCE7", fg: "#166534", border: "#86EFAC" };
+  if (key === "withdrawproducts" || key === "withdrawal") return { icon: "log-out", bg: "#FEE2E2", fg: "#B91C1C", border: "#FECACA" };
+  if (key === "requestmaintenance" || key === "maintenance") return { icon: "tool", bg: "#FEF3C7", fg: "#92400E", border: "#FDE68A" };
+  return { icon: "package", bg: "#EFF6FF", fg: "#1D4ED8", border: "#BFDBFE" };
 }
 
 function ExpenseOrderActions({ orders }) {
@@ -638,7 +887,7 @@ function ExpenseOrderActions({ orders }) {
     const label = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order";
     const meta = orderMeta(order);
     const style = { "--expense-order-btn-bg": meta.bg, "--expense-order-btn-fg": meta.fg, "--expense-order-btn-border": meta.border };
-    return href ? <a className="expense-ticket__order-btn" style={style} href={href} target="_blank" rel="noreferrer" key={`${label}-${index}`}><span>{label}</span><ClassicExpenseIcon name="external-link" size={14}/></a> : <span className="expense-ticket__order-btn expense-ticket__order-btn--disabled" style={style} key={`${label}-${index}`}>{label}</span>;
+    return href ? <a className="expense-ticket__order-btn" style={style} href={href} target="_blank" rel="noreferrer" key={`${label}-${index}`}><ClassicExpenseIcon name={meta.icon} size={15}/><span>{label}</span><ClassicExpenseIcon name="external-link" size={14}/></a> : <span className="expense-ticket__order-btn expense-ticket__order-btn--disabled" style={style} key={`${label}-${index}`}><ClassicExpenseIcon name={meta.icon} size={15}/><span>{label}</span></span>;
   })}</div>;
 }
 
@@ -647,20 +896,38 @@ function ExpenseShotButton({ item, onScreenshots }) {
   return <button type="button" className={`expense-ticket__shot-btn${shots.length ? " expense-ticket__shot-btn--has-shots" : ""}`} disabled={!shots.length} onClick={() => shots.length && onScreenshots(item)} aria-label={shots.length ? `View ${shots.length} screenshots` : "No screenshots uploaded"}><span className="expense-ticket__shot-btn-icon"><ClassicExpenseIcon name="image" size={18}/></span></button>;
 }
 
+function expenseLedgerCategoryMeta(item) {
+  const label = number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out";
+  const key = typeKey(label);
+  if (number(item?.cashIn) > 0) return { icon: "credit-card", bg: "#edf9f2", fg: "#24935d" };
+  if (/(uber|indrive|didi|taxi|bus|train|metro|swvl|transport|car)/.test(key)) return { icon: "truck", bg: "#eef5ff", fg: "#3978c9" };
+  if (/(meal|food|allowance)/.test(key)) return { icon: "coffee", bg: "#fff4e9", fg: "#dd6b17" };
+  if (/(online|transfer|cashpayment|payment)/.test(key)) return { icon: "credit-card", bg: "#edf9f2", fg: "#24935d" };
+  if (/(software|subscription|internet)/.test(key)) return { icon: "monitor", bg: "#f5effb", fg: "#8555ad" };
+  return { icon: "more-horizontal", bg: "#f1f4f8", fg: "#64748b" };
+}
+
 function LedgerGroup({ group, onScreenshots }) {
   const total = groupAmount(group);
+  const rows = [...(Array.isArray(group?.items) ? group.items : [])].sort((a, b) => transactionTime(a) - transactionTime(b));
+  const receiptCount = rows.reduce((count, item) => count + screenshotsFor(item).length, 0);
   return <section className="expense-ledger-group">
     <div className="expense-ledger-group__summary">
       <div className="expense-ledger-group__identity"><span className="expense-ledger-group__date">{formatDate(group.date, group.date || "No date")}</span><span className="expense-ledger-group__reason" title={group.reason}>{group.reason}</span></div>
       <div className="expense-ledger-group__orders"><ExpenseOrderActions orders={group.orders}/></div>
       <span className={`expense-ledger-group__total ${total.tone}`}>{total.text}</span>
-      <span className="expense-ledger-group__receipt-label">Receipt</span>
+      <span className="expense-ledger-group__receipt-label">{receiptCount ? `${receiptCount} file${receiptCount === 1 ? "" : "s"}` : "—"}</span>
     </div>
-    <div className="expense-ledger-group__rows">{group.items.map((item, index) => {
-      const amount = expenseAmount(item); const route = routeEndpoints(item); const cashIn = number(item?.cashIn) > 0; const category = cashIn ? { bg: "#edf9f2", fg: "#24935d", icon: "credit-card" } : { bg: "#fff3e9", fg: "#d96415", icon: typeKey(item?.fundsType) === "owncar" ? "car" : "tag" };
+    <div className="expense-ledger-group__rows">{rows.map((item, index) => {
+      const amount = expenseAmount(item);
+      const route = routeEndpoints(item);
+      const cashIn = number(item?.cashIn) > 0;
+      const category = expenseLedgerCategoryMeta(item);
+      const typeLabel = cashIn ? "Cash In" : text(item?.fundsType) || "Cash Out";
+      const kindLabel = cashIn ? "Cash in" : "Cash out";
       return <div className="expense-ledger-row" key={text(item?.id) || `${group.key}-${index}`}>
-        <div className="expense-ledger-row__context"><span className="expense-ledger-row__category-icon" style={{ "--category-bg": category.bg, "--category-fg": category.fg }}><ClassicExpenseIcon name={category.icon} size={14}/></span><span className="expense-ledger-row__context-copy"><span className="expense-ledger-row__type">{cashIn ? "Cash In" : text(item?.fundsType) || "Cash Out"}</span><span className="expense-ledger-row__kind">{cashIn ? "Incoming" : "Expense"}</span></span></div>
-        <div className="expense-ledger-row__route"><span className="expense-ledger-row__route-main">{route.from} → {route.to}</span><span className="expense-ledger-row__route-sub"><span>{text(item?.reason) || "—"}</span></span></div>
+        <div className="expense-ledger-row__context"><span className="expense-ledger-row__category-icon" style={{ "--category-bg": category.bg, "--category-fg": category.fg }}><ClassicExpenseIcon name={category.icon} size={14}/></span><span className="expense-ledger-row__context-copy"><span className="expense-ledger-row__type" title={typeLabel}>{typeLabel}</span><span className="expense-ledger-row__kind">{kindLabel}</span></span></div>
+        <div className="expense-ledger-row__route"><span className="expense-ledger-row__route-main" title={group.reason}>{group.reason || "Expense"}</span><span className="expense-ledger-row__route-sub"><span title={route.from}>{route.from}</span><ClassicExpenseIcon name="arrow-right" size={10}/><span title={route.to}>{route.to}</span></span></div>
         <span className={`expense-ledger-row__amount ${amount.tone}`}>{amount.text}</span>
         <span className="expense-ledger-row__shot"><ExpenseShotButton item={item} onScreenshots={onScreenshots}/></span>
       </div>;
@@ -668,11 +935,31 @@ function LedgerGroup({ group, onScreenshots }) {
   </section>;
 }
 
+function shouldHideExpenseGroupReason(group) {
+  const reason = lower(group?.reason).replace(/\s+/g, " ");
+  if (!reason || !Array.isArray(group?.orders) || !group.orders.length) return false;
+  return group.orders.some((order) => {
+    const label = lower(order?.label).replace(/\s+/g, " ");
+    const orderId = lower(order?.orderId).replace(/\s+/g, " ");
+    return (label && reason === label) || (orderId && reason === orderId);
+  });
+}
+
 function ExpenseTicket({ group, onScreenshots, compact = false }) {
   const total = groupAmount(group);
+  const rows = [...(Array.isArray(group?.items) ? group.items : [])].sort((a, b) => transactionTime(a) - transactionTime(b));
+  const hideReason = shouldHideExpenseGroupReason(group);
+  const hasOrders = Array.isArray(group?.orders) && group.orders.length > 0;
   return <article className={`expense-ticket${compact ? " expense-ticket--compact" : ""}`}>
-    <div className="expense-ticket__top"><div className={`expense-ticket__header-row${group.orders.length ? " expense-ticket__header-row--with-order" : ""}`}><div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div><div className="expense-ticket__header-side"><ExpenseOrderActions orders={group.orders}/>{!group.orders.length ? <div className="expense-ticket__reason">{group.reason}</div> : null}</div></div>{group.orders.length ? <div className="expense-ticket__reason expense-ticket__reason--block">{group.reason}</div> : null}<div className="expense-ticket__header-divider" /></div>
-    <div className="expense-ticket__legs">{group.items.map((item, index) => { const route = routeEndpoints(item); const amount = expenseAmount(item); return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><ExpenseShotButton item={item} onScreenshots={onScreenshots}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title">{number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"}</div><div className={`expense-ticket__route-amount ${amount.tone}`}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from">{route.from}</span><span className="expense-ticket__route-arrow"><ClassicExpenseIcon name="arrow-right" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to">{route.to}</span></div></div></div></div>; })}</div>
+    <div className="expense-ticket__top">
+      <div className={`expense-ticket__header-row${hasOrders ? " expense-ticket__header-row--with-order" : ""}`}>
+        <div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div>
+        <div className="expense-ticket__header-side">{hasOrders ? <ExpenseOrderActions orders={group.orders}/> : !hideReason ? <div className="expense-ticket__reason">{group.reason}</div> : null}</div>
+      </div>
+      {hasOrders && !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--block">{group.reason}</div> : null}
+      <div className="expense-ticket__header-divider" />
+    </div>
+    <div className="expense-ticket__legs">{rows.map((item, index) => { const route = routeEndpoints(item); const amount = expenseAmount(item); return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><ExpenseShotButton item={item} onScreenshots={onScreenshots}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title">{number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"}</div><div className={`expense-ticket__route-amount ${amount.tone}`}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from">{route.from}</span><span className="expense-ticket__route-arrow"><ClassicExpenseIcon name="arrow-right" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to">{route.to}</span></div></div></div></div>; })}</div>
     <div className="expense-ticket__separator" />
     <div className="expense-ticket__footer"><span className="expense-ticket__footer-label">Total</span><span className={`expense-ticket__footer-value ${total.tone}`}>{total.text}</span></div>
   </article>;
@@ -685,7 +972,7 @@ function AllExpensesSheet({ items, lastSettledAt, onClose, onScreenshots, onExpo
   const pastItems = Number.isFinite(boundary) ? items.filter((item) => transactionTime(item) <= boundary) : [];
   const recentGroups = groupTransactions(recentItems);
   const pastGroups = showPast ? groupTransactions(pastItems) : [];
-  return <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="ios-sheet"><div className="ios-drag"/><h3 className="ex-modal-title" style={{ textAlign: "center" }}>All Expenses</h3><div className="next-all-expenses-sheet-actions"><button className="view-all-chip" type="button" onClick={onExport}>Export</button></div><div id="allExpensesList">
+  return <div className="ios-modal next-ios-modal-open" style={{ display: "flex" }} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="ios-sheet" style={{ transform: "translateY(0)" }}><div className="ios-drag"/><h3 className="ex-modal-title" style={{ textAlign: "center" }}>All Expenses</h3><div className="next-all-expenses-sheet-actions"><button className="view-all-chip" type="button" onClick={onExport}>Export</button></div><div id="allExpensesList">
     {recentGroups.length ? recentGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} compact key={group.key}/>) : <div className="expenses-empty">Sorry, No data available</div>}
     {showPast && pastGroups.length ? <><div className="expenses-separator"><span>Past expenses</span></div>{pastGroups.map((group) => <ExpenseTicket group={group} onScreenshots={onScreenshots} compact key={`past-${group.key}`}/>)}</> : null}
     {pastItems.length ? <div className="past-expenses-wrapper"><button type="button" className="past-expenses-btn" onClick={() => setShowPast((current) => !current)}>{showPast ? "Hide past expenses" : "Show past expenses"}</button></div> : null}
