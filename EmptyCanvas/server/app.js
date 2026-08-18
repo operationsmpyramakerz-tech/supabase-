@@ -8098,19 +8098,37 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
   return { sources, rows, groupedRows, totals, groupMode, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
 }
 
-function _proposalCombinedPdfColumnsForContent(selectedColumns, contentW, sources = [], logic = "add") {
+function _proposalCombinedTotalQty(row = {}, logic = "add") {
+  const cleanLogic = _proposalCombineLogic(logic);
+  if (cleanLogic === "separate") {
+    return Object.values(row?.sourceQuantities || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  }
+  return Number(row?.quantity || 0) || 0;
+}
+
+function _proposalCombinedPdfColumnsForContent(selectedColumns, contentW, sources = [], logic = "add", includeTotalQty = false) {
   const selected = Array.isArray(selectedColumns) && selectedColumns.length ? selectedColumns : PRODUCT_PROPOSAL_EXPORT_COLUMNS;
-  if (_proposalCombineLogic(logic) !== "separate") return _proposalPdfColumnsForContent(selected, contentW);
+  const cleanLogic = _proposalCombineLogic(logic);
   const columns = [];
+  let totalQtyInserted = false;
+  const insertTotalQty = () => {
+    if (!includeTotalQty || totalQtyInserted) return;
+    columns.push({ key: "totalQty", label: "Total Qty", width: 62, align: "right", combineLogic: cleanLogic });
+    totalQtyInserted = true;
+  };
   for (const col of selected) {
-    if (col.key === "quantity") {
+    if (cleanLogic === "separate" && col.key === "quantity") {
       for (const source of sources || []) {
         columns.push({ key: `sourceQty:${source.id}`, sourceId: source.id, label: `${source.name || "Proposal"} Qty`, width: 58, align: "right" });
       }
+      insertTotalQty();
     } else {
+      if ((col.key === "unitPrice" || col.key === "totalPrice") && !totalQtyInserted) insertTotalQty();
       columns.push({ key: col.key, label: col.label, width: col.pdfWidth, align: col.align || "left" });
+      if (col.key === "quantity") insertTotalQty();
     }
   }
+  insertTotalQty();
   const naturalW = columns.reduce((sum, col) => sum + (Number(col.width) || 0), 0) || contentW;
   if (naturalW > contentW) {
     const scale = contentW / naturalW;
@@ -8127,6 +8145,7 @@ function _proposalCombinedPdfColumnsForContent(selectedColumns, contentW, source
 function _proposalCombinedCellValue(row = {}, col = {}, { formattedMoney = false } = {}) {
   const key = String(col?.key || col || "");
   if (key.startsWith("sourceQty:")) return Number(row?.sourceQuantities?.[col.sourceId || key.slice(10)] || 0) || 0;
+  if (key === "totalQty") return _proposalCombinedTotalQty(row, col?.combineLogic || "add");
   return _proposalExportCellValue(row, key, { formattedMoney });
 }
 
@@ -8184,6 +8203,7 @@ async function _sbRenderCombinedProductProposalsPdf(req, res) {
   const logic = _proposalCombineLogic(req?.query?.logic || req?.query?.combineLogic);
   const { sources, rows, groupedRows, totals, groupMode } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
   const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
+  const includeTotalQty = String(req?.query?.totalQty || "").trim().toLowerCase() === "1" || String(req?.query?.totalQty || "").trim().toLowerCase() === "true";
 
   await ensurePdfArabicSupport();
   const createdAt = new Date();
@@ -8227,7 +8247,7 @@ async function _sbRenderCombinedProductProposalsPdf(req, res) {
   doc.fillColor(COLORS.text).font("Helvetica").fontSize(10).text(sourceText || "-", mL + 10, doc.y + 21, { width: contentW - 20 });
   doc.y += boxH + 18;
 
-  const columns = _proposalCombinedPdfColumnsForContent(selectedExportColumns, contentW, sources, logic);
+  const columns = _proposalCombinedPdfColumnsForContent(selectedExportColumns, contentW, sources, logic, includeTotalQty);
   const tableW = columns.reduce((sum, col) => sum + col.width, 0);
   const startX = mL;
   const cellPad = 6;
@@ -8353,6 +8373,7 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   const logic = _proposalCombineLogic(req?.query?.logic || req?.query?.combineLogic);
   const { sources, rows, groupedRows, totals, groupMode } = await _sbProductProposalsCombinedExportData(proposalIds, req, logic);
   const selectedExportColumns = _proposalSelectedExportColumns(req?.query?.columns);
+  const includeTotalQty = String(req?.query?.totalQty || "").trim().toLowerCase() === "1" || String(req?.query?.totalQty || "").trim().toLowerCase() === "true";
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Operations Hub";
@@ -8363,13 +8384,23 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
   const excelColumns = includeKitColumn
     ? [{ header: "Kit", key: "__kitTag", width: 16, align: "center", kitTag: true }]
     : [];
+  let totalQtyInserted = false;
+  const insertTotalQtyColumn = () => {
+    if (!includeTotalQty || totalQtyInserted) return;
+    excelColumns.push({ header: "Total Qty", key: "__totalQty", width: 14, align: "center", combinedTotalQty: true, combineLogic: logic });
+    totalQtyInserted = true;
+  };
   for (const col of selectedExportColumns) {
     if (_proposalCombineLogic(logic) === "separate" && col.key === "quantity") {
       for (const source of sources) excelColumns.push({ header: `${source.name || "Proposal"} Qty`, key: `sourceQty_${source.id}`, width: 16, align: "center", sourceId: source.id, sourceQty: true });
+      insertTotalQtyColumn();
     } else {
+      if ((col.key === "unitPrice" || col.key === "totalPrice") && !totalQtyInserted) insertTotalQtyColumn();
       excelColumns.push({ header: col.label, key: col.key, width: col.excelWidth || 16, align: "center" });
+      if (col.key === "quantity") insertTotalQtyColumn();
     }
   }
+  insertTotalQtyColumn();
 
   const BORDER_COLOR = { argb: "FF9CA3AF" };
   const borderThin = {
@@ -8465,7 +8496,9 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
       ? String(kitName || "")
       : col.sourceQty
         ? Number(item?.sourceQuantities?.[col.sourceId] || 0) || 0
-        : _proposalExportCellValue(item, col.key));
+        : col.combinedTotalQty
+          ? _proposalCombinedTotalQty(item, col.combineLogic || logic)
+          : _proposalExportCellValue(item, col.key));
     const row = worksheet.addRow(values);
     row.height = 18;
     excelColumns.forEach((col, index) => {
@@ -8479,7 +8512,7 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
       } else if (visualIndex % 2 === 1) {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
       }
-      if (col.key === "quantity" || col.sourceQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
+      if (col.key === "quantity" || col.sourceQty || col.combinedTotalQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
       if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
       if (col.key === "name" && item.url) {
         const url = String(item.url || "").trim();
