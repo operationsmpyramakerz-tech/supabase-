@@ -172,17 +172,27 @@ async function uploadPreparedProductImage(image) {
     throw new Error("The image upload could not be prepared.");
   }
 
+  // Supabase Storage's signed-upload endpoint expects the same multipart body
+  // used by storage-js for Blob/File uploads. Sending the Blob as a raw request
+  // body can be rejected by some self-hosted Storage versions with a misleading
+  // "object exceeded the maximum allowed size" response, even for tiny files.
+  const formData = new FormData();
+  formData.append("cacheControl", String(upload.cacheControl || "3600"));
+  formData.append("", image.blob, image.name || "product-image.webp");
+
+  const headers = { ...(upload.headers || {}) };
+  for (const key of Object.keys(headers)) {
+    if (String(key).toLowerCase() === "content-type") delete headers[key];
+  }
+
   let response;
   try {
     response = await fetch(upload.signedUrl, {
       method: String(upload.method || "PUT").toUpperCase(),
       credentials: "omit",
       cache: "no-store",
-      headers: {
-        ...(upload.headers || {}),
-        "Content-Type": image.type || "image/webp",
-      },
-      body: image.blob,
+      headers,
+      body: formData,
     });
   } catch (error) {
     throw new Error(error?.message || "The browser could not upload the image to storage.");

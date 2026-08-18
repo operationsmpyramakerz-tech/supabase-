@@ -239,7 +239,10 @@ export async function createProductImageUploadTicket({ filename, mime, size } = 
     method: "PUT",
     signedUrl: ticket.signedUrl,
     publicUrl: ticket.publicUrl,
-    headers: { "Content-Type": cleanMime },
+    // Match Supabase storage-js uploadToSignedUrl behavior. The browser sets
+    // the multipart Content-Type (including the boundary) automatically.
+    headers: { "x-upsert": "false" },
+    cacheControl: "3600",
     bucket: ticket.bucket,
     path: ticket.path,
   };
