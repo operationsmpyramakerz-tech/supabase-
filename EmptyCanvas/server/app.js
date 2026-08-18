@@ -7548,6 +7548,13 @@ function _proposalExportGroupMode(value) {
   return raw === "kit-tag" || raw === "kits-tag" || raw === "kit" ? "kit-tag" : "component-tag";
 }
 
+function _proposalNaturalCompare(a, b) {
+  return String(a ?? "").localeCompare(String(b ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 async function _sbProductKitMembershipHierarchy() {
   try {
     const [kitRows, itemRows, folderRows] = await Promise.all([
@@ -7583,7 +7590,7 @@ async function _sbProductKitMembershipHierarchy() {
     }
     return new Map([...byProduct.entries()].map(([productId, kitsMap]) => [
       productId,
-      [...kitsMap.values()].sort((a, b) => String(a.folderName || "").localeCompare(String(b.folderName || "")) || String(a.name || "").localeCompare(String(b.name || ""))),
+      [...kitsMap.values()].sort((a, b) => _proposalNaturalCompare(a.folderName, b.folderName) || _proposalNaturalCompare(a.name, b.name)),
     ]));
   } catch (error) {
     console.warn("Unable to load kit membership for proposal grouping:", error?.message || error);
@@ -7600,8 +7607,8 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
       map.get(key).rows.push(row);
       return map;
     }, new Map()).values())
-      .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))) }))
-      .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
+      .map((group) => ({ ...group, rows: group.rows.slice().sort((a, b) => _proposalNaturalCompare(a.name, b.name)) }))
+      .sort((a, b) => _proposalNaturalCompare(a.tag, b.tag));
   }
 
   const folders = new Map();
@@ -7655,13 +7662,13 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
       folderId: folder.folderId,
       folderName: folder.folderName,
       kits: [...folder.kits.values()]
-        .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""))) }))
-        .sort((a, b) => String(a.kitName || "").localeCompare(String(b.kitName || ""))),
+        .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => _proposalNaturalCompare(a.name, b.name)) }))
+        .sort((a, b) => _proposalNaturalCompare(a.kitName, b.kitName)),
     }))
     .sort((a, b) => {
       if (a.folderId && !b.folderId) return -1;
       if (!a.folderId && b.folderId) return 1;
-      return String(a.folderName || "").localeCompare(String(b.folderName || ""));
+      return _proposalNaturalCompare(a.folderName, b.folderName);
     });
 }
 
@@ -7825,13 +7832,13 @@ function _proposalBuildCombinedGroupedRows(rows = [], groupMode = "component-tag
       folderId: folder.folderId,
       folderName: folder.folderName,
       kits: [...folder.kits.values()]
-        .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")) ) }))
-        .sort((a, b) => String(a.kitName || "").localeCompare(String(b.kitName || ""))),
+        .map((kit) => ({ ...kit, rows: kit.rows.slice().sort((a, b) => _proposalNaturalCompare(a.name, b.name) ) }))
+        .sort((a, b) => _proposalNaturalCompare(a.kitName, b.kitName)),
     }))
     .sort((a, b) => {
       if (a.folderId && !b.folderId) return -1;
       if (!a.folderId && b.folderId) return 1;
-      return String(a.folderName || "").localeCompare(String(b.folderName || ""));
+      return _proposalNaturalCompare(a.folderName, b.folderName);
     });
 }
 
@@ -8075,7 +8082,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
       sourceKitQuantities,
       sourceKits: effectiveSourceKits,
     };
-  }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }).sort((a, b) => _proposalNaturalCompare(a.name, b.name));
 
   const groupedRows = _proposalBuildCombinedGroupedRows(rows, groupMode, kitMembership, sources, cleanLogic);
 
