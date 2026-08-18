@@ -227,12 +227,36 @@ function counts(rows, foreignKey) {
   return map;
 }
 
+async function proposalItemCountsForHeaders(headers = []) {
+  const proposalIds = [...new Set((headers || []).map((row) => text(row?.id)).filter(Boolean))];
+  const itemCounts = new Map();
+  if (!proposalIds.length) return itemCounts;
+
+  // `selectAll()` is intentionally capped at 5,000 rows. Once the proposal-items
+  // table grows beyond that size, using a single select makes newer proposals
+  // appear to have zero components even though their detail view has items.
+  // Page through only the proposal_id column so the list count remains exact
+  // without loading the full proposal-item payload into memory.
+  const pageSize = 5000;
+  const inList = postgrestInList(proposalIds);
+  for (let offset = 0; ; offset += pageSize) {
+    const rows = await supabaseRequest(
+      `/${encodeURIComponent(proposalItemsTable())}?select=proposal_id&proposal_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
+    );
+    const page = Array.isArray(rows) ? rows : [];
+    for (const row of page) {
+      const proposalId = text(row?.proposal_id);
+      if (proposalId) itemCounts.set(proposalId, (itemCounts.get(proposalId) || 0) + 1);
+    }
+    if (page.length < pageSize) break;
+  }
+
+  return itemCounts;
+}
+
 export async function listProposals(account) {
-  const [headers, items] = await Promise.all([
-    selectAll(proposalTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
-    selectAll(proposalItemsTable(), { limit: 5000, order: "created_at.asc" }),
-  ]);
-  const itemCounts = counts(items, "proposal_id");
+  const headers = await selectAll(proposalTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
+  const itemCounts = await proposalItemCountsForHeaders(headers);
   return headers.map((row) => proposalHeader(row, itemCounts.get(text(row.id)) || 0, account));
 }
 
