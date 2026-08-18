@@ -88,7 +88,8 @@ export default async function TaskManagementViewPage({ params }) {
 
   return (
     <>
-      <link rel="stylesheet" href="/css/task-management.css?v=next-stage-2j" />
+      <link rel="stylesheet" href="/css/task-management.css?v=task-management-stable-status-frame-v24" />
+      <link rel="stylesheet" href="/css/task-management-next-parity.css?v=classic-parity-v1" />
       <AppShell
       account={account}
       title={config.title}
@@ -97,6 +98,7 @@ export default async function TaskManagementViewPage({ params }) {
     >
       <TaskManagementClient
         view={config.key}
+        account={account}
         viewSlug={resolvedParams.view}
         initialMeta={meta || { ok: true, view: config.key, departments: [], currentUser: {}, accessLevel: "view" }}
         initialTickets={Array.isArray(list?.tickets) ? list.tickets : []}

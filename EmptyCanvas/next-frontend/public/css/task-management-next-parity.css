@@ -1,0 +1,48 @@
+/* Next.js Task Management -> Classic visual parity.
+   Keep this file scoped so no other migrated page inherits Task Management overrides. */
+body.task-management-page .classic-app-shell > .main-content > .main-header.dash-header{display:none!important}
+body.task-management-page .classic-app-shell > .main-content > .next-classic-page-content{padding:0!important;max-width:none!important;width:100%!important;overflow:visible!important}
+body.task-management-page .next-task-classic-parity{width:100%;min-height:100%;background:transparent}
+body.task-management-page .next-task-classic-parity > .tm-page-header{display:block!important;position:relative!important;top:auto!important;z-index:30;background:transparent}
+body.task-management-page .next-task-classic-parity .tm-main{padding-left:24px;padding-right:24px;padding-bottom:30px}
+body.task-management-page .next-task-classic-parity .tm-agenda-layout{align-items:start}
+body.task-management-page .next-task-classic-parity .tm-ticket-card{width:100%;text-align:left}
+body.task-management-page .next-task-classic-parity .tm-ticket-card__state{display:flex;align-items:center;justify-content:flex-end}
+body.task-management-page .next-task-classic-parity .tm-ticket-card__bottom>.tm-creator-anchor{flex:0 0 auto}
+body.task-management-page .next-task-classic-parity .tm-creator-anchor{position:relative;display:inline-flex}
+body.task-management-page .next-task-classic-parity .tm-agenda-task__actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+body.task-management-page .next-task-classic-parity .tm-agenda-task__progress-ring{--p:var(--tm-agenda-progress,0%);width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(currentColor var(--p),#e8ebef 0);position:relative;color:#5d46d8;flex:0 0 auto}
+body.task-management-page .next-task-classic-parity .tm-agenda-task__progress-ring:before{content:"";position:absolute;inset:4px;border-radius:50%;background:#fff}
+body.task-management-page .next-task-classic-parity .tm-agenda-task__progress-ring b{position:relative;z-index:1;font-size:9px;color:#4d5562}
+body.task-management-page .next-task-classic-parity .tm-department-filter{position:relative;flex:0 0 auto}
+body.task-management-page .next-task-classic-parity .tm-department-filter__panel{display:block!important;position:absolute;right:0;top:calc(100% + 8px);z-index:120;width:min(430px,calc(100vw - 40px))}
+body.task-management-page .next-task-classic-parity .tm-status-pill--clickable{cursor:pointer;font:inherit}
+body.task-management-page .next-task-classic-parity .tm-ticket-card--archived{opacity:.82}
+body.task-management-page .next-task-classic-parity .dashboard-notice{margin:12px 24px}
+body.task-management-page.tm-modal-open{overflow:hidden}
+
+/* React modals use the original Classic dialog classes directly. */
+body.task-management-page .next-task-modal-layer.tm-overlay{z-index:10040}
+body.task-management-page .next-task-project-editor.tm-dialog{width:min(1480px,calc(100vw - 40px));max-height:min(92vh,980px)}
+body.task-management-page .next-task-work-editor.tm-dialog{width:min(760px,100%)}
+body.task-management-page .next-task-team-modal.tm-dialog{width:min(1180px,calc(100vw - 40px))}
+
+/* Classic header lives inside the page in Next because AppShell owns the sidebar. */
+@media(max-width:760px){
+  body.task-management-page .next-task-classic-parity .tm-main{padding-left:12px;padding-right:12px}
+  body.task-management-page .next-task-classic-parity .tm-page-header{padding-left:14px;padding-right:14px}
+  body.task-management-page .next-task-classic-parity .tm-department-filter__panel{position:fixed;left:12px;right:12px;top:auto;bottom:78px;width:auto;max-height:70vh;overflow:auto}
+}
+
+/* Small React-only bridges for elements that Classic positions through JavaScript. */
+body.task-management-page .next-task-classic-parity .tm-creator-profile-popover{z-index:15000;min-width:min(360px,calc(100vw - 32px))}
+body.task-management-page .next-task-classic-parity .tm-work-files-parity{margin-top:10px}
+body.task-management-page .next-task-classic-parity .tm-work-files-clear{margin-top:8px}
+body.task-management-page .next-task-classic-parity .tm-builder-loading{min-height:420px;display:grid;place-items:center;color:#6b7280;font-weight:700}
+body.task-management-page .next-task-classic-parity .tm-builder-board.is-people-mode .tm-builder-block{min-height:170px}
+body.task-management-page .next-task-classic-parity .tm-people-block__status{position:absolute;right:12px;bottom:12px;z-index:2}
+body.task-management-page .next-task-classic-parity .tm-people-work-preview{margin:14px 0 0;padding:14px;border:1px solid #e6e8ec;border-radius:16px;background:#fafafa}
+body.task-management-page .next-task-classic-parity .tm-people-work-preview>span{display:block;margin-bottom:7px;color:#737983;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+body.task-management-page .next-task-classic-parity .tm-people-work-preview p{margin:5px 0;white-space:pre-wrap}
+body.task-management-page .next-task-classic-parity .tm-people-work-preview .danger{color:#b42318}
+body.task-management-page .next-task-classic-parity .tm-people-work-preview a{display:inline-flex;margin-top:5px;font-weight:700}
