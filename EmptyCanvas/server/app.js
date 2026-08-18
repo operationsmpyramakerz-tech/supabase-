@@ -8216,6 +8216,13 @@ async function _sbRenderCombinedProductProposalsExcel(req, res) {
       }
       if (col.key === "quantity" || col.sourceQty || col.key === "unitPrice" || col.key === "totalPrice") cell.numFmt = numFmtFor(cell.value);
       if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
+      if (col.key === "name" && item.url) {
+        const url = String(item.url || "").trim();
+        if (/^https?:\/\//i.test(url)) {
+          cell.value = { text: String(cell.value || item.name || "Component"), hyperlink: url };
+          cell.font = { color: { argb: "FF2563EB" }, underline: true };
+        }
+      }
     });
     visualIndex += 1;
   };
