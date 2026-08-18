@@ -232,12 +232,12 @@ async function proposalItemCountsForHeaders(headers = []) {
   const itemCounts = new Map();
   if (!proposalIds.length) return itemCounts;
 
-  // `selectAll()` is intentionally capped at 5,000 rows. Once the proposal-items
-  // table grows beyond that size, using a single select makes newer proposals
-  // appear to have zero components even though their detail view has items.
-  // Page through only the proposal_id column so the list count remains exact
-  // without loading the full proposal-item payload into memory.
-  const pageSize = 5000;
+  // The self-hosted PostgREST instance can cap a response below the requested
+  // limit (commonly 1,000 rows). Using 5,000 here made the loop think it had
+  // reached the final page after the first capped response, so proposal cards
+  // showed partial counts. Keep each page safely below the server cap and
+  // continue until a genuinely short page is returned.
+  const pageSize = 500;
   const inList = postgrestInList(proposalIds);
   for (let offset = 0; ; offset += pageSize) {
     const rows = await supabaseRequest(

@@ -417,7 +417,7 @@ function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
               return (
                 <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={proposal.id} onClick={() => onToggle(proposal.id)}>
                   <span className="proposal-combine-multi__check" aria-hidden="true">{active ? "✓" : ""}</span>
-                  <span className="proposal-combine-multi__copy"><strong>{proposal.name}</strong><small>{formatNumber(proposal.itemsCount)} component{proposal.itemsCount === 1 ? "" : "s"}{proposal.createdBy ? ` · ${proposal.createdBy}` : ""}</small></span>
+                  <span className="proposal-combine-multi__copy"><strong>{proposal.name}</strong><small>{formatNumber(proposal.itemsCount)} item{proposal.itemsCount === 1 ? "" : "s"}{proposal.createdBy ? ` · ${proposal.createdBy}` : ""}</small></span>
                 </button>
               );
             })}
@@ -2007,7 +2007,7 @@ export default function ProposalsClient({
                         <span className="proposal-folder-figure__front"><small>Q</small></span>
                       </span>
                       <span className="proposal-folder-copy"><strong>{proposal.name}</strong><em>Created by {proposal.createdBy || "—"}</em></span>
-                      <span className="proposal-folder-count"><span aria-hidden="true">▱</span><span>{formatNumber(proposal.itemsCount)} component{proposal.itemsCount === 1 ? "" : "s"}</span></span>
+                      <span className="proposal-folder-count"><span aria-hidden="true">▱</span><span>{formatNumber(proposal.itemsCount)} item{proposal.itemsCount === 1 ? "" : "s"}</span></span>
                     </button>
                   </article>
                 ))}
