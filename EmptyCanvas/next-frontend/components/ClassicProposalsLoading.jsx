@@ -51,29 +51,17 @@ export default function ClassicProposalsLoading({ title = "Proposals", kits = fa
           </header>
 
           <main className="container-full-width next-classic-page-content">
-            <section className="products-shell proposals-shell next-proposals-classic-parity" aria-busy="true">
-              <div className="proposals-floating-actions">
-                <span className="products-add-btn proposals-create-btn next-proposals-loading-button" />
+            <section className="next-proposals-route-skeleton" aria-busy="true" aria-label={`Loading ${title} content`}>
+              <div className="next-proposals-route-skeleton__toolbar" aria-hidden="true">
+                <span className="next-proposals-route-skeleton__action" />
               </div>
-              <section className="products-proposals-view proposals-workspace proposals-folders-card">
-                <section className="proposals-panel">
-                  <div className="products-proposals-list">
-                    <div className="products-proposal-folders">
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <article className="products-proposal-folder next-proposals-loading-folder" key={index}>
-                          <span className="proposal-folder-figure" aria-hidden="true">
-                            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
-                            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
-                            <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
-                            <span className="proposal-folder-figure__back" />
-                            <span className="proposal-folder-figure__front"><small>{kits ? "K" : "Q"}</small></span>
-                          </span>
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              </section>
+              <div className="next-proposals-route-skeleton__surface" aria-hidden="true">
+                <div className="next-proposals-route-skeleton__grid">
+                  {Array.from({ length: 14 }).map((_, index) => (
+                    <span className="next-proposals-route-skeleton__card" key={index} />
+                  ))}
+                </div>
+              </div>
             </section>
           </main>
         </div>
