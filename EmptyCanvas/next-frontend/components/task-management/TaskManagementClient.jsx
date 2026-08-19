@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { BodyClassSync } from "../ClassicShellControls";
 import NotificationsBell from "../notifications/NotificationsBell";
 import UserProfileMenu from "../UserProfileMenu";
+import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import ClassicTaskWorkflowDetails from "./ClassicTaskWorkflowDetails";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 
@@ -223,6 +224,76 @@ function dependenciesFor(items, edges, targetId) {
     .filter((id) => items.some((item) => text(item.clientId || item.id) === id));
 }
 
+// Classic Task Management workflow numbering. The number comes from the arrow
+// dependency graph, not from the order blocks were created. A single block in
+// a dependency level is 1, 2, 3... while parallel blocks in the same level
+// become 1.1 / 1.2, 2.1 / 2.2, etc., ordered by their canvas position.
+function workflowNumbering(nodes = [], edges = []) {
+  const records = (Array.isArray(nodes) ? nodes : []).map((node, index) => ({
+    node,
+    id: text(node?.clientId || node?.id),
+    index,
+  }));
+  const recordById = new Map(records.filter((record) => record.id).map((record) => [record.id, record]));
+  const outgoing = new Map(records.map((record) => [record.id, []]));
+  const incoming = new Map(records.map((record) => [record.id, 0]));
+
+  (Array.isArray(edges) ? edges : []).forEach((edge) => {
+    const from = text(edge?.from ?? edge?.fromSectionId ?? edge?.from_section_id);
+    const to = text(edge?.to ?? edge?.toSectionId ?? edge?.to_section_id);
+    if (!recordById.has(from) || !recordById.has(to) || from === to) return;
+    outgoing.get(from).push(to);
+    incoming.set(to, (incoming.get(to) || 0) + 1);
+  });
+
+  const rank = new Map(records.map((record) => [record.id, 1]));
+  const queue = records
+    .filter((record) => incoming.get(record.id) === 0)
+    .sort((a, b) => (number(a.node?.canvasX) - number(b.node?.canvasX)) || (number(a.node?.canvasY) - number(b.node?.canvasY)) || (a.index - b.index))
+    .map((record) => record.id);
+  let processed = 0;
+
+  while (queue.length) {
+    const id = queue.shift();
+    processed += 1;
+    (outgoing.get(id) || []).forEach((nextId) => {
+      rank.set(nextId, Math.max(rank.get(nextId) || 1, (rank.get(id) || 1) + 1));
+      incoming.set(nextId, (incoming.get(nextId) || 0) - 1);
+      if (incoming.get(nextId) === 0) queue.push(nextId);
+    });
+  }
+
+  // Keep temporary blocks labelled even before an invalid circular graph is fixed.
+  if (processed !== records.length) records.forEach((record, index) => rank.set(record.id, index + 1));
+
+  const layers = new Map();
+  records.forEach((record) => {
+    const level = rank.get(record.id) || 1;
+    if (!layers.has(level)) layers.set(level, []);
+    layers.get(level).push(record);
+  });
+
+  const labels = new Map();
+  [...layers.entries()].sort((a, b) => a[0] - b[0]).forEach(([level, layer]) => {
+    layer
+      .slice()
+      .sort((a, b) => (number(a.node?.canvasY) - number(b.node?.canvasY)) || (number(a.node?.canvasX) - number(b.node?.canvasX)) || (a.index - b.index))
+      .forEach((record, index) => labels.set(record.id, layer.length === 1 ? String(level) : `${level}.${index + 1}`));
+  });
+  return labels;
+}
+
+function orderedWorkflowNodes(nodes = [], labels = new Map()) {
+  const parts = (node) => text(labels.get(text(node?.clientId || node?.id))).split('.').map((part) => number(part));
+  return (Array.isArray(nodes) ? nodes : []).slice().sort((a, b) => {
+    const aa = parts(a);
+    const bb = parts(b);
+    if ((aa[0] || 0) !== (bb[0] || 0)) return (aa[0] || 0) - (bb[0] || 0);
+    if ((aa[1] || 0) !== (bb[1] || 0)) return (aa[1] || 0) - (bb[1] || 0);
+    return (number(a?.canvasY) - number(b?.canvasY)) || (number(a?.canvasX) - number(b?.canvasX));
+  });
+}
+
 function readBuilderSocketAnchors(board, orientation = "horizontal") {
   if (!board) return {};
   const result = {};
@@ -372,15 +443,18 @@ function PriorityPill({ priority }) {
   return <span className={`next-task-priority next-task-priority--${priorityKey(priority)} tm-priority tm-priority--${priorityKey(priority)}`}>{text(priority) || "Normal"}</span>;
 }
 
-function AttachmentLinks({ attachments, empty = null }) {
+function AttachmentLinks({ attachments, empty = null, onRemove = null }) {
   const files = Array.isArray(attachments) ? attachments.filter((item) => item?.url) : [];
   if (!files.length) return empty ? <p className="next-task-muted">{empty}</p> : null;
   return (
     <div className="next-task-files">
       {files.map((file, index) => (
-        <a href={file.url} target="_blank" rel="noreferrer" key={`${file.url}-${index}`}>
-          <span>↗</span><div><strong>{file.name || "Open attachment"}</strong><small>{fileSize(file.size) || file.type || "Attached file"}</small></div>
-        </a>
+        <div className="next-task-files__item" key={`${file.url}-${index}`}>
+          <a href={file.url} target="_blank" rel="noreferrer">
+            <span>↗</span><div><strong>{file.name || "Open attachment"}</strong><small>{fileSize(file.size) || file.type || "Attached file"}</small></div>
+          </a>
+          {onRemove ? <button type="button" className="next-task-file-remove" onClick={() => onRemove(index, file)} aria-label={`Remove ${file.name || "attachment"}`} title="Remove file"><FeatherIcon name="x" /></button> : null}
+        </div>
       ))}
     </div>
   );
@@ -464,33 +538,6 @@ function ProjectCard({ ticket, view, onOpen, onRejected }) {
   );
 }
 
-function DependenciesEditor({ item, items, onChange }) {
-  const selfId = text(item.clientId || item.id);
-  const candidates = items.filter((candidate) => text(candidate.clientId || candidate.id) !== selfId);
-  if (!candidates.length) return null;
-  return (
-    <fieldset className="next-task-dependencies">
-      <legend>Starts after</legend>
-      <div>
-        {candidates.map((candidate, index) => {
-          const candidateId = text(candidate.clientId || candidate.id);
-          const checked = (item.dependsOn || []).includes(candidateId);
-          return (
-            <label key={candidateId}>
-              <input type="checkbox" checked={checked} onChange={(event) => {
-                const set = new Set(item.dependsOn || []);
-                if (event.target.checked) set.add(candidateId); else set.delete(candidateId);
-                onChange([...set]);
-              }} />
-              <span>{candidate.request || candidate.task || `Step ${index + 1}`}</span>
-            </label>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
-
 function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   const [draft, setDraft] = useState(() => ({ ...editor, sections: (editor.sections || []).map((section, index) => ({ ...section, canvasX: number(section.canvasX) || 80 + (index % 3) * 340, canvasY: number(section.canvasY) || 80 + Math.floor(index / 3) * 220 })) }));
   const [mode, setMode] = useState(editor.id ? "builder" : "meta");
@@ -500,6 +547,7 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
+  const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const [canvasSize, setCanvasSize] = useState({ width: 1280, height: 900 });
   const [anchors, setAnchors] = useState({});
   const dragRef = useRef(null);
@@ -528,13 +576,30 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   });
   const removeSection = (clientId) => setDraft((current) => ({ ...current, sections: current.sections.filter((section) => section.clientId !== clientId).map((section) => ({ ...section, dependsOn: (section.dependsOn || []).filter((id) => id !== clientId) })) }));
   const chooseFiles = async (clientId, files) => {
-    if (!files?.length) return;
+    const selectedFiles = Array.from(files || []).filter(Boolean);
+    if (!selectedFiles.length) return;
     setUploading(clientId); setError("");
+    startActionLoading({
+      title: "Uploading files",
+      message: `Uploading ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"} to this workflow block…`,
+    });
     try {
-      const uploaded = await uploadTaskFiles(files, view);
+      const uploaded = await uploadTaskFiles(selectedFiles, view);
       setDraft((current) => ({ ...current, sections: current.sections.map((section) => section.clientId === clientId ? { ...section, attachments: mergeAttachments(section.attachments, uploaded) } : section) }));
-    } catch (uploadError) { setError(uploadError?.message || "The attachments could not be uploaded."); }
-    finally { setUploading(""); }
+      await finishActionLoading("done", `${uploaded.length} file${uploaded.length === 1 ? "" : "s"} uploaded successfully.`);
+    } catch (uploadError) {
+      const message = uploadError?.message || "The attachments could not be uploaded.";
+      setError(message);
+      await finishActionLoading("failed", message);
+    } finally { setUploading(""); }
+  };
+  const removeAttachment = (clientId, index, file) => {
+    setDraft((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.clientId === clientId
+        ? { ...section, attachments: (Array.isArray(section.attachments) ? section.attachments : []).filter((attachment, fileIndex) => file?.url ? text(attachment?.url) !== text(file.url) : fileIndex !== index) }
+        : section),
+    }));
   };
   const continueToBuilder = (event) => {
     event?.preventDefault?.(); setError("");
@@ -680,8 +745,14 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
     if (!title || !dueDate) return setError("Project title and target date are required.");
     if (!draft.sections.length) return setError("Add at least one workflow block.");
     if (draft.sections.some((section) => !text(section.department) || !text(section.request) || !dateKey(section.deliveryDate))) return setError("Each workflow block requires a department, requested action, and delivery date.");
-    const sections = draft.sections.map((section, index) => ({ clientId: section.clientId, department: text(section.department), request: text(section.request), details: text(section.details), deliveryDate: dateKey(section.deliveryDate), attachments: section.attachments || [], sortOrder: index + 1, executionGroup: index + 1, canvasX: Math.round(number(section.canvasX)), canvasY: Math.round(number(section.canvasY)) }));
     const edges = draft.sections.flatMap((section) => (section.dependsOn || []).map((from) => ({ from, to: section.clientId })));
+    const labels = workflowNumbering(draft.sections, edges);
+    const ordered = orderedWorkflowNodes(draft.sections, labels);
+    const sections = ordered.map((section, index) => {
+      const label = text(labels.get(text(section.clientId)));
+      const executionGroup = Math.max(1, number(label.split('.')[0]) || index + 1);
+      return { clientId: section.clientId, department: text(section.department), request: text(section.request), details: text(section.details), deliveryDate: dateKey(section.deliveryDate), attachments: section.attachments || [], sortOrder: index + 1, executionGroup, canvasX: Math.round(number(section.canvasX)), canvasY: Math.round(number(section.canvasY)) };
+    });
     setBusy(true);
     try {
       const isEdit = !!draft.id;
@@ -697,6 +768,7 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   const boardHeight = Math.max(canvasSize.height, 900, ...draft.sections.map((s) => number(s.canvasY) + 290));
   canvasSizeRef.current = { width: Math.max(canvasSizeRef.current.width, boardWidth), height: Math.max(canvasSizeRef.current.height, boardHeight) };
   const edgeList = draft.sections.flatMap((section) => (section.dependsOn || []).map((from) => ({ from, to: section.clientId })));
+  const blockLabels = workflowNumbering(draft.sections, edgeList);
 
   useLayoutEffect(() => {
     if (mode !== "builder") return;
@@ -711,13 +783,14 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
         <div className="tm-builder-canvas-stage" style={{ width: boardWidth * zoom, height: boardHeight * zoom }}>
           <div ref={boardRef} className="tm-builder-board" style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
             <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-hidden="true"><defs><marker id="nextTmArrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="tm-arrow-marker" /></marker></defs>{edgeList.map((edge) => { const from = draft.sections.find((s) => s.clientId === edge.from); const to = draft.sections.find((s) => s.clientId === edge.to); if (!from || !to) return null; return <path key={`${edge.from}-${edge.to}`} className="tm-builder-arrow" markerEnd="url(#nextTmArrow)" d={builderArrowPath(edge.from, edge.to, anchors, from, to, "horizontal")} />; })}</svg>
-            {!draft.sections.length ? <div className="tm-builder-empty"><FeatherIcon name="git-branch" /><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span></div> : null}
-            {draft.sections.map((section, index) => <article data-builder-node={section.clientId} className={`tm-builder-block${connectFrom === section.clientId ? " is-connect-source" : ""}`} style={{ left: number(section.canvasX), top: number(section.canvasY) }} key={section.clientId}><button type="button" className="tm-builder-socket tm-builder-socket--in" aria-label="Connect into block" onClick={() => toggleConnection(section.clientId)} /><div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, section)}><span className="tm-builder-block__number">{index + 1}</span><span className="tm-builder-block__title"><b>{section.department || "Department"}</b><small>{section.deliveryDate ? `Delivery ${formatDate(section.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions"><button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(section.clientId)}><FeatherIcon name="edit" /></button><button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => removeSection(section.clientId)}><FeatherIcon name="trash" /></button></span></div><button type="button" className="tm-builder-block__body" onClick={() => setBlockId(section.clientId)}><span className="tm-builder-block__label">Requested action</span><strong>{section.request || "Click to add requested action"}</strong><span className={`tm-builder-block__details${section.details ? "" : " tm-builder-block__details--empty"}`}>{section.details || "No extra details"}</span></button><button type="button" className="tm-builder-socket tm-builder-socket--out" aria-label="Start connection" onClick={() => setConnectFrom(section.clientId)} /></article>)}
+            {draft.sections.map((section, index) => <article data-builder-node={section.clientId} className={`tm-builder-block${connectFrom === section.clientId ? " is-connect-source" : ""}`} style={{ left: number(section.canvasX), top: number(section.canvasY) }} key={section.clientId}><button type="button" className="tm-builder-socket tm-builder-socket--in" aria-label="Connect into block" onClick={() => toggleConnection(section.clientId)} /><div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, section)}><span className="tm-builder-block__number">{blockLabels.get(text(section.clientId)) || index + 1}</span><span className="tm-builder-block__title"><b>{section.department || "Department"}</b><small>{section.deliveryDate ? `Delivery ${formatDate(section.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions"><button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(section.clientId)}><FeatherIcon name="edit" /></button><button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => removeSection(section.clientId)}><FeatherIcon name="trash" /></button></span></div><button type="button" className="tm-builder-block__body" onClick={() => setBlockId(section.clientId)}><span className="tm-builder-block__label">Requested action</span><strong>{section.request || "Click to add requested action"}</strong><span className={`tm-builder-block__details${section.details ? "" : " tm-builder-block__details--empty"}`}>{section.details || "No extra details"}</span></button><button type="button" className="tm-builder-socket tm-builder-socket--out" aria-label="Start connection" onClick={() => setConnectFrom(section.clientId)} /></article>)}
           </div>
         </div>
+        {!draft.sections.length ? <div className="tm-builder-empty tm-builder-empty--viewport"><FeatherIcon name="git-branch" /><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span></div> : null}
       </div><div className="tm-builder-legend"><span><i className="tm-legend-dot tm-legend-dot--ready" />Each block is one department section</span><span><i className="tm-legend-arrow">→</i>Click an output point, then an input point to create an arrow</span><span><i className="tm-legend-handle" />Press and drag any empty part of a block to move it</span></div>{error ? <div className="tm-form-error">{error}</div> : null}</section></div> : null}
 
-    {activeBlock ? <div className="tm-overlay tm-overlay--above" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={() => setBlockId("")} /><section className="tm-dialog tm-dialog--block"><div className="tm-dialog__top"><div><span className="tm-eyebrow">Workflow block</span><h2>Edit Block</h2></div><button type="button" className="tm-icon-btn" onClick={() => setBlockId("")}><FeatherIcon name="x" /></button></div><div className="tm-form-grid tm-form-grid--block"><label className="tm-field"><span>Responsible department <b>*</b></span><ClassicTaskSelect value={activeBlock.department} onChange={(event) => updateSection(activeBlock.clientId, "department", event.target.value)}><option value="">Select department</option>{(meta.departments || []).map((department) => <option value={department} key={department}>{department}</option>)}</ClassicTaskSelect></label><label className="tm-field"><span>Delivery date <b>*</b></span><input type="date" max={draft.dueDate || undefined} value={activeBlock.deliveryDate} onChange={(event) => updateSection(activeBlock.clientId, "deliveryDate", event.target.value)} /></label><label className="tm-field tm-field--wide"><span>Requested action <b>*</b></span><textarea rows="3" value={activeBlock.request} onChange={(event) => updateSection(activeBlock.clientId, "request", event.target.value)} /></label><label className="tm-field tm-field--wide"><span>Details</span><textarea rows="4" value={activeBlock.details} onChange={(event) => updateSection(activeBlock.clientId, "details", event.target.value)} /></label><div className="tm-field tm-field--wide"><span>Attachments</span><div className="tm-upload-field"><label className="tm-upload-field__picker"><input hidden type="file" multiple onChange={(event) => { chooseFiles(activeBlock.clientId, event.target.files); event.target.value = ""; }} /><span className="tm-upload-field__icon"><FeatherIcon name="upload" /></span><span className="tm-upload-field__copy"><b>{uploading === activeBlock.clientId ? "Uploading…" : "Upload files"}</b><small>Maximum 10 MB per file</small></span><span className="tm-upload-field__action">Choose files</span></label></div><AttachmentLinks attachments={activeBlock.attachments} /></div></div><DependenciesEditor item={activeBlock} items={draft.sections} onChange={(value) => updateSection(activeBlock.clientId, "dependsOn", value)} /><div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={() => setBlockId("")}>Cancel</button><button type="button" className="tm-btn tm-btn--primary" onClick={() => setBlockId("")}><FeatherIcon name="save" /><span>Save Block</span></button></div></section></div> : null}
+    {activeBlock ? <div className="tm-overlay tm-overlay--above" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={() => setBlockId("")} /><section className="tm-dialog tm-dialog--block"><div className="tm-dialog__top"><div><span className="tm-eyebrow">Workflow block</span><h2>Edit Block</h2></div><button type="button" className="tm-icon-btn" onClick={() => setBlockId("")}><FeatherIcon name="x" /></button></div><div className="tm-form-grid tm-form-grid--block"><label className="tm-field"><span>Responsible department <b>*</b></span><ClassicTaskSelect value={activeBlock.department} onChange={(event) => updateSection(activeBlock.clientId, "department", event.target.value)}><option value="">Select department</option>{(meta.departments || []).map((department) => <option value={department} key={department}>{department}</option>)}</ClassicTaskSelect></label><label className="tm-field"><span>Delivery date <b>*</b></span><input type="date" max={draft.dueDate || undefined} value={activeBlock.deliveryDate} onChange={(event) => updateSection(activeBlock.clientId, "deliveryDate", event.target.value)} /></label><label className="tm-field tm-field--wide"><span>Requested action <b>*</b></span><textarea rows="3" value={activeBlock.request} onChange={(event) => updateSection(activeBlock.clientId, "request", event.target.value)} /></label><label className="tm-field tm-field--wide"><span>Details</span><textarea rows="4" value={activeBlock.details} onChange={(event) => updateSection(activeBlock.clientId, "details", event.target.value)} /></label><div className="tm-field tm-field--wide"><span>Attachments</span><div className="tm-upload-field"><label className="tm-upload-field__picker"><input hidden type="file" multiple onChange={(event) => { chooseFiles(activeBlock.clientId, event.target.files); event.target.value = ""; }} /><span className="tm-upload-field__icon"><FeatherIcon name="upload" /></span><span className="tm-upload-field__copy"><b>{uploading === activeBlock.clientId ? "Uploading…" : "Upload files"}</b><small>Maximum 10 MB per file</small></span><span className="tm-upload-field__action">Choose files</span></label></div><AttachmentLinks attachments={activeBlock.attachments} onRemove={(index, file) => removeAttachment(activeBlock.clientId, index, file)} /></div></div><div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={() => setBlockId("")}>Cancel</button><button type="button" className="tm-btn tm-btn--primary" onClick={() => setBlockId("")}><FeatherIcon name="save" /><span>Save Block</span></button></div></section></div> : null}
+    <ActionLoadingModal state={actionLoading} />
   </>;
 }
 
@@ -787,6 +860,7 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
+  const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const [blockId, setBlockId] = useState("");
   const [connectFrom, setConnectFrom] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -835,26 +909,47 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   };
   const remove = (clientId) => setDraft((current) => current.filter((item) => item.clientId !== clientId).map((item) => ({ ...item, dependsOn: (item.dependsOn || []).filter((id) => id !== clientId) })));
   const chooseFiles = async (clientId, files) => {
-    if (!files?.length) return;
+    const selectedFiles = Array.from(files || []).filter(Boolean);
+    if (!selectedFiles.length) return;
     setUploading(clientId); setError("");
+    startActionLoading({
+      title: "Uploading files",
+      message: `Uploading ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"} to this team task…`,
+    });
     try {
-      const uploaded = await uploadTaskFiles(files, "my");
-      const item = draft.find((row) => row.clientId === clientId);
-      update(clientId, "attachments", mergeAttachments(item?.attachments, uploaded));
-    } catch (uploadError) { setError(uploadError?.message || "The attachments could not be uploaded."); }
-    finally { setUploading(""); }
+      const uploaded = await uploadTaskFiles(selectedFiles, "my");
+      setDraft((current) => current.map((item) => item.clientId === clientId
+        ? { ...item, attachments: mergeAttachments(item.attachments, uploaded) }
+        : item));
+      await finishActionLoading("done", `${uploaded.length} file${uploaded.length === 1 ? "" : "s"} uploaded successfully.`);
+    } catch (uploadError) {
+      const message = uploadError?.message || "The attachments could not be uploaded.";
+      setError(message);
+      await finishActionLoading("failed", message);
+    } finally { setUploading(""); }
+  };
+  const removeAttachment = (clientId, index, file) => {
+    setDraft((current) => current.map((item) => item.clientId === clientId
+      ? { ...item, attachments: (Array.isArray(item.attachments) ? item.attachments : []).filter((attachment, fileIndex) => file?.url ? text(attachment?.url) !== text(file.url) : fileIndex !== index) }
+      : item));
   };
   const save = async () => {
     if (!draft.length) return setError("Add at least one team-member task.");
     if (draft.some((item) => !text(item.assigneeId) || !text(item.task) || !dateKey(item.deliveryDate))) return setError("Each task requires a team member, task, and delivery date.");
     setSaving(true); setError("");
     try {
-      const assignments = draft.map((item, index) => ({
-        clientId: item.clientId, assigneeId: item.assigneeId, assigneeName: item.assigneeName,
-        task: item.task, details: item.details, deliveryDate: dateKey(item.deliveryDate), attachments: item.attachments || [],
-        sortOrder: index + 1, executionGroup: index + 1, canvasX: Math.round(number(item.canvasX)), canvasY: Math.round(number(item.canvasY)),
-      }));
       const edges = draft.flatMap((item) => (item.dependsOn || []).map((from) => ({ from, to: item.clientId })));
+      const labels = workflowNumbering(draft, edges);
+      const ordered = orderedWorkflowNodes(draft, labels);
+      const assignments = ordered.map((item, index) => {
+        const label = text(labels.get(text(item.clientId)));
+        const executionGroup = Math.max(1, number(label.split('.')[0]) || index + 1);
+        return {
+          clientId: item.clientId, assigneeId: item.assigneeId, assigneeName: item.assigneeName,
+          task: item.task, details: item.details, deliveryDate: dateKey(item.deliveryDate), attachments: item.attachments || [],
+          sortOrder: index + 1, executionGroup, canvasX: Math.round(number(item.canvasX)), canvasY: Math.round(number(item.canvasY)),
+        };
+      });
       const result = await requestJson(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow?view=my`, { method: "PUT", body: JSON.stringify({ assignments, edges }) });
       notify("success", "Team workflow saved", `${assignments.length} team task${assignments.length === 1 ? "" : "s"} saved.`);
       setWorkflow((current) => ({ ...(current || {}), ...result }));
@@ -1017,6 +1112,7 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   const boardHeight = Math.max(canvasSize.height, 900, ...draft.map((item) => number(item.canvasY) + 290));
   canvasSizeRef.current = { width: Math.max(canvasSizeRef.current.width, boardWidth), height: Math.max(canvasSizeRef.current.height, boardHeight) };
   const edges = draft.flatMap((item) => (item.dependsOn || []).map((from) => ({ from, to: item.clientId })));
+  const blockLabels = workflowNumbering(draft, edges);
 
   useLayoutEffect(() => {
     if (busy || !workflow) return;
@@ -1041,16 +1137,16 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
           <div className="tm-builder-canvas-stage" style={{ width: boardWidth * zoom, height: boardHeight * zoom }}>
             <div ref={boardRef} className={`tm-builder-board is-people-mode${connectFrom ? " is-awaiting-target" : ""}`} style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }} aria-label="Team task workflow design canvas">
               <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-hidden="true"><defs><marker id="nextPeopleArrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="tm-arrow-marker" /></marker></defs>{edges.map((edge, index) => { const from = draft.find((item) => item.clientId === edge.from); const to = draft.find((item) => item.clientId === edge.to); if (!from || !to) return null; return <path key={`${edge.from}-${edge.to}-${index}`} className="tm-builder-arrow" markerEnd="url(#nextPeopleArrow)" d={builderArrowPath(edge.from, edge.to, anchors, from, to, "vertical")} />; })}</svg>
-              {!draft.length ? <div className="tm-builder-empty"><FeatherIcon name="git-branch" /><b>Your team workflow canvas is ready</b><span>Add person tasks vertically, then connect each card from its bottom point to the next card’s top point.</span></div> : null}
               {draft.map((assignment, index) => <article data-builder-node={assignment.clientId} className={`tm-builder-block${connectFrom === assignment.clientId ? " is-connect-source" : ""}${assignment.status === "cancelled" ? " is-archived" : ""}`} style={{ left: number(assignment.canvasX), top: number(assignment.canvasY) }} key={assignment.clientId}>
                 {canManage ? <button type="button" className="tm-builder-socket tm-builder-socket--top" aria-label="Connect into task" onClick={() => toggleConnection(assignment.clientId)} /> : null}
-                <div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, assignment)}><span className="tm-builder-block__number">{index + 1}</span><span className="tm-builder-block__title"><b>{assignment.assigneeName || "Team member"}</b><small>{assignment.deliveryDate ? `Delivery ${formatDate(assignment.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions">{canManage ? <button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(assignment.clientId)}><FeatherIcon name="edit" /></button> : null}{canManage && !assignment.id ? <button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => remove(assignment.clientId)}><FeatherIcon name="trash" /></button> : null}</span></div>
+                <div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, assignment)}><span className="tm-builder-block__number">{blockLabels.get(text(assignment.clientId)) || index + 1}</span><span className="tm-builder-block__title"><b>{assignment.assigneeName || "Team member"}</b><small>{assignment.deliveryDate ? `Delivery ${formatDate(assignment.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions">{canManage ? <button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(assignment.clientId)}><FeatherIcon name="edit" /></button> : null}{canManage && !assignment.id ? <button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => remove(assignment.clientId)}><FeatherIcon name="trash" /></button> : null}</span></div>
                 <button type="button" className="tm-builder-block__body" onClick={() => canManage ? setBlockId(assignment.clientId) : ((ownAssignment(assignment) || meta.isPageAdmin) && assignment.status !== "cancelled" ? onWork({ ...assignment, targetType: "assignment" }) : null)}><span className="tm-builder-block__label">Assigned task</span><strong>{assignment.task || "Click to add assigned task"}</strong><span className={`tm-builder-block__details${assignment.details ? "" : " tm-builder-block__details--empty"}`}>{assignment.details || "No extra details"}</span></button>
                 <div className="tm-people-block__status"><StatusPill status={assignment.status} archived={assignment.status === "cancelled"} /></div>
                 {canManage ? <button type="button" className="tm-builder-socket tm-builder-socket--bottom" aria-label="Start connection" onClick={() => setConnectFrom(assignment.clientId)} /> : null}
               </article>)}
             </div>
           </div>
+          {!draft.length ? <div className="tm-builder-empty tm-builder-empty--viewport"><FeatherIcon name="git-branch" /><b>Your team workflow canvas is ready</b><span>Add person tasks vertically, then connect each card from its bottom point to the next card’s top point.</span></div> : null}
         </div> : null}
         {!busy && workflow ? <div className="tm-builder-legend"><span><i className="tm-legend-dot tm-legend-dot--ready" />Each block is one team-member task</span><span><i className="tm-legend-arrow">↓</i>Click a bottom point, then a top point to connect the execution path</span><span><i className="tm-legend-handle" />Press and drag any empty part of a block to move it</span></div> : null}
         {error && workflow ? <div className="tm-form-error">{error}</div> : null}
@@ -1062,11 +1158,12 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
         <label className="tm-field"><span>Delivery date <b>*</b></span><input type="date" max={section.deliveryDate || undefined} value={activeBlock.deliveryDate || ""} onChange={(event) => update(activeBlock.clientId, "deliveryDate", event.target.value)} /></label>
         <label className="tm-field tm-field--wide"><span>Assigned task <b>*</b></span><input maxLength={4000} value={activeBlock.task || ""} onChange={(event) => update(activeBlock.clientId, "task", event.target.value)} placeholder="What should this team member deliver?" /></label>
         <label className="tm-field tm-field--wide"><span>Implementation details</span><textarea rows="4" maxLength={8000} value={activeBlock.details || ""} onChange={(event) => update(activeBlock.clientId, "details", event.target.value)} placeholder="Optional notes, dependencies, or handover criteria." /></label>
-        <div className="tm-field tm-field--wide"><span>Attachment</span><div className="tm-upload-field"><label className="tm-upload-field__picker"><input hidden type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" onChange={(event) => { chooseFiles(activeBlock.clientId, event.target.files); event.target.value = ""; }} /><span className="tm-upload-field__icon"><FeatherIcon name="upload" /></span><span className="tm-upload-field__copy"><b>{uploading === activeBlock.clientId ? "Uploading attachments…" : "Upload attachments"}</b><small>Select multiple files · maximum 10 MB per file</small></span><span className="tm-upload-field__action">Choose files</span></label></div><AttachmentLinks attachments={activeBlock.attachments} /></div>
+        <div className="tm-field tm-field--wide"><span>Attachment</span><div className="tm-upload-field"><label className="tm-upload-field__picker"><input hidden type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" onChange={(event) => { chooseFiles(activeBlock.clientId, event.target.files); event.target.value = ""; }} /><span className="tm-upload-field__icon"><FeatherIcon name="upload" /></span><span className="tm-upload-field__copy"><b>{uploading === activeBlock.clientId ? "Uploading attachments…" : "Upload attachments"}</b><small>Select multiple files · maximum 10 MB per file</small></span><span className="tm-upload-field__action">Choose files</span></label></div><AttachmentLinks attachments={activeBlock.attachments} onRemove={(index, file) => removeAttachment(activeBlock.clientId, index, file)} /></div>
       </div>
       {(activeBlock.workReport || activeBlock.workLink || activeBlock.workFiles?.length || activeBlock.rejectionReason) ? <div className="tm-people-work-preview"><span>Submitted work</span>{activeBlock.workReport ? <p>{activeBlock.workReport}</p> : null}{activeBlock.rejectionReason ? <p className="danger">Rejected: {activeBlock.rejectionReason}</p> : null}{activeBlock.workLink ? <a href={activeBlock.workLink} target="_blank" rel="noreferrer">Open work link ↗</a> : null}<AttachmentLinks attachments={activeBlock.workFiles} /></div> : null}
       <div className="tm-dialog__actions">{activeBlock.id ? <><button type="button" className="tm-btn tm-btn--secondary" onClick={() => archiveAssignment(activeBlock)}>{activeBlock.status === "cancelled" ? "Restore" : "Archive"}</button><button type="button" className="tm-btn tm-btn--secondary tm-btn--danger" onClick={() => deleteAssignment(activeBlock)}>Delete</button></> : null}<span className="tm-dialog__actions-spacer" /><button type="button" className="tm-btn tm-btn--secondary" onClick={() => setBlockId("")}>Cancel</button><button type="button" className="tm-btn tm-btn--primary" onClick={() => setBlockId("")}><FeatherIcon name="save" /><span>Save Block</span></button></div>
     </section></div> : null}
+    <ActionLoadingModal state={actionLoading} />
   </>;
 }
 
