@@ -174,3 +174,57 @@ body.task-management-page .tm-builder-canvas-wrap.is-panning{
     width:calc(100vw - 24px)!important;
   }
 }
+
+/* 2026-08-19 — Workflow builder parity follow-up.
+   Keep the empty-state card centered in the visible canvas viewport, not in
+   the much taller free-pan world. */
+body.task-management-page .tm-builder-canvas-wrap > .tm-builder-empty--viewport{
+  position:absolute!important;
+  left:50%!important;
+  top:50%!important;
+  transform:translate(-50%,-50%)!important;
+  z-index:8!important;
+  margin:0!important;
+  pointer-events:none!important;
+}
+
+/* The shared Proposal/Kits action loader is reused for workflow attachments.
+   Task Management overlays live on a much higher stacking layer. */
+body.task-management-page .action-loading-overlay{
+  z-index:600000!important;
+}
+
+/* Uploaded workflow files keep their normal open-file card and get an
+   explicit X control beside it so a draft attachment can be removed. */
+body.task-management-page .next-task-files__item{
+  display:flex;
+  align-items:stretch;
+  gap:8px;
+  min-width:0;
+}
+body.task-management-page .next-task-files__item > a{
+  flex:1 1 auto;
+  min-width:0;
+}
+body.task-management-page .next-task-file-remove{
+  width:36px;
+  flex:0 0 36px;
+  border:1px solid #e4e7ec;
+  border-radius:11px;
+  background:#fff;
+  color:#64748b;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,color .16s ease,transform .16s ease;
+}
+body.task-management-page .next-task-file-remove:hover{
+  border-color:#fecaca;
+  background:#fff1f2;
+  color:#dc2626;
+  transform:translateY(-1px);
+}
+body.task-management-page .next-task-file-remove svg{
+  width:15px;
+  height:15px;
+}
