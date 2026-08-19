@@ -71,17 +71,21 @@ body.task-management-page .next-task-classic-parity .tm-department-filter__panel
 body.task-management-page .next-task-classic-parity .tm-task-filter-grid .tm-select.is-open{z-index:130!important}
 body.task-management-page .next-task-classic-parity .tm-task-filter-grid .tm-select__menu{z-index:140!important}
 
-/* 50% visual result size while preserving the full available page width. */
+/* -------------------------------------------------------------------------
+   Next shell sizing + stacking fixes v3
+   - Keep Classic typography at its original size.
+   - Only visual icons inside Task Management are rendered at 50% size.
+   - Shared profile / notification controls stay exactly the same as other pages.
+   - Portalled Task Management overlays own the top stacking layer.
+   ------------------------------------------------------------------------- */
 body.task-management-page .next-task-classic-parity > .tm-page-header .header-row2,
 body.task-management-page .next-task-classic-parity > .tm-main,
 body.task-management-page .next-task-classic-parity > .dashboard-notice{
-  zoom:.5;
-  width:200%!important;
+  zoom:1!important;
+  width:100%!important;
   box-sizing:border-box!important;
 }
 
-/* The shared profile and notification controls deliberately remain unscaled so
-   they are identical to the rest of the migrated pages. */
 body.task-management-page .next-task-classic-parity > .tm-page-header .header-row1{
   position:relative!important;
   z-index:160!important;
@@ -92,32 +96,81 @@ body.task-management-page .next-task-classic-parity > .tm-page-header .topbar-ri
   gap:10px!important;
 }
 
+/* Reduce icons only; do not reduce labels, headings, body copy, or control text.
+   Connection-layer SVGs are drawing surfaces, not icons, and must remain 1:1. */
+body.task-management-page .next-task-classic-parity > .tm-page-header .header-row2 svg:not(.tm-connection-layer),
+body.task-management-page .next-task-classic-parity > .tm-main svg:not(.tm-connection-layer),
+body.task-management-page .next-task-classic-parity > .dashboard-notice svg:not(.tm-connection-layer),
+body.task-management-page > .tm-overlay svg:not(.tm-connection-layer){
+  transform:scale(.5);
+  transform-origin:center;
+}
+
+/* Keep shared header controls at the standard migrated-page size. */
+body.task-management-page .next-task-classic-parity > .tm-page-header .header-row1 svg{
+  transform:none!important;
+}
+
 /* Portalled Task Management overlays must own the top stacking layer. */
 body.task-management-page > .tm-overlay{z-index:500000!important}
-body.task-management-page > .tm-overlay.tm-overlay--builder-layer{z-index:500020!important}
+body.task-management-page > .tm-overlay.tm-overlay--builder-layer{
+  z-index:500020!important;
+  align-items:flex-start!important;
+  justify-items:center!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-overlay__backdrop{position:fixed!important}
 body.task-management-page > .tm-overlay.tm-overlay--builder-child{z-index:500030!important}
 body.task-management-page > .tm-overlay.tm-overlay--above{z-index:500040!important}
 body.task-management-page > .tm-overlay.tm-overlay--top{z-index:500060!important}
-body.task-management-page > .tm-overlay > .tm-dialog{
-  zoom:.5;
-}
+body.task-management-page > .tm-overlay > .tm-dialog{zoom:1!important}
 
-/* Keep scroll available inside long dialogs after the 50% render scale. */
+/* Restore Classic dialog sizing while retaining internal scroll for long forms. */
 body.task-management-page > .tm-overlay > .tm-dialog:not(.tm-dialog--builder){
-  max-height:min(180vh,1920px)!important;
+  max-height:min(90vh,960px)!important;
   overflow-y:auto!important;
   overflow-x:hidden!important;
 }
 body.task-management-page > .tm-overlay > .tm-dialog.tm-dialog--builder{
-  width:min(1480px,calc(200vw - 80px))!important;
-  height:min(1740px,calc(200vh - 76px))!important;
+  width:min(1480px,calc(100vw - 40px))!important;
+  height:auto!important;
+  min-height:min(870px,calc(100dvh - 40px))!important;
   max-height:none!important;
+}
+
+/* A scaled world sits inside a correctly sized stage. This gives the canvas
+   real scroll dimensions while blocks/arrows continue using world coordinates. */
+body.task-management-page .tm-builder-canvas-stage{
+  position:relative;
+  min-width:100%;
+  min-height:100%;
+}
+body.task-management-page .tm-builder-canvas-stage > .tm-builder-board{
+  position:absolute;
+  left:0;
+  top:0;
+}
+
+/* Free-pan feedback, matching the Classic builder. */
+body.task-management-page .tm-builder-canvas-wrap{
+  cursor:grab!important;
+  touch-action:none!important;
+  overscroll-behavior:contain!important;
+}
+body.task-management-page .tm-builder-canvas-wrap.is-panning{
+  cursor:grabbing!important;
 }
 
 @media(max-width:760px){
   body.task-management-page .next-task-classic-parity > .tm-page-header .header-row2,
   body.task-management-page .next-task-classic-parity > .tm-main,
   body.task-management-page .next-task-classic-parity > .dashboard-notice{
-    width:200%!important;
+    width:100%!important;
+  }
+  body.task-management-page > .tm-overlay > .tm-dialog.tm-dialog--builder{
+    width:calc(100vw - 24px)!important;
   }
 }

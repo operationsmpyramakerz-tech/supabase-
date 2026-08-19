@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BodyClassSync } from "../ClassicShellControls";
 import NotificationsBell from "../notifications/NotificationsBell";
@@ -221,6 +221,57 @@ function dependenciesFor(items, edges, targetId) {
     .filter((edge) => text(edge?.to) === text(targetId))
     .map((edge) => text(edge?.from))
     .filter((id) => items.some((item) => text(item.clientId || item.id) === id));
+}
+
+function readBuilderSocketAnchors(board, orientation = "horizontal") {
+  if (!board) return {};
+  const result = {};
+  const boardRect = board.getBoundingClientRect();
+  const scaleX = board.offsetWidth ? boardRect.width / board.offsetWidth : 1;
+  const scaleY = board.offsetHeight ? boardRect.height / board.offsetHeight : scaleX;
+  board.querySelectorAll("[data-builder-node]").forEach((block) => {
+    const id = block.getAttribute("data-builder-node");
+    if (!id) return;
+    const source = block.querySelector(orientation === "vertical" ? ".tm-builder-socket--bottom" : ".tm-builder-socket--out");
+    const target = block.querySelector(orientation === "vertical" ? ".tm-builder-socket--top" : ".tm-builder-socket--in");
+    const center = (socket) => {
+      if (!socket) return null;
+      const rect = socket.getBoundingClientRect();
+      return {
+        x: (rect.left + (rect.width / 2) - boardRect.left) / Math.max(.001, scaleX),
+        y: (rect.top + (rect.height / 2) - boardRect.top) / Math.max(.001, scaleY),
+      };
+    };
+    result[id] = { out: center(source), in: center(target), width: block.offsetWidth, height: block.offsetHeight };
+  });
+  return result;
+}
+
+function builderArrowPath(fromId, toId, anchors, fallbackFrom, fallbackTo, orientation = "horizontal") {
+  const fromAnchor = anchors?.[fromId]?.out;
+  const toAnchor = anchors?.[toId]?.in;
+  let sx; let sy; let tx; let ty;
+  if (fromAnchor && toAnchor) {
+    sx = fromAnchor.x; sy = fromAnchor.y; tx = toAnchor.x; ty = toAnchor.y;
+  } else if (orientation === "vertical") {
+    sx = number(fallbackFrom?.canvasX) + 150;
+    sy = number(fallbackFrom?.canvasY) + 170;
+    tx = number(fallbackTo?.canvasX) + 150;
+    ty = number(fallbackTo?.canvasY);
+  } else {
+    sx = number(fallbackFrom?.canvasX) + 300;
+    sy = number(fallbackFrom?.canvasY) + 86;
+    tx = number(fallbackTo?.canvasX);
+    ty = number(fallbackTo?.canvasY) + 86;
+  }
+  if (orientation === "vertical") {
+    const distance = Math.max(78, Math.abs(ty - sy) * .48);
+    const direction = ty >= sy ? 1 : -1;
+    return `M ${sx} ${sy} C ${sx} ${sy + (distance * direction)}, ${tx} ${ty - (distance * direction)}, ${tx} ${ty}`;
+  }
+  const distance = Math.max(95, Math.abs(tx - sx) * .48);
+  const direction = tx >= sx ? 1 : -1;
+  return `M ${sx} ${sy} C ${sx + (distance * direction)} ${sy}, ${tx - (distance * direction)} ${ty}, ${tx} ${ty}`;
 }
 
 function FeatherIcon({ name, className = "" }) {
@@ -449,14 +500,29 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
+  const [canvasSize, setCanvasSize] = useState({ width: 1280, height: 900 });
+  const [anchors, setAnchors] = useState({});
   const dragRef = useRef(null);
+  const panRef = useRef(null);
+  const canvasWrapRef = useRef(null);
+  const boardRef = useRef(null);
+  const canvasSizeRef = useRef({ width: 1280, height: 900 });
 
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const updateSection = (clientId, key, value) => setDraft((current) => ({ ...current, sections: current.sections.map((section) => section.clientId === clientId ? { ...section, [key]: value } : section) }));
   const addSection = () => setDraft((current) => {
     const clientId = newClientId("section");
     const index = current.sections.length;
-    const next = { clientId, department: "", request: "", details: "", deliveryDate: current.dueDate || "", attachments: [], dependsOn: [], canvasX: 90 + (index % 3) * 340, canvasY: 90 + Math.floor(index / 3) * 220 };
+    const wrap = canvasWrapRef.current;
+    const centerX = wrap ? (wrap.scrollLeft + (wrap.clientWidth / 2)) / zoom : 640;
+    const centerY = wrap ? (wrap.scrollTop + (wrap.clientHeight / 2)) / zoom : 360;
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const next = {
+      clientId, department: "", request: "", details: "", deliveryDate: current.dueDate || "", attachments: [], dependsOn: [],
+      canvasX: Math.max(70, Math.round(centerX - 150 + (column - 1) * 330)),
+      canvasY: Math.max(80, Math.round(centerY - 86 + row * 230)),
+    };
     window.setTimeout(() => setBlockId(clientId), 0);
     return { ...current, sections: [...current.sections, next] };
   });
@@ -485,18 +551,129 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
     }) }));
     setConnectFrom("");
   };
+  const expandCanvas = ({ left = 0, top = 0, right = 0, bottom = 0 } = {}) => {
+    const shiftX = Math.max(0, Math.ceil(number(left)));
+    const shiftY = Math.max(0, Math.ceil(number(top)));
+    const growRight = Math.max(0, Math.ceil(number(right)));
+    const growBottom = Math.max(0, Math.ceil(number(bottom)));
+    if (!(shiftX || shiftY || growRight || growBottom)) return;
+    const currentSize = canvasSizeRef.current;
+    const nextSize = {
+      width: Math.max(1280, currentSize.width + shiftX + growRight),
+      height: Math.max(900, currentSize.height + shiftY + growBottom),
+    };
+    canvasSizeRef.current = nextSize;
+    setCanvasSize(nextSize);
+    if (shiftX || shiftY) {
+      setDraft((current) => ({
+        ...current,
+        sections: current.sections.map((section) => ({
+          ...section,
+          canvasX: number(section.canvasX) + shiftX,
+          canvasY: number(section.canvasY) + shiftY,
+        })),
+      }));
+      if (dragRef.current) {
+        dragRef.current.x += shiftX;
+        dragRef.current.y += shiftY;
+      }
+    }
+    window.requestAnimationFrame(() => {
+      const wrap = canvasWrapRef.current;
+      if (!wrap) return;
+      if (shiftX) wrap.scrollLeft += shiftX * zoom;
+      if (shiftY) wrap.scrollTop += shiftY * zoom;
+    });
+  };
+  const ensureRoomForNode = (clientId, rawX, rawY) => {
+    const block = boardRef.current?.querySelector(`[data-builder-node="${clientId}"]`);
+    const blockWidth = block?.offsetWidth || 300;
+    const blockHeight = block?.offsetHeight || 172;
+    const margin = 180;
+    let x = rawX;
+    let y = rawY;
+    const left = x < margin ? margin - x + 560 : 0;
+    const top = y < margin ? margin - y + 420 : 0;
+    if (left || top) {
+      expandCanvas({ left, top });
+      x += left;
+      y += top;
+    }
+    const active = canvasSizeRef.current;
+    const right = x + blockWidth + margin > active.width ? x + blockWidth + margin - active.width + 560 : 0;
+    const bottom = y + blockHeight + margin > active.height ? y + blockHeight + margin - active.height + 420 : 0;
+    if (right || bottom) expandCanvas({ right, bottom });
+    return { x, y };
+  };
   const startDrag = (event, section) => {
     if (event.button !== 0 || event.target.closest("button")) return;
-    dragRef.current = { id: section.clientId, startX: event.clientX, startY: event.clientY, x: number(section.canvasX), y: number(section.canvasY) };
+    event.preventDefault();
+    dragRef.current = { id: section.clientId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: number(section.canvasX), y: number(section.canvasY) };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const moveDrag = (event) => {
-    const drag = dragRef.current; if (!drag) return;
-    const x = Math.max(20, drag.x + (event.clientX - drag.startX) / zoom);
-    const y = Math.max(20, drag.y + (event.clientY - drag.startY) / zoom);
-    updateSection(drag.id, "canvasX", Math.round(x)); updateSection(drag.id, "canvasY", Math.round(y));
+    const drag = dragRef.current;
+    if (!drag || (drag.pointerId != null && event.pointerId !== drag.pointerId)) return false;
+    event.preventDefault();
+    const next = ensureRoomForNode(drag.id, drag.x + (event.clientX - drag.startX) / zoom, drag.y + (event.clientY - drag.startY) / zoom);
+    updateSection(drag.id, "canvasX", Math.round(next.x));
+    updateSection(drag.id, "canvasY", Math.round(next.y));
+    return true;
   };
-  const endDrag = () => { dragRef.current = null; };
+  const startPan = (event) => {
+    if (event.button !== 0 || event.isPrimary === false || dragRef.current || event.target.closest(".tm-builder-block,button")) return;
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+    event.preventDefault();
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: wrap.scrollLeft,
+      startScrollTop: wrap.scrollTop,
+    };
+    wrap.classList.add("is-panning");
+    wrap.setPointerCapture?.(event.pointerId);
+  };
+  const movePan = (event) => {
+    const pan = panRef.current;
+    const wrap = canvasWrapRef.current;
+    if (!pan || !wrap || (pan.pointerId != null && event.pointerId !== pan.pointerId)) return false;
+    event.preventDefault();
+    let nextLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+    let nextTop = pan.startScrollTop - (event.clientY - pan.startY);
+    const edge = 120;
+    const scaledWidth = canvasSizeRef.current.width * zoom;
+    const scaledHeight = canvasSizeRef.current.height * zoom;
+    const maxLeft = Math.max(0, scaledWidth - wrap.clientWidth);
+    const maxTop = Math.max(0, scaledHeight - wrap.clientHeight);
+    const grow = {
+      left: nextLeft < edge ? 700 : 0,
+      top: nextTop < edge ? 520 : 0,
+      right: nextLeft > maxLeft - edge ? 700 : 0,
+      bottom: nextTop > maxTop - edge ? 520 : 0,
+    };
+    if (grow.left || grow.top || grow.right || grow.bottom) {
+      expandCanvas(grow);
+      pan.startScrollLeft += grow.left * zoom;
+      pan.startScrollTop += grow.top * zoom;
+      nextLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+      nextTop = pan.startScrollTop - (event.clientY - pan.startY);
+    }
+    wrap.scrollLeft = Math.max(0, nextLeft);
+    wrap.scrollTop = Math.max(0, nextTop);
+    return true;
+  };
+  const moveCanvas = (event) => { if (!moveDrag(event)) movePan(event); };
+  const endCanvasGesture = (event) => {
+    if (dragRef.current && (event?.pointerId == null || dragRef.current.pointerId === event.pointerId)) dragRef.current = null;
+    if (panRef.current && (event?.pointerId == null || panRef.current.pointerId === event.pointerId)) {
+      const wrap = canvasWrapRef.current;
+      try { wrap?.releasePointerCapture?.(panRef.current.pointerId); } catch {}
+      wrap?.classList.remove("is-panning");
+      panRef.current = null;
+    }
+  };
   const save = async () => {
     setError("");
     const title = text(draft.title); const dueDate = dateKey(draft.dueDate);
@@ -516,19 +693,29 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
     finally { setBusy(false); }
   };
   const activeBlock = draft.sections.find((section) => section.clientId === blockId) || null;
-  const boardWidth = Math.max(1280, ...draft.sections.map((s) => number(s.canvasX) + 360));
-  const boardHeight = Math.max(760, ...draft.sections.map((s) => number(s.canvasY) + 250));
+  const boardWidth = Math.max(canvasSize.width, 1280, ...draft.sections.map((s) => number(s.canvasX) + 390));
+  const boardHeight = Math.max(canvasSize.height, 900, ...draft.sections.map((s) => number(s.canvasY) + 290));
+  canvasSizeRef.current = { width: Math.max(canvasSizeRef.current.width, boardWidth), height: Math.max(canvasSizeRef.current.height, boardHeight) };
   const edgeList = draft.sections.flatMap((section) => (section.dependsOn || []).map((from) => ({ from, to: section.clientId })));
+
+  useLayoutEffect(() => {
+    if (mode !== "builder") return;
+    setAnchors(readBuilderSocketAnchors(boardRef.current, "horizontal"));
+  }, [mode, draft.sections, zoom, boardWidth, boardHeight]);
 
   return <>
     {mode === "meta" ? <div className="tm-overlay tm-overlay--above" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={onClose} /><section className="tm-dialog tm-dialog--meta"><div className="tm-dialog__top"><div><span className="tm-eyebrow">Project details</span><h2>Project information</h2></div><button type="button" className="tm-icon-btn" onClick={onClose}><FeatherIcon name="x" /></button></div><form onSubmit={continueToBuilder}><div className="tm-form-grid"><label className="tm-field tm-field--wide"><span>Project title <b>*</b></span><input value={draft.title} onChange={(event) => update("title", event.target.value)} maxLength={500} required /></label><label className="tm-field"><span>Priority <b>*</b></span><ClassicTaskSelect kind="priority" value={draft.priority} onChange={(event) => update("priority", event.target.value)}>{PRIORITIES.map((item) => <option value={item} key={item}>{item}</option>)}</ClassicTaskSelect></label><label className="tm-field"><span>Target date <b>*</b></span><input type="date" value={draft.dueDate} onChange={(event) => update("dueDate", event.target.value)} required /></label><label className="tm-field tm-field--wide"><span>Description</span><textarea rows="4" value={draft.description} onChange={(event) => update("description", event.target.value)} /></label></div>{error ? <div className="tm-form-error">{error}</div> : null}<div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={onClose}>Cancel</button><button type="submit" className="tm-btn tm-btn--primary"><span>{draft.id ? "Save Project Details" : "Continue to Workflow"}</span><FeatherIcon name="chevron-right" /></button></div></form></section></div> : null}
 
     {mode === "builder" ? <div className="tm-overlay tm-overlay--builder-layer" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={onClose} /><section className="tm-dialog tm-dialog--builder"><div className="tm-builder-header"><div><span className="tm-eyebrow">Workflow builder</span><h2>{draft.id ? "Edit Project Workflow" : "Create Project Workflow"}</h2></div><button type="button" className="tm-icon-btn" onClick={onClose}><FeatherIcon name="x" /></button></div><div className="tm-builder-toolbar" role="toolbar"><div className="tm-builder-toolbar__tools"><button type="button" className="tm-builder-tool tm-builder-tool--primary" onClick={addSection}><FeatherIcon name="plus-square" /><span>Add Block</span></button><div className="tm-builder-zoom"><button type="button" className="tm-builder-tool tm-builder-tool--icon" onClick={() => setZoom((z) => Math.max(.4, +(z - .1).toFixed(1)))}><FeatherIcon name="minus" /></button><button type="button" className="tm-builder-zoom__label" onClick={() => setZoom(1)}><span>{Math.round(zoom * 100)}%</span></button><button type="button" className="tm-builder-tool tm-builder-tool--icon" onClick={() => setZoom((z) => Math.min(1.8, +(z + .1).toFixed(1)))}><FeatherIcon name="plus" /></button></div><button type="button" className="tm-builder-tool" onClick={() => setMode("meta")}><FeatherIcon name="file-text" /><span>Project Details</span></button></div><div className="tm-builder-toolbar__status">{connectFrom ? "Select another block input point to create the arrow." : `${draft.sections.length} block${draft.sections.length === 1 ? "" : "s"} · ${edgeList.length} connection${edgeList.length === 1 ? "" : "s"}`}</div><div className="tm-builder-toolbar__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={onClose}>Cancel</button><button type="button" className="tm-btn tm-btn--primary" onClick={save} disabled={busy || !!uploading}><FeatherIcon name="save" /><span>{busy ? "Saving…" : draft.id ? "Save Changes" : "Create Project"}</span></button></div></div>
-      <div className="tm-builder-canvas-wrap" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}><div className="tm-builder-board" style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
-        <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} aria-hidden="true"><defs><marker id="nextTmArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" className="tm-arrow-marker" /></marker></defs>{edgeList.map((edge) => { const from = draft.sections.find((s) => s.clientId === edge.from); const to = draft.sections.find((s) => s.clientId === edge.to); if (!from || !to) return null; const x1 = number(from.canvasX) + 300, y1 = number(from.canvasY) + 86, x2 = number(to.canvasX), y2 = number(to.canvasY) + 86, mid = Math.max(50, Math.abs(x2 - x1) * .45); return <path key={`${edge.from}-${edge.to}`} className="tm-builder-arrow" markerEnd="url(#nextTmArrow)" d={`M ${x1} ${y1} C ${x1 + mid} ${y1}, ${x2 - mid} ${y2}, ${x2} ${y2}`} />; })}</svg>
-        {!draft.sections.length ? <div className="tm-builder-empty"><FeatherIcon name="git-branch" /><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span></div> : null}
-        {draft.sections.map((section, index) => <article className={`tm-builder-block${connectFrom === section.clientId ? " is-connect-source" : ""}`} style={{ left: number(section.canvasX), top: number(section.canvasY) }} key={section.clientId}><button type="button" className="tm-builder-socket tm-builder-socket--in" aria-label="Connect into block" onClick={() => toggleConnection(section.clientId)} /><div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, section)}><span className="tm-builder-block__number">{index + 1}</span><span className="tm-builder-block__title"><b>{section.department || "Department"}</b><small>{section.deliveryDate ? `Delivery ${formatDate(section.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions"><button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(section.clientId)}><FeatherIcon name="edit" /></button><button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => removeSection(section.clientId)}><FeatherIcon name="trash" /></button></span></div><button type="button" className="tm-builder-block__body" onClick={() => setBlockId(section.clientId)}><span className="tm-builder-block__label">Requested action</span><strong>{section.request || "Click to add requested action"}</strong><span className={`tm-builder-block__details${section.details ? "" : " tm-builder-block__details--empty"}`}>{section.details || "No extra details"}</span></button><button type="button" className="tm-builder-socket tm-builder-socket--out" aria-label="Start connection" onClick={() => setConnectFrom(section.clientId)} /></article>)}
-      </div></div><div className="tm-builder-legend"><span><i className="tm-legend-dot tm-legend-dot--ready" />Each block is one department section</span><span><i className="tm-legend-arrow">→</i>Click an output point, then an input point to create an arrow</span><span><i className="tm-legend-handle" />Press and drag any empty part of a block to move it</span></div>{error ? <div className="tm-form-error">{error}</div> : null}</section></div> : null}
+      <div ref={canvasWrapRef} className="tm-builder-canvas-wrap" onPointerDown={startPan} onPointerMove={moveCanvas} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture}>
+        <div className="tm-builder-canvas-stage" style={{ width: boardWidth * zoom, height: boardHeight * zoom }}>
+          <div ref={boardRef} className="tm-builder-board" style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
+            <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-hidden="true"><defs><marker id="nextTmArrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="tm-arrow-marker" /></marker></defs>{edgeList.map((edge) => { const from = draft.sections.find((s) => s.clientId === edge.from); const to = draft.sections.find((s) => s.clientId === edge.to); if (!from || !to) return null; return <path key={`${edge.from}-${edge.to}`} className="tm-builder-arrow" markerEnd="url(#nextTmArrow)" d={builderArrowPath(edge.from, edge.to, anchors, from, to, "horizontal")} />; })}</svg>
+            {!draft.sections.length ? <div className="tm-builder-empty"><FeatherIcon name="git-branch" /><b>Your workflow canvas is ready</b><span>Use <strong>Add Block</strong> to create a department task, then click a block’s output point and another block’s input point to connect the execution path.</span></div> : null}
+            {draft.sections.map((section, index) => <article data-builder-node={section.clientId} className={`tm-builder-block${connectFrom === section.clientId ? " is-connect-source" : ""}`} style={{ left: number(section.canvasX), top: number(section.canvasY) }} key={section.clientId}><button type="button" className="tm-builder-socket tm-builder-socket--in" aria-label="Connect into block" onClick={() => toggleConnection(section.clientId)} /><div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, section)}><span className="tm-builder-block__number">{index + 1}</span><span className="tm-builder-block__title"><b>{section.department || "Department"}</b><small>{section.deliveryDate ? `Delivery ${formatDate(section.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions"><button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(section.clientId)}><FeatherIcon name="edit" /></button><button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => removeSection(section.clientId)}><FeatherIcon name="trash" /></button></span></div><button type="button" className="tm-builder-block__body" onClick={() => setBlockId(section.clientId)}><span className="tm-builder-block__label">Requested action</span><strong>{section.request || "Click to add requested action"}</strong><span className={`tm-builder-block__details${section.details ? "" : " tm-builder-block__details--empty"}`}>{section.details || "No extra details"}</span></button><button type="button" className="tm-builder-socket tm-builder-socket--out" aria-label="Start connection" onClick={() => setConnectFrom(section.clientId)} /></article>)}
+          </div>
+        </div>
+      </div><div className="tm-builder-legend"><span><i className="tm-legend-dot tm-legend-dot--ready" />Each block is one department section</span><span><i className="tm-legend-arrow">→</i>Click an output point, then an input point to create an arrow</span><span><i className="tm-legend-handle" />Press and drag any empty part of a block to move it</span></div>{error ? <div className="tm-form-error">{error}</div> : null}</section></div> : null}
 
     {activeBlock ? <div className="tm-overlay tm-overlay--above" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={() => setBlockId("")} /><section className="tm-dialog tm-dialog--block"><div className="tm-dialog__top"><div><span className="tm-eyebrow">Workflow block</span><h2>Edit Block</h2></div><button type="button" className="tm-icon-btn" onClick={() => setBlockId("")}><FeatherIcon name="x" /></button></div><div className="tm-form-grid tm-form-grid--block"><label className="tm-field"><span>Responsible department <b>*</b></span><ClassicTaskSelect value={activeBlock.department} onChange={(event) => updateSection(activeBlock.clientId, "department", event.target.value)}><option value="">Select department</option>{(meta.departments || []).map((department) => <option value={department} key={department}>{department}</option>)}</ClassicTaskSelect></label><label className="tm-field"><span>Delivery date <b>*</b></span><input type="date" max={draft.dueDate || undefined} value={activeBlock.deliveryDate} onChange={(event) => updateSection(activeBlock.clientId, "deliveryDate", event.target.value)} /></label><label className="tm-field tm-field--wide"><span>Requested action <b>*</b></span><textarea rows="3" value={activeBlock.request} onChange={(event) => updateSection(activeBlock.clientId, "request", event.target.value)} /></label><label className="tm-field tm-field--wide"><span>Details</span><textarea rows="4" value={activeBlock.details} onChange={(event) => updateSection(activeBlock.clientId, "details", event.target.value)} /></label><div className="tm-field tm-field--wide"><span>Attachments</span><div className="tm-upload-field"><label className="tm-upload-field__picker"><input hidden type="file" multiple onChange={(event) => { chooseFiles(activeBlock.clientId, event.target.files); event.target.value = ""; }} /><span className="tm-upload-field__icon"><FeatherIcon name="upload" /></span><span className="tm-upload-field__copy"><b>{uploading === activeBlock.clientId ? "Uploading…" : "Upload files"}</b><small>Maximum 10 MB per file</small></span><span className="tm-upload-field__action">Choose files</span></label></div><AttachmentLinks attachments={activeBlock.attachments} /></div></div><DependenciesEditor item={activeBlock} items={draft.sections} onChange={(value) => updateSection(activeBlock.clientId, "dependsOn", value)} /><div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={() => setBlockId("")}>Cancel</button><button type="button" className="tm-btn tm-btn--primary" onClick={() => setBlockId("")}><FeatherIcon name="save" /><span>Save Block</span></button></div></section></div> : null}
   </>;
@@ -603,7 +790,13 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   const [blockId, setBlockId] = useState("");
   const [connectFrom, setConnectFrom] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [canvasSize, setCanvasSize] = useState({ width: 1280, height: 900 });
+  const [anchors, setAnchors] = useState({});
   const dragRef = useRef(null);
+  const panRef = useRef(null);
+  const canvasWrapRef = useRef(null);
+  const boardRef = useRef(null);
+  const canvasSizeRef = useRef({ width: 1280, height: 900 });
   const canManage = ["edit", "admin"].includes(lower(meta.accessLevel)) || meta.isPageAdmin;
   const currentUser = meta.currentUser || {};
 
@@ -628,10 +821,14 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
     const id = newClientId("assignment");
     setDraft((current) => {
       const previous = current[current.length - 1];
+      const wrap = canvasWrapRef.current;
+      const centerX = wrap ? (wrap.scrollLeft + (wrap.clientWidth / 2)) / zoom : 640;
+      const centerY = wrap ? (wrap.scrollTop + (wrap.clientHeight / 2)) / zoom : 360;
       return [...current, {
         clientId: id, assigneeId: "", assigneeName: "", task: "", details: "",
         deliveryDate: section.deliveryDate || "", attachments: [], dependsOn: previous ? [previous.clientId] : [], status: "not_started",
-        canvasX: 160, canvasY: 80 + current.length * 210,
+        canvasX: Math.max(70, Math.round(centerX - 150)),
+        canvasY: Math.max(80, Math.round(centerY - 86 + current.length * 190)),
       }];
     });
     setBlockId(id);
@@ -695,21 +892,136 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
     setDraft((current) => current.map((item) => item.clientId === toId ? { ...item, dependsOn: (item.dependsOn || []).includes(connectFrom) ? (item.dependsOn || []).filter((id) => id !== connectFrom) : [...(item.dependsOn || []), connectFrom] } : item));
     setConnectFrom("");
   };
+  const expandCanvas = ({ left = 0, top = 0, right = 0, bottom = 0 } = {}) => {
+    const shiftX = Math.max(0, Math.ceil(number(left)));
+    const shiftY = Math.max(0, Math.ceil(number(top)));
+    const growRight = Math.max(0, Math.ceil(number(right)));
+    const growBottom = Math.max(0, Math.ceil(number(bottom)));
+    if (!(shiftX || shiftY || growRight || growBottom)) return;
+    const currentSize = canvasSizeRef.current;
+    const nextSize = {
+      width: Math.max(1280, currentSize.width + shiftX + growRight),
+      height: Math.max(900, currentSize.height + shiftY + growBottom),
+    };
+    canvasSizeRef.current = nextSize;
+    setCanvasSize(nextSize);
+    if (shiftX || shiftY) {
+      setDraft((current) => current.map((item) => ({
+        ...item,
+        canvasX: number(item.canvasX) + shiftX,
+        canvasY: number(item.canvasY) + shiftY,
+      })));
+      if (dragRef.current) {
+        dragRef.current.x += shiftX;
+        dragRef.current.y += shiftY;
+      }
+    }
+    window.requestAnimationFrame(() => {
+      const wrap = canvasWrapRef.current;
+      if (!wrap) return;
+      if (shiftX) wrap.scrollLeft += shiftX * zoom;
+      if (shiftY) wrap.scrollTop += shiftY * zoom;
+    });
+  };
+  const ensureRoomForNode = (clientId, rawX, rawY) => {
+    const block = boardRef.current?.querySelector(`[data-builder-node="${clientId}"]`);
+    const blockWidth = block?.offsetWidth || 300;
+    const blockHeight = block?.offsetHeight || 172;
+    const margin = 180;
+    let x = rawX;
+    let y = rawY;
+    const left = x < margin ? margin - x + 560 : 0;
+    const top = y < margin ? margin - y + 420 : 0;
+    if (left || top) {
+      expandCanvas({ left, top });
+      x += left;
+      y += top;
+    }
+    const active = canvasSizeRef.current;
+    const right = x + blockWidth + margin > active.width ? x + blockWidth + margin - active.width + 560 : 0;
+    const bottom = y + blockHeight + margin > active.height ? y + blockHeight + margin - active.height + 420 : 0;
+    if (right || bottom) expandCanvas({ right, bottom });
+    return { x, y };
+  };
   const startDrag = (event, item) => {
     if (!canManage || event.button !== 0 || event.target.closest("button")) return;
-    dragRef.current = { id: item.clientId, startX: event.clientX, startY: event.clientY, x: number(item.canvasX), y: number(item.canvasY) };
+    event.preventDefault();
+    dragRef.current = { id: item.clientId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: number(item.canvasX), y: number(item.canvasY) };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
   const moveDrag = (event) => {
-    const drag = dragRef.current; if (!drag) return;
-    update(drag.id, "canvasX", Math.max(20, Math.round(drag.x + (event.clientX - drag.startX) / zoom)));
-    update(drag.id, "canvasY", Math.max(20, Math.round(drag.y + (event.clientY - drag.startY) / zoom)));
+    const drag = dragRef.current;
+    if (!drag || (drag.pointerId != null && event.pointerId !== drag.pointerId)) return false;
+    event.preventDefault();
+    const next = ensureRoomForNode(drag.id, drag.x + (event.clientX - drag.startX) / zoom, drag.y + (event.clientY - drag.startY) / zoom);
+    update(drag.id, "canvasX", Math.round(next.x));
+    update(drag.id, "canvasY", Math.round(next.y));
+    return true;
   };
-  const endDrag = () => { dragRef.current = null; };
+  const startPan = (event) => {
+    if (event.button !== 0 || event.isPrimary === false || dragRef.current || event.target.closest(".tm-builder-block,button")) return;
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+    event.preventDefault();
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: wrap.scrollLeft,
+      startScrollTop: wrap.scrollTop,
+    };
+    wrap.classList.add("is-panning");
+    wrap.setPointerCapture?.(event.pointerId);
+  };
+  const movePan = (event) => {
+    const pan = panRef.current;
+    const wrap = canvasWrapRef.current;
+    if (!pan || !wrap || (pan.pointerId != null && event.pointerId !== pan.pointerId)) return false;
+    event.preventDefault();
+    let nextLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+    let nextTop = pan.startScrollTop - (event.clientY - pan.startY);
+    const edge = 120;
+    const scaledWidth = canvasSizeRef.current.width * zoom;
+    const scaledHeight = canvasSizeRef.current.height * zoom;
+    const maxLeft = Math.max(0, scaledWidth - wrap.clientWidth);
+    const maxTop = Math.max(0, scaledHeight - wrap.clientHeight);
+    const grow = {
+      left: nextLeft < edge ? 700 : 0,
+      top: nextTop < edge ? 520 : 0,
+      right: nextLeft > maxLeft - edge ? 700 : 0,
+      bottom: nextTop > maxTop - edge ? 520 : 0,
+    };
+    if (grow.left || grow.top || grow.right || grow.bottom) {
+      expandCanvas(grow);
+      pan.startScrollLeft += grow.left * zoom;
+      pan.startScrollTop += grow.top * zoom;
+      nextLeft = pan.startScrollLeft - (event.clientX - pan.startX);
+      nextTop = pan.startScrollTop - (event.clientY - pan.startY);
+    }
+    wrap.scrollLeft = Math.max(0, nextLeft);
+    wrap.scrollTop = Math.max(0, nextTop);
+    return true;
+  };
+  const moveCanvas = (event) => { if (!moveDrag(event)) movePan(event); };
+  const endCanvasGesture = (event) => {
+    if (dragRef.current && (event?.pointerId == null || dragRef.current.pointerId === event.pointerId)) dragRef.current = null;
+    if (panRef.current && (event?.pointerId == null || panRef.current.pointerId === event.pointerId)) {
+      const wrap = canvasWrapRef.current;
+      try { wrap?.releasePointerCapture?.(panRef.current.pointerId); } catch {}
+      wrap?.classList.remove("is-panning");
+      panRef.current = null;
+    }
+  };
   const activeBlock = draft.find((item) => item.clientId === blockId) || null;
-  const boardWidth = Math.max(980, ...draft.map((item) => number(item.canvasX) + 380));
-  const boardHeight = Math.max(700, ...draft.map((item) => number(item.canvasY) + 240));
+  const boardWidth = Math.max(canvasSize.width, 1280, ...draft.map((item) => number(item.canvasX) + 390));
+  const boardHeight = Math.max(canvasSize.height, 900, ...draft.map((item) => number(item.canvasY) + 290));
+  canvasSizeRef.current = { width: Math.max(canvasSizeRef.current.width, boardWidth), height: Math.max(canvasSizeRef.current.height, boardHeight) };
   const edges = draft.flatMap((item) => (item.dependsOn || []).map((from) => ({ from, to: item.clientId })));
+
+  useLayoutEffect(() => {
+    if (busy || !workflow) return;
+    setAnchors(readBuilderSocketAnchors(boardRef.current, "vertical"));
+  }, [busy, workflow, draft, zoom, boardWidth, boardHeight]);
 
   return <>
     <div className="tm-overlay tm-overlay--builder-layer is-people-mode" role="dialog" aria-modal="true">
@@ -725,17 +1037,19 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
         </div>
         {busy ? <div className="tm-builder-loading">Loading team workflow…</div> : null}
         {!busy && error && !workflow ? <div className="next-task-error-box"><b>Could not load team workflow</b><p>{error}</p><button type="button" onClick={load}>Retry</button></div> : null}
-        {!busy && workflow ? <div className="tm-builder-canvas-wrap" onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-          <div className={`tm-builder-board is-people-mode${connectFrom ? " is-awaiting-target" : ""}`} style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }} aria-label="Team task workflow design canvas">
-            <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} aria-hidden="true"><defs><marker id="nextPeopleArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" className="tm-arrow-marker" /></marker></defs>{edges.map((edge, index) => { const from = draft.find((item) => item.clientId === edge.from); const to = draft.find((item) => item.clientId === edge.to); if (!from || !to) return null; const x1 = number(from.canvasX) + 150, y1 = number(from.canvasY) + 170, x2 = number(to.canvasX) + 150, y2 = number(to.canvasY), bend = Math.max(55, Math.abs(y2 - y1) * .45); return <path key={`${edge.from}-${edge.to}-${index}`} className="tm-builder-arrow" markerEnd="url(#nextPeopleArrow)" d={`M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`} />; })}</svg>
-            {!draft.length ? <div className="tm-builder-empty"><FeatherIcon name="git-branch" /><b>Your team workflow canvas is ready</b><span>Add person tasks vertically, then connect each card from its bottom point to the next card’s top point.</span></div> : null}
-            {draft.map((assignment, index) => <article className={`tm-builder-block${connectFrom === assignment.clientId ? " is-connect-source" : ""}${assignment.status === "cancelled" ? " is-archived" : ""}`} style={{ left: number(assignment.canvasX), top: number(assignment.canvasY) }} key={assignment.clientId}>
-              {canManage ? <button type="button" className="tm-builder-socket tm-builder-socket--top" aria-label="Connect into task" onClick={() => toggleConnection(assignment.clientId)} /> : null}
-              <div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, assignment)}><span className="tm-builder-block__number">{index + 1}</span><span className="tm-builder-block__title"><b>{assignment.assigneeName || "Team member"}</b><small>{assignment.deliveryDate ? `Delivery ${formatDate(assignment.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions">{canManage ? <button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(assignment.clientId)}><FeatherIcon name="edit" /></button> : null}{canManage && !assignment.id ? <button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => remove(assignment.clientId)}><FeatherIcon name="trash" /></button> : null}</span></div>
-              <button type="button" className="tm-builder-block__body" onClick={() => canManage ? setBlockId(assignment.clientId) : ((ownAssignment(assignment) || meta.isPageAdmin) && assignment.status !== "cancelled" ? onWork({ ...assignment, targetType: "assignment" }) : null)}><span className="tm-builder-block__label">Assigned task</span><strong>{assignment.task || "Click to add assigned task"}</strong><span className={`tm-builder-block__details${assignment.details ? "" : " tm-builder-block__details--empty"}`}>{assignment.details || "No extra details"}</span></button>
-              <div className="tm-people-block__status"><StatusPill status={assignment.status} archived={assignment.status === "cancelled"} /></div>
-              {canManage ? <button type="button" className="tm-builder-socket tm-builder-socket--bottom" aria-label="Start connection" onClick={() => setConnectFrom(assignment.clientId)} /> : null}
-            </article>)}
+        {!busy && workflow ? <div ref={canvasWrapRef} className="tm-builder-canvas-wrap" onPointerDown={startPan} onPointerMove={moveCanvas} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture}>
+          <div className="tm-builder-canvas-stage" style={{ width: boardWidth * zoom, height: boardHeight * zoom }}>
+            <div ref={boardRef} className={`tm-builder-board is-people-mode${connectFrom ? " is-awaiting-target" : ""}`} style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }} aria-label="Team task workflow design canvas">
+              <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-hidden="true"><defs><marker id="nextPeopleArrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="tm-arrow-marker" /></marker></defs>{edges.map((edge, index) => { const from = draft.find((item) => item.clientId === edge.from); const to = draft.find((item) => item.clientId === edge.to); if (!from || !to) return null; return <path key={`${edge.from}-${edge.to}-${index}`} className="tm-builder-arrow" markerEnd="url(#nextPeopleArrow)" d={builderArrowPath(edge.from, edge.to, anchors, from, to, "vertical")} />; })}</svg>
+              {!draft.length ? <div className="tm-builder-empty"><FeatherIcon name="git-branch" /><b>Your team workflow canvas is ready</b><span>Add person tasks vertically, then connect each card from its bottom point to the next card’s top point.</span></div> : null}
+              {draft.map((assignment, index) => <article data-builder-node={assignment.clientId} className={`tm-builder-block${connectFrom === assignment.clientId ? " is-connect-source" : ""}${assignment.status === "cancelled" ? " is-archived" : ""}`} style={{ left: number(assignment.canvasX), top: number(assignment.canvasY) }} key={assignment.clientId}>
+                {canManage ? <button type="button" className="tm-builder-socket tm-builder-socket--top" aria-label="Connect into task" onClick={() => toggleConnection(assignment.clientId)} /> : null}
+                <div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, assignment)}><span className="tm-builder-block__number">{index + 1}</span><span className="tm-builder-block__title"><b>{assignment.assigneeName || "Team member"}</b><small>{assignment.deliveryDate ? `Delivery ${formatDate(assignment.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions">{canManage ? <button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(assignment.clientId)}><FeatherIcon name="edit" /></button> : null}{canManage && !assignment.id ? <button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => remove(assignment.clientId)}><FeatherIcon name="trash" /></button> : null}</span></div>
+                <button type="button" className="tm-builder-block__body" onClick={() => canManage ? setBlockId(assignment.clientId) : ((ownAssignment(assignment) || meta.isPageAdmin) && assignment.status !== "cancelled" ? onWork({ ...assignment, targetType: "assignment" }) : null)}><span className="tm-builder-block__label">Assigned task</span><strong>{assignment.task || "Click to add assigned task"}</strong><span className={`tm-builder-block__details${assignment.details ? "" : " tm-builder-block__details--empty"}`}>{assignment.details || "No extra details"}</span></button>
+                <div className="tm-people-block__status"><StatusPill status={assignment.status} archived={assignment.status === "cancelled"} /></div>
+                {canManage ? <button type="button" className="tm-builder-socket tm-builder-socket--bottom" aria-label="Start connection" onClick={() => setConnectFrom(assignment.clientId)} /> : null}
+              </article>)}
+            </div>
           </div>
         </div> : null}
         {!busy && workflow ? <div className="tm-builder-legend"><span><i className="tm-legend-dot tm-legend-dot--ready" />Each block is one team-member task</span><span><i className="tm-legend-arrow">↓</i>Click a bottom point, then a top point to connect the execution path</span><span><i className="tm-legend-handle" />Press and drag any empty part of a block to move it</span></div> : null}
