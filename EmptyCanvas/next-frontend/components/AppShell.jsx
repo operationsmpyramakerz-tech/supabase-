@@ -1,5 +1,6 @@
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
+import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
 import {
   BodyClassSync,
   ClassicSidebarBootstrap,
@@ -27,7 +28,7 @@ const MODULE_LINKS = [
   { label: "Kits", href: "/next/kits", classicHref: "/kits", permissions: ["Kits", "Proposals", "Products"] },
   { label: "B2C Database", href: "/next/b2c/database", classicHref: "/b2c/database", permissions: ["B2C", "Customer Database", "B2C Customer Database", "/b2c/database"] },
   { label: "B2C Forms", href: "/next/b2c/forms", classicHref: "/b2c/form", permissions: ["B2C", "Customer Form", "B2C Customer Form", "Customer Database", "B2C Customer Database", "/b2c/form"] },
-  { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
+  { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"] },
   { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
   { label: "Expenses Users", href: "/next/expenses/users", classicHref: "/expenses/users", permissions: ["Expenses Users"] },
   { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
@@ -55,7 +56,7 @@ const CLASSIC_MAIN_LINKS = [
   { label: "Proposals", href: "/next/proposals", icon: "file-text", permissions: ["Proposals", "Products"] },
   { label: "Expenses", href: "/next/expenses", icon: "dollar-sign", permissions: ["Expenses"] },
   { label: "Expenses by Users", href: "/next/expenses/users", icon: "credit-card", permissions: ["Expenses Users"] },
-  { label: "Task Management", href: "/next/task-management", icon: "git-branch", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
+  { label: "Task Management", href: "/next/task-management", icon: "git-branch", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"] },
   { label: "KPIs", href: "/next/kpis", icon: "bar-chart-2", permissions: ["KPIs"] },
   { label: "Users Center", href: "/next/users-center", icon: "shield", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"], boundary: "users" },
 ];
@@ -237,6 +238,7 @@ export default function AppShell({
       <BodyClassSync className={combinedBodyClass} />
       <ClassicSidebarBootstrap />
       <ClassicSidebarViewportKeeper />
+      <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar">
