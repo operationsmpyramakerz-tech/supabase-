@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BodyClassSync } from "../ClassicShellControls";
+import NotificationsBell from "../notifications/NotificationsBell";
+import UserProfileMenu from "../UserProfileMenu";
 import ClassicTaskWorkflowDetails from "./ClassicTaskWorkflowDetails";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 
@@ -39,6 +42,11 @@ const VIEW_COPY = {
     emptyText: "Create a project to start a workflow between departments.",
   },
 };
+
+function TaskPortal({ children }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
 
 function text(value) {
   return String(value ?? "").trim();
@@ -994,7 +1002,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
-        <div className="header-row1"><div className="left"><div aria-live="polite" className="greeting-pill"><span className="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div className="greet-text"><div className="greet-title">Hi, <span>{userName}</span> 👋</div><div className="greet-sub">{copy.subtitle}</div></div></div></div><div className="right topbar-right"><a aria-label="My account" className="account-mini" href="/next/account" title="My account"><span className="ico-circle"><img alt="Logo" src="/images/logo.png" /></span><span className="label">My account</span></a></div></div>
+        <div className="header-row1"><div className="left"><div aria-live="polite" className="greeting-pill"><span className="greeting-avatar"><img alt="Hi icon" src="/images/greeting-icon.png" /></span><div className="greet-text"><div className="greet-title">Hi, <span>{userName}</span> 👋</div><div className="greet-sub">{copy.subtitle}</div></div></div></div><div className="right topbar-right"><NotificationsBell classic /><UserProfileMenu account={account} /></div></div>
         <div className="header-row2 tm-header-row2"><div className="tm-page-title-wrap"><span className="tm-page-module">Task Management</span><h1 className="page-title">{copy.label}</h1></div>{canCreate ? <button type="button" className="tm-new-ticket tm-new-ticket--header" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" /><span>Add Project</span></button> : null}</div>
       </header>
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some Task Management resources loaded through fallback.</strong><span>The page remains usable while those resources recover.</span></div> : null}
@@ -1015,13 +1023,13 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
           </section>
         </div>
       </main>
-      {selectedTicket ? <ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={(ticket) => requestAction("edit", ticket)} onRefresh={() => refresh({ silent: true })} onWork={setWorkTarget} onTeamWorkflow={setTeamSection} onArchive={(ticket) => requestAction("archive", ticket)} onDelete={(ticket) => requestAction("delete", ticket)} onDelivered={delivered} notify={notify} /> : null}
-      {editor ? <ProjectEditor editor={editor} meta={meta} view={view} onClose={() => setEditor(null)} onSaved={afterSaved} notify={notify} /> : null}
-      {workTarget ? <WorkEditor target={workTarget} view={view} onClose={() => setWorkTarget(null)} onSaved={workSaved} notify={notify} /> : null}
-      {teamSection ? <TeamWorkflowModal section={teamSection} meta={meta} onClose={() => setTeamSection(null)} onWork={(target) => { setTeamSection(null); setWorkTarget(target); }} notify={notify} onParentRefresh={() => refresh({ silent: true })} /> : null}
-      {adminAction ? <AdminActionModal action={adminAction.action} ticket={adminAction.ticket} view={view} onClose={() => setAdminAction(null)} onVerified={verifiedAction} /> : null}
-      {confirmAction ? <ProjectConfirmModal confirmAction={confirmAction} onCancel={() => setConfirmAction(null)} onConfirm={() => confirmAction.type === "archive" ? doArchive(confirmAction.ticket, confirmAction.password) : doDelete(confirmAction.ticket, confirmAction.password)} /> : null}
-      {rejectedReason ? <RejectedInfoModal reason={rejectedReason} onClose={() => setRejectedReason("")} /> : null}
+      {selectedTicket ? <TaskPortal><ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={(ticket) => requestAction("edit", ticket)} onRefresh={() => refresh({ silent: true })} onWork={setWorkTarget} onTeamWorkflow={setTeamSection} onArchive={(ticket) => requestAction("archive", ticket)} onDelete={(ticket) => requestAction("delete", ticket)} onDelivered={delivered} notify={notify} /></TaskPortal> : null}
+      {editor ? <TaskPortal><ProjectEditor editor={editor} meta={meta} view={view} onClose={() => setEditor(null)} onSaved={afterSaved} notify={notify} /></TaskPortal> : null}
+      {workTarget ? <TaskPortal><WorkEditor target={workTarget} view={view} onClose={() => setWorkTarget(null)} onSaved={workSaved} notify={notify} /></TaskPortal> : null}
+      {teamSection ? <TaskPortal><TeamWorkflowModal section={teamSection} meta={meta} onClose={() => setTeamSection(null)} onWork={(target) => { setTeamSection(null); setWorkTarget(target); }} notify={notify} onParentRefresh={() => refresh({ silent: true })} /></TaskPortal> : null}
+      {adminAction ? <TaskPortal><AdminActionModal action={adminAction.action} ticket={adminAction.ticket} view={view} onClose={() => setAdminAction(null)} onVerified={verifiedAction} /></TaskPortal> : null}
+      {confirmAction ? <TaskPortal><ProjectConfirmModal confirmAction={confirmAction} onCancel={() => setConfirmAction(null)} onConfirm={() => confirmAction.type === "archive" ? doArchive(confirmAction.ticket, confirmAction.password) : doDelete(confirmAction.ticket, confirmAction.password)} /></TaskPortal> : null}
+      {rejectedReason ? <TaskPortal><RejectedInfoModal reason={rejectedReason} onClose={() => setRejectedReason("")} /></TaskPortal> : null}
     </section>
   );
 }

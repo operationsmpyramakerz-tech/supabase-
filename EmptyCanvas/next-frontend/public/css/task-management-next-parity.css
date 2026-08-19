@@ -46,3 +46,78 @@ body.task-management-page .next-task-classic-parity .tm-people-work-preview>span
 body.task-management-page .next-task-classic-parity .tm-people-work-preview p{margin:5px 0;white-space:pre-wrap}
 body.task-management-page .next-task-classic-parity .tm-people-work-preview .danger{color:#b42318}
 body.task-management-page .next-task-classic-parity .tm-people-work-preview a{display:inline-flex;margin-top:5px;font-weight:700}
+
+/* -------------------------------------------------------------------------
+   Next shell fixes v2
+   - Keep the page scroll inside AppShell instead of disabling it.
+   - Task content is intentionally rendered at 50% visual scale as requested.
+   - Task dialogs are portalled to <body>, so they sit above the sidebar and
+     status/filter toolbar rather than being trapped by the shell stacking context.
+   - The normal shared header user/notifications controls stay at normal size.
+   ------------------------------------------------------------------------- */
+body.task-management-page .classic-app-shell > .main-content > .next-classic-page-content{
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+
+/* The late Classic filter rules intentionally use a very high z-index. In the
+   Next shell keep page chrome below any open dialog. */
+body.task-management-page .next-task-classic-parity .tm-toolbar.tm-orders-toolbar{z-index:70!important}
+body.task-management-page .next-task-classic-parity .tm-department-filter.is-open{z-index:110!important}
+body.task-management-page .next-task-classic-parity .tm-department-filter__panel{z-index:120!important}
+body.task-management-page .next-task-classic-parity .tm-task-filter-grid .tm-select.is-open{z-index:130!important}
+body.task-management-page .next-task-classic-parity .tm-task-filter-grid .tm-select__menu{z-index:140!important}
+
+/* 50% visual result size while preserving the full available page width. */
+body.task-management-page .next-task-classic-parity > .tm-page-header .header-row2,
+body.task-management-page .next-task-classic-parity > .tm-main,
+body.task-management-page .next-task-classic-parity > .dashboard-notice{
+  zoom:.5;
+  width:200%!important;
+  box-sizing:border-box!important;
+}
+
+/* The shared profile and notification controls deliberately remain unscaled so
+   they are identical to the rest of the migrated pages. */
+body.task-management-page .next-task-classic-parity > .tm-page-header .header-row1{
+  position:relative!important;
+  z-index:160!important;
+}
+body.task-management-page .next-task-classic-parity > .tm-page-header .topbar-right{
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+}
+
+/* Portalled Task Management overlays must own the top stacking layer. */
+body.task-management-page > .tm-overlay{z-index:500000!important}
+body.task-management-page > .tm-overlay.tm-overlay--builder-layer{z-index:500020!important}
+body.task-management-page > .tm-overlay.tm-overlay--builder-child{z-index:500030!important}
+body.task-management-page > .tm-overlay.tm-overlay--above{z-index:500040!important}
+body.task-management-page > .tm-overlay.tm-overlay--top{z-index:500060!important}
+body.task-management-page > .tm-overlay > .tm-dialog{
+  zoom:.5;
+}
+
+/* Keep scroll available inside long dialogs after the 50% render scale. */
+body.task-management-page > .tm-overlay > .tm-dialog:not(.tm-dialog--builder){
+  max-height:min(180vh,1920px)!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}
+body.task-management-page > .tm-overlay > .tm-dialog.tm-dialog--builder{
+  width:min(1480px,calc(200vw - 80px))!important;
+  height:min(1740px,calc(200vh - 76px))!important;
+  max-height:none!important;
+}
+
+@media(max-width:760px){
+  body.task-management-page .next-task-classic-parity > .tm-page-header .header-row2,
+  body.task-management-page .next-task-classic-parity > .tm-main,
+  body.task-management-page .next-task-classic-parity > .dashboard-notice{
+    width:200%!important;
+  }
+}
