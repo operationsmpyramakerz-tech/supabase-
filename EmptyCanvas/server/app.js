@@ -11721,6 +11721,195 @@ app.delete('/api/backup/delete-all', requireAuth, requirePage('Backup'), async (
   }
 });
 
+
+function _backupBrowserValueForFilter(value) {
+  if (value === null) return 'is.null';
+  if (typeof value === 'undefined') return '';
+  if (typeof value === 'object') return '';
+  return `eq.${String(value)}`;
+}
+
+function _backupBrowserIdentityFilters(row = {}) {
+  if (!row || typeof row !== 'object') return [];
+  if (_backupHasUsableId(row)) return [['id', _backupBrowserValueForFilter(row.id)]];
+
+  const keys = Object.keys(row).filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(key || '')));
+  const preferred = [];
+  const add = (key) => {
+    if (!key || preferred.includes(key)) return;
+    const value = row[key];
+    if (typeof value === 'object' && value !== null) return;
+    const filter = _backupBrowserValueForFilter(value);
+    if (!filter) return;
+    preferred.push(key);
+  };
+
+  for (const key of keys) {
+    if (/^(uuid|notion_id|page_id|record_id|key|slug|email)$/i.test(key) || /_id$/i.test(key)) add(key);
+  }
+  for (const key of keys) {
+    if (/^(created_at|created|timestamp|date|name|title)$/i.test(key)) add(key);
+  }
+  for (const key of keys) add(key);
+
+  return preferred.slice(0, 16).map((key) => [key, _backupBrowserValueForFilter(row[key])]).filter((entry) => entry[1]);
+}
+
+function _backupBrowserCoerceValue(value, column = {}) {
+  if (value === null || typeof value === 'undefined') return value ?? null;
+  if (typeof value !== 'string') return value;
+  const raw = value;
+  const trimmed = raw.trim();
+  const type = _backupColumnTypeToken(column);
+
+  if (/json|object|array/.test(type)) {
+    if (!trimmed) return null;
+    try { return JSON.parse(raw); } catch {
+      const err = new Error(`Column "${column?.name || 'value'}" must contain valid JSON.`);
+      err.status = 400;
+      throw err;
+    }
+  }
+  if (/boolean|bool/.test(type)) {
+    if (!trimmed) return null;
+    if (/^(true|t|yes|y|1)$/i.test(trimmed)) return true;
+    if (/^(false|f|no|n|0)$/i.test(trimmed)) return false;
+    const err = new Error(`Column "${column?.name || 'value'}" must be true or false.`);
+    err.status = 400;
+    throw err;
+  }
+  if (/integer|int2|int4|int8|bigint|smallint/.test(type)) {
+    if (!trimmed) return null;
+    if (/^-?\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+    const err = new Error(`Column "${column?.name || 'value'}" must be an integer.`);
+    err.status = 400;
+    throw err;
+  }
+  if (/number|numeric|decimal|real|double|float/.test(type)) {
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    if (Number.isFinite(n)) return n;
+    const err = new Error(`Column "${column?.name || 'value'}" must be a number.`);
+    err.status = 400;
+    throw err;
+  }
+  return raw;
+}
+
+app.get('/api/backup/tables/:key/rows', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    const item = _backupFindCatalogItem(req.params?.key);
+    if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
+
+    const limit = Math.max(10, Math.min(200, Number.parseInt(req.query?.limit, 10) || 50));
+    const offset = Math.max(0, Number.parseInt(req.query?.offset, 10) || 0);
+    const params = new URLSearchParams({ select: '*', limit: String(limit + 1), offset: String(offset) });
+    const payload = await supabaseDb.request(`/${encodeURIComponent(_backupCleanTableName(item.tableName))}?${params.toString()}`);
+    const list = Array.isArray(payload) ? payload : [];
+    const hasMore = list.length > limit;
+    const rows = hasMore ? list.slice(0, limit) : list;
+    const schema = await _backupGetTableColumns(item.tableName);
+    let columns = Array.isArray(schema?.columns) ? schema.columns : [];
+    if (!columns.length && rows.length) {
+      const names = [];
+      const seen = new Set();
+      for (const row of rows.slice(0, 20)) {
+        for (const key of Object.keys(row || {})) {
+          if (seen.has(key)) continue;
+          seen.add(key);
+          names.push(key);
+        }
+      }
+      columns = names.map((name) => _backupNormalizeColumnInfo(name, {})).filter(Boolean);
+    }
+
+    return res.json({
+      ok: true,
+      table: {
+        key: item.key,
+        pageName: item.pageName,
+        tableName: item.tableName,
+        moduleName: item.moduleName,
+        icon: item.icon,
+        description: item.description,
+        sensitive: !!item.sensitive,
+      },
+      columns,
+      rows,
+      offset,
+      limit,
+      hasMore,
+      canEdit: _hasPageAdminAccess(req, 'Backup'),
+      accessLevel: req.opsPageAccessLevel || _sessionPageAccessLevel(req, 'Backup') || '',
+    });
+  } catch (error) {
+    console.error('GET /api/backup/tables/:key/rows error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to load table rows.' });
+  }
+});
+
+app.patch('/api/backup/tables/:key/rows', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    if (!_hasPageAdminAccess(req, 'Backup')) {
+      return res.status(403).json({ ok: false, error: 'Database Admin access is required to edit table rows.' });
+    }
+
+    const item = _backupFindCatalogItem(req.params?.key);
+    if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
+    const originalRow = req.body?.originalRow;
+    const changes = req.body?.changes;
+    if (!originalRow || typeof originalRow !== 'object' || Array.isArray(originalRow)) {
+      return res.status(400).json({ ok: false, error: 'The original row is required.' });
+    }
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
+      return res.status(400).json({ ok: false, error: 'Row changes are required.' });
+    }
+
+    const schema = await _backupGetTableColumns(item.tableName);
+    const byName = new Map((schema?.columns || []).map((column) => [String(column?.name || '').toLowerCase(), column]));
+    const cleanChanges = {};
+    for (const [rawKey, rawValue] of Object.entries(changes)) {
+      const key = String(rawKey || '').trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      const column = byName.get(key.toLowerCase()) || { name: key };
+      if (byName.size && !byName.has(key.toLowerCase())) continue;
+      cleanChanges[key] = _backupBrowserCoerceValue(rawValue, column);
+    }
+    if (!Object.keys(cleanChanges).length) return res.status(400).json({ ok: false, error: 'There are no valid changes to save.' });
+
+    const filters = _backupBrowserIdentityFilters(originalRow);
+    if (!filters.length) {
+      return res.status(409).json({ ok: false, error: 'This row does not have a safe identifier, so it cannot be edited from Database.' });
+    }
+
+    const table = _backupCleanTableName(item.tableName);
+    const verifyParams = new URLSearchParams({ select: '*', limit: '2' });
+    for (const [key, filter] of filters) verifyParams.append(key, filter);
+    const matches = await supabaseDb.request(`/${encodeURIComponent(table)}?${verifyParams.toString()}`);
+    if (!Array.isArray(matches) || matches.length !== 1) {
+      return res.status(409).json({ ok: false, error: matches?.length > 1 ? 'More than one row matches this record. Editing was stopped for safety.' : 'The row changed or no longer exists. Refresh the table and try again.' });
+    }
+
+    const updateParams = new URLSearchParams();
+    for (const [key, filter] of filters) updateParams.append(key, filter);
+    const updated = await supabaseDb.request(`/${encodeURIComponent(table)}?${updateParams.toString()}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: cleanChanges,
+    });
+    const row = Array.isArray(updated) ? updated[0] || { ...originalRow, ...cleanChanges } : { ...originalRow, ...cleanChanges };
+    _historySetEntity(res, { entityType: 'database_row', entityId: String(row?.id || originalRow?.id || item.tableName), entityLabel: `${item.pageName} / ${item.tableName}` });
+    return res.json({ ok: true, row });
+  } catch (error) {
+    console.error('PATCH /api/backup/tables/:key/rows error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to update table row.' });
+  }
+});
+
 app.get('/api/backup/tables/:key/download', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
