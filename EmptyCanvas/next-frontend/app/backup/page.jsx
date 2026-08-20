@@ -65,10 +65,11 @@ export default async function BackupPage() {
       eyebrow="Backup, restore and database control"
       activePath="/next/backup"
       classicHrefOverride="/backup"
+      bodyClass="page-backup"
+      classicStyles={["/css/backup.css?v=next-stage-2n-database"]}
     >
       <BackupClient
         initialTables={Array.isArray(backupPayload?.tables) ? backupPayload.tables : []}
-        bootstrapWarnings={response.data.omitted || []}
       />
     </AppShell>
   );
