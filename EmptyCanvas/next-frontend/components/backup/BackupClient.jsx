@@ -163,6 +163,7 @@ export default function BackupClient({ initialTables = [] }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteStage, setDeleteStage] = useState("");
   const [toast, setToast] = useState(null);
+  const [folderMenu, setFolderMenu] = useState("");
 
   const modalOpen = Boolean(importTarget || deleteTarget);
 
@@ -186,6 +187,22 @@ export default function BackupClient({ initialTables = [] }) {
     const timer = window.setTimeout(() => setToast(null), 3000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!folderMenu) return undefined;
+    function closeMenu(event) {
+      if (!event.target.closest(".backup-folder-card")) setFolderMenu("");
+    }
+    function keyDown(event) {
+      if (event.key === "Escape") setFolderMenu("");
+    }
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", keyDown);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", keyDown);
+    };
+  }, [folderMenu]);
 
   function showToast(message, variant = "success") {
     setToast({ message, variant, stamp: Date.now() });
@@ -329,13 +346,13 @@ export default function BackupClient({ initialTables = [] }) {
     <>
       {toast ? <BodyPortal><Toast toast={toast} /></BodyPortal> : null}
 
-      <main className="backup-page-shell">
+      <main className="backup-page-shell backup-folder-page">
         <section className="backup-hero card">
           <span className="backup-hero-icon"><FeatherIcon name="database" /></span>
-          <div>
+          <div className="backup-hero-copy">
             <p className="backup-kicker">SYSTEM DATA</p>
             <h2>Database</h2>
-            <p>Export, import, or clear Supabase table data safely.</p>
+            <p>Open a table to view its rows. Database Admins can edit values directly.</p>
           </div>
           <div className="backup-hero-actions">
             <a className="backup-export-all-btn" href="/api/backup/export-all" download>
@@ -347,7 +364,7 @@ export default function BackupClient({ initialTables = [] }) {
           </div>
         </section>
 
-        <section className="backup-list-card card">
+        <section className="backup-list-card card backup-folders-card">
           <div className="backup-list-head">
             <div>
               <p className="backup-kicker">DATABASE TABLES</p>
@@ -356,32 +373,58 @@ export default function BackupClient({ initialTables = [] }) {
             <span className="backup-count">{tables.length} table{tables.length === 1 ? "" : "s"}</span>
           </div>
 
-          <div className="backup-grid" aria-live="polite">
-            {tables.length ? tables.map((item) => (
-              <article className="backup-table-card" key={item.key || item.tableName}>
-                <div className="backup-table-head">
-                  <span className="backup-card-icon"><FeatherIcon name={item.icon || "database"} /></span>
-                  <div className="backup-card-meta">
-                    <h3 className="backup-card-title">{item.pageName || "Database"}</h3>
-                    <span className="backup-card-module">{item.moduleName || "System"}</span>
-                  </div>
-                </div>
-                <div className="backup-table-name" title={item.tableName || ""}>
-                  <FeatherIcon name="database" /><code>{item.tableName || "table"}</code>
-                </div>
-                <div className="backup-card-actions">
-                  <a className="backup-download-btn" href={`/api/backup/tables/${encodeURIComponent(item.key)}/download`} download>
-                    <FeatherIcon name="download" /><span>Export</span>
-                  </a>
-                  <button type="button" className="backup-import-btn" onClick={() => openImportModal(item)}>
-                    <FeatherIcon name="upload" /><span>Import</span>
+          <div className="backup-folder-grid" aria-live="polite">
+            {tables.length ? tables.map((item) => {
+              const menuOpen = folderMenu === item.key;
+              return (
+                <article className={`backup-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={item.key || item.tableName}>
+                  <button
+                    type="button"
+                    className="backup-folder-menu-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setFolderMenu((current) => current === item.key ? "" : item.key);
+                    }}
+                    aria-label={`Actions for ${item.pageName || item.tableName}`}
+                    aria-expanded={menuOpen}
+                  >
+                    <span aria-hidden="true">•••</span>
                   </button>
-                  <button type="button" className="backup-delete-btn" onClick={() => openDeleteModal(item)}>
-                    <FeatherIcon name="trash-2" /><span>Delete</span>
+                  {menuOpen ? (
+                    <div className="backup-folder-menu" onClick={(event) => event.stopPropagation()}>
+                      <a href={`/api/backup/tables/${encodeURIComponent(item.key)}/download`} download onClick={() => setFolderMenu("")}>
+                        <FeatherIcon name="download" /><span>Export</span>
+                      </a>
+                      <button type="button" onClick={() => { setFolderMenu(""); openImportModal(item); }}>
+                        <FeatherIcon name="upload" /><span>Import</span>
+                      </button>
+                      <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); openDeleteModal(item); }}>
+                        <FeatherIcon name="trash-2" /><span>Delete</span>
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="backup-folder-main"
+                    onClick={() => { window.location.href = `/next/backup/${encodeURIComponent(item.key)}`; }}
+                    aria-label={`Open ${item.pageName || item.tableName}`}
+                  >
+                    <span className="backup-folder-figure" aria-hidden="true">
+                      <span className="backup-folder-paper backup-folder-paper--left" />
+                      <span className="backup-folder-paper backup-folder-paper--middle" />
+                      <span className="backup-folder-paper backup-folder-paper--right" />
+                      <span className="backup-folder-back" />
+                      <span className="backup-folder-front"><small>DB</small></span>
+                    </span>
+                    <span className="backup-folder-copy">
+                      <strong>{item.pageName || item.tableName || "Database table"}</strong>
+                      <em>{item.moduleName || "System"}</em>
+                    </span>
+                    <span className="backup-folder-table-name" title={item.tableName || ""}>{item.tableName || "table"}</span>
                   </button>
-                </div>
-              </article>
-            )) : (
+                </article>
+              );
+            }) : (
               <div className="backup-empty"><FeatherIcon name="database" /><span>No database tables found.</span></div>
             )}
           </div>
