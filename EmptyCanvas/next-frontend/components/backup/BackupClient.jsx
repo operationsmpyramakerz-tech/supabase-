@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 const MAX_CSV_SIZE = 25 * 1024 * 1024;
 
@@ -10,18 +11,6 @@ function text(value) {
 
 function lower(value) {
   return text(value).toLowerCase();
-}
-
-function unique(values) {
-  return [...new Set(values.map(text).filter(Boolean))];
-}
-
-function fileSize(value) {
-  const bytes = Number(value || 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 function filenameFromResponse(response, fallback) {
@@ -36,15 +25,15 @@ function filenameFromResponse(response, fallback) {
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename || "database-export.csv";
-  anchor.style.display = "none";
-  document.body.appendChild(anchor);
-  anchor.click();
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "database-export.csv";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
   window.setTimeout(() => {
-    URL.revokeObjectURL(url);
-    anchor.remove();
+    try { URL.revokeObjectURL(url); } catch {}
+    link.remove();
   }, 1200);
 }
 
@@ -54,7 +43,9 @@ async function readResponseError(response, fallback = "Request failed.") {
     const body = await response.json().catch(() => ({}));
     return text(body?.error || body?.message || body?.details) || fallback;
   }
-  const body = text(await response.text().catch(() => "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const body = text(await response.text().catch(() => ""))
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
   return body || `${fallback} (${response.status})`;
 }
 
@@ -64,7 +55,7 @@ async function requestJson(url, options = {}) {
     cache: "no-store",
     ...options,
     headers: {
-      ...(options.body && !options.rawBody ? { "Content-Type": "application/json" } : {}),
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...(options.headers || {}),
     },
   });
@@ -85,457 +76,382 @@ async function fetchDownload(url, fallbackName) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     throw new Error("Your session has expired.");
   }
-  if (!response.ok) throw new Error(await readResponseError(response, "Export failed."));
+  if (!response.ok) throw new Error(await readResponseError(response, "Export failed, so delete was stopped."));
   const blob = await response.blob();
-  if (!blob?.size) throw new Error("The exported file is empty.");
+  if (!blob?.size) throw new Error("Export file is empty, so delete was stopped.");
   downloadBlob(blob, filenameFromResponse(response, fallbackName));
   return blob;
 }
 
-function initials(value) {
-  return text(value)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "DB";
-}
-
-function moduleMark(value) {
-  const clean = text(value);
-  const marks = {
-    Orders: "OR",
-    Inventory: "IN",
-    Events: "EV",
-    Finance: "FI",
-    B2B: "B2",
-    B2C: "BC",
-    Proposals: "PR",
-    "Task Management": "TM",
-    KPIs: "KP",
-    "Users Center": "UC",
-    System: "SY",
+function FeatherIcon({ name = "database" }) {
+  const common = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
   };
-  return marks[clean] || initials(clean);
-}
-
-function BackupIcon({ name }) {
-  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
-  const paths = {
+  const icons = {
     database: <><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>,
-    refresh: <><path d="M20 6v6h-6"/><path d="M4 18v-6h6"/><path d="M18.5 9a7 7 0 0 0-11.8-2.6L4 9"/><path d="M5.5 15a7 7 0 0 0 11.8 2.6L20 15"/></>,
+    "download-cloud": <><path d="M8 17l4 4 4-4"/><path d="M12 12v9"/><path d="M20.9 18.1A5 5 0 0 0 18 9h-1.3A8 8 0 1 0 3 16.3"/></>,
     download: <><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></>,
-    upload: <><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 21h14"/></>,
-    trash: <><path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></>,
-    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
-    chevron: <path d="m7 9 5 5 5-5"/>,
-    check: <path d="m5 12 4 4L19 6"/>,
-    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></>,
+    "upload-cloud": <><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.9 18.1A5 5 0 0 0 18 9h-1.3A8 8 0 1 0 3 16.3"/></>,
+    upload: <><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/></>,
+    "trash-2": <><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></>,
+    x: <><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>,
+    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
+    "alert-triangle": <><path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+    check: <path d="m20 6-11 11-5-5"/>,
+    "shopping-cart": <><circle cx="9" cy="20" r="1"/><circle cx="20" cy="20" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></>,
+    archive: <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
+    package: <><path d="m16.5 9.4-9-5.2"/><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
+    tag: <><path d="M20.6 13.6 11 23.2 1.8 14V4.8h9.2z"/><circle cx="6.5" cy="9.5" r="1.5"/></>,
+    calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
+    box: <><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/></>,
+    layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
+    "map-pin": <><path d="M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></>,
+    "dollar-sign": <><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></>,
+    folder: <><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></>,
+    columns: <><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></>,
+    users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></>,
+    clipboard: <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></>,
+    sliders: <><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></>,
+    "file-text": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>,
+    list: <><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>,
+    briefcase: <><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></>,
+    "git-branch": <><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></>,
+    "git-pull-request": <><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></>,
+    "git-merge": <><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/><path d="m15 6 3-3 3 3"/><path d="M18 3v12"/></>,
+    target: <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>,
+    "trending-up": <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>,
+    "bar-chart-2": <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>,
+    award: <><circle cx="12" cy="8" r="6"/><path d="M15.5 12.9 17 22l-5-3-5 3 1.5-9.1"/></>,
+    "user-plus": <><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></>,
+    clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
   };
-  return <svg {...common}>{paths[name] || paths.database}</svg>;
+  return <svg {...common}>{icons[name] || icons.database}</svg>;
 }
 
-function BackupSelect({ label, value, options, onChange }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
-  const selected = options.find((option) => option.value === value) || options[0];
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function pointerDown(event) {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
-    }
-    function keyDown(event) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", pointerDown);
-    document.addEventListener("keydown", keyDown);
-    return () => {
-      document.removeEventListener("pointerdown", pointerDown);
-      document.removeEventListener("keydown", keyDown);
-    };
-  }, [open]);
-
-  return (
-    <div className={`next-backup-select ${open ? "is-open" : ""}`} ref={rootRef}>
-      <span className="next-backup-select__label">{label}</span>
-      <button type="button" className="next-backup-select__trigger" onClick={() => setOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={open}>
-        <span>{selected?.label || "Select"}</span><BackupIcon name="chevron" />
-      </button>
-      {open ? (
-        <div className="next-backup-select__menu" role="listbox" aria-label={label}>
-          {options.map((option) => (
-            <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "is-selected" : ""} key={option.value} onClick={() => { onChange(option.value); setOpen(false); }}>
-              <span>{option.label}</span>{option.value === value ? <BackupIcon name="check" /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
+function BodyPortal({ children }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
 }
 
-function Toast({ toast, onClose }) {
+function Toast({ toast }) {
   if (!toast) return null;
   return (
-    <div className={`next-backup-toast is-${toast.type || "info"}`} role="status">
-      <div><strong>{toast.title || "Database Backup"}</strong><span>{toast.message}</span></div>
-      <button type="button" onClick={onClose} aria-label="Close">×</button>
+    <div className={`backup-toast ${toast.variant === "danger" ? "backup-toast--danger" : ""} is-visible`} role="status" aria-live="polite">
+      <FeatherIcon name={toast.variant === "danger" ? "alert-triangle" : "check"} />
+      <span>{toast.message}</span>
     </div>
   );
 }
 
-function Modal({ title, subtitle, onClose, children, footer = null, danger = false }) {
+export default function BackupClient({ initialTables = [] }) {
+  const [tables, setTables] = useState(() => Array.isArray(initialTables) ? initialTables : []);
+  const [importTarget, setImportTarget] = useState(null);
+  const [importFile, setImportFile] = useState(null);
+  const [importPassword, setImportPassword] = useState("");
+  const [importError, setImportError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importStage, setImportStage] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteStage, setDeleteStage] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const modalOpen = Boolean(importTarget || deleteTarget);
+
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    function keyDown(event) { if (event.key === "Escape") onClose(); }
+    document.body.classList.toggle("backup-modal-open", modalOpen);
+    if (!modalOpen) return undefined;
+    function keyDown(event) {
+      if (event.key !== "Escape" || importing || deleting) return;
+      if (importTarget) closeImportModal();
+      else if (deleteTarget) closeDeleteModal();
+    }
     document.addEventListener("keydown", keyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      document.body.classList.remove("backup-modal-open");
       document.removeEventListener("keydown", keyDown);
     };
-  }, [onClose]);
+  }, [modalOpen, importTarget, deleteTarget, importing, deleting]);
 
-  return (
-    <div className="next-backup-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`next-backup-modal__card ${danger ? "is-danger" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <span>{danger ? "!" : "DB"}</span>
-          <div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-        <div className="next-backup-modal__body">{children}</div>
-        {footer ? <footer>{footer}</footer> : null}
-      </section>
-    </div>
-  );
-}
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
-function ImportModal({ table, onClose, onImported }) {
-  const [file, setFile] = useState(null);
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [stage, setStage] = useState("");
-  const [error, setError] = useState("");
-  const inputRef = useRef(null);
+  function showToast(message, variant = "success") {
+    setToast({ message, variant, stamp: Date.now() });
+  }
 
-  async function submit(event) {
-    event.preventDefault();
-    setError("");
-    if (!file) return setError("Choose a CSV file first.");
-    if (!/\.csv$/i.test(file.name || "") && lower(file.type) !== "text/csv") return setError("Only CSV files are allowed.");
-    if (file.size > MAX_CSV_SIZE) return setError("CSV file is too large. Maximum size is 25 MB.");
-    if (!text(password)) return setError("Admin password is required.");
-
-    setBusy(true);
+  async function reloadTables() {
     try {
-      setStage("Reading CSV…");
-      const csvText = await file.text();
+      const body = await requestJson("/api/backup/tables");
+      setTables(Array.isArray(body?.tables) ? body.tables : []);
+    } catch (error) {
+      showToast(error?.message || "Failed to load database tables.", "danger");
+    }
+  }
+
+  function openImportModal(table) {
+    setImportTarget(table);
+    setImportFile(null);
+    setImportPassword("");
+    setImportError("");
+    setImportStage("");
+  }
+
+  function closeImportModal() {
+    if (importing) return;
+    setImportTarget(null);
+    setImportFile(null);
+    setImportPassword("");
+    setImportError("");
+    setImportStage("");
+  }
+
+  async function confirmImport() {
+    if (!importTarget) return;
+    if (!importFile) return setImportError("Choose a CSV file first.");
+    const fileName = lower(importFile.name);
+    if (fileName && !fileName.endsWith(".csv")) return setImportError("Only CSV files are allowed.");
+    if (importFile.size > MAX_CSV_SIZE) return setImportError("CSV file is too large. Maximum size is 25 MB.");
+    if (!text(importPassword)) return setImportError("Admin password is required.");
+
+    setImportError("");
+    setImporting(true);
+    try {
+      setImportStage("Reading...");
+      const csvText = await importFile.text();
       if (!text(csvText)) throw new Error("CSV file is empty.");
-      setStage("Validating schema…");
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(table.key)}/import`, {
+      setImportStage("Validating...");
+      const response = await fetch(`/api/backup/tables/${encodeURIComponent(importTarget.key)}/import`, {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "X-Admin-Password": encodeURIComponent(text(password)),
-          "X-CSV-Filename": encodeURIComponent(file.name || ""),
+          "X-Admin-Password": encodeURIComponent(text(importPassword)),
+          "X-CSV-Filename": encodeURIComponent(importFile.name || ""),
         },
         body: csvText,
       });
-      if (response.status === 401) {
-        const body = await response.json().catch(() => ({}));
-        if (!lower(body?.error).includes("password")) {
-          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
-          throw new Error("Your session has expired.");
-        }
-        throw new Error(text(body?.error) || "Invalid admin password.");
+      const body = response.ok ? await response.json().catch(() => ({})) : {};
+      if (!response.ok || body?.ok === false) {
+        throw new Error(response.ok ? (body?.error || "Failed to import CSV data.") : await readResponseError(response, "Failed to import CSV data."));
       }
-      if (!response.ok) throw new Error(await readResponseError(response, "CSV import failed."));
-      const body = await response.json().catch(() => ({}));
-      if (body?.ok === false) throw new Error(text(body?.error) || "CSV import failed.");
-      onImported(body);
-    } catch (submitError) {
-      setError(submitError?.message || "CSV import failed.");
-    } finally {
-      setBusy(false);
-      setStage("");
+      const importedTarget = importTarget;
+      setImporting(false);
+      setImportTarget(null);
+      setImportFile(null);
+      setImportPassword("");
+      setImportStage("");
+      showToast(`Imported ${Number(body?.importedRows || 0).toLocaleString()} row${Number(body?.importedRows || 0) === 1 ? "" : "s"} into ${body?.tableName || importedTarget?.tableName}.`);
+      await reloadTables();
+    } catch (error) {
+      setImportError(error?.message || "Failed to import CSV data.");
+      showToast(error?.message || "Failed to import CSV data.", "danger");
+      setImporting(false);
+      setImportStage("");
     }
   }
 
-  return (
-    <Modal
-      title={`Import ${text(table.pageName) || "table"}`}
-      subtitle={text(table.tableName)}
-      onClose={busy ? () => {} : onClose}
-      footer={(
-        <>
-          <button type="button" className="next-backup-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" form="nextBackupImportForm" className="next-backup-btn primary" disabled={busy}>{busy ? stage || "Importing…" : "Import CSV"}</button>
-        </>
-      )}
-    >
-      <form id="nextBackupImportForm" className="next-backup-form" onSubmit={submit}>
-        <div className="next-backup-safe-note">
-          <strong>Schema validation is enabled</strong>
-          <span>The CSV headers must match the actual Supabase table. Rows with IDs are upserted; rows without IDs are inserted.</span>
-        </div>
-        <label className="next-backup-file-picker">
-          <span>CSV file</span>
-          <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={(event) => { setFile(event.target.files?.[0] || null); setError(""); }} />
-          <div>
-            <b>{file ? file.name : "Choose CSV file"}</b>
-            <small>{file ? `${fileSize(file.size)} • Ready to validate` : "Maximum file size: 25 MB"}</small>
-          </div>
-        </label>
-        <label><span>Admin password *</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" placeholder="Enter admin password" /></label>
-        {error ? <div className="next-backup-inline-error">{error}</div> : null}
-      </form>
-    </Modal>
-  );
-}
+  function openDeleteModal(table) {
+    setDeleteTarget(table);
+    setDeletePassword("");
+    setDeleteError("");
+    setDeleteStage("");
+  }
 
-function DeleteModal({ target, onClose, onDeleted }) {
-  const [password, setPassword] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [stage, setStage] = useState("");
-  const [error, setError] = useState("");
-  const isAll = target?.isAll;
-  const label = isAll ? "all system data" : (text(target?.pageName) || text(target?.tableName) || "table data");
-  const confirmationText = isAll ? "DELETE ALL DATA" : "DELETE TABLE DATA";
+  function closeDeleteModal() {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setDeletePassword("");
+    setDeleteError("");
+    setDeleteStage("");
+  }
 
-  async function submit(event) {
-    event.preventDefault();
-    setError("");
-    if (!text(password)) return setError("Admin password is required.");
-    if (text(confirmed).toUpperCase() !== confirmationText) return setError(`Type ${confirmationText} exactly to continue.`);
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const password = text(deletePassword);
+    if (!password) return setDeleteError("Admin password is required.");
 
-    setBusy(true);
+    const isAll = Boolean(deleteTarget?.isAll);
+    const confirmed = window.OpsDeleteConfirm?.confirm
+      ? await window.OpsDeleteConfirm.confirm({
+          title: isAll ? "Delete all system data?" : `Delete ${deleteTarget?.pageName || "table data"}?`,
+          itemType: isAll ? "system data" : "table data",
+          itemName: isAll ? "all system data" : (deleteTarget?.pageName || deleteTarget?.tableName || "this table"),
+          message: isAll
+            ? "You’re going to download a complete ZIP backup and then permanently delete all rows from all database tables. This action cannot be undone."
+            : `You’re going to download a CSV backup and then permanently delete every row from “${deleteTarget?.tableName || "this table"}”. This action cannot be undone.`,
+        })
+      : window.confirm(isAll ? "Delete all system data?" : `Delete ${deleteTarget?.pageName || "table data"}?`);
+    if (!confirmed) return;
+
+    setDeleteError("");
+    setDeleting(true);
     try {
-      setStage(isAll ? "Exporting full ZIP…" : "Exporting CSV…");
-      const exportUrl = isAll ? "/api/backup/export-all" : `/api/backup/tables/${encodeURIComponent(target.key)}/download`;
-      const fallbackName = isAll ? `database-export-${Date.now()}.zip` : `${text(target.tableName) || "table"}-${Date.now()}.csv`;
+      setDeleteStage("Exporting...");
+      const exportUrl = isAll ? "/api/backup/export-all" : `/api/backup/tables/${encodeURIComponent(deleteTarget.key)}/download`;
+      const fallbackName = isAll ? `database-export-${Date.now()}.zip` : `${deleteTarget?.tableName || "table"}-${Date.now()}.csv`;
       await fetchDownload(exportUrl, fallbackName);
       await new Promise((resolve) => window.setTimeout(resolve, 450));
-      setStage("Deleting data…");
-      const deleteUrl = isAll ? "/api/backup/delete-all" : `/api/backup/tables/${encodeURIComponent(target.key)}`;
-      const result = await requestJson(deleteUrl, {
+
+      setDeleteStage("Deleting...");
+      const deleteUrl = isAll ? "/api/backup/delete-all" : `/api/backup/tables/${encodeURIComponent(deleteTarget.key)}`;
+      await requestJson(deleteUrl, {
         method: "DELETE",
-        body: JSON.stringify({ adminPassword: text(password) }),
+        body: JSON.stringify({ adminPassword: password }),
       });
-      onDeleted(result);
-    } catch (submitError) {
-      setError(submitError?.message || "The data could not be deleted.");
-    } finally {
-      setBusy(false);
-      setStage("");
+      setDeleting(false);
+      setDeleteTarget(null);
+      setDeletePassword("");
+      setDeleteStage("");
+      showToast(isAll ? "Export downloaded and all data deleted." : "CSV downloaded and table data deleted.");
+      await reloadTables();
+    } catch (error) {
+      setDeleteError(error?.message || "Failed to delete data.");
+      showToast(error?.message || "Failed to delete data.", "danger");
+      setDeleting(false);
+      setDeleteStage("");
     }
   }
 
   return (
-    <Modal
-      title={isAll ? "Delete all database data?" : `Delete ${label}?`}
-      subtitle="The export must finish successfully before deletion begins."
-      danger
-      onClose={busy ? () => {} : onClose}
-      footer={(
-        <>
-          <button type="button" className="next-backup-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" form="nextBackupDeleteForm" className="next-backup-btn danger" disabled={busy}>{busy ? stage || "Deleting…" : "Export then delete"}</button>
-        </>
-      )}
-    >
-      <form id="nextBackupDeleteForm" className="next-backup-form" onSubmit={submit}>
-        <div className="next-backup-danger-note">
-          <strong>This action cannot be undone</strong>
-          <span>{isAll ? "A ZIP backup will be downloaded, then rows from every configured database table will be permanently deleted." : `A CSV backup will be downloaded, then every row from “${text(target.tableName)}” will be permanently deleted.`}</span>
-        </div>
-        <label><span>Admin password *</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" placeholder="Enter admin password" /></label>
-        <label><span>Type {confirmationText} *</span><input type="text" value={confirmed === false ? "" : confirmed} onChange={(event) => setConfirmed(event.target.value)} autoComplete="off" placeholder={confirmationText} /></label>
-        {error ? <div className="next-backup-inline-error">{error}</div> : null}
-      </form>
-    </Modal>
-  );
-}
+    <>
+      {toast ? <BodyPortal><Toast toast={toast} /></BodyPortal> : null}
 
-export default function BackupClient({ initialTables = [], bootstrapWarnings = [] }) {
-  const [tables, setTables] = useState(() => Array.isArray(initialTables) ? initialTables : []);
-  const [query, setQuery] = useState("");
-  const [moduleFilter, setModuleFilter] = useState("all");
-  const [sensitivityFilter, setSensitivityFilter] = useState("all");
-  const [sort, setSort] = useState("module-name");
-  const [busyAction, setBusyAction] = useState("");
-  const [importTarget, setImportTarget] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [toast, setToast] = useState(null);
-
-  const modules = useMemo(() => unique(tables.map((item) => item?.moduleName)).sort((a, b) => a.localeCompare(b)), [tables]);
-  const sensitiveCount = useMemo(() => tables.filter((item) => item?.sensitive).length, [tables]);
-  const moduleOptions = useMemo(() => [{ value: "all", label: "All modules" }, ...modules.map((module) => ({ value: module, label: module }))], [modules]);
-  const sensitivityOptions = [
-    { value: "all", label: "All tables" },
-    { value: "standard", label: "Standard tables" },
-    { value: "sensitive", label: "Sensitive tables" },
-  ];
-  const sortOptions = [
-    { value: "module-name", label: "Module then name" },
-    { value: "name", label: "Name A–Z" },
-    { value: "name-desc", label: "Name Z–A" },
-    { value: "table", label: "Table name" },
-    { value: "sensitive", label: "Sensitive first" },
-  ];
-
-  const filteredTables = useMemo(() => {
-    const needle = lower(query);
-    const rows = tables.filter((item) => {
-      if (moduleFilter !== "all" && text(item?.moduleName) !== moduleFilter) return false;
-      if (sensitivityFilter === "sensitive" && !item?.sensitive) return false;
-      if (sensitivityFilter === "standard" && item?.sensitive) return false;
-      if (!needle) return true;
-      return [item?.pageName, item?.tableName, item?.moduleName, item?.description, item?.key].some((value) => lower(value).includes(needle));
-    });
-    rows.sort((a, b) => {
-      if (sort === "name-desc") return text(b?.pageName).localeCompare(text(a?.pageName));
-      if (sort === "table") return text(a?.tableName).localeCompare(text(b?.tableName));
-      if (sort === "sensitive") return Number(Boolean(b?.sensitive)) - Number(Boolean(a?.sensitive)) || text(a?.pageName).localeCompare(text(b?.pageName));
-      if (sort === "name") return text(a?.pageName).localeCompare(text(b?.pageName));
-      return text(a?.moduleName).localeCompare(text(b?.moduleName)) || text(a?.pageName).localeCompare(text(b?.pageName));
-    });
-    return rows;
-  }, [tables, query, moduleFilter, sensitivityFilter, sort]);
-
-  function showToast(type, title, message) {
-    setToast({ type, title, message });
-  }
-
-  async function refresh() {
-    setBusyAction("refresh");
-    try {
-      const body = await requestJson("/api/backup/tables");
-      setTables(Array.isArray(body?.tables) ? body.tables : []);
-      showToast("success", "Catalogue refreshed", "The configured Supabase table catalogue is up to date.");
-    } catch (error) {
-      showToast("error", "Refresh failed", error?.message || "Database tables could not be loaded.");
-    } finally {
-      setBusyAction("");
-    }
-  }
-
-  async function exportOne(table) {
-    const key = text(table?.key);
-    if (!key) return;
-    setBusyAction(`export-${key}`);
-    try {
-      await fetchDownload(`/api/backup/tables/${encodeURIComponent(key)}/download`, `${text(table.tableName) || "table"}-${Date.now()}.csv`);
-      showToast("success", "CSV exported", `${text(table.pageName) || "Table"} was downloaded successfully.`);
-    } catch (error) {
-      showToast("error", "Export failed", error?.message || "The CSV could not be downloaded.");
-    } finally {
-      setBusyAction("");
-    }
-  }
-
-  async function exportAll() {
-    setBusyAction("export-all");
-    try {
-      await fetchDownload("/api/backup/export-all", `database-export-${Date.now()}.zip`);
-      showToast("success", "Full backup exported", "The ZIP archive was downloaded successfully.");
-    } catch (error) {
-      showToast("error", "Export failed", error?.message || "The full backup could not be downloaded.");
-    } finally {
-      setBusyAction("");
-    }
-  }
-
-  function clearFilters() {
-    setQuery("");
-    setModuleFilter("all");
-    setSensitivityFilter("all");
-    setSort("module-name");
-  }
-
-  return (
-    <section className="next-backup-page next-backup-page--refined">
-      <Toast toast={toast} onClose={() => setToast(null)} />
-
-      <article className="next-backup-hero next-backup-hero--refined">
-        <div className="next-backup-hero__copy">
-          <span className="next-backup-kicker">SYSTEM DATA</span>
-          <h2>Database</h2>
-          <p>Export, import and clear Supabase table data from one protected workspace.</p>
-          {Array.isArray(bootstrapWarnings) && bootstrapWarnings.length ? <small>Some resources were unavailable during page load. Refresh the catalogue before making a destructive change.</small> : null}
-        </div>
-        <div className="next-backup-hero__actions">
-          <button type="button" className="next-backup-btn secondary" onClick={refresh} disabled={Boolean(busyAction)}><BackupIcon name="refresh" /><span>{busyAction === "refresh" ? "Refreshing…" : "Refresh"}</span></button>
-          <button type="button" className="next-backup-btn primary" onClick={exportAll} disabled={Boolean(busyAction)}><BackupIcon name="download" /><span>{busyAction === "export-all" ? "Preparing ZIP…" : "Export all"}</span></button>
-          <button type="button" className="next-backup-btn danger-outline" onClick={() => setDeleteTarget({ isAll: true })} disabled={Boolean(busyAction)}><BackupIcon name="trash" /><span>Delete all</span></button>
-        </div>
-      </article>
-
-      <div className="next-backup-summary">
-        <article><span>DB</span><div><small>Configured tables</small><strong>{tables.length.toLocaleString()}</strong><p>Available for controlled backup</p></div></article>
-        <article><span>MD</span><div><small>System modules</small><strong>{modules.length.toLocaleString()}</strong><p>Grouped by ERP workspace</p></div></article>
-        <article><span>SC</span><div><small>Sensitive tables</small><strong>{sensitiveCount.toLocaleString()}</strong><p>Identity, access or audit data</p></div></article>
-        <article><span>FM</span><div><small>Backup formats</small><strong>2</strong><p>CSV per table and full ZIP</p></div></article>
-      </div>
-
-      <article className="next-backup-toolbar next-backup-toolbar--modern">
-        <label className="next-backup-search">
-          <span>Search tables</span>
-          <div className="next-backup-search__field"><BackupIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Page, table, module…" /></div>
-        </label>
-        <BackupSelect label="Module" value={moduleFilter} options={moduleOptions} onChange={setModuleFilter} />
-        <BackupSelect label="Sensitivity" value={sensitivityFilter} options={sensitivityOptions} onChange={setSensitivityFilter} />
-        <BackupSelect label="Sort by" value={sort} options={sortOptions} onChange={setSort} />
-        <div className="next-backup-toolbar__result"><strong>{filteredTables.length}</strong><span>of {tables.length} tables</span></div>
-        <button type="button" className="next-backup-clear" onClick={clearFilters}>Clear filters</button>
-      </article>
-
-      <article className="next-backup-list-card">
-        <header>
-          <div><span className="next-backup-kicker">DATABASE TABLES</span><h2>Tables</h2></div>
-          <p><strong>{filteredTables.length}</strong> visible · Imports and deletes require the admin password.</p>
-        </header>
-        {filteredTables.length ? (
-          <div className="next-backup-grid">
-            {filteredTables.map((table) => {
-              const key = text(table?.key);
-              const exporting = busyAction === `export-${key}`;
-              return (
-                <article className={`next-backup-table-card ${table?.sensitive ? "is-sensitive" : ""}`} key={key || table.tableName}>
-                  <header>
-                    <span className="next-backup-module-mark">{moduleMark(table?.moduleName)}</span>
-                    <div><small>{text(table?.moduleName) || "System"}</small><h3>{text(table?.pageName) || "Database table"}</h3></div>
-                    {table?.sensitive ? <em>Sensitive</em> : null}
-                  </header>
-                  <div className="next-backup-table-name"><span>Supabase table</span><code>{text(table?.tableName) || "table"}</code></div>
-                  <p>{text(table?.description) || "System data stored in Supabase."}</p>
-                  <footer>
-                    <button type="button" className="next-backup-card-btn export" onClick={() => exportOne(table)} disabled={Boolean(busyAction)}><BackupIcon name="download" /><span>{exporting ? "Exporting…" : "Export"}</span></button>
-                    <button type="button" className="next-backup-card-btn import" onClick={() => setImportTarget(table)} disabled={Boolean(busyAction)}><BackupIcon name="upload" /><span>Import</span></button>
-                    <button type="button" className="next-backup-card-btn delete" onClick={() => setDeleteTarget(table)} disabled={Boolean(busyAction)}><BackupIcon name="trash" /><span>Delete</span></button>
-                  </footer>
-                </article>
-              );
-            })}
+      <main className="backup-page-shell">
+        <section className="backup-hero card">
+          <span className="backup-hero-icon"><FeatherIcon name="database" /></span>
+          <div>
+            <p className="backup-kicker">SYSTEM DATA</p>
+            <h2>Database</h2>
+            <p>Export, import, or clear Supabase table data safely.</p>
           </div>
-        ) : (
-          <div className="next-backup-empty"><span>DB</span><h3>No tables match the current filters</h3><p>Clear the search and filters to show the full backup catalogue.</p><button type="button" onClick={clearFilters}>Clear filters</button></div>
-        )}
-      </article>
+          <div className="backup-hero-actions">
+            <a className="backup-export-all-btn" href="/api/backup/export-all" download>
+              <FeatherIcon name="download-cloud" /><span>Export all data</span>
+            </a>
+            <button type="button" className="backup-delete-all-btn" onClick={() => openDeleteModal({ key: "__all__", pageName: "all system data", tableName: "all database tables", isAll: true })}>
+              <FeatherIcon name="trash-2" /><span>Delete all data</span>
+            </button>
+          </div>
+        </section>
 
-      <article className="next-backup-guidance">
-        <div><span>1</span><strong>Export</strong><p>Create a CSV or full ZIP before changing database content.</p></div>
-        <div><span>2</span><strong>Validate</strong><p>Imports are checked against the real Supabase table schema.</p></div>
-        <div><span>3</span><strong>Protect</strong><p>Restore and delete operations require the Backup admin password.</p></div>
-        <div><span>4</span><strong>Audit</strong><p>Imports and deletions are recorded in System History.</p></div>
-      </article>
+        <section className="backup-list-card card">
+          <div className="backup-list-head">
+            <div>
+              <p className="backup-kicker">DATABASE TABLES</p>
+              <h2>Tables</h2>
+            </div>
+            <span className="backup-count">{tables.length} table{tables.length === 1 ? "" : "s"}</span>
+          </div>
 
-      {importTarget ? <ImportModal table={importTarget} onClose={() => setImportTarget(null)} onImported={(body) => { setImportTarget(null); showToast("success", "CSV imported", `${Number(body?.importedRows || 0).toLocaleString()} row${Number(body?.importedRows || 0) === 1 ? "" : "s"} imported into ${text(body?.tableName) || text(importTarget?.tableName)}.`); refresh(); }} /> : null}
-      {deleteTarget ? <DeleteModal target={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={(body) => { const wasAll = Boolean(deleteTarget?.isAll); setDeleteTarget(null); showToast("success", wasAll ? "Database cleared" : "Table cleared", wasAll ? `The export was downloaded and ${Number(body?.deletedTables?.length || 0).toLocaleString()} configured tables were cleared.` : "The CSV was downloaded and all rows were deleted from the selected table."); refresh(); }} /> : null}
-    </section>
+          <div className="backup-grid" aria-live="polite">
+            {tables.length ? tables.map((item) => (
+              <article className="backup-table-card" key={item.key || item.tableName}>
+                <div className="backup-table-head">
+                  <span className="backup-card-icon"><FeatherIcon name={item.icon || "database"} /></span>
+                  <div className="backup-card-meta">
+                    <h3 className="backup-card-title">{item.pageName || "Database"}</h3>
+                    <span className="backup-card-module">{item.moduleName || "System"}</span>
+                  </div>
+                </div>
+                <div className="backup-table-name" title={item.tableName || ""}>
+                  <FeatherIcon name="database" /><code>{item.tableName || "table"}</code>
+                </div>
+                <div className="backup-card-actions">
+                  <a className="backup-download-btn" href={`/api/backup/tables/${encodeURIComponent(item.key)}/download`} download>
+                    <FeatherIcon name="download" /><span>Export</span>
+                  </a>
+                  <button type="button" className="backup-import-btn" onClick={() => openImportModal(item)}>
+                    <FeatherIcon name="upload" /><span>Import</span>
+                  </button>
+                  <button type="button" className="backup-delete-btn" onClick={() => openDeleteModal(item)}>
+                    <FeatherIcon name="trash-2" /><span>Delete</span>
+                  </button>
+                </div>
+              </article>
+            )) : (
+              <div className="backup-empty"><FeatherIcon name="database" /><span>No database tables found.</span></div>
+            )}
+          </div>
+        </section>
+      </main>
+
+      {deleteTarget ? <BodyPortal>
+        <div className="backup-delete-modal">
+          <div className="backup-modal-backdrop" onMouseDown={closeDeleteModal} />
+          <section className="backup-delete-card" role="dialog" aria-modal="true" aria-labelledby="backupDeleteTitle">
+            <button type="button" className="backup-modal-close" onClick={closeDeleteModal} aria-label="Close" disabled={deleting}><FeatherIcon name="x" /></button>
+            <div className="backup-delete-head">
+              <span className="backup-delete-icon"><FeatherIcon name="trash-2" /></span>
+              <div>
+                <p className="backup-kicker">DELETE DATA</p>
+                <h2 id="backupDeleteTitle">{deleteTarget.isAll ? "Delete all data?" : `Delete ${deleteTarget.pageName || deleteTarget.tableName}?`}</h2>
+              </div>
+            </div>
+            <p className="backup-delete-copy">
+              {deleteTarget.isAll
+                ? "A ZIP export containing CSV files will download first, then all table rows will be deleted."
+                : `A CSV export will download first, then all rows in “${deleteTarget.tableName}” will be deleted.`}
+            </p>
+            <label className="backup-field">
+              <span>Admin password</span>
+              <input type="password" autoComplete="off" placeholder="Enter admin password" value={deletePassword} onChange={(event) => { setDeletePassword(event.target.value); setDeleteError(""); }} onKeyDown={(event) => { if (event.key === "Enter" && !deleting) confirmDelete(); }} autoFocus />
+            </label>
+            {deleteError ? <p className="backup-error">{deleteError}</p> : null}
+            <div className="backup-delete-actions">
+              <button type="button" className="backup-cancel-btn" onClick={closeDeleteModal} disabled={deleting}>Cancel</button>
+              <button type="button" className={`backup-delete-next-btn ${deleting ? "is-loading" : ""}`} onClick={confirmDelete} disabled={deleting}>
+                <FeatherIcon name="trash-2" /><span>{deleting ? (deleteStage || "Deleting...") : "Delete data"}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </BodyPortal> : null}
+
+      {importTarget ? <BodyPortal>
+        <div className="backup-import-modal">
+          <div className="backup-modal-backdrop" onMouseDown={closeImportModal} />
+          <section className="backup-import-card" role="dialog" aria-modal="true" aria-labelledby="backupImportTitle">
+            <button type="button" className="backup-modal-close" onClick={closeImportModal} aria-label="Close" disabled={importing}><FeatherIcon name="x" /></button>
+            <div className="backup-import-head">
+              <span className="backup-import-icon"><FeatherIcon name="upload-cloud" /></span>
+              <div>
+                <p className="backup-kicker">IMPORT CSV</p>
+                <h2 id="backupImportTitle">Import {importTarget.pageName || importTarget.tableName}</h2>
+                <p className="backup-import-table">{importTarget.tableName || ""}</p>
+              </div>
+            </div>
+            <label className="backup-field backup-file-field">
+              <span>CSV file</span>
+              <input type="file" accept=".csv,text/csv" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportError(""); }} autoFocus />
+            </label>
+            <label className="backup-field">
+              <span>Admin password</span>
+              <input type="password" autoComplete="off" placeholder="Enter admin password" value={importPassword} onChange={(event) => { setImportPassword(event.target.value); setImportError(""); }} onKeyDown={(event) => { if (event.key === "Enter" && !importing) confirmImport(); }} />
+            </label>
+            <p className="backup-import-note"><FeatherIcon name="shield" /><span>The CSV header must match the selected Supabase table columns.</span></p>
+            {importError ? <p className="backup-error">{importError}</p> : null}
+            <div className="backup-import-actions">
+              <button type="button" className="backup-cancel-btn" onClick={closeImportModal} disabled={importing}>Cancel</button>
+              <button type="button" className={`backup-import-confirm-btn ${importing ? "is-loading" : ""}`} onClick={confirmImport} disabled={importing}>
+                <FeatherIcon name="upload" /><span>{importing ? (importStage || "Importing...") : "Import CSV"}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </BodyPortal> : null}
+    </>
   );
 }
