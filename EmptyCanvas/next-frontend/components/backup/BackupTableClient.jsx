@@ -84,7 +84,6 @@ export default function BackupTableClient({ tableKey, initialTable }) {
   const [columns, setColumns] = useState([]);
   const [rows, setRows] = useState([]);
   const [canEdit, setCanEdit] = useState(false);
-  const [accessLevel, setAccessLevel] = useState("");
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -114,7 +113,6 @@ export default function BackupTableClient({ tableKey, initialTable }) {
       setColumns(Array.isArray(body?.columns) ? body.columns : []);
       setRows(Array.isArray(body?.rows) ? body.rows : []);
       setCanEdit(Boolean(body?.canEdit));
-      setAccessLevel(text(body?.accessLevel));
       setOffset(Number(body?.offset || 0));
       setHasMore(Boolean(body?.hasMore));
     } catch (err) {
@@ -127,6 +125,30 @@ export default function BackupTableClient({ tableKey, initialTable }) {
   useEffect(() => {
     loadRows(0);
   }, [tableKey]);
+
+  // The Classic shell owns the single page search field. Bind it to this
+  // table instead of rendering a second search bar inside the workspace.
+  useEffect(() => {
+    const input = document.querySelector(".main-header .searchbar input[type='search'], .main-header .searchbar input");
+    if (!input) return undefined;
+
+    const previousPlaceholder = input.getAttribute("placeholder") || "Search";
+    const previousValue = input.value || "";
+    input.setAttribute("placeholder", `Search ${table?.pageName || table?.tableName || "table"}`);
+    input.value = "";
+    setQuery("");
+
+    const onInput = () => setQuery(input.value || "");
+    input.addEventListener("input", onInput);
+    input.addEventListener("search", onInput);
+
+    return () => {
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("search", onInput);
+      input.setAttribute("placeholder", previousPlaceholder);
+      input.value = previousValue;
+    };
+  }, [tableKey, table?.pageName, table?.tableName]);
 
   useEffect(() => {
     document.body.classList.toggle("backup-table-modal-open", Boolean(editRow));
@@ -209,19 +231,12 @@ export default function BackupTableClient({ tableKey, initialTable }) {
           <div>
             <p className="backup-kicker">DATABASE TABLE</p>
             <h2>{table?.pageName || table?.tableName || "Table"}</h2>
-            <p>{table?.tableName || ""}{table?.moduleName ? ` · ${table.moduleName}` : ""}</p>
           </div>
-        </div>
-        <div className="backup-table-toolbar__actions">
-          <span className={`backup-table-access ${canEdit ? "is-admin" : ""}`}><Icon name="shield" />{canEdit ? "Admin editing enabled" : (accessLevel ? `${accessLevel} access` : "View only")}</span>
-          <a className="backup-table-action" href={`/api/backup/tables/${encodeURIComponent(tableKey)}/download`} download><Icon name="download" /><span>Export</span></a>
-          <button type="button" className="backup-table-action" onClick={() => loadRows(offset)} disabled={loading}><Icon name="refresh" /><span>Refresh</span></button>
         </div>
       </section>
 
       <section className="backup-table-workspace card">
-        <div className="backup-table-workspace__head">
-          <div className="backup-table-search"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search loaded rows..." /></div>
+        <div className="backup-table-workspace__head backup-table-workspace__head--meta-only">
           <div className="backup-table-page-meta">Rows {rows.length ? offset + 1 : 0}–{offset + rows.length}</div>
         </div>
 

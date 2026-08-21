@@ -352,7 +352,6 @@ export default function BackupClient({ initialTables = [] }) {
           <div className="backup-hero-copy">
             <p className="backup-kicker">SYSTEM DATA</p>
             <h2>Database</h2>
-            <p>Open a table to view its rows. Database Admins can edit values directly.</p>
           </div>
           <div className="backup-hero-actions">
             <a className="backup-export-all-btn" href="/api/backup/export-all" download>
