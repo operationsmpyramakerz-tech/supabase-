@@ -66,68 +66,89 @@ export default async function BackupPage() {
       activePath="/next/backup"
       classicHrefOverride="/backup"
       bodyClass="page-backup"
-      classicStyles={["/css/backup.css?v=database-page-folders-v1"]}
+      classicStyles={["/css/backup.css?v=database-page-folder-stack-v2"]}
     >
       <style>{`
-        /* Main database folders contain folders, so show three mini-folder icons. */
+        /* Main database folders contain table folders: one front folder + two stacked behind it. */
         .page-backup .backup-page-folder-card .backup-folder-figure {
-          top: 10px !important;
-          width: 120px !important;
-          height: 62px !important;
+          top: 8px !important;
+          width: 116px !important;
+          height: 58px !important;
           z-index: 6 !important;
           overflow: visible !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper {
-          top: 15px !important;
+          position: absolute !important;
           bottom: auto !important;
-          width: 38px !important;
-          height: 29px !important;
-          z-index: 2 !important;
-          border-radius: 8px 8px 7px 7px !important;
-          border: 1px solid rgba(120, 53, 15, .16) !important;
-          background: linear-gradient(180deg, #fffdf6 0%, #fff2bf 46%, #f9c84d 100%) !important;
-          box-shadow: 0 8px 16px rgba(15, 23, 42, .24), inset 0 1px 0 rgba(255,255,255,.9) !important;
+          width: 58px !important;
+          height: 34px !important;
+          border-radius: 10px 10px 8px 8px !important;
+          border: 1px solid rgba(15, 23, 42, .12) !important;
+          box-shadow: 0 10px 18px rgba(15, 23, 42, .24), inset 0 1px 0 rgba(255,255,255,.34) !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper::before {
           content: "" !important;
           position: absolute !important;
-          left: 4px !important;
+          left: 5px !important;
           right: auto !important;
           top: -8px !important;
-          width: 17px !important;
+          width: 22px !important;
           height: 10px !important;
-          border-radius: 6px 6px 1px 1px !important;
-          border: 1px solid rgba(120, 53, 15, .14) !important;
+          border-radius: 7px 7px 1px 1px !important;
+          border: 1px solid rgba(15, 23, 42, .10) !important;
           border-bottom: 0 !important;
-          background: linear-gradient(180deg, #fffdf7 0%, #ffe7a0 100%) !important;
           box-shadow: none !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper::after {
           content: "" !important;
           position: absolute !important;
-          left: 7px !important;
-          right: 7px !important;
-          top: 9px !important;
+          left: 8px !important;
+          right: 8px !important;
+          top: 10px !important;
           height: 3px !important;
           border-radius: 999px !important;
-          background: rgba(255,255,255,.68) !important;
-          box-shadow: 0 7px 0 rgba(180, 83, 9, .14) !important;
+          background: rgba(255,255,255,.30) !important;
+          box-shadow: 0 7px 0 rgba(255,255,255,.13) !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper--left {
-          left: 5px !important;
-          transform: rotate(-7deg) translateY(4px) !important;
+          left: 2px !important;
+          top: 17px !important;
+          z-index: 1 !important;
+          transform: rotate(-8deg) scale(.90) !important;
+          background: linear-gradient(180deg, #8b3338 0%, #76272d 100%) !important;
+          opacity: .92 !important;
         }
-        .page-backup .backup-page-folder-card .backup-folder-paper--middle {
-          left: 41px !important;
-          top: 9px !important;
-          bottom: auto !important;
-          z-index: 4 !important;
-          transform: none !important;
+        .page-backup .backup-page-folder-card .backup-folder-paper--left::before {
+          background: linear-gradient(180deg, #a34449 0%, #8b3338 100%) !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper--right {
-          right: 5px !important;
+          right: 2px !important;
           left: auto !important;
-          transform: rotate(7deg) translateY(4px) !important;
+          top: 17px !important;
+          z-index: 2 !important;
+          transform: rotate(8deg) scale(.90) !important;
+          background: linear-gradient(180deg, #656b73 0%, #4f555d 100%) !important;
+          opacity: .94 !important;
+        }
+        .page-backup .backup-page-folder-card .backup-folder-paper--right::before {
+          background: linear-gradient(180deg, #777d85 0%, #656b73 100%) !important;
+        }
+        .page-backup .backup-page-folder-card .backup-folder-paper--middle {
+          left: 50% !important;
+          top: 10px !important;
+          z-index: 4 !important;
+          transform: translateX(-50%) !important;
+          background: linear-gradient(180deg, #ffffff 0%, #f5f5f4 50%, #e7e5e4 100%) !important;
+          border-color: rgba(15, 23, 42, .10) !important;
+          box-shadow: 0 13px 22px rgba(15, 23, 42, .28), inset 0 1px 0 rgba(255,255,255,.90) !important;
+        }
+        .page-backup .backup-page-folder-card .backup-folder-paper--middle::before {
+          background: linear-gradient(180deg, #ffffff 0%, #eeeeec 100%) !important;
+          border-color: rgba(15, 23, 42, .08) !important;
+        }
+        .page-backup .backup-page-folder-card .backup-folder-back,
+        .page-backup .backup-page-folder-card .backup-folder-front {
+          display: none !important;
         }
       `}</style>
       <BackupClient
