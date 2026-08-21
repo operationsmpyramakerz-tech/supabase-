@@ -53,7 +53,7 @@ export default async function BackupTablePage({ params }) {
       activePath="/next/backup"
       classicHrefOverride="/backup"
       bodyClass="page-backup page-backup-table"
-      classicStyles={["/css/backup.css?v=database-folders-table-editor-v1"]}
+      classicStyles={["/css/backup.css?v=database-header-search-clean-v1"]}
     >
       <BackupTableClient tableKey={tableKey} initialTable={initialTable} />
     </AppShell>
