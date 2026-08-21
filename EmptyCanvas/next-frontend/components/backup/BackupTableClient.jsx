@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -34,10 +33,6 @@ function Icon({ name = "database" }) {
   return <svg {...common}>{icons[name] || icons.database}</svg>;
 }
 
-function Portal({ children }) {
-  if (typeof document === "undefined") return null;
-  return createPortal(children, document.body);
-}
 
 function columnType(column = {}) {
   return lower(column?.type || column?.format || column?.raw?.format);
@@ -150,11 +145,6 @@ export default function BackupTableClient({ tableKey, initialTable }) {
     };
   }, [tableKey, table?.pageName, table?.tableName]);
 
-  useEffect(() => {
-    document.body.classList.toggle("backup-table-modal-open", Boolean(editRow));
-    return () => document.body.classList.remove("backup-table-modal-open");
-  }, [editRow]);
-
   const visibleColumns = useMemo(() => {
     const names = columns.map((column) => text(column?.name)).filter(Boolean);
     if (names.length) return columns;
@@ -255,22 +245,49 @@ export default function BackupTableClient({ tableKey, initialTable }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row, rowIndex) => (
-                  <tr key={`${offset}-${rowIndex}-${String(row?.id ?? "")}`}>
-                    <td className="backup-data-row-number">{offset + rowIndex + 1}</td>
-                    {visibleColumns.map((column) => {
-                      const value = row?.[column.name];
-                      const display = displayValue(value);
-                      return <td key={column.name} className={value === null || typeof value === "undefined" ? "is-null" : ""} title={display}>{display}</td>;
-                    })}
-                    {canEdit ? <td className="backup-data-edit-cell"><button type="button" onClick={() => openEdit(row)}><Icon name="edit" /><span>Edit</span></button></td> : null}
-                  </tr>
-                ))}
+                {filteredRows.map((row, rowIndex) => {
+                  const isEditing = row === editRow;
+                  return (
+                    <tr key={`${offset}-${rowIndex}-${String(row?.id ?? "")}`} className={isEditing ? "is-editing" : ""}>
+                      <td className="backup-data-row-number">{offset + rowIndex + 1}</td>
+                      {visibleColumns.map((column) => {
+                        const value = row?.[column.name];
+                        const display = displayValue(value);
+                        if (isEditing) {
+                          return (
+                            <td key={column.name} className="backup-inline-cell-editor">
+                              <FieldEditor
+                                column={column}
+                                value={String(draft?.[column.name] ?? "")}
+                                onChange={(nextValue) => setDraft((current) => ({ ...current, [column.name]: nextValue }))}
+                              />
+                            </td>
+                          );
+                        }
+                        return <td key={column.name} className={value === null || typeof value === "undefined" ? "is-null" : ""} title={display}>{display}</td>;
+                      })}
+                      {canEdit ? (
+                        <td className="backup-data-edit-cell">
+                          {isEditing ? (
+                            <button type="button" className="is-save" onClick={saveRow} disabled={saving}>
+                              <Icon name="save" /><span>{saving ? "Saving..." : "Save"}</span>
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => openEdit(row)} disabled={Boolean(editRow) || saving}>
+                              <Icon name="edit" /><span>Edit</span>
+                            </button>
+                          )}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {!filteredRows.length ? <div className="backup-table-no-search">No rows on this page match your search.</div> : null}
           </div>
         ) : null}
+        {saveError ? <p className="backup-inline-save-error">{saveError}</p> : null}
 
         <div className="backup-table-pagination">
           <button type="button" onClick={() => loadRows(Math.max(0, offset - pageSize))} disabled={loading || offset <= 0}><Icon name="chevronLeft" /><span>Previous</span></button>
@@ -279,31 +296,6 @@ export default function BackupTableClient({ tableKey, initialTable }) {
         </div>
       </section>
 
-      {editRow ? <Portal>
-        <div className="backup-row-edit-modal">
-          <div className="backup-modal-backdrop" onMouseDown={closeEdit} />
-          <section className="backup-row-edit-card" role="dialog" aria-modal="true" aria-labelledby="backupRowEditTitle">
-            <button type="button" className="backup-modal-close" onClick={closeEdit} disabled={saving} aria-label="Close"><Icon name="x" /></button>
-            <div className="backup-row-edit-head">
-              <span className="backup-table-title-icon"><Icon name="edit" /></span>
-              <div><p className="backup-kicker">ADMIN EDIT</p><h2 id="backupRowEditTitle">Edit table row</h2><p>{table?.tableName || ""}</p></div>
-            </div>
-            <div className="backup-row-edit-grid">
-              {visibleColumns.map((column) => (
-                <label className="backup-row-field" key={column.name}>
-                  <span><strong>{column.name}</strong>{columnType(column) ? <em>{columnType(column)}</em> : null}</span>
-                  <FieldEditor column={column} value={String(draft?.[column.name] ?? "")} onChange={(value) => setDraft((current) => ({ ...current, [column.name]: value }))} />
-                </label>
-              ))}
-            </div>
-            {saveError ? <p className="backup-error">{saveError}</p> : null}
-            <div className="backup-row-edit-actions">
-              <button type="button" className="backup-cancel-btn" onClick={closeEdit} disabled={saving}>Cancel</button>
-              <button type="button" className="backup-row-save-btn" onClick={saveRow} disabled={saving}><Icon name="save" /><span>{saving ? "Saving..." : "Save changes"}</span></button>
-            </div>
-          </section>
-        </div>
-      </Portal> : null}
     </main>
   );
 }
