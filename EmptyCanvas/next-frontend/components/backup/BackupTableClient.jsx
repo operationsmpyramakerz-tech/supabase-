@@ -74,7 +74,7 @@ function FieldEditor({ column, value, onChange }) {
   return <input type={inputType} value={value} onChange={(event) => onChange(event.target.value)} spellCheck={false} />;
 }
 
-export default function BackupTableClient({ tableKey, initialTable }) {
+export default function BackupTableClient({ tableKey, initialTable, backFolder = "" }) {
   const [table, setTable] = useState(initialTable || null);
   const [columns, setColumns] = useState([]);
   const [rows, setRows] = useState([]);
@@ -216,7 +216,7 @@ export default function BackupTableClient({ tableKey, initialTable }) {
     <main className="backup-table-page-shell">
       <section className="backup-table-toolbar card">
         <div className="backup-table-toolbar__title">
-          <a className="backup-table-back" href="/next/backup" aria-label="Back to Database"><Icon name="arrowLeft" /></a>
+          <a className="backup-table-back" href={`/next/backup${backFolder ? `?folder=${encodeURIComponent(backFolder)}` : ""}`} aria-label="Back to Database"><Icon name="arrowLeft" /></a>
           <span className="backup-table-title-icon"><Icon name="database" /></span>
           <div>
             <p className="backup-kicker">DATABASE TABLE</p>

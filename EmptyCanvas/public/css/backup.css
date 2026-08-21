@@ -454,7 +454,7 @@
   margin-bottom:.85rem;
 }
 .backup-grid{
-  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  grid-template-colums:repeat(auto-fit,minmax(230px,1fr));
   gap:.65rem;
 }
 .backup-table-card{
@@ -528,7 +528,7 @@
 .backup-import-btn span{ color:#c2410c; stroke:#c2410c; }
 .backup-delete-modal[hidden],
 .backup-final-modal[hidden],
-.backup-import-modal[hidden]{ display:none !important; }
+.backup-import-modal[hidden] { display:none !important; }
 .backup-delete-modal,
 .backup-final-modal,
 .backup-import-modal{
@@ -1006,7 +1006,7 @@ button.backup-table-action{cursor:pointer;}
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  margin-bottom:12px;
+  margin-bottom:16px;
 }
 .backup-table-search{
   width:min(520px,100%);
@@ -1115,7 +1115,7 @@ button.backup-table-action{cursor:pointer;}
 .backup-table-spinner{width:30px;height:30px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:#f97316;animation:backupSpin .75s linear infinite;}
 .backup-table-no-search{padding:26px;text-align:center;color:#64748b;font-weight:850;}
 .backup-table-pagination{
-  margin-top:12px;
+  margin-top:16px;
   display:flex;
   align-items:center;
   justify-content:flex-end;
@@ -1619,4 +1619,40 @@ body.backup-table-modal-open{overflow:hidden !important;}
   color:#b91c1c;
   font-size:.78rem;
   font-weight:850;
+}
+
+
+/* 2026-08-21: Database main page folders. */
+.backup-folder-level-heading{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.backup-page-folder-back{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  padding:0;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  display:grid;
+  place-items:center;
+  background:#f3f4f6;
+  color:#111827;
+  cursor:pointer;
+}
+.backup-page-folder-back:hover{background:#e5e7eb;}
+.backup-page-folder-back:focus-visible{
+  outline:3px solid rgba(220,38,38,.25);
+  outline-offset:2px;
+}
+.backup-page-folder-back svg{width:19px;height:19px;}
+.page-backup .backup-page-folder-card .backup-folder-copy{right:11px !important;}
+.page-backup .backup-page-folder-card .backup-folder-copy strong{padding-right:0 !important;}
+.page-backup .backup-page-folder-card .backup-folder-table-name{right:11px !important;}
+.page-backup .backup-page-folder-card .backup-folder-table-name::before{content:"▱";}
+@media (max-width:640px){
+  .backup-folder-level-heading{gap:8px;}
+  .backup-page-folder-back{width:36px;height:36px;flex-basis:36px;border-radius:12px;}
 }

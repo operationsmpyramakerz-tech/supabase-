@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 const MAX_CSV_SIZE = 25 * 1024 * 1024;
@@ -130,6 +130,7 @@ function FeatherIcon({ name = "database" }) {
     award: <><circle cx="12" cy="8" r="6"/><path d="M15.5 12.9 17 22l-5-3-5 3 1.5-9.1"/></>,
     "user-plus": <><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></>,
     clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+    "arrow-left": <><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></>,
   };
   return <svg {...common}>{icons[name] || icons.database}</svg>;
 }
@@ -149,6 +150,38 @@ function Toast({ toast }) {
   );
 }
 
+const DATABASE_PAGE_GROUPS = [
+  { key: "orders", label: "Orders", tableKeys: ["orders"] },
+  { key: "stocktaking", label: "Stocktaking", tableKeys: ["stocktaking"] },
+  { key: "products", label: "Products", tableKeys: ["products", "product-tags"] },
+  { key: "events", label: "Events", tableKeys: ["events", "event-types", "event-governorate-transport-rates"] },
+  { key: "event-components", label: "Event Components", tableKeys: ["event-components", "event-component-categories"] },
+  { key: "expenses", label: "Expenses", tableKeys: ["expenses"] },
+  { key: "b2b-schools", label: "B2B Schools", tableKeys: ["b2b-schools"] },
+  { key: "b2c-database", label: "B2C Database", tableKeys: ["b2c-databases", "b2c-customer-fields", "b2c-customers"] },
+  { key: "b2c-forms", label: "B2C Forms", tableKeys: ["b2c-forms", "b2c-form-fields"] },
+  { key: "proposals", label: "Proposals", tableKeys: ["proposals", "proposal-items"] },
+  { key: "kits", label: "Kits", tableKeys: ["kits", "kit-items"] },
+  { key: "task-management", label: "Task Management", tableKeys: ["department-tickets", "department-ticket-sections", "department-ticket-section-edges"] },
+  { key: "kpis", label: "KPIs", tableKeys: ["kpi-standards", "kpi-sections", "kpi-items", "kpi-reviews", "kpi-scores"] },
+  { key: "users-center", label: "Users Center", tableKeys: ["team-members", "team-departments", "team-sv-schools", "page-access", "signup-requests"] },
+  { key: "system-history", label: "System History", tableKeys: ["history"] },
+];
+
+function buildDatabasePageGroups(tables = []) {
+  const byKey = new Map((Array.isArray(tables) ? tables : []).map((item) => [text(item?.key), item]));
+  const used = new Set();
+  const groups = DATABASE_PAGE_GROUPS.map((group) => {
+    const items = group.tableKeys.map((key) => byKey.get(key)).filter(Boolean);
+    items.forEach((item) => used.add(text(item?.key)));
+    return { ...group, tables: items };
+  }).filter((group) => group.tables.length);
+
+  const ungrouped = (Array.isArray(tables) ? tables : []).filter((item) => !used.has(text(item?.key)));
+  if (ungrouped.length) groups.push({ key: "other", label: "Other", tableKeys: ungrouped.map((item) => text(item?.key)), tables: ungrouped });
+  return groups;
+}
+
 export default function BackupClient({ initialTables = [] }) {
   const [tables, setTables] = useState(() => Array.isArray(initialTables) ? initialTables : []);
   const [importTarget, setImportTarget] = useState(null);
@@ -164,6 +197,25 @@ export default function BackupClient({ initialTables = [] }) {
   const [deleteStage, setDeleteStage] = useState("");
   const [toast, setToast] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
+  const [activePageKey, setActivePageKey] = useState("");
+  const [search, setSearch] = useState("");
+
+  const pageGroups = useMemo(() => buildDatabasePageGroups(tables), [tables]);
+  const activePage = useMemo(() => pageGroups.find((group) => group.key === activePageKey) || null, [pageGroups, activePageKey]);
+  const visiblePageGroups = useMemo(() => {
+    const needle = lower(search);
+    if (!needle) return pageGroups;
+    return pageGroups.filter((group) => lower([
+      group.label,
+      ...(group.tables || []).flatMap((item) => [item?.pageName, item?.tableName, item?.moduleName]),
+    ].join(" ")).includes(needle));
+  }, [pageGroups, search]);
+  const visibleTables = useMemo(() => {
+    const items = activePage?.tables || [];
+    const needle = lower(search);
+    if (!needle) return items;
+    return items.filter((item) => lower([item?.pageName, item?.tableName, item?.moduleName, item?.description].join(" ")).includes(needle));
+  }, [activePage, search]);
 
   const modalOpen = Boolean(importTarget || deleteTarget);
 
@@ -203,6 +255,59 @@ export default function BackupClient({ initialTables = [] }) {
       document.removeEventListener("keydown", keyDown);
     };
   }, [folderMenu]);
+
+  useEffect(() => {
+    function syncFolderFromUrl() {
+      const requested = text(new URLSearchParams(window.location.search).get("folder"));
+      const exists = pageGroups.some((group) => group.key === requested);
+      setActivePageKey(exists ? requested : "");
+      setFolderMenu("");
+      setSearch("");
+    }
+    syncFolderFromUrl();
+    window.addEventListener("popstate", syncFolderFromUrl);
+    return () => window.removeEventListener("popstate", syncFolderFromUrl);
+  }, [pageGroups.map((group) => group.key).join("|")]);
+
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .searchbar input, .main-header .searchbar input");
+    if (!input) return undefined;
+    const previousPlaceholder = input.getAttribute("placeholder") || "Search";
+    const previousValue = input.value || "";
+    input.value = "";
+    input.placeholder = activePage ? `Search tables in ${activePage.label}...` : "Search database pages...";
+    setSearch("");
+    const handle = (event) => setSearch(event.target.value || "");
+    input.addEventListener("input", handle);
+    input.addEventListener("search", handle);
+    return () => {
+      input.removeEventListener("input", handle);
+      input.removeEventListener("search", handle);
+      input.placeholder = previousPlaceholder;
+      input.value = previousValue;
+    };
+  }, [activePageKey]);
+
+  function openPageFolder(key) {
+    const clean = text(key);
+    if (!clean) return;
+    setActivePageKey(clean);
+    setFolderMenu("");
+    setSearch("");
+    const url = new URL(window.location.href);
+    url.searchParams.set("folder", clean);
+    window.history.pushState({}, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
+  }
+
+  function closePageFolder() {
+    setActivePageKey("");
+    setFolderMenu("");
+    setSearch("");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("folder");
+    const query = url.searchParams.toString();
+    window.history.pushState({}, "", `${url.pathname}${query ? `?${query}` : ""}${url.hash}`);
+  }
 
   function showToast(message, variant = "success") {
     setToast({ message, variant, stamp: Date.now() });
@@ -365,15 +470,52 @@ export default function BackupClient({ initialTables = [] }) {
 
         <section className="backup-list-card card backup-folders-card">
           <div className="backup-list-head">
-            <div>
-              <p className="backup-kicker">DATABASE TABLES</p>
-              <h2>Tables</h2>
+            <div className="backup-folder-level-heading">
+              {activePage ? (
+                <button type="button" className="backup-page-folder-back" onClick={closePageFolder} aria-label="Back to database pages">
+                  <FeatherIcon name="arrow-left" />
+                </button>
+              ) : null}
+              <div>
+                <p className="backup-kicker">{activePage ? "DATABASE TABLES" : "DATABASE PAGES"}</p>
+                <h2>{activePage ? activePage.label : "Pages"}</h2>
+              </div>
             </div>
-            <span className="backup-count">{tables.length} table{tables.length === 1 ? "" : "s"}</span>
+            <span className="backup-count">
+              {activePage
+                ? `${visibleTables.length} table${visibleTables.length === 1 ? "" : "s"}`
+                : `${visiblePageGroups.length} page${visiblePageGroups.length === 1 ? "" : "s"}`}
+            </span>
           </div>
 
           <div className="backup-folder-grid" aria-live="polite">
-            {tables.length ? tables.map((item) => {
+            {!activePage ? (
+              visiblePageGroups.length ? visiblePageGroups.map((group) => (
+                <article className="backup-folder-card backup-page-folder-card" key={group.key}>
+                  <button
+                    type="button"
+                    className="backup-folder-main"
+                    onClick={() => openPageFolder(group.key)}
+                    aria-label={`Open ${group.label} tables`}
+                  >
+                    <span className="backup-folder-figure" aria-hidden="true">
+                      <span className="backup-folder-paper backup-folder-paper--left" />
+                      <span className="backup-folder-paper backup-folder-paper--middle" />
+                      <span className="backup-folder-paper backup-folder-paper--right" />
+                      <span className="backup-folder-back" />
+                      <span className="backup-folder-front"><small>DB</small></span>
+                    </span>
+                    <span className="backup-folder-copy">
+                      <strong>{group.label}</strong>
+                      <em>Database page</em>
+                    </span>
+                    <span className="backup-folder-table-name">{group.tables.length} table{group.tables.length === 1 ? "" : "s"}</span>
+                  </button>
+                </article>
+              )) : (
+                <div className="backup-empty"><FeatherIcon name="folder" /><span>No database pages match your search.</span></div>
+              )
+            ) : visibleTables.length ? visibleTables.map((item) => {
               const menuOpen = folderMenu === item.key;
               return (
                 <article className={`backup-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={item.key || item.tableName}>
@@ -397,15 +539,15 @@ export default function BackupClient({ initialTables = [] }) {
                       <button type="button" onClick={() => { setFolderMenu(""); openImportModal(item); }}>
                         <FeatherIcon name="upload" /><span>Import</span>
                       </button>
-                      <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); openDeleteModal(item); }}>
+                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); openDeleteModal(item); }}>
                         <FeatherIcon name="trash-2" /><span>Delete</span>
                       </button>
-                    </div>
+                  </div>
                   ) : null}
                   <button
                     type="button"
                     className="backup-folder-main"
-                    onClick={() => { window.location.href = `/next/backup/${encodeURIComponent(item.key)}`; }}
+                    onClick={() => { window.location.href = `/next/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`; }}
                     aria-label={`Open ${item.pageName || item.tableName}`}
                   >
                     <span className="backup-folder-figure" aria-hidden="true">
@@ -417,14 +559,14 @@ export default function BackupClient({ initialTables = [] }) {
                     </span>
                     <span className="backup-folder-copy">
                       <strong>{item.pageName || item.tableName || "Database table"}</strong>
-                      <em>{item.moduleName || "System"}</em>
+                      <em>{item.moduleName || activePage.label}</em>
                     </span>
                     <span className="backup-folder-table-name" title={item.tableName || ""}>{item.tableName || "table"}</span>
                   </button>
                 </article>
               );
             }) : (
-              <div className="backup-empty"><FeatherIcon name="database" /><span>No database tables found.</span></div>
+              <div className="backup-empty"><FeatherIcon name="database" /><span>No tables in this page match your search.</span></div>
             )}
           </div>
         </section>

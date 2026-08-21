@@ -20,10 +20,13 @@ function getResource(map, prefix, fallback = null) {
   return fallback;
 }
 
-export default async function BackupTablePage({ params }) {
+export default async function BackupTablePage({ params, searchParams }) {
   const resolvedParams = await Promise.resolve(params);
+  const resolvedSearchParams = await Promise.resolve(searchParams);
   const tableKey = String(resolvedParams?.key || "").trim();
   if (!tableKey) redirect("/next/backup");
+  const rawBackFolder = String(resolvedSearchParams?.folder || "").trim();
+  const backFolder = /^[a-z0-9-]+$/i.test(rawBackFolder) ? rawBackFolder : "";
 
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=backup", { timeoutMs: 30000 });
   if (response.status === 401) redirect(`/login?next=/next/backup/${encodeURIComponent(tableKey)}`);
@@ -53,9 +56,9 @@ export default async function BackupTablePage({ params }) {
       activePath="/next/backup"
       classicHrefOverride="/backup"
       bodyClass="page-backup page-backup-table"
-      classicStyles={["/css/backup.css?v=database-inline-row-edit-v1"]}
+      classicStyles={["/css/backup.css?v=database-page-folders-v1"]}
     >
-      <BackupTableClient tableKey={tableKey} initialTable={initialTable} />
+      <BackupTableClient tableKey={tableKey} initialTable={initialTable} backFolder={backFolder} />
     </AppShell>
   );
 }
