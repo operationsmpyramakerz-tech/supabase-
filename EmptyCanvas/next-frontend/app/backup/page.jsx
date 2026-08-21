@@ -69,28 +69,37 @@ export default async function BackupPage() {
       classicStyles={["/css/backup.css?v=database-page-folders-v1"]}
     >
       <style>{`
+        /* Main database folders contain folders, so show three mini-folder icons. */
+        .page-backup .backup-page-folder-card .backup-folder-figure {
+          top: 10px !important;
+          width: 120px !important;
+          height: 62px !important;
+          z-index: 6 !important;
+          overflow: visible !important;
+        }
         .page-backup .backup-page-folder-card .backup-folder-paper {
-          top: auto !important;
-          bottom: 6px !important;
+          top: 15px !important;
+          bottom: auto !important;
           width: 38px !important;
-          height: 27px !important;
-          border-radius: 8px 8px 6px 6px !important;
-          border: 1px solid rgba(120, 53, 15, .18) !important;
-          background: linear-gradient(180deg, #fff8e6 0%, #fde68a 58%, #f59e0b 100%) !important;
-          box-shadow: 0 9px 18px rgba(15, 23, 42, .18) !important;
+          height: 29px !important;
+          z-index: 2 !important;
+          border-radius: 8px 8px 7px 7px !important;
+          border: 1px solid rgba(120, 53, 15, .16) !important;
+          background: linear-gradient(180deg, #fffdf6 0%, #fff2bf 46%, #f9c84d 100%) !important;
+          box-shadow: 0 8px 16px rgba(15, 23, 42, .24), inset 0 1px 0 rgba(255,255,255,.9) !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper::before {
           content: "" !important;
           position: absolute !important;
           left: 4px !important;
           right: auto !important;
-          top: -7px !important;
-          width: 16px !important;
-          height: 8px !important;
-          border-radius: 6px 6px 0 0 !important;
-          border: 1px solid rgba(120, 53, 15, .16) !important;
+          top: -8px !important;
+          width: 17px !important;
+          height: 10px !important;
+          border-radius: 6px 6px 1px 1px !important;
+          border: 1px solid rgba(120, 53, 15, .14) !important;
           border-bottom: 0 !important;
-          background: linear-gradient(180deg, #fff8e6 0%, #fcd46a 100%) !important;
+          background: linear-gradient(180deg, #fffdf7 0%, #ffe7a0 100%) !important;
           box-shadow: none !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper::after {
@@ -98,26 +107,27 @@ export default async function BackupPage() {
           position: absolute !important;
           left: 7px !important;
           right: 7px !important;
-          top: 8px !important;
+          top: 9px !important;
           height: 3px !important;
           border-radius: 999px !important;
-          background: rgba(255, 255, 255, .52) !important;
-          box-shadow: 0 7px 0 rgba(217, 119, 6, .18) !important;
+          background: rgba(255,255,255,.68) !important;
+          box-shadow: 0 7px 0 rgba(180, 83, 9, .14) !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper--left {
-          left: 7px !important;
-          transform: rotate(-8deg) translateY(3px) !important;
+          left: 5px !important;
+          transform: rotate(-7deg) translateY(4px) !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper--middle {
-          left: 40px !important;
-          top: auto !important;
-          bottom: 11px !important;
-          z-index: 2 !important;
+          left: 41px !important;
+          top: 9px !important;
+          bottom: auto !important;
+          z-index: 4 !important;
           transform: none !important;
         }
         .page-backup .backup-page-folder-card .backup-folder-paper--right {
-          right: 7px !important;
-          transform: rotate(8deg) translateY(4px) !important;
+          right: 5px !important;
+          left: auto !important;
+          transform: rotate(7deg) translateY(4px) !important;
         }
       `}</style>
       <BackupClient
