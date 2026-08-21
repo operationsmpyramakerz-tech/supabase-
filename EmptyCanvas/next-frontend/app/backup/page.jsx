@@ -66,7 +66,7 @@ export default async function BackupPage() {
       activePath="/next/backup"
       classicHrefOverride="/backup"
       bodyClass="page-backup"
-      classicStyles={["/css/backup.css?v=database-folders-table-editor-v1"]}
+      classicStyles={["/css/backup.css?v=database-proposal-red-folders-v2"]}
     >
       <BackupClient
         initialTables={Array.isArray(backupPayload?.tables) ? backupPayload.tables : []}
