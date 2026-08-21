@@ -62,7 +62,7 @@
 .backup-hero p:not(.backup-kicker),
 .backup-muted{
   margin:.45rem 0 0;
-  color:var(--backup-muted);
+  color:#667386;
   font-weight:750;
   line-height:1.35;
 }
@@ -411,7 +411,7 @@
   transition:transform .2s ease;
 }
 .backup-toast.is-visible{ transform:translateX(-50%) translateY(0); }
-.backup-toast--danger{ background:#b91c1c; }
+.backup-toast--danger{_background:#b91c1c; }
 .backup-toast svg{ width:18px; height:18px; stroke:#fff; }
 @media (max-width:760px){
   .page-backup .backup-page-shell{ padding:.55rem .5rem 7rem; gap:.65rem; }
