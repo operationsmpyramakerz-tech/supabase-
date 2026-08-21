@@ -156,7 +156,7 @@ function ExportModal({ onClose }) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.error || "The stocktaking export failed.");
       }
-      const fallback = fileType === "excel" ? "Stocktaking.xlsx" : "Stocktaking.pdf";
+      const fallback = fileType === "excel" ? "Stocktaking.plse" : "Stocktaking.pdf";
       downloadBlob(await response.blob(), responseFileName(response, fallback));
       onClose();
     } catch (exportError) {
@@ -204,7 +204,7 @@ function ExportModal({ onClose }) {
   );
 }
 
-export default function StocktakingClient({ initialStock = [], bootstrapWarnings = [] }) {
+export default function StocktakingClient({ initialStock = [] }) {
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -214,9 +214,17 @@ export default function StocktakingClient({ initialStock = [], bootstrapWarnings
     input.value = "";
     input.placeholder = "Search components...";
     const handle = (event) => setSearch(event.target.value || "");
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && input.value) {
+        input.value = "";
+        setSearch("");
+      }
+    };
     input.addEventListener("input", handle);
+    input.addEventListener("keydown", handleKeyDown);
     return () => {
       input.removeEventListener("input", handle);
+      input.removeEventListener("keydown", handleKeyDown);
       input.value = "";
       input.placeholder = "Search";
     };
@@ -229,15 +237,13 @@ export default function StocktakingClient({ initialStock = [], bootstrapWarnings
   const filteredRows = useMemo(() => {
     const query = lower(search);
     if (!query) return rows;
-    return rows.filter((row) => lower([row.name, row.idCode, row.tag.name, row.quantity].join(" ")).includes(query));
+    return rows.filter((row) => lower(row.name).includes(query) || lower(row.tag.name).includes(query));
   }, [rows, search]);
 
   const groups = useMemo(() => groupRows(filteredRows), [filteredRows]);
 
   return (
     <section className="next-stocktaking-classic-parity">
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some stocktaking data may be temporarily unavailable.</strong><span>The classic Stocktaking page remains available while the resource recovers.</span><a href="/stocktaking?classic=1">Open classic Stocktaking</a></div> : null}
-
       <section className="card">
         <div className="card-toolbar"><button className="btn b2b-download-primary" type="button" onClick={() => setExportOpen(true)}><Icon name="download" /><span>Download</span></button></div>
         <div className="groups-grid" aria-live="polite">
