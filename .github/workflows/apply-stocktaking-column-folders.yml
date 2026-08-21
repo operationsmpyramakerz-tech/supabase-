@@ -1,0 +1,39 @@
+name: Apply Stocktaking Column Folders
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.erp-patches/stocktaking-column-folders.patch.gz'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply prepared Stocktaking patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCH_FILE=".erp-patches/stocktaking-column-folders.patch.gz"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "Patch already applied."
+            exit 0
+          fi
+          gunzip -c "$PATCH_FILE" > /tmp/stocktaking-column-folders.patch
+          git apply --check /tmp/stocktaking-column-folders.patch
+          git apply /tmp/stocktaking-column-folders.patch
+          rm -f "$PATCH_FILE"
+          rmdir .erp-patches 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Organize Stocktaking into stock column folders"
+          git push origin HEAD:main
