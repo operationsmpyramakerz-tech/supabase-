@@ -1557,3 +1557,66 @@ body.backup-table-modal-open{overflow:hidden !important;}
     flex-direction:row !important;
   }
 }
+
+/* 2026-08-21: Database table inline row editing. */
+.backup-data-table tbody tr.is-editing td{
+  background:#eef0f2 !important;
+}
+.backup-data-table tbody tr.is-editing:hover td{
+  background:#eef0f2 !important;
+}
+.backup-data-table tbody tr.is-editing .backup-data-row-number,
+.backup-data-table tbody tr.is-editing .backup-data-edit-cell{
+  background:#e7e9ec !important;
+}
+.backup-inline-cell-editor{
+  overflow:visible !important;
+  text-overflow:clip !important;
+}
+.backup-inline-cell-editor input,
+.backup-inline-cell-editor select,
+.backup-inline-cell-editor textarea{
+  width:100%;
+  min-width:120px;
+  max-width:100%;
+  min-height:32px;
+  border:1px solid #cbd0d6;
+  border-radius:8px;
+  background:#fff;
+  color:#111827;
+  padding:6px 8px;
+  outline:none;
+  font:inherit;
+  font-size:.78rem;
+  font-weight:700;
+  box-sizing:border-box;
+}
+.backup-inline-cell-editor textarea{
+  min-height:58px;
+  resize:vertical;
+  white-space:pre-wrap;
+}
+.backup-inline-cell-editor input:focus,
+.backup-inline-cell-editor select:focus,
+.backup-inline-cell-editor textarea:focus{
+  border-color:#94a3b8;
+  box-shadow:0 0 0 2px rgba(100,116,139,.14);
+}
+.backup-data-edit-cell button.is-save{
+  background:#0b1120;
+  border-color:#0b1120;
+  color:#fff;
+}
+.backup-data-edit-cell button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.backup-inline-save-error{
+  margin:10px 0 0;
+  padding:9px 11px;
+  border-radius:10px;
+  background:#fef2f2;
+  color:#b91c1c;
+  font-size:.78rem;
+  font-weight:850;
+}
