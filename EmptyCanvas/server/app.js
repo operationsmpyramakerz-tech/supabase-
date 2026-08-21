@@ -25953,7 +25953,7 @@ async function _pageBootstrapMaintenanceOrders(req) {
 async function _pageBootstrapStocktaking(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
-    _pageBootstrapLoad('/api/stock', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/stock', 25_000)),
+    _pageBootstrapLoad('/api/stock/columns', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/stock/columns', 25_000)),
   ]);
 }
 
@@ -29647,6 +29647,75 @@ async function _sbStocktakingRows() {
   return Array.isArray(rows) ? rows : [];
 }
 
+function _sbStocktakingFolderColumns(rows = []) {
+  const list = Array.isArray(rows) ? rows : [];
+  const folderBlocked = new Set([
+    "sourceorderid", "sourceordernumber", "orderid", "ordernumber",
+    "teammemberid", "teammembername", "userid", "username", "createdby", "ownername", "employee",
+    "school", "stocktakingcolumn",
+  ]);
+  const keys = _sbAllColumnKeys(list).filter((key) => (
+    _uaIsUsefulStocktakingSchoolColumn(key) && !folderBlocked.has(_sbCanon(key))
+  ));
+  return keys
+    .map((key) => {
+      let itemsCount = 0;
+      let total = 0;
+      for (const row of list) {
+        const rawValue = row?.[key];
+        if (typeof rawValue === "boolean") continue;
+        const value = Number(rawValue);
+        if (!Number.isFinite(value) || value === 0) continue;
+        itemsCount += 1;
+        total += value;
+      }
+      return {
+        key,
+        label: _uaTitleCaseLabel(key),
+        itemsCount,
+        total,
+      };
+    })
+    .filter((item) => item.itemsCount > 0)
+    .sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+}
+
+function _sbRequestedStocktakingColumn(req, rows = []) {
+  const requested = String(req?.query?.column || "").trim();
+  if (!requested) return "";
+  const keys = _sbAllColumnKeys(rows || []);
+  const resolved = keys.find((key) => key === requested) || _sbFindKey(keys, [requested]);
+  if (!resolved || !_uaIsUsefulStocktakingSchoolColumn(resolved)) {
+    const err = new Error("The selected Stocktaking column is not available.");
+    err.status = 404;
+    throw err;
+  }
+  return resolved;
+}
+
+async function _sbStocktakingSelectionForRequest(req, rows = []) {
+  const requestedColumn = _sbRequestedStocktakingColumn(req, rows);
+  if (requestedColumn) {
+    return {
+      quantityColumn: requestedColumn,
+      displayName: _uaTitleCaseLabel(requestedColumn),
+      requested: true,
+    };
+  }
+
+  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
+  if (!schoolName) {
+    const err = new Error("Could not determine school name for the current user.");
+    err.status = 404;
+    throw err;
+  }
+  return {
+    quantityColumn: _sbDetectStocktakingQuantityColumn((rows || [])[0] || {}, schoolName) || schoolName,
+    displayName: schoolName,
+    requested: false,
+  };
+}
+
 function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
   const quantityColumn = Object.prototype.hasOwnProperty.call(row || {}, schoolNameOrColumn)
     ? schoolNameOrColumn
@@ -29679,14 +29748,9 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
 }
 
 async function _sbStocktakingForRequest(req) {
-  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
-  if (!schoolName) {
-    const err = new Error("Could not determine school name for the current user.");
-    err.status = 404;
-    throw err;
-  }
   const rows = await _sbStocktakingRows();
-  const items = rows.map((row) => _sbSerializeStocktakingRow(row, schoolName));
+  const selection = await _sbStocktakingSelectionForRequest(req, rows);
+  const items = rows.map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn));
   // Stocktaking must show both incoming Request Products (+qty) and outgoing Withdrawal Products (-qty).
   // Keep zero-only rows hidden so the page still behaves as an active stock/movement view.
   return items.filter((item) => Number(item.quantity) !== 0);
@@ -29843,16 +29907,10 @@ app.get(
 );
 
 async function _sbRenderStocktakingPdf(req, res) {
-  const { schoolName } = await _sbStocktakingCurrentSchoolName(req);
-  if (!schoolName) {
-    const err = new Error("Could not determine school name for the current user.");
-    err.status = 404;
-    throw err;
-  }
-
   const rows = await _sbStocktakingRows();
+  const selection = await _sbStocktakingSelectionForRequest(req, rows);
   const items = rows
-    .map((row) => _sbSerializeStocktakingRow(row, schoolName))
+    .map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn))
     .filter((item) => Number(item.quantity) !== 0);
 
   const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
@@ -29914,7 +29972,7 @@ async function _sbRenderStocktakingPdf(req, res) {
 
   const logoPath = path.join(__dirname, "../public/images/logo.png");
   const exportDateLabel = formatDateTime(createdAt);
-  const displayName = String(schoolName || req.session?.username || "-").trim() || "-";
+  const displayName = String(selection.displayName || req.session?.username || "-").trim() || "-";
 
   drawStocktakingHeader(doc, {
     title: "Stocktaking",
@@ -30136,10 +30194,38 @@ async function _sbRenderStocktakingExcel(req, res) {
 }
 
 app.get(
+  "/api/stock/columns",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (_sbStocktakingEnabled()) {
+        const rows = await _sbStocktakingRows();
+        return res.json({ ok: true, columns: _sbStocktakingFolderColumns(rows), source: "supabase" });
+      }
+
+      if (!stocktakingDatabaseId) {
+        return res.status(500).json({ ok: false, error: "Stocktaking database is not configured." });
+      }
+      const props = await _getStocktakingDBProps();
+      const columns = Object.entries(props || {})
+        .filter(([key, prop]) => _uaIsUsefulStocktakingSchoolColumn(key) && ["number", "formula"].includes(String(prop?.type || "")))
+        .map(([key]) => ({ key, label: _uaTitleCaseLabel(key), itemsCount: null, total: null }))
+        .sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+      return res.json({ ok: true, columns, source: "notion" });
+    } catch (error) {
+      console.error("GET /api/stock/columns error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load Stocktaking columns." });
+    }
+  },
+);
+
+app.get(
   "/api/stock",
   requireAuth,
   requirePage("Stocktaking"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(req.session?.username || "")}:v3`),
+  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${req.query?.column || ""}`)}:v4`),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res
@@ -30205,7 +30291,8 @@ app.get(
               props.Component?.title?.[0]?.plain_text ||
               "Untitled";
 
-            const quantity = firstDefinedNumber(props[schoolName]);
+            const selectedColumn = String(req.query?.column || "").trim() || schoolName;
+            const quantity = firstDefinedNumber(props[selectedColumn]);
 
             const oneKitQuantity = firstDefinedNumber(
               props["One Kit Quantity"],
@@ -30384,7 +30471,8 @@ app.all(
               props.Component?.title?.[0]?.plain_text ||
               "Untitled";
 
-            const quantity = firstDefinedNumber(props[schoolName]);
+            const selectedColumn = String(req.query?.column || "").trim() || schoolName;
+            const quantity = firstDefinedNumber(props[selectedColumn]);
             const idCode = lookupIdCode(componentName, props);
 
             // Prefer an explicit URL property, fall back to the Notion page URL.
@@ -30955,7 +31043,8 @@ app.all(
               props.Component?.title?.[0]?.plain_text ||
               "Untitled";
 
-            const quantity = firstDefinedNumber(props[schoolName]);
+            const selectedColumn = String(req.query?.column || "").trim() || schoolName;
+            const quantity = firstDefinedNumber(props[selectedColumn]);
             const idCode = lookupIdCode(componentName, props);
 
             let tag = null;

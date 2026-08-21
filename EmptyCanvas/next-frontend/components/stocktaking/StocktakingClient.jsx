@@ -112,11 +112,13 @@ function Icon({ name }) {
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>,
     chevron: <polyline points="6 9 12 15 18 9" />,
     check: <polyline points="20 6 9 17 4 12" />,
+    folder: <><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></>,
+    arrowLeft: <><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></>,
   };
   return <svg {...common}>{paths[name] || paths.download}</svg>;
 }
 
-function ExportModal({ onClose }) {
+function ExportModal({ onClose, columnKey = "" }) {
   const [fileType, setFileType] = useState("pdf");
   const [columns, setColumns] = useState(() => EXPORT_COLUMNS.filter((column) => column.checked).map((column) => column.value));
   const [fileTypeOpen, setFileTypeOpen] = useState(false);
@@ -143,7 +145,9 @@ function ExportModal({ onClose }) {
     setError("");
     try {
       const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
-      const response = await fetch(`${endpoint}?columns=${encodeURIComponent(columns.join(","))}`, {
+      const params = new URLSearchParams({ columns: columns.join(",") });
+      if (columnKey) params.set("column", columnKey);
+      const response = await fetch(`${endpoint}?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -204,15 +208,37 @@ function ExportModal({ onClose }) {
   );
 }
 
-export default function StocktakingClient({ initialStock = [] }) {
+export default function StocktakingClient({ initialStock = [], initialColumns = [] }) {
+  const fallbackColumn = useMemo(() => {
+    const first = (Array.isArray(initialStock) ? initialStock : []).find((item) => text(item?.quantityColumn));
+    const key = text(first?.quantityColumn);
+    return key ? { key, label: key.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase()), itemsCount: initialStock.length } : null;
+  }, [initialStock]);
+
+  const columns = useMemo(() => {
+    const list = Array.isArray(initialColumns) ? initialColumns : [];
+    if (list.length) return list
+      .map((item) => ({
+        key: text(item?.key || item?.column || item?.value),
+        label: text(item?.label || item?.value || item?.key || item?.column),
+        itemsCount: Number.isFinite(Number(item?.itemsCount)) ? Number(item.itemsCount) : null,
+      }))
+      .filter((item) => item.key && item.label);
+    return fallbackColumn ? [fallbackColumn] : [];
+  }, [initialColumns, fallbackColumn]);
+
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [activeColumn, setActiveColumn] = useState(null);
+  const [stock, setStock] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
     if (!input) return undefined;
     input.value = "";
-    input.placeholder = "Search components...";
+    input.placeholder = activeColumn ? `Search ${activeColumn.label}...` : "Search stock folders...";
     const handle = (event) => setSearch(event.target.value || "");
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && input.value) {
@@ -228,11 +254,100 @@ export default function StocktakingClient({ initialStock = [] }) {
       input.value = "";
       input.placeholder = "Search";
     };
-  }, []);
+  }, [activeColumn?.key, activeColumn?.label]);
 
-  const rows = useMemo(() => (Array.isArray(initialStock) ? initialStock : [])
+  useEffect(() => {
+    if (!columns.length || typeof window === "undefined") return;
+    const key = text(new URLSearchParams(window.location.search).get("column"));
+    if (!key) return;
+    const match = columns.find((item) => item.key === key);
+    if (match) openFolder(match, { updateHistory: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns.map((item) => item.key).join("|")]);
+
+  async function loadColumn(column) {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/stock?column=${encodeURIComponent(column.key)}&_fresh=1`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/stocktaking";
+        return;
+      }
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(body)) throw new Error(body?.error || "Failed to load this Stocktaking folder.");
+      setStock(body);
+    } catch (loadError) {
+      setStock([]);
+      setError(loadError?.message || "Failed to load this Stocktaking folder.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openFolder(column, options = {}) {
+    setActiveColumn(column);
+    setSearch("");
+    setExportOpen(false);
+    if (typeof window !== "undefined") {
+      const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+      if (input) input.value = "";
+      if (options.updateHistory !== false) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("column", column.key);
+        window.history.pushState({}, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
+      }
+    }
+    loadColumn(column);
+  }
+
+  function closeFolder() {
+    setActiveColumn(null);
+    setStock([]);
+    setSearch("");
+    setError("");
+    setExportOpen(false);
+    if (typeof window !== "undefined") {
+      const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
+      if (input) input.value = "";
+      const url = new URL(window.location.href);
+      url.searchParams.delete("column");
+      const query = url.searchParams.toString();
+      window.history.pushState({}, "", `${url.pathname}${query ? `?${query}` : ""}${url.hash}`);
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handlePopState = () => {
+      const key = text(new URLSearchParams(window.location.search).get("column"));
+      if (!key) {
+        setActiveColumn(null);
+        setStock([]);
+        setSearch("");
+        setError("");
+        return;
+      }
+      const match = columns.find((item) => item.key === key);
+      if (match && match.key !== activeColumn?.key) openFolder(match, { updateHistory: false });
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [columns, activeColumn?.key]);
+
+  const visibleFolders = useMemo(() => {
+    const query = lower(search);
+    if (!query) return columns;
+    return columns.filter((item) => lower(item.label).includes(query) || lower(item.key).includes(query));
+  }, [columns, search]);
+
+  const rows = useMemo(() => (Array.isArray(stock) ? stock : [])
     .map(normalizedRow)
-    .filter((row) => row.quantity !== 0), [initialStock]);
+    .filter((row) => row.quantity !== 0), [stock]);
 
   const filteredRows = useMemo(() => {
     const query = lower(search);
@@ -243,33 +358,73 @@ export default function StocktakingClient({ initialStock = [] }) {
   const groups = useMemo(() => groupRows(filteredRows), [filteredRows]);
 
   return (
-    <section className="next-stocktaking-classic-parity">
-      <section className="card">
-        <div className="card-toolbar"><button className="btn b2b-download-primary" type="button" onClick={() => setExportOpen(true)}><Icon name="download" /><span>Download</span></button></div>
-        <div className="groups-grid" aria-live="polite">
-          {!groups.length ? (
-            <div className="empty-block empty-block--no-data">Sorry, No data available</div>
-          ) : groups.map((group) => {
-            const tone = TAG_TONES[group.color] || TAG_TONES.default;
-            return (
-              <section className="card card--elevated group-card" style={{ "--group-accent-bg": tone.background, "--group-accent-text": tone.color, "--group-accent-border": tone.border }} key={group.key}>
-                <div className="group-card__head">
-                  <div className="group-head-left"><span className="group-title">Tag</span><span className="group-tag"><span className={`tag-pill tag--${group.color}`}>{group.name}</span></span></div>
-                  <div className="group-head-right"><span className="group-count">{group.items.length} items</span></div>
-                </div>
-                <div className="group-table-wrap">
-                  <table className="group-table">
-                    <thead><tr><th>Component</th><th className="col-num">In Stock</th></tr></thead>
-                    <tbody>{group.items.map((row) => <tr key={row.key}><td style={{ fontWeight: 600 }}>{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td><td className="col-num">{row.quantity}</td></tr>)}</tbody>
-                  </table>
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      </section>
+    <section className="next-stocktaking-classic-parity next-stocktaking-folders-page">
+      {!activeColumn ? (
+        <section className="card stocktaking-folders-card">
+          <div className="stocktaking-folders-head">
+            <div>
+              <span className="stocktaking-folders-kicker">STOCKTAKING COLUMNS</span>
+              <h2>Stock Folders</h2>
+            </div>
+            <span className="stocktaking-folders-count">{visibleFolders.length} folder{visibleFolders.length === 1 ? "" : "s"}</span>
+          </div>
 
-      {exportOpen ? <ExportModal onClose={() => setExportOpen(false)} /> : null}
+          <div className="stocktaking-folder-grid" aria-live="polite">
+            {visibleFolders.length ? visibleFolders.map((column) => (
+              <button className="stocktaking-folder-card" type="button" onClick={() => openFolder(column)} key={column.key}>
+                <span className="stocktaking-folder-shape" aria-hidden="true"><Icon name="folder" /></span>
+                <span className="stocktaking-folder-copy">
+                  <strong>{column.label}</strong>
+                  <small>{column.itemsCount === null ? "Stocktaking" : `${column.itemsCount} stock item${column.itemsCount === 1 ? "" : "s"}`}</small>
+                </span>
+              </button>
+            )) : (
+              <div className="empty-block empty-block--no-data stocktaking-folder-empty">Sorry, No stock folders available</div>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section className="card stocktaking-folder-workspace">
+          <div className="stocktaking-folder-toolbar">
+            <div className="stocktaking-folder-title">
+              <button className="stocktaking-folder-back" type="button" onClick={closeFolder} aria-label="Back to stock folders"><Icon name="arrowLeft" /></button>
+              <span className="stocktaking-folder-title-icon"><Icon name="folder" /></span>
+              <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
+            </div>
+            <button className="btn b2b-download-primary" type="button" onClick={() => setExportOpen(true)} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button>
+          </div>
+
+          {loading ? (
+            <div className="stocktaking-folder-state"><span className="stocktaking-folder-spinner" />Loading stocktaking...</div>
+          ) : error ? (
+            <div className="stocktaking-folder-state is-error"><span>{error}</span><button type="button" onClick={() => loadColumn(activeColumn)}>Try again</button></div>
+          ) : (
+            <div className="groups-grid" aria-live="polite">
+              {!groups.length ? (
+                <div className="empty-block empty-block--no-data">Sorry, No data available</div>
+              ) : groups.map((group) => {
+                const tone = TAG_TONES[group.color] || TAG_TONES.default;
+                return (
+                  <section className="card card--elevated group-card" style={{ "--group-accent-bg": tone.background, "--group-accent-text": tone.color, "--group-accent-border": tone.border }} key={group.key}>
+                    <div className="group-card__head">
+                      <div className="group-head-left"><span className="group-title">Tag</span><span className="group-tag"><span className={`tag-pill tag--${group.color}`}>{group.name}</span></span></div>
+                      <div className="group-head-right"><span className="group-count">{group.items.length} items</span></div>
+                    </div>
+                    <div className="group-table-wrap">
+                      <table className="group-table">
+                        <thead><tr><th>Component</th><th className="col-num">In Stock</th></tr></thead>
+                        <tbody>{group.items.map((row) => <tr key={row.key}><td style={{ fontWeight: 600 }}>{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td><td className="col-num">{row.quantity}</td></tr>)}</tbody>
+                      </table>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {exportOpen && activeColumn ? <ExportModal columnKey={activeColumn.key} onClose={() => setExportOpen(false)} /> : null}
     </section>
   );
 }
