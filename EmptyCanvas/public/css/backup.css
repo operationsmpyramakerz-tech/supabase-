@@ -1546,3 +1546,14 @@ body.backup-table-modal-open{overflow:hidden !important;}
     height:144px !important;
   }
 }
+
+/* 2026-08-21: Table Browser uses the Classic header search as its only search field. */
+.backup-table-workspace__head--meta-only{
+  justify-content:flex-end !important;
+}
+@media (max-width:640px){
+  .backup-table-workspace__head--meta-only{
+    align-items:flex-end !important;
+    flex-direction:row !important;
+  }
+}
