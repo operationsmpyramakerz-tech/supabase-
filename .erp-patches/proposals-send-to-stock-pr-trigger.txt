@@ -1,3 +1,4 @@
 Trigger Proposal send-to-stock workflow via pull request.
 Retry after fixing patch reconstruction.
 Retry with normalized patch chunks.
+Retry after normalizing trailing whitespace.
