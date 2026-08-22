@@ -42,3 +42,5 @@ jobs:
           git add -A
           git commit -m "Add Proposal send-to-stock workflow"
           git push origin HEAD:main
+
+# trigger existing workflow after creation
