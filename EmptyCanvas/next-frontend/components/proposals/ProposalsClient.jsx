@@ -23,6 +23,7 @@ const COMBINE_LOGICS = [
 const PROPOSAL_ICON_PATHS = {
   download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
   shoppingBag: [<path key="p1" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />, <line key="l" x1="3" y1="6" x2="21" y2="6" />, <path key="p2" d="M16 10a4 4 0 0 1-8 0" />],
+  archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
   edit: [<path key="p1" d="M12 20h9" />, <path key="p2" d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />],
   copy: [<rect key="r" x="9" y="9" width="13" height="13" rx="2" ry="2" />, <path key="p" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />],
   trash: [<polyline key="pl" points="3 6 5 6 21 6" />, <path key="p1" d="M19 6l-1 14H6L5 6" />, <path key="p2" d="M10 11v6M14 11v6M9 6V4h6v2" />],
@@ -88,6 +89,15 @@ function normalizedUrl(value) {
   if (!url) return "";
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   return `https://${url.replace(/^\/+/, "")}`;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
+    reader.readAsDataURL(file);
+  });
 }
 
 function normalizeProduct(product, index = 0) {
@@ -821,42 +831,87 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   );
 }
 
-function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
+function SendToStockPage({ proposal, members, busy, onBack, onSubmit }) {
+  const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.stocktakingColumn)), [members]);
   const [memberId, setMemberId] = useState("");
-  const [password, setPassword] = useState("");
+  const [files, setFiles] = useState([]);
   const [error, setError] = useState("");
+
+  const chooseFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+    const invalid = incoming.find((file) => !/^image\//i.test(file.type || ""));
+    if (invalid) return setError("Receipt uploads must be images.");
+    const tooLarge = incoming.find((file) => Number(file.size || 0) > 8 * 1024 * 1024);
+    if (tooLarge) return setError(`${tooLarge.name} is larger than 8 MB.`);
+    setFiles((current) => {
+      const combined = [...current, ...incoming];
+      const seen = new Set();
+      return combined.filter((file) => {
+        const key = `${file.name}:${file.size}:${file.lastModified}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 12);
+    });
+    setError("");
+  };
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!memberId) return setError("Choose a team member.");
-    if (!text(password)) return setError("Admin password is required.");
+    if (!memberId) return setError("Choose the user who will receive the stock.");
+    if (!files.length) return setError("Upload at least one receipt image.");
     setError("");
     try {
-      await onSubmit({ teamMemberId: memberId, adminPassword: text(password) });
+      await onSubmit({ teamMemberId: memberId, files });
     } catch (submitError) {
-      setError(submitError?.message || "The order could not be created.");
+      setError(submitError?.message || "The proposal could not be sent to Stocktaking.");
     }
   };
 
   return (
-    <Modal title="Make Order" subtitle={`Create a Request Products order from all components in “${proposal.name}”.`} icon="▤" onClose={onClose}>
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
+    <section className="proposal-send-stock-page card">
+      <header className="proposal-send-stock-head">
+        <button type="button" className="products-back-btn" onClick={onBack} aria-label="Back to proposal" disabled={busy}>←</button>
+        <span className="proposal-send-stock-icon"><ProposalIcon name="archive" size={21} /></span>
+        <div><span>SEND TO STOCK</span><h2>{proposal?.name || "Proposal"}</h2><p>Add this proposal directly to a user’s Stocktaking column.</p></div>
+      </header>
+
+      <form className="proposal-send-stock-form" onSubmit={submit}>
         <ModernSelect
-          label="Team Member *"
+          label="Stock user *"
           value={memberId}
-          placeholder="Select team member"
+          placeholder={stockMembers.length ? "Select stock user" : "No Stocktaking users available"}
           searchable
-          options={members.map((member) => ({ value: member.id, label: member.name, meta: member.department || "Team member" }))}
-          onChange={setMemberId}
+          options={stockMembers.map((member) => ({ value: member.id, label: member.name, meta: member.stocktakingColumn }))}
+          onChange={(value) => { setMemberId(value); setError(""); }}
         />
-        <label><span>Admin Password *</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+
+        <label className="proposal-receipt-upload-field">
+          <span>Receipt images *</span>
+          <div className={`proposal-receipt-upload-box ${files.length ? "has-files" : ""}`}>
+            <ProposalIcon name="file" size={22} />
+            <div><strong>{files.length ? `${files.length} receipt image${files.length === 1 ? "" : "s"} selected` : "Upload receipt images"}</strong><small>JPG, PNG or WEBP · up to 8 MB per image</small></div>
+            <b>{busy ? "Uploading…" : "Choose images"}</b>
+            <input type="file" accept="image/*" multiple disabled={busy} onChange={(event) => { chooseFiles(event.target.files); event.target.value = ""; }} />
+          </div>
+          {files.length ? (
+            <div className="proposal-receipt-file-list">
+              {files.map((file, index) => (
+                <span key={`${file.name}-${file.size}-${index}`}><em>{file.name}</em><button type="button" onClick={() => setFiles((current) => current.filter((_, idx) => idx !== index))} disabled={busy} aria-label={`Remove ${file.name}`}>×</button></span>
+              ))}
+            </div>
+          ) : null}
+        </label>
+
+        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Stock rows will be saved under Header “Main stock”, and every row will use its Proposal kit name as the Tag.</span></div>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Creating…" : "Create Order"}</button>
+        <div className="proposal-send-stock-actions">
+          <button type="button" className="products-btn products-btn--light" onClick={onBack} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !stockMembers.length}><ProposalIcon name="archive" /><span>{busy ? "Sending…" : "Confirm"}</span></button>
         </div>
       </form>
-    </Modal>
+    </section>
   );
 }
 
@@ -894,7 +949,7 @@ export default function ProposalsClient({
   const [nameDialog, setNameDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
-  const [orderDialog, setOrderDialog] = useState(false);
+  const [sendToStockOpen, setSendToStockOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState("");
   const [combineOpen, setCombineOpen] = useState(false);
   const [detailEdit, setDetailEdit] = useState(false);
@@ -1217,7 +1272,7 @@ export default function ProposalsClient({
     setEditAdminPassword("");
     setDraftErrors({ name: "", items: "" });
     setAddDialog(false);
-    setOrderDialog(false);
+    setSendToStockOpen(false);
   };
 
   const startCreateProposal = async () => {
@@ -1665,16 +1720,36 @@ export default function ProposalsClient({
     }
   };
 
-  const makeOrder = async (payload) => {
+  const sendToStock = async ({ teamMemberId, files = [] }) => {
     const proposal = activeDetail?.proposal;
+    if (!proposal?.id) throw new Error("Proposal ID is missing.");
     setBusy(true);
+    startActionLoading({ title: "Sending to stock", message: "Uploading receipt images and adding Stocktaking rows…" });
     try {
-      const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/make-order`, {
+      const receipts = [];
+      for (const file of files) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const uploaded = await requestJson("/api/products/proposals/receipt-upload", {
+          method: "POST",
+          body: JSON.stringify({ dataUrl, filename: file.name || "receipt.jpg" }),
+        });
+        if (uploaded?.url) receipts.push({ url: uploaded.url, name: uploaded.name || file.name || "Receipt" });
+      }
+      if (!receipts.length) throw new Error("No receipt images were uploaded.");
+
+      const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/send-to-stock`, {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ teamMemberId, receipts }),
       });
-      setOrderDialog(false);
-      notify(`Order ${body.orderId || body.orderNumber || ""} was created with ${body.count || enrichedRows.length} components.`);
+      const count = Number(body?.count || 0);
+      const memberName = text(body?.member?.name) || "the selected user";
+      await finishActionLoading("done", `${count} Stocktaking row${count === 1 ? "" : "s"} added to ${memberName}.`);
+      setSendToStockOpen(false);
+      notify(`Proposal sent to ${memberName} Stocktaking under Main stock.`);
+      return body;
+    } catch (error) {
+      await finishActionLoading("failed", error?.message || "The proposal could not be sent to Stocktaking.");
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -1794,6 +1869,15 @@ export default function ProposalsClient({
 
   if (activeDetail || detailBusy) {
     const proposal = activeDetail?.proposal;
+    if (sendToStockOpen && proposal) {
+      return (
+        <main className="products-shell proposals-shell next-proposals-classic-parity proposal-send-stock-shell">
+          <Toast toast={toast} onClose={() => setToast(null)} />
+          <ActionLoadingModal state={actionLoading} />
+          <SendToStockPage proposal={proposal} members={members} busy={busy} onBack={() => setSendToStockOpen(false)} onSubmit={sendToStock} />
+        </main>
+      );
+    }
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
@@ -1859,7 +1943,7 @@ export default function ProposalsClient({
                             </div>
                           ) : null}
                         </div>
-                        <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={() => setOrderDialog(true)} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make Order</span></button>
+                        <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={() => { setSendToStockOpen(true); setDownloadMenuOpen(false); setSortMenuOpen(false); }} disabled={!enrichedRows.length}><ProposalIcon name="archive" /><span>Send to stock</span></button>
                       </div>
                     </header>
                   )}
@@ -1982,7 +2066,7 @@ export default function ProposalsClient({
         </section>
 
         {addDialog && proposal ? <AddItemsModal proposal={proposal} products={products} kits={kits} kitFolders={kitFolders} tags={tags} busy={busy} onClose={() => setAddDialog(false)} onSubmit={submitAdd} /> : null}
-        {orderDialog && proposal ? <MakeOrderModal proposal={proposal} members={members} busy={busy} onClose={() => setOrderDialog(false)} onSubmit={makeOrder} /> : null}
+
         {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.proposal?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
         {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
       </main>

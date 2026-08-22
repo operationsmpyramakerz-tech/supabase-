@@ -2171,7 +2171,7 @@ body.expenses-users-page .next-expense-users-pdf {
   }
 }
 
-/* ========================================================================== 
+/* ==========================================================================
    Stage 2H — B2C Database + Table Workspace Classic parity
    ========================================================================== */
 body.b2c-page .next-b2c-classic-warning{
@@ -11551,4 +11551,320 @@ body.stocktaking-page .stocktaking-data-receipt span{
 @media(max-width:640px){
   body.stocktaking-page .stocktaking-folder-grid{gap:16px 12px !important;}
   body.stocktaking-page .stocktaking-data-table{min-width:540px;}
+}
+
+/* ===== 2026-08-22 · Proposals compact actions + Send to stock ===== */
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  flex-wrap:nowrap !important;
+  gap:8px !important;
+  width:auto !important;
+  margin-left:auto !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-download-menu-wrap,
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-sort-menu-wrap{
+  width:auto !important;
+  flex:0 0 auto !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-download-btn,
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-sort-btn,
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-send-stock-btn{
+  min-height:44px !important;
+  height:44px !important;
+  width:auto !important;
+  min-width:0 !important;
+  flex:0 0 auto !important;
+  border-radius:14px !important;
+  padding:0 13px !important;
+  gap:7px !important;
+  font-size:.78rem !important;
+  font-weight:900 !important;
+  white-space:nowrap !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-send-stock-btn{
+  padding-inline:15px !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic button svg{
+  width:16px !important;
+  height:16px !important;
+  flex:0 0 16px !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-download-menu{
+  left:0 !important;
+  right:auto !important;
+  width:min(360px, calc(100vw - 34px)) !important;
+}
+
+@media (max-width:1200px){
+  body.proposals-page .next-proposals-classic-parity .proposal-download-menu{
+    position:fixed !important;
+    top:50% !important;
+    left:50% !important;
+    right:auto !important;
+    bottom:auto !important;
+    width:min(360px, calc(100vw - 32px)) !important;
+    max-height:min(76vh,520px) !important;
+    overflow:auto !important;
+    transform:translate(-50%,-50%) !important;
+    border-radius:20px !important;
+  }
+}
+
+@media (max-width:760px){
+  body.proposals-page .next-proposals-classic-parity .proposal-detail-head--compact{
+    align-items:center !important;
+    gap:8px !important;
+  }
+  body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic{
+    display:grid !important;
+    grid-template-columns:auto auto minmax(118px,auto) !important;
+    justify-content:end !important;
+    width:auto !important;
+    gap:6px !important;
+  }
+  body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-download-btn,
+  body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-sort-btn,
+  body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-send-stock-btn{
+    width:auto !important;
+    height:40px !important;
+    min-height:40px !important;
+    padding:0 9px !important;
+    border-radius:12px !important;
+    font-size:.71rem !important;
+    gap:5px !important;
+  }
+  body.proposals-page .next-proposals-classic-parity .proposal-detail-actions--classic .proposal-send-stock-btn{
+    padding-inline:11px !important;
+  }
+}
+
+body.proposals-page .proposal-send-stock-shell{
+  width:100%;
+  min-width:0;
+}
+body.proposals-page .proposal-send-stock-page{
+  width:min(720px,100%);
+  margin:0 auto;
+  padding:20px !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  border-radius:24px !important;
+  background:#fff !important;
+  box-shadow:0 20px 54px rgba(15,23,42,.10) !important;
+}
+body.proposals-page .proposal-send-stock-head{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  padding-bottom:16px;
+  border-bottom:1px solid #edf0f3;
+}
+body.proposals-page .proposal-send-stock-head .products-back-btn{
+  flex:0 0 auto;
+}
+body.proposals-page .proposal-send-stock-icon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:grid;
+  place-items:center;
+  border-radius:13px;
+  border:1px solid #fed7aa;
+  background:#fff7ed;
+  color:#c2410c;
+}
+body.proposals-page .proposal-send-stock-head > div{
+  min-width:0;
+}
+body.proposals-page .proposal-send-stock-head > div > span{
+  display:block;
+  margin-bottom:2px;
+  color:#c2410c;
+  font-size:.65rem;
+  font-weight:950;
+  letter-spacing:.08em;
+}
+body.proposals-page .proposal-send-stock-head h2{
+  margin:0;
+  color:#07101f;
+  font-size:1.3rem;
+  font-weight:950;
+  line-height:1.15;
+}
+body.proposals-page .proposal-send-stock-head p{
+  margin:4px 0 0;
+  color:#7c8798;
+  font-size:.79rem;
+  font-weight:700;
+}
+body.proposals-page .proposal-send-stock-form{
+  display:grid;
+  gap:16px;
+  padding-top:18px;
+}
+body.proposals-page .proposal-send-stock-form .proposal-search-select{
+  width:100% !important;
+}
+body.proposals-page .proposal-receipt-upload-field{
+  display:grid;
+  gap:8px;
+}
+body.proposals-page .proposal-receipt-upload-field > span{
+  color:#344054;
+  font-size:.76rem;
+  font-weight:900;
+}
+body.proposals-page .proposal-receipt-upload-box{
+  position:relative;
+  min-height:106px;
+  padding:15px 16px;
+  border:1px dashed #cbd5e1;
+  border-radius:17px;
+  background:linear-gradient(180deg,#fbfcfe,#f8fafc);
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  color:#475569;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+body.proposals-page .proposal-receipt-upload-box:hover,
+body.proposals-page .proposal-receipt-upload-box.has-files{
+  border-color:#fb923c;
+  background:#fffaf6;
+  box-shadow:0 0 0 4px rgba(249,115,22,.07);
+}
+body.proposals-page .proposal-receipt-upload-box > svg{
+  color:#c2410c;
+}
+body.proposals-page .proposal-receipt-upload-box > div{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+body.proposals-page .proposal-receipt-upload-box strong{
+  color:#111827;
+  font-size:.86rem;
+  font-weight:950;
+}
+body.proposals-page .proposal-receipt-upload-box small{
+  color:#7c8798;
+  font-size:.7rem;
+  font-weight:750;
+}
+body.proposals-page .proposal-receipt-upload-box > b{
+  min-height:34px;
+  padding:0 11px;
+  border-radius:10px;
+  display:inline-flex;
+  align-items:center;
+  background:#07101f;
+  color:#fff;
+  font-size:.7rem;
+  font-weight:900;
+  white-space:nowrap;
+}
+body.proposals-page .proposal-receipt-upload-box input{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+}
+body.proposals-page .proposal-receipt-file-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+body.proposals-page .proposal-receipt-file-list > span{
+  max-width:100%;
+  min-height:32px;
+  padding:0 6px 0 10px;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  background:#fff;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  color:#475569;
+}
+body.proposals-page .proposal-receipt-file-list em{
+  max-width:220px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.68rem;
+  font-style:normal;
+  font-weight:850;
+}
+body.proposals-page .proposal-receipt-file-list button{
+  width:22px;
+  height:22px;
+  border:0;
+  border-radius:7px;
+  background:#f3f4f6;
+  color:#475569;
+  cursor:pointer;
+  font-size:15px;
+  line-height:1;
+}
+body.proposals-page .proposal-send-stock-note{
+  padding:12px 13px;
+  border:1px solid #fde3cf;
+  border-radius:14px;
+  background:#fffaf6;
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  color:#7c2d12;
+  font-size:.73rem;
+  line-height:1.4;
+}
+body.proposals-page .proposal-send-stock-note strong{
+  flex:0 0 auto;
+  color:#c2410c;
+  font-weight:950;
+}
+body.proposals-page .proposal-send-stock-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  padding-top:4px;
+}
+body.proposals-page .proposal-send-stock-actions .products-btn{
+  min-height:42px !important;
+  height:42px !important;
+  border-radius:13px !important;
+  padding:0 15px !important;
+}
+
+@media (max-width:640px){
+  body.proposals-page .proposal-send-stock-page{
+    padding:15px !important;
+    border-radius:20px !important;
+  }
+  body.proposals-page .proposal-send-stock-head{
+    align-items:flex-start;
+  }
+  body.proposals-page .proposal-send-stock-head p{
+    display:none;
+  }
+  body.proposals-page .proposal-receipt-upload-box{
+    grid-template-columns:auto minmax(0,1fr);
+    min-height:98px;
+  }
+  body.proposals-page .proposal-receipt-upload-box > b{
+    grid-column:1/-1;
+    justify-self:start;
+  }
+  body.proposals-page .proposal-send-stock-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  body.proposals-page .proposal-send-stock-actions .products-btn{
+    width:100% !important;
+  }
 }

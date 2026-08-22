@@ -103,7 +103,7 @@ const b2bDatabaseId = _extractNotionIdFromEnv(
 );
 
 
-const NOTION_VER = process.env.NOTION_VERSION || '2022-06-28'; // المطلوب في أمثلة Notion 
+const NOTION_VER = process.env.NOTION_VERSION || '2022-06-28'; // المطلوب في أمثلة Notion
 // Team Members DB (from ENV)
 const teamMembersDatabaseId =
   process.env.Team_Members ||
@@ -7412,6 +7412,7 @@ function _sbSerializeProposalTeamMember(row = {}) {
     name,
     position: _sbString(_sbValueForLabel(row, "Position")) || "",
     department: _sbString(_sbValueForLabel(row, "Department")) || "",
+    stocktakingColumn: _sbString(_sbValueForLabel(row, "School")) || "",
   };
 }
 
@@ -7517,6 +7518,175 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
   }
   await _sbInvalidateOrdersCaches();
   return { orderNumber, orderId: `ORD-${orderNumber}`, count: created.length, member };
+}
+
+function _proposalReceiptUploads(body = {}) {
+  const rows = Array.isArray(body?.receipts) ? body.receipts : [];
+  return rows
+    .map((item, index) => ({
+      url: String(item?.url || "").trim(),
+      name: String(item?.name || item?.filename || `Receipt ${index + 1}`).trim() || `Receipt ${index + 1}`,
+    }))
+    .filter((item) => /^https?:\/\//i.test(item.url));
+}
+
+async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
+  const pid = String(proposalId || "").trim();
+  const teamMemberId = String(body?.teamMemberId || body?.team_member_id || "").trim();
+  if (!pid) {
+    const err = new Error("Proposal ID is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!teamMemberId) {
+    const err = new Error("Stock user is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!_sbStocktakingEnabled()) {
+    const err = new Error("Supabase Stocktaking table is not configured.");
+    err.status = 500;
+    throw err;
+  }
+
+  const receipts = _proposalReceiptUploads(body);
+  if (!receipts.length) {
+    const err = new Error("Upload at least one receipt image before confirming.");
+    err.status = 400;
+    throw err;
+  }
+
+  const memberRow = await _sbFindTeamMemberById(teamMemberId);
+  if (!memberRow) {
+    const err = new Error("Selected Stocktaking user was not found.");
+    err.status = 404;
+    throw err;
+  }
+  const member = _sbSerializeProposalTeamMember(memberRow);
+  const stockLabel = String(member.stocktakingColumn || "").trim();
+  if (!stockLabel) {
+    const err = new Error(`${member.name} does not have Stocktaking access / a Stocktaking column yet.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const detail = await _sbProductProposalById(pid, req);
+  if (!detail?.proposal) {
+    const err = new Error("Proposal not found.");
+    err.status = 404;
+    throw err;
+  }
+  const items = Array.isArray(detail.items) ? detail.items : [];
+  if (!items.length) {
+    const err = new Error("This proposal has no components to send to Stocktaking.");
+    err.status = 400;
+    throw err;
+  }
+
+  let stockRows = await _sbStocktakingRows();
+  let keys = _sbAllColumnKeys(stockRows || []);
+  if (!keys.length) keys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+
+  let quantityColumn = _sbDetectStocktakingQuantityColumnFromKeys(keys, stockLabel);
+  if (!quantityColumn) {
+    const ensured = await _uaAddStocktakingSchoolColumn(stockLabel);
+    quantityColumn = String(ensured?.column || _sbStocktakingColumnKey(stockLabel)).trim();
+    if (quantityColumn && !keys.includes(quantityColumn)) keys.push(quantityColumn);
+  }
+  if (!quantityColumn) {
+    const err = new Error(`Could not resolve the Stocktaking column for ${member.name}.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const headerKey = _sbFindStocktakingKey(keys, ["header", "Header", "stock_header", "Stock Header", "main_header", "Main Header"]);
+  const tagKey = _sbFindStocktakingKey(keys, ["tag", "Tag", "tags", "Tags"]);
+  if (keys.length && !headerKey) {
+    const err = new Error("Stocktaking table does not have a Header column. Add the Header column before using Send to stock.");
+    err.status = 400;
+    throw err;
+  }
+  if (keys.length && !tagKey) {
+    const err = new Error("Stocktaking table does not have a Tag column.");
+    err.status = 400;
+    throw err;
+  }
+
+  const actualHeaderKey = headerKey || "header";
+  const actualTagKey = tagKey || "tag";
+  const receiptNumberKey = _sbFindStocktakingKey(keys, ["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"]);
+  const receiptPhotosKey = _sbFindStocktakingKey(keys, ["receipt_photos", "Receipt Photos", "receipt_images", "Receipt Images", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"]);
+  const sourceProposalIdKey = _sbFindStocktakingKey(keys, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"]);
+  const sourceProposalNameKey = _sbFindStocktakingKey(keys, ["source_proposal", "Source Proposal", "proposal_name", "Proposal Name"]);
+  const targetMemberIdKey = _sbFindStocktakingKey(keys, ["team_member_id", "Team Member ID", "user_id", "User ID"]);
+  const targetMemberNameKey = _sbFindStocktakingKey(keys, ["team_member_name", "Team Member Name", "user_name", "User Name", "username", "Username"]);
+
+  const productMap = await _sbProductsMapById();
+  const receiptNames = receipts.map((item) => item.name).filter(Boolean).join("\n");
+  const receiptUrls = receipts.map((item) => item.url).filter(Boolean).join("\n");
+  const receiptFilesJson = JSON.stringify(receipts);
+  const created = [];
+  const kitTags = new Set();
+  let totalQuantity = 0;
+
+  const setFirstExisting = (row, aliases, value, fallbackKey = "") => {
+    if (value === null || typeof value === "undefined") return "";
+    const key = _sbFindStocktakingKey(keys, aliases) || (!keys.length ? fallbackKey : "");
+    if (!key) return "";
+    row[key] = value;
+    return key;
+  };
+
+  for (const item of items) {
+    const product = productMap.get(String(item?.productId || "")) || {};
+    const totalItemQuantity = _sbProposalQuantity(item?.quantity || 1);
+    const sources = _sbProposalSourceKitsForTotal(item?.sourceKits || item?.source_kits || [], totalItemQuantity);
+    for (const source of sources) {
+      const qty = _sbProposalQuantity(source?.quantity || 1);
+      const kitName = _sbProposalText(source?.kitName || source?.name) || "Direct components";
+      const productName = _sbProposalText(product?.name || item?.productName || item?.product_name) || "Untitled Product";
+      const row = {};
+
+      row[actualHeaderKey] = "Main stock";
+      row[actualTagKey] = kitName;
+      row[quantityColumn] = qty;
+      kitTags.add(kitName);
+      totalQuantity += qty;
+
+      const nameKey = setFirstExisting(row, ["name", "Name", "component", "Component"], productName, "name");
+      setFirstExisting(row, ["product_name", "Product Name", "product", "Product", "products", "Products"], productName, nameKey ? "" : "product_name");
+      setFirstExisting(row, ["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], product?.url || null, "product_url");
+      setFirstExisting(row, ["id_code", "ID Code", "code", "Code"], product?.displayId || product?.idCode || null, "id_code");
+      setFirstExisting(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null, "unit_price");
+
+      if (receiptNumberKey) row[receiptNumberKey] = receiptNames;
+      else if (!keys.length) row.receipt_number = receiptNames;
+      if (receiptPhotosKey) row[receiptPhotosKey] = receiptFilesJson;
+      else if (!keys.length) row.receipt_photos = receiptFilesJson;
+      if (sourceProposalIdKey) row[sourceProposalIdKey] = pid;
+      if (sourceProposalNameKey) row[sourceProposalNameKey] = detail.proposal.name || "Proposal";
+      if (targetMemberIdKey) row[targetMemberIdKey] = member.id;
+      if (targetMemberNameKey) row[targetMemberNameKey] = member.name;
+
+      const inserted = await _sbInsertStocktakingRowSafe(row, [actualHeaderKey, actualTagKey, quantityColumn]);
+      created.push(inserted || row);
+    }
+  }
+
+  await Promise.allSettled([
+    cacheDel(`cache:api:stock:${cacheKeySafe(`${member.name}:${quantityColumn}`)}:v4`),
+    cacheDel(`cache:api:stock:${cacheKeySafe(`${member.name}:${stockLabel}`)}:v4`),
+  ]);
+
+  return {
+    count: created.length,
+    totalQuantity,
+    member,
+    stocktakingColumn: quantityColumn,
+    header: "Main stock",
+    tags: [...kitTags],
+    receiptCount: receipts.length,
+  };
 }
 
 function _proposalPdfSafeFilename(value = "Proposal") {
@@ -26854,6 +27024,55 @@ app.get(
 );
 
 app.post(
+  "/api/products/proposals/receipt-upload",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const { dataUrl, filename } = req.body || {};
+      if (!dataUrl) return res.status(400).json({ ok: false, error: "Receipt image data is required." });
+      const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+      if (!/^image\//i.test(String(mime || ""))) {
+        return res.status(400).json({ ok: false, error: "Receipt upload must be an image." });
+      }
+      if (buf.length > 8 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: "Receipt image is too large. Maximum size is 8 MB." });
+      }
+      const originalName = String(filename || "receipt.jpg").trim() || "receipt.jpg";
+      const cleanName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+      const objectName = `proposal-receipts/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const url = await uploadToBlobFromBase64(dataUrl, objectName);
+      return res.status(201).json({ ok: true, url, name: originalName, mime });
+    } catch (error) {
+      console.error("POST /api/products/proposals/receipt-upload error:", error?.details || error?.body || error);
+      const message = String(error?.message || "") === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+        ? "Supabase Storage is not configured for receipt uploads."
+        : (error?.message || "Failed to upload receipt image.");
+      return res.status(error?.status || 500).json({ ok: false, error: message });
+    }
+  },
+);
+
+app.post(
+  "/api/products/proposals/:proposalId/send-to-stock",
+  requireAuth,
+  requirePage(["Proposals", "Products"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      const result = await _sbSendProposalToStocktaking(req.params.proposalId, req.body || {}, req);
+      return res.status(201).json({ ok: true, source: "supabase", ...result });
+    } catch (error) {
+      console.error("POST /api/products/proposals/:proposalId/send-to-stock error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to send proposal to Stocktaking." });
+    }
+  },
+);
+
+app.post(
   "/api/products/proposals/:proposalId/make-order",
   requireAuth,
   requirePage(["Proposals", "Products"]),
@@ -27919,7 +28138,7 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
     .status(500)
     .json({ success: false, message: "Database IDs are not configured." });
 }
-    
+
 
     try {
       // Detect Order Type property (if provided) so we can store it on the order pages.
@@ -28246,7 +28465,7 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
             productId: product.id,
             productName,
             quantity: Number(product.quantity),
-            reason: product.reason, 
+            reason: product.reason,
             createdTime: created.created_time,
           };
         }),
@@ -30662,7 +30881,7 @@ app.all(
         }
       };
 
-      
+
       const normalizeUrl = (url) => {
         const s = String(url || "").trim();
         if (!s) return null;
