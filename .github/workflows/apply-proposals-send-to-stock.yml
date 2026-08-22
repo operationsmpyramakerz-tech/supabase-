@@ -9,6 +9,10 @@ on:
       - '.erp-patches/proposals-send-to-stock-01.b64'
       - '.erp-patches/proposals-send-to-stock-02.b64'
       - '.github/workflows/apply-proposals-send-to-stock.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,6 +25,7 @@ jobs:
       - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Rebuild and apply patch
@@ -42,5 +47,3 @@ jobs:
           git add -A
           git commit -m "Add Proposal send-to-stock workflow"
           git push origin HEAD:main
-
-# trigger existing workflow after creation
