@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/apply-stocktaking-proposal-table.yml'
+      - '.github/stocktaking-patch/trigger'
 
 permissions:
   contents: write
@@ -20,6 +20,7 @@ jobs:
       - name: Apply exact Stocktaking patch
         shell: bash
         run: |
+          set -euo pipefail
           cat .github/stocktaking-patch/part1 .github/stocktaking-patch/part2 .github/stocktaking-patch/part3 .github/stocktaking-patch/part4 .github/stocktaking-patch/part5 | base64 -d > /tmp/stocktaking.patch
           git apply --check /tmp/stocktaking.patch
           git apply /tmp/stocktaking.patch
@@ -31,5 +32,4 @@ jobs:
           git rm -r .github/stocktaking-patch .github/workflows/apply-stocktaking-proposal-table.yml
           git add EmptyCanvas/next-frontend/components/stocktaking/StocktakingClient.jsx EmptyCanvas/next-frontend/app/classic-parity.css EmptyCanvas/server/app.js
           git commit -m 'Match Stocktaking folders to Proposal and add receipt table'
-          git push origin main
-# trigger second push
+          git push origin HEAD:main
