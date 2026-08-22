@@ -2983,6 +2983,48 @@ async function _uaAddStocktakingSchoolColumn(displayName = "") {
   return { label: _uaTitleCaseLabel(columnName), column: columnName };
 }
 
+function _uaGeneratedStocktakingColumnName(memberName = "") {
+  const clean = String(memberName || "").replace(/\s+/g, " ").trim();
+  return clean ? `${clean} Stock` : "";
+}
+
+function _uaAppPageIsStocktaking(page = {}) {
+  const values = [page?.pageKey, page?.pageName, page?.routePath].map((value) => String(value || "").trim()).filter(Boolean);
+  return values.some((value) => _sbCanon(value) === "stocktaking" || /(^|\/)stocktaking(?:$|[/?#])/i.test(value));
+}
+
+async function _uaEnsureGeneratedStocktakingColumnForMember(memberId = "", memberName = "") {
+  const id = String(memberId || "").trim();
+  const label = _uaGeneratedStocktakingColumnName(memberName);
+  if (!id || !label || !_sbTeamMembersEnabled() || !_sbStocktakingEnabled()) return null;
+
+  const rows = await _sbSelectTeamMembersRows();
+  const member = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim() === id) || null;
+  if (!member) {
+    const err = new Error("Team member was not found while preparing Stocktaking access.");
+    err.status = 404;
+    throw err;
+  }
+
+  const keys = _sbAllColumnKeys(rows || []);
+  const schoolKey = _sbFindKey(keys, ["School", "school", "school_name", "Stocktaking Column", "stocktaking_column", "Done Column", "done_column"]);
+  if (!schoolKey) {
+    const err = new Error("Team Members table does not have a Stocktaking/School column.");
+    err.status = 500;
+    throw err;
+  }
+
+  const created = await _uaAddStocktakingSchoolColumn(label);
+  const current = _sbString(_sbValueForLabel(member, "School"));
+  if (norm(current) === norm(label)) {
+    return { label, column: created?.column || _uaSafeSqlIdentifierFromLabel(label), changed: false };
+  }
+
+  await supabaseDb.updateById(_sbTeamMembersTable(), id, { [schoolKey]: label });
+  await _uaClearUserAccessCaches(id);
+  return { label, column: created?.column || _uaSafeSqlIdentifierFromLabel(label), changed: true };
+}
+
 function _uaResolveTeamMemberNamesToIds(value, rows = []) {
   const values = _sbSplitValues(value);
   const ids = [];
@@ -3881,6 +3923,11 @@ async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemb
       granted_by: _sbString(_sbGet(previous, ["granted_by", "grantedBy"])) || grantedBy || null,
       notes: _sbGet(previous, ["notes"]) ?? null,
     });
+  }
+
+  const stocktakingEnabled = Array.from(incomingByPageId.values()).some(({ page, entry }) => !!entry?.isEnabled && _uaAppPageIsStocktaking(page));
+  if (stocktakingEnabled) {
+    await _uaEnsureGeneratedStocktakingColumnForMember(memberId, teamMemberName);
   }
 
   // Two bulk operations instead of one sequential PATCH per page.
