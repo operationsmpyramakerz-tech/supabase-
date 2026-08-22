@@ -1,0 +1,46 @@
+name: Apply Proposal modal users fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-proposal-modal-users-fix.yml'
+      - '.push/proposal-fix.patch.gz.b64'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Decode and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .push/proposal-fix.patch.gz.b64 | gzip -d > /tmp/proposal-fix.patch
+          git apply --check /tmp/proposal-fix.patch
+          git apply /tmp/proposal-fix.patch
+
+          test "$(git hash-object EmptyCanvas/next-frontend/components/proposals/ProposalsClient.jsx)" = "3becd880a4e74bcccd88153438303f20d24fb615"
+          test "$(git hash-object EmptyCanvas/next-frontend/app/classic-parity.css)" = "c14867f9794a1ebf2e14df9a23a29da54d4cea7c"
+          test "$(git hash-object EmptyCanvas/server/app.js)" = "5a1f00fc7be545958a07c58efb3a2020d9683863"
+
+      - name: Commit changes and clean temporary files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .push/proposal-fix.patch.gz.b64
+          rm -f .github/workflows/apply-proposal-modal-users-fix.yml
+          rmdir .push 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix Proposal download and stock user modal"
+          git push origin HEAD:main
