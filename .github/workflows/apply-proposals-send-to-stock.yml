@@ -1,0 +1,44 @@
+name: Apply Proposal Send To Stock
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.erp-patches/proposals-send-to-stock-00.b64'
+      - '.erp-patches/proposals-send-to-stock-01.b64'
+      - '.erp-patches/proposals-send-to-stock-02.b64'
+      - '.github/workflows/apply-proposals-send-to-stock.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild and apply patch
+        run: |
+          cat .erp-patches/proposals-send-to-stock-00.b64 .erp-patches/proposals-send-to-stock-01.b64 .erp-patches/proposals-send-to-stock-02.b64 | base64 -d > /tmp/proposals-send-to-stock.patch
+          git apply --check /tmp/proposals-send-to-stock.patch
+          git apply /tmp/proposals-send-to-stock.patch
+          git diff --check
+          node --check EmptyCanvas/server/app.js
+
+      - name: Commit changed files and clean updater
+        run: |
+          rm -f .erp-patches/proposals-send-to-stock-00.b64
+          rm -f .erp-patches/proposals-send-to-stock-01.b64
+          rm -f .erp-patches/proposals-send-to-stock-02.b64
+          rm -f .github/workflows/apply-proposals-send-to-stock.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add Proposal send-to-stock workflow"
+          git push origin HEAD:main
