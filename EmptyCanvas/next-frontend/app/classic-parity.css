@@ -11868,3 +11868,157 @@ body.proposals-page .proposal-send-stock-actions .products-btn{
     width:100% !important;
   }
 }
+
+/* ===== 2026-08-23 · Proposals compact download + Send to stock modals ===== */
+body.proposals-page .proposal-download-modal,
+body.proposals-page .proposal-send-stock-modal{
+  width:min(590px,100%) !important;
+  max-height:min(88vh,760px) !important;
+  padding:22px !important;
+  border-radius:26px !important;
+  overflow:visible !important;
+}
+body.proposals-page .proposal-download-modal .products-modal__header,
+body.proposals-page .proposal-send-stock-modal .products-modal__header{
+  gap:12px !important;
+  margin-bottom:16px !important;
+}
+body.proposals-page .proposal-download-modal .products-modal__icon,
+body.proposals-page .proposal-send-stock-modal .products-modal__icon{
+  width:48px !important;
+  height:48px !important;
+  flex-basis:48px !important;
+  border-radius:16px !important;
+}
+body.proposals-page .proposal-download-modal .products-modal__icon svg,
+body.proposals-page .proposal-send-stock-modal .products-modal__icon svg{
+  width:23px !important;
+  height:23px !important;
+}
+body.proposals-page .proposal-download-modal h2,
+body.proposals-page .proposal-send-stock-modal h2{
+  font-size:1.35rem !important;
+  letter-spacing:-.03em !important;
+}
+body.proposals-page .proposal-download-modal p,
+body.proposals-page .proposal-send-stock-modal p{
+  margin-top:5px !important;
+  font-size:.76rem !important;
+  line-height:1.4 !important;
+}
+body.proposals-page .proposal-download-modal .products-modal__close,
+body.proposals-page .proposal-send-stock-modal .products-modal__close{
+  top:16px !important;
+  right:16px !important;
+  width:38px !important;
+  height:38px !important;
+  font-size:24px !important;
+}
+body.proposals-page .proposal-download-modal__body{
+  display:grid;
+  gap:14px;
+}
+body.proposals-page .proposal-download-modal__columns{
+  padding:14px;
+  border:1px solid #e5e7eb;
+  border-radius:17px;
+  background:#f8fafc;
+}
+body.proposals-page .proposal-download-modal__columns > span{
+  display:block;
+  margin-bottom:10px;
+  color:#667085;
+  font-size:.68rem;
+  font-weight:950;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+body.proposals-page .proposal-download-modal__columns > div{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+body.proposals-page .proposal-download-modal__columns label{
+  min-width:0;
+  min-height:42px;
+  padding:0 11px;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  background:#fff;
+  color:#344054;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:.75rem;
+  font-weight:850;
+  cursor:pointer;
+}
+body.proposals-page .proposal-download-modal__columns input{
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+  accent-color:#0f172a;
+}
+body.proposals-page .proposal-download-modal__actions{
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  gap:9px !important;
+  margin-top:0 !important;
+}
+body.proposals-page .proposal-download-modal__actions .products-btn{
+  width:100% !important;
+  min-height:46px !important;
+  height:46px !important;
+  border-radius:14px !important;
+  gap:8px !important;
+}
+body.proposals-page .proposal-send-stock-modal-form{
+  padding-top:0 !important;
+  gap:13px !important;
+}
+body.proposals-page .proposal-send-stock-modal-form .next-proposals-modern-select__menu{
+  z-index:1800 !important;
+}
+body.proposals-page .proposal-send-stock-modal-form .proposal-receipt-upload-box{
+  min-height:92px !important;
+}
+body.proposals-page .proposal-send-stock-note--access{
+  align-items:center !important;
+  border-color:#dbeafe !important;
+  background:#f8fbff !important;
+  color:#334155 !important;
+}
+body.proposals-page .proposal-send-stock-note--access > svg{
+  flex:0 0 17px;
+  color:#2563eb;
+}
+body.proposals-page .proposal-send-stock-note--access strong{
+  color:#0f172a !important;
+}
+body.proposals-page .proposal-send-stock-modal .proposal-send-stock-actions{
+  margin-top:2px !important;
+  padding-top:14px !important;
+}
+
+@media (max-width:640px){
+  body.proposals-page .proposal-download-modal,
+  body.proposals-page .proposal-send-stock-modal{
+    width:100% !important;
+    max-height:calc(100vh - 28px) !important;
+    overflow:auto !important;
+    padding:18px !important;
+    border-radius:22px !important;
+  }
+  body.proposals-page .proposal-download-modal__columns > div{
+    grid-template-columns:1fr !important;
+  }
+  body.proposals-page .proposal-download-modal__actions{
+    grid-template-columns:1fr !important;
+  }
+  body.proposals-page .proposal-send-stock-modal .products-modal__header{
+    padding-right:42px !important;
+  }
+  body.proposals-page .proposal-send-stock-modal-form .proposal-receipt-upload-box{
+    min-height:88px !important;
+  }
+}

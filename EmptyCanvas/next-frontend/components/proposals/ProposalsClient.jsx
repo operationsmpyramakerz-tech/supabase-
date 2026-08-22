@@ -831,8 +831,42 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   );
 }
 
-function SendToStockPage({ proposal, members, busy, onBack, onSubmit }) {
-  const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.stocktakingColumn)), [members]);
+function ProposalDownloadModal({ columns, onToggleColumn, onDownload, onClose }) {
+  return (
+    <Modal
+      title="Download proposal"
+      subtitle="Choose the columns you need, then select the file type."
+      icon={<ProposalIcon name="download" size={26} />}
+      className="proposal-download-modal"
+      onClose={onClose}
+    >
+      <div className="proposal-download-modal__body">
+        <div className="proposal-download-modal__columns">
+          <span>Columns</span>
+          <div>
+            {EXPORT_COLUMNS.map(([key, label]) => (
+              <label key={key}>
+                <input type="checkbox" checked={columns.includes(key)} onChange={() => onToggleColumn(key)} />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="proposal-download-modal__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("pdf")}>
+            <ProposalIcon name="file" /><span>Download PDF</span>
+          </button>
+          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("excel")}>
+            <ProposalIcon name="grid" /><span>Download Excel</span>
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
+  const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
   const [memberId, setMemberId] = useState("");
   const [files, setFiles] = useState([]);
   const [error, setError] = useState("");
@@ -869,21 +903,31 @@ function SendToStockPage({ proposal, members, busy, onBack, onSubmit }) {
     }
   };
 
-  return (
-    <section className="proposal-send-stock-page card">
-      <header className="proposal-send-stock-head">
-        <button type="button" className="products-back-btn" onClick={onBack} aria-label="Back to proposal" disabled={busy}>←</button>
-        <span className="proposal-send-stock-icon"><ProposalIcon name="archive" size={21} /></span>
-        <div><span>SEND TO STOCK</span><h2>{proposal?.name || "Proposal"}</h2><p>Add this proposal directly to a user’s Stocktaking column.</p></div>
-      </header>
+  const close = () => {
+    if (!busy) onClose();
+  };
 
-      <form className="proposal-send-stock-form" onSubmit={submit}>
+  return (
+    <Modal
+      title="Send to stock"
+      subtitle={`Add “${proposal?.name || "Proposal"}” directly to a user's Stocktaking column.`}
+      icon={<ProposalIcon name="archive" size={26} />}
+      className="proposal-send-stock-modal"
+      onClose={close}
+    >
+      <form className="proposal-send-stock-form proposal-send-stock-modal-form" onSubmit={submit}>
         <ModernSelect
           label="Stock user *"
           value={memberId}
-          placeholder={stockMembers.length ? "Select stock user" : "No Stocktaking users available"}
+          placeholder={stockMembers.length ? "Select stock user" : "No Users Center users available"}
           searchable
-          options={stockMembers.map((member) => ({ value: member.id, label: member.name, meta: member.stocktakingColumn }))}
+          options={stockMembers.map((member) => ({
+            value: member.id,
+            label: member.name,
+            meta: text(member.stocktakingColumn)
+              ? `Stock column: ${member.stocktakingColumn}`
+              : `Will grant Stocktaking access and create ${member.name} Stock`,
+          }))}
           onChange={(value) => { setMemberId(value); setError(""); }}
         />
 
@@ -904,14 +948,18 @@ function SendToStockPage({ proposal, members, busy, onBack, onSubmit }) {
           ) : null}
         </label>
 
-        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Stock rows will be saved under Header “Main stock”, and every row will use its Proposal kit name as the Tag.</span></div>
+        <div className="proposal-send-stock-note proposal-send-stock-note--access">
+          <ProposalIcon name="archive" size={17} />
+          <span>If the selected user does not have Stocktaking access, Confirm will grant it automatically and create the user column using <strong>Username + Stock</strong>.</span>
+        </div>
+        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Rows will be saved under Header “Main stock”, and every row will use its Proposal kit name as the Tag.</span></div>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="proposal-send-stock-actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onBack} disabled={busy}>Cancel</button>
+        <div className="proposal-send-stock-actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
           <button type="submit" className="products-btn products-btn--dark" disabled={busy || !stockMembers.length}><ProposalIcon name="archive" /><span>{busy ? "Sending…" : "Confirm"}</span></button>
         </div>
       </form>
-    </section>
+    </Modal>
   );
 }
 
@@ -981,7 +1029,7 @@ export default function ProposalsClient({
   useEffect(() => {
     const close = (event) => {
       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
-      if (!event.target.closest(".proposal-download-menu-wrap")) setDownloadMenuOpen(false);
+      if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
       if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
     };
     document.addEventListener("click", close);
@@ -1720,6 +1768,15 @@ export default function ProposalsClient({
     }
   };
 
+  const openSendToStock = () => {
+    setDownloadMenuOpen(false);
+    setSortMenuOpen(false);
+    setSendToStockOpen(true);
+    requestJson(`/api/products/proposals/team-members?_ts=${Date.now()}`)
+      .then((body) => setMembers(Array.isArray(body?.members) ? body.members : []))
+      .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
+  };
+
   const sendToStock = async ({ teamMemberId, files = [] }) => {
     const proposal = activeDetail?.proposal;
     if (!proposal?.id) throw new Error("Proposal ID is missing.");
@@ -1869,20 +1926,28 @@ export default function ProposalsClient({
 
   if (activeDetail || detailBusy) {
     const proposal = activeDetail?.proposal;
-    if (sendToStockOpen && proposal) {
-      return (
-        <main className="products-shell proposals-shell next-proposals-classic-parity proposal-send-stock-shell">
-          <Toast toast={toast} onClose={() => setToast(null)} />
-          <ActionLoadingModal state={actionLoading} />
-          <SendToStockPage proposal={proposal} members={members} busy={busy} onBack={() => setSendToStockOpen(false)} onSubmit={sendToStock} />
-        </main>
-      );
-    }
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
         <ActionLoadingModal state={actionLoading} />
+        {downloadMenuOpen ? (
+          <ProposalDownloadModal
+            columns={exportColumns}
+            onToggleColumn={toggleExportColumn}
+            onDownload={downloadSingle}
+            onClose={() => setDownloadMenuOpen(false)}
+          />
+        ) : null}
+        {sendToStockOpen && proposal ? (
+          <SendToStockModal
+            proposal={proposal}
+            members={members}
+            busy={busy}
+            onClose={() => setSendToStockOpen(false)}
+            onSubmit={sendToStock}
+          />
+        ) : null}
         <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">
           <section className="proposals-panel">
             <section className={`products-proposal-detail ${createMode ? "is-create" : detailEdit ? "is-edit" : "is-view"}`}>
@@ -1905,26 +1970,9 @@ export default function ProposalsClient({
                       <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
                       <div className="proposal-detail-actions proposal-detail-actions--classic">
                         <div className="proposal-download-menu-wrap">
-                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => { setDownloadMenuOpen((open) => !open); setSortMenuOpen(false); }}>
+                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => { setDownloadMenuOpen(true); setSortMenuOpen(false); }}>
                             <ProposalIcon name="download" /><span>Download</span><ProposalIcon name="chevronDown" size={15} />
                           </button>
-                          {downloadMenuOpen ? (
-                            <div className="proposal-download-menu" role="menu">
-                              <div className="proposal-download-menu__title"><strong>Download</strong><span>Choose columns and file type</span></div>
-                              <div className="proposal-download-menu__columns">
-                                <span>Columns</span>
-                                <div>
-                                  {EXPORT_COLUMNS.map(([key, label]) => (
-                                    <label key={key}><input type="checkbox" checked={exportColumns.includes(key)} onChange={() => toggleExportColumn(key)} /><span>{label}</span></label>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="proposal-download-menu__actions">
-                                <button type="button" onClick={() => downloadSingle("pdf")}><ProposalIcon name="file" /><span>Download PDF</span></button>
-                                <button type="button" onClick={() => downloadSingle("excel")}><ProposalIcon name="grid" /><span>Download Excel</span></button>
-                              </div>
-                            </div>
-                          ) : null}
                         </div>
                         <div className="proposal-sort-menu-wrap">
                           <button type="button" className="products-btn proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
@@ -1943,7 +1991,7 @@ export default function ProposalsClient({
                             </div>
                           ) : null}
                         </div>
-                        <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={() => { setSendToStockOpen(true); setDownloadMenuOpen(false); setSortMenuOpen(false); }} disabled={!enrichedRows.length}><ProposalIcon name="archive" /><span>Send to stock</span></button>
+                        <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={openSendToStock} disabled={!enrichedRows.length}><ProposalIcon name="archive" /><span>Send to stock</span></button>
                       </div>
                     </header>
                   )}

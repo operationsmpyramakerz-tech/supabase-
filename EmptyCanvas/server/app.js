@@ -7421,6 +7421,101 @@ async function _sbProposalTeamMembersList() {
   return (rows || []).map(_sbSerializeProposalTeamMember).filter((m) => m.id && m.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
+async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
+  let member = _sbSerializeProposalTeamMember(memberRow);
+  const memberId = String(member.id || "").trim();
+  if (!memberId) {
+    const err = new Error("Selected Stocktaking user was not found.");
+    err.status = 404;
+    throw err;
+  }
+
+  let accessPayload = await _sbPageAccessPayloadForMember(memberId);
+  let stockPage = (accessPayload?.pages || []).find((page) => _uaAppPageIsStocktaking(page));
+  if (!stockPage) {
+    const err = new Error("Stocktaking is not available in the application page-access catalog.");
+    err.status = 500;
+    throw err;
+  }
+
+  const hadAccess = !!stockPage.isEnabled;
+  const hadColumn = !!String(member.stocktakingColumn || "").trim();
+  if (!hadAccess) {
+    const grantedBy = String(req?.session?.username || "Admin").trim() || "Admin";
+    const accessRow = {
+      team_member_id: memberId,
+      team_member_name: member.name || null,
+      page_id: Number(stockPage.pageId || stockPage.id),
+      access_level: stockPage.accessLevel || "edit",
+      is_enabled: true,
+      granted_by: grantedBy,
+    };
+    if (stockPage.accessId) {
+      await supabaseDb.updateById('team_member_page_access', stockPage.accessId, accessRow);
+    } else {
+      await supabaseDb.request('/team_member_page_access', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: accessRow,
+      });
+    }
+    await clearSupabaseMemberAccessCaches(memberId, { includeLms: false, includeDirectory: true });
+  }
+
+  // Stocktaking user columns follow the Users Center rule: `<username> Stock`.
+  // Prepare it automatically when Send to stock grants access, and also repair
+  // older users whose Stocktaking permission exists but no generated column is saved.
+  if (!hadAccess || !hadColumn) {
+    await _uaEnsureGeneratedStocktakingColumnForMember(memberId, member.name);
+    const refreshedRow = await _sbFindTeamMemberById(memberId);
+    if (refreshedRow) {
+      memberRow = refreshedRow;
+      member = _sbSerializeProposalTeamMember(refreshedRow);
+    }
+  }
+
+  if (!String(member.stocktakingColumn || "").trim()) {
+    const err = new Error(`Could not prepare the Stocktaking column for ${member.name}.`);
+    err.status = 500;
+    throw err;
+  }
+
+  // If the selected target is the signed-in user, refresh the current session so
+  // the newly granted Stocktaking page is available immediately without re-login.
+  if (!hadAccess && String(req?.session?.userSupabaseId || "").trim() === memberId) {
+    accessPayload = await _sbPageAccessPayloadForMember(memberId);
+    const allowedNormalized = _sbAllowedPagesFromPageAccessRows(
+      (accessPayload.pages || []).map((page) => ({
+        page_key: page.pageKey,
+        page_name: page.pageName,
+        is_enabled: page.isEnabled,
+        access_level: page.accessLevel,
+      })),
+    );
+    req.session.allowedPages = allowedNormalized;
+    req.session.pageAccess = _sbPageAccessClientRows((accessPayload.pages || []).map((page) => ({
+      page_id: page.pageId,
+      page_key: page.pageKey,
+      page_name: page.pageName,
+      route_path: page.routePath,
+      access_level: page.accessLevel,
+      is_enabled: page.isEnabled,
+    })));
+    if (req.session.accountCache) {
+      req.session.accountCache.allowedPages = expandAllowedForUI(allowedNormalized);
+      req.session.accountCache.pageAccess = { pages: req.session.pageAccess };
+      req.session.accountCacheTs = Date.now();
+    }
+  }
+
+  return {
+    member,
+    row: memberRow,
+    accessGranted: !hadAccess,
+    columnPrepared: !hadColumn || !hadAccess,
+  };
+}
+
 async function _sbVerifyTeamMemberPassword(memberId, password) {
   const row = await _sbFindTeamMemberById(memberId);
   if (!row) return { ok: false, error: "Team member not found." };
@@ -7562,13 +7657,6 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
     err.status = 404;
     throw err;
   }
-  const member = _sbSerializeProposalTeamMember(memberRow);
-  const stockLabel = String(member.stocktakingColumn || "").trim();
-  if (!stockLabel) {
-    const err = new Error(`${member.name} does not have Stocktaking access / a Stocktaking column yet.`);
-    err.status = 400;
-    throw err;
-  }
 
   const detail = await _sbProductProposalById(pid, req);
   if (!detail?.proposal) {
@@ -7582,6 +7670,10 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
     err.status = 400;
     throw err;
   }
+
+  const preparedMember = await _sbEnsureProposalStocktakingAccess(memberRow, req);
+  const member = preparedMember.member;
+  const stockLabel = String(member.stocktakingColumn || "").trim();
 
   let stockRows = await _sbStocktakingRows();
   let keys = _sbAllColumnKeys(stockRows || []);
@@ -7686,6 +7778,8 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
     header: "Main stock",
     tags: [...kitTags],
     receiptCount: receipts.length,
+    accessGranted: !!preparedMember.accessGranted,
+    columnPrepared: !!preparedMember.columnPrepared,
   };
 }
 
