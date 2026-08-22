@@ -7,7 +7,15 @@ on:
     paths:
       - '.erp-patches/proposals-send-to-stock-00.b64'
       - '.erp-patches/proposals-send-to-stock-01.b64'
-      - '.erp-patches/proposals-send-to-stock-02.b64'
+      - '.erp-patches/proposals-send-to-stock-02-0.b64'
+      - '.erp-patches/proposals-send-to-stock-02-1.b64'
+      - '.erp-patches/proposals-send-to-stock-02-2-0.b64'
+      - '.erp-patches/proposals-send-to-stock-02-2-1.b64'
+      - '.erp-patches/proposals-send-to-stock-02-2-2.b64'
+      - '.erp-patches/proposals-send-to-stock-02-2-3.b64'
+      - '.erp-patches/proposals-send-to-stock-02-3-0.b64'
+      - '.erp-patches/proposals-send-to-stock-02-3-1.b64'
+      - '.erp-patches/proposals-send-to-stock-02-3-2.b64'
       - '.github/workflows/apply-proposals-send-to-stock.yml'
   pull_request:
     branches:
@@ -31,9 +39,21 @@ jobs:
       - name: Rebuild and apply patch
         run: |
           : > /tmp/proposals-send-to-stock.patch
-          for part in .erp-patches/proposals-send-to-stock-00.b64 .erp-patches/proposals-send-to-stock-01.b64 .erp-patches/proposals-send-to-stock-02.b64; do
+          for part in \
+            .erp-patches/proposals-send-to-stock-00.b64 \
+            .erp-patches/proposals-send-to-stock-01.b64 \
+            .erp-patches/proposals-send-to-stock-02-0.b64 \
+            .erp-patches/proposals-send-to-stock-02-1.b64 \
+            .erp-patches/proposals-send-to-stock-02-2-0.b64 \
+            .erp-patches/proposals-send-to-stock-02-2-1.b64 \
+            .erp-patches/proposals-send-to-stock-02-2-2.b64 \
+            .erp-patches/proposals-send-to-stock-02-2-3.b64 \
+            .erp-patches/proposals-send-to-stock-02-3-0.b64 \
+            .erp-patches/proposals-send-to-stock-02-3-1.b64 \
+            .erp-patches/proposals-send-to-stock-02-3-2.b64; do
             base64 -d "$part" >> /tmp/proposals-send-to-stock.patch
           done
+          echo "5e5ad69b48c50776c6178989647e6d316cbc302f7b3d08f46133dcbf381e9f31  /tmp/proposals-send-to-stock.patch" | sha256sum -c -
           git apply --check /tmp/proposals-send-to-stock.patch
           git apply /tmp/proposals-send-to-stock.patch
           sed -i 's/[[:space:]]\+$//' EmptyCanvas/next-frontend/components/proposals/ProposalsClient.jsx EmptyCanvas/next-frontend/app/classic-parity.css EmptyCanvas/server/app.js
@@ -45,6 +65,16 @@ jobs:
           rm -f .erp-patches/proposals-send-to-stock-00.b64
           rm -f .erp-patches/proposals-send-to-stock-01.b64
           rm -f .erp-patches/proposals-send-to-stock-02.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-0.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-1.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-2.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-2-0.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-2-1.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-2-2.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-2-3.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-3-0.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-3-1.b64
+          rm -f .erp-patches/proposals-send-to-stock-02-3-2.b64
           rm -f .github/workflows/apply-proposals-send-to-stock.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
