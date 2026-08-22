@@ -36,6 +36,7 @@ jobs:
           done
           git apply --check /tmp/proposals-send-to-stock.patch
           git apply /tmp/proposals-send-to-stock.patch
+          sed -i 's/[[:space:]]\+$//' EmptyCanvas/next-frontend/components/proposals/ProposalsClient.jsx EmptyCanvas/next-frontend/app/classic-parity.css EmptyCanvas/server/app.js
           git diff --check
           node --check EmptyCanvas/server/app.js
 
