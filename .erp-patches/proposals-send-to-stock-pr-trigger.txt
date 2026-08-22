@@ -1,1 +1,2 @@
 Trigger Proposal send-to-stock workflow via pull request.
+Retry after fixing patch reconstruction.
