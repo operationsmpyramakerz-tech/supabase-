@@ -1,0 +1,39 @@
+name: Apply Users Center Auto Stocktaking Column
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.erp-patches/users-center-auto-stock-column.patch'
+      - '.github/workflows/apply-users-center-auto-stock-column.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply Users Center update
+        run: |
+          git apply --check .erp-patches/users-center-auto-stock-column.patch
+          git apply .erp-patches/users-center-auto-stock-column.patch
+          git diff --check
+          node --check EmptyCanvas/server/app.js
+
+      - name: Commit changed files and clean temporary updater
+        run: |
+          rm -f .erp-patches/users-center-auto-stock-column.patch
+          rm -f .github/workflows/apply-users-center-auto-stock-column.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Auto-generate Stocktaking column from user name"
+          git push origin HEAD:main
