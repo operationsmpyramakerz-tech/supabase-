@@ -60,6 +60,7 @@ function normalizedRow(row, index) {
     name: text(row?.name) || "Untitled component",
     idCode: text(row?.idCode),
     quantity: number(row?.quantity),
+    receiptNumber: text(row?.receiptNumber),
     unitPrice: number(row?.unitPrice),
     url: normalizedUrl(row?.url),
     tag: { name: tagName, color: tagColor(tagName, text(row?.tag?.color)) },
@@ -352,10 +353,9 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const filteredRows = useMemo(() => {
     const query = lower(search);
     if (!query) return rows;
-    return rows.filter((row) => lower(row.name).includes(query) || lower(row.tag.name).includes(query));
+    return rows.filter((row) => lower(row.name).includes(query) || lower(row.receiptNumber).includes(query));
   }, [rows, search]);
 
-  const groups = useMemo(() => groupRows(filteredRows), [filteredRows]);
 
   return (
     <section className="next-stocktaking-classic-parity next-stocktaking-folders-page">
@@ -371,13 +371,25 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
 
           <div className="stocktaking-folder-grid" aria-live="polite">
             {visibleFolders.length ? visibleFolders.map((column) => (
-              <button className="stocktaking-folder-card" type="button" onClick={() => openFolder(column)} key={column.key}>
-                <span className="stocktaking-folder-shape" aria-hidden="true"><Icon name="folder" /></span>
-                <span className="stocktaking-folder-copy">
-                  <strong>{column.label}</strong>
-                  <small>{column.itemsCount === null ? "Stocktaking" : `${column.itemsCount} stock item${column.itemsCount === 1 ? "" : "s"}`}</small>
-                </span>
-              </button>
+              <article className="products-proposal-folder stocktaking-proposal-folder" key={column.key}>
+                <button className="products-proposal-folder__main stocktaking-proposal-folder__main" type="button" onClick={() => openFolder(column)} aria-label={`Open ${column.label}`}>
+                  <span className="proposal-folder-figure stocktaking-proposal-folder-figure" aria-hidden="true">
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
+                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
+                    <span className="proposal-folder-figure__back" />
+                    <span className="proposal-folder-figure__front"><small>S</small></span>
+                  </span>
+                  <span className="proposal-folder-copy stocktaking-proposal-folder-copy">
+                    <strong>{column.label}</strong>
+                    <em>Stocktaking</em>
+                  </span>
+                  <span className="proposal-folder-count stocktaking-proposal-folder-count">
+                    <span aria-hidden="true">▱</span>
+                    <span>{column.itemsCount === null ? "Stock items" : `${column.itemsCount} item${column.itemsCount === 1 ? "" : "s"}`}</span>
+                  </span>
+                </button>
+              </article>
             )) : (
               <div className="empty-block empty-block--no-data stocktaking-folder-empty">Sorry, No stock folders available</div>
             )}
@@ -399,26 +411,29 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
           ) : error ? (
             <div className="stocktaking-folder-state is-error"><span>{error}</span><button type="button" onClick={() => loadColumn(activeColumn)}>Try again</button></div>
           ) : (
-            <div className="groups-grid" aria-live="polite">
-              {!groups.length ? (
+            <div className="stocktaking-data-table-wrap" aria-live="polite">
+              {!filteredRows.length ? (
                 <div className="empty-block empty-block--no-data">Sorry, No data available</div>
-              ) : groups.map((group) => {
-                const tone = TAG_TONES[group.color] || TAG_TONES.default;
-                return (
-                  <section className="card card--elevated group-card" style={{ "--group-accent-bg": tone.background, "--group-accent-text": tone.color, "--group-accent-border": tone.border }} key={group.key}>
-                    <div className="group-card__head">
-                      <div className="group-head-left"><span className="group-title">Tag</span><span className="group-tag"><span className={`tag-pill tag--${group.color}`}>{group.name}</span></span></div>
-                      <div className="group-head-right"><span className="group-count">{group.items.length} items</span></div>
-                    </div>
-                    <div className="group-table-wrap">
-                      <table className="group-table">
-                        <thead><tr><th>Component</th><th className="col-num">In Stock</th></tr></thead>
-                        <tbody>{group.items.map((row) => <tr key={row.key}><td style={{ fontWeight: 600 }}>{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td><td className="col-num">{row.quantity}</td></tr>)}</tbody>
-                      </table>
-                    </div>
-                  </section>
-                );
-              })}
+              ) : (
+                <table className="stocktaking-data-table">
+                  <thead>
+                    <tr>
+                      <th>Components</th>
+                      <th className="stocktaking-data-qty">Qty</th>
+                      <th className="stocktaking-data-receipt">Receipt no.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row) => (
+                      <tr key={row.key}>
+                        <td className="stocktaking-data-component">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td>
+                        <td className="stocktaking-data-qty">{row.quantity}</td>
+                        <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </section>

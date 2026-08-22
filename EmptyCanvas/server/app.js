@@ -30361,6 +30361,15 @@ app.get(
               quantity: Number(quantity) || 0,
               oneKitQuantity: Number(oneKitQuantity) || 0,
               idCode,
+              receiptNumber: _normalizeMultilineText(
+                _extractPropText(_propInsensitive(props, "Receipt Number")) ||
+                _extractPropText(_propInsensitive(props, "Store Receipt Number")) ||
+                _extractPropText(_propInsensitive(props, "Receipt Numbers")) ||
+                _extractPropText(_propInsensitive(props, "Receipt No")) ||
+                _extractPropText(_propInsensitive(props, "Receipt #")) ||
+                _extractPropText(_propInsensitive(props, "Receipt")) ||
+                "",
+              ),
               unitPrice: firstDefinedNumber(props["Unity Price"], props["Unit Price"], props["one_piece_price"]),
               userName:
                 props["Created By"]?.people?.[0]?.name ||
