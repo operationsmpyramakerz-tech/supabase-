@@ -32,3 +32,4 @@ jobs:
           git add EmptyCanvas/next-frontend/components/stocktaking/StocktakingClient.jsx EmptyCanvas/next-frontend/app/classic-parity.css EmptyCanvas/server/app.js
           git commit -m 'Match Stocktaking folders to Proposal and add receipt table'
           git push origin main
+# trigger second push
