@@ -146,6 +146,30 @@ function normalizeKitFolder(folder, index = 0) {
   };
 }
 
+function normalizeUsersCenterMembers(payload) {
+  const direct = Array.isArray(payload?.members) ? payload.members : [];
+  const departments = Array.isArray(payload?.departments) ? payload.departments : [];
+  const nested = departments.flatMap((department) => Array.isArray(department?.members) ? department.members : []);
+  const seen = new Set();
+  return [...direct, ...nested]
+    .map((member) => {
+      const fields = Array.isArray(member?.fields) ? member.fields : [];
+      const stockField = fields.find((field) => ["school", "stocktaking column", "done column"].includes(lower(field?.label)));
+      return {
+        ...member,
+        id: text(member?.id),
+        name: text(member?.name) || "Unnamed",
+        stocktakingColumn: text(member?.stocktakingColumn || member?.school || stockField?.value),
+      };
+    })
+    .filter((member) => {
+      if (!member.id || !member.name || seen.has(member.id)) return false;
+      seen.add(member.id);
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function normalizeSourceKits(value) {
   const rows = Array.isArray(value) ? value : [];
   return rows
@@ -975,7 +999,7 @@ export default function ProposalsClient({
   const [proposals, setProposals] = useState(() => (Array.isArray(initialProposals?.proposals) ? initialProposals.proposals : []).map(normalizeProposal));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
   const [kitFolders, setKitFolders] = useState(() => (Array.isArray(initialKitFolders?.folders) ? initialKitFolders.folders : []).map(normalizeKitFolder));
-  const [members, setMembers] = useState(() => Array.isArray(initialMembers?.members) ? initialMembers.members : []);
+  const [members, setMembers] = useState(() => normalizeUsersCenterMembers(initialMembers));
   const [activeDetail, setActiveDetail] = useState(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("updated-desc");
@@ -1270,13 +1294,13 @@ export default function ProposalsClient({
         requestJson(`/next/api/products/proposals?_ts=${Date.now()}`),
         requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
         requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
-        requestJson(`/api/products/proposals/team-members?_ts=${Date.now()}`),
+        requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`),
         requestJson(`/next/api/products?_ts=${Date.now()}`),
       ]);
       setProposals((proposalBody.proposals || []).map(normalizeProposal));
       setKits((kitBody.kits || []).map(normalizeKit));
       setKitFolders((kitFolderBody.folders || []).map(normalizeKitFolder));
-      setMembers(Array.isArray(memberBody.members) ? memberBody.members : []);
+      setMembers(normalizeUsersCenterMembers(memberBody));
       setProducts((productBody.products || []).map(normalizeProduct));
       if (activeDetail?.proposal?.id) await loadProposal(activeDetail.proposal.id);
       notify("Proposal data has been refreshed.");
@@ -1772,8 +1796,8 @@ export default function ProposalsClient({
     setDownloadMenuOpen(false);
     setSortMenuOpen(false);
     setSendToStockOpen(true);
-    requestJson(`/api/products/proposals/team-members?_ts=${Date.now()}`)
-      .then((body) => setMembers(Array.isArray(body?.members) ? body.members : []))
+    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
+      .then((body) => setMembers(normalizeUsersCenterMembers(body)))
       .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
   };
 
