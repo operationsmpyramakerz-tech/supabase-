@@ -91,6 +91,10 @@ function normalizedUrl(value) {
   return `https://${url.replace(/^\/+/, "")}`;
 }
 
+const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
+const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
+const RECEIPT_MAX_EDGE = 2000;
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -98,6 +102,91 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
     reader.readAsDataURL(file);
   });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+async function prepareReceiptImage(file) {
+  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
+  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
+
+  // Small files are already comfortably below Vercel's request-body limit even
+  // after Base64 encoding, so keep them untouched to preserve original quality.
+  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
+    return {
+      dataUrl: await readFileAsDataUrl(file),
+      name: file.name || "receipt.jpg",
+      size: number(file.size),
+    };
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const candidate = new Image();
+      candidate.onload = () => resolve(candidate);
+      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
+      candidate.src = objectUrl;
+    });
+
+    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
+    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
+    const longest = Math.max(naturalWidth, naturalHeight);
+    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
+    let bestBlob = null;
+    let bestType = "image/webp";
+
+    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
+      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
+      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+
+      let quality = 0.88;
+      let blob = await canvasToBlob(canvas, "image/webp", quality);
+      let mime = "image/webp";
+      if (!blob) {
+        quality = 0.86;
+        blob = await canvasToBlob(canvas, "image/jpeg", quality);
+        mime = "image/jpeg";
+      }
+      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
+
+      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
+        quality = Math.max(0.5, quality - 0.08);
+        blob = await canvasToBlob(canvas, mime, quality);
+        if (!blob) break;
+      }
+
+      if (blob && (!bestBlob || blob.size < bestBlob.size)) {
+        bestBlob = blob;
+        bestType = mime;
+      }
+      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
+      dimensionScale *= 0.82;
+    }
+
+    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) {
+      throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
+    }
+
+    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
+    return {
+      dataUrl: await readFileAsDataUrl(bestBlob),
+      name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`,
+      size: bestBlob.size,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 function normalizeProduct(product, index = 0) {
@@ -216,7 +305,12 @@ async function requestJson(url, options = {}) {
   }
 
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) throw new Error(apiErrorMessage(body, "The request failed."));
+  if (!response.ok || body?.ok === false) {
+    if (response.status === 413 && !text(body?.error || body?.message)) {
+      throw new Error("The upload is still too large for the server. Choose a smaller image and try again.");
+    }
+    throw new Error(apiErrorMessage(body, "The request failed."));
+  }
   return body;
 }
 
@@ -933,7 +1027,7 @@ function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
     if (!incoming.length) return;
     const invalid = incoming.find((file) => !/^image\//i.test(file.type || ""));
     if (invalid) return setError("Receipt uploads must be images.");
-    const tooLarge = incoming.find((file) => Number(file.size || 0) > 8 * 1024 * 1024);
+    const tooLarge = incoming.find((file) => Number(file.size || 0) > RECEIPT_SOURCE_MAX_BYTES);
     if (tooLarge) return setError(`${tooLarge.name} is larger than 8 MB.`);
     setFiles((current) => {
       const combined = [...current, ...incoming];
@@ -992,7 +1086,7 @@ function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
           <span>Receipt images *</span>
           <div className={`proposal-receipt-upload-box ${files.length ? "has-files" : ""}`}>
             <ProposalIcon name="file" size={22} />
-            <div><strong>{files.length ? `${files.length} receipt image${files.length === 1 ? "" : "s"} selected` : "Upload receipt images"}</strong><small>JPG, PNG or WEBP · up to 8 MB per image</small></div>
+            <div><strong>{files.length ? `${files.length} receipt image${files.length === 1 ? "" : "s"} selected` : "Upload receipt images"}</strong><small>JPG, PNG or WEBP · up to 8 MB each · optimized before upload</small></div>
             <b>{busy ? "Uploading…" : "Choose images"}</b>
             <input type="file" accept="image/*" multiple disabled={busy} onChange={(event) => { chooseFiles(event.target.files); event.target.value = ""; }} />
           </div>
@@ -1840,12 +1934,12 @@ export default function ProposalsClient({
     try {
       const receipts = [];
       for (const file of files) {
-        const dataUrl = await readFileAsDataUrl(file);
+        const prepared = await prepareReceiptImage(file);
         const uploaded = await requestJson("/next/api/products/proposals/receipt-upload", {
           method: "POST",
-          body: JSON.stringify({ dataUrl, filename: file.name || "receipt.jpg" }),
+          body: JSON.stringify({ dataUrl: prepared.dataUrl, filename: prepared.name || file.name || "receipt.jpg" }),
         });
-        if (uploaded?.url) receipts.push({ url: uploaded.url, name: uploaded.name || file.name || "Receipt" });
+        if (uploaded?.url) receipts.push({ url: uploaded.url, name: uploaded.name || prepared.name || file.name || "Receipt" });
       }
       if (!receipts.length) throw new Error("No receipt images were uploaded.");
 
