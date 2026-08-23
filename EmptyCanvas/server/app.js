@@ -7437,15 +7437,32 @@ async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
     throw err;
   }
 
-  // Always prepare the generated `<Username> Stock` column first. This keeps
-  // Send to stock aligned with Users Center and avoids the old case where a
-  // user without Stocktaking access failed before their column was created.
-  const generated = await _uaEnsureGeneratedStocktakingColumnForMember(memberId, member.name);
+  // Reuse the member's existing Users Center Stocktaking column whenever it
+  // already exists in the Stocktaking table (including legacy `<User> Done`
+  // columns). Only create the newer `<Username> Stock` column when there is no
+  // usable configured column. This avoids duplicate user folders and prevents
+  // Send to stock from requiring a schema/RPC change for existing users.
+  let existingConfiguredColumn = "";
+  if (String(member.stocktakingColumn || "").trim()) {
+    let stockKeys = [];
+    try {
+      stockKeys = _sbAllColumnKeys(await _sbStocktakingRows());
+    } catch {}
+    if (!stockKeys.length) {
+      stockKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+    }
+    existingConfiguredColumn = _sbDetectStocktakingQuantityColumnFromKeys(stockKeys, member.stocktakingColumn);
+  }
+
+  const generated = existingConfiguredColumn
+    ? null
+    : await _uaEnsureGeneratedStocktakingColumnForMember(memberId, member.name);
   const refreshedBeforeAccess = await _sbFindTeamMemberById(memberId).catch(() => null);
   if (refreshedBeforeAccess) {
     memberRow = refreshedBeforeAccess;
     member = _sbSerializeProposalTeamMember(refreshedBeforeAccess);
   }
+  if (existingConfiguredColumn) member.stocktakingColumn = existingConfiguredColumn;
 
   let accessPayload = await _sbPageAccessPayloadForMember(memberId);
   let stockPage = (accessPayload?.pages || []).find((page) => _uaAppPageIsStocktaking(page));
@@ -7477,6 +7494,7 @@ async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
     memberRow = refreshedRow;
     member = _sbSerializeProposalTeamMember(refreshedRow);
   }
+  if (existingConfiguredColumn) member.stocktakingColumn = existingConfiguredColumn;
 
   if (!String(member.stocktakingColumn || "").trim()) {
     const err = new Error(`Could not prepare the Stocktaking column for ${member.name}.`);
@@ -30017,6 +30035,17 @@ function _sbStocktakingIsInventoryMetaColumn(key = "") {
   return /\d{4}[_-]\d{2}[_-]\d{2}/.test(raw) || /\d{8}$/.test(canon);
 }
 
+function _sbStocktakingOwnerBase(value = "") {
+  let key = _sbStocktakingColumnKey(value);
+  if (!key) return "";
+  let previous = "";
+  while (key && key !== previous) {
+    previous = key;
+    key = key.replace(/_(?:2nd_term|second_term|done|stock|quantity)$/i, "");
+  }
+  return key;
+}
+
 function _sbStocktakingFolderColumns(rows = [], memberRows = []) {
   const list = Array.isArray(rows) ? rows : [];
   const folderBlocked = new Set([
@@ -30030,12 +30059,30 @@ function _sbStocktakingFolderColumns(rows = [], memberRows = []) {
     !_sbStocktakingIsInventoryMetaColumn(key)
   ));
 
+  // Folder titles must come from Users Center, not from the physical stock
+  // column name. Older columns may be named `<User> Done` while newer access
+  // creates `<User> Stock`; both belong to the same Users Center member.
   const memberByColumn = new Map();
   for (const row of Array.isArray(memberRows) ? memberRows : []) {
     const member = _sbSerializeProposalTeamMember(row);
-    if (!member?.id || !member?.name || !member?.stocktakingColumn) continue;
-    const resolved = _sbDetectStocktakingQuantityColumnFromKeys(keys, member.stocktakingColumn);
-    if (resolved && !memberByColumn.has(resolved)) memberByColumn.set(resolved, member);
+    if (!member?.id || !member?.name) continue;
+
+    const exactResolved = member?.stocktakingColumn
+      ? _sbDetectStocktakingQuantityColumnFromKeys(keys, member.stocktakingColumn)
+      : "";
+    if (exactResolved && !memberByColumn.has(exactResolved)) memberByColumn.set(exactResolved, member);
+
+    const ownerBases = new Set([
+      _sbStocktakingOwnerBase(member.name),
+      _sbStocktakingOwnerBase(member.stocktakingColumn),
+    ].filter(Boolean));
+    if (!ownerBases.size) continue;
+
+    for (const key of keys) {
+      if (memberByColumn.has(key)) continue;
+      const keyBase = _sbStocktakingOwnerBase(key);
+      if (keyBase && ownerBases.has(keyBase)) memberByColumn.set(key, member);
+    }
   }
 
   return keys

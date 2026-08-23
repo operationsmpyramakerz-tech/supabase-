@@ -13,7 +13,7 @@
     { "source": "/api/products/proposals/:id/copy", "destination": "/next/api/products/proposals/:id/copy" },
     { "source": "/api/products/proposals/:id/items", "destination": "/next/api/products/proposals/:id/items" },
     { "source": "/api/products/proposals/:id/items/:itemId((?!by-tag|by-kit)[^/]+)", "destination": "/next/api/products/proposals/:id/items/:itemId" },
-    { "source": "/api/products/proposals/:id", "destination": "/next/api/products/proposals/:id" },
+    { "source": "/api/products/proposals/:id((?!receipt-upload)[^/]+)", "destination": "/next/api/products/proposals/:id" },
 
     { "source": "/api/products/kits", "destination": "/next/api/products/kits" },
     { "source": "/api/products/kits/:id/copy", "destination": "/next/api/products/kits/:id/copy" },
