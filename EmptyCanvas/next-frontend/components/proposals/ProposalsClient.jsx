@@ -1841,7 +1841,7 @@ export default function ProposalsClient({
       const receipts = [];
       for (const file of files) {
         const dataUrl = await readFileAsDataUrl(file);
-        const uploaded = await requestJson("/api/products/proposals/receipt-upload", {
+        const uploaded = await requestJson("/next/api/products/proposals/receipt-upload", {
           method: "POST",
           body: JSON.stringify({ dataUrl, filename: file.name || "receipt.jpg" }),
         });
@@ -1849,7 +1849,7 @@ export default function ProposalsClient({
       }
       if (!receipts.length) throw new Error("No receipt images were uploaded.");
 
-      const body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/send-to-stock`, {
+      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/send-to-stock`, {
         method: "POST",
         body: JSON.stringify({ teamMemberId, receipts }),
       });
