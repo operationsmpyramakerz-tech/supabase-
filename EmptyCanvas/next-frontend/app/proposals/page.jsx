@@ -23,7 +23,7 @@ export default async function ProposalsPage() {
     listProposals(gate.account),
     listKits(gate.account),
     listKitFolders(gate.account),
-    fetchLegacyJson("/api/products/proposals/team-members?_ts=" + Date.now(), { timeoutMs: 20000 }),
+    fetchLegacyJson("/api/user-access/team-members?_fresh=1&_ts=" + Date.now(), { timeoutMs: 20000 }),
   ]);
 
   const catalog = catalogResult.status === "fulfilled" ? catalogResult.value : { ok: false, products: [], tagsCatalog: [], unitsCatalog: [] };
@@ -37,7 +37,7 @@ export default async function ProposalsPage() {
   if (proposalsResult.status === "rejected") warnings.push({ url: "/next/api/products/proposals", error: proposalsResult.reason?.message || "Proposals could not load." });
   if (kitsResult.status === "rejected") warnings.push({ url: "/next/api/products/kits", error: kitsResult.reason?.message || "Kits could not load." });
   if (kitFoldersResult.status === "rejected") warnings.push({ url: "/next/api/products/kit-folders", error: kitFoldersResult.reason?.message || "Kit folders could not load." });
-  if (!membersResponse?.ok) warnings.push({ url: "/api/products/proposals/team-members", error: membersResponse?.error || "Team members remain temporarily on the legacy API." });
+  if (!membersResponse?.ok) warnings.push({ url: "/api/user-access/team-members", error: membersResponse?.error || "Users Center members could not load." });
 
   return (
     <AppShell account={gate.account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals" bodyClass="products-page proposals-page" classicStyles={["/css/products.css?v=products-manual-image-v1", "/css/proposals.css?v=b2b-addname-transparent-pdf-v1"]}>
