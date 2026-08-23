@@ -594,7 +594,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const filteredRows = useMemo(() => {
     const query = lower(search);
     if (!query) return rows;
-    return rows.filter((row) => lower(row.name).includes(query) || lower(row.receiptNumber).includes(query) || row.receiptPhotos.some((photo) => lower(photo.name).includes(query)));
+    return rows.filter((row) => lower(row.name).includes(query) || lower(row.tag?.name).includes(query) || lower(row.receiptNumber).includes(query) || row.receiptPhotos.some((photo) => lower(photo.name).includes(query)));
   }, [rows, search]);
 
 
@@ -667,6 +667,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                   <thead>
                     <tr>
                       <th>Components</th>
+                      <th className="stocktaking-data-tag">Tag</th>
                       <th className="stocktaking-data-qty">Qty</th>
                       <th className="stocktaking-data-receipt">Receipt no.</th>
                       <th className="stocktaking-data-photos">Receipt photos</th>
@@ -678,6 +679,16 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                     {filteredRows.map((row) => (
                       <tr key={row.key}>
                         <td className="stocktaking-data-component">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td>
+                        <td className="stocktaking-data-tag">
+                          <span
+                            className="stocktaking-tag-pill"
+                            style={{
+                              background: (TAG_TONES[row.tag?.color] || TAG_TONES.default).background,
+                              color: (TAG_TONES[row.tag?.color] || TAG_TONES.default).color,
+                              borderColor: (TAG_TONES[row.tag?.color] || TAG_TONES.default).border,
+                            }}
+                          >{row.tag?.name || "Untagged"}</span>
+                        </td>
                         <td className="stocktaking-data-qty">{row.quantity}</td>
                         <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
                         <td className="stocktaking-data-photos">

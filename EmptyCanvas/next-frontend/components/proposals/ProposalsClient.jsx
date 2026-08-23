@@ -1019,6 +1019,7 @@ function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
 function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
   const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
   const [memberId, setMemberId] = useState("");
+  const [receiptNumber, setReceiptNumber] = useState("");
   const [files, setFiles] = useState([]);
   const [error, setError] = useState("");
 
@@ -1045,10 +1046,11 @@ function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
   const submit = async (event) => {
     event.preventDefault();
     if (!memberId) return setError("Choose the user who will receive the stock.");
+    if (!text(receiptNumber)) return setError("Enter the receipt number.");
     if (!files.length) return setError("Upload at least one receipt image.");
     setError("");
     try {
-      await onSubmit({ teamMemberId: memberId, files });
+      await onSubmit({ teamMemberId: memberId, receiptNumber: text(receiptNumber), files });
     } catch (submitError) {
       setError(submitError?.message || "The proposal could not be sent to Stocktaking.");
     }
@@ -1081,6 +1083,19 @@ function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
           }))}
           onChange={(value) => { setMemberId(value); setError(""); }}
         />
+
+        <label className="proposal-send-stock-text-field">
+          <span>Receipt number *</span>
+          <input
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            value={receiptNumber}
+            onChange={(event) => { setReceiptNumber(event.target.value); setError(""); }}
+            placeholder="Enter receipt number"
+            disabled={busy}
+          />
+        </label>
 
         <label className="proposal-receipt-upload-field">
           <span>Receipt images *</span>
@@ -1926,7 +1941,7 @@ export default function ProposalsClient({
       .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
   };
 
-  const sendToStock = async ({ teamMemberId, files = [] }) => {
+  const sendToStock = async ({ teamMemberId, receiptNumber, files = [] }) => {
     const proposal = activeDetail?.proposal;
     if (!proposal?.id) throw new Error("Proposal ID is missing.");
     setBusy(true);
@@ -1945,7 +1960,7 @@ export default function ProposalsClient({
 
       const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/send-to-stock`, {
         method: "POST",
-        body: JSON.stringify({ teamMemberId, receipts }),
+        body: JSON.stringify({ teamMemberId, receiptNumber: text(receiptNumber), receipts }),
       });
       const count = Number(body?.count || 0);
       const memberName = text(body?.member?.name) || "the selected user";

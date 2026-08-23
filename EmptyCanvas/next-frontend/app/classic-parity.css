@@ -12132,7 +12132,7 @@ body.stocktaking-page .stocktaking-make-inventory-btn.is-active{
   color:#047857;
 }
 body.stocktaking-page .stocktaking-make-inventory-btn:disabled{opacity:.55;cursor:not-allowed;}
-body.stocktaking-page .stocktaking-data-table{min-width:760px;}
+body.stocktaking-page .stocktaking-data-table{min-width:900px;}
 body.stocktaking-page .stocktaking-data-component{width:auto;min-width:250px;}
 body.stocktaking-page .stocktaking-data-photos{min-width:150px;}
 body.stocktaking-page .stocktaking-receipt-photo-list{
@@ -12363,4 +12363,54 @@ body.stocktaking-page .stocktaking-inventory-confirm svg{width:16px;height:16px;
   body.stocktaking-page .stocktaking-inventory-modal{align-items:flex-end;padding:0;}
   body.stocktaking-page .stocktaking-inventory-modal__card{width:100%;max-height:92vh;border-radius:24px 24px 0 0;padding:18px;}
   body.stocktaking-page .stocktaking-inventory-modal__card footer{display:grid;grid-template-columns:1fr 1fr;}
+}
+
+
+/* ===== 2026-08-23 · Send to stock receipt number + Stocktaking tag ===== */
+body.proposals-page .proposal-send-stock-text-field{
+  display:grid;
+  gap:7px;
+  min-width:0;
+}
+body.proposals-page .proposal-send-stock-text-field > span{
+  color:#344054;
+  font-size:.72rem;
+  font-weight:950;
+}
+body.proposals-page .proposal-send-stock-text-field input{
+  width:100%;
+  min-height:50px;
+  padding:0 15px;
+  border:1px solid #dfe3e8;
+  border-radius:14px;
+  background:#fff;
+  color:#111827;
+  font:inherit;
+  font-size:.8rem;
+  font-weight:800;
+  outline:none;
+  box-sizing:border-box;
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+body.proposals-page .proposal-send-stock-text-field input:focus{
+  border-color:#94a3b8;
+  box-shadow:0 0 0 3px rgba(148,163,184,.16);
+}
+body.proposals-page .proposal-send-stock-text-field input:disabled{opacity:.6;cursor:not-allowed;}
+body.stocktaking-page .stocktaking-data-tag{min-width:135px;}
+body.stocktaking-page .stocktaking-tag-pill{
+  display:inline-flex;
+  align-items:center;
+  max-width:170px;
+  min-height:28px;
+  padding:4px 9px;
+  border:1px solid;
+  border-radius:999px;
+  overflow:hidden;
+  font-size:.66rem;
+  font-weight:950;
+  line-height:1.15;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  vertical-align:middle;
 }

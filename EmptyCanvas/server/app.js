@@ -7649,6 +7649,7 @@ function _proposalReceiptUploads(body = {}) {
 async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
   const pid = String(proposalId || "").trim();
   const teamMemberId = String(body?.teamMemberId || body?.team_member_id || "").trim();
+  const receiptNumber = String(body?.receiptNumber || body?.receipt_number || "").trim();
   if (!pid) {
     const err = new Error("Proposal ID is required.");
     err.status = 400;
@@ -7656,6 +7657,11 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
   }
   if (!teamMemberId) {
     const err = new Error("Stock user is required.");
+    err.status = 400;
+    throw err;
+  }
+  if (!receiptNumber) {
+    const err = new Error("Receipt number is required.");
     err.status = 400;
     throw err;
   }
@@ -7727,15 +7733,15 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
   const actualHeaderKey = headerKey || "header";
   const actualTagKey = tagKey || "tag";
   const receiptNumberKey = _sbFindStocktakingKey(keys, ["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"]);
-  const receiptPhotosKey = _sbFindStocktakingKey(keys, ["receipt_photos", "Receipt Photos", "receipt_images", "Receipt Images", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"]);
+  const receiptPhotosKey = _sbFindStocktakingKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"]);
+  const actualReceiptNumberKey = receiptNumberKey || "receipt_number";
+  const actualReceiptPhotosKey = receiptPhotosKey || "receipt_photos";
   const sourceProposalIdKey = _sbFindStocktakingKey(keys, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"]);
   const sourceProposalNameKey = _sbFindStocktakingKey(keys, ["source_proposal", "Source Proposal", "proposal_name", "Proposal Name"]);
   const targetMemberIdKey = _sbFindStocktakingKey(keys, ["team_member_id", "Team Member ID", "user_id", "User ID"]);
   const targetMemberNameKey = _sbFindStocktakingKey(keys, ["team_member_name", "Team Member Name", "user_name", "User Name", "username", "Username"]);
 
   const productMap = await _sbProductsMapById();
-  const receiptNames = receipts.map((item) => item.name).filter(Boolean).join("\n");
-  const receiptUrls = receipts.map((item) => item.url).filter(Boolean).join("\n");
   const receiptFilesJson = JSON.stringify(receipts);
   const created = [];
   const kitTags = new Set();
@@ -7771,16 +7777,17 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
       setFirstExisting(row, ["id_code", "ID Code", "code", "Code"], product?.displayId || product?.idCode || null, "id_code");
       setFirstExisting(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null, "unit_price");
 
-      if (receiptNumberKey) row[receiptNumberKey] = receiptNames;
-      else if (!keys.length) row.receipt_number = receiptNames;
-      if (receiptPhotosKey) row[receiptPhotosKey] = receiptFilesJson;
-      else if (!keys.length) row.receipt_photos = receiptFilesJson;
+      // Receipt number is user-entered metadata. Receipt image filenames must
+      // never be written into the receipt-number field. Store the uploaded
+      // receipt objects only in the Receipt Photos column.
+      row[actualReceiptNumberKey] = receiptNumber;
+      row[actualReceiptPhotosKey] = receiptFilesJson;
       if (sourceProposalIdKey) row[sourceProposalIdKey] = pid;
       if (sourceProposalNameKey) row[sourceProposalNameKey] = detail.proposal.name || "Proposal";
       if (targetMemberIdKey) row[targetMemberIdKey] = member.id;
       if (targetMemberNameKey) row[targetMemberNameKey] = member.name;
 
-      const inserted = await _sbInsertStocktakingRowSafe(row, [quantityColumn]);
+      const inserted = await _sbInsertStocktakingRowSafe(row, [quantityColumn, actualReceiptNumberKey, actualReceiptPhotosKey]);
       created.push(inserted || row);
     }
   }
@@ -30194,7 +30201,8 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
     null;
   const tagName = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
   const receiptPhotosRaw = _sbGet(row, [
-    "receipt_photos", "Receipt Photos", "receipt_images", "Receipt Images",
+    "receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo",
+    "receipt_images", "Receipt Images", "receipt_image", "Receipt Image",
     "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files",
   ]);
   return {
