@@ -3014,10 +3014,17 @@ async function _uaEnsureGeneratedStocktakingColumnForMember(memberId = "", membe
     throw err;
   }
 
-  const created = await _uaAddStocktakingSchoolColumn(label);
   const current = _sbString(_sbValueForLabel(member, "School"));
+  const desiredColumn = _uaSafeSqlIdentifierFromLabel(label);
   if (norm(current) === norm(label)) {
-    return { label, column: created?.column || _uaSafeSqlIdentifierFromLabel(label), changed: false };
+    const existingKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(async () => _sbAllColumnKeys(await _sbStocktakingRows().catch(() => [])));
+    const existingColumn = (existingKeys || []).find((key) => key === desiredColumn) || _sbFindKey(existingKeys || [], [label, desiredColumn]);
+    if (existingColumn) return { label, column: existingColumn, changed: false };
+  }
+
+  const created = await _uaAddStocktakingSchoolColumn(label);
+  if (norm(current) === norm(label)) {
+    return { label, column: created?.column || desiredColumn, changed: false };
   }
 
   await supabaseDb.updateById(_sbTeamMembersTable(), id, { [schoolKey]: label });
@@ -7430,6 +7437,16 @@ async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
     throw err;
   }
 
+  // Always prepare the generated `<Username> Stock` column first. This keeps
+  // Send to stock aligned with Users Center and avoids the old case where a
+  // user without Stocktaking access failed before their column was created.
+  const generated = await _uaEnsureGeneratedStocktakingColumnForMember(memberId, member.name);
+  const refreshedBeforeAccess = await _sbFindTeamMemberById(memberId).catch(() => null);
+  if (refreshedBeforeAccess) {
+    memberRow = refreshedBeforeAccess;
+    member = _sbSerializeProposalTeamMember(refreshedBeforeAccess);
+  }
+
   let accessPayload = await _sbPageAccessPayloadForMember(memberId);
   let stockPage = (accessPayload?.pages || []).find((page) => _uaAppPageIsStocktaking(page));
   if (!stockPage) {
@@ -7439,39 +7456,26 @@ async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
   }
 
   const hadAccess = !!stockPage.isEnabled;
-  const hadColumn = !!String(member.stocktakingColumn || "").trim();
   if (!hadAccess) {
     const grantedBy = String(req?.session?.username || "Admin").trim() || "Admin";
-    const accessRow = {
-      team_member_id: memberId,
-      team_member_name: member.name || null,
-      page_id: Number(stockPage.pageId || stockPage.id),
-      access_level: stockPage.accessLevel || "edit",
-      is_enabled: true,
-      granted_by: grantedBy,
-    };
-    if (stockPage.accessId) {
-      await supabaseDb.updateById('team_member_page_access', stockPage.accessId, accessRow);
-    } else {
-      await supabaseDb.request('/team_member_page_access', {
-        method: 'POST',
-        headers: { Prefer: 'return=minimal' },
-        body: accessRow,
-      });
-    }
-    await clearSupabaseMemberAccessCaches(memberId, { includeLms: false, includeDirectory: true });
+    const entries = (accessPayload.pages || []).map((page) => ({
+      pageId: page.pageId || page.id,
+      pageKey: page.pageKey,
+      accessLevel: _uaAppPageIsStocktaking(page) ? (page.accessLevel || "edit") : page.accessLevel,
+      isEnabled: _uaAppPageIsStocktaking(page) ? true : !!page.isEnabled,
+    }));
+    await _sbSavePageAccessForMember(memberId, entries, {
+      teamMemberName: member.name,
+      grantedBy,
+    });
+    accessPayload = await _sbPageAccessPayloadForMember(memberId);
+    stockPage = (accessPayload?.pages || []).find((page) => _uaAppPageIsStocktaking(page)) || stockPage;
   }
 
-  // Stocktaking user columns follow the Users Center rule: `<username> Stock`.
-  // Prepare it automatically when Send to stock grants access, and also repair
-  // older users whose Stocktaking permission exists but no generated column is saved.
-  if (!hadAccess || !hadColumn) {
-    await _uaEnsureGeneratedStocktakingColumnForMember(memberId, member.name);
-    const refreshedRow = await _sbFindTeamMemberById(memberId);
-    if (refreshedRow) {
-      memberRow = refreshedRow;
-      member = _sbSerializeProposalTeamMember(refreshedRow);
-    }
+  const refreshedRow = await _sbFindTeamMemberById(memberId).catch(() => null);
+  if (refreshedRow) {
+    memberRow = refreshedRow;
+    member = _sbSerializeProposalTeamMember(refreshedRow);
   }
 
   if (!String(member.stocktakingColumn || "").trim()) {
@@ -7483,7 +7487,6 @@ async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
   // If the selected target is the signed-in user, refresh the current session so
   // the newly granted Stocktaking page is available immediately without re-login.
   if (!hadAccess && String(req?.session?.userSupabaseId || "").trim() === memberId) {
-    accessPayload = await _sbPageAccessPayloadForMember(memberId);
     const allowedNormalized = _sbAllowedPagesFromPageAccessRows(
       (accessPayload.pages || []).map((page) => ({
         page_key: page.pageKey,
@@ -7512,7 +7515,7 @@ async function _sbEnsureProposalStocktakingAccess(memberRow = {}, req = null) {
     member,
     row: memberRow,
     accessGranted: !hadAccess,
-    columnPrepared: !hadColumn || !hadAccess,
+    columnPrepared: !!generated,
   };
 }
 
@@ -30007,7 +30010,14 @@ async function _sbStocktakingRows() {
   return Array.isArray(rows) ? rows : [];
 }
 
-function _sbStocktakingFolderColumns(rows = []) {
+function _sbStocktakingIsInventoryMetaColumn(key = "") {
+  const raw = String(key || "").trim().toLowerCase();
+  const canon = _sbCanon(raw);
+  if (!/(inventory|defected|defecated)/i.test(canon)) return false;
+  return /\d{4}[_-]\d{2}[_-]\d{2}/.test(raw) || /\d{8}$/.test(canon);
+}
+
+function _sbStocktakingFolderColumns(rows = [], memberRows = []) {
   const list = Array.isArray(rows) ? rows : [];
   const folderBlocked = new Set([
     "sourceorderid", "sourceordernumber", "orderid", "ordernumber",
@@ -30015,8 +30025,19 @@ function _sbStocktakingFolderColumns(rows = []) {
     "school", "stocktakingcolumn",
   ]);
   const keys = _sbAllColumnKeys(list).filter((key) => (
-    _uaIsUsefulStocktakingSchoolColumn(key) && !folderBlocked.has(_sbCanon(key))
+    _uaIsUsefulStocktakingSchoolColumn(key) &&
+    !folderBlocked.has(_sbCanon(key)) &&
+    !_sbStocktakingIsInventoryMetaColumn(key)
   ));
+
+  const memberByColumn = new Map();
+  for (const row of Array.isArray(memberRows) ? memberRows : []) {
+    const member = _sbSerializeProposalTeamMember(row);
+    if (!member?.id || !member?.name || !member?.stocktakingColumn) continue;
+    const resolved = _sbDetectStocktakingQuantityColumnFromKeys(keys, member.stocktakingColumn);
+    if (resolved && !memberByColumn.has(resolved)) memberByColumn.set(resolved, member);
+  }
+
   return keys
     .map((key) => {
       let itemsCount = 0;
@@ -30029,9 +30050,13 @@ function _sbStocktakingFolderColumns(rows = []) {
         itemsCount += 1;
         total += value;
       }
+      const owner = memberByColumn.get(key) || null;
+      const fallback = _uaTitleCaseLabel(key).replace(/\s+Stock$/i, "").trim() || _uaTitleCaseLabel(key);
       return {
         key,
-        label: _uaTitleCaseLabel(key),
+        label: owner?.name || fallback,
+        userId: owner?.id || null,
+        stocktakingLabel: owner?.stocktakingColumn || _uaTitleCaseLabel(key),
         itemsCount,
         total,
       };
@@ -30056,9 +30081,11 @@ function _sbRequestedStocktakingColumn(req, rows = []) {
 async function _sbStocktakingSelectionForRequest(req, rows = []) {
   const requestedColumn = _sbRequestedStocktakingColumn(req, rows);
   if (requestedColumn) {
+    const memberRows = _sbTeamMembersEnabled() ? await _sbSelectTeamMembersRows().catch(() => []) : [];
+    const folder = _sbStocktakingFolderColumns(rows, memberRows).find((item) => item.key === requestedColumn) || null;
     return {
       quantityColumn: requestedColumn,
-      displayName: _uaTitleCaseLabel(requestedColumn),
+      displayName: folder?.label || _uaTitleCaseLabel(requestedColumn).replace(/\s+Stock$/i, ""),
       requested: true,
     };
   }
@@ -30076,10 +30103,42 @@ async function _sbStocktakingSelectionForRequest(req, rows = []) {
   };
 }
 
-function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
+function _sbResolveStocktakingSessionColumn(rows = [], rawValue = "", kind = "") {
+  const requested = String(rawValue || "").trim();
+  if (!requested) return "";
+  const keys = _sbAllColumnKeys(rows || []);
+  const resolved = keys.find((key) => key === requested) || _sbFindKey(keys, [requested]);
+  if (!resolved) {
+    const err = new Error(`The selected ${kind || "inventory"} column is not available.`);
+    err.status = 404;
+    throw err;
+  }
+  const canon = _sbCanon(resolved);
+  if (kind === "inventory" && !canon.includes("inventory")) {
+    const err = new Error("Invalid Inventory column.");
+    err.status = 400;
+    throw err;
+  }
+  if (kind === "defected" && !canon.includes("defected") && !canon.includes("defecated")) {
+    const err = new Error("Invalid Defecated column.");
+    err.status = 400;
+    throw err;
+  }
+  return resolved;
+}
+
+function _sbNullableStocktakingNumber(value) {
+  if (value === null || typeof value === "undefined" || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options = {}) {
   const quantityColumn = Object.prototype.hasOwnProperty.call(row || {}, schoolNameOrColumn)
     ? schoolNameOrColumn
     : _sbDetectStocktakingQuantityColumn(row, schoolNameOrColumn);
+  const inventoryColumn = String(options?.inventoryColumn || "").trim();
+  const defectedColumn = String(options?.defectedColumn || "").trim();
   const name = _sbStocktakingText(_sbGet(row, ["name", "Name", "component", "Component", "product_name", "Product Name"])) || "Untitled";
   const productName = _sbStocktakingText(_sbGet(row, ["product_name", "Product Name", "product", "Product"])) || name;
   const url =
@@ -30088,6 +30147,10 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
     _sbExtractUrl(_sbGet(row, ["item_url", "Item URL"])) ||
     null;
   const tagName = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
+  const receiptPhotosRaw = _sbGet(row, [
+    "receipt_photos", "Receipt Photos", "receipt_images", "Receipt Images",
+    "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files",
+  ]);
   return {
     id: String(_sbGet(row, ["id", "ID", "notion_id", "Notion ID"]) ?? ""),
     name,
@@ -30099,8 +30162,15 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
     receiptNumber: _normalizeMultilineText(
       _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])) || "",
     ),
+    receiptPhotos: _sbNormalizeOrderReceiptEntries(receiptPhotosRaw, "Receipt photo")
+      .filter((entry) => entry?.url)
+      .map((entry) => ({ name: entry.name || "Receipt photo", url: entry.url })),
     unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
     userName: _sbStocktakingText(_sbGet(row, ["user_name", "username", "User Name", "Username", "created_by", "Created By", "requested_by", "Requested By", "owner_name", "Owner Name", "employee", "Employee"])) || "Unknown user",
+    inventory: inventoryColumn ? _sbNullableStocktakingNumber(row?.[inventoryColumn]) : null,
+    defected: defectedColumn ? _sbNullableStocktakingNumber(row?.[defectedColumn]) : null,
+    inventoryColumn: inventoryColumn || null,
+    defectedColumn: defectedColumn || null,
     tag: { name: tagName, color: _stockMovementTagColor(tagName, "default") },
     quantityColumn: quantityColumn || null,
     source: "supabase",
@@ -30110,7 +30180,9 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "") {
 async function _sbStocktakingForRequest(req) {
   const rows = await _sbStocktakingRows();
   const selection = await _sbStocktakingSelectionForRequest(req, rows);
-  const items = rows.map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn));
+  const inventoryColumn = _sbResolveStocktakingSessionColumn(rows, req?.query?.inventoryColumn || req?.query?.inventory_column, "inventory");
+  const defectedColumn = _sbResolveStocktakingSessionColumn(rows, req?.query?.defectedColumn || req?.query?.defected_column, "defected");
+  const items = rows.map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn, { inventoryColumn, defectedColumn }));
   // Stocktaking must show both incoming Request Products (+qty) and outgoing Withdrawal Products (-qty).
   // Keep zero-only rows hidden so the page still behaves as an active stock/movement view.
   return items.filter((item) => Number(item.quantity) !== 0);
@@ -30269,8 +30341,10 @@ app.get(
 async function _sbRenderStocktakingPdf(req, res) {
   const rows = await _sbStocktakingRows();
   const selection = await _sbStocktakingSelectionForRequest(req, rows);
+  const inventoryColumn = _sbResolveStocktakingSessionColumn(rows, req?.query?.inventoryColumn || req?.query?.inventory_column, "inventory");
+  const defectedColumn = _sbResolveStocktakingSessionColumn(rows, req?.query?.defectedColumn || req?.query?.defected_column, "defected");
   const items = rows
-    .map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn))
+    .map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn, { inventoryColumn, defectedColumn }))
     .filter((item) => Number(item.quantity) !== 0);
 
   const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
@@ -30553,6 +30627,109 @@ async function _sbRenderStocktakingExcel(req, res) {
   res.end();
 }
 
+
+async function _sbStocktakingOwnerForColumn(quantityColumn = "", rows = []) {
+  const key = String(quantityColumn || "").trim();
+  const memberRows = _sbTeamMembersEnabled() ? await _sbSelectTeamMembersRows().catch(() => []) : [];
+  const folder = _sbStocktakingFolderColumns(rows, memberRows).find((item) => item.key === key) || null;
+  if (folder) return { id: folder.userId || null, name: folder.label || _uaTitleCaseLabel(key), stocktakingLabel: folder.stocktakingLabel || _uaTitleCaseLabel(key) };
+  const fallback = _uaTitleCaseLabel(key).replace(/\s+Stock$/i, "").trim() || _uaTitleCaseLabel(key);
+  return { id: null, name: fallback || "Stock user", stocktakingLabel: _uaTitleCaseLabel(key) };
+}
+
+async function _sbEnsureStocktakingInventoryColumn(label = "", knownKeys = []) {
+  const desired = _sbStocktakingColumnKey(label);
+  const keys = Array.isArray(knownKeys) ? knownKeys : [];
+  const existing = keys.find((key) => key === desired) || _sbFindKey(keys, [label, desired]);
+  if (existing) return existing;
+  const created = await _uaAddStocktakingSchoolColumn(label);
+  return String(created?.column || desired).trim();
+}
+
+app.post(
+  "/api/stock/inventory/start",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      const column = String(req?.body?.column || req?.body?.stockColumn || "").trim();
+      if (!column) return res.status(400).json({ ok: false, error: "Choose a Stocktaking folder first." });
+      const dateISO = _normalizeISODateInput(req?.body?.date || req?.body?.inventoryDate || req?.body?.dateISO);
+      if (!dateISO) return res.status(400).json({ ok: false, error: "Choose a valid inventory date." });
+      const rawMode = String(req?.body?.mode || req?.body?.columns || "both").trim().toLowerCase();
+      const mode = rawMode === "inventory" ? "inventory" : ((rawMode === "defected" || rawMode === "defecated") ? "defected" : "both");
+
+      const rows = await _sbStocktakingRows();
+      const quantityColumn = _sbRequestedStocktakingColumn({ query: { column } }, rows);
+      const owner = await _sbStocktakingOwnerForColumn(quantityColumn, rows);
+      let keys = _sbAllColumnKeys(rows || []);
+      if (!keys.length) keys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+
+      let inventoryColumn = "";
+      let defectedColumn = "";
+      if (mode === "inventory" || mode === "both") {
+        inventoryColumn = await _sbEnsureStocktakingInventoryColumn(`${owner.name} Inventory ${dateISO}`, keys);
+        if (inventoryColumn && !keys.includes(inventoryColumn)) keys.push(inventoryColumn);
+      }
+      if (mode === "defected" || mode === "both") {
+        defectedColumn = await _sbEnsureStocktakingInventoryColumn(`${owner.name} Defected ${dateISO}`, keys);
+        if (defectedColumn && !keys.includes(defectedColumn)) keys.push(defectedColumn);
+      }
+
+      return res.json({
+        ok: true,
+        source: "supabase",
+        mode,
+        date: dateISO,
+        user: owner,
+        stockColumn: quantityColumn,
+        inventoryColumn: inventoryColumn || null,
+        defectedColumn: defectedColumn || null,
+      });
+    } catch (error) {
+      console.error("POST /api/stock/inventory/start error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to prepare inventory columns." });
+    }
+  },
+);
+
+app.patch(
+  "/api/stock/:stockId/inventory-value",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      const stockId = String(req.params?.stockId || "").trim();
+      const requestedColumn = String(req?.body?.column || "").trim();
+      if (!stockId || !requestedColumn) return res.status(400).json({ ok: false, error: "Stock row and inventory column are required." });
+      const rows = await _sbStocktakingRows();
+      const keys = _sbAllColumnKeys(rows || []);
+      const column = keys.find((key) => key === requestedColumn) || _sbFindKey(keys, [requestedColumn]);
+      if (!column || !_sbStocktakingIsInventoryMetaColumn(column)) {
+        return res.status(400).json({ ok: false, error: "The selected inventory column is invalid." });
+      }
+      const raw = req?.body?.value;
+      const value = raw === null || typeof raw === "undefined" || raw === "" ? null : Number(raw);
+      if (value !== null && (!Number.isFinite(value) || value < 0)) {
+        return res.status(400).json({ ok: false, error: "Inventory values must be zero or greater." });
+      }
+      const updated = await supabaseDb.updateById(_sbStocktakingTable(), stockId, { [column]: value });
+      const stockColumn = String(req?.body?.stockColumn || "").trim();
+      if (stockColumn) {
+        await cacheDel(`cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${stockColumn}`)}:v4`).catch(() => {});
+      }
+      return res.json({ ok: true, source: "supabase", id: stockId, column, value, row: updated || null });
+    } catch (error) {
+      console.error("PATCH /api/stock/:stockId/inventory-value error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save inventory value." });
+    }
+  },
+);
+
 app.get(
   "/api/stock/columns",
   requireAuth,
@@ -30561,8 +30738,11 @@ app.get(
     res.set("Cache-Control", "no-store");
     try {
       if (_sbStocktakingEnabled()) {
-        const rows = await _sbStocktakingRows();
-        return res.json({ ok: true, columns: _sbStocktakingFolderColumns(rows), source: "supabase" });
+        const [rows, memberRows] = await Promise.all([
+          _sbStocktakingRows(),
+          _sbTeamMembersEnabled() ? _sbSelectTeamMembersRows().catch(() => []) : Promise.resolve([]),
+        ]);
+        return res.json({ ok: true, columns: _sbStocktakingFolderColumns(rows, memberRows), source: "supabase" });
       }
 
       if (!stocktakingDatabaseId) {

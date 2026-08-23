@@ -889,6 +889,39 @@ function ProposalDownloadModal({ columns, onToggleColumn, onDownload, onClose })
   );
 }
 
+function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
+  const [previews, setPreviews] = useState([]);
+
+  useEffect(() => {
+    const next = (Array.isArray(files) ? files : []).map((file, index) => ({
+      file,
+      index,
+      url: URL.createObjectURL(file),
+    }));
+    setPreviews(next);
+    return () => next.forEach((item) => URL.revokeObjectURL(item.url));
+  }, [files]);
+
+  if (!previews.length) return null;
+  return (
+    <div className="proposal-receipt-preview-grid" aria-label="Selected receipt images">
+      {previews.map((item) => (
+        <article className="proposal-receipt-preview-card" key={`${item.file.name}-${item.file.size}-${item.file.lastModified}-${item.index}`}>
+          <div className="proposal-receipt-preview-card__image">
+            <img src={item.url} alt={item.file.name || `Receipt image ${item.index + 1}`} />
+            <span>{item.index + 1}</span>
+          </div>
+          <div className="proposal-receipt-preview-card__copy">
+            <strong title={item.file.name}>{item.file.name || `Receipt ${item.index + 1}`}</strong>
+            <small>{Math.max(1, Math.round(Number(item.file.size || 0) / 1024))} KB</small>
+          </div>
+          <button type="button" onClick={() => onRemove(item.index)} disabled={busy} aria-label={`Remove ${item.file.name || `receipt ${item.index + 1}`}`}>×</button>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
   const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
   const [memberId, setMemberId] = useState("");
@@ -963,13 +996,11 @@ function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
             <b>{busy ? "Uploading…" : "Choose images"}</b>
             <input type="file" accept="image/*" multiple disabled={busy} onChange={(event) => { chooseFiles(event.target.files); event.target.value = ""; }} />
           </div>
-          {files.length ? (
-            <div className="proposal-receipt-file-list">
-              {files.map((file, index) => (
-                <span key={`${file.name}-${file.size}-${index}`}><em>{file.name}</em><button type="button" onClick={() => setFiles((current) => current.filter((_, idx) => idx !== index))} disabled={busy} aria-label={`Remove ${file.name}`}>×</button></span>
-              ))}
-            </div>
-          ) : null}
+          <ReceiptImagePreviewGrid
+            files={files}
+            busy={busy}
+            onRemove={(index) => setFiles((current) => current.filter((_, idx) => idx !== index))}
+          />
         </label>
 
         <div className="proposal-send-stock-note proposal-send-stock-note--access">

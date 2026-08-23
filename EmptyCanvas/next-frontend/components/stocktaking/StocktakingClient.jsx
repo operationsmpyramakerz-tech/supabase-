@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const EXPORT_COLUMNS = [
   { value: "stock", label: "Stock", checked: true },
@@ -52,6 +52,19 @@ function tagColor(name, fallback) {
   return TAG_TONES[fallback] ? fallback : "default";
 }
 
+function normalizeReceiptPhotos(value) {
+  const rows = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  return rows.map((item, index) => ({
+    name: text(item?.name) || `Receipt ${index + 1}`,
+    url: normalizedUrl(item?.url),
+  })).filter((item) => {
+    if (!item.url || seen.has(item.url)) return false;
+    seen.add(item.url);
+    return true;
+  });
+}
+
 function normalizedRow(row, index) {
   const tagName = text(row?.tag?.name) || "Untagged";
   return {
@@ -61,6 +74,9 @@ function normalizedRow(row, index) {
     idCode: text(row?.idCode),
     quantity: number(row?.quantity),
     receiptNumber: text(row?.receiptNumber),
+    receiptPhotos: normalizeReceiptPhotos(row?.receiptPhotos),
+    inventory: row?.inventory === null || typeof row?.inventory === "undefined" || row?.inventory === "" ? null : number(row.inventory),
+    defected: row?.defected === null || typeof row?.defected === "undefined" || row?.defected === "" ? null : number(row.defected),
     unitPrice: number(row?.unitPrice),
     url: normalizedUrl(row?.url),
     tag: { name: tagName, color: tagColor(tagName, text(row?.tag?.color)) },
@@ -119,7 +135,7 @@ function Icon({ name }) {
   return <svg {...common}>{paths[name] || paths.download}</svg>;
 }
 
-function ExportModal({ onClose, columnKey = "" }) {
+function ExportModal({ onClose, columnKey = "", inventorySession = null }) {
   const [fileType, setFileType] = useState("pdf");
   const [columns, setColumns] = useState(() => EXPORT_COLUMNS.filter((column) => column.checked).map((column) => column.value));
   const [fileTypeOpen, setFileTypeOpen] = useState(false);
@@ -148,6 +164,8 @@ function ExportModal({ onClose, columnKey = "" }) {
       const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
       const params = new URLSearchParams({ columns: columns.join(",") });
       if (columnKey) params.set("column", columnKey);
+      if (inventorySession?.inventoryColumn) params.set("inventoryColumn", inventorySession.inventoryColumn);
+      if (inventorySession?.defectedColumn) params.set("defectedColumn", inventorySession.defectedColumn);
       const response = await fetch(`${endpoint}?${params.toString()}`, {
         method: "GET",
         credentials: "include",
@@ -209,11 +227,136 @@ function ExportModal({ onClose, columnKey = "" }) {
   );
 }
 
+function InventorySetupModal({ column, busy, onClose, onConfirm }) {
+  const [mode, setMode] = useState("both");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [error, setError] = useState("");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!date) return setError("Choose the inventory date.");
+    setError("");
+    try {
+      await onConfirm({ mode, date });
+    } catch (submitError) {
+      setError(submitError?.message || "Inventory columns could not be prepared.");
+    }
+  };
+
+  return (
+    <div className="stocktaking-inventory-modal" role="presentation" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
+      <section className="stocktaking-inventory-modal__card" role="dialog" aria-modal="true" aria-label="Make inventory">
+        <button type="button" className="stocktaking-inventory-modal__close" onClick={onClose} disabled={busy} aria-label="Close">×</button>
+        <header>
+          <span className="stocktaking-inventory-modal__icon"><Icon name="folder" /></span>
+          <div><small>INVENTORY SETUP</small><h3>Make inventory</h3><p>{column?.label || "Stocktaking"}</p></div>
+        </header>
+        <form onSubmit={submit}>
+          <label className="stocktaking-inventory-field">
+            <span>Columns</span>
+            <select value={mode} onChange={(event) => setMode(event.target.value)} disabled={busy}>
+              <option value="both">Inventory &amp; Defecated</option>
+              <option value="inventory">Inventory</option>
+              <option value="defected">Defecated</option>
+            </select>
+          </label>
+          <label className="stocktaking-inventory-field">
+            <span>Date</span>
+            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} disabled={busy} />
+          </label>
+          {error ? <div className="stocktaking-inventory-modal__error">{error}</div> : null}
+          <footer>
+            <button type="button" className="btn btn--light" onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" className="btn stocktaking-inventory-confirm" disabled={busy}><span>{busy ? "Preparing…" : "Confirm"}</span></button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function InventoryFinishModal({ session, columnKey, busy, onClose, onDone }) {
+  const hasInventory = !!session?.inventoryColumn;
+  const hasDefected = !!session?.defectedColumn;
+  const [fileType, setFileType] = useState("pdf");
+  const [columnsMode, setColumnsMode] = useState(hasInventory && hasDefected ? "both" : (hasInventory ? "inventory" : "defected"));
+  const [error, setError] = useState("");
+  const [finishing, setFinishing] = useState(false);
+
+  const finish = async () => {
+    setError("");
+    setFinishing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      const selected = ["stock"];
+      if ((columnsMode === "both" || columnsMode === "inventory") && hasInventory) selected.push("inventory");
+      if ((columnsMode === "both" || columnsMode === "defected") && hasDefected) selected.push("defected");
+      const params = new URLSearchParams({ column: columnKey, columns: selected.join(",") });
+      if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
+      if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
+      const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
+      const response = await fetch(`${endpoint}?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/stocktaking";
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.error || "Inventory export failed.");
+      }
+      const fallback = fileType === "excel" ? "Stocktaking-Inventory.xlsx" : "Stocktaking-Inventory.pdf";
+      downloadBlob(await response.blob(), responseFileName(response, fallback));
+      onDone();
+    } catch (finishError) {
+      setError(finishError?.message || "Inventory export failed.");
+    } finally {
+      setFinishing(false);
+    }
+  };
+
+  return (
+    <div className="stocktaking-inventory-modal" role="presentation" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
+      <section className="stocktaking-inventory-modal__card" role="dialog" aria-modal="true" aria-label="Finish inventory">
+        <button type="button" className="stocktaking-inventory-modal__close" onClick={onClose} disabled={busy || finishing} aria-label="Close">×</button>
+        <header>
+          <span className="stocktaking-inventory-modal__icon"><Icon name="download" /></span>
+          <div><small>EXPORT &amp; CLOSE</small><h3>Finish inventory</h3><p>Download the inventory file, then hide the inventory columns.</p></div>
+        </header>
+        <div className="stocktaking-inventory-finish-fields">
+          <label className="stocktaking-inventory-field">
+            <span>File type</span>
+            <select value={fileType} onChange={(event) => setFileType(event.target.value)}>
+              <option value="pdf">PDF</option>
+              <option value="excel">Excel</option>
+            </select>
+          </label>
+          {hasInventory && hasDefected ? (
+            <label className="stocktaking-inventory-field">
+              <span>Columns</span>
+              <select value={columnsMode} onChange={(event) => setColumnsMode(event.target.value)}>
+                <option value="both">Inventory &amp; Defecated</option>
+                <option value="inventory">Inventory</option>
+                <option value="defected">Defecated</option>
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {error ? <div className="stocktaking-inventory-modal__error">{error}</div> : null}
+        <footer>
+          <button type="button" className="btn btn--light" onClick={onClose} disabled={finishing}>Cancel</button>
+          <button type="button" className="btn stocktaking-inventory-confirm" onClick={finish} disabled={finishing}><Icon name="download" /><span>{finishing ? "Preparing…" : "Download & finish"}</span></button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export default function StocktakingClient({ initialStock = [], initialColumns = [] }) {
   const fallbackColumn = useMemo(() => {
     const first = (Array.isArray(initialStock) ? initialStock : []).find((item) => text(item?.quantityColumn));
     const key = text(first?.quantityColumn);
-    return key ? { key, label: key.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase()), itemsCount: initialStock.length } : null;
+    const label = key.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase()).replace(/\s+Stock$/i, "").trim();
+    return key ? { key, label: label || key, itemsCount: initialStock.length } : null;
   }, [initialStock]);
 
   const columns = useMemo(() => {
@@ -223,6 +366,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         key: text(item?.key || item?.column || item?.value),
         label: text(item?.label || item?.value || item?.key || item?.column),
         itemsCount: Number.isFinite(Number(item?.itemsCount)) ? Number(item.itemsCount) : null,
+        userId: text(item?.userId),
+        stocktakingLabel: text(item?.stocktakingLabel),
       }))
       .filter((item) => item.key && item.label);
     return fallbackColumn ? [fallbackColumn] : [];
@@ -234,6 +379,17 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [inventorySetupOpen, setInventorySetupOpen] = useState(false);
+  const [inventoryFinishOpen, setInventoryFinishOpen] = useState(false);
+  const [inventoryBusy, setInventoryBusy] = useState(false);
+  const [inventorySession, setInventorySession] = useState(null);
+  const [inventorySaveError, setInventorySaveError] = useState("");
+  const inventorySaveTimers = useRef(new Map());
+
+  useEffect(() => () => {
+    inventorySaveTimers.current.forEach((timer) => clearTimeout(timer));
+    inventorySaveTimers.current.clear();
+  }, []);
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -266,11 +422,14 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns.map((item) => item.key).join("|")]);
 
-  async function loadColumn(column) {
+  async function loadColumn(column, session = inventorySession) {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/stock?column=${encodeURIComponent(column.key)}&_fresh=1`, {
+      const params = new URLSearchParams({ column: column.key, _fresh: "1" });
+      if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
+      if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
+      const response = await fetch(`/api/stock?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -290,10 +449,85 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     }
   }
 
+  async function startInventory({ mode, date }) {
+    if (!activeColumn?.key) throw new Error("Open a Stocktaking folder first.");
+    setInventoryBusy(true);
+    setInventorySaveError("");
+    try {
+      const response = await fetch("/api/stock/inventory/start", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ column: activeColumn.key, mode, date }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/stocktaking";
+        return;
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body?.ok === false) throw new Error(body?.error || "Inventory columns could not be prepared.");
+      const session = {
+        mode: body.mode || mode,
+        date: body.date || date,
+        inventoryColumn: text(body.inventoryColumn),
+        defectedColumn: text(body.defectedColumn),
+      };
+      setInventorySession(session);
+      setInventorySetupOpen(false);
+      await loadColumn(activeColumn, session);
+      return session;
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
+  async function saveInventoryCell(row, kind, rawValue) {
+    if (!row?.id || !inventorySession) return;
+    const column = kind === "inventory" ? inventorySession.inventoryColumn : inventorySession.defectedColumn;
+    if (!column) return;
+    const value = rawValue === "" ? null : Number(rawValue);
+    if (value !== null && (!Number.isFinite(value) || value < 0)) return;
+    const timerKey = `${row.id}:${kind}`;
+    const previous = inventorySaveTimers.current.get(timerKey);
+    if (previous) clearTimeout(previous);
+    setStock((current) => (Array.isArray(current) ? current : []).map((item) => text(item?.id) === text(row.id) ? { ...item, [kind]: value } : item));
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/stock/${encodeURIComponent(row.id)}/inventory-value`, {
+          method: "PATCH",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ column, value, stockColumn: activeColumn?.key || "" }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok || body?.ok === false) throw new Error(body?.error || `Failed to save ${kind}.`);
+        setInventorySaveError("");
+      } catch (saveError) {
+        setInventorySaveError(saveError?.message || `Failed to save ${kind}.`);
+      } finally {
+        inventorySaveTimers.current.delete(timerKey);
+      }
+    }, 550);
+    inventorySaveTimers.current.set(timerKey, timer);
+  }
+
+  function finishInventorySession() {
+    setInventoryFinishOpen(false);
+    setInventorySession(null);
+    setInventorySaveError("");
+    if (activeColumn) loadColumn(activeColumn, null);
+  }
+
   function openFolder(column, options = {}) {
     setActiveColumn(column);
     setSearch("");
     setExportOpen(false);
+    setInventorySession(null);
+    setInventorySetupOpen(false);
+    setInventoryFinishOpen(false);
+    setInventorySaveError("");
     if (typeof window !== "undefined") {
       const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
       if (input) input.value = "";
@@ -303,7 +537,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         window.history.pushState({}, "", `${url.pathname}?${url.searchParams.toString()}${url.hash}`);
       }
     }
-    loadColumn(column);
+    loadColumn(column, null);
   }
 
   function closeFolder() {
@@ -312,6 +546,10 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setSearch("");
     setError("");
     setExportOpen(false);
+    setInventorySession(null);
+    setInventorySetupOpen(false);
+    setInventoryFinishOpen(false);
+    setInventorySaveError("");
     if (typeof window !== "undefined") {
       const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
       if (input) input.value = "";
@@ -331,6 +569,9 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         setStock([]);
         setSearch("");
         setError("");
+        setInventorySession(null);
+        setInventorySetupOpen(false);
+        setInventoryFinishOpen(false);
         return;
       }
       const match = columns.find((item) => item.key === key);
@@ -353,7 +594,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const filteredRows = useMemo(() => {
     const query = lower(search);
     if (!query) return rows;
-    return rows.filter((row) => lower(row.name).includes(query) || lower(row.receiptNumber).includes(query));
+    return rows.filter((row) => lower(row.name).includes(query) || lower(row.receiptNumber).includes(query) || row.receiptPhotos.some((photo) => lower(photo.name).includes(query)));
   }, [rows, search]);
 
 
@@ -403,7 +644,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
               <span className="stocktaking-folder-title-icon"><Icon name="folder" /></span>
               <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
             </div>
-            <button className="btn b2b-download-primary" type="button" onClick={() => setExportOpen(true)} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button>
+            <div className="stocktaking-folder-actions">
+              <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error)}>
+                <span>{inventorySession ? "Finish inventory" : "Make inventory"}</span>
+              </button>
+              <button className="btn b2b-download-primary" type="button" onClick={() => setExportOpen(true)} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button>
+            </div>
           </div>
 
           {loading ? (
@@ -411,7 +657,9 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
           ) : error ? (
             <div className="stocktaking-folder-state is-error"><span>{error}</span><button type="button" onClick={() => loadColumn(activeColumn)}>Try again</button></div>
           ) : (
-            <div className="stocktaking-data-table-wrap" aria-live="polite">
+            <>
+              {inventorySaveError ? <div className="stocktaking-inventory-inline-error">{inventorySaveError}</div> : null}
+              <div className="stocktaking-data-table-wrap" aria-live="polite">
               {!filteredRows.length ? (
                 <div className="empty-block empty-block--no-data">Sorry, No data available</div>
               ) : (
@@ -421,6 +669,9 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                       <th>Components</th>
                       <th className="stocktaking-data-qty">Qty</th>
                       <th className="stocktaking-data-receipt">Receipt no.</th>
+                      <th className="stocktaking-data-photos">Receipt photos</th>
+                      {inventorySession?.inventoryColumn ? <th className="stocktaking-data-inventory">Inventory{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
+                      {inventorySession?.defectedColumn ? <th className="stocktaking-data-inventory">Defecated{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -429,17 +680,42 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                         <td className="stocktaking-data-component">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td>
                         <td className="stocktaking-data-qty">{row.quantity}</td>
                         <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
+                        <td className="stocktaking-data-photos">
+                          {row.receiptPhotos.length ? (
+                            <div className="stocktaking-receipt-photo-list">
+                              {row.receiptPhotos.slice(0, 3).map((photo, index) => (
+                                <a href={photo.url} target="_blank" rel="noopener noreferrer" key={`${photo.url}-${index}`} title={photo.name}>
+                                  <img src={photo.url} alt={photo.name || `Receipt ${index + 1}`} />
+                                </a>
+                              ))}
+                              {row.receiptPhotos.length > 3 ? <span>+{row.receiptPhotos.length - 3}</span> : null}
+                            </div>
+                          ) : <span className="stocktaking-no-photo">—</span>}
+                        </td>
+                        {inventorySession?.inventoryColumn ? (
+                          <td className={`stocktaking-data-inventory ${row.inventory !== null && Number(row.inventory) !== Number(row.quantity) ? "is-mismatch" : ""}`}>
+                            <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" />
+                          </td>
+                        ) : null}
+                        {inventorySession?.defectedColumn ? (
+                          <td className="stocktaking-data-inventory">
+                            <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" />
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-            </div>
+              </div>
+            </>
           )}
         </section>
       )}
 
-      {exportOpen && activeColumn ? <ExportModal columnKey={activeColumn.key} onClose={() => setExportOpen(false)} /> : null}
+      {exportOpen && activeColumn ? <ExportModal columnKey={activeColumn.key} inventorySession={inventorySession} onClose={() => setExportOpen(false)} /> : null}
+      {inventorySetupOpen && activeColumn ? <InventorySetupModal column={activeColumn} busy={inventoryBusy} onClose={() => setInventorySetupOpen(false)} onConfirm={startInventory} /> : null}
+      {inventoryFinishOpen && activeColumn && inventorySession ? <InventoryFinishModal session={inventorySession} columnKey={activeColumn.key} busy={inventoryBusy} onClose={() => setInventoryFinishOpen(false)} onDone={finishInventorySession} /> : null}
     </section>
   );
 }
