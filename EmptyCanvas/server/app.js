@@ -7698,7 +7698,12 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
 
   let stockRows = await _sbStocktakingRows();
   let keys = _sbAllColumnKeys(stockRows || []);
-  if (!keys.length) keys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+  // Merge the live row keys with the PostgREST schema. Send to stock must not
+  // fail just because an optional metadata column (Header/Tag) is absent from
+  // the current Stocktaking table. The selected user's quantity column is the
+  // only field required for the stock movement itself.
+  const schemaKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+  keys = Array.from(new Set([...(keys || []), ...(schemaKeys || [])].filter(Boolean)));
 
   let quantityColumn = _sbDetectStocktakingQuantityColumnFromKeys(keys, stockLabel);
   if (!quantityColumn) {
@@ -7714,17 +7719,11 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
 
   const headerKey = _sbFindStocktakingKey(keys, ["header", "Header", "stock_header", "Stock Header", "main_header", "Main Header"]);
   const tagKey = _sbFindStocktakingKey(keys, ["tag", "Tag", "tags", "Tags"]);
-  if (keys.length && !headerKey) {
-    const err = new Error("Stocktaking table does not have a Header column. Add the Header column before using Send to stock.");
-    err.status = 400;
-    throw err;
-  }
-  if (keys.length && !tagKey) {
-    const err = new Error("Stocktaking table does not have a Tag column.");
-    err.status = 400;
-    throw err;
-  }
 
+  // Header and Tag are metadata, not prerequisites for adding quantity to a
+  // user's Stocktaking column. Use their real columns when available. When
+  // they are not part of the table, _sbInsertStocktakingRowSafe will drop the
+  // optimistic fallback keys and keep the stock movement instead of failing.
   const actualHeaderKey = headerKey || "header";
   const actualTagKey = tagKey || "tag";
   const receiptNumberKey = _sbFindStocktakingKey(keys, ["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"]);
@@ -7781,7 +7780,7 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
       if (targetMemberIdKey) row[targetMemberIdKey] = member.id;
       if (targetMemberNameKey) row[targetMemberNameKey] = member.name;
 
-      const inserted = await _sbInsertStocktakingRowSafe(row, [actualHeaderKey, actualTagKey, quantityColumn]);
+      const inserted = await _sbInsertStocktakingRowSafe(row, [quantityColumn]);
       created.push(inserted || row);
     }
   }

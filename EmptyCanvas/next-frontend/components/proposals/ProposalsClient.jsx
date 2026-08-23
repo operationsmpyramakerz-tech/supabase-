@@ -1007,7 +1007,7 @@ function SendToStockModal({ proposal, members, busy, onClose, onSubmit }) {
           <ProposalIcon name="archive" size={17} />
           <span>If the selected user does not have Stocktaking access, Confirm will grant it automatically. Their existing Users Center Stocktaking column will be reused; if none exists, a <strong>Username + Stock</strong> column will be created.</span>
         </div>
-        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Rows will be saved under Header “Main stock”, and every row will use its Proposal kit name as the Tag.</span></div>
+        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Rows will be added to the selected user's Stocktaking column. If Header/Tag fields exist, Header will be “Main stock” and Tag will use the Proposal kit name.</span></div>
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className="proposal-send-stock-actions products-modal__actions">
           <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
