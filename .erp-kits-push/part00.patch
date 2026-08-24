@@ -1,0 +1,284 @@
+--- a/EmptyCanvas/server/app.js
++++ b/EmptyCanvas/server/app.js
+@@ -7647,11 +7647,13 @@
+ }
+ 
+ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
+-  const pid = String(proposalId || "").trim();
++  const rawId = String(proposalId || "").trim();
++  const isKitSource = rawId.startsWith("kit:");
++  const pid = isKitSource ? rawId.slice(4).trim() : rawId;
+   const teamMemberId = String(body?.teamMemberId || body?.team_member_id || "").trim();
+   const receiptNumber = String(body?.receiptNumber || body?.receipt_number || "").trim();
+   if (!pid) {
+-    const err = new Error("Proposal ID is required.");
++    const err = new Error(isKitSource ? "Kit ID is required." : "Proposal ID is required.");
+     err.status = 400;
+     throw err;
+   }
+@@ -7685,15 +7687,26 @@
+     throw err;
+   }
+ 
+-  const detail = await _sbProductProposalById(pid, req);
++  let detail = null;
++  if (isKitSource) {
++    const kitDetail = await _sbProductKitById(pid, req);
++    if (kitDetail?.kit) {
++      detail = {
++        proposal: { ...kitDetail.kit, exportKind: "kit" },
++        items: Array.isArray(kitDetail.items) ? kitDetail.items : [],
++      };
++    }
++  } else {
++    detail = await _sbProductProposalById(pid, req);
++  }
+   if (!detail?.proposal) {
+-    const err = new Error("Proposal not found.");
++    const err = new Error(isKitSource ? "Kit not found." : "Proposal not found.");
+     err.status = 404;
+     throw err;
+   }
+   const items = Array.isArray(detail.items) ? detail.items : [];
+   if (!items.length) {
+-    const err = new Error("This proposal has no components to send to Stocktaking.");
++    const err = new Error(isKitSource ? "This kit has no components to send to Stocktaking." : "This proposal has no components to send to Stocktaking.");
+     err.status = 400;
+     throw err;
+   }
+@@ -7738,6 +7751,8 @@
+   const actualReceiptPhotosKey = receiptPhotosKey || "receipt_photos";
+   const sourceProposalIdKey = _sbFindStocktakingKey(keys, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"]);
+   const sourceProposalNameKey = _sbFindStocktakingKey(keys, ["source_proposal", "Source Proposal", "proposal_name", "Proposal Name"]);
++  const sourceKitIdKey = _sbFindStocktakingKey(keys, ["source_kit_id", "Source Kit ID", "kit_id", "Kit ID"]);
++  const sourceKitNameKey = _sbFindStocktakingKey(keys, ["source_kit", "Source Kit", "kit_name", "Kit Name"]);
+   const targetMemberIdKey = _sbFindStocktakingKey(keys, ["team_member_id", "Team Member ID", "user_id", "User ID"]);
+   const targetMemberNameKey = _sbFindStocktakingKey(keys, ["team_member_name", "Team Member Name", "user_name", "User Name", "username", "Username"]);
+ 
+@@ -7758,7 +7773,9 @@
+   for (const item of items) {
+     const product = productMap.get(String(item?.productId || "")) || {};
+     const totalItemQuantity = _sbProposalQuantity(item?.quantity || 1);
+-    const sources = _sbProposalSourceKitsForTotal(item?.sourceKits || item?.source_kits || [], totalItemQuantity);
++    const sources = isKitSource
++      ? [{ kitId: pid, kitName: detail.proposal?.name || "Kit", quantity: totalItemQuantity }]
++      : _sbProposalSourceKitsForTotal(item?.sourceKits || item?.source_kits || [], totalItemQuantity);
+     for (const source of sources) {
+       const qty = _sbProposalQuantity(source?.quantity || 1);
+       const kitName = _sbProposalText(source?.kitName || source?.name) || "Direct components";
+@@ -7782,8 +7799,13 @@
+       // receipt objects only in the Receipt Photos column.
+       row[actualReceiptNumberKey] = receiptNumber;
+       row[actualReceiptPhotosKey] = receiptFilesJson;
+-      if (sourceProposalIdKey) row[sourceProposalIdKey] = pid;
+-      if (sourceProposalNameKey) row[sourceProposalNameKey] = detail.proposal.name || "Proposal";
++      if (isKitSource) {
++        if (sourceKitIdKey) row[sourceKitIdKey] = pid;
++        if (sourceKitNameKey) row[sourceKitNameKey] = detail.proposal.name || "Kit";
++      } else {
++        if (sourceProposalIdKey) row[sourceProposalIdKey] = pid;
++        if (sourceProposalNameKey) row[sourceProposalNameKey] = detail.proposal.name || "Proposal";
++      }
+       if (targetMemberIdKey) row[targetMemberIdKey] = member.id;
+       if (targetMemberNameKey) row[targetMemberNameKey] = member.name;
+ 
+@@ -8181,9 +8203,28 @@
+ }
+ 
+ async function _sbProductProposalExportData(proposalId, req = null) {
+-  const detail = await _sbProductProposalById(proposalId, req);
++  const rawId = String(proposalId || "").trim();
++  const isKitExport = rawId.startsWith("kit:");
++  const sourceId = isKitExport ? rawId.slice(4).trim() : rawId;
++
++  let detail = null;
++  if (isKitExport) {
++    const kitDetail = await _sbProductKitById(sourceId, req);
++    if (kitDetail?.kit) {
++      detail = {
++        proposal: {
++          ...kitDetail.kit,
++          exportKind: "kit",
++        },
++        items: Array.isArray(kitDetail.items) ? kitDetail.items : [],
++      };
++    }
++  } else {
++    detail = await _sbProductProposalById(sourceId, req);
++  }
++
+   if (!detail?.proposal) {
+-    const err = new Error("Proposal not found.");
++    const err = new Error(isKitExport ? "Kit not found." : "Proposal not found.");
+     err.status = 404;
+     throw err;
+   }
+@@ -8208,7 +8249,9 @@
+       url: String(product?.url || item?.url || item?.productUrl || item?.product_url || "").trim(),
+       tag: firstProductTagForServer(product),
+       quantity,
+-      sourceKits: _sbProposalSourceKits(item?.sourceKits || item?.source_kits),
++      sourceKits: isKitExport
++        ? [{ kitId: sourceId, kitName: String(detail.proposal?.name || "Kit").trim() || "Kit", quantity }]
++        : _sbProposalSourceKits(item?.sourceKits || item?.source_kits),
+       unitPrice: cleanUnitPrice,
+       totalPrice,
+     };
+@@ -8227,7 +8270,6 @@
+   return { detail, rows, groupedRows, totals, groupMode };
+ }
+ 
+-
+ function _proposalCombineLogic(value) {
+   const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "-");
+   if (raw === "max" || raw === "max-logic") return "max";
+@@ -8974,10 +9016,12 @@
+   const contentW = doc.page.width - mL - mR;
+   const generatedLabel = formatDateTime(createdAt);
+   const proposalName = String(detail.proposal.name || "Proposal").trim() || "Proposal";
++  const isKitExport = String(detail?.proposal?.exportKind || "").toLowerCase() === "kit";
++  const exportLabel = isKitExport ? "Kit" : "Proposal";
+ 
+   const drawHeader = (variant = "default") => {
+     drawStocktakingHeader(doc, {
+-      title: "Proposal",
++      title: exportLabel,
+       variant,
+       logoPath,
+       colors: COLORS,
+@@ -8997,12 +9041,12 @@
+     .fillColor(COLORS.text)
+     .font("Helvetica-Bold")
+     .fontSize(14)
+-    .text("Proposal Summary", mL, doc.y);
++    .text(`${exportLabel} Summary`, mL, doc.y);
+   doc
+     .fillColor(COLORS.muted)
+     .font("Helvetica")
+     .fontSize(9)
+-    .text("Saved components and quantities for this proposal.", mL, doc.y + 4, { width: contentW });
++    .text(isKitExport ? "Saved components and quantities for this kit." : "Saved components and quantities for this proposal.", mL, doc.y + 4, { width: contentW });
+   doc.moveDown(1.1);
+ 
+   const boxH = 34;
+@@ -9170,8 +9214,10 @@
+   const workbook = new ExcelJS.Workbook();
+   workbook.creator = "Operations Hub";
+   workbook.created = new Date();
+-  const worksheet = workbook.addWorksheet("Proposal");
+-  const proposalName = String(detail.proposal.name || "Proposal").trim() || "Proposal";
++  const isKitExport = String(detail?.proposal?.exportKind || "").toLowerCase() === "kit";
++  const exportLabel = isKitExport ? "Kit" : "Proposal";
++  const worksheet = workbook.addWorksheet(exportLabel);
++  const proposalName = String(detail.proposal.name || exportLabel).trim() || exportLabel;
+   const generatedAt = new Date();
+   const includeKitColumn = groupMode === "kit-tag";
+   const excelColumns = [
+@@ -9198,7 +9244,7 @@
+ 
+   worksheet.mergeCells(1, 1, 1, visualLastCol);
+   const titleCell = worksheet.getCell(1, 1);
+-  titleCell.value = `Proposal Report — ${proposalName}`;
++  titleCell.value = `${exportLabel} Report — ${proposalName}`;
+   titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+   titleCell.alignment = { horizontal: "center", vertical: "middle" };
+   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+@@ -27147,7 +27193,7 @@
+ app.post(
+   "/api/products/proposals/receipt-upload",
+   requireAuth,
+-  requirePage(["Proposals", "Products"]),
++  requirePage(["Proposals", "Kits", "Products"]),
+   async (req, res) => {
+     res.set("Cache-Control", "no-store");
+     try {
+@@ -27400,6 +27446,56 @@
+     }
+   },
+ );
++
++app.get(
++  "/api/products/kits/:kitId/pdf",
++  requireAuth,
++  requirePage(["Kits", "Proposals", "Products"]),
++  async (req, res) => {
++    try {
++      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
++      return await _sbRenderProductProposalPdf(`kit:${req.params.kitId}`, req, res);
++    } catch (error) {
++      console.error("GET /api/products/kits/:kitId/pdf error:", error?.details || error);
++      if (!res.headersSent) return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download kit PDF." });
++      try { res.end(); } catch {}
++    }
++  },
++);
++
++app.get(
++  "/api/products/kits/:kitId/excel",
++  requireAuth,
++  requirePage(["Kits", "Proposals", "Products"]),
++  async (req, res) => {
++    try {
++      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
++      return await _sbRenderProductProposalExcel(`kit:${req.params.kitId}`, req, res);
++    } catch (error) {
++      console.error("GET /api/products/kits/:kitId/excel error:", error?.details || error);
++      if (!res.headersSent) return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download kit Excel." });
++      try { res.end(); } catch {}
++    }
++  },
++);
++
++app.post(
++  "/api/products/kits/:kitId/send-to-stock",
++  requireAuth,
++  requirePage(["Kits", "Proposals", "Products"]),
++  async (req, res) => {
++    res.set("Cache-Control", "no-store");
++    try {
++      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
++      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
++      const result = await _sbSendProposalToStocktaking(`kit:${req.params.kitId}`, req.body || {}, req);
++      return res.status(201).json({ ok: true, source: "supabase", ...result });
++    } catch (error) {
++      console.error("POST /api/products/kits/:kitId/send-to-stock error:", error?.details || error?.body || error);
++      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to send kit to Stocktaking." });
++    }
++  },
++);
+ 
+ app.get(
+   "/api/products/kits/:kitId",
+--- a/EmptyCanvas/next-frontend/components/kits/KitsClient.jsx
++++ b/EmptyCanvas/next-frontend/components/kits/KitsClient.jsx
+@@ -5,6 +5,18 @@
+ import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
+ import { confirmDelete } from "../../lib/client-confirm";
+ 
++const EXPORT_COLUMNS = [
++  ["idCode", "ID Code"],
++  ["name", "Component"],
++  ["quantity", "Quantity"],
++  ["unitPrice", "Unit Cost"],
++  ["totalPrice", "Total Cost"],
++];
++
++const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
++const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
++const RECEIPT_MAX_EDGE = 2000;
++
+ function text(value) {
+   return String(value ?? "").trim();
+ }
+@@ -45,6 +57,125 @@
+   return `https://${url.replace(/^\/+/, "")}`;
+ }
+ 
++function openDownload(url) {
++  const anchor = document.createElement("a");
++  anchor.href = url;
++  anchor.target = "_blank";
++  anchor.rel = "noopener";
++  document.body.appendChild(anchor);
++  anchor.click();
++  anc
