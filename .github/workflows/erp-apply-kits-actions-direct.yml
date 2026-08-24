@@ -1,0 +1,40 @@
+name: Apply Kits actions update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/erp-apply-kits-actions-direct.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-kits-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Apply changed files and clean temporary helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --ff-only origin main
+          cat .erp-kits-push/part00.patch .erp-kits-push/part01.patch .erp-kits-push/part02.patch .erp-kits-push/part03.patch .erp-kits-push/part04.patch > /tmp/kits-actions.patch
+          git apply --check /tmp/kits-actions.patch
+          git apply /tmp/kits-actions.patch
+          rm -rf .erp-kits-push
+          rm -f .erp-patch/kits-actions.patch.gz.b64
+          rmdir .erp-patch 2>/dev/null || true
+          rm -f .github/workflows/erp-apply-kits-actions.yml
+          rm -f .github/workflows/erp-apply-kits-actions-direct.yml
+          git add -A
+          git commit -m "Add proposal actions to kits"
+          git push origin HEAD:main
