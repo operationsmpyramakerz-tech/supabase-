@@ -6,6 +6,13 @@ on:
       - main
     paths:
       - '.github/workflows/erp-apply-kits-actions.yml'
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
@@ -35,6 +42,3 @@ jobs:
           git add -A
           git commit -m "Add proposal actions to kits"
           git push origin HEAD:main
-
-# trigger after workflow is present on main
-# merge-trigger
