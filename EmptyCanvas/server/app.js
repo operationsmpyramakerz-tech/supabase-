@@ -2501,7 +2501,9 @@ function _uaIsUsefulStocktakingSchoolColumn(key = "") {
   const blocked = new Set([
     "id", "createdat", "updatedat", "importedat", "createdtime", "lasteditedtime", "lasteditedby",
     "name", "product", "products", "productname", "producturl", "itemurl", "url", "tag", "tags",
-    "idcode", "receiptNumber", "receiptnumber", "onekitquantity", "unityprice", "unitprice", "onepieceprice",
+    "idcode", "receiptnumber", "receiptphotos", "receiptphoto", "receiptimages", "receiptimage",
+    "receipturls", "receipturl", "orderreceipt", "attachments", "files",
+    "onekitquantity", "unityprice", "unitprice", "onepieceprice",
     "totalprice", "totalcost", "totalquantity", "allprice", "manualquantitytopurchase", "quantitytopurchase",
     "allschoolsneed", "allschoolsquantities", "allschoolsstock", "schoolkit", "schooltotalquantites", "schooltotalquantities"
   ]);
@@ -7747,8 +7749,21 @@ async function _sbSendProposalToStocktaking(proposalId, body = {}, req = null) {
   const actualTagKey = tagKey || "tag";
   const receiptNumberKey = _sbFindStocktakingKey(keys, ["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"]);
   const receiptPhotosKey = _sbFindStocktakingKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"]);
+
+  // Receipt Photos is real Stocktaking data, not an optional display field.
+  // Do not silently place receipt image JSON into Receipt Number (or any other
+  // fallback column). The schema migration shipped with this change adds the
+  // dedicated text column used by both Proposal and Kit Send to stock.
+  if (!receiptPhotosKey) {
+    const err = new Error(
+      "Stocktaking is missing the receipt_photos column. Run supabase_stocktaking_receipt_photos.sql once in Supabase SQL Editor, then try Send to stock again.",
+    );
+    err.status = 400;
+    throw err;
+  }
+
   const actualReceiptNumberKey = receiptNumberKey || "receipt_number";
-  const actualReceiptPhotosKey = receiptPhotosKey || "receipt_photos";
+  const actualReceiptPhotosKey = receiptPhotosKey;
   const sourceProposalIdKey = _sbFindStocktakingKey(keys, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"]);
   const sourceProposalNameKey = _sbFindStocktakingKey(keys, ["source_proposal", "Source Proposal", "proposal_name", "Proposal Name"]);
   const sourceKitIdKey = _sbFindStocktakingKey(keys, ["source_kit_id", "Source Kit ID", "kit_id", "Kit ID"]);
