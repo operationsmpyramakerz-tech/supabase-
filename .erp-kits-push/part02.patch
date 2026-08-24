@@ -1,0 +1,259 @@
+/button>
++          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("excel")}>
++            <FeatherIcon name="grid" /><span>Download Excel</span>
++          </button>
++        </div>
++      </div>
++    </Modal>
++  );
++}
++
++function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
++  const [previews, setPreviews] = useState([]);
++  useEffect(() => {
++    const next = (Array.isArray(files) ? files : []).map((file, index) => ({ file, index, url: URL.createObjectURL(file) }));
++    setPreviews(next);
++    return () => next.forEach((item) => URL.revokeObjectURL(item.url));
++  }, [files]);
++
++  if (!previews.length) return null;
++  return (
++    <div className="proposal-receipt-preview-grid" aria-label="Selected receipt images">
++      {previews.map((item) => (
++        <article className="proposal-receipt-preview-card" key={`${item.file.name}-${item.file.size}-${item.file.lastModified}-${item.index}`}>
++          <div className="proposal-receipt-preview-card__image">
++            <img src={item.url} alt={item.file.name || `Receipt image ${item.index + 1}`} />
++            <span>{item.index + 1}</span>
++          </div>
++          <div className="proposal-receipt-preview-card__copy">
++            <strong title={item.file.name}>{item.file.name || `Receipt ${item.index + 1}`}</strong>
++            <small>{Math.max(1, Math.round(Number(item.file.size || 0) / 1024))} KB</small>
++          </div>
++          <button type="button" onClick={() => onRemove(item.index)} disabled={busy} aria-label={`Remove ${item.file.name || `receipt ${item.index + 1}`}`}>×</button>
++        </article>
++      ))}
++    </div>
++  );
++}
++
++function SendKitToStockModal({ kit, members, busy, onClose, onSubmit }) {
++  const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
++  const [memberId, setMemberId] = useState("");
++  const [receiptNumber, setReceiptNumber] = useState("");
++  const [files, setFiles] = useState([]);
++  const [error, setError] = useState("");
++
++  const chooseFiles = (fileList) => {
++    const incoming = Array.from(fileList || []);
++    if (!incoming.length) return;
++    const invalid = incoming.find((file) => !/^image\//i.test(file.type || ""));
++    if (invalid) return setError("Receipt uploads must be images.");
++    const tooLarge = incoming.find((file) => Number(file.size || 0) > RECEIPT_SOURCE_MAX_BYTES);
++    if (tooLarge) return setError(`${tooLarge.name} is larger than 8 MB.`);
++    setFiles((current) => {
++      const combined = [...current, ...incoming];
++      const seen = new Set();
++      return combined.filter((file) => {
++        const key = `${file.name}:${file.size}:${file.lastModified}`;
++        if (seen.has(key)) return false;
++        seen.add(key);
++        return true;
++      }).slice(0, 12);
++    });
++    setError("");
++  };
++
++  const submit = async (event) => {
++    event.preventDefault();
++    if (!memberId) return setError("Choose the user who will receive the stock.");
++    if (!text(receiptNumber)) return setError("Enter the receipt number.");
++    if (!files.length) return setError("Upload at least one receipt image.");
++    setError("");
++    try {
++      await onSubmit({ teamMemberId: memberId, receiptNumber: text(receiptNumber), files });
++    } catch (submitError) {
++      setError(submitError?.message || "The kit could not be sent to Stocktaking.");
++    }
++  };
++
++  const close = () => {
++    if (!busy) onClose();
++  };
++
++  return (
++    <Modal
++      title="Send to stock"
++      subtitle={`Add “${kit?.name || "Kit"}” directly to a user's Stocktaking column.`}
++      icon={<FeatherIcon name="archive" size={26} />}
++      onClose={close}
++    >
++      <form className="proposal-send-stock-form proposal-send-stock-modal-form" onSubmit={submit}>
++        <ModernSelect
++          label="Stock user *"
++          value={memberId}
++          placeholder={stockMembers.length ? "Select stock user" : "No Users Center users available"}
++          searchable
++          options={stockMembers.map((member) => ({
++            value: member.id,
++            label: member.name,
++            meta: text(member.stocktakingColumn)
++              ? `Stock column: ${member.stocktakingColumn}`
++              : `Will grant Stocktaking access and create ${member.name} Stock`,
++          }))}
++          onChange={(value) => { setMemberId(value); setError(""); }}
++        />
++
++        <label className="proposal-send-stock-text-field">
++          <span>Receipt number *</span>
++          <input
++            type="text"
++            inputMode="text"
++            autoComplete="off"
++            value={receiptNumber}
++            onChange={(event) => { setReceiptNumber(event.target.value); setError(""); }}
++            placeholder="Enter receipt number"
++            disabled={busy}
++          />
++        </label>
++
++        <label className="proposal-receipt-upload-field">
++          <span>Receipt images *</span>
++          <div className={`proposal-receipt-upload-box ${files.length ? "has-files" : ""}`}>
++            <FeatherIcon name="file" size={22} />
++            <div><strong>{files.length ? `${files.length} receipt image${files.length === 1 ? "" : "s"} selected` : "Upload receipt images"}</strong><small>JPG, PNG or WEBP · up to 8 MB each · optimized before upload</small></div>
++            <b>{busy ? "Uploading…" : "Choose images"}</b>
++            <input type="file" accept="image/*" multiple disabled={busy} onChange={(event) => { chooseFiles(event.target.files); event.target.value = ""; }} />
++          </div>
++          <ReceiptImagePreviewGrid files={files} busy={busy} onRemove={(index) => setFiles((current) => current.filter((_, idx) => idx !== index))} />
++        </label>
++
++        <div className="proposal-send-stock-note proposal-send-stock-note--access">
++          <FeatherIcon name="archive" size={17} />
++          <span>If the selected user does not have Stocktaking access, Confirm will grant it automatically. Their existing Users Center Stocktaking column will be reused; if none exists, a <strong>Username + Stock</strong> column will be created.</span>
++        </div>
++        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Rows will be added to the selected user's Stocktaking column and Tag will use this kit name.</span></div>
++        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
++        <div className="proposal-send-stock-actions products-modal__actions">
++          <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
++          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !stockMembers.length}><FeatherIcon name="archive" /><span>{busy ? "Sending…" : "Confirm"}</span></button>
++        </div>
++      </form>
++    </Modal>
++  );
++}
++
+ function NameModal({ dialog, busy, onClose, onSubmit }) {
+   const [value, setValue] = useState(dialog?.value || "");
+   const [error, setError] = useState("");
+@@ -514,6 +892,12 @@
+   const [activeFolder, setActiveFolder] = useState(null);
+   const [activeDetail, setActiveDetail] = useState(null);
+   const [search, setSearch] = useState("");
++  const [members, setMembers] = useState([]);
++  const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
++  const [groupBy, setGroupBy] = useState("component-tag");
++  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
++  const [sortMenuOpen, setSortMenuOpen] = useState(false);
++  const [sendToStockOpen, setSendToStockOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
+   const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
+   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
+@@ -560,11 +944,15 @@
+     const close = (event) => {
+       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
+       if (pickerRef.current && !pickerRef.current.contains(event.target)) setProductPickerOpen(false);
++      if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
++      if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
+     };
+     const onKey = (event) => {
+       if (event.key !== "Escape") return;
+       setFolderMenu("");
+       setProductPickerOpen(false);
++      setDownloadMenuOpen(false);
++      setSortMenuOpen(false);
+     };
+     document.addEventListener("click", close);
+     document.addEventListener("keydown", onKey);
+@@ -629,6 +1017,33 @@
+     return enrichedRows.filter((row) => lower(row.name).includes(needle));
+   }, [activeDetail, enrichedRows, search]);
+ 
++  const componentGroupedVisibleRows = useMemo(() => {
++    const groups = new Map();
++    for (const row of visibleEnrichedRows) {
++      const label = text(row.tag) || "Uncategorized";
++      if (!groups.has(label)) groups.set(label, []);
++      groups.get(label).push(row);
++    }
++    return [...groups.entries()]
++      .map(([label, rows]) => ({ label, rows: rows.slice().sort((a, b) => a.name.localeCompare(b.name)) }))
++      .sort((a, b) => a.label.localeCompare(b.label));
++  }, [visibleEnrichedRows]);
++
++  const kitGroupedVisibleRows = useMemo(() => {
++    const kit = activeDetail?.kit;
++    if (!kit) return [];
++    const folder = folders.find((entry) => entry.id === kit.folderId);
++    return [{
++      id: folder?.id || "",
++      label: folder?.name || "Unfiled Kits",
++      kits: [{
++        id: kit.id,
++        label: kit.name || "Kit",
++        rows: visibleEnrichedRows.slice().sort((a, b) => a.name.localeCompare(b.name)),
++      }],
++    }];
++  }, [activeDetail, folders, visibleEnrichedRows]);
++
+   const detailTotals = useMemo(() => enrichedRows.reduce((acc, row) => {
+     acc.items += 1;
+     acc.quantity += row.quantity;
+@@ -677,9 +1092,76 @@
+   const backToKits = () => {
+     setActiveDetail(null);
+     setSearch("");
++    setDownloadMenuOpen(false);
++    setSortMenuOpen(false);
++    setSendToStockOpen(false);
+     resetDetailEditor();
+   };
+ 
++  const toggleExportColumn = (key) => {
++    setExportColumns((current) => current.includes(key)
++      ? (current.length === 1 ? current : current.filter((item) => item !== key))
++      : [...current, key]);
++  };
++
++  const chooseGroupBy = (mode) => {
++    setGroupBy(mode === "kit-tag" ? "kit-tag" : "component-tag");
++    setSortMenuOpen(false);
++  };
++
++  const downloadKit = (type) => {
++    const kit = activeDetail?.kit;
++    if (!kit?.id) return;
++    const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
++    const params = new URLSearchParams({ columns, groupBy });
++    openDownload(`/api/products/kits/${encodeURIComponent(kit.id)}/${type}?${params.toString()}`);
++    setDownloadMenuOpen(false);
++  };
++
++  const openSendToStock = () => {
++    setDownloadMenuOpen(false);
++    setSortMenuOpen(false);
++    setSendToStockOpen(true);
++    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
++      .then((body) => setMembers(normalizeUsersCenterMembers(body)))
++      .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
++  };
++
++  const sendKitToStock = async ({ teamMemberId, receiptNumber, files = [] }) => {
++    const kit = activeDetail?.kit;
++    if (!kit?.id) throw new Error("Kit ID is missing.");
++    setBusy(true);
++    startActionLoading({ title: "Sending to stock", message: "Uploading receipt images and adding Stocktaking rows…" });
++    try {
++      const receipts = [];
++      for (const file of files) {
++        const prepared = await prepareReceiptImage(file);
++        const uploaded = await requestJson("/next/api/products/proposals/receipt-uploa
