@@ -35,3 +35,5 @@ jobs:
           git add -A
           git commit -m "Add proposal actions to kits"
           git push origin HEAD:main
+
+# trigger after workflow is present on main
