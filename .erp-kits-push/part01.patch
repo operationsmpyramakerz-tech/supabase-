@@ -1,0 +1,243 @@
+hor.remove();
++}
++
++function readFileAsDataUrl(file) {
++  return new Promise((resolve, reject) => {
++    const reader = new FileReader();
++    reader.onload = () => resolve(String(reader.result || ""));
++    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
++    reader.readAsDataURL(file);
++  });
++}
++
++function canvasToBlob(canvas, type, quality) {
++  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
++}
++
++async function prepareReceiptImage(file) {
++  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
++  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
++  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
++    return { dataUrl: await readFileAsDataUrl(file), name: file.name || "receipt.jpg", size: number(file.size) };
++  }
++
++  const objectUrl = URL.createObjectURL(file);
++  try {
++    const image = await new Promise((resolve, reject) => {
++      const candidate = new Image();
++      candidate.onload = () => resolve(candidate);
++      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
++      candidate.src = objectUrl;
++    });
++    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
++    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
++    const longest = Math.max(naturalWidth, naturalHeight);
++    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
++    let bestBlob = null;
++    let bestType = "image/webp";
++
++    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
++      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
++      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
++      const canvas = document.createElement("canvas");
++      canvas.width = width;
++      canvas.height = height;
++      const context = canvas.getContext("2d", { alpha: false });
++      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
++      context.fillStyle = "#ffffff";
++      context.fillRect(0, 0, width, height);
++      context.drawImage(image, 0, 0, width, height);
++
++      let quality = 0.88;
++      let blob = await canvasToBlob(canvas, "image/webp", quality);
++      let mime = "image/webp";
++      if (!blob) {
++        quality = 0.86;
++        blob = await canvasToBlob(canvas, "image/jpeg", quality);
++        mime = "image/jpeg";
++      }
++      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
++
++      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
++        quality = Math.max(0.5, quality - 0.08);
++        blob = await canvasToBlob(canvas, mime, quality);
++        if (!blob) break;
++      }
++      if (blob && (!bestBlob || blob.size < bestBlob.size)) {
++        bestBlob = blob;
++        bestType = mime;
++      }
++      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
++      dimensionScale *= 0.82;
++    }
++
++    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) {
++      throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
++    }
++
++    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
++    return {
++      dataUrl: await readFileAsDataUrl(bestBlob),
++      name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`,
++      size: bestBlob.size,
++    };
++  } finally {
++    URL.revokeObjectURL(objectUrl);
++  }
++}
++
++function normalizeUsersCenterMembers(payload) {
++  const direct = Array.isArray(payload?.members) ? payload.members : [];
++  const departments = Array.isArray(payload?.departments) ? payload.departments : [];
++  const nested = departments.flatMap((department) => Array.isArray(department?.members) ? department.members : []);
++  const seen = new Set();
++  return [...direct, ...nested]
++    .map((member) => {
++      const fields = Array.isArray(member?.fields) ? member.fields : [];
++      const stockField = fields.find((field) => ["school", "stocktaking column", "done column"].includes(lower(field?.label)));
++      return {
++        ...member,
++        id: text(member?.id),
++        name: text(member?.name) || "Unnamed",
++        stocktakingColumn: text(member?.stocktakingColumn || member?.school || stockField?.value),
++      };
++    })
++    .filter((member) => {
++      if (!member.id || !member.name || seen.has(member.id)) return false;
++      seen.add(member.id);
++      return true;
++    })
++    .sort((a, b) => a.name.localeCompare(b.name));
++}
++
+ const FEATHER_PATHS = {
+   briefcase: [
+     <rect key="r" x="3" y="7" width="18" height="13" rx="2" ry="2" />,
+@@ -92,6 +223,11 @@
+   ],
+   folder: [<path key="p" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
+   folderPlus: [<path key="p1" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />, <path key="p2" d="M12 10v6M9 13h6" />],
++  download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
++  archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
++  file: [<path key="p1" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />, <polyline key="p2" points="14 2 14 8 20 8" />, <line key="l1" x1="8" y1="13" x2="16" y2="13" />, <line key="l2" x1="8" y1="17" x2="16" y2="17" />],
++  grid: [<rect key="r1" x="3" y="3" width="7" height="7" rx="1" />, <rect key="r2" x="14" y="3" width="7" height="7" rx="1" />, <rect key="r3" x="3" y="14" width="7" height="7" rx="1" />, <rect key="r4" x="14" y="14" width="7" height="7" rx="1" />],
++  sort: [<line key="l1" x1="3" y1="6" x2="21" y2="6" />, <line key="l2" x1="6" y1="12" x2="18" y2="12" />, <line key="l3" x1="10" y1="18" x2="14" y2="18" />],
+ };
+ 
+ function FeatherIcon({ name, size = 18, className = "" }) {
+@@ -193,10 +329,10 @@
+   );
+ }
+ 
+-function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false }) {
++function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false, className = "" }) {
+   return (
+     <div className="products-modal-overlay next-proposals-classic-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+-      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
++      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""} ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title}>
+         <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
+         <div className="products-modal__header">
+           <div className="products-modal__icon" aria-hidden="true">{icon}</div>
+@@ -208,6 +344,248 @@
+   );
+ }
+ 
++
++function ModernSelect({ label, value, options, placeholder = "Select", searchable = false, onChange, disabled = false }) {
++  const [open, setOpen] = useState(false);
++  const [query, setQuery] = useState("");
++  const rootRef = useRef(null);
++  const selected = options.find((option) => String(option.value) === String(value));
++  const filtered = useMemo(() => {
++    const needle = lower(query);
++    if (!needle) return options;
++    return options.filter((option) => lower(`${option.label || ""} ${option.meta || ""}`).includes(needle));
++  }, [options, query]);
++
++  useEffect(() => {
++    if (!open) return undefined;
++    const onPointerDown = (event) => {
++      if (!rootRef.current?.contains(event.target)) setOpen(false);
++    };
++    const onKeyDown = (event) => {
++      if (event.key === "Escape") setOpen(false);
++    };
++    document.addEventListener("pointerdown", onPointerDown, true);
++    document.addEventListener("keydown", onKeyDown, true);
++    return () => {
++      document.removeEventListener("pointerdown", onPointerDown, true);
++      document.removeEventListener("keydown", onKeyDown, true);
++    };
++  }, [open]);
++
++  const choose = (nextValue) => {
++    onChange(nextValue);
++    setOpen(false);
++    setQuery("");
++  };
++
++  return (
++    <div className={`next-proposals-modern-select ${open ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`} ref={rootRef}>
++      {label ? <span className="next-proposals-modern-select__label">{label}</span> : null}
++      <button
++        type="button"
++        className="next-proposals-modern-select__trigger"
++        aria-haspopup="listbox"
++        aria-expanded={open}
++        disabled={disabled}
++        onClick={() => setOpen((current) => !current)}
++      >
++        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
++      </button>
++      {open ? (
++        <div className="next-proposals-modern-select__menu" role="listbox" aria-label={label || placeholder}>
++          {searchable ? (
++            <div className="next-proposals-modern-select__search">
++              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
++              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." />
++            </div>
++          ) : null}
++          <div className="next-proposals-modern-select__options">
++            {filtered.map((option) => {
++              const active = String(option.value) === String(value);
++              return (
++                <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={`${label || "select"}-${option.value}`} onClick={() => choose(option.value)}>
++                  <span><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
++                  {active ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : null}
++                </button>
++              );
++            })}
++            {!filtered.length ? <div className="next-proposals-modern-select__empty">No matching options.</div> : null}
++          </div>
++        </div>
++      ) : null}
++    </div>
++  );
++}
++
++function KitDownloadModal({ columns, onToggleColumn, onDownload, onClose }) {
++  return (
++    <Modal
++      title="Download kit"
++      subtitle="Choose the columns you need, then select the file type."
++      icon={<FeatherIcon name="download" size={26} />}
++      className="proposal-download-modal"
++      onClose={onClose}
++    >
++      <div className="proposal-download-modal__body">
++        <div className="proposal-download-modal__columns">
++          <span>Columns</span>
++          <div>
++            {EXPORT_COLUMNS.map(([key, label]) => (
++              <label key={key}>
++                <input type="checkbox" checked={columns.includes(key)} onChange={() => onToggleColumn(key)} />
++                <span>{label}</span>
++              </label>
++            ))}
++          </div>
++        </div>
++        <div className="proposal-download-modal__actions products-modal__actions">
++          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("pdf")}>
++            <FeatherIcon name="file" /><span>Download PDF</span>
++          <
