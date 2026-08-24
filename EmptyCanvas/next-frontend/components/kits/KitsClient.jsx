@@ -5,6 +5,18 @@ import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
 
+const EXPORT_COLUMNS = [
+  ["idCode", "ID Code"],
+  ["name", "Component"],
+  ["quantity", "Quantity"],
+  ["unitPrice", "Unit Cost"],
+  ["totalPrice", "Total Cost"],
+];
+
+const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
+const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
+const RECEIPT_MAX_EDGE = 2000;
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -43,6 +55,125 @@ function normalizedUrl(value) {
   if (!url) return "";
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   return `https://${url.replace(/^\/+/, "")}`;
+}
+
+function openDownload(url) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.target = "_blank";
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+async function prepareReceiptImage(file) {
+  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
+  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
+  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
+    return { dataUrl: await readFileAsDataUrl(file), name: file.name || "receipt.jpg", size: number(file.size) };
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const candidate = new Image();
+      candidate.onload = () => resolve(candidate);
+      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
+      candidate.src = objectUrl;
+    });
+    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
+    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
+    const longest = Math.max(naturalWidth, naturalHeight);
+    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
+    let bestBlob = null;
+    let bestType = "image/webp";
+
+    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
+      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
+      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+
+      let quality = 0.88;
+      let blob = await canvasToBlob(canvas, "image/webp", quality);
+      let mime = "image/webp";
+      if (!blob) {
+        quality = 0.86;
+        blob = await canvasToBlob(canvas, "image/jpeg", quality);
+        mime = "image/jpeg";
+      }
+      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
+
+      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
+        quality = Math.max(0.5, quality - 0.08);
+        blob = await canvasToBlob(canvas, mime, quality);
+        if (!blob) break;
+      }
+      if (blob && (!bestBlob || blob.size < bestBlob.size)) {
+        bestBlob = blob;
+        bestType = mime;
+      }
+      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
+      dimensionScale *= 0.82;
+    }
+
+    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) {
+      throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
+    }
+
+    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
+    return {
+      dataUrl: await readFileAsDataUrl(bestBlob),
+      name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`,
+      size: bestBlob.size,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function normalizeUsersCenterMembers(payload) {
+  const direct = Array.isArray(payload?.members) ? payload.members : [];
+  const departments = Array.isArray(payload?.departments) ? payload.departments : [];
+  const nested = departments.flatMap((department) => Array.isArray(department?.members) ? department.members : []);
+  const seen = new Set();
+  return [...direct, ...nested]
+    .map((member) => {
+      const fields = Array.isArray(member?.fields) ? member.fields : [];
+      const stockField = fields.find((field) => ["school", "stocktaking column", "done column"].includes(lower(field?.label)));
+      return {
+        ...member,
+        id: text(member?.id),
+        name: text(member?.name) || "Unnamed",
+        stocktakingColumn: text(member?.stocktakingColumn || member?.school || stockField?.value),
+      };
+    })
+    .filter((member) => {
+      if (!member.id || !member.name || seen.has(member.id)) return false;
+      seen.add(member.id);
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 const FEATHER_PATHS = {
@@ -92,6 +223,11 @@ const FEATHER_PATHS = {
   ],
   folder: [<path key="p" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
   folderPlus: [<path key="p1" d="M3 5a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />, <path key="p2" d="M12 10v6M9 13h6" />],
+  download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
+  archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
+  file: [<path key="p1" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />, <polyline key="p2" points="14 2 14 8 20 8" />, <line key="l1" x1="8" y1="13" x2="16" y2="13" />, <line key="l2" x1="8" y1="17" x2="16" y2="17" />],
+  grid: [<rect key="r1" x="3" y="3" width="7" height="7" rx="1" />, <rect key="r2" x="14" y="3" width="7" height="7" rx="1" />, <rect key="r3" x="3" y="14" width="7" height="7" rx="1" />, <rect key="r4" x="14" y="14" width="7" height="7" rx="1" />],
+  sort: [<line key="l1" x1="3" y1="6" x2="21" y2="6" />, <line key="l2" x1="6" y1="12" x2="18" y2="12" />, <line key="l3" x1="10" y1="18" x2="14" y2="18" />],
 };
 
 function FeatherIcon({ name, size = 18, className = "" }) {
@@ -193,10 +329,10 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false }) {
+function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false, className = "" }) {
   return (
     <div className="products-modal-overlay next-proposals-classic-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""} ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title}>
         <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
         <div className="products-modal__header">
           <div className="products-modal__icon" aria-hidden="true">{icon}</div>
@@ -205,6 +341,248 @@ function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false 
         <div className="next-proposals-modal__body">{children}</div>
       </section>
     </div>
+  );
+}
+
+
+function ModernSelect({ label, value, options, placeholder = "Select", searchable = false, onChange, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const selected = options.find((option) => String(option.value) === String(value));
+  const filtered = useMemo(() => {
+    const needle = lower(query);
+    if (!needle) return options;
+    return options.filter((option) => lower(`${option.label || ""} ${option.meta || ""}`).includes(needle));
+  }, [options, query]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [open]);
+
+  const choose = (nextValue) => {
+    onChange(nextValue);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div className={`next-proposals-modern-select ${open ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`} ref={rootRef}>
+      {label ? <span className="next-proposals-modern-select__label">{label}</span> : null}
+      <button
+        type="button"
+        className="next-proposals-modern-select__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+      </button>
+      {open ? (
+        <div className="next-proposals-modern-select__menu" role="listbox" aria-label={label || placeholder}>
+          {searchable ? (
+            <div className="next-proposals-modern-select__search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." />
+            </div>
+          ) : null}
+          <div className="next-proposals-modern-select__options">
+            {filtered.map((option) => {
+              const active = String(option.value) === String(value);
+              return (
+                <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={`${label || "select"}-${option.value}`} onClick={() => choose(option.value)}>
+                  <span><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
+                  {active ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : null}
+                </button>
+              );
+            })}
+            {!filtered.length ? <div className="next-proposals-modern-select__empty">No matching options.</div> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function KitDownloadModal({ columns, onToggleColumn, onDownload, onClose }) {
+  return (
+    <Modal
+      title="Download kit"
+      subtitle="Choose the columns you need, then select the file type."
+      icon={<FeatherIcon name="download" size={26} />}
+      className="proposal-download-modal"
+      onClose={onClose}
+    >
+      <div className="proposal-download-modal__body">
+        <div className="proposal-download-modal__columns">
+          <span>Columns</span>
+          <div>
+            {EXPORT_COLUMNS.map(([key, label]) => (
+              <label key={key}>
+                <input type="checkbox" checked={columns.includes(key)} onChange={() => onToggleColumn(key)} />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="proposal-download-modal__actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("pdf")}>
+            <FeatherIcon name="file" /><span>Download PDF</span>
+          </button>
+          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("excel")}>
+            <FeatherIcon name="grid" /><span>Download Excel</span>
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
+  const [previews, setPreviews] = useState([]);
+  useEffect(() => {
+    const next = (Array.isArray(files) ? files : []).map((file, index) => ({ file, index, url: URL.createObjectURL(file) }));
+    setPreviews(next);
+    return () => next.forEach((item) => URL.revokeObjectURL(item.url));
+  }, [files]);
+
+  if (!previews.length) return null;
+  return (
+    <div className="proposal-receipt-preview-grid" aria-label="Selected receipt images">
+      {previews.map((item) => (
+        <article className="proposal-receipt-preview-card" key={`${item.file.name}-${item.file.size}-${item.file.lastModified}-${item.index}`}>
+          <div className="proposal-receipt-preview-card__image">
+            <img src={item.url} alt={item.file.name || `Receipt image ${item.index + 1}`} />
+            <span>{item.index + 1}</span>
+          </div>
+          <div className="proposal-receipt-preview-card__copy">
+            <strong title={item.file.name}>{item.file.name || `Receipt ${item.index + 1}`}</strong>
+            <small>{Math.max(1, Math.round(Number(item.file.size || 0) / 1024))} KB</small>
+          </div>
+          <button type="button" onClick={() => onRemove(item.index)} disabled={busy} aria-label={`Remove ${item.file.name || `receipt ${item.index + 1}`}`}>×</button>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function SendKitToStockModal({ kit, members, busy, onClose, onSubmit }) {
+  const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
+  const [memberId, setMemberId] = useState("");
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const [files, setFiles] = useState([]);
+  const [error, setError] = useState("");
+
+  const chooseFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+    const invalid = incoming.find((file) => !/^image\//i.test(file.type || ""));
+    if (invalid) return setError("Receipt uploads must be images.");
+    const tooLarge = incoming.find((file) => Number(file.size || 0) > RECEIPT_SOURCE_MAX_BYTES);
+    if (tooLarge) return setError(`${tooLarge.name} is larger than 8 MB.`);
+    setFiles((current) => {
+      const combined = [...current, ...incoming];
+      const seen = new Set();
+      return combined.filter((file) => {
+        const key = `${file.name}:${file.size}:${file.lastModified}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 12);
+    });
+    setError("");
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!memberId) return setError("Choose the user who will receive the stock.");
+    if (!text(receiptNumber)) return setError("Enter the receipt number.");
+    if (!files.length) return setError("Upload at least one receipt image.");
+    setError("");
+    try {
+      await onSubmit({ teamMemberId: memberId, receiptNumber: text(receiptNumber), files });
+    } catch (submitError) {
+      setError(submitError?.message || "The kit could not be sent to Stocktaking.");
+    }
+  };
+
+  const close = () => {
+    if (!busy) onClose();
+  };
+
+  return (
+    <Modal
+      title="Send to stock"
+      subtitle={`Add “${kit?.name || "Kit"}” directly to a user's Stocktaking column.`}
+      icon={<FeatherIcon name="archive" size={26} />}
+      onClose={close}
+    >
+      <form className="proposal-send-stock-form proposal-send-stock-modal-form" onSubmit={submit}>
+        <ModernSelect
+          label="Stock user *"
+          value={memberId}
+          placeholder={stockMembers.length ? "Select stock user" : "No Users Center users available"}
+          searchable
+          options={stockMembers.map((member) => ({
+            value: member.id,
+            label: member.name,
+            meta: text(member.stocktakingColumn)
+              ? `Stock column: ${member.stocktakingColumn}`
+              : `Will grant Stocktaking access and create ${member.name} Stock`,
+          }))}
+          onChange={(value) => { setMemberId(value); setError(""); }}
+        />
+
+        <label className="proposal-send-stock-text-field">
+          <span>Receipt number *</span>
+          <input
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            value={receiptNumber}
+            onChange={(event) => { setReceiptNumber(event.target.value); setError(""); }}
+            placeholder="Enter receipt number"
+            disabled={busy}
+          />
+        </label>
+
+        <label className="proposal-receipt-upload-field">
+          <span>Receipt images *</span>
+          <div className={`proposal-receipt-upload-box ${files.length ? "has-files" : ""}`}>
+            <FeatherIcon name="file" size={22} />
+            <div><strong>{files.length ? `${files.length} receipt image${files.length === 1 ? "" : "s"} selected` : "Upload receipt images"}</strong><small>JPG, PNG or WEBP · up to 8 MB each · optimized before upload</small></div>
+            <b>{busy ? "Uploading…" : "Choose images"}</b>
+            <input type="file" accept="image/*" multiple disabled={busy} onChange={(event) => { chooseFiles(event.target.files); event.target.value = ""; }} />
+          </div>
+          <ReceiptImagePreviewGrid files={files} busy={busy} onRemove={(index) => setFiles((current) => current.filter((_, idx) => idx !== index))} />
+        </label>
+
+        <div className="proposal-send-stock-note proposal-send-stock-note--access">
+          <FeatherIcon name="archive" size={17} />
+          <span>If the selected user does not have Stocktaking access, Confirm will grant it automatically. Their existing Users Center Stocktaking column will be reused; if none exists, a <strong>Username + Stock</strong> column will be created.</span>
+        </div>
+        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Rows will be added to the selected user's Stocktaking column and Tag will use this kit name.</span></div>
+        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
+        <div className="proposal-send-stock-actions products-modal__actions">
+          <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !stockMembers.length}><FeatherIcon name="archive" /><span>{busy ? "Sending…" : "Confirm"}</span></button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -514,6 +892,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [activeFolder, setActiveFolder] = useState(null);
   const [activeDetail, setActiveDetail] = useState(null);
   const [search, setSearch] = useState("");
+  const [members, setMembers] = useState([]);
+  const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
+  const [groupBy, setGroupBy] = useState("component-tag");
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [sendToStockOpen, setSendToStockOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const { saveProgress, startSaveProgress, updateSaveProgress, finishSaveProgress } = useSaveProgress();
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
@@ -560,11 +944,15 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const close = (event) => {
       if (!event.target.closest(".products-proposal-folder")) setFolderMenu("");
       if (pickerRef.current && !pickerRef.current.contains(event.target)) setProductPickerOpen(false);
+      if (!event.target.closest(".proposal-download-menu-wrap") && !event.target.closest(".proposal-download-modal")) setDownloadMenuOpen(false);
+      if (!event.target.closest(".proposal-sort-menu-wrap")) setSortMenuOpen(false);
     };
     const onKey = (event) => {
       if (event.key !== "Escape") return;
       setFolderMenu("");
       setProductPickerOpen(false);
+      setDownloadMenuOpen(false);
+      setSortMenuOpen(false);
     };
     document.addEventListener("click", close);
     document.addEventListener("keydown", onKey);
@@ -629,6 +1017,33 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     return enrichedRows.filter((row) => lower(row.name).includes(needle));
   }, [activeDetail, enrichedRows, search]);
 
+  const componentGroupedVisibleRows = useMemo(() => {
+    const groups = new Map();
+    for (const row of visibleEnrichedRows) {
+      const label = text(row.tag) || "Uncategorized";
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(row);
+    }
+    return [...groups.entries()]
+      .map(([label, rows]) => ({ label, rows: rows.slice().sort((a, b) => a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [visibleEnrichedRows]);
+
+  const kitGroupedVisibleRows = useMemo(() => {
+    const kit = activeDetail?.kit;
+    if (!kit) return [];
+    const folder = folders.find((entry) => entry.id === kit.folderId);
+    return [{
+      id: folder?.id || "",
+      label: folder?.name || "Unfiled Kits",
+      kits: [{
+        id: kit.id,
+        label: kit.name || "Kit",
+        rows: visibleEnrichedRows.slice().sort((a, b) => a.name.localeCompare(b.name)),
+      }],
+    }];
+  }, [activeDetail, folders, visibleEnrichedRows]);
+
   const detailTotals = useMemo(() => enrichedRows.reduce((acc, row) => {
     acc.items += 1;
     acc.quantity += row.quantity;
@@ -677,7 +1092,74 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const backToKits = () => {
     setActiveDetail(null);
     setSearch("");
+    setDownloadMenuOpen(false);
+    setSortMenuOpen(false);
+    setSendToStockOpen(false);
     resetDetailEditor();
+  };
+
+  const toggleExportColumn = (key) => {
+    setExportColumns((current) => current.includes(key)
+      ? (current.length === 1 ? current : current.filter((item) => item !== key))
+      : [...current, key]);
+  };
+
+  const chooseGroupBy = (mode) => {
+    setGroupBy(mode === "kit-tag" ? "kit-tag" : "component-tag");
+    setSortMenuOpen(false);
+  };
+
+  const downloadKit = (type) => {
+    const kit = activeDetail?.kit;
+    if (!kit?.id) return;
+    const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
+    const params = new URLSearchParams({ columns, groupBy });
+    openDownload(`/api/products/kits/${encodeURIComponent(kit.id)}/${type}?${params.toString()}`);
+    setDownloadMenuOpen(false);
+  };
+
+  const openSendToStock = () => {
+    setDownloadMenuOpen(false);
+    setSortMenuOpen(false);
+    setSendToStockOpen(true);
+    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
+      .then((body) => setMembers(normalizeUsersCenterMembers(body)))
+      .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
+  };
+
+  const sendKitToStock = async ({ teamMemberId, receiptNumber, files = [] }) => {
+    const kit = activeDetail?.kit;
+    if (!kit?.id) throw new Error("Kit ID is missing.");
+    setBusy(true);
+    startActionLoading({ title: "Sending to stock", message: "Uploading receipt images and adding Stocktaking rows…" });
+    try {
+      const receipts = [];
+      for (const file of files) {
+        const prepared = await prepareReceiptImage(file);
+        const uploaded = await requestJson("/next/api/products/proposals/receipt-upload", {
+          method: "POST",
+          body: JSON.stringify({ dataUrl: prepared.dataUrl, filename: prepared.name || file.name || "receipt.jpg" }),
+        });
+        if (uploaded?.url) receipts.push({ url: uploaded.url, name: uploaded.name || prepared.name || file.name || "Receipt" });
+      }
+      if (!receipts.length) throw new Error("No receipt images were uploaded.");
+
+      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/send-to-stock`, {
+        method: "POST",
+        body: JSON.stringify({ teamMemberId, receiptNumber: text(receiptNumber), receipts }),
+      });
+      const count = Number(body?.count || 0);
+      const memberName = text(body?.member?.name) || "the selected user";
+      await finishActionLoading("done", `${count} Stocktaking row${count === 1 ? "" : "s"} added to ${memberName}.`);
+      setSendToStockOpen(false);
+      notify(`Kit sent to ${memberName} Stocktaking under Main stock.`);
+      return body;
+    } catch (error) {
+      await finishActionLoading("failed", error?.message || "The kit could not be sent to Stocktaking.");
+      throw error;
+    } finally {
+      setBusy(false);
+    }
   };
 
   const loadKit = async (kitId, options = {}) => {
@@ -1225,6 +1707,61 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     );
   };
 
+  const renderDetailComponentCard = (row) => (
+    <article className={`kit-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+      <header className="kit-component-card__head">
+        <div className="kit-component-card__title">
+          <span>Component</span>
+          <h4>{row.name}</h4>
+        </div>
+      </header>
+
+      <div className="kit-component-card__metrics">
+        <div className="kit-component-card__metric kit-component-card__metric--qty">
+          <span>Qty</span>
+          {detailEdit ? (
+            <input
+              className="proposal-item-qty kit-component-card__qty-input"
+              type="number"
+              min="1"
+              step="1"
+              defaultValue={row.quantity}
+              key={`${row.id}-${row.quantity}`}
+              onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined}
+              onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined}
+              aria-label={`Quantity for ${row.name}`}
+            />
+          ) : <strong>{formatNumber(row.quantity)}</strong>}
+        </div>
+        <div className="kit-component-card__metric">
+          <span>Unit price</span>
+          <strong>{formatMoney(row.unitPrice)}</strong>
+        </div>
+        <div className="kit-component-card__metric kit-component-card__metric--total">
+          <span>Total price</span>
+          <strong>{formatMoney(row.totalPrice)}</strong>
+        </div>
+      </div>
+
+      <footer className="kit-component-card__actions">
+        {row.product?.url ? (
+          <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
+            <FeatherIcon name="externalLink" /><span>Open link</span>
+          </a>
+        ) : (
+          <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
+            <FeatherIcon name="minus" /><span>No link</span>
+          </span>
+        )}
+        {detailEdit ? (
+          <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
+            <FeatherIcon name="trash" /><span>Remove</span>
+          </button>
+        ) : null}
+      </footer>
+    </article>
+  );
+
   const renderLibraryFolder = (folder) => {
     const menuKey = `folder:${folder.id}`;
     const menuOpen = folderMenu === menuKey;
@@ -1278,14 +1815,44 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                       </div>
                     </header>
                   ) : (
-                    <header className="products-proposal-detail__head">
+                    <header className="products-proposal-detail__head proposal-detail-head--compact">
                       <button type="button" className="products-back-btn" onClick={backToKits} aria-label="Back to kits"><FeatherIcon name="arrowLeft" /></button>
-                      <div>
-                        <h2>{kit?.name || "Kit"}</h2>
-                        <p>{formatNumber(enrichedRows.length)} saved component{enrichedRows.length === 1 ? "" : "s"}{detailEdit ? " • Edit mode" : " • View only"}</p>
+                      <div className="proposal-detail-actions proposal-detail-actions--classic">
+                        <div className="proposal-download-menu-wrap">
+                          <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => { setDownloadMenuOpen(true); setSortMenuOpen(false); }}>
+                            <FeatherIcon name="download" /><span>Download</span><FeatherIcon name="chevronDown" size={15} />
+                          </button>
+                        </div>
+                        <div className="proposal-sort-menu-wrap">
+                          <button type="button" className="products-btn proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
+                            <FeatherIcon name="sort" /><span>Sort</span><FeatherIcon name="chevronDown" size={15} />
+                          </button>
+                          {sortMenuOpen ? (
+                            <div className="proposal-sort-menu" role="menu">
+                              <button type="button" className={groupBy === "component-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("component-tag")}>
+                                <span className="proposal-sort-menu__check">{groupBy === "component-tag" ? "✓" : ""}</span>
+                                <span><strong>By components tag</strong><small>Group by the product component tag.</small></span>
+                              </button>
+                              <button type="button" className={groupBy === "kit-tag" ? "is-active" : ""} onClick={() => chooseGroupBy("kit-tag")}>
+                                <span className="proposal-sort-menu__check">{groupBy === "kit-tag" ? "✓" : ""}</span>
+                                <span><strong>By kits tag</strong><small>Folder → kit → components.</small></span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                        <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={openSendToStock} disabled={!enrichedRows.length}>
+                          <FeatherIcon name="archive" /><span>Send to stock</span>
+                        </button>
                       </div>
                     </header>
                   )}
+
+                  {!createMode && !detailEdit ? (
+                    <div className="proposal-classic-detail-title">
+                      <span className="proposal-create-title-pill"><span>{kit?.name || "Kit"}</span></span>
+                      <p>{formatNumber(enrichedRows.length)} saved component{enrichedRows.length === 1 ? "" : "s"} • View only</p>
+                    </div>
+                  ) : null}
 
                   {detailEdit ? (
                     <>
@@ -1371,61 +1938,42 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                       <span>{formatNumber(enrichedRows.length)} item{enrichedRows.length === 1 ? "" : "s"}</span>
                     </div>
                     <div className="products-proposal-table-wrap kit-components-wrap">
-                      <div className="kit-components-grid">
-                        {visibleEnrichedRows.map((row) => (
-                          <article className={`kit-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
-                            <header className="kit-component-card__head">
-                              <div className="kit-component-card__title">
-                                <span>Component</span>
-                                <h4>{row.name}</h4>
+                      <div className="proposal-components-groups kit-components-groups">
+                        {groupBy === "kit-tag" ? (
+                          kitGroupedVisibleRows.map((folder) => (
+                            <section className="proposal-kit-folder-group" key={`${folder.id || "unfiled"}-${folder.label}`}>
+                              <div className="proposal-kit-folder-group__head">
+                                <div><span>Kit folder</span><strong>{folder.label}</strong></div>
+                                <em>{folder.kits.length} kit{folder.kits.length === 1 ? "" : "s"}</em>
                               </div>
-                            </header>
-
-                            <div className="kit-component-card__metrics">
-                              <div className="kit-component-card__metric kit-component-card__metric--qty">
-                                <span>Qty</span>
-                                {detailEdit ? (
-                                  <input
-                                    className="proposal-item-qty kit-component-card__qty-input"
-                                    type="number"
-                                    min="1"
-                                    step="1"
-                                    defaultValue={row.quantity}
-                                    key={`${row.id}-${row.quantity}`}
-                                    onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined}
-                                    onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined}
-                                    aria-label={`Quantity for ${row.name}`}
-                                  />
-                                ) : <strong>{formatNumber(row.quantity)}</strong>}
+                              <div className="proposal-kit-folder-group__body">
+                                {folder.kits.map((groupedKit) => (
+                                  <div className="proposal-kit-group" key={`${groupedKit.id || "kit"}-${groupedKit.label}`}>
+                                    <div className="proposal-kit-group__head">
+                                      <div><span>Kit</span><strong>{groupedKit.label}</strong></div>
+                                      <em>{groupedKit.rows.length} item{groupedKit.rows.length === 1 ? "" : "s"}</em>
+                                    </div>
+                                    <div className="kit-components-grid">
+                                      {groupedKit.rows.map(renderDetailComponentCard)}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <div className="kit-component-card__metric">
-                                <span>Unit price</span>
-                                <strong>{formatMoney(row.unitPrice)}</strong>
+                            </section>
+                          ))
+                        ) : (
+                          componentGroupedVisibleRows.map((group) => (
+                            <section className="proposal-component-group" key={group.label}>
+                              <div className="proposal-component-group__head">
+                                <div><span>Component tag</span><strong>{group.label}</strong></div>
+                                <em>{group.rows.length} item{group.rows.length === 1 ? "" : "s"}</em>
                               </div>
-                              <div className="kit-component-card__metric kit-component-card__metric--total">
-                                <span>Total price</span>
-                                <strong>{formatMoney(row.totalPrice)}</strong>
+                              <div className="kit-components-grid">
+                                {group.rows.map(renderDetailComponentCard)}
                               </div>
-                            </div>
-
-                            <footer className="kit-component-card__actions">
-                              {row.product?.url ? (
-                                <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
-                                  <FeatherIcon name="externalLink" /><span>Open link</span>
-                                </a>
-                              ) : (
-                                <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
-                                  <FeatherIcon name="minus" /><span>No link</span>
-                                </span>
-                              )}
-                              {detailEdit ? (
-                                <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
-                                  <FeatherIcon name="trash" /><span>Remove</span>
-                                </button>
-                              ) : null}
-                            </footer>
-                          </article>
-                        ))}
+                            </section>
+                          ))
+                        )}
                         {!visibleEnrichedRows.length ? <div className="products-table-empty kit-components-empty">{enrichedRows.length ? "No components match your search." : <>No components yet. {detailEdit ? "Add one component above." : "Open Edit from the folder menu to add components."}</>}</div> : null}
                       </div>
                     </div>
@@ -1450,6 +1998,23 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
           </section>
         </section>
 
+        {downloadMenuOpen && kit ? (
+          <KitDownloadModal
+            columns={exportColumns}
+            onToggleColumn={toggleExportColumn}
+            onDownload={downloadKit}
+            onClose={() => setDownloadMenuOpen(false)}
+          />
+        ) : null}
+        {sendToStockOpen && kit ? (
+          <SendKitToStockModal
+            kit={kit}
+            members={members}
+            busy={busy}
+            onClose={() => setSendToStockOpen(false)}
+            onSubmit={sendKitToStock}
+          />
+        ) : null}
         {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.kit?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
         {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
       </main>
