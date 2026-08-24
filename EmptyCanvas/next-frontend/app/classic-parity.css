@@ -12414,3 +12414,370 @@ body.stocktaking-page .stocktaking-tag-pill{
   white-space:nowrap;
   vertical-align:middle;
 }
+
+/* ===== 2026-08-24 · Stocktaking grouping, receipt sort and edit parity ===== */
+body.stocktaking-page .stocktaking-sort-menu-wrap{
+  position:relative;
+  display:inline-flex;
+}
+body.stocktaking-page .stocktaking-sort-btn{
+  min-height:42px;
+  height:42px;
+  padding:0 14px;
+  border:1px solid #07101f;
+  border-radius:13px;
+  background:#07101f;
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  font-size:.75rem;
+  font-weight:950;
+  box-shadow:0 10px 22px rgba(15,23,42,.13);
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-sort-btn svg{
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+}
+body.stocktaking-page .stocktaking-sort-btn svg:last-child{
+  width:14px;
+  height:14px;
+  flex-basis:14px;
+}
+body.stocktaking-page .stocktaking-sort-btn:hover:not(:disabled){transform:translateY(-1px);}
+body.stocktaking-page .stocktaking-sort-btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none;}
+body.stocktaking-page .stocktaking-sort-menu{
+  position:absolute;
+  top:calc(100% + 9px);
+  right:0;
+  z-index:45;
+  width:285px;
+  padding:7px;
+  border:1px solid #e5e7eb;
+  border-radius:15px;
+  background:#fff;
+  box-shadow:0 22px 48px rgba(15,23,42,.16);
+}
+body.stocktaking-page .stocktaking-sort-menu > button{
+  width:100%;
+  min-height:58px;
+  padding:9px 10px;
+  border:0;
+  border-radius:11px;
+  background:transparent;
+  color:#111827;
+  display:grid;
+  grid-template-columns:22px minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  text-align:left;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-sort-menu > button:hover,
+body.stocktaking-page .stocktaking-sort-menu > button.is-active{background:#f8fafc;}
+body.stocktaking-page .stocktaking-sort-menu__check{
+  width:20px;
+  height:20px;
+  border:1px solid #dbe2ea;
+  border-radius:7px;
+  display:grid;
+  place-items:center;
+  color:#f97316;
+  font-size:.72rem;
+  font-weight:950;
+}
+body.stocktaking-page .stocktaking-sort-menu > button.is-active .stocktaking-sort-menu__check{
+  border-color:#fed7aa;
+  background:#fff7ed;
+}
+body.stocktaking-page .stocktaking-sort-menu > button > span:last-child{display:grid;gap:2px;min-width:0;}
+body.stocktaking-page .stocktaking-sort-menu strong{font-size:.72rem;font-weight:950;}
+body.stocktaking-page .stocktaking-sort-menu small{color:#98a2b3;font-size:.62rem;font-weight:750;}
+
+body.stocktaking-page .stocktaking-data-table{min-width:790px;}
+body.stocktaking-page .stocktaking-data-component{width:auto;min-width:280px;}
+body.stocktaking-page .stocktaking-data-qty{width:110px;}
+body.stocktaking-page .stocktaking-data-receipt{width:170px;}
+body.stocktaking-page .stocktaking-data-photos{width:190px;}
+body.stocktaking-page .stocktaking-tag-group-row > td,
+body.stocktaking-page .stocktaking-receipt-group-row > td{
+  padding:8px 10px !important;
+  border-bottom:0 !important;
+  background:#fff !important;
+}
+body.stocktaking-page .stocktaking-tag-group-row:hover > td,
+body.stocktaking-page .stocktaking-receipt-group-row:hover > td{background:#fff !important;}
+body.stocktaking-page .stocktaking-tag-group-head{
+  min-height:42px;
+  padding:0 13px;
+  border:1px solid;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+body.stocktaking-page .stocktaking-tag-group-head > span{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+body.stocktaking-page .stocktaking-tag-group-head small{
+  font-size:.57rem;
+  line-height:1;
+  font-weight:950;
+  letter-spacing:.08em;
+  opacity:.7;
+}
+body.stocktaking-page .stocktaking-tag-group-head strong{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.78rem;
+  font-weight:950;
+}
+body.stocktaking-page .stocktaking-tag-group-head em{
+  flex:0 0 auto;
+  font-size:.62rem;
+  font-style:normal;
+  font-weight:900;
+  opacity:.8;
+}
+body.stocktaking-page .stocktaking-receipt-group-row > td{padding-top:14px !important;}
+body.stocktaking-page .stocktaking-receipt-group-head{
+  min-height:46px;
+  padding:0 14px;
+  border:1px solid #dfe5ec;
+  border-radius:13px;
+  background:#07101f;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  box-shadow:0 8px 20px rgba(15,23,42,.09);
+}
+body.stocktaking-page .stocktaking-receipt-group-head > span{display:flex;align-items:center;gap:10px;min-width:0;}
+body.stocktaking-page .stocktaking-receipt-group-head small{
+  color:#cbd5e1;
+  font-size:.57rem;
+  font-weight:950;
+  letter-spacing:.08em;
+}
+body.stocktaking-page .stocktaking-receipt-group-head strong{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.8rem;
+  font-weight:950;
+}
+body.stocktaking-page .stocktaking-receipt-group-head em{
+  flex:0 0 auto;
+  color:#cbd5e1;
+  font-size:.62rem;
+  font-style:normal;
+  font-weight:900;
+}
+body.stocktaking-page .stocktaking-receipt-group-row + .stocktaking-tag-group-row > td{padding-top:2px !important;}
+
+body.stocktaking-page .stocktaking-edit-qty-input{
+  width:78px;
+  height:38px;
+  padding:0 8px;
+  border:1px solid #dbe2ea;
+  border-radius:10px;
+  background:#fff;
+  color:#111827;
+  text-align:center;
+  font:inherit;
+  font-weight:950;
+  outline:none;
+  box-sizing:border-box;
+}
+body.stocktaking-page .stocktaking-edit-qty-input:focus{
+  border-color:#f59e0b;
+  box-shadow:0 0 0 3px rgba(245,158,11,.13);
+}
+body.stocktaking-page .stocktaking-data-table tr.is-editing td{background:#fffcf8;}
+body.stocktaking-page .stocktaking-data-table tr.is-editing:hover td{background:#fff8ef;}
+body.stocktaking-page .stocktaking-data-inventory input:disabled{opacity:.5;cursor:not-allowed;background:#f8fafc;}
+body.stocktaking-page .stocktaking-edit-inline-error{
+  margin-bottom:10px;
+  padding:10px 12px;
+  border:1px solid #fecaca;
+  border-radius:11px;
+  background:#fef2f2;
+  color:#b91c1c;
+  font-size:.7rem;
+  font-weight:850;
+}
+body.stocktaking-page .stocktaking-edit-footer{
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid #edf0f3;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+}
+body.stocktaking-page .stocktaking-edit-footer--view .stocktaking-edit-action-btn{
+  min-height:44px;
+  height:44px;
+  padding:0 17px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:14px;
+  background:#fff;
+  color:#111827;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-size:.78rem;
+  font-weight:950;
+  line-height:1;
+  box-shadow:0 10px 24px rgba(15,23,42,.08);
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-edit-footer--view .stocktaking-edit-action-btn svg{width:17px;height:17px;}
+body.stocktaking-page .stocktaking-edit-footer--view .stocktaking-edit-action-btn:hover:not(:disabled){transform:translateY(-1px);}
+body.stocktaking-page .stocktaking-edit-footer--view .stocktaking-edit-action-btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none;}
+body.stocktaking-page .stocktaking-edit-footer.direct-create-save-footer{
+  position:static !important;
+  width:auto !important;
+  margin:12px 0 0 !important;
+  padding:12px 0 0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+body.stocktaking-page .stocktaking-edit-footer .products-btn{
+  min-height:44px;
+  height:44px;
+  padding:0 17px;
+  border-radius:14px;
+  font-size:.78rem;
+  font-weight:950;
+}
+
+body.stocktaking-page .stocktaking-edit-password-modal{
+  position:fixed;
+  inset:0;
+  z-index:1600;
+  display:grid;
+  place-items:center;
+  padding:18px;
+}
+body.stocktaking-page .stocktaking-edit-password-modal__backdrop{
+  position:absolute;
+  inset:0;
+  border:0;
+  background:rgba(15,23,42,.48);
+  backdrop-filter:blur(5px);
+}
+body.stocktaking-page .stocktaking-edit-password-modal__card{
+  position:relative;
+  z-index:1;
+  width:min(430px,calc(100vw - 30px));
+  padding:22px;
+  border:1px solid rgba(255,255,255,.75);
+  border-radius:24px;
+  background:#fff;
+  box-shadow:0 28px 70px rgba(15,23,42,.24);
+}
+body.stocktaking-page .stocktaking-edit-password-modal__close{
+  position:absolute;
+  top:15px;
+  right:15px;
+  width:36px;
+  height:36px;
+  border:1px solid #e5e7eb;
+  border-radius:50%;
+  background:#f8fafc;
+  color:#111827;
+  display:grid;
+  place-items:center;
+  font-size:20px;
+  font-weight:900;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-edit-password-modal__card header{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding-right:42px;
+}
+body.stocktaking-page .stocktaking-edit-password-modal__icon{
+  width:46px;
+  height:46px;
+  flex:0 0 46px;
+  border:1px solid #fed7aa;
+  border-radius:13px;
+  background:#fff7ed;
+  color:#c2410c;
+  display:grid;
+  place-items:center;
+}
+body.stocktaking-page .stocktaking-edit-password-modal__icon svg{width:19px;height:19px;}
+body.stocktaking-page .stocktaking-edit-password-modal__card header small{color:#c2410c;font-size:.56rem;font-weight:950;letter-spacing:.08em;}
+body.stocktaking-page .stocktaking-edit-password-modal__card header h3{margin:2px 0 3px;color:#111827;font-size:1rem;font-weight:950;}
+body.stocktaking-page .stocktaking-edit-password-modal__card header p{margin:0;color:#667085;font-size:.68rem;line-height:1.5;font-weight:700;}
+body.stocktaking-page .stocktaking-edit-password-field{display:grid;gap:7px;margin-top:18px;}
+body.stocktaking-page .stocktaking-edit-password-field span{color:#344054;font-size:.69rem;font-weight:950;}
+body.stocktaking-page .stocktaking-edit-password-field input{
+  width:100%;
+  height:46px;
+  padding:0 13px;
+  border:1px solid #dfe3e8;
+  border-radius:12px;
+  background:#fff;
+  color:#111827;
+  font:inherit;
+  font-weight:850;
+  outline:none;
+  box-sizing:border-box;
+}
+body.stocktaking-page .stocktaking-edit-password-field input:focus{border-color:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.12);}
+body.stocktaking-page .stocktaking-edit-password-modal__error{
+  margin-top:10px;
+  padding:9px 11px;
+  border:1px solid #fecaca;
+  border-radius:10px;
+  background:#fef2f2;
+  color:#b91c1c;
+  font-size:.68rem;
+  font-weight:850;
+}
+body.stocktaking-page .stocktaking-edit-password-modal__card footer{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid #f1f5f9;
+}
+body.stocktaking-page .stocktaking-edit-password-modal__card footer .btn{
+  min-height:42px;
+  padding:0 15px;
+  border-radius:12px;
+}
+body.stocktaking-page .stocktaking-edit-password-confirm{
+  border:0;
+  background:#07101f;
+  color:#fff;
+  font-weight:950;
+}
+
+@media(max-width:760px){
+  body.stocktaking-page .stocktaking-folder-actions{grid-template-columns:repeat(3,minmax(0,1fr));}
+  body.stocktaking-page .stocktaking-sort-menu{position:fixed;top:50%;left:50%;right:auto;width:min(320px,calc(100vw - 30px));transform:translate(-50%,-50%);}
+  body.stocktaking-page .stocktaking-edit-footer{display:grid;grid-template-columns:1fr 1fr;}
+  body.stocktaking-page .stocktaking-edit-footer--view{display:flex;justify-content:flex-end;}
+  body.stocktaking-page .stocktaking-edit-footer .products-btn{width:100%;}
+  body.stocktaking-page .stocktaking-edit-password-modal{align-items:end;padding:0;}
+  body.stocktaking-page .stocktaking-edit-password-modal__card{width:100%;border-radius:24px 24px 0 0;padding:18px;}
+  body.stocktaking-page .stocktaking-edit-password-modal__card footer{display:grid;grid-template-columns:1fr 1fr;}
+}

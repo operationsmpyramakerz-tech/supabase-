@@ -30811,6 +30811,107 @@ async function _sbEnsureStocktakingInventoryColumn(label = "", knownKeys = []) {
   return String(created?.column || desired).trim();
 }
 
+async function _sbStocktakingEditAuthorization(req, requestedColumn = "", rows = [], adminPassword = "") {
+  const accessLevel = _sessionPageAccessLevel(req, "Stocktaking");
+  if (![PAGE_ACCESS_LEVELS.EDIT, PAGE_ACCESS_LEVELS.ADMIN].includes(accessLevel)) {
+    return { ok: false, status: 403, error: "Your Stocktaking access is view only." };
+  }
+
+  const quantityColumn = _sbRequestedStocktakingColumn({ query: { column: requestedColumn } }, rows);
+  const owner = await _sbStocktakingOwnerForColumn(quantityColumn, rows);
+  const currentId = String(req?.session?.userSupabaseId || req?.session?.userNotionId || "").trim();
+  const currentName = String(req?.session?.username || "").trim();
+  const sameOwner = Boolean(
+    (owner?.id && currentId && String(owner.id) === currentId) ||
+    (owner?.name && currentName && _sbCanon(owner.name) === _sbCanon(currentName))
+  );
+
+  if (sameOwner || accessLevel === PAGE_ACCESS_LEVELS.ADMIN) {
+    return { ok: true, quantityColumn, owner, accessLevel };
+  }
+
+  const password = String(adminPassword || "").trim();
+  if (!password) {
+    return {
+      ok: false,
+      status: 401,
+      requiresPassword: true,
+      error: `Admin password is required to edit ${owner?.name || "this Stocktaking folder"}.`,
+      quantityColumn,
+      owner,
+    };
+  }
+
+  const verified = await _verifyPageAdminPassword(req, password, "Stocktaking");
+  if (!verified) {
+    return { ok: false, status: 401, requiresPassword: true, error: "Invalid Admin password.", quantityColumn, owner };
+  }
+
+  return { ok: true, quantityColumn, owner, accessLevel };
+}
+
+app.post(
+  "/api/stock/edit-access",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      const column = String(req?.body?.column || req?.body?.stockColumn || "").trim();
+      if (!column) return res.status(400).json({ ok: false, error: "Choose a Stocktaking folder first." });
+      const rows = await _sbStocktakingRows();
+      const auth = await _sbStocktakingEditAuthorization(req, column, rows, req?.body?.adminPassword || req?.body?.password);
+      if (!auth.ok) return res.status(auth.status || 403).json({ ok: false, error: auth.error, requiresPassword: auth.requiresPassword === true });
+      return res.json({ ok: true, column: auth.quantityColumn, owner: auth.owner || null });
+    } catch (error) {
+      console.error("POST /api/stock/edit-access error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to verify Stocktaking edit access." });
+    }
+  },
+);
+
+app.patch(
+  "/api/stock",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      const column = String(req?.body?.column || req?.body?.stockColumn || "").trim();
+      const updates = Array.isArray(req?.body?.updates) ? req.body.updates : [];
+      if (!column) return res.status(400).json({ ok: false, error: "Choose a Stocktaking folder first." });
+      if (!updates.length) return res.json({ ok: true, updatedCount: 0 });
+      if (updates.length > 500) return res.status(400).json({ ok: false, error: "Too many Stocktaking rows were submitted at once." });
+
+      const rows = await _sbStocktakingRows();
+      const auth = await _sbStocktakingEditAuthorization(req, column, rows, req?.body?.adminPassword || req?.body?.password);
+      if (!auth.ok) return res.status(auth.status || 403).json({ ok: false, error: auth.error, requiresPassword: auth.requiresPassword === true });
+
+      const rowIds = new Set((rows || []).map((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim()).filter(Boolean));
+      const normalized = [];
+      for (const update of updates) {
+        const id = String(update?.id || "").trim();
+        const quantity = Number(update?.quantity);
+        if (!id || !rowIds.has(id)) return res.status(404).json({ ok: false, error: "One of the Stocktaking rows no longer exists. Refresh and try again." });
+        if (!Number.isFinite(quantity)) return res.status(400).json({ ok: false, error: "Stock quantities must be valid numbers." });
+        normalized.push({ id, quantity });
+      }
+
+      for (const update of normalized) {
+        await supabaseDb.updateById(_sbStocktakingTable(), update.id, { [auth.quantityColumn]: update.quantity });
+      }
+
+      await cacheDel(`cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${auth.quantityColumn}`)}:v4`).catch(() => {});
+      return res.json({ ok: true, source: "supabase", column: auth.quantityColumn, updatedCount: normalized.length });
+    } catch (error) {
+      console.error("PATCH /api/stock error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save Stocktaking changes." });
+    }
+  },
+);
+
 app.post(
   "/api/stock/inventory/start",
   requireAuth,
