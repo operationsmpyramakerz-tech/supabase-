@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -621,6 +622,7 @@ function Progress({ stage }) {
 function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [sortMode, setSortMode] = useState("product-tag");
   const moreRef = useRef(null);
   const downloadRef = useRef(null);
 
@@ -652,6 +654,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   useEffect(() => {
     setMoreOpen(false);
     setDownloadOpen(false);
+    setSortMode("product-tag");
   }, [group?.key, tab]);
 
   if (!group) return null;
@@ -661,15 +664,13 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const delivered = group.stage === 4;
   const shipping = group.stage === 3;
 
-  // Match the Classic Operations Orders action rules: workflow actions are
-  // tab-specific, while Archive/UnArchive live in the overflow menu.
   const canReceive = tab === "approved" && group.stage === 2 && group.hasApproved && !maintenance;
   const canRejectComponents = tab === "approved" && group.stage === 2 && !maintenance;
   const canDeliver = tab === "received" && shipping;
   const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
   const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
   const showDownload = !(maintenance && tab === "approved");
-  const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
+  const groupedItems = groupOrderItems(group.items, sortMode);
 
   const menuAction = (action) => {
     setMoreOpen(false);
@@ -679,6 +680,46 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const exportAction = (kind) => {
     setDownloadOpen(false);
     onExport(kind, group, tab);
+  };
+
+  const renderItem = (item, index) => {
+    const state = itemStatus(item);
+    const base = baseQuantity(item);
+    const received = receivedQuantity(item);
+    const remaining = remainingQuantity(item);
+    const vars = STATUS_COLORS[state.className.replace(/^status-/, "")] || STATUS_COLORS["under-supervision"];
+    const safeUrl = text(item?.productUrl ?? item?.product_url);
+    const itemId = text(item?.id);
+    const itemName = text(item?.productName) || "Product";
+    const receivedWasEdited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited) || Math.abs(received) > 1e-9;
+    const showReceivedValue = tab === "received" || tab === "delivered" || tab === "archive";
+    const visibleQty = tab === "remaining"
+      ? remaining
+      : showReceivedValue && receivedWasEdited
+        ? received
+        : base;
+    const showReceivedDiff = (tab === "delivered" || tab === "archive") && receivedWasEdited && Math.abs(received - base) > 1e-9;
+    const qtyMarkup = showReceivedDiff
+      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
+      : <strong>{formatQuantity(visibleQty)}</strong>;
+    const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
+    return <div className="co-item" key={itemId || index}>
+      <div className="co-item-left">
+        <div className="co-item-title">
+          <div className="co-item-name">{itemName}</div>
+          {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
+        </div>
+        {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice ?? item?.unit_price ?? item?.price)} · Total: {formatMoney(displayTotal)}</div> : null}
+        {text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}
+        {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
+        {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
+      </div>
+      <div className="co-item-right">
+        <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
+        <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
+        {canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={() => onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName })}><ClassicOrderIcon name="x" /> Reject</button> : null}
+      </div>
+    </div>;
   };
 
   return (
@@ -723,6 +764,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
                 <button className="download-menu__item" role="menuitem" type="button" onClick={() => exportAction("excel")} disabled={busy}><span>Download Excel</span><ClassicOrderIcon name="grid" /></button>
               </div> : null}
             </div> : null}
+            <OrderSortButton value={sortMode} onChange={setSortMode} />
             {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", group)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("maintenance-log", group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
@@ -733,49 +775,13 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
 
           {group.receiptEntries.length ? <div className="next-classic-receipt-list"><div className="co-submodal-label">Receipt photos</div><div>{group.receiptEntries.map((entry, index) => <a className="ro-action-btn ro-action-btn--light" href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}><ClassicOrderIcon name="image" />{entry.name}</a>)}</div></div> : null}
 
-          <div className="co-modal-items">
-            {items.map((item, index) => {
-              const state = itemStatus(item);
-              const base = baseQuantity(item);
-              const received = receivedQuantity(item);
-              const remaining = remainingQuantity(item);
-              const vars = STATUS_COLORS[state.className.replace(/^status-/, "")] || STATUS_COLORS["under-supervision"];
-              const safeUrl = text(item?.productUrl ?? item?.product_url);
-              const itemId = text(item?.id);
-              const itemName = text(item?.productName) || "Product";
-              const receivedWasEdited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited) || Math.abs(received) > 1e-9;
-              const showReceivedValue = tab === "received" || tab === "delivered" || tab === "archive";
-              const visibleQty = tab === "remaining"
-                ? remaining
-                : showReceivedValue && receivedWasEdited
-                  ? received
-                  : base;
-              // Classic Operations Orders only uses the crossed-out comparison in
-              // the later completed workflow views. Approved/Rejected keep the
-              // approved base quantity clean, and Shipping shows the received qty.
-              const showReceivedDiff = (tab === "delivered" || tab === "archive") && receivedWasEdited && Math.abs(received - base) > 1e-9;
-              const qtyMarkup = showReceivedDiff
-                ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
-                : <strong>{formatQuantity(visibleQty)}</strong>;
-              const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
-              return <div className="co-item" key={itemId || index}>
-                <div className="co-item-left">
-                  <div className="co-item-title">
-                    <div className="co-item-name">{itemName}</div>
-                    {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
-                  </div>
-                  {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice ?? item?.unit_price ?? item?.price)} · Total: {formatMoney(displayTotal)}</div> : null}
-                  {text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}
-                  {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
-                  {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
-                </div>
-                <div className="co-item-right">
-                  <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
-                  <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
-                  {canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={() => onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName })}><ClassicOrderIcon name="x" /> Reject</button> : null}
-                </div>
-              </div>;
-            })}
+          <div className="co-modal-items order-component-groups">
+            {groupedItems.map((section) => (
+              <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
+                <OrderGroupHeader group={section} mode={sortMode} />
+                <div className="order-component-group__items">{section.items.map(renderItem)}</div>
+              </section>
+            ))}
           </div>
         </div>
       </div>

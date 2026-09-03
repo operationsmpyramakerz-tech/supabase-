@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -477,6 +478,7 @@ function ProgressTrack({ value }) {
 
 function OrderDetailsModal({ group, onClose, onAction, onReason }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sortMode, setSortMode] = useState("product-tag");
   const moreRef = useRef(null);
 
   useEffect(() => {
@@ -503,18 +505,43 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
     };
   }, [group, moreOpen, onClose]);
 
-  useEffect(() => setMoreOpen(false), [group?.key]);
+  useEffect(() => { setMoreOpen(false); setSortMode("product-tag"); }, [group?.key]);
   if (!group) return null;
 
   const archived = group.status === "archive";
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
-  const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
+  const groupedItems = groupOrderItems(group.items, sortMode);
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
 
   const menuAction = (action) => {
     setMoreOpen(false);
     onAction(action, group);
+  };
+
+  const renderItem = (item, index) => {
+    const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
+    const qtyEditedRaw = supervisorEditedQuantity(item);
+    const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
+    const qty = effectiveQuantity(item);
+    const itemStatus = statusTabForItem(item);
+    const itemReason = rejectedReason(item);
+    const safeUrl = text(item?.productUrl);
+    return (
+      <div className="co-item" key={text(item?.id) || index}>
+        <div className="co-item-left">
+          <div className="co-item-title">
+            <div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>
+            {/^[hH][tT][tT][pP][sS]?:\/\//.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><ClassicOrderIcon name="external-link" /></a> : null}
+          </div>
+          {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}
+        </div>
+        <div className="co-item-right">
+          {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {hasEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qty)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div>}
+          <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -544,31 +571,14 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
 
         <div className="co-modal-body">
           {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-          <div className="co-modal-items">
-            {items.length ? items.map((item, index) => {
-              const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
-              const qtyEditedRaw = supervisorEditedQuantity(item);
-              const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
-              const qty = effectiveQuantity(item);
-              const itemStatus = statusTabForItem(item);
-              const itemReason = rejectedReason(item);
-              const safeUrl = text(item?.productUrl);
-              return (
-                <div className="co-item" key={text(item?.id) || index}>
-                  <div className="co-item-left">
-                    <div className="co-item-title">
-                      <div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>
-                      {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><ClassicOrderIcon name="external-link" /></a> : null}
-                    </div>
-                    {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}
-                  </div>
-                  <div className="co-item-right">
-                    {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {hasEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qty)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div>}
-                    <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
-                  </div>
-                </div>
-              );
-            }) : <div className="muted">No items.</div>}
+          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions"><OrderSortButton value={sortMode} onChange={setSortMode} /></div>
+          <div className="co-modal-items order-component-groups">
+            {groupedItems.length ? groupedItems.map((section) => (
+              <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
+                <OrderGroupHeader group={section} mode={sortMode} />
+                <div className="order-component-group__items">{section.items.map(renderItem)}</div>
+              </section>
+            )) : <div className="muted">No items.</div>}
           </div>
         </div>
       </div>

@@ -4859,6 +4859,9 @@ function _sbSerializeOrderRow(row = {}) {
     assignedToId: "",
     assignedToName: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) || "",
     svApproval: _sbOrderText(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) || null,
+    productTag: _sbOrderText(_sbOrderGet(row, ["product_tag", "Product Tag", "component_tag", "Component Tag", "tag", "Tag"])) || null,
+    kitTag: _sbOrderText(_sbOrderGet(row, ["kit_tag", "Kit Tag", "kit_name", "Kit Name", "source_kit", "Source Kit"])) || null,
+    kitFolderName: _sbOrderText(_sbOrderGet(row, ["kit_folder", "Kit Folder", "kit_folder_name", "Kit Folder Name"])) || null,
     source: "supabase",
   };
 }
@@ -4891,7 +4894,7 @@ async function _sbRequestedOrdersList({ includeAllSystem = false } = {}) {
   // not only the orders already approved for operations. Other consumers can keep
   // the old approved-only behavior by omitting includeAllSystem.
   const rows = await _sbSelectOrdersRows({ approvedOnly: !includeAllSystem });
-  return rows.map(_sbSerializeOrderRow);
+  return _sbEnrichOrderGrouping(rows.map(_sbSerializeOrderRow));
 }
 
 async function _sbCurrentOrdersList(req) {
@@ -4903,7 +4906,7 @@ async function _sbCurrentOrdersList(req) {
         return !by || by.includes(username) || username.includes(by);
       })
     : rows;
-  return filtered.map(_sbSerializeOrderRow);
+  return _sbEnrichOrderGrouping(filtered.map(_sbSerializeOrderRow));
 }
 
 async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
@@ -7672,8 +7675,10 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
       quantity_progress: qty,
       quantity_received_by_operations: 0,
       quantity_remaining: qty,
-      status: "Under Supervision",
-      sv_approval: null,
+      status: "In Progress",
+      sv_approval: "Approved",
+      product_tag: Array.isArray(product.tags) ? (product.tags.find((tag) => String(tag || "").trim()) || null) : null,
+      kit_tag: _sbProposalPrimarySourceKit(item?.sourceKits || item?.source_kits)?.kitName || null,
       team_member_id: member.id || null,
       team_member_name: member.name || null,
       issue_description: `Created from proposal: ${detail.proposal.name || "Proposal"}`,
@@ -9464,6 +9469,68 @@ async function _sbRenderProductProposalExcel(proposalId, req, res) {
 async function _sbProductsMapById() {
   const products = await _sbProductsList();
   return new Map(products.map((p) => [String(p.id), p]));
+}
+
+async function _sbEnrichOrderGrouping(items = []) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return rows;
+
+  let products = [];
+  let kitMembership = new Map();
+  try {
+    [products, kitMembership] = await Promise.all([
+      _sbProductsList().catch(() => []),
+      _sbProductKitMembershipHierarchy().catch(() => new Map()),
+    ]);
+  } catch {
+    products = [];
+    kitMembership = new Map();
+  }
+
+  const byName = new Map();
+  const byUrl = new Map();
+  for (const product of products || []) {
+    const nameKey = normKey(product?.name);
+    const urlKey = String(product?.url || "").trim().toLowerCase();
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+    if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, product);
+  }
+
+  return rows.map((item) => {
+    const nameKey = normKey(item?.productName);
+    const urlKey = String(item?.productUrl || item?.product_url || "").trim().toLowerCase();
+    const product = byName.get(nameKey) || byUrl.get(urlKey) || null;
+    const storedProductTag = String(item?.productTag || item?.product_tag || "").trim();
+    const productTags = Array.isArray(product?.tags)
+      ? product.tags.map((tag) => String(tag || "").trim()).filter(Boolean)
+      : [];
+    const productTag = storedProductTag || productTags[0] || "Uncategorized";
+
+    const memberships = product?.id ? (kitMembership.get(String(product.id)) || []) : [];
+    const cleanMemberships = (Array.isArray(memberships) ? memberships : []).map((entry) => ({
+      kitId: String(entry?.id || entry?.kitId || "").trim() || null,
+      kitName: String(entry?.name || entry?.kitName || "").trim() || "Unassigned kit",
+      folderId: String(entry?.folderId || "").trim() || null,
+      folderName: String(entry?.folderName || "").trim() || "Unfiled Kits",
+    }));
+    const storedKitTag = String(item?.kitTag || item?.kit_tag || "").trim();
+    const storedKitFolder = String(item?.kitFolderName || item?.kit_folder_name || "").trim();
+    const primaryMembership = cleanMemberships[0] || null;
+    const kitTag = storedKitTag || primaryMembership?.kitName || "Unassigned kit";
+    const kitFolderName = storedKitFolder || primaryMembership?.folderName || "Unfiled Kits";
+
+    return {
+      ...item,
+      productId: item?.productId || product?.id || null,
+      productUrl: item?.productUrl || product?.url || null,
+      productTags: productTags.length ? productTags : [productTag],
+      productTag,
+      kitMemberships: cleanMemberships,
+      kitTags: cleanMemberships.map((entry) => entry.kitName).filter(Boolean),
+      kitTag,
+      kitFolderName,
+    };
+  });
 }
 
 async function _sbNextOrderNumber() {
@@ -36070,6 +36137,9 @@ function _sbSerializeSVOrderRow(row = {}) {
     orderType,
     orderTypeColor: _sbOrderTypeColor(orderType),
     createdTime: _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) || new Date().toISOString(),
+    productTag: _sbOrderText(_sbOrderGet(row, ["product_tag", "Product Tag", "component_tag", "Component Tag", "tag", "Tag"])) || null,
+    kitTag: _sbOrderText(_sbOrderGet(row, ["kit_tag", "Kit Tag", "kit_name", "Kit Name", "source_kit", "Source Kit"])) || null,
+    kitFolderName: _sbOrderText(_sbOrderGet(row, ["kit_folder", "Kit Folder", "kit_folder_name", "Kit Folder Name"])) || null,
     source: "supabase",
   };
 }
@@ -36143,6 +36213,10 @@ async function _sbSVOrdersList(req, label = "Not Started") {
   const wanted = label && !archiveOnly ? norm(label) : "";
   const filtered = (rows || []).filter((row) => {
     if (!_sbOrderVisibleToSV(row, visible)) return false;
+    // Proposal-generated orders are pre-approved at creation time and skip the
+    // Orders Review stage entirely. Keep them in Current/Operations Orders only.
+    const issueDescription = _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"]));
+    if (/^created from proposal:/i.test(issueDescription)) return false;
     const statusKey = norm(_sbOrderGet(row, ["status", "Status"]));
     const isArchived = /archive|archived/.test(statusKey);
     if (archiveOnly) return isArchived;
@@ -36150,7 +36224,7 @@ async function _sbSVOrdersList(req, label = "Not Started") {
     if (!wanted) return true;
     return norm(_sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]))) === wanted;
   });
-  return filtered.map(_sbSerializeSVOrderRow);
+  return _sbEnrichOrderGrouping(filtered.map(_sbSerializeSVOrderRow));
 }
 
 async function _sbSVOrderRowIfAllowed(req, id) {
