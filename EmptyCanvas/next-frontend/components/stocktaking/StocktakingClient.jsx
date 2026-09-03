@@ -237,6 +237,7 @@ function Icon({ name }) {
     check: <polyline points="20 6 9 17 4 12" />,
     folder: <><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></>,
     arrowLeft: <><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></>,
+    arrowRight: <><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></>,
     sort: <><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="10" y1="18" x2="14" y2="18" /></>,
     edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></>,
     save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></>,
@@ -771,11 +772,45 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const [newRowReceiptFiles, setNewRowReceiptFiles] = useState([]);
   const inventorySaveTimers = useRef(new Map());
   const sortMenuRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const [tableScrollState, setTableScrollState] = useState({ canLeft: false, canRight: false });
 
   useEffect(() => () => {
     inventorySaveTimers.current.forEach((timer) => clearTimeout(timer));
     inventorySaveTimers.current.clear();
   }, []);
+
+  const updateTableScrollState = () => {
+    const scroller = tableScrollRef.current;
+    if (!scroller) {
+      setTableScrollState({ canLeft: false, canRight: false });
+      return;
+    }
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    setTableScrollState({
+      canLeft: scroller.scrollLeft > 2,
+      canRight: scroller.scrollLeft < maxScroll - 2,
+    });
+  };
+
+  const scrollTableHorizontally = (direction) => {
+    const scroller = tableScrollRef.current;
+    if (!scroller) return;
+    const step = Math.max(240, Math.round(scroller.clientWidth * 0.78));
+    scroller.scrollBy({ left: direction * step, behavior: "smooth" });
+    window.setTimeout(updateTableScrollState, 260);
+  };
+
+  useEffect(() => {
+    if (!activeColumn || loading) return undefined;
+    const frame = window.requestAnimationFrame(updateTableScrollState);
+    const onResize = () => updateTableScrollState();
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [activeColumn?.key, loading, stock.length, editRowId, newRowOpen, inventorySession?.inventoryColumn, inventorySession?.defectedColumn]);
 
   useEffect(() => {
     if (!sortMenuOpen) return undefined;
@@ -1470,7 +1505,14 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
             <>
               {inventorySaveError ? <div className="stocktaking-inventory-inline-error">{inventorySaveError}</div> : null}
               {editError ? <div className="stocktaking-edit-inline-error">{editError}</div> : null}
-              <div className="stocktaking-data-table-wrap" aria-live="polite">
+              <div className="stocktaking-horizontal-scroll-tools" aria-label="Horizontal table navigation">
+                <span><strong>Scroll table</strong><small>Swipe, drag the bar, or use the arrows to view columns on the right.</small></span>
+                <div>
+                  <button type="button" onClick={() => scrollTableHorizontally(-1)} disabled={!tableScrollState.canLeft} aria-label="Scroll table left"><Icon name="arrowLeft" /></button>
+                  <button type="button" onClick={() => scrollTableHorizontally(1)} disabled={!tableScrollState.canRight} aria-label="Scroll table right"><Icon name="arrowRight" /></button>
+                </div>
+              </div>
+              <div ref={tableScrollRef} className="stocktaking-data-table-wrap" aria-live="polite" onScroll={updateTableScrollState}>
                 <table className={`stocktaking-data-table ${editRowId || newRowOpen ? "is-edit-mode" : ""}`}>
                   <thead>
                     <tr>
