@@ -12249,6 +12249,50 @@ app.get('/api/backup/tables/:key/rows', requireAuth, requirePage('Backup'), asyn
   }
 });
 
+app.post('/api/backup/tables/:key/rows', requireAuth, requirePage('Backup'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (!supabaseDb.isConfigured()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
+    if (!_hasPageAdminAccess(req, 'Backup')) {
+      return res.status(403).json({ ok: false, error: 'Database Admin access is required to add table rows.' });
+    }
+
+    const item = _backupFindCatalogItem(req.params?.key);
+    if (!item) return res.status(404).json({ ok: false, error: 'Backup table was not found.' });
+    const values = req.body?.values;
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+      return res.status(400).json({ ok: false, error: 'New row values are required.' });
+    }
+
+    const schema = await _backupGetTableColumns(item.tableName);
+    const byName = new Map((schema?.columns || []).map((column) => [String(column?.name || '').toLowerCase(), column]));
+    const cleanValues = {};
+    for (const [rawKey, rawValue] of Object.entries(values)) {
+      const key = String(rawKey || '').trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      if (byName.size && !byName.has(key.toLowerCase())) continue;
+      // Blank fields are intentionally omitted on insert so database defaults,
+      // identity/serial IDs and created_at triggers can run normally. Users can
+      // still edit a created row afterwards if they explicitly need a blank text.
+      if (typeof rawValue === 'string' && rawValue.trim() === '') continue;
+      const column = byName.get(key.toLowerCase()) || { name: key };
+      cleanValues[key] = _backupBrowserCoerceValue(rawValue, column);
+    }
+    if (!Object.keys(cleanValues).length) {
+      return res.status(400).json({ ok: false, error: 'Enter at least one value for the new row.' });
+    }
+
+    const table = _backupCleanTableName(item.tableName);
+    const created = await supabaseDb.insert(table, cleanValues);
+    const row = created && typeof created === 'object' ? created : cleanValues;
+    _historySetEntity(res, { entityType: 'database_row', entityId: String(row?.id || item.tableName), entityLabel: `${item.pageName} / ${item.tableName}` });
+    return res.status(201).json({ ok: true, row });
+  } catch (error) {
+    console.error('POST /api/backup/tables/:key/rows error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: error?.message || 'Failed to create table row.' });
+  }
+});
+
 app.patch('/api/backup/tables/:key/rows', requireAuth, requirePage('Backup'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -30850,6 +30894,41 @@ async function _sbStocktakingEditAuthorization(req, requestedColumn = "", rows =
   return { ok: true, quantityColumn, owner, accessLevel };
 }
 
+function _sbStocktakingProductUpdatePatch(targetRow = {}, product = {}) {
+  const keys = Object.keys(targetRow || {});
+  const patch = {};
+  const set = (aliases, value) => {
+    const key = _sbFindStocktakingKey(keys, aliases);
+    if (!key) return;
+    patch[key] = value;
+  };
+  const productName = _sbProposalText(product?.name) || "Untitled Product";
+  set(["name", "Name", "component", "Component"], productName);
+  set(["product_name", "Product Name", "product", "Product", "products", "Products"], productName);
+  set(["product_id", "Product ID", "products_id", "Products ID"], product?.id || null);
+  set(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], product?.url || null);
+  set(["id_code", "ID Code", "code", "Code"], product?.displayId || product?.idCode || null);
+  set(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null);
+  return patch;
+}
+
+app.get(
+  "/api/stock/products",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
+      const products = await _sbProductsList();
+      return res.json({ ok: true, source: "supabase", products });
+    } catch (error) {
+      console.error("GET /api/stock/products error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load Products for Stocktaking." });
+    }
+  },
+);
+
 app.post(
   "/api/stock/edit-access",
   requireAuth,
@@ -30867,6 +30946,81 @@ app.post(
     } catch (error) {
       console.error("POST /api/stock/edit-access error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to verify Stocktaking edit access." });
+    }
+  },
+);
+
+app.post(
+  "/api/stock",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
+      const column = String(req?.body?.column || req?.body?.stockColumn || "").trim();
+      const productId = String(req?.body?.productId || req?.body?.product_id || "").trim();
+      const quantity = Number(req?.body?.quantity);
+      if (!column) return res.status(400).json({ ok: false, error: "Choose a Stocktaking folder first." });
+      if (!productId) return res.status(400).json({ ok: false, error: "Choose a component for the new row." });
+      if (!Number.isFinite(quantity)) return res.status(400).json({ ok: false, error: "Stock quantity must be a valid number." });
+
+      const rows = await _sbStocktakingRows();
+      const auth = await _sbStocktakingEditAuthorization(req, column, rows, req?.body?.adminPassword || req?.body?.password);
+      if (!auth.ok) return res.status(auth.status || 403).json({ ok: false, error: auth.error, requiresPassword: auth.requiresPassword === true });
+
+      const products = await _sbProductsList();
+      const product = products.find((item) => String(item?.id || "") === productId);
+      if (!product) return res.status(404).json({ ok: false, error: "The selected Product component was not found." });
+
+      let keys = _sbAllColumnKeys(rows || []);
+      const schemaKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+      keys = Array.from(new Set([...(keys || []), ...(schemaKeys || [])].filter(Boolean)));
+      const row = { [auth.quantityColumn]: quantity };
+      const set = (aliases, value, fallbackKey = "") => {
+        if (value === null || typeof value === "undefined" || value === "") return "";
+        const key = _sbFindStocktakingKey(keys, aliases) || (!keys.length ? fallbackKey : "");
+        if (!key) return "";
+        row[key] = value;
+        return key;
+      };
+
+      const productName = _sbProposalText(product?.name) || "Untitled Product";
+      const nameKey = set(["name", "Name", "component", "Component"], productName, "name");
+      set(["product_name", "Product Name", "product", "Product", "products", "Products"], productName, nameKey ? "" : "product_name");
+      set(["product_id", "Product ID", "products_id", "Products ID"], product.id, "product_id");
+      set(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], product?.url || null, "product_url");
+      set(["id_code", "ID Code", "code", "Code"], product?.displayId || product?.idCode || null, "id_code");
+      set(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null, "unit_price");
+
+      const tag = _sbProposalText(req?.body?.tag) || firstProductTagForServer(product) || "Manual";
+      set(["tag", "Tag", "tags", "Tags"], tag, "tag");
+      set(["header", "Header", "stock_header", "Stock Header", "main_header", "Main Header"], "Main stock", "header");
+
+      const receiptNumber = _normalizeMultilineText(String(req?.body?.receiptNumber || req?.body?.receipt_number || "").trim());
+      if (receiptNumber) set(["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"], receiptNumber, "receipt_number");
+
+      const photoUrl = String(req?.body?.receiptPhotoUrl || req?.body?.receipt_photo_url || "").trim();
+      if (photoUrl) {
+        let parsed = null;
+        try { parsed = new URL(photoUrl); } catch {}
+        if (!parsed || !/^https?:$/i.test(parsed.protocol)) return res.status(400).json({ ok: false, error: "Receipt photo URL must be a valid http(s) URL." });
+        set(
+          ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"],
+          JSON.stringify([{ name: "Manual receipt photo", url: photoUrl }]),
+          "receipt_photos",
+        );
+      }
+
+      set(["team_member_id", "Team Member ID", "user_id", "User ID"], auth?.owner?.id || null);
+      set(["team_member_name", "Team Member Name", "user_name", "User Name", "username", "Username"], auth?.owner?.name || null);
+
+      const created = await _sbInsertStocktakingRowSafe(row, [auth.quantityColumn]);
+      await cacheDel(`cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${auth.quantityColumn}`)}:v4`).catch(() => {});
+      return res.status(201).json({ ok: true, source: "supabase", column: auth.quantityColumn, row: created || row });
+    } catch (error) {
+      console.error("POST /api/stock error:", error?.details || error?.body || error);
+      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add Stocktaking row." });
     }
   },
 );
@@ -30889,18 +31043,24 @@ app.patch(
       const auth = await _sbStocktakingEditAuthorization(req, column, rows, req?.body?.adminPassword || req?.body?.password);
       if (!auth.ok) return res.status(auth.status || 403).json({ ok: false, error: auth.error, requiresPassword: auth.requiresPassword === true });
 
-      const rowIds = new Set((rows || []).map((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim()).filter(Boolean));
+      const rowById = new Map((rows || []).map((row) => [String(_sbGet(row, ["id", "ID"]) ?? "").trim(), row]).filter(([id]) => Boolean(id)));
+      const productMap = new Map((await _sbProductsList()).map((product) => [String(product?.id || ""), product]));
       const normalized = [];
       for (const update of updates) {
         const id = String(update?.id || "").trim();
         const quantity = Number(update?.quantity);
-        if (!id || !rowIds.has(id)) return res.status(404).json({ ok: false, error: "One of the Stocktaking rows no longer exists. Refresh and try again." });
+        const productId = String(update?.productId || update?.product_id || "").trim();
+        const targetRow = rowById.get(id);
+        if (!id || !targetRow) return res.status(404).json({ ok: false, error: "One of the Stocktaking rows no longer exists. Refresh and try again." });
         if (!Number.isFinite(quantity)) return res.status(400).json({ ok: false, error: "Stock quantities must be valid numbers." });
-        normalized.push({ id, quantity });
+        if (productId && !productMap.has(productId)) return res.status(404).json({ ok: false, error: "The selected Product component was not found." });
+        normalized.push({ id, quantity, productId, targetRow });
       }
 
       for (const update of normalized) {
-        await supabaseDb.updateById(_sbStocktakingTable(), update.id, { [auth.quantityColumn]: update.quantity });
+        const patch = { [auth.quantityColumn]: update.quantity };
+        if (update.productId) Object.assign(patch, _sbStocktakingProductUpdatePatch(update.targetRow, productMap.get(update.productId)));
+        await supabaseDb.updateById(_sbStocktakingTable(), update.id, patch);
       }
 
       await cacheDel(`cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${auth.quantityColumn}`)}:v4`).catch(() => {});

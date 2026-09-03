@@ -12781,3 +12781,107 @@ body.stocktaking-page .stocktaking-edit-password-confirm{
   body.stocktaking-page .stocktaking-edit-password-modal__card{width:100%;border-radius:24px 24px 0 0;padding:18px;}
   body.stocktaking-page .stocktaking-edit-password-modal__card footer{display:grid;grid-template-columns:1fr 1fr;}
 }
+
+/* 2026-08-25: Stocktaking per-row Edit column + manual New Row */
+body.stocktaking-page .stocktaking-data-table{min-width:900px;}
+body.stocktaking-page .stocktaking-row-edit-head{
+  min-width:88px !important;
+  width:88px;
+  max-width:88px !important;
+  text-align:center !important;
+  position:sticky;
+  right:0;
+  z-index:6;
+  background:#0b1120 !important;
+}
+body.stocktaking-page .stocktaking-row-edit-cell{
+  min-width:88px !important;
+  width:88px;
+  max-width:88px !important;
+  position:sticky;
+  right:0;
+  z-index:3;
+  background:#fff !important;
+  text-align:center;
+}
+body.stocktaking-page .stocktaking-data-table tbody tr:nth-child(even) .stocktaking-row-edit-cell{background:#fff !important;}
+body.stocktaking-page .stocktaking-data-table tbody tr:hover .stocktaking-row-edit-cell,
+body.stocktaking-page .stocktaking-data-table tr.is-editing .stocktaking-row-edit-cell{background:#fffaf5 !important;}
+body.stocktaking-page .stocktaking-row-edit-cell > button,
+body.stocktaking-page .stocktaking-row-edit-actions > button{
+  min-height:32px;
+  border:1px solid #e5e7eb;
+  border-radius:10px;
+  padding:0 9px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  background:#fff;
+  color:#111827;
+  font:inherit;
+  font-size:.69rem;
+  font-weight:900;
+  line-height:1;
+  cursor:pointer;
+  white-space:nowrap;
+}
+body.stocktaking-page .stocktaking-row-edit-cell button svg{width:14px;height:14px;}
+body.stocktaking-page .stocktaking-row-edit-cell button:disabled{opacity:.45;cursor:not-allowed;}
+body.stocktaking-page .stocktaking-row-edit-actions{display:flex;align-items:center;justify-content:center;gap:5px;}
+body.stocktaking-page .stocktaking-row-edit-actions > button.is-cancel{width:32px;padding:0;color:#64748b;}
+body.stocktaking-page .stocktaking-row-edit-actions > button.is-save{background:#0b1120;color:#fff;border-color:#0b1120;}
+body.stocktaking-page .stocktaking-edit-product-select,
+body.stocktaking-page .stocktaking-new-row-component-stack select,
+body.stocktaking-page .stocktaking-new-row-component-stack input,
+body.stocktaking-page .stocktaking-new-row-input{
+  width:100%;
+  min-height:38px;
+  padding:0 9px;
+  border:1px solid #dbe2ea;
+  border-radius:10px;
+  background:#fff;
+  color:#111827;
+  outline:none;
+  font:inherit;
+  font-size:.68rem;
+  font-weight:800;
+  box-sizing:border-box;
+}
+body.stocktaking-page .stocktaking-edit-product-select:focus,
+body.stocktaking-page .stocktaking-new-row-component-stack select:focus,
+body.stocktaking-page .stocktaking-new-row-component-stack input:focus,
+body.stocktaking-page .stocktaking-new-row-input:focus{
+  border-color:#f59e0b;
+  box-shadow:0 0 0 3px rgba(245,158,11,.13);
+}
+body.stocktaking-page .stocktaking-new-row-component-stack{display:grid;gap:6px;min-width:250px;}
+body.stocktaking-page .stocktaking-new-row-editor td{background:#fffcf8 !important;height:auto;padding-top:8px;padding-bottom:8px;}
+body.stocktaking-page .stocktaking-new-row-editor .stocktaking-row-edit-cell{background:#fffcf8 !important;}
+body.stocktaking-page .stocktaking-data-table tfoot td{border-top:1px solid #edf0f3;}
+body.stocktaking-page .stocktaking-new-row-button-row > td{padding:10px !important;background:#fff !important;}
+body.stocktaking-page .stocktaking-new-row-btn{
+  min-height:38px;
+  border:1px dashed #cfd7e3;
+  border-radius:11px;
+  padding:0 13px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  background:#f8fafc;
+  color:#111827;
+  font:inherit;
+  font-size:.72rem;
+  font-weight:900;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-new-row-btn:hover:not(:disabled){border-color:#fb923c;background:#fff7ed;color:#9a3412;}
+body.stocktaking-page .stocktaking-new-row-btn:disabled{opacity:.5;cursor:not-allowed;}
+body.stocktaking-page .stocktaking-new-row-btn svg{width:15px;height:15px;}
+body.stocktaking-page .stocktaking-empty-under-table{margin:10px 0 0;}
+
+@media (max-width:760px){
+  body.stocktaking-page .stocktaking-data-table{min-width:860px;}
+  body.stocktaking-page .stocktaking-edit-product-select{min-width:220px;}
+}

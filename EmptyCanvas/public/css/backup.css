@@ -1656,3 +1656,52 @@ body.backup-table-modal-open{overflow:hidden !important;}
   .backup-folder-level-heading{gap:8px;}
   .backup-page-folder-back{width:36px;height:36px;flex-basis:36px;border-radius:12px;}
 }
+
+/* 2026-08-25: Database manual New Row */
+.page-backup-table .backup-data-table tfoot td{background:#fff;border-top:1px solid #e5e7eb;}
+.page-backup-table .backup-new-row-button-row > td{padding:10px !important;}
+.page-backup-table .backup-new-row-btn{
+  min-height:38px;
+  border:1px dashed #cfd7e3;
+  border-radius:11px;
+  padding:0 13px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  background:#f8fafc;
+  color:#111827;
+  font:inherit;
+  font-size:.76rem;
+  font-weight:900;
+  cursor:pointer;
+}
+.page-backup-table .backup-new-row-btn:hover:not(:disabled){border-color:#fb923c;background:#fff7ed;color:#9a3412;}
+.page-backup-table .backup-new-row-btn:disabled{opacity:.5;cursor:not-allowed;}
+.page-backup-table .backup-new-row-btn svg{width:15px;height:15px;}
+.page-backup-table .backup-new-row-editor td{background:#fffcf8 !important;height:auto;}
+.page-backup-table .backup-new-row-editor .backup-data-row-number{background:#fff7ed !important;color:#9a3412;}
+.page-backup-table .backup-new-row-editor .backup-data-edit-cell{background:#fffcf8 !important;}
+.page-backup-table .backup-new-row-actions{display:flex;align-items:center;justify-content:center;gap:5px;}
+.page-backup-table .backup-new-row-actions .is-save{background:#0b1120;color:#fff;border-color:#0b1120;}
+.page-backup-table .backup-new-row-actions .is-cancel{width:32px;padding:0;color:#64748b;}
+.page-backup-table .backup-inline-cell-editor input,
+.page-backup-table .backup-inline-cell-editor select,
+.page-backup-table .backup-inline-cell-editor textarea{
+  width:100%;
+  min-width:120px;
+  min-height:34px;
+  padding:6px 8px;
+  border:1px solid #dbe2ea;
+  border-radius:9px;
+  background:#fff;
+  color:#111827;
+  outline:none;
+  font:inherit;
+  font-size:.74rem;
+  box-sizing:border-box;
+}
+.page-backup-table .backup-inline-cell-editor textarea{min-height:72px;resize:vertical;}
+.page-backup-table .backup-inline-cell-editor input:focus,
+.page-backup-table .backup-inline-cell-editor select:focus,
+.page-backup-table .backup-inline-cell-editor textarea:focus{border-color:#fb923c;box-shadow:0 0 0 3px rgba(249,115,22,.10);}

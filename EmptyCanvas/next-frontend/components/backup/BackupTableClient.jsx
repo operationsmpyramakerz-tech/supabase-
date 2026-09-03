@@ -29,6 +29,7 @@ function Icon({ name = "database" }) {
     chevronRight: <path d="m9 18 6-6-6-6"/>,
     shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
     search: <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>,
+    plus: <><path d="M12 5v14"/><path d="M5 12h14"/></>,
   };
   return <svg {...common}>{icons[name] || icons.database}</svg>;
 }
@@ -88,6 +89,10 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
   const [draft, setDraft] = useState({});
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [newRowOpen, setNewRowOpen] = useState(false);
+  const [newDraft, setNewDraft] = useState({});
+  const [createError, setCreateError] = useState("");
+  const [creating, setCreating] = useState(false);
   const pageSize = 50;
 
   async function loadRows(nextOffset = 0) {
@@ -163,7 +168,7 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
   }, [rows, visibleColumns, query]);
 
   function openEdit(row) {
-    if (!canEdit) return;
+    if (!canEdit || newRowOpen) return;
     const next = {};
     visibleColumns.forEach((column) => { next[column.name] = editorValue(row?.[column.name]); });
     setEditRow(row);
@@ -176,6 +181,49 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
     setEditRow(null);
     setDraft({});
     setSaveError("");
+  }
+
+  function openNewRow() {
+    if (!canEdit || saving || creating || editRow) return;
+    const next = {};
+    visibleColumns.forEach((column) => { next[column.name] = ""; });
+    setNewDraft(next);
+    setNewRowOpen(true);
+    setCreateError("");
+    setSaveError("");
+  }
+
+  function closeNewRow() {
+    if (creating) return;
+    setNewRowOpen(false);
+    setNewDraft({});
+    setCreateError("");
+  }
+
+  async function saveNewRow() {
+    if (!canEdit || creating || !newRowOpen) return;
+    setCreating(true);
+    setCreateError("");
+    try {
+      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: newDraft }),
+      });
+      if (!response.ok) throw new Error(await readError(response, "Failed to create row."));
+      const body = await response.json();
+      const created = body?.row || { ...newDraft };
+      setRows((current) => [...current, created]);
+      setNewRowOpen(false);
+      setNewDraft({});
+      setCreateError("");
+    } catch (err) {
+      setCreateError(err?.message || "Failed to create row.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function saveRow() {
@@ -232,9 +280,9 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
 
         {error ? <div className="backup-table-state is-error">{error}<button type="button" onClick={() => loadRows(offset)}>Try again</button></div> : null}
         {!error && loading ? <div className="backup-table-state"><span className="backup-table-spinner" />Loading table rows...</div> : null}
-        {!error && !loading && !rows.length ? <div className="backup-table-state"><Icon name="database" />This table has no rows.</div> : null}
+        {!error && !loading && !rows.length && !visibleColumns.length ? <div className="backup-table-state"><Icon name="database" />This table has no rows.</div> : null}
 
-        {!error && !loading && rows.length ? (
+        {!error && !loading && visibleColumns.length ? (
           <div className="backup-data-table-scroll">
             <table className="backup-data-table">
               <thead>
@@ -273,7 +321,7 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
                               <Icon name="save" /><span>{saving ? "Saving..." : "Save"}</span>
                             </button>
                           ) : (
-                            <button type="button" onClick={() => openEdit(row)} disabled={Boolean(editRow) || saving}>
+                            <button type="button" onClick={() => openEdit(row)} disabled={Boolean(editRow) || saving || newRowOpen || creating}>
                               <Icon name="edit" /><span>Edit</span>
                             </button>
                           )}
@@ -283,11 +331,46 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
                   );
                 })}
               </tbody>
+              {canEdit ? (
+                <tfoot>
+                  {newRowOpen ? (
+                    <tr className="backup-new-row-editor">
+                      <td className="backup-data-row-number">New</td>
+                      {visibleColumns.map((column) => (
+                        <td key={column.name} className="backup-inline-cell-editor">
+                          <FieldEditor
+                            column={column}
+                            value={String(newDraft?.[column.name] ?? "")}
+                            onChange={(nextValue) => { setNewDraft((current) => ({ ...current, [column.name]: nextValue })); setCreateError(""); }}
+                          />
+                        </td>
+                      ))}
+                      <td className="backup-data-edit-cell">
+                        <div className="backup-new-row-actions">
+                          <button type="button" className="is-save" onClick={saveNewRow} disabled={creating}>
+                            <Icon name="save" /><span>{creating ? "Saving..." : "Save"}</span>
+                          </button>
+                          <button type="button" className="is-cancel" onClick={closeNewRow} disabled={creating} aria-label="Cancel new row"><Icon name="x" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className="backup-new-row-button-row">
+                      <td colSpan={visibleColumns.length + 2}>
+                        <button type="button" className="backup-new-row-btn" onClick={openNewRow} disabled={saving || creating || Boolean(editRow)}>
+                          <Icon name="plus" /><span>New Row</span>
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </tfoot>
+              ) : null}
             </table>
-            {!filteredRows.length ? <div className="backup-table-no-search">No rows on this page match your search.</div> : null}
+            {!filteredRows.length && rows.length ? <div className="backup-table-no-search">No rows on this page match your search.</div> : null}
           </div>
         ) : null}
         {saveError ? <p className="backup-inline-save-error">{saveError}</p> : null}
+        {createError ? <p className="backup-inline-save-error">{createError}</p> : null}
 
         <div className="backup-table-pagination">
           <button type="button" onClick={() => loadRows(Math.max(0, offset - pageSize))} disabled={loading || offset <= 0}><Icon name="chevronLeft" /><span>Previous</span></button>

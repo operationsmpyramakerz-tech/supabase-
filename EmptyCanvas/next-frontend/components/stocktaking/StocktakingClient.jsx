@@ -165,6 +165,9 @@ function Icon({ name }) {
     arrowLeft: <><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></>,
     sort: <><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="10" y1="18" x2="14" y2="18" /></>,
     edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></>,
+    save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></>,
+    x: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+    plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   };
   return <svg {...common}>{paths[name] || paths.download}</svg>;
 }
@@ -452,13 +455,18 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const [inventorySaveError, setInventorySaveError] = useState("");
   const [sortMode, setSortMode] = useState("tag");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editQuantities, setEditQuantities] = useState({});
+  const [editRowId, setEditRowId] = useState("");
+  const [editDraft, setEditDraft] = useState({ productId: "", quantity: "" });
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
   const [editAdminPassword, setEditAdminPassword] = useState("");
   const [editPasswordOpen, setEditPasswordOpen] = useState(false);
   const [editPasswordError, setEditPasswordError] = useState("");
+  const [pendingEditTarget, setPendingEditTarget] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [newRowOpen, setNewRowOpen] = useState(false);
+  const [newRowDraft, setNewRowDraft] = useState({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
   const inventorySaveTimers = useRef(new Map());
   const sortMenuRef = useRef(null);
 
@@ -612,21 +620,70 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     if (activeColumn) loadColumn(activeColumn, null);
   }
 
-  function enterEditMode(adminPassword = "") {
-    const draft = {};
-    rows.forEach((row) => {
-      if (row.id) draft[row.id] = String(row.quantity ?? 0);
-    });
-    setEditQuantities(draft);
-    setEditAdminPassword(adminPassword);
-    setEditError("");
-    setEditPasswordError("");
-    setEditMode(true);
-    setSortMenuOpen(false);
+  async function loadProducts() {
+    if (products.length) return products;
+    setProductsLoading(true);
+    try {
+      const response = await fetch(`/api/stock/products?_fresh=1&_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/stocktaking";
+        return [];
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body?.ok === false) throw new Error(body?.error || "Products could not be loaded.");
+      const list = (Array.isArray(body?.products) ? body.products : [])
+        .map((product) => ({
+          id: text(product?.id),
+          name: text(product?.name),
+          displayId: text(product?.displayId || product?.idCode),
+          url: text(product?.url),
+          unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null,
+          tags: Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [],
+        }))
+        .filter((product) => product.id && product.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setProducts(list);
+      return list;
+    } catch (productError) {
+      throw new Error(productError?.message || "Products could not be loaded.");
+    } finally {
+      setProductsLoading(false);
+    }
   }
 
-  async function requestEditAccess(adminPassword = "", { fromModal = false } = {}) {
+  function matchedProductId(row, list = products) {
+    const byCode = row?.idCode ? list.find((product) => lower(product.displayId) === lower(row.idCode)) : null;
+    const byName = list.find((product) => lower(product.name) === lower(row?.name));
+    return text(byCode?.id || byName?.id);
+  }
+
+  function openRowEditor(row, list = products) {
+    if (!row?.id) return;
+    setNewRowOpen(false);
+    setEditRowId(row.id);
+    setEditDraft({ productId: matchedProductId(row, list), quantity: String(row.quantity ?? 0) });
+    setEditError("");
+  }
+
+  function openNewRowEditor() {
+    setEditRowId("");
+    setEditDraft({ productId: "", quantity: "" });
+    setNewRowDraft({
+      productId: "",
+      quantity: "1",
+      tag: "",
+      receiptNumber: "",
+      receiptPhotoUrl: "",
+    });
+    setNewRowOpen(true);
+    setEditError("");
+  }
+
+  async function requestEditAccess(adminPassword = "", { fromModal = false, target = null } = {}) {
     if (!activeColumn?.key || editBusy) return;
+    const requestedTarget = target || pendingEditTarget;
+    if (!requestedTarget) return;
+    if (target) setPendingEditTarget(target);
     setEditBusy(true);
     setEditError("");
     if (fromModal) setEditPasswordError("");
@@ -652,15 +709,20 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         return;
       }
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "You do not have permission to edit this Stocktaking folder.");
+      const list = await loadProducts();
+      setEditAdminPassword(adminPassword || editAdminPassword);
       setEditPasswordOpen(false);
-      if (editMode) {
-        setEditAdminPassword(adminPassword);
-        setEditPasswordError("");
+      setEditPasswordError("");
+      setPendingEditTarget(null);
+      if (requestedTarget.type === "new") {
+        openNewRowEditor();
       } else {
-        enterEditMode(adminPassword);
+        const row = rows.find((item) => String(item.id) === String(requestedTarget.rowId));
+        if (!row) throw new Error("This Stocktaking row is no longer available. Refresh and try again.");
+        openRowEditor(row, list);
       }
     } catch (accessError) {
-      const message = accessError?.message || "The Stocktaking folder could not enter edit mode.";
+      const message = accessError?.message || "The Stocktaking row could not enter edit mode.";
       if (fromModal) setEditPasswordError(message);
       else setEditError(message);
     } finally {
@@ -668,43 +730,19 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     }
   }
 
-  function updateEditQuantity(rowId, value) {
-    setEditQuantities((current) => ({ ...current, [rowId]: value }));
+  function cancelRowEdit() {
+    setEditRowId("");
+    setEditDraft({ productId: "", quantity: "" });
     setEditError("");
   }
 
-  function cancelEdit() {
-    setEditMode(false);
-    setEditQuantities({});
-    setEditError("");
-    setEditAdminPassword("");
-    setEditPasswordOpen(false);
-    setEditPasswordError("");
-  }
-
-  async function saveStockChanges() {
-    if (!activeColumn?.key || editBusy) return;
-    const updates = [];
-    for (const row of rows) {
-      if (!row.id) continue;
-      const raw = Object.prototype.hasOwnProperty.call(editQuantities, row.id) ? editQuantities[row.id] : String(row.quantity ?? 0);
-      if (String(raw).trim() === "") {
-        setEditError(`Enter a quantity for ${row.name}.`);
-        return;
-      }
-      const quantity = Number(raw);
-      if (!Number.isFinite(quantity)) {
-        setEditError(`Enter a valid quantity for ${row.name}.`);
-        return;
-      }
-      if (quantity !== Number(row.quantity)) updates.push({ id: row.id, quantity });
-    }
-
-    if (!updates.length) {
-      cancelEdit();
+  async function saveEditedRow(row) {
+    if (!activeColumn?.key || !row?.id || editBusy) return;
+    const quantity = Number(editDraft.quantity);
+    if (!Number.isFinite(quantity)) {
+      setEditError(`Enter a valid quantity for ${row.name}.`);
       return;
     }
-
     setEditBusy(true);
     setEditError("");
     try {
@@ -713,10 +751,15 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ column: activeColumn.key, updates, adminPassword: editAdminPassword }),
+        body: JSON.stringify({
+          column: activeColumn.key,
+          updates: [{ id: row.id, quantity, productId: text(editDraft.productId) || null }],
+          adminPassword: editAdminPassword,
+        }),
       });
       const body = await response.json().catch(() => ({}));
       if (response.status === 401 && body?.requiresPassword) {
+        setPendingEditTarget({ type: "row", rowId: row.id });
         setEditPasswordOpen(true);
         setEditPasswordError(body?.error || "Admin password is required to save these changes.");
         return;
@@ -726,12 +769,77 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         return;
       }
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "Stocktaking changes could not be saved.");
-      setEditMode(false);
-      setEditQuantities({});
-      setEditAdminPassword("");
+      cancelRowEdit();
       await loadColumn(activeColumn, inventorySession);
     } catch (saveError) {
       setEditError(saveError?.message || "Stocktaking changes could not be saved.");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  function cancelNewRow() {
+    setNewRowOpen(false);
+    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+    setEditError("");
+  }
+
+  function updateNewRowProduct(productId) {
+    const selected = products.find((product) => product.id === productId) || null;
+    setNewRowDraft((current) => ({
+      ...current,
+      productId,
+      tag: current.tag || text(selected?.tags?.[0]),
+    }));
+    setEditError("");
+  }
+
+  async function saveNewStockRow() {
+    if (!activeColumn?.key || editBusy) return;
+    const productId = text(newRowDraft.productId);
+    const quantity = Number(newRowDraft.quantity);
+    if (!productId) {
+      setEditError("Choose a component for the new row.");
+      return;
+    }
+    if (!Number.isFinite(quantity)) {
+      setEditError("Enter a valid quantity for the new row.");
+      return;
+    }
+    setEditBusy(true);
+    setEditError("");
+    try {
+      const response = await fetch("/api/stock", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          column: activeColumn.key,
+          productId,
+          quantity,
+          tag: text(newRowDraft.tag),
+          receiptNumber: text(newRowDraft.receiptNumber),
+          receiptPhotoUrl: text(newRowDraft.receiptPhotoUrl),
+          adminPassword: editAdminPassword,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 401 && body?.requiresPassword) {
+        setPendingEditTarget({ type: "new" });
+        setEditPasswordOpen(true);
+        setEditPasswordError(body?.error || "Admin password is required to add this row.");
+        return;
+      }
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/stocktaking";
+        return;
+      }
+      if (!response.ok || body?.ok === false) throw new Error(body?.error || "The new Stocktaking row could not be saved.");
+      cancelNewRow();
+      await loadColumn(activeColumn, inventorySession);
+    } catch (saveError) {
+      setEditError(saveError?.message || "The new Stocktaking row could not be saved.");
     } finally {
       setEditBusy(false);
     }
@@ -743,8 +851,11 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setExportOpen(false);
     setSortMode("tag");
     setSortMenuOpen(false);
-    setEditMode(false);
-    setEditQuantities({});
+    setEditRowId("");
+    setEditDraft({ productId: "", quantity: "" });
+    setNewRowOpen(false);
+    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+    setPendingEditTarget(null);
     setEditError("");
     setEditAdminPassword("");
     setEditPasswordOpen(false);
@@ -773,8 +884,11 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setExportOpen(false);
     setSortMode("tag");
     setSortMenuOpen(false);
-    setEditMode(false);
-    setEditQuantities({});
+    setEditRowId("");
+    setEditDraft({ productId: "", quantity: "" });
+    setNewRowOpen(false);
+    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+    setPendingEditTarget(null);
     setEditError("");
     setEditAdminPassword("");
     setEditPasswordOpen(false);
@@ -804,8 +918,11 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         setError("");
         setSortMode("tag");
         setSortMenuOpen(false);
-        setEditMode(false);
-        setEditQuantities({});
+        setEditRowId("");
+        setEditDraft({ productId: "", quantity: "" });
+        setNewRowOpen(false);
+        setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+        setPendingEditTarget(null);
         setEditError("");
         setEditAdminPassword("");
         setEditPasswordOpen(false);
@@ -848,7 +965,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
 
   const tagGroups = useMemo(() => groupRows(filteredRows, sortMode === "receipt" ? "receipt" : "component"), [filteredRows, sortMode]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
-  const tableColumnCount = 4 + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const tableColumnCount = 5 + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
 
   const toneForTag = (name) => TAG_TONES[tagToneMap.get(lower(name)) || "default"] || TAG_TONES.default;
 
@@ -866,48 +983,82 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     );
   };
 
-  const renderStockRow = (row) => (
-    <tr key={row.key} className={editMode ? "is-editing" : ""}>
-      <td className="stocktaking-data-component">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</td>
-      <td className="stocktaking-data-qty">
-        {editMode ? (
-          <input
-            className="stocktaking-edit-qty-input"
-            type="number"
-            step="1"
-            inputMode="numeric"
-            value={Object.prototype.hasOwnProperty.call(editQuantities, row.id) ? editQuantities[row.id] : String(row.quantity ?? 0)}
-            onChange={(event) => updateEditQuantity(row.id, event.target.value)}
-            disabled={editBusy || !row.id}
-            aria-label={`Quantity for ${row.name}`}
-          />
-        ) : row.quantity}
-      </td>
-      <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
-      <td className="stocktaking-data-photos">
-        {row.receiptPhotos.length ? (
-          <div className="stocktaking-receipt-photo-list">
-            {row.receiptPhotos.slice(0, 3).map((photo, index) => (
-              <a href={photo.url} target="_blank" rel="noopener noreferrer" key={`${photo.url}-${index}`} title={photo.name}>
-                <img src={photo.url} alt={photo.name || `Receipt ${index + 1}`} />
-              </a>
-            ))}
-            {row.receiptPhotos.length > 3 ? <span>+{row.receiptPhotos.length - 3}</span> : null}
-          </div>
-        ) : <span className="stocktaking-no-photo">—</span>}
-      </td>
-      {inventorySession?.inventoryColumn ? (
-        <td className={`stocktaking-data-inventory ${row.inventory !== null && Number(row.inventory) !== Number(row.quantity) ? "is-mismatch" : ""}`}>
-          <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={editMode} />
+  const renderStockRow = (row) => {
+    const isEditing = String(editRowId) === String(row.id);
+    return (
+      <tr key={row.key} className={isEditing ? "is-editing" : ""}>
+        <td className="stocktaking-data-component">
+          {isEditing ? (
+            <select
+              className="stocktaking-edit-product-select"
+              value={editDraft.productId}
+              onChange={(event) => { setEditDraft((current) => ({ ...current, productId: event.target.value })); setEditError(""); }}
+              disabled={editBusy || productsLoading}
+              aria-label={`Component for ${row.name}`}
+            >
+              {!editDraft.productId ? <option value="">Current: {row.name}</option> : null}
+              {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.displayId ? ` — ${product.displayId}` : ""}</option>)}
+            </select>
+          ) : (
+            row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name
+          )}
         </td>
-      ) : null}
-      {inventorySession?.defectedColumn ? (
-        <td className="stocktaking-data-inventory">
-          <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={editMode} />
+        <td className="stocktaking-data-qty">
+          {isEditing ? (
+            <input
+              className="stocktaking-edit-qty-input"
+              type="number"
+              step="1"
+              inputMode="numeric"
+              value={editDraft.quantity}
+              onChange={(event) => { setEditDraft((current) => ({ ...current, quantity: event.target.value })); setEditError(""); }}
+              disabled={editBusy}
+              aria-label={`Quantity for ${row.name}`}
+            />
+          ) : row.quantity}
         </td>
-      ) : null}
-    </tr>
-  );
+        <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
+        <td className="stocktaking-data-photos">
+          {row.receiptPhotos.length ? (
+            <div className="stocktaking-receipt-photo-list">
+              {row.receiptPhotos.slice(0, 3).map((photo, index) => (
+                <a href={photo.url} target="_blank" rel="noopener noreferrer" key={`${photo.url}-${index}`} title={photo.name}>
+                  <img src={photo.url} alt={photo.name || `Receipt ${index + 1}`} />
+                </a>
+              ))}
+              {row.receiptPhotos.length > 3 ? <span>+{row.receiptPhotos.length - 3}</span> : null}
+            </div>
+          ) : <span className="stocktaking-no-photo">—</span>}
+        </td>
+        {inventorySession?.inventoryColumn ? (
+          <td className={`stocktaking-data-inventory ${row.inventory !== null && Number(row.inventory) !== Number(row.quantity) ? "is-mismatch" : ""}`}>
+            <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={isEditing} />
+          </td>
+        ) : null}
+        {inventorySession?.defectedColumn ? (
+          <td className="stocktaking-data-inventory">
+            <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={isEditing} />
+          </td>
+        ) : null}
+        <td className="stocktaking-row-edit-cell">
+          {isEditing ? (
+            <button type="button" className="is-save" onClick={() => saveEditedRow(row)} disabled={editBusy}>
+              <Icon name="save" /><span>{editBusy ? "Saving..." : "Save"}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => requestEditAccess(editAdminPassword, { target: { type: "row", rowId: row.id } })}
+              disabled={editBusy || productsLoading || !row.id || Boolean(editRowId) || newRowOpen}
+            >
+              <Icon name="edit" /><span>Edit</span>
+            </button>
+          )}
+        </td>
+      </tr>
+    );
+  };
+
 
   return (
     <section className="next-stocktaking-classic-parity next-stocktaking-folders-page">
@@ -956,7 +1107,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
               <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
             </div>
             <div className="stocktaking-folder-actions">
-              <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || editMode}>
+              <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}>
                 <span>{inventorySession ? "Finish inventory" : "Make inventory"}</span>
               </button>
               <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button>
@@ -989,10 +1140,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
               {inventorySaveError ? <div className="stocktaking-inventory-inline-error">{inventorySaveError}</div> : null}
               {editError ? <div className="stocktaking-edit-inline-error">{editError}</div> : null}
               <div className="stocktaking-data-table-wrap" aria-live="polite">
-              {!filteredRows.length ? (
-                <div className="empty-block empty-block--no-data">Sorry, No data available</div>
-              ) : (
-                <table className={`stocktaking-data-table ${editMode ? "is-edit-mode" : ""}`}>
+                <table className={`stocktaking-data-table ${editRowId || newRowOpen ? "is-edit-mode" : ""}`}>
                   <thead>
                     <tr>
                       <th>Components</th>
@@ -1001,6 +1149,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                       <th className="stocktaking-data-photos">Receipt photos</th>
                       {inventorySession?.inventoryColumn ? <th className="stocktaking-data-inventory">Inventory{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
                       {inventorySession?.defectedColumn ? <th className="stocktaking-data-inventory">Defecated{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
+                      <th className="stocktaking-row-edit-head">Edit</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1023,26 +1172,43 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                       tagGroups.flatMap((group) => [renderTagHeader(group), ...group.items.map((row) => renderStockRow(row))])
                     )}
                   </tbody>
+                  <tfoot>
+                    {newRowOpen ? (
+                      <tr className="stocktaking-new-row-editor">
+                        <td className="stocktaking-data-component">
+                          <div className="stocktaking-new-row-component-stack">
+                            <select value={newRowDraft.productId} onChange={(event) => updateNewRowProduct(event.target.value)} disabled={editBusy || productsLoading}>
+                              <option value="">Select component</option>
+                              {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.displayId ? ` — ${product.displayId}` : ""}</option>)}
+                            </select>
+                            <input type="text" value={newRowDraft.tag} onChange={(event) => setNewRowDraft((current) => ({ ...current, tag: event.target.value }))} placeholder="Tag (optional)" />
+                          </div>
+                        </td>
+                        <td className="stocktaking-data-qty"><input className="stocktaking-edit-qty-input" type="number" step="1" inputMode="numeric" value={newRowDraft.quantity} onChange={(event) => setNewRowDraft((current) => ({ ...current, quantity: event.target.value }))} disabled={editBusy} /></td>
+                        <td className="stocktaking-data-receipt"><input className="stocktaking-new-row-input" type="text" value={newRowDraft.receiptNumber} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptNumber: event.target.value }))} placeholder="Receipt no." /></td>
+                        <td className="stocktaking-data-photos"><input className="stocktaking-new-row-input" type="url" value={newRowDraft.receiptPhotoUrl} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptPhotoUrl: event.target.value }))} placeholder="Receipt photo URL" /></td>
+                        {inventorySession?.inventoryColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
+                        {inventorySession?.defectedColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
+                        <td className="stocktaking-row-edit-cell">
+                          <div className="stocktaking-row-edit-actions">
+                            <button type="button" className="is-save" onClick={saveNewStockRow} disabled={editBusy || productsLoading}><Icon name="save" /><span>{editBusy ? "Saving..." : "Save"}</span></button>
+                            <button type="button" className="is-cancel" onClick={cancelNewRow} disabled={editBusy} aria-label="Cancel new row"><Icon name="x" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr className="stocktaking-new-row-button-row">
+                        <td colSpan={tableColumnCount}>
+                          <button type="button" className="stocktaking-new-row-btn" onClick={() => requestEditAccess(editAdminPassword, { target: { type: "new" } })} disabled={editBusy || productsLoading || Boolean(editRowId)}>
+                            <Icon name="plus" /><span>{productsLoading ? "Loading components..." : "New Row"}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </tfoot>
                 </table>
-              )}
+                {!filteredRows.length && !newRowOpen ? <div className="empty-block empty-block--no-data stocktaking-empty-under-table">Sorry, No data available</div> : null}
               </div>
-
-              {filteredRows.length ? (
-                editMode ? (
-                  <div className="stocktaking-edit-footer direct-create-save-footer proposal-create-save-footer direct-create-save-footer--edit">
-                    <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={cancelEdit} disabled={editBusy}>Cancel</button>
-                    <button type="button" className="products-btn products-btn--dark direct-create-save-btn" onClick={saveStockChanges} disabled={editBusy}>
-                      <span>{editBusy ? "Saving…" : "Save Changes"}</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="stocktaking-edit-footer stocktaking-edit-footer--view">
-                    <button type="button" className="proposal-edit-action-btn stocktaking-edit-action-btn" onClick={() => requestEditAccess()} disabled={editBusy || loading || Boolean(error) || Boolean(inventorySession)}>
-                      <Icon name="edit" /><span>{editBusy ? "Checking…" : "Edit"}</span>
-                    </button>
-                  </div>
-                )
-              ) : null}
             </>
           )}
         </section>
