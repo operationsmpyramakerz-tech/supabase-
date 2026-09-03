@@ -47,6 +47,80 @@ function normalizedUrl(value) {
   return "";
 }
 
+const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
+const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
+const RECEIPT_MAX_EDGE = 2000;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+async function prepareStockReceiptImage(file) {
+  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
+  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
+  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
+    return { dataUrl: await readFileAsDataUrl(file), name: file.name || "receipt.jpg", size: number(file.size) };
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const candidate = new Image();
+      candidate.onload = () => resolve(candidate);
+      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
+      candidate.src = objectUrl;
+    });
+    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
+    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
+    const longest = Math.max(naturalWidth, naturalHeight);
+    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
+    let bestBlob = null;
+    let bestType = "image/webp";
+    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
+      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
+      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      let quality = 0.88;
+      let blob = await canvasToBlob(canvas, "image/webp", quality);
+      let mime = "image/webp";
+      if (!blob) {
+        quality = 0.86;
+        blob = await canvasToBlob(canvas, "image/jpeg", quality);
+        mime = "image/jpeg";
+      }
+      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
+      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
+        quality = Math.max(0.5, quality - 0.08);
+        blob = await canvasToBlob(canvas, mime, quality);
+        if (!blob) break;
+      }
+      if (blob && (!bestBlob || blob.size < bestBlob.size)) { bestBlob = blob; bestType = mime; }
+      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
+      dimensionScale *= 0.82;
+    }
+    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
+    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
+    return { dataUrl: await readFileAsDataUrl(bestBlob), name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`, size: bestBlob.size };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function tagColor(name, fallback) {
   const canonical = lower(name).replace(/[^a-z0-9]+/g, "");
   if (canonical === "requestproducts" || canonical === "requestproduct") return "green";
@@ -264,6 +338,135 @@ function StockProductPicker({ value = "", products = [], disabled = false, place
               );
             }) : <div className="stocktaking-product-picker__empty">No matching components</div>}
           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StockTagPicker({ value = "", tags = [], disabled = false, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const rootRef = useRef(null);
+  const inputRef = useRef(null);
+  const options = useMemo(() => {
+    const seen = new Set();
+    return (Array.isArray(tags) ? tags : []).map(text).filter((tag) => {
+      const key = lower(tag);
+      if (!key || key === "untagged" || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [tags]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) {
+        setOpen(false);
+        setAdding(false);
+        setNewTag("");
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setAdding(false);
+        setNewTag("");
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const pick = (tag) => {
+    onChange?.(tag);
+    setOpen(false);
+    setAdding(false);
+    setNewTag("");
+  };
+  const addTag = () => {
+    const tag = text(newTag);
+    if (tag) pick(tag);
+  };
+
+  return (
+    <div className={`stocktaking-tag-picker ${open ? "is-open" : ""}`} ref={rootRef}>
+      <button type="button" className={`stocktaking-tag-picker__trigger ${value ? "has-value" : "is-placeholder"}`} onClick={() => { if (!disabled) setOpen((current) => !current); }} disabled={disabled} aria-expanded={open} aria-haspopup="listbox">
+        <span>{value || "Select tag"}</span><Icon name="chevron" />
+      </button>
+      {open ? (
+        <div className="stocktaking-tag-picker__menu">
+          <div className="stocktaking-tag-picker__options" role="listbox">
+            {options.length ? options.map((tag) => (
+              <button type="button" key={tag} className={lower(value) === lower(tag) ? "is-selected" : ""} onClick={() => pick(tag)} role="option" aria-selected={lower(value) === lower(tag)}>
+                <span>{tag}</span>{lower(value) === lower(tag) ? <Icon name="check" /> : null}
+              </button>
+            )) : <div className="stocktaking-tag-picker__empty">No saved tags yet</div>}
+          </div>
+          {adding ? (
+            <div className="stocktaking-tag-picker__new">
+              <input ref={inputRef} type="text" value={newTag} onChange={(event) => setNewTag(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} placeholder="New tag name" autoFocus />
+              <button type="button" onClick={addTag} disabled={!text(newTag)}>Add</button>
+            </div>
+          ) : (
+            <button type="button" className="stocktaking-tag-picker__add" onClick={() => { setAdding(true); window.setTimeout(() => inputRef.current?.focus(), 20); }}><Icon name="plus" /><span>Add new tag</span></button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StockReceiptUploadPicker({ files = [], disabled = false, onChange, onError }) {
+  const inputRef = useRef(null);
+  const [previews, setPreviews] = useState([]);
+
+  useEffect(() => {
+    const next = (Array.isArray(files) ? files : []).map((file, index) => ({ file, index, url: URL.createObjectURL(file) }));
+    setPreviews(next);
+    return () => next.forEach((item) => URL.revokeObjectURL(item.url));
+  }, [files]);
+
+  const chooseFiles = (fileList) => {
+    const incoming = Array.from(fileList || []);
+    if (!incoming.length) return;
+    const invalid = incoming.find((file) => !/^image\//i.test(file.type || ""));
+    if (invalid) return onError?.("Receipt uploads must be images.");
+    const tooLarge = incoming.find((file) => Number(file.size || 0) > RECEIPT_SOURCE_MAX_BYTES);
+    if (tooLarge) return onError?.(`${tooLarge.name} is larger than 8 MB.`);
+    const combined = [...files, ...incoming];
+    const seen = new Set();
+    onChange?.(combined.filter((file) => {
+      const key = `${file.name}:${file.size}:${file.lastModified}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }));
+    onError?.("");
+    if (inputRef.current) inputRef.current.value = "";
+  };
+  const remove = (index) => onChange?.(files.filter((_, itemIndex) => itemIndex !== index));
+
+  return (
+    <div className="stocktaking-receipt-upload">
+      <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={(event) => chooseFiles(event.target.files)} disabled={disabled} />
+      <button type="button" className={`stocktaking-receipt-upload__button ${files.length ? "has-files" : ""}`} onClick={() => inputRef.current?.click()} disabled={disabled}>
+        <Icon name="plus" /><span>{files.length ? `${files.length} photo${files.length === 1 ? "" : "s"} selected` : "Upload photos"}</span>
+      </button>
+      {previews.length ? (
+        <div className="stocktaking-receipt-upload__previews">
+          {previews.map((item) => (
+            <span key={`${item.file.name}-${item.file.size}-${item.file.lastModified}-${item.index}`}>
+              <img src={item.url} alt="" />
+              <button type="button" onClick={() => remove(item.index)} disabled={disabled} aria-label={`Remove ${item.file.name || "receipt photo"}`}>×</button>
+            </span>
+          ))}
         </div>
       ) : null}
     </div>
@@ -564,7 +767,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [newRowOpen, setNewRowOpen] = useState(false);
-  const [newRowDraft, setNewRowDraft] = useState({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+  const [newRowDraft, setNewRowDraft] = useState({ productId: "", quantity: "", tag: "", receiptNumber: "" });
+  const [newRowReceiptFiles, setNewRowReceiptFiles] = useState([]);
   const inventorySaveTimers = useRef(new Map());
   const sortMenuRef = useRef(null);
 
@@ -771,8 +975,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       quantity: "1",
       tag: "",
       receiptNumber: "",
-      receiptPhotoUrl: "",
     });
+    setNewRowReceiptFiles([]);
     setNewRowOpen(true);
     setEditError("");
   }
@@ -878,17 +1082,16 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
 
   function cancelNewRow() {
     setNewRowOpen(false);
-    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "" });
+    setNewRowReceiptFiles([]);
     setEditError("");
   }
 
   function updateNewRowProduct(productId) {
     const selected = products.find((product) => product.id === productId) || null;
-    setNewRowDraft((current) => ({
-      ...current,
-      productId,
-      tag: current.tag || text(selected?.tags?.[0]),
-    }));
+    const suggestedTag = text(selected?.tags?.[0]);
+    const matchingSavedTag = availableTagNames.find((tag) => lower(tag) === lower(suggestedTag)) || "";
+    setNewRowDraft((current) => ({ ...current, productId, tag: current.tag || matchingSavedTag }));
     setEditError("");
   }
 
@@ -907,6 +1110,25 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditBusy(true);
     setEditError("");
     try {
+      const receiptPhotos = [];
+      for (const file of newRowReceiptFiles) {
+        const prepared = await prepareStockReceiptImage(file);
+        const uploadResponse = await fetch("/next/api/stock/receipt-upload", {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: prepared.dataUrl, filename: prepared.name || file.name || "receipt.jpg" }),
+        });
+        const uploadBody = await uploadResponse.json().catch(() => ({}));
+        if (uploadResponse.status === 401) {
+          window.location.href = "/login?next=/next/stocktaking";
+          return;
+        }
+        if (!uploadResponse.ok || uploadBody?.ok === false || !text(uploadBody?.url)) throw new Error(uploadBody?.error || `Failed to upload ${file.name || "receipt image"}.`);
+        receiptPhotos.push({ name: text(uploadBody?.name) || prepared.name || file.name || "Receipt photo", url: text(uploadBody.url) });
+      }
+
       const response = await fetch("/api/stock", {
         method: "POST",
         credentials: "include",
@@ -918,7 +1140,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
           quantity,
           tag: text(newRowDraft.tag),
           receiptNumber: text(newRowDraft.receiptNumber),
-          receiptPhotoUrl: text(newRowDraft.receiptPhotoUrl),
+          receiptPhotos,
           adminPassword: editAdminPassword,
         }),
       });
@@ -952,7 +1174,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
     setNewRowOpen(false);
-    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "" });
+    setNewRowReceiptFiles([]);
     setPendingEditTarget(null);
     setEditError("");
     setEditAdminPassword("");
@@ -985,7 +1208,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
     setNewRowOpen(false);
-    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+    setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "" });
+    setNewRowReceiptFiles([]);
     setPendingEditTarget(null);
     setEditError("");
     setEditAdminPassword("");
@@ -1019,7 +1243,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         setEditRowId("");
         setEditDraft({ productId: "", quantity: "" });
         setNewRowOpen(false);
-        setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "", receiptPhotoUrl: "" });
+        setNewRowDraft({ productId: "", quantity: "", tag: "", receiptNumber: "" });
+        setNewRowReceiptFiles([]);
         setPendingEditTarget(null);
         setEditError("");
         setEditAdminPassword("");
@@ -1046,6 +1271,16 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const rows = useMemo(() => (Array.isArray(stock) ? stock : [])
     .map(normalizedRow)
     .filter((row) => row.quantity !== 0), [stock]);
+
+  const availableTagNames = useMemo(() => {
+    const seen = new Set();
+    return rows.map((row) => text(row?.tag?.name)).filter((tag) => {
+      const key = lower(tag);
+      if (!key || key === "untagged" || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
     const query = lower(search);
@@ -1280,12 +1515,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                               onChange={updateNewRowProduct}
                               disabled={editBusy || productsLoading}
                             />
-                            <input type="text" value={newRowDraft.tag} onChange={(event) => setNewRowDraft((current) => ({ ...current, tag: event.target.value }))} placeholder="Tag (optional)" />
+                            <StockTagPicker value={newRowDraft.tag} tags={availableTagNames} disabled={editBusy} onChange={(tag) => { setNewRowDraft((current) => ({ ...current, tag })); setEditError(""); }} />
                           </div>
                         </td>
                         <td className="stocktaking-data-qty"><input className="stocktaking-edit-qty-input" type="number" step="1" inputMode="numeric" value={newRowDraft.quantity} onChange={(event) => setNewRowDraft((current) => ({ ...current, quantity: event.target.value }))} disabled={editBusy} /></td>
                         <td className="stocktaking-data-receipt"><input className="stocktaking-new-row-input" type="text" value={newRowDraft.receiptNumber} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptNumber: event.target.value }))} placeholder="Receipt no." /></td>
-                        <td className="stocktaking-data-photos"><input className="stocktaking-new-row-input" type="url" value={newRowDraft.receiptPhotoUrl} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptPhotoUrl: event.target.value }))} placeholder="Receipt photo URL" /></td>
+                        <td className="stocktaking-data-photos"><StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /></td>
                         {inventorySession?.inventoryColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
                         {inventorySession?.defectedColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
                         <td className="stocktaking-row-edit-cell">

@@ -30951,6 +30951,33 @@ app.post(
 );
 
 app.post(
+  "/api/stock/receipt-upload",
+  requireAuth,
+  requirePage("Stocktaking"),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const { dataUrl, filename } = req.body || {};
+      if (!dataUrl) return res.status(400).json({ ok: false, error: "Receipt image data is required." });
+      const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+      if (!/^image\//i.test(String(mime || ""))) return res.status(400).json({ ok: false, error: "Receipt upload must be an image." });
+      if (buf.length > 8 * 1024 * 1024) return res.status(413).json({ ok: false, error: "Receipt image is too large. Maximum size is 8 MB." });
+      const originalName = String(filename || "receipt.jpg").trim() || "receipt.jpg";
+      const cleanName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+      const objectName = `stocktaking-receipts/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
+      const url = await uploadToBlobFromBase64(dataUrl, objectName);
+      return res.status(201).json({ ok: true, url, name: originalName, mime });
+    } catch (error) {
+      console.error("POST /api/stock/receipt-upload error:", error?.details || error?.body || error);
+      const message = String(error?.message || "") === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+        ? "Supabase Storage is not configured for receipt uploads."
+        : (error?.message || "Failed to upload receipt image.");
+      return res.status(error?.status || 500).json({ ok: false, error: message });
+    }
+  },
+);
+
+app.post(
   "/api/stock",
   requireAuth,
   requirePage("Stocktaking"),
@@ -31000,14 +31027,25 @@ app.post(
       const receiptNumber = _normalizeMultilineText(String(req?.body?.receiptNumber || req?.body?.receipt_number || "").trim());
       if (receiptNumber) set(["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"], receiptNumber, "receipt_number");
 
-      const photoUrl = String(req?.body?.receiptPhotoUrl || req?.body?.receipt_photo_url || "").trim();
-      if (photoUrl) {
+      const requestedReceiptPhotos = Array.isArray(req?.body?.receiptPhotos) ? req.body.receiptPhotos : [];
+      const legacyPhotoUrl = String(req?.body?.receiptPhotoUrl || req?.body?.receipt_photo_url || "").trim();
+      const receiptPhotos = [...requestedReceiptPhotos, ...(legacyPhotoUrl ? [{ name: "Manual receipt photo", url: legacyPhotoUrl }] : [])]
+        .map((item, index) => ({ name: _sbProposalText(item?.name) || `Receipt photo ${index + 1}`, url: String(item?.url || "").trim() }))
+        .filter((item) => item.url);
+      const seenReceiptPhotoUrls = new Set();
+      const validReceiptPhotos = [];
+      for (const photo of receiptPhotos) {
         let parsed = null;
-        try { parsed = new URL(photoUrl); } catch {}
+        try { parsed = new URL(photo.url); } catch {}
         if (!parsed || !/^https?:$/i.test(parsed.protocol)) return res.status(400).json({ ok: false, error: "Receipt photo URL must be a valid http(s) URL." });
+        if (seenReceiptPhotoUrls.has(photo.url)) continue;
+        seenReceiptPhotoUrls.add(photo.url);
+        validReceiptPhotos.push(photo);
+      }
+      if (validReceiptPhotos.length) {
         set(
           ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"],
-          JSON.stringify([{ name: "Manual receipt photo", url: photoUrl }]),
+          JSON.stringify(validReceiptPhotos),
           "receipt_photos",
         );
       }

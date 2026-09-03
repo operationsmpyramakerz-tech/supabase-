@@ -13188,3 +13188,247 @@ body.stocktaking-page .stocktaking-new-row-editor > td{vertical-align:top !impor
   body.stocktaking-page .stocktaking-data-component{min-width:300px !important;}
   body.stocktaking-page .stocktaking-product-picker__options{max-height:210px;}
 }
+
+/* ===== 2026-09-03 · Stocktaking horizontal pan + manual row tag/photo controls ===== */
+body.stocktaking-page .stocktaking-data-table-wrap{
+  display:block !important;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  overflow-x:scroll !important;
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch !important;
+  touch-action:pan-x pan-y !important;
+  overscroll-behavior-x:contain !important;
+  scroll-behavior:smooth;
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+}
+body.stocktaking-page .stocktaking-data-table-wrap::-webkit-scrollbar{
+  width:0 !important;
+  height:0 !important;
+  display:none !important;
+}
+body.stocktaking-page .stocktaking-data-table{
+  width:1180px !important;
+  min-width:1180px !important;
+  max-width:none !important;
+}
+body.stocktaking-page .stocktaking-data-table.is-edit-mode{
+  width:1260px !important;
+  min-width:1260px !important;
+}
+
+body.stocktaking-page .stocktaking-tag-picker{
+  position:relative;
+  width:100%;
+  min-width:0;
+}
+body.stocktaking-page .stocktaking-tag-picker__trigger{
+  width:100%;
+  min-height:40px;
+  padding:0 11px;
+  border:1px solid #dbe2ea;
+  border-radius:11px;
+  background:#fff;
+  color:#172033;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font:inherit;
+  font-size:.69rem;
+  font-weight:850;
+  text-align:left;
+  cursor:pointer;
+  outline:0;
+  box-sizing:border-box;
+}
+body.stocktaking-page .stocktaking-tag-picker__trigger.is-placeholder{color:#98a2b3;}
+body.stocktaking-page .stocktaking-tag-picker__trigger > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+body.stocktaking-page .stocktaking-tag-picker__trigger svg{width:14px;height:14px;flex:0 0 14px;transition:transform .15s ease;}
+body.stocktaking-page .stocktaking-tag-picker.is-open .stocktaking-tag-picker__trigger{
+  border-color:#f97316;
+  box-shadow:0 0 0 3px rgba(249,115,22,.10);
+}
+body.stocktaking-page .stocktaking-tag-picker.is-open .stocktaking-tag-picker__trigger svg{transform:rotate(180deg);}
+body.stocktaking-page .stocktaking-tag-picker__menu{
+  position:relative;
+  z-index:35;
+  margin-top:6px;
+  overflow:hidden;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:13px;
+  background:#fff;
+  box-shadow:0 15px 34px rgba(15,23,42,.13);
+}
+body.stocktaking-page .stocktaking-tag-picker__options{
+  max-height:180px;
+  overflow:auto;
+  padding:5px;
+  overscroll-behavior:contain;
+}
+body.stocktaking-page .stocktaking-tag-picker__options > button{
+  width:100%;
+  min-height:38px;
+  padding:0 9px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#344054;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font:inherit;
+  font-size:.68rem;
+  font-weight:850;
+  text-align:left;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-tag-picker__options > button:hover{background:#f8fafc;}
+body.stocktaking-page .stocktaking-tag-picker__options > button.is-selected{background:#fff5eb;color:#b54708;}
+body.stocktaking-page .stocktaking-tag-picker__options > button svg{width:14px;height:14px;}
+body.stocktaking-page .stocktaking-tag-picker__empty{padding:13px 9px;color:#98a2b3;font-size:.64rem;font-weight:800;text-align:center;}
+body.stocktaking-page .stocktaking-tag-picker__add{
+  width:calc(100% - 10px);
+  min-height:38px;
+  margin:0 5px 5px;
+  padding:0 9px;
+  border:1px dashed #fdba74;
+  border-radius:9px;
+  background:#fffaf5;
+  color:#c2410c;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  font:inherit;
+  font-size:.67rem;
+  font-weight:900;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-tag-picker__add svg{width:14px;height:14px;}
+body.stocktaking-page .stocktaking-tag-picker__new{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:6px;
+  padding:6px;
+  border-top:1px solid #edf1f5;
+  background:#f8fafc;
+}
+body.stocktaking-page .stocktaking-tag-picker__new input{
+  width:100% !important;
+  height:36px !important;
+  min-height:36px !important;
+  padding:0 9px !important;
+  border:1px solid #dbe2ea !important;
+  border-radius:9px !important;
+  background:#fff !important;
+  color:#172033 !important;
+  font:inherit !important;
+  font-size:.67rem !important;
+  font-weight:800 !important;
+  box-shadow:none !important;
+  outline:0 !important;
+}
+body.stocktaking-page .stocktaking-tag-picker__new input:focus{border-color:#f97316 !important;box-shadow:0 0 0 2px rgba(249,115,22,.09) !important;}
+body.stocktaking-page .stocktaking-tag-picker__new button{
+  min-width:52px;
+  height:36px;
+  border:0;
+  border-radius:9px;
+  background:#0c1424;
+  color:#fff;
+  font:inherit;
+  font-size:.65rem;
+  font-weight:900;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-tag-picker__new button:disabled{opacity:.45;cursor:not-allowed;}
+
+body.stocktaking-page .stocktaking-receipt-upload{
+  width:100%;
+  display:grid;
+  gap:7px;
+}
+body.stocktaking-page .stocktaking-receipt-upload__button{
+  width:100%;
+  min-height:40px;
+  padding:0 9px;
+  border:1px dashed #cfd7e3;
+  border-radius:11px;
+  background:#f8fafc;
+  color:#344054;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  font:inherit;
+  font-size:.65rem;
+  font-weight:900;
+  cursor:pointer;
+}
+body.stocktaking-page .stocktaking-receipt-upload__button:hover:not(:disabled),
+body.stocktaking-page .stocktaking-receipt-upload__button.has-files{
+  border-color:#fdba74;
+  background:#fff7ed;
+  color:#b54708;
+}
+body.stocktaking-page .stocktaking-receipt-upload__button svg{width:14px;height:14px;}
+body.stocktaking-page .stocktaking-receipt-upload__button:disabled{opacity:.55;cursor:not-allowed;}
+body.stocktaking-page .stocktaking-receipt-upload__previews{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+body.stocktaking-page .stocktaking-receipt-upload__previews > span{
+  position:relative;
+  width:38px;
+  height:38px;
+  border:1px solid #e5e7eb;
+  border-radius:9px;
+  overflow:visible;
+  background:#fff;
+  box-shadow:0 4px 10px rgba(15,23,42,.06);
+}
+body.stocktaking-page .stocktaking-receipt-upload__previews img{width:100%;height:100%;object-fit:cover;border-radius:8px;display:block;}
+body.stocktaking-page .stocktaking-receipt-upload__previews button{
+  position:absolute;
+  top:-5px;
+  right:-5px;
+  width:17px;
+  height:17px;
+  padding:0;
+  border:1px solid #fff;
+  border-radius:50%;
+  background:#111827;
+  color:#fff;
+  display:grid;
+  place-items:center;
+  font-size:11px;
+  line-height:1;
+  cursor:pointer;
+}
+
+@media(max-width:760px){
+  body.stocktaking-page .stocktaking-data-table{width:1120px !important;min-width:1120px !important;}
+  body.stocktaking-page .stocktaking-data-table.is-edit-mode{width:1230px !important;min-width:1230px !important;}
+}
+
+@media(max-width:760px){
+  body.stocktaking-page .stocktaking-folder-toolbar{min-width:0 !important;}
+  body.stocktaking-page .stocktaking-folder-actions{
+    min-width:0 !important;
+    max-width:58% !important;
+    flex-wrap:nowrap !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch;
+    touch-action:pan-x;
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+  }
+  body.stocktaking-page .stocktaking-folder-actions::-webkit-scrollbar{width:0;height:0;display:none;}
+  body.stocktaking-page .stocktaking-folder-actions > *{flex:0 0 auto;}
+}
