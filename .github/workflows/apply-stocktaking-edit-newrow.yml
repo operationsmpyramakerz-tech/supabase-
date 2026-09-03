@@ -1,0 +1,31 @@
+name: Apply stocktaking/database edit and new row changes
+
+on:
+  push:
+    branches:
+      - chatgpt-stocktaking-edit-newrow-20260903
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify base, apply patch, verify result
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object EmptyCanvas/next-frontend/components/stocktaking/StocktakingClient.jsx)" = "62ce2fb372f8041ab8631317468b4c1ff65a3c63"
+          test "$(git hash-object EmptyCanvas/next-frontend/components/backup/BackupTableClient.jsx)" = "d2c69981f74bb703f5d9e1b9319319ad864806c4"
+          test "$(git hash-object EmptyCanvas/next-frontend/app/classic-parity.css)" = "80c4af17ae418b36bfbc7526ce59168cecde6e8b"
+          test "$(git hash-object EmptyCanvas/public/css/backup.css)" = "1dee1f05ae016e36d2a6f5fdfd87adc28b56c552"
+          test "$(git hash-object EmptyCanvas/server/app.js)" = "f938953791b73d0ec1e6c3870c94102a2c88384e"
+          cat > /tmp/patch.b64 <<'B64'
+H4sIANS9mWoC/+196XbbRpPofz9FG/HEZERSBBeJoiz5c2Qn8U3seGLlO+eOjkaGCFBETBL8AFCywuE58xD3Ge6DzZPcquoF3dgIanG+OXey2ESv1dXV1bV0d7n+eMyazSs/Zs7um9kivj1x5tdOtDv3vsTNcRjMY2/u7jqLxe5o6kSRP2ounNCPb1ujKGKXW1d54s9d
