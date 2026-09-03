@@ -1106,8 +1106,22 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         return;
       }
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "Stocktaking changes could not be saved.");
+
+      const selectedProduct = products.find((product) => text(product?.id) === text(editDraft.productId)) || null;
+      setStock((current) => (Array.isArray(current) ? current : []).map((item) => {
+        if (text(item?.id) !== text(row.id)) return item;
+        return {
+          ...item,
+          quantity,
+          ...(selectedProduct ? {
+            name: selectedProduct.name,
+            idCode: selectedProduct.displayId,
+            url: selectedProduct.url,
+            unitPrice: selectedProduct.unitPrice,
+          } : {}),
+        };
+      }));
       cancelRowEdit();
-      await loadColumn(activeColumn, inventorySession);
     } catch (saveError) {
       setEditError(saveError?.message || "Stocktaking changes could not be saved.");
     } finally {
@@ -1408,16 +1422,38 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         ) : null}
         <td className="stocktaking-row-edit-cell">
           {isEditing ? (
-            <button type="button" className="is-save" onClick={() => saveEditedRow(row)} disabled={editBusy}>
-              <Icon name="save" /><span>{editBusy ? "Saving..." : "Save"}</span>
-            </button>
+            <div className="stocktaking-row-edit-actions">
+              <button
+                type="button"
+                className="is-save is-icon-only"
+                onClick={() => saveEditedRow(row)}
+                disabled={editBusy}
+                aria-label={editBusy ? "Saving row" : "Save row"}
+                title={editBusy ? "Saving..." : "Save"}
+              >
+                <Icon name="save" />
+              </button>
+              <button
+                type="button"
+                className="is-cancel is-icon-only"
+                onClick={cancelRowEdit}
+                disabled={editBusy}
+                aria-label="Cancel row edit"
+                title="Cancel"
+              >
+                <Icon name="x" />
+              </button>
+            </div>
           ) : (
             <button
               type="button"
+              className="is-edit is-icon-only"
               onClick={() => requestEditAccess(editAdminPassword, { target: { type: "row", rowId: row.id } })}
               disabled={editBusy || productsLoading || !row.id || Boolean(editRowId) || newRowOpen}
+              aria-label={`Edit ${row.name}`}
+              title="Edit"
             >
-              <Icon name="edit" /><span>Edit</span>
+              <Icon name="edit" />
             </button>
           )}
         </td>
@@ -1505,13 +1541,6 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
             <>
               {inventorySaveError ? <div className="stocktaking-inventory-inline-error">{inventorySaveError}</div> : null}
               {editError ? <div className="stocktaking-edit-inline-error">{editError}</div> : null}
-              <div className="stocktaking-horizontal-scroll-tools" aria-label="Horizontal table navigation">
-                <span><strong>Scroll table</strong><small>Swipe, drag the bar, or use the arrows to view columns on the right.</small></span>
-                <div>
-                  <button type="button" onClick={() => scrollTableHorizontally(-1)} disabled={!tableScrollState.canLeft} aria-label="Scroll table left"><Icon name="arrowLeft" /></button>
-                  <button type="button" onClick={() => scrollTableHorizontally(1)} disabled={!tableScrollState.canRight} aria-label="Scroll table right"><Icon name="arrowRight" /></button>
-                </div>
-              </div>
               <div ref={tableScrollRef} className="stocktaking-data-table-wrap" aria-live="polite" onScroll={updateTableScrollState}>
                 <table className={`stocktaking-data-table ${editRowId || newRowOpen ? "is-edit-mode" : ""}`}>
                   <thead>
@@ -1567,8 +1596,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                         {inventorySession?.defectedColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
                         <td className="stocktaking-row-edit-cell">
                           <div className="stocktaking-row-edit-actions">
-                            <button type="button" className="is-save" onClick={saveNewStockRow} disabled={editBusy || productsLoading}><Icon name="save" /><span>{editBusy ? "Saving..." : "Save"}</span></button>
-                            <button type="button" className="is-cancel" onClick={cancelNewRow} disabled={editBusy} aria-label="Cancel new row"><Icon name="x" /></button>
+                            <button type="button" className="is-save is-icon-only" onClick={saveNewStockRow} disabled={editBusy || productsLoading} aria-label={editBusy ? "Saving new row" : "Save new row"} title={editBusy ? "Saving..." : "Save"}><Icon name="save" /></button>
+                            <button type="button" className="is-cancel is-icon-only" onClick={cancelNewRow} disabled={editBusy} aria-label="Cancel new row" title="Cancel"><Icon name="x" /></button>
                           </div>
                         </td>
                       </tr>
