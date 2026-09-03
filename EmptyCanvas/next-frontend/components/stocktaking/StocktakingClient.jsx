@@ -168,8 +168,106 @@ function Icon({ name }) {
     save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></>,
     x: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
     plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
   };
   return <svg {...common}>{paths[name] || paths.download}</svg>;
+}
+
+function StockProductPicker({ value = "", products = [], disabled = false, placeholder = "Select component", currentLabel = "", onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef(null);
+  const rootRef = useRef(null);
+  const selected = products.find((product) => String(product.id) === String(value)) || null;
+  const label = selected?.name || currentLabel || placeholder;
+
+  const visibleProducts = useMemo(() => {
+    const needle = lower(query);
+    if (!needle) return products;
+    return products.filter((product) => lower(`${product.name} ${product.displayId || ""}`).includes(needle));
+  }, [products, query]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const timer = window.setTimeout(() => searchRef.current?.focus(), 30);
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const choose = (productId) => {
+    onChange?.(productId);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div className={`stocktaking-product-picker ${open ? "is-open" : ""}`} ref={rootRef}>
+      <button
+        type="button"
+        className={`stocktaking-product-picker__trigger ${selected || currentLabel ? "has-value" : "is-placeholder"}`}
+        onClick={() => { if (!disabled) setOpen((current) => { if (current) setQuery(""); return !current; }); }}
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span>{label}</span>
+        <Icon name="chevron" />
+      </button>
+      {open ? (
+        <div className="stocktaking-product-picker__menu">
+          <div className="stocktaking-product-picker__search">
+            <Icon name="search" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search components..."
+              aria-label="Search components"
+            />
+          </div>
+          <div className="stocktaking-product-picker__options" role="listbox">
+            {visibleProducts.length ? visibleProducts.map((product) => {
+              const active = String(product.id) === String(value);
+              return (
+                <button
+                  type="button"
+                  key={product.id}
+                  className={active ? "is-selected" : ""}
+                  onClick={() => choose(product.id)}
+                  role="option"
+                  aria-selected={active}
+                >
+                  <span>
+                    <strong>{product.name}</strong>
+                    {product.displayId ? <small>{product.displayId}</small> : null}
+                  </span>
+                  {active ? <Icon name="check" /> : null}
+                </button>
+              );
+            }) : <div className="stocktaking-product-picker__empty">No matching components</div>}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ExportModal({ onClose, columnKey = "", inventorySession = null }) {
@@ -989,16 +1087,14 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       <tr key={row.key} className={isEditing ? "is-editing" : ""}>
         <td className="stocktaking-data-component">
           {isEditing ? (
-            <select
-              className="stocktaking-edit-product-select"
+            <StockProductPicker
               value={editDraft.productId}
-              onChange={(event) => { setEditDraft((current) => ({ ...current, productId: event.target.value })); setEditError(""); }}
+              products={products}
+              currentLabel={row.name}
+              placeholder="Select component"
+              onChange={(productId) => { setEditDraft((current) => ({ ...current, productId })); setEditError(""); }}
               disabled={editBusy || productsLoading}
-              aria-label={`Component for ${row.name}`}
-            >
-              {!editDraft.productId ? <option value="">Current: {row.name}</option> : null}
-              {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.displayId ? ` — ${product.displayId}` : ""}</option>)}
-            </select>
+            />
           ) : (
             row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name
           )}
@@ -1177,10 +1273,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                       <tr className="stocktaking-new-row-editor">
                         <td className="stocktaking-data-component">
                           <div className="stocktaking-new-row-component-stack">
-                            <select value={newRowDraft.productId} onChange={(event) => updateNewRowProduct(event.target.value)} disabled={editBusy || productsLoading}>
-                              <option value="">Select component</option>
-                              {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.displayId ? ` — ${product.displayId}` : ""}</option>)}
-                            </select>
+                            <StockProductPicker
+                              value={newRowDraft.productId}
+                              products={products}
+                              placeholder="Select component"
+                              onChange={updateNewRowProduct}
+                              disabled={editBusy || productsLoading}
+                            />
                             <input type="text" value={newRowDraft.tag} onChange={(event) => setNewRowDraft((current) => ({ ...current, tag: event.target.value }))} placeholder="Tag (optional)" />
                           </div>
                         </td>
