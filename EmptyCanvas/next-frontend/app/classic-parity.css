@@ -13662,3 +13662,51 @@ body.stocktaking-page .stocktaking-row-edit-actions .is-cancel:hover:not(:disabl
 }
 /* The table remains swipe/drag scrollable; the extra navigation strip is intentionally removed. */
 body.stocktaking-page .stocktaking-horizontal-scroll-tools{display:none !important;}
+
+/* ===== 2026-09-04 · Proposal Make order restored ===== */
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-modal .proposal-make-order-form{
+  display:grid !important;
+  gap:16px !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-modal .proposal-make-order-form > label{
+  display:grid !important;
+  gap:7px !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-modal .proposal-make-order-form > label > span{
+  color:#344054 !important;
+  font-size:.82rem !important;
+  font-weight:900 !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-modal .proposal-make-order-form > label > input{
+  width:100% !important;
+  min-height:54px !important;
+  border:1px solid rgba(15,23,42,.12) !important;
+  border-radius:16px !important;
+  background:#fff !important;
+  color:#111827 !important;
+  padding:0 15px !important;
+  outline:none !important;
+  font:inherit !important;
+  font-weight:800 !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-modal .proposal-make-order-form > label > input:focus{
+  border-color:rgba(241,105,33,.55) !important;
+  box-shadow:0 0 0 4px rgba(241,105,33,.10) !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-note{
+  display:flex !important;
+  align-items:flex-start !important;
+  gap:10px !important;
+  padding:13px 14px !important;
+  border:1px solid rgba(59,130,246,.16) !important;
+  border-radius:14px !important;
+  background:#f8fbff !important;
+  color:#475467 !important;
+  font-size:.78rem !important;
+  line-height:1.55 !important;
+}
+body.proposals-page .next-proposals-classic-parity .proposal-make-order-note svg{
+  flex:0 0 18px !important;
+  margin-top:1px !important;
+  color:#2f80ed !important;
+}
