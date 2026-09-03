@@ -18,7 +18,7 @@ export async function POST(request, { params }) {
     const response = await fetchLegacyJson(`/api/products/proposals/${encodeURIComponent(id)}/make-order`, {
       method: "POST",
       body,
-      timeoutMs: 60000,
+      timeoutMs: 120000,
     });
     return jsonFromLegacy(response, "Failed to create order from proposal.");
   } catch (error) {

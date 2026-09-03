@@ -7571,6 +7571,56 @@ async function _sbInsertOrderRowSafe(row = {}) {
   throw err;
 }
 
+// Proposal orders can contain 100+ components. Creating every component with an
+// individual REST request made the Next.js proxy hit its 60s timeout while the
+// legacy backend was still inserting rows, leaving the UI reporting failure even
+// though part (or all) of the order had already been written. Insert the whole
+// order as one PostgREST batch instead. If an older Orders schema is missing one
+// of the optional columns, remove that column from the whole batch once and retry
+// the batch atomically instead of repeating the same failed request for every row.
+async function _sbInsertOrderRowsSafe(rows = []) {
+  let payload = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row && typeof row === "object")
+    .map((row) => _sbCleanInsertRow(row));
+  if (!payload.length) return { count: 0, removedColumns: [] };
+
+  const removedColumns = [];
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      // We only need confirmation that the batch committed; returning 100+ full
+      // order rows adds unnecessary serialization/network time. Give the single
+      // bulk request enough time for slower self-hosted Supabase instances while
+      // still staying comfortably inside the frontend proxy timeout.
+      await supabaseDb.request(`/${encodeURIComponent(_sbOrdersTable())}`, {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: payload,
+        timeoutMs: 45000,
+      });
+      return { count: payload.length, removedColumns };
+    } catch (error) {
+      const message = String(error?.message || error?.details || error?.hint || "");
+      const missingColumn =
+        (message.match(/Could not find the ['"]([^'"]+)['"] column/i) || [])[1] ||
+        (message.match(/column ['"]([^'"]+)['"]/i) || [])[1] ||
+        "";
+      if (!missingColumn || !payload.some((row) => Object.prototype.hasOwnProperty.call(row, missingColumn))) {
+        throw error;
+      }
+      payload = payload.map((row) => {
+        const next = { ...row };
+        delete next[missingColumn];
+        return next;
+      });
+      removedColumns.push(missingColumn);
+    }
+  }
+
+  const err = new Error(`Failed to create order after removing unsupported column(s): ${removedColumns.join(", ")}`);
+  err.status = 500;
+  throw err;
+}
+
 async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
   const pid = String(proposalId || "").trim();
   const teamMemberId = String(body?.teamMemberId || body?.team_member_id || "").trim();
@@ -7606,11 +7656,11 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
   const productMap = await _sbProductsMapById();
   const orderNumber = await _sbNextOrderNumber();
   const now = new Date().toISOString();
-  const created = [];
+  const rows = [];
   for (const item of items) {
     const product = productMap.get(String(item.productId || "")) || {};
     const qty = _sbProposalQuantity(item.quantity || 1);
-    const row = {
+    rows.push({
       reason: detail.proposal.name || "Proposal",
       order_number: orderNumber,
       order_type: _canonicalOrderTypeLabel("Request Products") || "Request Products",
@@ -7631,11 +7681,12 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
       person_received_by_operations: null,
       created_by_name: String(req?.session?.username || "").trim() || null,
       created_by_id: String(req?.session?.userSupabaseId || "").trim() || null,
-    };
-    created.push(await _sbInsertOrderRowSafe(row));
+    });
   }
+
+  const inserted = await _sbInsertOrderRowsSafe(rows);
   await _sbInvalidateOrdersCaches();
-  return { orderNumber, orderId: `ORD-${orderNumber}`, count: created.length, member };
+  return { orderNumber, orderId: `ORD-${orderNumber}`, count: inserted.count, member };
 }
 
 function _proposalReceiptUploads(body = {}) {
