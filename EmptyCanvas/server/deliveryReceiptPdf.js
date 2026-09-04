@@ -2,7 +2,7 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
+const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -132,13 +132,6 @@ function containsArabicText(value) {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(value || ""));
 }
 
-function firstStrongTextDirection(value) {
-  for (const ch of Array.from(String(value || ""))) {
-    if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(ch)) return "rtl";
-    if (/[A-Za-z]/.test(ch)) return "ltr";
-  }
-  return containsArabicText(value) ? "rtl" : "ltr";
-}
 
 function splitInstructionParagraphs(value) {
   const normalized = String(value || "").replace(/\r\n?/g, "\n").trim();
@@ -150,6 +143,19 @@ function splitInstructionParagraphs(value) {
     .split(/\n[ \t]*\n+/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
+}
+
+function splitLegacyInstructionLanguages(value) {
+  const paragraphs = splitInstructionParagraphs(value);
+  const english = [];
+  const arabic = [];
+  for (const paragraph of paragraphs) {
+    (containsArabicText(paragraph) ? arabic : english).push(paragraph);
+  }
+  return {
+    englishText: english.join("\n\n"),
+    arabicText: arabic.join("\n\n"),
+  };
 }
 
 /**
@@ -195,6 +201,8 @@ async function pipeDeliveryReceiptPDF(
     showFooterSignature = true,
     exportColumns = null,
     instructionTitle = "",
+    instructionEnglishText = "",
+    instructionArabicText = "",
     instructionText = "",
   },
   stream,
@@ -352,91 +360,102 @@ async function pipeDeliveryReceiptPDF(
   drawPageHeader({ compact: false });
   drawFooterSignature();
 
-  // ======== Optional instructions block (page 1, before order metadata) ========
-  const safeInstructionText = String(instructionText || "").trim();
+  // ======== Optional instructions blocks (page 1, before order metadata) ========
+  // English and Arabic are intentionally rendered in separate blocks. This keeps
+  // the Arabic paragraph on the legacy visual-order shaping path, which is more
+  // reliable than mixing LTR/RTL paragraphs inside one PDFKit text flow.
   const safeInstructionTitle = String(instructionTitle || "").trim();
-  if (safeInstructionText) {
+  const legacyInstruction = splitLegacyInstructionLanguages(instructionText);
+  const safeInstructionEnglish = String(instructionEnglishText || legacyInstruction.englishText || "").trim();
+  const safeInstructionArabic = String(instructionArabicText || legacyInstruction.arabicText || "").trim();
+  const showSelectedTitle = Boolean(safeInstructionTitle && safeInstructionTitle.toLowerCase() !== "instructions");
+  const instructionTitleIsArabic = showSelectedTitle && containsArabicText(safeInstructionTitle);
+
+  const drawInstructionLanguageBlock = ({ label, text, isArabic = false, title = "" }) => {
+    const safeText = String(text || "").trim();
+    if (!safeText) return;
+
     const { mL, contentW } = metrics();
     const padX = 12;
     const padY = 10;
-    const headingSize = 11;
+    const headingSize = 10;
     const titleSize = 9.5;
     const bodySize = 9;
     const innerW = Math.max(1, contentW - padX * 2);
-    const showSelectedTitle = Boolean(safeInstructionTitle && safeInstructionTitle.toLowerCase() !== "instructions");
-    const paragraphs = splitInstructionParagraphs(safeInstructionText);
-    const paragraphGap = 9;
-
-    const measureDirectionalText = (text, fontName, fontSize, lineGap = 1) => {
-      const direction = firstStrongTextDirection(text);
-      return withNativeArabicPdfText(doc, () => {
-        doc.font(fontName).fontSize(fontSize);
-        return doc.heightOfString(text, {
-          width: innerW,
-          lineGap,
-          align: direction === "rtl" ? "right" : "left",
-          direction,
-        });
-      });
-    };
+    const paragraphs = splitInstructionParagraphs(safeText);
+    const paragraphGap = 8;
+    const align = isArabic ? "right" : "left";
 
     doc.font("Helvetica-Bold").fontSize(headingSize);
-    const headingH = doc.heightOfString("Instructions", { width: innerW, lineGap: 1, align: "left" });
-    const titleH = showSelectedTitle
-      ? measureDirectionalText(safeInstructionTitle, "Helvetica-Bold", titleSize, 1)
+    const headingH = doc.heightOfString(label, { width: innerW, lineGap: 1, align });
+    const safeTitle = String(title || "").trim();
+    const titleH = safeTitle
+      ? doc.font("Helvetica-Bold").fontSize(titleSize).heightOfString(safeTitle, { width: innerW, lineGap: 1, align })
       : 0;
     const bodyHeights = paragraphs.map((paragraph) =>
-      measureDirectionalText(paragraph, "Helvetica", bodySize, 2),
+      doc.font("Helvetica").fontSize(bodySize).heightOfString(paragraph, { width: innerW, lineGap: 2, align }),
     );
-    const titleGap = showSelectedTitle ? 5 : 0;
+    const titleGap = safeTitle ? 5 : 0;
     const bodyGap = 6;
     const paragraphsH = bodyHeights.reduce((sum, height) => sum + height, 0)
       + Math.max(0, paragraphs.length - 1) * paragraphGap;
-    const blockH = Math.max(62, padY + headingH + titleGap + titleH + bodyGap + paragraphsH + padY);
-    ensureSpace(blockH + 18);
-    const y = doc.y;
+    const blockH = Math.max(58, padY + headingH + titleGap + titleH + bodyGap + paragraphsH + padY);
 
+    ensureSpace(blockH + 14);
+    const y = doc.y;
     doc.save();
-    doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke("#FFFCF7", "#FED7AA");
+    doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke(
+      isArabic ? "#F7FFFD" : "#FFFCF7",
+      isArabic ? "#99F6E4" : "#FED7AA",
+    );
+
     let cursorY = y + padY;
-    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(headingSize).text("Instructions", mL + padX, cursorY, {
+    doc.fillColor(isArabic ? "#0F766E" : "#9A3412").font("Helvetica-Bold").fontSize(headingSize).text(label, mL + padX, cursorY, {
       width: innerW,
       lineGap: 1,
-      align: "left",
+      align,
     });
     cursorY += headingH;
 
-    if (showSelectedTitle) {
+    if (safeTitle) {
       cursorY += titleGap;
-      const titleDirection = firstStrongTextDirection(safeInstructionTitle);
-      withNativeArabicPdfText(doc, () => {
-        doc.fillColor("#B45309").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, cursorY, {
-          width: innerW,
-          lineGap: 1,
-          align: titleDirection === "rtl" ? "right" : "left",
-          direction: titleDirection,
-        });
+      doc.fillColor(isArabic ? "#0F766E" : "#B45309").font("Helvetica-Bold").fontSize(titleSize).text(safeTitle, mL + padX, cursorY, {
+        width: innerW,
+        lineGap: 1,
+        align,
       });
       cursorY += titleH;
     }
 
     cursorY += bodyGap;
     paragraphs.forEach((paragraph, index) => {
-      const direction = firstStrongTextDirection(paragraph);
-      withNativeArabicPdfText(doc, () => {
-        doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(paragraph, mL + padX, cursorY, {
-          width: innerW,
-          lineGap: 2,
-          align: direction === "rtl" ? "right" : "left",
-          direction,
-        });
+      doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(paragraph, mL + padX, cursorY, {
+        width: innerW,
+        lineGap: 2,
+        align,
       });
       cursorY += bodyHeights[index] || 0;
       if (index < paragraphs.length - 1) cursorY += paragraphGap;
     });
 
     doc.restore();
-    doc.y = y + blockH + 14;
+    doc.y = y + blockH + 9;
+  };
+
+  if (safeInstructionEnglish || safeInstructionArabic) {
+    drawInstructionLanguageBlock({
+      label: "English Instructions",
+      text: safeInstructionEnglish,
+      isArabic: false,
+      title: showSelectedTitle && !instructionTitleIsArabic ? safeInstructionTitle : "",
+    });
+    drawInstructionLanguageBlock({
+      label: "التعليمات العربية",
+      text: safeInstructionArabic,
+      isArabic: true,
+      title: showSelectedTitle && instructionTitleIsArabic ? safeInstructionTitle : "",
+    });
+    doc.y += 5;
   }
 
   // ======== Meta small table (page 1) ========

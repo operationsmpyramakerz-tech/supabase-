@@ -17,18 +17,41 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
+function containsArabic(value) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(value || ""));
+}
+
+function splitLegacyInstructionText(value) {
+  const raw = text(value);
+  if (!raw) return { englishText: "", arabicText: "" };
+
+  const english = [];
+  const arabic = [];
+  const blocks = raw.split(/\n[ \t]*\n+/).map((part) => text(part)).filter(Boolean);
+  for (const block of blocks.length ? blocks : [raw]) {
+    (containsArabic(block) ? arabic : english).push(block);
+  }
+  return { englishText: english.join("\n\n"), arabicText: arabic.join("\n\n") };
+}
+
+function normalizeTemplate(item) {
+  const legacy = splitLegacyInstructionText(item?.text || item?.body);
+  return {
+    id: text(item?.id),
+    title: text(item?.title),
+    englishText: text(item?.englishText || item?.english || legacy.englishText),
+    arabicText: text(item?.arabicText || item?.arabic || legacy.arabicText),
+  };
+}
+
 function loadTemplates() {
   if (typeof window === "undefined") return [];
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
     return Array.isArray(parsed)
       ? parsed
-          .map((item) => ({
-            id: text(item?.id),
-            title: text(item?.title),
-            text: text(item?.text),
-          }))
-          .filter((item) => item.id && item.title && item.text)
+          .map(normalizeTemplate)
+          .filter((item) => item.id && item.title && (item.englishText || item.arabicText))
       : [];
   } catch {
     return [];
@@ -50,8 +73,10 @@ function makeTemplateId() {
 }
 
 function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
-  const [title, setTitle] = useState(() => text(initialTemplate?.title));
-  const [body, setBody] = useState(() => text(initialTemplate?.text));
+  const normalizedInitial = useMemo(() => normalizeTemplate(initialTemplate || {}), [initialTemplate]);
+  const [title, setTitle] = useState(() => text(normalizedInitial.title));
+  const [englishBody, setEnglishBody] = useState(() => text(normalizedInitial.englishText));
+  const [arabicBody, setArabicBody] = useState(() => text(normalizedInitial.arabicText));
   const titleRef = useRef(null);
 
   useEffect(() => {
@@ -66,7 +91,7 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const canSave = Boolean(text(title) && text(body));
+  const canSave = Boolean(text(title) && (text(englishBody) || text(arabicBody)));
 
   return (
     <div className="order-instruction-editor-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -78,7 +103,12 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!canSave) return;
-          onSave({ id: text(initialTemplate?.id) || makeTemplateId(), title: text(title), text: text(body) });
+          onSave({
+            id: text(initialTemplate?.id) || makeTemplateId(),
+            title: text(title),
+            englishText: text(englishBody),
+            arabicText: text(arabicBody),
+          });
         }}
       >
         <button type="button" className="order-download-close" onClick={onClose} aria-label="Close add instructions dialog"><ClassicOrderIcon name="x" /></button>
@@ -86,7 +116,7 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
           <span className="order-download-header__icon"><ClassicOrderIcon name="file-text" /></span>
           <div>
             <h3 id="order-instruction-editor-title">{initialTemplate ? "Edit Instructions" : "Add new Instructions"}</h3>
-            <p>{initialTemplate ? "Update the selected reusable instructions." : "Save a reusable title and text for future order files."}</p>
+            <p>{initialTemplate ? "Update the selected reusable instructions." : "Save separate English and Arabic instructions for future order files."}</p>
           </div>
         </div>
         <div className="order-instruction-editor__fields">
@@ -95,8 +125,27 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
             <input ref={titleRef} type="text" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="Example: Delivery notes" />
           </label>
           <label>
-            <span>Instructions *</span>
-            <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={7} placeholder="Write the instructions that should appear at the beginning of the file..." />
+            <span>English Instructions</span>
+            <textarea
+              value={englishBody}
+              onChange={(event) => setEnglishBody(event.target.value)}
+              maxLength={2000}
+              rows={6}
+              dir="ltr"
+              placeholder="Write the English instructions..."
+            />
+          </label>
+          <label>
+            <span>Arabic Instructions</span>
+            <textarea
+              value={arabicBody}
+              onChange={(event) => setArabicBody(event.target.value)}
+              maxLength={2000}
+              rows={6}
+              dir="rtl"
+              lang="ar"
+              placeholder="اكتب التعليمات باللغة العربية..."
+            />
           </label>
         </div>
         <div className="order-download-actions order-instruction-editor__actions">
@@ -183,7 +232,11 @@ export default function OrderDownloadModal({
         kind,
         columns,
         instruction: selectedInstruction
-          ? { title: selectedInstruction.title, text: selectedInstruction.text }
+          ? {
+              title: selectedInstruction.title,
+              englishText: selectedInstruction.englishText,
+              arabicText: selectedInstruction.arabicText,
+            }
           : null,
       });
       onClose();
@@ -258,14 +311,14 @@ export default function OrderDownloadModal({
                 </button>
                 {templates.map((template) => (
                   <button type="button" className={`order-instruction-select__option ${selectedInstructionId === template.id ? "is-selected" : ""}`} key={template.id} onClick={() => { setSelectedInstructionId(template.id); setInstructionOpen(false); }}>
-                    <span><strong>{template.title}</strong><small>{template.text}</small></span>
+                    <span><strong>{template.title}</strong><small>{template.englishText || template.arabicText}</small></span>
                     {selectedInstructionId === template.id ? <ClassicOrderIcon name="check" /> : null}
                   </button>
                 ))}
                 <div className="order-instruction-select__divider" />
                 <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setEditingInstruction(null); setComposerOpen(true); }}>
                   <span className="order-instruction-select__add-icon">+</span>
-                  <span><strong>Add new Instructions</strong><small>Save a reusable title and text</small></span>
+                  <span><strong>Add new Instructions</strong><small>Save English and Arabic text separately</small></span>
                 </button>
               </div>
             ) : null}
@@ -284,7 +337,8 @@ export default function OrderDownloadModal({
                   <ClassicOrderIcon name="edit-2" />
                 </button>
               </div>
-              <p>{selectedInstruction.text}</p>
+              {selectedInstruction.englishText ? <p dir="ltr">{selectedInstruction.englishText}</p> : null}
+              {selectedInstruction.arabicText ? <p dir="rtl" lang="ar">{selectedInstruction.arabicText}</p> : null}
             </div>
           ) : null}
         </div>

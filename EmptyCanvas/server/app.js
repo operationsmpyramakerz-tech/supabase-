@@ -5732,15 +5732,48 @@ function _selectedOrderExportColumnDefs(columns, opts = {}) {
     .filter(Boolean);
 }
 
-function _normalizeOrderExportInstruction(instruction) {
-  if (!instruction) return { title: "", text: "" };
-  if (typeof instruction === "string") {
-    const body = String(instruction || "").trim().slice(0, 2000);
-    return { title: body ? "Instructions" : "", text: body };
+function _orderInstructionContainsArabic(value) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(value || ""));
+}
+
+function _splitLegacyOrderInstructionText(value) {
+  const raw = String(value || "").replace(/\r\n?/g, "\n").trim();
+  if (!raw) return { englishText: "", arabicText: "" };
+
+  const english = [];
+  const arabic = [];
+  const blocks = raw.split(/\n[ \t]*\n+/).map((part) => String(part || "").trim()).filter(Boolean);
+  for (const block of blocks.length ? blocks : [raw]) {
+    (_orderInstructionContainsArabic(block) ? arabic : english).push(block);
   }
+  return { englishText: english.join("\n\n"), arabicText: arabic.join("\n\n") };
+}
+
+function _normalizeOrderExportInstruction(instruction) {
+  if (!instruction) return { title: "", englishText: "", arabicText: "", text: "" };
+
+  if (typeof instruction === "string") {
+    const legacy = _splitLegacyOrderInstructionText(String(instruction || "").slice(0, 4000));
+    const hasBody = Boolean(legacy.englishText || legacy.arabicText);
+    return {
+      title: hasBody ? "Instructions" : "",
+      englishText: legacy.englishText.slice(0, 2000),
+      arabicText: legacy.arabicText.slice(0, 2000),
+      text: [legacy.englishText, legacy.arabicText].filter(Boolean).join("\n\n").slice(0, 4000),
+    };
+  }
+
   const title = String(instruction?.title || "Instructions").trim().slice(0, 120);
-  const body = String(instruction?.text || instruction?.body || "").trim().slice(0, 2000);
-  return { title: body ? (title || "Instructions") : "", text: body };
+  const legacy = _splitLegacyOrderInstructionText(instruction?.text || instruction?.body || "");
+  const englishText = String(instruction?.englishText || instruction?.english || legacy.englishText || "").trim().slice(0, 2000);
+  const arabicText = String(instruction?.arabicText || instruction?.arabic || legacy.arabicText || "").trim().slice(0, 2000);
+  const hasBody = Boolean(englishText || arabicText);
+  return {
+    title: hasBody ? (title || "Instructions") : "",
+    englishText,
+    arabicText,
+    text: [englishText, arabicText].filter(Boolean).join("\n\n"),
+  };
 }
 
 function _normalizeOrderExportSortMode(value) {
@@ -5841,6 +5874,8 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", colu
       showCosts: !hideCosts,
       exportColumns: selectedExportColumns,
       instructionTitle: exportInstruction.title,
+      instructionEnglishText: exportInstruction.englishText,
+      instructionArabicText: exportInstruction.arabicText,
       instructionText: exportInstruction.text,
       documentTitle: payload.receiptView.documentTitle,
       recipientLabelLeft: payload.receiptView.recipientLabelLeft,
@@ -5998,7 +6033,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   };
 
   const instructionLastCol = _orderExcelColumnName(Math.max(4, columnCount));
-  if (exportInstruction.text) {
+  if (exportInstruction.englishText || exportInstruction.arabicText) {
     const instructionHeadingRow = ws.addRow(["Instructions"]);
     ws.mergeCells(`A${instructionHeadingRow.number}:${instructionLastCol}${instructionHeadingRow.number}`);
     instructionHeadingRow.height = 23;
@@ -6018,14 +6053,29 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
       instructionTitleRow.getCell(1).border = borderThin;
     }
 
-    const instructionTextRow = ws.addRow([exportInstruction.text]);
-    ws.mergeCells(`A${instructionTextRow.number}:${instructionLastCol}${instructionTextRow.number}`);
-    instructionTextRow.height = Math.min(160, Math.max(46, 30 + Math.ceil(exportInstruction.text.length / 90) * 15));
-    const instructionIsArabic = _orderExportContainsArabic(exportInstruction.text);
-    instructionTextRow.getCell(1).alignment = { vertical: "top", horizontal: instructionIsArabic ? "right" : "left", readingOrder: instructionIsArabic ? "rtl" : "ltr", wrapText: true };
-    instructionTextRow.getCell(1).font = { color: { argb: "FF374151" } };
-    instructionTextRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFCF7" } };
-    instructionTextRow.getCell(1).border = borderThin;
+    const addInstructionLanguageRow = (label, value, isArabic = false) => {
+      const body = String(value || "").trim();
+      if (!body) return;
+
+      const labelRow = ws.addRow([label]);
+      ws.mergeCells(`A${labelRow.number}:${instructionLastCol}${labelRow.number}`);
+      labelRow.height = 19;
+      labelRow.getCell(1).font = { bold: true, color: { argb: isArabic ? "FF0F766E" : "FF475467" }, size: 9 };
+      labelRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: isArabic ? "FFF0FDFA" : "FFF8FAFC" } };
+      labelRow.getCell(1).alignment = { vertical: "middle", horizontal: isArabic ? "right" : "left", readingOrder: isArabic ? "rtl" : "ltr", wrapText: true };
+      labelRow.getCell(1).border = borderThin;
+
+      const textRow = ws.addRow([body]);
+      ws.mergeCells(`A${textRow.number}:${instructionLastCol}${textRow.number}`);
+      textRow.height = Math.min(160, Math.max(46, 30 + Math.ceil(body.length / 90) * 15));
+      textRow.getCell(1).alignment = { vertical: "top", horizontal: isArabic ? "right" : "left", readingOrder: isArabic ? "rtl" : "ltr", wrapText: true };
+      textRow.getCell(1).font = { color: { argb: "FF374151" } };
+      textRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: isArabic ? "FFF7FFFD" : "FFFFFCF7" } };
+      textRow.getCell(1).border = borderThin;
+    };
+
+    addInstructionLanguageRow("English", exportInstruction.englishText, false);
+    addInstructionLanguageRow("العربية", exportInstruction.arabicText, true);
     ws.addRow([]);
   }
 
@@ -23528,6 +23578,8 @@ app.post(
           showCosts: !hideCosts,
           exportColumns: selectedExportColumns,
           instructionTitle: exportInstruction.title,
+          instructionEnglishText: exportInstruction.englishText,
+          instructionArabicText: exportInstruction.arabicText,
           instructionText: exportInstruction.text,
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
@@ -24590,6 +24642,8 @@ app.post(
           headerColorKey: groupReason,
           exportColumns: selectedExportColumns,
           instructionTitle: exportInstruction.title,
+          instructionEnglishText: exportInstruction.englishText,
+          instructionArabicText: exportInstruction.arabicText,
           instructionText: exportInstruction.text,
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
