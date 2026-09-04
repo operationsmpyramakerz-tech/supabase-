@@ -595,7 +595,7 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
           open={downloadOpen}
           title={`Download ${group.orderIdLabel}`}
           onClose={() => setDownloadOpen(false)}
-          onDownload={(options) => onExport(options, group)}
+          onDownload={(options) => onExport({ ...options, sortMode }, group)}
         />
       </div>
     </div>
@@ -855,6 +855,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
         orderIds: group.orderIds,
         columns: options?.columns || [],
         instruction: options?.instruction || null,
+        sortMode: options?.sortMode || "product-tag",
       }),
     });
     if (response.status === 401) {

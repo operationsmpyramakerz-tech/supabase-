@@ -676,7 +676,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     onAction(action, group);
   };
 
-  const exportAction = (options) => onExport(options, group, tab);
+  const exportAction = (options) => onExport({ ...options, sortMode }, group, tab);
 
   const renderItem = (item, index) => {
     const state = itemStatus(item);
@@ -1409,7 +1409,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], instruction: options?.instruction || null }),
+        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], instruction: options?.instruction || null, sortMode: options?.sortMode || "product-tag" }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";

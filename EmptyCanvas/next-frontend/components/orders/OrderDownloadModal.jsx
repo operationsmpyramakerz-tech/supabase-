@@ -272,16 +272,18 @@ export default function OrderDownloadModal({
           </div>
           {selectedInstruction ? (
             <div className="order-download-instruction-preview">
-              <button
-                type="button"
-                className="order-download-instruction-edit"
-                aria-label="Edit selected instructions"
-                title="Edit instructions"
-                onClick={() => { setInstructionOpen(false); setEditingInstruction(selectedInstruction); setComposerOpen(true); }}
-              >
-                <ClassicOrderIcon name="edit-2" />
-              </button>
-              <strong>{selectedInstruction.title}</strong>
+              <div className="order-download-instruction-preview__head">
+                <strong>{selectedInstruction.title}</strong>
+                <button
+                  type="button"
+                  className="order-download-instruction-edit"
+                  aria-label="Edit selected instructions"
+                  title="Edit instructions"
+                  onClick={() => { setInstructionOpen(false); setEditingInstruction(selectedInstruction); setComposerOpen(true); }}
+                >
+                  <ClassicOrderIcon name="edit-2" />
+                </button>
+              </div>
               <p>{selectedInstruction.text}</p>
             </div>
           ) : null}

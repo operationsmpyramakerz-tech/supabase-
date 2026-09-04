@@ -432,7 +432,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
         open={downloadOpen}
         title={`Download ${group.orderIdLabel}`}
         onClose={() => setDownloadOpen(false)}
-        onDownload={(options) => onExport(options, group, activeTab)}
+        onDownload={(options) => onExport({ ...options, sortMode }, group, activeTab)}
       />
     </div>
   </div>;
@@ -775,6 +775,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
         tab: selectedTab,
         columns: options?.columns || [],
         instruction: options?.instruction || null,
+        sortMode: options?.sortMode || "product-tag",
       }),
     });
     if (response.status === 401) {
