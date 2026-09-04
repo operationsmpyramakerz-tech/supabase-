@@ -2,7 +2,7 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
+const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -284,25 +284,30 @@ async function pipeDeliveryReceiptPDF(
   const safeInstructionText = String(instructionText || "").trim();
   const safeInstructionTitle = String(instructionTitle || "Instructions").trim() || "Instructions";
   if (safeInstructionText) {
-    const { mL, contentW } = metrics();
-    const padX = 12;
-    const padY = 10;
-    const titleSize = 10;
-    const bodySize = 9;
-    const innerW = Math.max(1, contentW - padX * 2);
-    doc.font("Helvetica-Bold").fontSize(titleSize);
-    const titleH = doc.heightOfString(safeInstructionTitle, { width: innerW, lineGap: 1 });
-    doc.font("Helvetica").fontSize(bodySize);
-    const bodyH = doc.heightOfString(safeInstructionText, { width: innerW, lineGap: 2 });
-    const blockH = Math.max(58, padY + titleH + 6 + bodyH + padY);
-    ensureSpace(blockH + 18);
-    const y = doc.y;
-    doc.save();
-    doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke("#FFFCF7", "#FED7AA");
-    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, y + padY, { width: innerW, lineGap: 1 });
-    doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(safeInstructionText, mL + padX, y + padY + titleH + 6, { width: innerW, lineGap: 2 });
-    doc.restore();
-    doc.y = y + blockH + 14;
+    // Instructions may contain full Arabic paragraphs. Use fontkit's native Arabic
+    // shaping for this block only so logical RTL text is not manually reversed.
+    // Other legacy PDF sections keep their existing compatibility behavior.
+    withNativeArabicPdfText(doc, () => {
+      const { mL, contentW } = metrics();
+      const padX = 12;
+      const padY = 10;
+      const titleSize = 10;
+      const bodySize = 9;
+      const innerW = Math.max(1, contentW - padX * 2);
+      doc.font("Helvetica-Bold").fontSize(titleSize);
+      const titleH = doc.heightOfString(safeInstructionTitle, { width: innerW, lineGap: 1 });
+      doc.font("Helvetica").fontSize(bodySize);
+      const bodyH = doc.heightOfString(safeInstructionText, { width: innerW, lineGap: 2 });
+      const blockH = Math.max(58, padY + titleH + 6 + bodyH + padY);
+      ensureSpace(blockH + 18);
+      const y = doc.y;
+      doc.save();
+      doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke("#FFFCF7", "#FED7AA");
+      doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, y + padY, { width: innerW, lineGap: 1 });
+      doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(safeInstructionText, mL + padX, y + padY + titleH + 6, { width: innerW, lineGap: 2 });
+      doc.restore();
+      doc.y = y + blockH + 14;
+    });
   }
 
   // ======== Meta small table (page 1) ========

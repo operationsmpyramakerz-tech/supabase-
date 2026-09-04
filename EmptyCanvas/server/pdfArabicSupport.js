@@ -700,9 +700,16 @@ function enableArabicPdf(doc) {
           return String(prepared || "").length * 7;
         }
       };
-      const prepared = canWrapManually
-        ? prepareWrappedPdfTextForArabic(raw, wrapWidth, measurePrepared)
-        : preparePdfTextForArabic(raw);
+      // PDFKit 0.17+/fontkit can shape logical Arabic text natively. Most of the
+      // legacy ERP PDFs still use the historical visual-order compatibility mode,
+      // but callers can opt into native shaping for blocks where manually reversing
+      // Arabic would otherwise render the letters/words backwards.
+      const useNativeShaping = Boolean(doc.__pdfArabicNativeShaping);
+      const prepared = useNativeShaping
+        ? raw
+        : (canWrapManually
+            ? prepareWrappedPdfTextForArabic(raw, wrapWidth, measurePrepared)
+            : preparePdfTextForArabic(raw));
 
       return fn(prepared);
     } catch (err) {
@@ -753,6 +760,18 @@ function enableArabicPdf(doc) {
   return arabicFontsRegistered;
 }
 
+
+function withNativeArabicPdfText(doc, callback) {
+  if (!doc || typeof callback !== "function") return undefined;
+  const previous = Boolean(doc.__pdfArabicNativeShaping);
+  doc.__pdfArabicNativeShaping = true;
+  try {
+    return callback();
+  } finally {
+    doc.__pdfArabicNativeShaping = previous;
+  }
+}
+
 module.exports = {
   ARABIC_REGULAR_FONT,
   ARABIC_BOLD_FONT,
@@ -760,4 +779,5 @@ module.exports = {
   enableArabicPdf,
   ensurePdfArabicSupport,
   preparePdfTextForArabic,
+  withNativeArabicPdfText,
 };

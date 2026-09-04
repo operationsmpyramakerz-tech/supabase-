@@ -49,9 +49,9 @@ function makeTemplateId() {
   return `instruction-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function InstructionComposer({ onClose, onSave }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
+  const [title, setTitle] = useState(() => text(initialTemplate?.title));
+  const [body, setBody] = useState(() => text(initialTemplate?.text));
   const titleRef = useRef(null);
 
   useEffect(() => {
@@ -78,15 +78,15 @@ function InstructionComposer({ onClose, onSave }) {
         onSubmit={(event) => {
           event.preventDefault();
           if (!canSave) return;
-          onSave({ id: makeTemplateId(), title: text(title), text: text(body) });
+          onSave({ id: text(initialTemplate?.id) || makeTemplateId(), title: text(title), text: text(body) });
         }}
       >
         <button type="button" className="order-download-close" onClick={onClose} aria-label="Close add instructions dialog"><ClassicOrderIcon name="x" /></button>
         <div className="order-download-header">
           <span className="order-download-header__icon"><ClassicOrderIcon name="file-text" /></span>
           <div>
-            <h3 id="order-instruction-editor-title">Add new Instructions</h3>
-            <p>Save a reusable title and text for future order files.</p>
+            <h3 id="order-instruction-editor-title">{initialTemplate ? "Edit Instructions" : "Add new Instructions"}</h3>
+            <p>{initialTemplate ? "Update the selected reusable instructions." : "Save a reusable title and text for future order files."}</p>
           </div>
         </div>
         <div className="order-instruction-editor__fields">
@@ -101,7 +101,7 @@ function InstructionComposer({ onClose, onSave }) {
         </div>
         <div className="order-download-actions order-instruction-editor__actions">
           <button type="button" className="order-download-btn order-download-btn--light" onClick={onClose}>Cancel</button>
-          <button type="submit" className="order-download-btn order-download-btn--dark" disabled={!canSave}><ClassicOrderIcon name="check" /><span>Save Instructions</span></button>
+          <button type="submit" className="order-download-btn order-download-btn--dark" disabled={!canSave}><ClassicOrderIcon name="check" /><span>{initialTemplate ? "Save Changes" : "Save Instructions"}</span></button>
         </div>
       </form>
     </div>
@@ -127,6 +127,7 @@ export default function OrderDownloadModal({
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [editingInstruction, setEditingInstruction] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const selectorRef = useRef(null);
@@ -138,6 +139,7 @@ export default function OrderDownloadModal({
     setSelectedInstructionId("");
     setInstructionOpen(false);
     setComposerOpen(false);
+    setEditingInstruction(null);
     setBusy(false);
     setError("");
   }, [open, startingColumns]);
@@ -192,11 +194,15 @@ export default function OrderDownloadModal({
     }
   };
 
-  const addInstruction = (template) => {
-    const next = [...templates, template];
+  const saveInstruction = (template) => {
+    const exists = templates.some((item) => item.id === template.id);
+    const next = exists
+      ? templates.map((item) => (item.id === template.id ? template : item))
+      : [...templates, template];
     setTemplates(next);
     saveTemplates(next);
     setSelectedInstructionId(template.id);
+    setEditingInstruction(null);
     setComposerOpen(false);
     setInstructionOpen(false);
   };
@@ -257,14 +263,28 @@ export default function OrderDownloadModal({
                   </button>
                 ))}
                 <div className="order-instruction-select__divider" />
-                <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setComposerOpen(true); }}>
+                <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setEditingInstruction(null); setComposerOpen(true); }}>
                   <span className="order-instruction-select__add-icon">+</span>
                   <span><strong>Add new Instructions</strong><small>Save a reusable title and text</small></span>
                 </button>
               </div>
             ) : null}
           </div>
-          {selectedInstruction ? <div className="order-download-instruction-preview"><strong>{selectedInstruction.title}</strong><p>{selectedInstruction.text}</p></div> : null}
+          {selectedInstruction ? (
+            <div className="order-download-instruction-preview">
+              <button
+                type="button"
+                className="order-download-instruction-edit"
+                aria-label="Edit selected instructions"
+                title="Edit instructions"
+                onClick={() => { setInstructionOpen(false); setEditingInstruction(selectedInstruction); setComposerOpen(true); }}
+              >
+                <ClassicOrderIcon name="edit-2" />
+              </button>
+              <strong>{selectedInstruction.title}</strong>
+              <p>{selectedInstruction.text}</p>
+            </div>
+          ) : null}
         </div>
 
         {error ? <div className="order-download-error" role="alert">{error}</div> : null}
@@ -274,7 +294,7 @@ export default function OrderDownloadModal({
           <button type="button" className="order-download-btn order-download-btn--dark" disabled={busy} onClick={() => runDownload("excel")}><ClassicOrderIcon name="grid" /><span>{busy ? "Preparing…" : "Download Excel"}</span></button>
         </div>
       </div>
-      {composerOpen ? <InstructionComposer onClose={() => setComposerOpen(false)} onSave={addInstruction} /> : null}
+      {composerOpen ? <InstructionComposer initialTemplate={editingInstruction} onClose={() => { setComposerOpen(false); setEditingInstruction(null); }} onSave={saveInstruction} /> : null}
     </div>
   );
 }
