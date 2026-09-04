@@ -5619,7 +5619,7 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
     throw err;
   }
 
-  const items = rowsRaw.map(_sbSerializeOrderRow);
+  const items = await _sbEnrichOrderGrouping(rowsRaw.map(_sbSerializeOrderRow));
   const productNameMap = await _sbProductsMapByName();
   const createdTimes = items
     .map((item) => new Date(item.createdTime || Date.now()))
@@ -5662,6 +5662,9 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
       sparePartsReplacedNames: item.sparePartsReplacedNames || [],
       sparePartsReplacedName: item.sparePartsReplacedName || null,
       link: item.productUrl || prod?.url || "",
+      productTag: String(item.productTag || item.product_tag || item.productTags?.[0] || "Uncategorized").trim() || "Uncategorized",
+      kitTag: String(item.kitTag || item.kit_tag || "Unassigned kit").trim() || "Unassigned kit",
+      kitFolderName: String(item.kitFolderName || item.kit_folder_name || "Unfiled Kits").trim() || "Unfiled Kits",
       unit,
       total,
     });
@@ -5740,6 +5743,45 @@ function _normalizeOrderExportInstruction(instruction) {
   return { title: body ? (title || "Instructions") : "", text: body };
 }
 
+function _normalizeOrderExportSortMode(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (["kit-tag", "kits-tag", "kit", "kits"].includes(key)) return "kit-tag";
+  if (["product-tag", "products-tag", "product", "products"].includes(key)) return "product-tag";
+  return "";
+}
+
+function _orderExportNaturalCompare(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function _groupOrderExportRows(rows = [], sortMode = "") {
+  const mode = _normalizeOrderExportSortMode(sortMode);
+  if (!mode) return [];
+  const groups = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const isKit = mode === "kit-tag";
+    const tag = isKit
+      ? (String(row?.kitTag || row?.kit_tag || "").trim() || "Unassigned kit")
+      : (String(row?.productTag || row?.product_tag || "").trim() || "Uncategorized");
+    const folderName = isKit
+      ? (String(row?.kitFolderName || row?.kit_folder_name || "").trim() || "Unfiled Kits")
+      : "";
+    const key = `${folderName.toLowerCase()}|${tag.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, { tag, folderName, rows: [] });
+    groups.get(key).rows.push(row);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      rows: group.rows.slice().sort((a, b) => _orderExportNaturalCompare(a?.component, b?.component)),
+    }))
+    .sort((a, b) => _orderExportNaturalCompare(a.folderName, b.folderName) || _orderExportNaturalCompare(a.tag, b.tag));
+}
+
+function _orderExportContainsArabic(value) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(value || ""));
+}
+
 function _orderExcelColumnName(index) {
   let n = Math.max(1, Number(index) || 1);
   let out = "";
@@ -5772,11 +5814,12 @@ function _sbSafeExportName(value = "order") {
     .slice(0, 60);
 }
 
-async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null } = {}) {
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null, sortMode = null } = {}) {
   const tabKey = String(tab || "").trim().toLowerCase();
   const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
+  const exportSortMode = _normalizeOrderExportSortMode(sortMode ?? req?.body?.sortMode);
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
   await _sendBackgroundExport(res, {
@@ -5788,6 +5831,7 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", colu
       teamMember: payload.teamMember,
       preparedBy: payload.groupReason,
       rows: payload.rows,
+      groupMode: exportSortMode,
       grandQty: payload.grandQty,
       grandTotal: payload.grandTotal,
       metaLayout: "teamReasonFirst",
@@ -5908,11 +5952,12 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   });
 }
 
-async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "", instruction = null } = {}) {
+async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "", instruction = null, sortMode = null } = {}) {
   const ExcelJS = require("exceljs");
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const selectedColumns = _selectedOrderExportColumnDefs(columns, { tab });
   const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
+  const exportSortMode = _normalizeOrderExportSortMode(sortMode ?? req?.body?.sortMode);
   const first = payload.first || {};
   const isMaintenanceExport = _normKeyOrderType(first.orderType || "") === _normKeyOrderType("Request Maintenance");
   const columnCount = Math.max(1, selectedColumns.length);
@@ -5954,18 +5999,30 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
 
   const instructionLastCol = _orderExcelColumnName(Math.max(4, columnCount));
   if (exportInstruction.text) {
-    const instructionTitleRow = ws.addRow([exportInstruction.title || "Instructions"]);
-    ws.mergeCells(`A${instructionTitleRow.number}:${instructionLastCol}${instructionTitleRow.number}`);
-    instructionTitleRow.height = 24;
-    instructionTitleRow.getCell(1).font = { bold: true, color: { argb: "FF9A3412" } };
-    instructionTitleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-    instructionTitleRow.getCell(1).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-    instructionTitleRow.getCell(1).border = borderThin;
+    const instructionHeadingRow = ws.addRow(["Instructions"]);
+    ws.mergeCells(`A${instructionHeadingRow.number}:${instructionLastCol}${instructionHeadingRow.number}`);
+    instructionHeadingRow.height = 23;
+    instructionHeadingRow.getCell(1).font = { bold: true, color: { argb: "FF9A3412" }, size: 12 };
+    instructionHeadingRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+    instructionHeadingRow.getCell(1).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    instructionHeadingRow.getCell(1).border = borderThin;
+
+    const selectedInstructionTitle = String(exportInstruction.title || "").trim();
+    if (selectedInstructionTitle && selectedInstructionTitle.toLowerCase() !== "instructions") {
+      const instructionTitleRow = ws.addRow([selectedInstructionTitle]);
+      ws.mergeCells(`A${instructionTitleRow.number}:${instructionLastCol}${instructionTitleRow.number}`);
+      instructionTitleRow.height = 21;
+      instructionTitleRow.getCell(1).font = { bold: true, color: { argb: "FFB45309" } };
+      instructionTitleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFCF7" } };
+      instructionTitleRow.getCell(1).alignment = { vertical: "middle", horizontal: _orderExportContainsArabic(selectedInstructionTitle) ? "right" : "left", readingOrder: _orderExportContainsArabic(selectedInstructionTitle) ? "rtl" : "ltr", wrapText: true };
+      instructionTitleRow.getCell(1).border = borderThin;
+    }
 
     const instructionTextRow = ws.addRow([exportInstruction.text]);
     ws.mergeCells(`A${instructionTextRow.number}:${instructionLastCol}${instructionTextRow.number}`);
-    instructionTextRow.height = Math.min(140, Math.max(42, 28 + Math.ceil(exportInstruction.text.length / 95) * 15));
-    instructionTextRow.getCell(1).alignment = { vertical: "top", horizontal: "left", wrapText: true };
+    instructionTextRow.height = Math.min(160, Math.max(46, 30 + Math.ceil(exportInstruction.text.length / 90) * 15));
+    const instructionIsArabic = _orderExportContainsArabic(exportInstruction.text);
+    instructionTextRow.getCell(1).alignment = { vertical: "top", horizontal: instructionIsArabic ? "right" : "left", readingOrder: instructionIsArabic ? "rtl" : "ltr", wrapText: true };
     instructionTextRow.getCell(1).font = { color: { argb: "FF374151" } };
     instructionTextRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFCF7" } };
     instructionTextRow.getCell(1).border = borderThin;
@@ -6081,36 +6138,75 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
     }
     ws.addRow([]);
   } else {
-    const reasonMap = new Map();
-    for (const row of payload.rows || []) {
-      const reason = String(row.reason || "").trim() || "No Reason";
-      if (!reasonMap.has(reason)) reasonMap.set(reason, []);
-      reasonMap.get(reason).push(row);
-    }
-    const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
+    const exportGroups = _groupOrderExportRows(payload.rows || [], exportSortMode);
+    if (exportGroups.length) {
+      const GROUP_STYLES = [
+        { fill: "FFFFF7ED", text: "FF9A3412", header: "FFFFEDD5" },
+        { fill: "FFEFF6FF", text: "FF1D4ED8", header: "FFDBEAFE" },
+        { fill: "FFECFDF5", text: "FF047857", header: "FFD1FAE5" },
+        { fill: "FFF5F3FF", text: "FF6D28D9", header: "FFEDE9FE" },
+        { fill: "FFFDF2F8", text: "FFBE185D", header: "FFFCE7F3" },
+        { fill: "FFFEFCE8", text: "FFA16207", header: "FFFEF3C7" },
+      ];
+      exportGroups.forEach((group, groupIndex) => {
+        const style = GROUP_STYLES[groupIndex % GROUP_STYLES.length];
+        const groupLabel = exportSortMode === "kit-tag"
+          ? `${group.folderName || "Unfiled Kits"}  •  ${group.tag || "Unassigned kit"}`
+          : (group.tag || "Uncategorized");
+        const groupPrefix = exportSortMode === "kit-tag" ? "Kit Tag" : "Product Tag";
+        const titleRow = ws.addRow([`${groupPrefix}: ${groupLabel} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
+        const titleNum = titleRow.number;
+        ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
+        for (let c = 1; c <= columnCount; c += 1) {
+          const cell = ws.getRow(titleNum).getCell(c);
+          cell.border = borderThin;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.fill } };
+          cell.font = { bold: true, color: { argb: style.text } };
+          cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+        }
 
-    for (const reason of reasons) {
-      const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
-      const titleNum = titleRow.number;
-      ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
-      for (let c = 1; c <= columnCount; c += 1) {
-        const cell = ws.getRow(titleNum).getCell(c);
-        cell.border = borderThin;
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
-        cell.font = { bold: true, color: { argb: "FF5B21B6" } };
-      }
-
-      const header = ws.addRow(headerCols);
-      header.font = { bold: true, color: { argb: "FF111827" } };
-      header.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
-        cell.border = borderThin;
-        cell.alignment = { vertical: "middle", wrapText: true };
+        const header = ws.addRow(headerCols);
+        header.font = { bold: true, color: { argb: "FF111827" } };
+        header.eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.header } };
+          cell.border = borderThin;
+          cell.alignment = { vertical: "middle", wrapText: true };
+        });
+        group.rows.forEach(addItemRow);
+        ws.addRow([]);
       });
+    } else {
+      const reasonMap = new Map();
+      for (const row of payload.rows || []) {
+        const reason = String(row.reason || "").trim() || "No Reason";
+        if (!reasonMap.has(reason)) reasonMap.set(reason, []);
+        reasonMap.get(reason).push(row);
+      }
+      const reasons = Array.from(reasonMap.keys()).sort((a, b) => String(a).localeCompare(String(b)));
 
-      const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
-      items.forEach(addItemRow);
-      ws.addRow([]);
+      for (const reason of reasons) {
+        const titleRow = ws.addRow([`Reason: ${reason} (${(reasonMap.get(reason) || []).length} items)`]);
+        const titleNum = titleRow.number;
+        ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
+        for (let c = 1; c <= columnCount; c += 1) {
+          const cell = ws.getRow(titleNum).getCell(c);
+          cell.border = borderThin;
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
+          cell.font = { bold: true, color: { argb: "FF5B21B6" } };
+        }
+
+        const header = ws.addRow(headerCols);
+        header.font = { bold: true, color: { argb: "FF111827" } };
+        header.eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDE9FE" } };
+          cell.border = borderThin;
+          cell.alignment = { vertical: "middle", wrapText: true };
+        });
+
+        const items = (reasonMap.get(reason) || []).slice().sort((a, b) => String(a.component || "").localeCompare(String(b.component || "")));
+        items.forEach(addItemRow);
+        ws.addRow([]);
+      }
     }
   }
 
@@ -23141,7 +23237,7 @@ app.post(
   requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
-      const { orderIds, tab, columns, instruction } = req.body || {};
+      const { orderIds, tab, columns, instruction, sortMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23162,7 +23258,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction, sortMode });
       }
 
       const parseNumberProp = (prop) => {
@@ -23710,7 +23806,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds, columns, tab, instruction } = req.body || {};
+      const { orderIds, columns, tab, instruction, sortMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23723,7 +23819,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids, { columns, tab, instruction });
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab, instruction, sortMode });
       }
 
       // Helpers
@@ -24227,7 +24323,7 @@ app.post(
   requirePage("Current Orders"),
   async (req, res) => {
     try {
-      const { orderIds, columns, instruction } = req.body || {};
+      const { orderIds, columns, instruction, sortMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24240,7 +24336,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction, sortMode });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -24520,7 +24616,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds, columns, instruction } = req.body || {};
+      const { orderIds, columns, instruction, sortMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24532,7 +24628,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids, { columns, tab: "current", instruction });
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab: "current", instruction, sortMode });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -36282,7 +36378,7 @@ async function _sbSVOrderRowIfAllowed(req, id) {
     // ====== API: update quantity (number only) ======
 app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
-    const { orderIds, columns, instruction, tab } = req.body || {};
+    const { orderIds, columns, instruction, tab, sortMode } = req.body || {};
     const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
     if (!ids.length) return res.status(400).json({ error: "orderIds required" });
     if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
@@ -36293,7 +36389,7 @@ app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"),
       if (!access?.row) return res.status(404).json({ error: "Order not found" });
       if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
     }
-    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction });
+    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction, sortMode });
   } catch (error) {
     console.error("POST /api/sv-orders/export/pdf error:", error?.details || error);
     if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export PDF" });
@@ -36302,7 +36398,7 @@ app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"),
 
 app.post("/api/sv-orders/export/excel", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
-    const { orderIds, columns, instruction, tab } = req.body || {};
+    const { orderIds, columns, instruction, tab, sortMode } = req.body || {};
     const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
     if (!ids.length) return res.status(400).json({ error: "orderIds required" });
     if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
@@ -36313,7 +36409,7 @@ app.post("/api/sv-orders/export/excel", requireAuth, requirePage("Orders Review"
       if (!access?.row) return res.status(404).json({ error: "Order not found" });
       if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
     }
-    return await _sbPipeOrderExcel(req, res, ids, { tab: tab || "review", columns, instruction });
+    return await _sbPipeOrderExcel(req, res, ids, { tab: tab || "review", columns, instruction, sortMode });
   } catch (error) {
     console.error("POST /api/sv-orders/export/excel error:", error?.details || error);
     if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export Excel" });

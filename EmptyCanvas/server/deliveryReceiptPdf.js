@@ -2,7 +2,7 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
+const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -85,6 +85,53 @@ function groupByReason(rows) {
   return sorted.map((reason) => ({ reason, rows: map.get(reason) || [] }));
 }
 
+function normalizeExportGroupMode(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "product-tag") return "product-tag";
+  if (key === "kit-tag") return "kit-tag";
+  return "";
+}
+
+function naturalCompare(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function groupByExportTag(rows, mode) {
+  const groupMode = normalizeExportGroupMode(mode);
+  if (!groupMode) return [];
+  const map = new Map();
+  for (const row of rows || []) {
+    const isKit = groupMode === "kit-tag";
+    const tag = isKit
+      ? (String(row?.kitTag || row?.kit_tag || "").trim() || "Unassigned kit")
+      : (String(row?.productTag || row?.product_tag || "").trim() || "Uncategorized");
+    const folderName = isKit
+      ? (String(row?.kitFolderName || row?.kit_folder_name || "").trim() || "Unfiled Kits")
+      : "";
+    const key = `${folderName.toLowerCase()}|${tag.toLowerCase()}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        reason: tag,
+        tag,
+        folderName,
+        label: isKit ? "Kit Tag" : "Product Tag",
+        rows: [],
+      });
+    }
+    map.get(key).rows.push(row);
+  }
+  return [...map.values()]
+    .map((group) => ({
+      ...group,
+      rows: group.rows.slice().sort((a, b) => naturalCompare(a?.component, b?.component)),
+    }))
+    .sort((a, b) => naturalCompare(a.folderName, b.folderName) || naturalCompare(a.tag, b.tag));
+}
+
+function containsArabicText(value) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(value || ""));
+}
+
 /**
  * Generate Delivery Receipt PDF and pipe it to a writable stream (e.g. Express res).
  *
@@ -114,6 +161,7 @@ async function pipeDeliveryReceiptPDF(
     // Optional layout overrides
     metaLayout = "default", // "default" | "teamReasonFirst"
     groupByReason: groupByReasonOpt = true,
+    groupMode = "",
     showReasonTagBar: showReasonTagBarOpt = true,
     // Requested change:
     // Allow hiding price columns (Unit / Total) for some exports (e.g. Received/Delivered tabs).
@@ -154,9 +202,13 @@ async function pipeDeliveryReceiptPDF(
   // For Current Orders we can disable grouping & hide the reason tag bar.
   const singleKey =
     String(headerColorKey || preparedBy || orderId || "Order").trim() || "Order";
-  const groups = groupByReasonOpt
-    ? groupByReason(safeRows)
-    : [{ reason: singleKey, rows: safeRows }];
+  const exportGroupMode = normalizeExportGroupMode(groupMode);
+  const exportTagGroups = exportGroupMode ? groupByExportTag(safeRows, exportGroupMode) : [];
+  const groups = exportTagGroups.length
+    ? exportTagGroups
+    : (groupByReasonOpt
+        ? groupByReason(safeRows)
+        : [{ reason: singleKey, label: "Reason", tag: singleKey, folderName: "", rows: safeRows }]);
 
   // Use the same logo/header style as the Stocktaking PDFs
   const logoPath = path.join(__dirname, "..", "public", "images", "logo.png");
@@ -282,32 +334,58 @@ async function pipeDeliveryReceiptPDF(
 
   // ======== Optional instructions block (page 1, before order metadata) ========
   const safeInstructionText = String(instructionText || "").trim();
-  const safeInstructionTitle = String(instructionTitle || "Instructions").trim() || "Instructions";
+  const safeInstructionTitle = String(instructionTitle || "").trim();
   if (safeInstructionText) {
-    // Instructions may contain full Arabic paragraphs. Use fontkit's native Arabic
-    // shaping for this block only so logical RTL text is not manually reversed.
-    // Other legacy PDF sections keep their existing compatibility behavior.
-    withNativeArabicPdfText(doc, () => {
-      const { mL, contentW } = metrics();
-      const padX = 12;
-      const padY = 10;
-      const titleSize = 10;
-      const bodySize = 9;
-      const innerW = Math.max(1, contentW - padX * 2);
+    const { mL, contentW } = metrics();
+    const padX = 12;
+    const padY = 10;
+    const headingSize = 11;
+    const titleSize = 9.5;
+    const bodySize = 9;
+    const innerW = Math.max(1, contentW - padX * 2);
+    const showSelectedTitle = Boolean(safeInstructionTitle && safeInstructionTitle.toLowerCase() !== "instructions");
+    const titleIsArabic = containsArabicText(safeInstructionTitle);
+    const bodyIsArabic = containsArabicText(safeInstructionText);
+
+    doc.font("Helvetica-Bold").fontSize(headingSize);
+    const headingH = doc.heightOfString("Instructions", { width: innerW, lineGap: 1 });
+    let titleH = 0;
+    if (showSelectedTitle) {
       doc.font("Helvetica-Bold").fontSize(titleSize);
-      const titleH = doc.heightOfString(safeInstructionTitle, { width: innerW, lineGap: 1 });
-      doc.font("Helvetica").fontSize(bodySize);
-      const bodyH = doc.heightOfString(safeInstructionText, { width: innerW, lineGap: 2 });
-      const blockH = Math.max(58, padY + titleH + 6 + bodyH + padY);
-      ensureSpace(blockH + 18);
-      const y = doc.y;
-      doc.save();
-      doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke("#FFFCF7", "#FED7AA");
-      doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, y + padY, { width: innerW, lineGap: 1 });
-      doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(safeInstructionText, mL + padX, y + padY + titleH + 6, { width: innerW, lineGap: 2 });
-      doc.restore();
-      doc.y = y + blockH + 14;
+      titleH = doc.heightOfString(safeInstructionTitle, { width: innerW, lineGap: 1, align: titleIsArabic ? "right" : "left" });
+    }
+    doc.font("Helvetica").fontSize(bodySize);
+    const bodyH = doc.heightOfString(safeInstructionText, { width: innerW, lineGap: 2, align: bodyIsArabic ? "right" : "left" });
+    const titleGap = showSelectedTitle ? 5 : 0;
+    const bodyGap = 6;
+    const blockH = Math.max(62, padY + headingH + titleGap + titleH + bodyGap + bodyH + padY);
+    ensureSpace(blockH + 18);
+    const y = doc.y;
+
+    doc.save();
+    doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke("#FFFCF7", "#FED7AA");
+    let cursorY = y + padY;
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(headingSize).text("Instructions", mL + padX, cursorY, { width: innerW, lineGap: 1, align: "left" });
+    cursorY += headingH;
+
+    if (showSelectedTitle) {
+      cursorY += titleGap;
+      doc.fillColor("#B45309").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, cursorY, {
+        width: innerW,
+        lineGap: 1,
+        align: titleIsArabic ? "right" : "left",
+      });
+      cursorY += titleH;
+    }
+
+    cursorY += bodyGap;
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(safeInstructionText, mL + padX, cursorY, {
+      width: innerW,
+      lineGap: 2,
+      align: bodyIsArabic ? "right" : "left",
     });
+    doc.restore();
+    doc.y = y + blockH + 14;
   }
 
   // ======== Meta small table (page 1) ========
@@ -451,7 +529,7 @@ async function pipeDeliveryReceiptPDF(
   const tableW = contentW;
   const headerH = 26;
   const cellPadX = 8;
-  const tagBarH = 28;
+  const tagBarH = 38;
 
   // Dynamic columns. If no explicit exportColumns are provided, keep the old defaults:
   // ID | Component | Qty | Unit | Total, or ID | Component | Qty when showCosts=false.
@@ -496,8 +574,12 @@ async function pipeDeliveryReceiptPDF(
   });
   const showGrandTotalSummary = columns.some((col) => col.key === "unit" || col.key === "total");
 
-  function drawTagBar(reason, count, tagColors) {
+  function drawTagBar(group, count, tagColors) {
     const y = doc.y;
+    const label = String(group?.label || (exportGroupMode ? (exportGroupMode === "kit-tag" ? "Kit Tag" : "Product Tag") : "Reason"));
+    const pillText = String(group?.tag || group?.reason || "No Reason");
+    const folderName = exportGroupMode === "kit-tag" ? String(group?.folderName || "Unfiled Kits") : "";
+
     doc
       .roundedRect(tableX, y, tableW, tagBarH, 10)
       .fill(tagColors.bg)
@@ -505,31 +587,31 @@ async function pipeDeliveryReceiptPDF(
       .lineWidth(1)
       .stroke();
 
-    // Left label
-    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(10);
-    const label = "Reason";
-    doc.text(label, tableX + 12, y + 8, { width: 70, align: "left" });
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9);
+    doc.text(label, tableX + 12, y + 7, { width: 72, align: "left" });
 
-    // Pill with reason name
-    const pillText = String(reason || "No Reason");
     doc.font("Helvetica-Bold").fontSize(10);
-    const pillW = Math.min(360, doc.widthOfString(pillText) + 26);
-    const pillX = tableX + 70;
+    const pillW = Math.min(330, Math.max(76, doc.widthOfString(pillText) + 24));
+    const pillX = tableX + 78;
     doc
-      .roundedRect(pillX, y + 5, pillW, 18, 9)
+      .roundedRect(pillX, y + 5, pillW, 19, 9)
       .fill(tagColors.pill)
       .strokeColor(tagColors.border)
       .lineWidth(1)
       .stroke();
-    doc.fillColor(tagColors.text).text(pillText, pillX + 12, y + 8, {
-      width: pillW - 24,
+    doc.fillColor(tagColors.text).text(pillText, pillX + 11, y + 9, {
+      width: pillW - 22,
       align: "left",
       ellipsis: true,
     });
 
-    // Right count
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10);
-    doc.text(`${Number(count) || 0} items`, tableX + 12, y + 8, {
+    if (folderName) {
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8);
+      doc.text(folderName, pillX, y + 27, { width: Math.max(100, tableW - 170), align: "left", ellipsis: true });
+    }
+
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9);
+    doc.text(`${Number(count) || 0} items`, tableX + 12, y + 9, {
       width: tableW - 24,
       align: "right",
     });
@@ -577,11 +659,11 @@ async function pipeDeliveryReceiptPDF(
       String(a?.component || "").localeCompare(String(b?.component || "")),
     );
 
-    const needsTagBar = Boolean(showReasonTagBarOpt);
+    const needsTagBar = Boolean(exportTagGroups.length || showReasonTagBarOpt);
     const groupHeaderHeight = (needsTagBar ? tagBarH + 8 : 0) + headerH + 6;
     ensureSpace(groupHeaderHeight);
     const drawGroupHeader = () => {
-      if (needsTagBar) drawTagBar(g.reason, items.length, tagColors);
+      if (needsTagBar) drawTagBar(g, items.length, tagColors);
       drawTableHeader(tagColors);
     };
     drawGroupHeader();
