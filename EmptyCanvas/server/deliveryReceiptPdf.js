@@ -2,7 +2,7 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
+const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -375,7 +375,8 @@ async function pipeDeliveryReceiptPDF(
     const safeText = String(text || "").trim();
     if (!safeText) return;
 
-    const { mL, contentW } = metrics();
+    const renderBlock = () => {
+      const { mL, contentW } = metrics();
     const padX = 12;
     const padY = 10;
     const headingSize = 10;
@@ -438,8 +439,14 @@ async function pipeDeliveryReceiptPDF(
       if (index < paragraphs.length - 1) cursorY += paragraphGap;
     });
 
-    doc.restore();
-    doc.y = y + blockH + 9;
+      doc.restore();
+      doc.y = y + blockH + 9;
+    };
+
+    if (isArabic) {
+      return withNativeArabicPdfText(doc, renderBlock);
+    }
+    return renderBlock();
   };
 
   if (safeInstructionEnglish || safeInstructionArabic) {
