@@ -775,6 +775,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           open={downloadOpen}
           title={`Download ${group.orderIdLabel}`}
           defaultColumns={(tab === "received" || tab === "delivered") ? ["idCode", "component", "qty"] : null}
+          defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
+          showSignatureOptions={!maintenance}
           onClose={() => setDownloadOpen(false)}
           onDownload={exportAction}
         />
@@ -1409,7 +1411,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], instruction: options?.instruction || null, sortMode: options?.sortMode || "product-tag" }),
+        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], signatureLabels: options?.signatureLabels || null, instruction: options?.instruction || null, sortMode: options?.sortMode || "product-tag" }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";

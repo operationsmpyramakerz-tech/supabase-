@@ -11,6 +11,13 @@ export const ORDER_EXPORT_COLUMNS = [
   ["total", "Total Cost"],
 ];
 
+export const ORDER_SIGNATURE_OPTIONS = [
+  "Storekeeper",
+  "Operations",
+  "Delivered to",
+  "Received From",
+];
+
 const STORAGE_KEY = "operations-hub.order-download-instructions.v1";
 
 function text(value) {
@@ -160,8 +167,10 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
 export default function OrderDownloadModal({
   open,
   title = "Download order",
-  subtitle = "Choose the columns and optional instructions, then select the file type.",
+  subtitle = "Choose the columns, signatures and optional instructions, then select the file type.",
   defaultColumns = null,
+  defaultSignatureLabels = null,
+  showSignatureOptions = true,
   onClose,
   onDownload,
 }) {
@@ -171,7 +180,18 @@ export default function OrderDownloadModal({
     return requested.length ? requested : ORDER_EXPORT_COLUMNS.map(([key]) => key);
   }, [defaultColumns]);
 
+  const startingSignatures = useMemo(() => {
+    const canonical = new Map(ORDER_SIGNATURE_OPTIONS.map((label) => [label.toLowerCase().replace(/[^a-z]/g, ""), label]));
+    const requested = Array.isArray(defaultSignatureLabels)
+      ? defaultSignatureLabels
+          .map((label) => canonical.get(String(label || "").toLowerCase().replace(/[^a-z]/g, "")))
+          .filter(Boolean)
+      : [];
+    return Array.from(new Set(requested.length ? requested : ["Storekeeper", "Operations", "Delivered to"]));
+  }, [defaultSignatureLabels]);
+
   const [columns, setColumns] = useState(startingColumns);
+  const [signatureLabels, setSignatureLabels] = useState(startingSignatures);
   const [templates, setTemplates] = useState([]);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
@@ -184,6 +204,7 @@ export default function OrderDownloadModal({
   useEffect(() => {
     if (!open) return;
     setColumns(startingColumns);
+    setSignatureLabels(startingSignatures);
     setTemplates(loadTemplates());
     setSelectedInstructionId("");
     setInstructionOpen(false);
@@ -191,7 +212,7 @@ export default function OrderDownloadModal({
     setEditingInstruction(null);
     setBusy(false);
     setError("");
-  }, [open, startingColumns]);
+  }, [open, startingColumns, startingSignatures]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -223,6 +244,13 @@ export default function OrderDownloadModal({
     });
   };
 
+  const toggleSignature = (label) => {
+    setSignatureLabels((current) => {
+      if (current.includes(label)) return current.length === 1 ? current : current.filter((item) => item !== label);
+      return [...current, label];
+    });
+  };
+
   const runDownload = async (kind) => {
     if (busy) return;
     setBusy(true);
@@ -231,6 +259,7 @@ export default function OrderDownloadModal({
       await onDownload({
         kind,
         columns,
+        signatureLabels: showSignatureOptions ? signatureLabels : null,
         instruction: selectedInstruction
           ? {
               title: selectedInstruction.title,
@@ -283,6 +312,23 @@ export default function OrderDownloadModal({
             ))}
           </div>
         </div>
+
+        {showSignatureOptions ? (
+          <div className="order-download-section order-download-signatures">
+            <div className="order-download-instructions__heading">
+              <span className="order-download-section__label">Signatures</span>
+              <small>Choose the signature boxes shown at the end of the PDF.</small>
+            </div>
+            <div className="order-download-columns__grid">
+              {ORDER_SIGNATURE_OPTIONS.map((label) => (
+                <label key={label} className="order-download-column-option">
+                  <input type="checkbox" checked={signatureLabels.includes(label)} onChange={() => toggleSignature(label)} />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="order-download-section order-download-instructions">
           <div className="order-download-instructions__heading">

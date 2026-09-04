@@ -594,6 +594,8 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
         <OrderDownloadModal
           open={downloadOpen}
           title={`Download ${group.orderIdLabel}`}
+          defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
+          showSignatureOptions={!maintenance}
           onClose={() => setDownloadOpen(false)}
           onDownload={(options) => onExport({ ...options, sortMode }, group)}
         />
@@ -855,6 +857,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
         orderIds: group.orderIds,
         columns: options?.columns || [],
         instruction: options?.instruction || null,
+        signatureLabels: options?.signatureLabels || null,
         sortMode: options?.sortMode || "product-tag",
       }),
     });
