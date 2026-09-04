@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
+import OrderDownloadModal from "./OrderDownloadModal";
 
 const REVIEW_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -316,16 +317,22 @@ function QuantityEditor({ item, busy, onSave, onCancel }) {
   </form>;
 }
 
-function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason }) {
+function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason, onExport }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingQty, setEditingQty] = useState("");
   const [sortMode, setSortMode] = useState("product-tag");
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const moreRef = useRef(null);
 
   useEffect(() => {
     if (!group) return undefined;
     const onKey = (event) => {
       if (event.key !== "Escape") return;
+      if (downloadOpen) {
+        event.preventDefault();
+        setDownloadOpen(false);
+        return;
+      }
       if (moreOpen) {
         event.preventDefault();
         setMoreOpen(false);
@@ -344,9 +351,9 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.body.classList.remove("co-modal-open");
     };
-  }, [group, moreOpen, onClose]);
+  }, [group, moreOpen, downloadOpen, onClose]);
 
-  useEffect(() => { setMoreOpen(false); setEditingQty(""); setSortMode("product-tag"); }, [group?.key]);
+  useEffect(() => { setMoreOpen(false); setEditingQty(""); setDownloadOpen(false); setSortMode("product-tag"); }, [group?.key]);
   if (!group) return null;
 
   const archived = group.archived;
@@ -407,7 +414,10 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
       <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
       <div className="co-modal-body">
         {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions"><OrderSortButton value={sortMode} onChange={setSortMode} /></div>
+        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions">
+          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
+          <OrderSortButton value={sortMode} onChange={setSortMode} />
+        </div>
         {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>Apply one decision to every item in this order.</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
         <div className="co-modal-items order-component-groups">
           {groupedItems.length ? groupedItems.map((section) => (
@@ -418,6 +428,12 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
           )) : <div className="muted">No items.</div>}
         </div>
       </div>
+      <OrderDownloadModal
+        open={downloadOpen}
+        title={`Download ${group.orderIdLabel}`}
+        onClose={() => setDownloadOpen(false)}
+        onDownload={(options) => onExport(options, group, activeTab)}
+      />
     </div>
   </div>;
 }
@@ -747,6 +763,38 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     } catch { setCreatorState({ ...base, loading: false, error: true }); }
   }
 
+  async function exportOrder(options, group, selectedTab) {
+    const kind = options?.kind === "excel" ? "excel" : "pdf";
+    const endpoint = kind === "excel" ? "/api/sv-orders/export/excel" : "/api/sv-orders/export/pdf";
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        orderIds: group.orderIds,
+        tab: selectedTab,
+        columns: options?.columns || [],
+        instruction: options?.instruction || null,
+      }),
+    });
+    if (response.status === 401) {
+      window.location.href = "/login?next=/next/orders-review";
+      throw new Error("Your session expired.");
+    }
+    const data = response.ok ? null : await readJson(response);
+    if (!response.ok) throw new Error(data?.error || `Failed to export ${kind.toUpperCase()}.`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${group.orderIdLabel.replace(/[^a-z0-9_-]+/gi, "-") || "review-order"}.${kind === "excel" ? "xlsx" : "pdf"}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showNotice(`${kind.toUpperCase()} downloaded.`);
+  }
+
   return <section className="next-classic-orders-parity">
     {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/sv-orders?classic=1">Classic page</a></div> : null}
     {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
@@ -760,7 +808,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
 
     <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
 
-    <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={() => setSelectedKey("")} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView}/>
+    <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={() => setSelectedKey("")} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>
     <PasswordModal state={passwordState} busy={passwordBusy} error={passwordError} onCancel={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }} onSubmit={submitPasswordAction}/>
     <RejectionModal state={rejectionState} busy={rejectionBusy} error={rejectionError} onCancel={() => { if (!rejectionBusy) { setRejectionState(null); setRejectionError(""); } }} onSubmit={submitRejection}/>
     <ReviewEditorModal state={editorState} busy={editorBusy} error={editorError} onCancel={() => { if (!editorBusy) { setEditorState(null); setEditorError(""); } }} onSubmit={submitReviewEditor}/>

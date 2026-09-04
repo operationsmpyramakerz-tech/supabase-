@@ -5729,6 +5729,17 @@ function _selectedOrderExportColumnDefs(columns, opts = {}) {
     .filter(Boolean);
 }
 
+function _normalizeOrderExportInstruction(instruction) {
+  if (!instruction) return { title: "", text: "" };
+  if (typeof instruction === "string") {
+    const body = String(instruction || "").trim().slice(0, 2000);
+    return { title: body ? "Instructions" : "", text: body };
+  }
+  const title = String(instruction?.title || "Instructions").trim().slice(0, 120);
+  const body = String(instruction?.text || instruction?.body || "").trim().slice(0, 2000);
+  return { title: body ? (title || "Instructions") : "", text: body };
+}
+
 function _orderExcelColumnName(index) {
   let n = Math.max(1, Number(index) || 1);
   let out = "";
@@ -5761,10 +5772,11 @@ function _sbSafeExportName(value = "order") {
     .slice(0, 60);
 }
 
-async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null } = {}) {
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null } = {}) {
   const tabKey = String(tab || "").trim().toLowerCase();
   const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
+  const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
   await _sendBackgroundExport(res, {
@@ -5784,6 +5796,8 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", colu
       headerColorKey: payload.groupReason,
       showCosts: !hideCosts,
       exportColumns: selectedExportColumns,
+      instructionTitle: exportInstruction.title,
+      instructionText: exportInstruction.text,
       documentTitle: payload.receiptView.documentTitle,
       recipientLabelLeft: payload.receiptView.recipientLabelLeft,
       thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
@@ -5894,10 +5908,11 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   });
 }
 
-async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "" } = {}) {
+async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "", instruction = null } = {}) {
   const ExcelJS = require("exceljs");
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const selectedColumns = _selectedOrderExportColumnDefs(columns, { tab });
+  const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
   const first = payload.first || {};
   const isMaintenanceExport = _normKeyOrderType(first.orderType || "") === _normKeyOrderType("Request Maintenance");
   const columnCount = Math.max(1, selectedColumns.length);
@@ -5937,6 +5952,27 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
     right: { style: "thin", color: { argb: "FFE5E7EB" } },
   };
 
+  const instructionLastCol = _orderExcelColumnName(Math.max(4, columnCount));
+  if (exportInstruction.text) {
+    const instructionTitleRow = ws.addRow([exportInstruction.title || "Instructions"]);
+    ws.mergeCells(`A${instructionTitleRow.number}:${instructionLastCol}${instructionTitleRow.number}`);
+    instructionTitleRow.height = 24;
+    instructionTitleRow.getCell(1).font = { bold: true, color: { argb: "FF9A3412" } };
+    instructionTitleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+    instructionTitleRow.getCell(1).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    instructionTitleRow.getCell(1).border = borderThin;
+
+    const instructionTextRow = ws.addRow([exportInstruction.text]);
+    ws.mergeCells(`A${instructionTextRow.number}:${instructionLastCol}${instructionTextRow.number}`);
+    instructionTextRow.height = Math.min(140, Math.max(42, 28 + Math.ceil(exportInstruction.text.length / 95) * 15));
+    instructionTextRow.getCell(1).alignment = { vertical: "top", horizontal: "left", wrapText: true };
+    instructionTextRow.getCell(1).font = { color: { argb: "FF374151" } };
+    instructionTextRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFCF7" } };
+    instructionTextRow.getCell(1).border = borderThin;
+    ws.addRow([]);
+  }
+
+  const metaStartRow = ws.rowCount + 1;
   ws.addRow(["Order ID", payload.orderIdRange, "Date", formatDateTime(payload.createdAt)]);
   ws.addRow(["Team member", payload.teamMember || "", "Prepared by (Operations)", String(req.session?.username || "—")]);
   if (!isMaintenanceExport) {
@@ -5944,7 +5980,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   }
 
   const metaRowCount = isMaintenanceExport ? 2 : 3;
-  for (let r = 1; r <= metaRowCount; r += 1) {
+  for (let r = metaStartRow; r < metaStartRow + metaRowCount; r += 1) {
     const row = ws.getRow(r);
     row.height = 20;
     for (let c = 1; c <= 4; c += 1) {
@@ -5960,8 +5996,8 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
     }
   }
   if (!isMaintenanceExport) {
-    ws.getRow(3).getCell(2).numFmt = "0";
-    ws.getRow(3).getCell(4).numFmt = '"£"#,##0.00';
+    ws.getRow(metaStartRow + 2).getCell(2).numFmt = "0";
+    ws.getRow(metaStartRow + 2).getCell(4).numFmt = '"£"#,##0.00';
   }
   ws.addRow([]);
 
@@ -6079,7 +6115,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   }
 
   ws.columns = selectedColumns.map((col) => ({ width: col.width || 16 }));
-  ws.views = [{ state: "frozen", ySplit: isMaintenanceExport ? 3 : 4 }];
+  ws.views = [{ state: "frozen", ySplit: metaStartRow + metaRowCount }];
   const fileName = `${isMaintenanceExport ? "maintenance_order" : "order"}_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
   const buf = await wb.xlsx.writeBuffer();
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -23105,7 +23141,7 @@ app.post(
   requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
-      const { orderIds, tab, columns } = req.body || {};
+      const { orderIds, tab, columns, instruction } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23116,6 +23152,7 @@ app.post(
       const tabKey = String(tab || "").trim().toLowerCase();
       const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
       const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
+      const exportInstruction = _normalizeOrderExportInstruction(instruction);
 
       const ids = orderIds
         .map((x) => String(x || "").trim())
@@ -23125,7 +23162,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction });
       }
 
       const parseNumberProp = (prop) => {
@@ -23394,6 +23431,8 @@ app.post(
           headerColorKey: groupReason,
           showCosts: !hideCosts,
           exportColumns: selectedExportColumns,
+          instructionTitle: exportInstruction.title,
+          instructionText: exportInstruction.text,
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
@@ -23671,7 +23710,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds, columns, tab } = req.body || {};
+      const { orderIds, columns, tab, instruction } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23684,7 +23723,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids, { columns, tab });
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab, instruction });
       }
 
       // Helpers
@@ -24188,7 +24227,7 @@ app.post(
   requirePage("Current Orders"),
   async (req, res) => {
     try {
-      const { orderIds } = req.body || {};
+      const { orderIds, columns, instruction } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24201,7 +24240,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current" });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -24435,6 +24474,8 @@ app.post(
       }
       const groupReason =
         Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "No Reason";
+      const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: "current" });
+      const exportInstruction = _normalizeOrderExportInstruction(instruction);
 
       await _sendBackgroundExport(res, {
         type: "delivery-pdf",
@@ -24451,6 +24492,9 @@ app.post(
           showReasonTagBar: false,
           groupByReason: false,
           headerColorKey: groupReason,
+          exportColumns: selectedExportColumns,
+          instructionTitle: exportInstruction.title,
+          instructionText: exportInstruction.text,
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
@@ -24476,7 +24520,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds } = req.body || {};
+      const { orderIds, columns, instruction } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24488,7 +24532,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids);
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab: "current", instruction });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -36236,6 +36280,46 @@ async function _sbSVOrderRowIfAllowed(req, id) {
 
 
     // ====== API: update quantity (number only) ======
+app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const { orderIds, columns, instruction, tab } = req.body || {};
+    const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
+      return res.status(400).json({ error: "Orders Review export is available for Supabase orders." });
+    }
+    for (const id of ids) {
+      const access = await _sbSVOrderRowIfAllowed(req, id);
+      if (!access?.row) return res.status(404).json({ error: "Order not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
+    }
+    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction });
+  } catch (error) {
+    console.error("POST /api/sv-orders/export/pdf error:", error?.details || error);
+    if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export PDF" });
+  }
+});
+
+app.post("/api/sv-orders/export/excel", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    const { orderIds, columns, instruction, tab } = req.body || {};
+    const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
+      return res.status(400).json({ error: "Orders Review export is available for Supabase orders." });
+    }
+    for (const id of ids) {
+      const access = await _sbSVOrderRowIfAllowed(req, id);
+      if (!access?.row) return res.status(404).json({ error: "Order not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
+    }
+    return await _sbPipeOrderExcel(req, res, ids, { tab: tab || "review", columns, instruction });
+  } catch (error) {
+    console.error("POST /api/sv-orders/export/excel error:", error?.details || error);
+    if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export Excel" });
+  }
+});
+
 app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
     const pageId = req.params.id;

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
+import OrderDownloadModal from "./OrderDownloadModal";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -624,7 +625,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
   const moreRef = useRef(null);
-  const downloadRef = useRef(null);
 
   useEffect(() => {
     if (!group) return undefined;
@@ -640,7 +640,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     };
     const onPointerDown = (event) => {
       if (moreOpen && moreRef.current && !moreRef.current.contains(event.target)) setMoreOpen(false);
-      if (downloadOpen && downloadRef.current && !downloadRef.current.contains(event.target)) setDownloadOpen(false);
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown);
@@ -677,10 +676,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     onAction(action, group);
   };
 
-  const exportAction = (kind) => {
-    setDownloadOpen(false);
-    onExport(kind, group, tab);
-  };
+  const exportAction = (options) => onExport(options, group, tab);
 
   const renderItem = (item, index) => {
     const state = itemStatus(item);
@@ -754,16 +750,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           </div>
 
           <div className="co-modal-actions ro-actions ro-actions--right">
-            {showDownload ? <div className="download-menu download-menu--button next-operations-download-menu" ref={downloadRef}>
-              <button type="button" className="ro-action-btn ro-action-btn--light download-menu__btn ops-download-trigger" aria-haspopup="menu" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((value) => !value)} disabled={busy}>
-                <ClassicOrderIcon name="download" /><span>Download</span><ClassicOrderIcon name="chevron-down" className="ops-download-trigger__arrow" />
-              </button>
-              {downloadOpen ? <div className="download-menu__panel" role="menu" aria-label="Download options">
-                <button className="download-menu__item" role="menuitem" type="button" onClick={() => exportAction("pdf")} disabled={busy}><span>Download PDF</span><ClassicOrderIcon name="file-text" /></button>
-                <div className="download-menu__sep" role="separator" />
-                <button className="download-menu__item" role="menuitem" type="button" onClick={() => exportAction("excel")} disabled={busy}><span>Download Excel</span><ClassicOrderIcon name="grid" /></button>
-              </div> : null}
-            </div> : null}
+            {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
             {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", group)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
@@ -784,6 +771,13 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
             ))}
           </div>
         </div>
+        <OrderDownloadModal
+          open={downloadOpen}
+          title={`Download ${group.orderIdLabel}`}
+          defaultColumns={(tab === "received" || tab === "delivered") ? ["idCode", "component", "qty"] : null}
+          onClose={() => setDownloadOpen(false)}
+          onDownload={exportAction}
+        />
       </div>
     </div>
   );
@@ -1401,7 +1395,8 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     }
   }
 
-  async function exportOrder(kind, group, selectedTab) {
+  async function exportOrder(options, group, selectedTab) {
+    const kind = options?.kind === "excel" ? "excel" : "pdf";
     setBusy(true);
     setActionError("");
     try {
@@ -1414,7 +1409,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab }),
+        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], instruction: options?.instruction || null }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";
@@ -1431,6 +1426,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     } catch (error) {
       setNotice(error?.message || "Export failed.");
       window.setTimeout(() => setNotice(""), 4500);
+      throw error;
     } finally {
       setBusy(false);
     }

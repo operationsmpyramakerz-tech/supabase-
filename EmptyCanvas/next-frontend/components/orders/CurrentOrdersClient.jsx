@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
+import OrderDownloadModal from "./OrderDownloadModal";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -476,15 +477,21 @@ function ProgressTrack({ value }) {
   );
 }
 
-function OrderDetailsModal({ group, onClose, onAction, onReason }) {
+function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const moreRef = useRef(null);
 
   useEffect(() => {
     if (!group) return undefined;
     const onKey = (event) => {
       if (event.key !== "Escape") return;
+      if (downloadOpen) {
+        event.preventDefault();
+        setDownloadOpen(false);
+        return;
+      }
       if (moreOpen) {
         event.preventDefault();
         setMoreOpen(false);
@@ -503,9 +510,9 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.body.classList.remove("co-modal-open");
     };
-  }, [group, moreOpen, onClose]);
+  }, [group, moreOpen, downloadOpen, onClose]);
 
-  useEffect(() => { setMoreOpen(false); setSortMode("product-tag"); }, [group?.key]);
+  useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); }, [group?.key]);
   if (!group) return null;
 
   const archived = group.status === "archive";
@@ -571,7 +578,10 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
 
         <div className="co-modal-body">
           {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions"><OrderSortButton value={sortMode} onChange={setSortMode} /></div>
+          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions">
+            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
+            <OrderSortButton value={sortMode} onChange={setSortMode} />
+          </div>
           <div className="co-modal-items order-component-groups">
             {groupedItems.length ? groupedItems.map((section) => (
               <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
@@ -581,6 +591,12 @@ function OrderDetailsModal({ group, onClose, onAction, onReason }) {
             )) : <div className="muted">No items.</div>}
           </div>
         </div>
+        <OrderDownloadModal
+          open={downloadOpen}
+          title={`Download ${group.orderIdLabel}`}
+          onClose={() => setDownloadOpen(false)}
+          onDownload={(options) => onExport(options, group)}
+        />
       </div>
     </div>
   );
@@ -828,6 +844,40 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     }
   }
 
+  async function exportOrder(options, group) {
+    const kind = options?.kind === "excel" ? "excel" : "pdf";
+    const endpoint = kind === "excel" ? "/api/orders/export/excel" : "/api/orders/export/pdf";
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        orderIds: group.orderIds,
+        columns: options?.columns || [],
+        instruction: options?.instruction || null,
+      }),
+    });
+    if (response.status === 401) {
+      window.location.href = "/login?next=/next/orders";
+      throw new Error("Your session expired.");
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.error || `Failed to export ${kind.toUpperCase()}.`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${group.orderIdLabel.replace(/[^a-z0-9_-]+/gi, "-") || "order"}.${kind === "excel" ? "xlsx" : "pdf"}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setNotice(`${kind.toUpperCase()} downloaded.`);
+    window.setTimeout(() => setNotice(""), 3000);
+  }
+
   return (
     <section className="next-classic-orders-parity">
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders?classic=1">Classic page</a></div> : null}
@@ -860,7 +910,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
         </div>
       </section>
 
-      <OrderDetailsModal group={selected} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} />
+      <OrderDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} onExport={exportOrder} />
       <PasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { if (!busy) { setActionState(null); setActionError(""); } }} onSubmit={submitAction} />
       <DeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => { if (!busy) setDeleteConfirm(null); }} onConfirm={confirmDelete} />
       <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")} />
