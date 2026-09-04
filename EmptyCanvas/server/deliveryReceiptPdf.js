@@ -2,7 +2,7 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
+const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -130,6 +130,26 @@ function groupByExportTag(rows, mode) {
 
 function containsArabicText(value) {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(value || ""));
+}
+
+function firstStrongTextDirection(value) {
+  for (const ch of Array.from(String(value || ""))) {
+    if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(ch)) return "rtl";
+    if (/[A-Za-z]/.test(ch)) return "ltr";
+  }
+  return containsArabicText(value) ? "rtl" : "ltr";
+}
+
+function splitInstructionParagraphs(value) {
+  const normalized = String(value || "").replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return [];
+
+  // Keep the same paragraph semantics as the browser preview: blank lines create
+  // paragraph spacing, while single line breaks stay inside the same paragraph.
+  return normalized
+    .split(/\n[ \t]*\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -344,46 +364,77 @@ async function pipeDeliveryReceiptPDF(
     const bodySize = 9;
     const innerW = Math.max(1, contentW - padX * 2);
     const showSelectedTitle = Boolean(safeInstructionTitle && safeInstructionTitle.toLowerCase() !== "instructions");
-    const titleIsArabic = containsArabicText(safeInstructionTitle);
-    const bodyIsArabic = containsArabicText(safeInstructionText);
+    const paragraphs = splitInstructionParagraphs(safeInstructionText);
+    const paragraphGap = 9;
+
+    const measureDirectionalText = (text, fontName, fontSize, lineGap = 1) => {
+      const direction = firstStrongTextDirection(text);
+      return withNativeArabicPdfText(doc, () => {
+        doc.font(fontName).fontSize(fontSize);
+        return doc.heightOfString(text, {
+          width: innerW,
+          lineGap,
+          align: direction === "rtl" ? "right" : "left",
+          direction,
+        });
+      });
+    };
 
     doc.font("Helvetica-Bold").fontSize(headingSize);
-    const headingH = doc.heightOfString("Instructions", { width: innerW, lineGap: 1 });
-    let titleH = 0;
-    if (showSelectedTitle) {
-      doc.font("Helvetica-Bold").fontSize(titleSize);
-      titleH = doc.heightOfString(safeInstructionTitle, { width: innerW, lineGap: 1, align: titleIsArabic ? "right" : "left" });
-    }
-    doc.font("Helvetica").fontSize(bodySize);
-    const bodyH = doc.heightOfString(safeInstructionText, { width: innerW, lineGap: 2, align: bodyIsArabic ? "right" : "left" });
+    const headingH = doc.heightOfString("Instructions", { width: innerW, lineGap: 1, align: "left" });
+    const titleH = showSelectedTitle
+      ? measureDirectionalText(safeInstructionTitle, "Helvetica-Bold", titleSize, 1)
+      : 0;
+    const bodyHeights = paragraphs.map((paragraph) =>
+      measureDirectionalText(paragraph, "Helvetica", bodySize, 2),
+    );
     const titleGap = showSelectedTitle ? 5 : 0;
     const bodyGap = 6;
-    const blockH = Math.max(62, padY + headingH + titleGap + titleH + bodyGap + bodyH + padY);
+    const paragraphsH = bodyHeights.reduce((sum, height) => sum + height, 0)
+      + Math.max(0, paragraphs.length - 1) * paragraphGap;
+    const blockH = Math.max(62, padY + headingH + titleGap + titleH + bodyGap + paragraphsH + padY);
     ensureSpace(blockH + 18);
     const y = doc.y;
 
     doc.save();
     doc.roundedRect(mL, y, contentW, blockH, 9).fillAndStroke("#FFFCF7", "#FED7AA");
     let cursorY = y + padY;
-    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(headingSize).text("Instructions", mL + padX, cursorY, { width: innerW, lineGap: 1, align: "left" });
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(headingSize).text("Instructions", mL + padX, cursorY, {
+      width: innerW,
+      lineGap: 1,
+      align: "left",
+    });
     cursorY += headingH;
 
     if (showSelectedTitle) {
       cursorY += titleGap;
-      doc.fillColor("#B45309").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, cursorY, {
-        width: innerW,
-        lineGap: 1,
-        align: titleIsArabic ? "right" : "left",
+      const titleDirection = firstStrongTextDirection(safeInstructionTitle);
+      withNativeArabicPdfText(doc, () => {
+        doc.fillColor("#B45309").font("Helvetica-Bold").fontSize(titleSize).text(safeInstructionTitle, mL + padX, cursorY, {
+          width: innerW,
+          lineGap: 1,
+          align: titleDirection === "rtl" ? "right" : "left",
+          direction: titleDirection,
+        });
       });
       cursorY += titleH;
     }
 
     cursorY += bodyGap;
-    doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(safeInstructionText, mL + padX, cursorY, {
-      width: innerW,
-      lineGap: 2,
-      align: bodyIsArabic ? "right" : "left",
+    paragraphs.forEach((paragraph, index) => {
+      const direction = firstStrongTextDirection(paragraph);
+      withNativeArabicPdfText(doc, () => {
+        doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(paragraph, mL + padX, cursorY, {
+          width: innerW,
+          lineGap: 2,
+          align: direction === "rtl" ? "right" : "left",
+          direction,
+        });
+      });
+      cursorY += bodyHeights[index] || 0;
+      if (index < paragraphs.length - 1) cursorY += paragraphGap;
     });
+
     doc.restore();
     doc.y = y + blockH + 14;
   }
