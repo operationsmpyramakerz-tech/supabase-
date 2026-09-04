@@ -261,6 +261,7 @@ async function pipeDeliveryReceiptPDF(
 ) {
   await ensurePdfArabicSupport();
   const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  const generatedAt = new Date();
   enableArabicPdf(doc);
   doc.pipe(stream);
   // Page numbering (helps ordering when printing/sharing)
@@ -323,7 +324,7 @@ async function pipeDeliveryReceiptPDF(
     // Match Stocktaking header style (logo LEFT + title + subtitle + divider)
     drawStocktakingHeader(doc, {
       title: String(documentTitle || "Delivery Receipt"),
-      subtitle: `Order: ${String(orderId || "-")}  •  Generated: ${formatDateTime(createdAt)}`,
+      subtitle: `Order: ${String(orderId || "-")}  •  Generated: ${formatDateTime(generatedAt)}`,
       variant: compact ? "compact" : "default",
       logoPath,
       colors: COLORS,
@@ -549,13 +550,13 @@ async function pipeDeliveryReceiptPDF(
         ],
         [
           { label: "Order ID", value: String(orderId || "—") },
-          { label: "Date", value: formatDateTime(createdAt) },
+          { label: "Date", value: formatDateTime(generatedAt) },
         ],
       ]
     : [
         [
           { label: "Order ID", value: String(orderId || "—") },
-          { label: "Date", value: formatDateTime(createdAt) },
+          { label: "Date", value: formatDateTime(generatedAt) },
         ],
         [
           { label: "Team member", value: String(teamMember || "—") },
@@ -664,7 +665,7 @@ async function pipeDeliveryReceiptPDF(
   const tableW = contentW;
   const headerH = 26;
   const cellPadX = 8;
-  const tagBarH = 38;
+  const tagBarH = exportGroupMode === "kit-tag" ? 30 : 38;
 
   // Dynamic columns. If no explicit exportColumns are provided, keep the old defaults:
   // ID | Component | Qty | Unit | Total, or ID | Component | Qty when showCosts=false.
@@ -711,9 +712,12 @@ async function pipeDeliveryReceiptPDF(
 
   function drawTagBar(group, count, tagColors) {
     const y = doc.y;
-    const label = String(group?.label || (exportGroupMode ? (exportGroupMode === "kit-tag" ? "Kit Tag" : "Product Tag") : "Reason"));
+    const isKitTag = exportGroupMode === "kit-tag";
+    const folderName = isKitTag ? String(group?.folderName || "Unfiled Kits") : "";
+    const label = isKitTag
+      ? folderName
+      : String(group?.label || (exportGroupMode ? "Product Tag" : "Reason"));
     const pillText = String(group?.tag || group?.reason || "No Reason");
-    const folderName = exportGroupMode === "kit-tag" ? String(group?.folderName || "Unfiled Kits") : "";
 
     doc
       .roundedRect(tableX, y, tableW, tagBarH, 10)
@@ -739,11 +743,6 @@ async function pipeDeliveryReceiptPDF(
       align: "left",
       ellipsis: true,
     });
-
-    if (folderName) {
-      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8);
-      doc.text(folderName, pillX, y + 27, { width: Math.max(100, tableW - 170), align: "left", ellipsis: true });
-    }
 
     doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9);
     doc.text(`${Number(count) || 0} items`, tableX + 12, y + 9, {

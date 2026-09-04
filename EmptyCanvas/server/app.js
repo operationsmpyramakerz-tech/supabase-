@@ -5776,6 +5776,30 @@ function _normalizeOrderExportInstruction(instruction) {
   };
 }
 
+const ORDER_EXPORT_SIGNATURE_OPTIONS = [
+  "Storekeeper",
+  "Operations",
+  "Delivered to",
+  "Received From",
+];
+
+function _normalizeOrderExportSignatureLabels(value, fallback = []) {
+  const canonical = new Map(ORDER_EXPORT_SIGNATURE_OPTIONS.map((label) => [
+    label.toLowerCase().replace(/[^a-z]/g, ""),
+    label,
+  ]));
+  const requested = Array.isArray(value) ? value : [];
+  const normalized = requested
+    .map((label) => canonical.get(String(label || "").toLowerCase().replace(/[^a-z]/g, "")))
+    .filter(Boolean);
+  if (normalized.length) return Array.from(new Set(normalized));
+
+  const fallbackNormalized = (Array.isArray(fallback) ? fallback : [])
+    .map((label) => canonical.get(String(label || "").toLowerCase().replace(/[^a-z]/g, "")))
+    .filter(Boolean);
+  return Array.from(new Set(fallbackNormalized));
+}
+
 function _normalizeOrderExportSortMode(value) {
   const key = String(value || "").trim().toLowerCase();
   if (["kit-tag", "kits-tag", "kit", "kits"].includes(key)) return "kit-tag";
@@ -5847,13 +5871,17 @@ function _sbSafeExportName(value = "order") {
     .slice(0, 60);
 }
 
-async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null, sortMode = null } = {}) {
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null, sortMode = null, signatureLabels = null } = {}) {
   const tabKey = String(tab || "").trim().toLowerCase();
   const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
   const exportSortMode = _normalizeOrderExportSortMode(sortMode ?? req?.body?.sortMode);
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const exportSignatureLabels = _normalizeOrderExportSignatureLabels(
+    signatureLabels ?? req?.body?.signatureLabels,
+    payload.receiptView.signatureLabels,
+  );
   const fileName = `${payload.receiptView.filePrefix}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
   await _sendBackgroundExport(res, {
     type: "delivery-pdf",
@@ -5880,7 +5908,7 @@ async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", colu
       documentTitle: payload.receiptView.documentTitle,
       recipientLabelLeft: payload.receiptView.recipientLabelLeft,
       thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
-      signatureLabels: payload.receiptView.signatureLabels,
+      signatureLabels: exportSignatureLabels,
     },
   });
 }
@@ -6080,7 +6108,7 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   }
 
   const metaStartRow = ws.rowCount + 1;
-  ws.addRow(["Order ID", payload.orderIdRange, "Date", formatDateTime(payload.createdAt)]);
+  ws.addRow(["Order ID", payload.orderIdRange, "Date", formatDateTime(new Date())]);
   ws.addRow(["Team member", payload.teamMember || "", "Prepared by (Operations)", String(req.session?.username || "—")]);
   if (!isMaintenanceExport) {
     ws.addRow(["Total quantity", Number(payload.grandQty) || 0, "Estimate total", Number(payload.grandTotal) || 0]);
@@ -6201,9 +6229,11 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
       exportGroups.forEach((group, groupIndex) => {
         const style = GROUP_STYLES[groupIndex % GROUP_STYLES.length];
         const groupLabel = exportSortMode === "kit-tag"
-          ? `${group.folderName || "Unfiled Kits"}  •  ${group.tag || "Unassigned kit"}`
+          ? (group.tag || "Unassigned kit")
           : (group.tag || "Uncategorized");
-        const groupPrefix = exportSortMode === "kit-tag" ? "Kit Tag" : "Product Tag";
+        const groupPrefix = exportSortMode === "kit-tag"
+          ? (group.folderName || "Unfiled Kits")
+          : "Product Tag";
         const titleRow = ws.addRow([`${groupPrefix}: ${groupLabel} (${group.rows.length} item${group.rows.length === 1 ? "" : "s"})`]);
         const titleNum = titleRow.number;
         ws.mergeCells(`A${titleNum}:${lastCol}${titleNum}`);
@@ -23287,7 +23317,7 @@ app.post(
   requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
-      const { orderIds, tab, columns, instruction, sortMode } = req.body || {};
+      const { orderIds, tab, columns, instruction, sortMode, signatureLabels } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23308,7 +23338,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction, sortMode });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction, sortMode, signatureLabels });
       }
 
       const parseNumberProp = (prop) => {
@@ -23584,7 +23614,7 @@ app.post(
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
-          signatureLabels: receiptView.signatureLabels,
+          signatureLabels: _normalizeOrderExportSignatureLabels(signatureLabels, receiptView.signatureLabels),
         },
       });
     } catch (e) {
@@ -24375,7 +24405,7 @@ app.post(
   requirePage("Current Orders"),
   async (req, res) => {
     try {
-      const { orderIds, columns, instruction, sortMode } = req.body || {};
+      const { orderIds, columns, instruction, sortMode, signatureLabels } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24388,7 +24418,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction, sortMode });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction, sortMode, signatureLabels });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -24648,7 +24678,7 @@ app.post(
           documentTitle: receiptView.documentTitle,
           recipientLabelLeft: receiptView.recipientLabelLeft,
           thirdSignatureLabel: receiptView.thirdSignatureLabel,
-          signatureLabels: receiptView.signatureLabels,
+          signatureLabels: _normalizeOrderExportSignatureLabels(signatureLabels, receiptView.signatureLabels),
           showFooterSignature: false,
         },
       });
@@ -36432,7 +36462,7 @@ async function _sbSVOrderRowIfAllowed(req, id) {
     // ====== API: update quantity (number only) ======
 app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
-    const { orderIds, columns, instruction, tab, sortMode } = req.body || {};
+    const { orderIds, columns, instruction, tab, sortMode, signatureLabels } = req.body || {};
     const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
     if (!ids.length) return res.status(400).json({ error: "orderIds required" });
     if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
@@ -36443,7 +36473,7 @@ app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"),
       if (!access?.row) return res.status(404).json({ error: "Order not found" });
       if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
     }
-    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction, sortMode });
+    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction, sortMode, signatureLabels });
   } catch (error) {
     console.error("POST /api/sv-orders/export/pdf error:", error?.details || error);
     if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export PDF" });
