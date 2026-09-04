@@ -158,6 +158,58 @@ function splitLegacyInstructionLanguages(value) {
   };
 }
 
+// PDFKit/fontkit shapes Arabic letters correctly, but PDFKit does not perform
+// Unicode bidirectional (BiDi) reordering for RTL paragraphs. In native shaping
+// mode that means the letters inside each Arabic word look correct while the
+// words themselves are laid out left-to-right. Build each visual line in reverse
+// word order so reading the rendered line from the right produces the original
+// logical Arabic sentence.
+function reverseRtlWordsForNativePdfLine(value) {
+  const words = String(value || "").trim().match(/\S+/g) || [];
+  return words.reverse().join(" ");
+}
+
+function prepareNativeRtlPdfText(doc, value, maxWidth) {
+  const input = String(value || "").replace(/\r\n?/g, "\n");
+  if (!input) return "";
+
+  const width = Number(maxWidth);
+  const canMeasure = doc && typeof doc.widthOfString === "function" && Number.isFinite(width) && width > 0;
+
+  return input
+    .split("\n")
+    .map((sourceLine) => {
+      const rawLine = String(sourceLine || "").trim();
+      if (!rawLine) return "";
+
+      const words = rawLine.match(/\S+/g) || [];
+      if (!canMeasure || words.length <= 1) return reverseRtlWordsForNativePdfLine(rawLine);
+
+      const logicalLines = [];
+      let current = [];
+
+      for (const word of words) {
+        const candidate = current.concat(word);
+        const visualCandidate = candidate.slice().reverse().join(" ");
+        const candidateWidth = doc.widthOfString(visualCandidate);
+
+        if (current.length && candidateWidth > width) {
+          logicalLines.push(current);
+          current = [word];
+        } else {
+          current = candidate;
+        }
+      }
+
+      if (current.length) logicalLines.push(current);
+
+      return logicalLines
+        .map((logicalLine) => logicalLine.slice().reverse().join(" "))
+        .join("\n");
+    })
+    .join("\n");
+}
+
 /**
  * Generate Delivery Receipt PDF and pipe it to a writable stream (e.g. Express res).
  *
@@ -388,13 +440,19 @@ async function pipeDeliveryReceiptPDF(
     const align = isArabic ? "right" : "left";
 
     doc.font("Helvetica-Bold").fontSize(headingSize);
-    const headingH = doc.heightOfString(label, { width: innerW, lineGap: 1, align });
+    const displayLabel = isArabic ? prepareNativeRtlPdfText(doc, label, innerW) : label;
+    const headingH = doc.heightOfString(displayLabel, { width: innerW, lineGap: 1, align });
     const safeTitle = String(title || "").trim();
+    const displayTitle = isArabic && safeTitle ? prepareNativeRtlPdfText(doc, safeTitle, innerW) : safeTitle;
     const titleH = safeTitle
-      ? doc.font("Helvetica-Bold").fontSize(titleSize).heightOfString(safeTitle, { width: innerW, lineGap: 1, align })
+      ? doc.font("Helvetica-Bold").fontSize(titleSize).heightOfString(displayTitle, { width: innerW, lineGap: 1, align })
       : 0;
-    const bodyHeights = paragraphs.map((paragraph) =>
-      doc.font("Helvetica").fontSize(bodySize).heightOfString(paragraph, { width: innerW, lineGap: 2, align }),
+    doc.font("Helvetica").fontSize(bodySize);
+    const displayParagraphs = paragraphs.map((paragraph) =>
+      isArabic ? prepareNativeRtlPdfText(doc, paragraph, innerW) : paragraph,
+    );
+    const bodyHeights = displayParagraphs.map((paragraph) =>
+      doc.heightOfString(paragraph, { width: innerW, lineGap: 2, align }),
     );
     const titleGap = safeTitle ? 5 : 0;
     const bodyGap = 6;
@@ -411,7 +469,7 @@ async function pipeDeliveryReceiptPDF(
     );
 
     let cursorY = y + padY;
-    doc.fillColor(isArabic ? "#0F766E" : "#9A3412").font("Helvetica-Bold").fontSize(headingSize).text(label, mL + padX, cursorY, {
+    doc.fillColor(isArabic ? "#0F766E" : "#9A3412").font("Helvetica-Bold").fontSize(headingSize).text(displayLabel, mL + padX, cursorY, {
       width: innerW,
       lineGap: 1,
       align,
@@ -420,7 +478,7 @@ async function pipeDeliveryReceiptPDF(
 
     if (safeTitle) {
       cursorY += titleGap;
-      doc.fillColor(isArabic ? "#0F766E" : "#B45309").font("Helvetica-Bold").fontSize(titleSize).text(safeTitle, mL + padX, cursorY, {
+      doc.fillColor(isArabic ? "#0F766E" : "#B45309").font("Helvetica-Bold").fontSize(titleSize).text(displayTitle, mL + padX, cursorY, {
         width: innerW,
         lineGap: 1,
         align,
@@ -429,14 +487,14 @@ async function pipeDeliveryReceiptPDF(
     }
 
     cursorY += bodyGap;
-    paragraphs.forEach((paragraph, index) => {
+    displayParagraphs.forEach((paragraph, index) => {
       doc.fillColor(COLORS.text).font("Helvetica").fontSize(bodySize).text(paragraph, mL + padX, cursorY, {
         width: innerW,
         lineGap: 2,
         align,
       });
       cursorY += bodyHeights[index] || 0;
-      if (index < paragraphs.length - 1) cursorY += paragraphGap;
+      if (index < displayParagraphs.length - 1) cursorY += paragraphGap;
     });
 
       doc.restore();
