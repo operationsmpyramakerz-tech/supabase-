@@ -5003,6 +5003,26 @@ body.operations-orders-page .next-operations-receive-field .co-submodal-input {
   font-weight: 750;
 }
 
+body.operations-orders-page .next-operations-receive-search {
+  position: relative;
+  display: block;
+  margin-top: 12px;
+}
+
+body.operations-orders-page .next-operations-receive-search .co-submodal-input {
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+body.operations-orders-page .next-operations-receive-search .co-submodal-input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
 body.operations-orders-page .next-operations-receive-quantities {
   margin-top: 16px;
   padding-top: 14px;
@@ -5053,6 +5073,17 @@ body.operations-orders-page .next-operations-receive-count {
 body.operations-orders-page .next-operations-receive-list {
   display: grid;
   gap: 8px;
+}
+
+body.operations-orders-page .next-operations-receive-empty {
+  padding: 22px 14px;
+  border: 1px dashed #dbe3ec;
+  border-radius: 16px;
+  background: #fbfcfe;
+  color: #64748b;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 body.operations-orders-page .next-operations-receive-row {
@@ -5212,6 +5243,16 @@ body.operations-orders-page .next-classic-orders-parity .sv-qty-new {
   body.operations-orders-page .next-operations-receive-fields {
     grid-template-columns: 1fr;
     gap: 9px;
+  }
+
+  body.operations-orders-page .next-operations-receive-search {
+    margin-top: 10px;
+  }
+
+  body.operations-orders-page .next-operations-receive-search .co-submodal-input {
+    min-height: 40px;
+    height: 40px;
+    font-size: 11px;
   }
 
   body.operations-orders-page .next-operations-receive-row {
