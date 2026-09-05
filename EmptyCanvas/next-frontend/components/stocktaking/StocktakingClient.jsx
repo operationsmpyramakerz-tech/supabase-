@@ -123,8 +123,8 @@ async function prepareStockReceiptImage(file) {
 
 function tagColor(name, fallback) {
   const canonical = lower(name).replace(/[^a-z0-9]+/g, "");
-  if (canonical === "requestproducts" || canonical === "requestproduct") return "green";
-  if (["withdrawproducts", "withdrawproduct", "withdrawalproducts", "withdrawalproduct"].includes(canonical)) return "red";
+  if (["requestproducts", "requestproduct", "requestcomponents", "requestcomponent"].includes(canonical)) return "green";
+  if (["withdrawproducts", "withdrawproduct", "withdrawalproducts", "withdrawalproduct", "withdrawcomponents", "withdrawcomponent", "withdrawalcomponents", "withdrawalcomponent"].includes(canonical)) return "red";
   return TAG_TONES[fallback] ? fallback : "default";
 }
 
@@ -155,6 +155,10 @@ function normalizedRow(row, index) {
     defected: row?.defected === null || typeof row?.defected === "undefined" || row?.defected === "" ? null : number(row.defected),
     unitPrice: number(row?.unitPrice),
     url: normalizedUrl(row?.url),
+    componentTag: text(row?.componentTag || row?.productTag) || tagName,
+    kitTag: text(row?.kitTag || row?.sourceKit) || tagName,
+    orderNumber: text(row?.orderNumber || row?.sourceOrderNumber),
+    sourceOrderRowId: text(row?.sourceOrderRowId),
     tag: { name: tagName, color: tagColor(tagName, text(row?.tag?.color)) },
   };
 }
@@ -167,11 +171,14 @@ function sortReceiptValues(a, b) {
   return aValue.localeCompare(bValue, undefined, { numeric: true, sensitivity: "base" });
 }
 
-function groupRows(rows, rowSort = "component") {
+function groupRows(rows, rowSort = "component", groupMode = "component") {
   const groups = new Map();
   rows.forEach((row) => {
-    const key = lower(row.tag.name) || "untagged";
-    if (!groups.has(key)) groups.set(key, { key, name: row.tag.name || "Untagged", items: [] });
+    const groupName = groupMode === "kit"
+      ? (text(row.kitTag) || text(row.tag?.name) || "Untagged")
+      : (text(row.componentTag) || text(row.tag?.name) || "Untagged");
+    const key = lower(groupName) || "untagged";
+    if (!groups.has(key)) groups.set(key, { key, name: groupName || "Untagged", items: [] });
     groups.get(key).items.push(row);
   });
 
@@ -186,7 +193,7 @@ function groupRows(rows, rowSort = "component") {
       const aUntagged = lower(a.name) === "untagged" || a.name === "-";
       const bUntagged = lower(b.name) === "untagged" || b.name === "-";
       if (aUntagged !== bUntagged) return aUntagged ? 1 : -1;
-      return a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
     });
 }
 
@@ -199,10 +206,27 @@ function groupRowsByReceipt(rows) {
     groups.get(key).items.push(row);
   });
   return [...groups.values()]
-    .map((group) => ({ ...group, tagGroups: groupRows(group.items, "component") }))
+    .map((group) => ({ ...group, tagGroups: groupRows(group.items, "component", "component") }))
     .sort((a, b) => {
       if (a.key === "__no_receipt__") return 1;
       if (b.key === "__no_receipt__") return -1;
+      return sortReceiptValues(a.label, b.label);
+    });
+}
+
+function groupRowsByOrderNumber(rows) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const label = text(row.orderNumber);
+    const key = lower(label) || "__no_order__";
+    if (!groups.has(key)) groups.set(key, { key, label: label || "No order number", items: [] });
+    groups.get(key).items.push(row);
+  });
+  return [...groups.values()]
+    .map((group) => ({ ...group, kitGroups: groupRows(group.items, "component", "kit") }))
+    .sort((a, b) => {
+      if (a.key === "__no_order__") return 1;
+      if (b.key === "__no_order__") return -1;
       return sortReceiptValues(a.label, b.label);
     });
 }
@@ -1334,30 +1358,44 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const filteredRows = useMemo(() => {
     const query = lower(search);
     if (!query) return rows;
-    return rows.filter((row) => lower(row.name).includes(query) || lower(row.tag?.name).includes(query) || lower(row.receiptNumber).includes(query) || row.receiptPhotos.some((photo) => lower(photo.name).includes(query)));
+    return rows.filter((row) =>
+      lower(row.name).includes(query) ||
+      lower(row.tag?.name).includes(query) ||
+      lower(row.componentTag).includes(query) ||
+      lower(row.kitTag).includes(query) ||
+      lower(row.orderNumber).includes(query) ||
+      lower(row.receiptNumber).includes(query) ||
+      row.receiptPhotos.some((photo) => lower(photo.name).includes(query))
+    );
   }, [rows, search]);
 
   const tagToneMap = useMemo(() => {
-    const names = [...new Set(rows.map((row) => text(row.tag?.name) || "Untagged"))]
-      .sort((a, b) => a.localeCompare(b));
+    const names = [...new Set(rows.flatMap((row) => [
+      text(row.tag?.name),
+      text(row.componentTag),
+      text(row.kitTag),
+    ]).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
     const map = new Map();
     names.forEach((name, index) => map.set(lower(name), TAG_GROUP_TONE_ORDER[index % TAG_GROUP_TONE_ORDER.length]));
     return map;
   }, [rows]);
 
-  const tagGroups = useMemo(() => groupRows(filteredRows, sortMode === "receipt" ? "receipt" : "component"), [filteredRows, sortMode]);
+  const componentTagGroups = useMemo(() => groupRows(filteredRows, "component", "component"), [filteredRows]);
+  const kitTagGroups = useMemo(() => groupRows(filteredRows, "component", "kit"), [filteredRows]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
+  const orderGroups = useMemo(() => groupRowsByOrderNumber(filteredRows), [filteredRows]);
   const tableColumnCount = 5 + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
 
   const toneForTag = (name) => TAG_TONES[tagToneMap.get(lower(name)) || "default"] || TAG_TONES.default;
 
-  const renderTagHeader = (group, keyPrefix = "tag") => {
+  const renderTagHeader = (group, keyPrefix = "tag", label = "TAG") => {
     const tone = toneForTag(group.name);
     return (
       <tr className="stocktaking-tag-group-row" key={`${keyPrefix}-${group.key}`}>
         <td colSpan={tableColumnCount}>
           <div className="stocktaking-tag-group-head" style={{ background: tone.background, color: tone.color, borderColor: tone.border }}>
-            <span><small>TAG</small><strong>{group.name || "Untagged"}</strong></span>
+            <span><small>{label}</small><strong>{group.name || "Untagged"}</strong></span>
             <em>{group.items.length} item{group.items.length === 1 ? "" : "s"}</em>
           </div>
         </td>
@@ -1521,11 +1559,19 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                   <div className="stocktaking-sort-menu" role="menu">
                     <button type="button" className={sortMode === "tag" ? "is-active" : ""} onClick={() => { setSortMode("tag"); setSortMenuOpen(false); }}>
                       <span className="stocktaking-sort-menu__check">{sortMode === "tag" ? "✓" : ""}</span>
-                      <span><strong>By components tag</strong><small>Tag → components.</small></span>
+                      <span><strong>By components tag</strong><small>Component tag → components.</small></span>
+                    </button>
+                    <button type="button" className={sortMode === "kit" ? "is-active" : ""} onClick={() => { setSortMode("kit"); setSortMenuOpen(false); }}>
+                      <span className="stocktaking-sort-menu__check">{sortMode === "kit" ? "✓" : ""}</span>
+                      <span><strong>By kit tag</strong><small>Kit tag → components.</small></span>
                     </button>
                     <button type="button" className={sortMode === "receipt" ? "is-active" : ""} onClick={() => { setSortMode("receipt"); setSortMenuOpen(false); }}>
                       <span className="stocktaking-sort-menu__check">{sortMode === "receipt" ? "✓" : ""}</span>
-                      <span><strong>By receipt number</strong><small>Receipt → tag → components.</small></span>
+                      <span><strong>By receipt number</strong><small>Receipt → component tag → components.</small></span>
+                    </button>
+                    <button type="button" className={sortMode === "order" ? "is-active" : ""} onClick={() => { setSortMode("order"); setSortMenuOpen(false); }}>
+                      <span className="stocktaking-sort-menu__check">{sortMode === "order" ? "✓" : ""}</span>
+                      <span><strong>By order number</strong><small>Order → kit tag → components.</small></span>
                     </button>
                   </div>
                 ) : null}
@@ -1566,12 +1612,35 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                           </td>
                         </tr>,
                         ...receiptGroup.tagGroups.flatMap((group) => [
-                          renderTagHeader(group, `receipt-${receiptGroup.key}`),
+                          renderTagHeader(group, `receipt-${receiptGroup.key}`, "COMPONENT TAG"),
                           ...group.items.map((row) => renderStockRow(row)),
                         ]),
                       ])
+                    ) : sortMode === "order" ? (
+                      orderGroups.flatMap((orderGroup) => [
+                        <tr className="stocktaking-receipt-group-row" key={`order-${orderGroup.key}`}>
+                          <td colSpan={tableColumnCount}>
+                            <div className="stocktaking-receipt-group-head">
+                              <span><small>ORDER NO.</small><strong>{orderGroup.label}</strong></span>
+                              <em>{orderGroup.items.length} item{orderGroup.items.length === 1 ? "" : "s"}</em>
+                            </div>
+                          </td>
+                        </tr>,
+                        ...orderGroup.kitGroups.flatMap((group) => [
+                          renderTagHeader(group, `order-${orderGroup.key}`, "KIT TAG"),
+                          ...group.items.map((row) => renderStockRow(row)),
+                        ]),
+                      ])
+                    ) : sortMode === "kit" ? (
+                      kitTagGroups.flatMap((group) => [
+                        renderTagHeader(group, "kit", "KIT TAG"),
+                        ...group.items.map((row) => renderStockRow(row)),
+                      ])
                     ) : (
-                      tagGroups.flatMap((group) => [renderTagHeader(group), ...group.items.map((row) => renderStockRow(row))])
+                      componentTagGroups.flatMap((group) => [
+                        renderTagHeader(group, "component", "COMPONENT TAG"),
+                        ...group.items.map((row) => renderStockRow(row)),
+                      ])
                     )}
                   </tbody>
                   <tfoot>
