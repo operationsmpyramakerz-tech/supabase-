@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderDownloadModal from "./OrderDownloadModal";
+import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -1225,6 +1226,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   const [creatorState, setCreatorState] = useState(null);
   const [maintenanceOptions, setMaintenanceOptions] = useState(null);
   const creatorProfileCache = useRef(new Map());
+  const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or user...");
 
@@ -1333,11 +1335,36 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     window.setTimeout(() => setNotice(""), 3500);
   }
 
+  function actionLoadingConfig(action, group) {
+    const componentScope = group?.actionScope === "component";
+    const configs = {
+      approve: { title: "Approving order", message: "Saving the Operations approval…" },
+      reject: { title: componentScope ? "Rejecting component" : "Rejecting order", message: "Saving the rejection reason…" },
+      receive: { title: "Receiving components", message: "Updating the received quantities…" },
+      "technical-visit": { title: "Saving technical visit", message: "Saving the technical visit details…" },
+      "maintenance-log": { title: "Saving maintenance log", message: "Saving maintenance details…" },
+      "maintenance-deliver": { title: "Marking maintenance delivered", message: "Uploading the signed maintenance report…" },
+      deliver: { title: "Marking order delivered", message: "Uploading receipt photos and syncing Stocktaking…" },
+      archive: { title: "Archiving order", message: "Moving the order to Archive…" },
+      unarchive: { title: "Restoring order", message: "Restoring the order to the active workflow…" },
+      withdrawal: { title: "Creating withdrawal order", message: "Creating the withdrawal order…" },
+      delivery: { title: "Creating delivery order", message: "Creating the delivery order…" },
+    };
+    return configs[action] || null;
+  }
+
   async function submitAction(payload) {
     if (!actionState) return;
     const { action, group } = actionState;
+    const loadingConfig = action === "edit" ? null : actionLoadingConfig(action, group);
+    let loadingStarted = false;
+    let loadingSuccessMessage = "Completed successfully.";
     setBusy(true);
     setActionError("");
+    if (loadingConfig) {
+      startActionLoading(loadingConfig);
+      loadingStarted = true;
+    }
     try {
       if (action === "edit") {
         const password = text(payload);
@@ -1360,12 +1387,14 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         return;
       } else if (action === "approve") {
         await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Approved" });
+        loadingSuccessMessage = "Order approved by operations.";
         await completeAction("Order approved by operations.", "approved");
       } else if (action === "reject") {
         const reason = text(payload);
         if (!reason) throw new Error("Rejected reason is required.");
         await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Rejected", rejectedReason: reason });
-        await completeAction(group.actionScope === "component" ? "Component rejected and the reason was saved." : "Order rejected and the reason was saved.", group.actionScope === "component" ? "approved" : "rejected");
+        loadingSuccessMessage = group.actionScope === "component" ? "Component rejected and the reason was saved." : "Order rejected and the reason was saved.";
+        await completeAction(loadingSuccessMessage, group.actionScope === "component" ? "approved" : "rejected");
       } else if (action === "receive") {
         const quantities = {};
         group.items.forEach((item) => {
@@ -1382,6 +1411,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
           issueDescription: text(payload?.issueDescription) || null,
           quantities,
         });
+        loadingSuccessMessage = "Components were received by operations.";
         await completeAction("Components were received by operations.", "received");
       } else if (action === "technical-visit") {
         if (payload?.validationError) throw new Error(payload.validationError);
@@ -1394,6 +1424,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
           issueDescription: text(payload?.issueDescription) || null,
           perItemIssues,
         });
+        loadingSuccessMessage = "Technical visit requested.";
         await completeAction("Technical visit requested.", "received");
       } else if (action === "maintenance-log") {
         const logs = Array.isArray(payload) ? payload : [];
@@ -1409,6 +1440,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         setActionState(null);
         setSelected(null);
         setTab("approved");
+        loadingSuccessMessage = "Maintenance log saved.";
         setNotice("Maintenance log saved.");
         window.setTimeout(() => setNotice(""), 4000);
       } else if (action === "maintenance-deliver") {
@@ -1426,6 +1458,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
           orderReceiptFilenames: files.map((file, index) => text(file?.name) || `maintenance-report-${index + 1}.jpg`),
           receiptNumbers,
         });
+        loadingSuccessMessage = "Maintenance order marked as delivered.";
         await completeAction("Maintenance order marked as delivered.", "delivered");
       } else if (action === "deliver") {
         const files = Array.isArray(payload?.files) ? payload.files : [];
@@ -1437,24 +1470,32 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
           orderReceiptDataUrls: dataUrls,
           orderReceiptFilenames: files.map((file, index) => text(file?.name) || `receipt-photo-${index + 1}.jpg`),
         });
+        loadingSuccessMessage = "Order marked as delivered and Stocktaking was synchronized.";
         await completeAction("Order marked as delivered.", "delivered");
       } else if (action === "archive") {
         const password = text(payload);
         if (!password) throw new Error("Admin password is required.");
         await postJson("/api/orders/requested/archive", { orderIds: group.orderIds, adminPassword: password });
+        loadingSuccessMessage = "Order moved to Archive.";
         await completeAction("Order moved to Archive.", "archive");
       } else if (action === "unarchive") {
         await postJson("/api/orders/requested/unarchive", { orderIds: group.orderIds });
+        loadingSuccessMessage = "Order restored from Archive.";
         await completeAction("Order restored from Archive.", "approved");
       } else if (action === "withdrawal") {
         await postJson("/api/orders/requested/create-withdrawal", { orderIds: group.orderIds });
+        loadingSuccessMessage = "Withdrawal order created.";
         await completeAction("Withdrawal order created.", "all");
       } else if (action === "delivery") {
         await postJson("/api/orders/requested/create-delivery", { orderIds: group.orderIds });
+        loadingSuccessMessage = "Delivery order created.";
         await completeAction("Delivery order created.", "all");
       }
+      if (loadingStarted) await finishActionLoading("done", loadingSuccessMessage);
     } catch (error) {
-      setActionError(error?.message || "The action could not be completed.");
+      const message = error?.message || "The action could not be completed.";
+      if (loadingStarted) await finishActionLoading("failed", message);
+      setActionError(message);
     } finally {
       setBusy(false);
     }
@@ -1526,6 +1567,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
 
   return (
     <section className="next-classic-orders-parity next-classic-operations-parity">
+      <ActionLoadingModal state={actionLoading} />
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/requested?classic=1">Classic page</a></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
