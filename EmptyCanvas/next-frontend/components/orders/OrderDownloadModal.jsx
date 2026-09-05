@@ -169,16 +169,26 @@ export default function OrderDownloadModal({
   title = "Download order",
   subtitle = "Choose the columns, signatures and optional instructions, then select the file type.",
   defaultColumns = null,
+  columnOptions = null,
   defaultSignatureLabels = null,
   showSignatureOptions = true,
   onClose,
   onDownload,
 }) {
+  const availableColumns = useMemo(() => {
+    const source = Array.isArray(columnOptions) && columnOptions.length ? columnOptions : ORDER_EXPORT_COLUMNS;
+    return source
+      .map((entry) => Array.isArray(entry)
+        ? [text(entry[0]), text(entry[1]) || text(entry[0])]
+        : [text(entry?.key ?? entry?.value), text(entry?.label ?? entry?.name ?? entry?.key ?? entry?.value)])
+      .filter(([key]) => Boolean(key));
+  }, [columnOptions]);
+
   const startingColumns = useMemo(() => {
-    const valid = new Set(ORDER_EXPORT_COLUMNS.map(([key]) => key));
+    const valid = new Set(availableColumns.map(([key]) => key));
     const requested = Array.isArray(defaultColumns) ? defaultColumns.filter((key) => valid.has(key)) : [];
-    return requested.length ? requested : ORDER_EXPORT_COLUMNS.map(([key]) => key);
-  }, [defaultColumns]);
+    return requested.length ? requested : availableColumns.map(([key]) => key);
+  }, [defaultColumns, availableColumns]);
 
   const startingSignatures = useMemo(() => {
     const canonical = new Map(ORDER_SIGNATURE_OPTIONS.map((label) => [label.toLowerCase().replace(/[^a-z]/g, ""), label]));
@@ -304,7 +314,7 @@ export default function OrderDownloadModal({
         <div className="order-download-section order-download-columns">
           <span className="order-download-section__label">Columns</span>
           <div className="order-download-columns__grid">
-            {ORDER_EXPORT_COLUMNS.map(([key, label]) => (
+            {availableColumns.map(([key, label]) => (
               <label key={key} className="order-download-column-option">
                 <input type="checkbox" checked={columns.includes(key)} onChange={() => toggleColumn(key)} />
                 <span>{label}</span>

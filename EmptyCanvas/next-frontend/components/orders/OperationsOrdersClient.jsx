@@ -780,7 +780,31 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           <div className="co-modal-meta">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
             {group.receiptNumber ? <div className="co-meta-row"><span>Store Receipt Number</span><strong>{group.receiptNumber}</strong></div> : null}
-            {group.operationsByName ? <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div> : null}
+            {(group.operationsByName || group.receiptEntries.length) ? (
+              <div className="next-operations-meta-pair">
+                {group.operationsByName ? <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div> : null}
+                {group.receiptEntries.length ? (
+                  <div className="co-meta-row next-operations-receipt-meta">
+                    <span>Receipt photos</span>
+                    <strong className="next-operations-receipt-meta__links">
+                      {group.receiptEntries.map((entry, index) => (
+                        <a
+                          className="next-operations-receipt-meta__link"
+                          href={entry.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={entry.name}
+                          key={`${entry.url}-${index}`}
+                        >
+                          <ClassicOrderIcon name="image" />
+                          <span>{entry.name || `Photo ${index + 1}`}</span>
+                        </a>
+                      ))}
+                    </strong>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
           </div>
 
@@ -794,8 +818,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
             {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
             {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
           </div>
-
-          {group.receiptEntries.length ? <div className="next-classic-receipt-list"><div className="co-submodal-label">Receipt photos</div><div>{group.receiptEntries.map((entry, index) => <a className="ro-action-btn ro-action-btn--light" href={entry.url} target="_blank" rel="noreferrer" key={`${entry.url}-${index}`}><ClassicOrderIcon name="image" />{entry.name}</a>)}</div></div> : null}
 
           <div className="co-modal-items order-component-groups">
             {groupedItems.map((section) => (
