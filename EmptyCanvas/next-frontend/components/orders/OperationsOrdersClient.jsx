@@ -1202,12 +1202,14 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
 }
 
 function ConfirmModal({ state, busy, error, onCancel, onSubmit }) {
-  const [receiptNumbers, setReceiptNumbers] = useState("");
-  useEffect(() => setReceiptNumbers(""), [state?.action, state?.group?.key]);
+  const [receiptPhotos, setReceiptPhotos] = useState([]);
+  const receiptPhotosInputRef = useRef(null);
+  useEffect(() => setReceiptPhotos([]), [state?.action, state?.group?.key]);
   if (!state) return null;
-  const configs = { approve: ["Approve operations order", "Every component in this order will be approved by Operations.", "Approve", "check-circle"], deliver: ["Mark order delivered", "The order will move to Delivered and stocktaking synchronization will run.", "Mark delivered", "check-circle"], unarchive: ["Restore archived order", "The order will return to the active workflow.", "UnArchive", "rotate-ccw"], withdrawal: ["Create withdrawal order", "A new withdrawal order will be created from delivered quantities.", "Create Withdrawal", "log-out"], delivery: ["Create delivery order", "A new delivery order will be created from delivered quantities.", "Create Delivery", "package"] };
+  const configs = { approve: ["Approve operations order", "Every component in this order will be approved by Operations.", "Approve", "check-circle"], deliver: ["Mark order delivered", "Upload the receipt photos, then the order will move to Delivered and stocktaking synchronization will run.", "Mark delivered", "check-circle"], unarchive: ["Restore archived order", "The order will return to the active workflow.", "UnArchive", "rotate-ccw"], withdrawal: ["Create withdrawal order", "A new withdrawal order will be created from delivered quantities.", "Create Withdrawal", "log-out"], delivery: ["Create delivery order", "A new delivery order will be created from delivered quantities.", "Create Delivery", "package"] };
   const config = configs[state.action] || ["Confirm action", "Continue with this operation?", "Continue", "check-circle"];
-  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumbers }); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name={config[3]} /></div><div><div className="co-submodal-title">{config[0]}</div><div className="co-submodal-sub">{config[1]}</div></div></div><div className="co-submodal-body">{state.action === "deliver" ? <label className="co-submodal-field"><span className="co-submodal-label">Receipt numbers (optional)</span><input className="co-submodal-input" value={receiptNumbers} onChange={(event) => setReceiptNumbers(event.target.value)} placeholder="Separate values with commas"/></label> : null}<div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Working…" : config[2]}</button></div></form></div>;
+  const isDeliver = state.action === "deliver";
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(isDeliver ? { files: receiptPhotos } : {}); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name={config[3]} /></div><div><div className="co-submodal-title">{config[0]}</div><div className="co-submodal-sub">{config[1]}</div></div></div><div className="co-submodal-body">{isDeliver ? <div className="co-submodal-field"><span className="co-submodal-label">Receipt photos <em>Required</em></span><input ref={receiptPhotosInputRef} className="co-upload-field__input" type="file" accept="image/*" multiple hidden required onChange={(event) => setReceiptPhotos(Array.from(event.target.files || []))} disabled={busy} /><button type="button" className="co-upload-field next-maintenance-upload-field" onClick={() => receiptPhotosInputRef.current?.click()} disabled={busy}><span className="co-upload-field__icon"><ClassicOrderIcon name="upload-cloud" /></span><span className="co-upload-field__content"><span className="co-upload-field__title">{receiptPhotos.length ? `${receiptPhotos.length} photo${receiptPhotos.length === 1 ? "" : "s"} selected` : "Choose receipt photos"}</span><span className="co-upload-field__meta">{receiptPhotos.length ? receiptPhotos.map((file) => file.name).join(" • ") : "PNG, JPG or WEBP"}</span></span></button></div> : null}<div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || (isDeliver && !receiptPhotos.length)}>{busy ? (isDeliver ? "Uploading…" : "Working…") : config[2]}</button></div></form></div>;
 }
 
 export default function OperationsOrdersClient({ initialOrders = [], bootstrapWarnings = [] }) {
@@ -1426,8 +1428,15 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         });
         await completeAction("Maintenance order marked as delivered.", "delivered");
       } else if (action === "deliver") {
-        const receiptNumbers = text(payload?.receiptNumbers).split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
-        await postJson("/api/orders/requested/mark-arrived", { orderIds: group.orderIds, receiptNumbers });
+        const files = Array.isArray(payload?.files) ? payload.files : [];
+        if (!files.length) throw new Error("Receipt photos are required.");
+        const dataUrls = [];
+        for (const file of files) dataUrls.push(await fileToOptimizedDataUrl(file));
+        await postJson("/api/orders/requested/mark-arrived", {
+          orderIds: group.orderIds,
+          orderReceiptDataUrls: dataUrls,
+          orderReceiptFilenames: files.map((file, index) => text(file?.name) || `receipt-photo-${index + 1}.jpg`),
+        });
         await completeAction("Order marked as delivered.", "delivered");
       } else if (action === "archive") {
         const password = text(payload);
