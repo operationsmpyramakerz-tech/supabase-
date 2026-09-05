@@ -107,6 +107,19 @@ async function selectById(table, id) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+async function selectByIds(table, ids = [], { limit = 5000, select: selectExpr = '*' } = {}) {
+  const clean = (Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean);
+  if (!clean.length) return [];
+  const inList = clean.map((id) => `"${String(id).replace(/"/g, '\\"')}"`).join(',');
+  const safeLimit = Math.max(1, Math.min(5000, Number(limit) || clean.length || 1));
+  const rows = await request(
+    `/${encodeTableName(table)}?select=${encodeURIComponent(String(selectExpr || '*'))}&id=in.(${encodeURIComponent(inList)})&limit=${safeLimit}`,
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
 async function insert(table, row) {
   const rows = await request(`/${encodeTableName(table)}`, {
     method: 'POST',
@@ -114,6 +127,17 @@ async function insert(table, row) {
     body: row,
   });
   return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function insertMany(table, rows = []) {
+  const payload = (Array.isArray(rows) ? rows : []).filter((row) => row && typeof row === 'object');
+  if (!payload.length) return [];
+  const result = await request(`/${encodeTableName(table)}`, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: payload,
+  });
+  return Array.isArray(result) ? result : [];
 }
 
 async function updateById(table, id, row) {
@@ -139,4 +163,4 @@ async function updateByIds(table, ids = [], row = {}) {
   return Array.isArray(rows) ? rows : [];
 }
 
-module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, insert, updateById, updateByIds };
+module.exports = { getConfig, isConfigured, request, select, selectAll, selectById, selectByIds, insert, insertMany, updateById, updateByIds };
