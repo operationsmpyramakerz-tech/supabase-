@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import OrderDownloadModal from "../orders/OrderDownloadModal";
 
 const EXPORT_COLUMNS = [
   { value: "stock", label: "Stock", checked: true },
@@ -499,94 +500,55 @@ function StockReceiptUploadPicker({ files = [], disabled = false, onChange, onEr
 }
 
 function ExportModal({ onClose, columnKey = "", inventorySession = null }) {
-  const [fileType, setFileType] = useState("pdf");
-  const [columns, setColumns] = useState(() => EXPORT_COLUMNS.filter((column) => column.checked).map((column) => column.value));
-  const [fileTypeOpen, setFileTypeOpen] = useState(false);
-  const [columnsOpen, setColumnsOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const columnOptions = useMemo(() => EXPORT_COLUMNS.map((column) => [column.value, column.label]), []);
+  const defaultColumns = useMemo(
+    () => EXPORT_COLUMNS.filter((column) => column.checked).map((column) => column.value),
+    [],
+  );
 
-  useEffect(() => {
-    document.body.classList.add("modal-open");
-    return () => document.body.classList.remove("modal-open");
-  }, []);
+  const runExport = async ({ kind, columns, signatureLabels, instruction }) => {
+    const fileType = kind === "excel" ? "excel" : "pdf";
+    const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
+    const params = new URLSearchParams({ columns: (columns || []).join(",") });
+    if (columnKey) params.set("column", columnKey);
+    if (inventorySession?.inventoryColumn) params.set("inventoryColumn", inventorySession.inventoryColumn);
+    if (inventorySession?.defectedColumn) params.set("defectedColumn", inventorySession.defectedColumn);
 
-  const toggleColumn = (value) => {
-    setColumns((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-    setError("");
-  };
+    const response = await fetch(`${endpoint}?${params.toString()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+      body: JSON.stringify({
+        signatureLabels: Array.isArray(signatureLabels) ? signatureLabels : null,
+        instruction: instruction || null,
+      }),
+    });
 
-  const runExport = async () => {
-    if (!columns.length) {
-      setError("Please choose at least one column.");
+    if (response.status === 401) {
+      window.location.href = "/login?next=/next/stocktaking";
       return;
     }
-    setBusy(true);
-    setError("");
-    try {
-      const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
-      const params = new URLSearchParams({ columns: columns.join(",") });
-      if (columnKey) params.set("column", columnKey);
-      if (inventorySession?.inventoryColumn) params.set("inventoryColumn", inventorySession.inventoryColumn);
-      if (inventorySession?.defectedColumn) params.set("defectedColumn", inventorySession.defectedColumn);
-      const response = await fetch(`${endpoint}?${params.toString()}`, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (response.status === 401) {
-        window.location.href = "/login?next=/next/stocktaking";
-        return;
-      }
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.error || "The stocktaking export failed.");
-      }
-      const fallback = fileType === "excel" ? "Stocktaking.plse" : "Stocktaking.pdf";
-      downloadBlob(await response.blob(), responseFileName(response, fallback));
-      onClose();
-    } catch (exportError) {
-      setError(exportError?.message || "The stocktaking export failed.");
-    } finally {
-      setBusy(false);
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error || "The stocktaking export failed.");
     }
+
+    const fallback = fileType === "excel" ? "Stocktaking.xlsx" : "Stocktaking.pdf";
+    downloadBlob(await response.blob(), responseFileName(response, fallback));
   };
 
   return (
-    <div className="b2b-export-modal next-stock-export-modal">
-      <div className="b2b-export-modal__backdrop" onClick={!busy ? onClose : undefined} />
-      <div className="b2b-export-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="stockExportTitle">
-        <div className="b2b-export-modal__header">
-          <div className="b2b-export-modal__icon" aria-hidden="true"><Icon name="download" /></div>
-          <div><h3 className="b2b-export-modal__title" id="stockExportTitle">Download stock file</h3><p className="b2b-export-modal__hint">Choose the file type and the columns that should appear in the file.</p></div>
-          <button className="b2b-export-modal__close" type="button" aria-label="Close" onClick={onClose} disabled={busy}>×</button>
-        </div>
-        <div className="b2b-export-modal__body">
-          <div className="b2b-export-field b2b-export-filetype">
-            <span className="b2b-export-field__label">File type</span>
-            <button className={`b2b-export-picker-button ${fileTypeOpen ? "is-open" : ""}`} type="button" aria-expanded={fileTypeOpen} onClick={() => { setFileTypeOpen((value) => !value); setColumnsOpen(false); }}><span>{fileType === "excel" ? "Excel" : "PDF"}</span><Icon name="chevron" /></button>
-            <div className="b2b-export-filetype__panel b2b-export-floating-panel" role="listbox" aria-label="File type" hidden={!fileTypeOpen}>
-              {["pdf", "excel"].map((value) => <button className={`b2b-export-option ${fileType === value ? "is-selected" : ""}`} type="button" role="option" aria-selected={fileType === value} onClick={() => { setFileType(value); setFileTypeOpen(false); }} key={value}><span>{value === "excel" ? "Excel" : "PDF"}</span>{fileType === value ? <Icon name="check" /> : <Icon name="check" />}</button>)}
-            </div>
-          </div>
-
-          <div className="b2b-export-field b2b-export-multiselect">
-            <span className="b2b-export-field__label">Columns</span>
-            <button className={`b2b-export-multiselect__button ${columnsOpen ? "is-open" : ""}`} type="button" aria-expanded={columnsOpen} onClick={() => { setColumnsOpen((value) => !value); setFileTypeOpen(false); }}><span>{columns.length} columns selected</span><Icon name="chevron" /></button>
-            <div className="b2b-export-multiselect__panel b2b-export-floating-panel" role="listbox" aria-label="Columns" hidden={!columnsOpen}>
-              <div className="b2b-export-columns">
-                {EXPORT_COLUMNS.map((column) => <label className="b2b-export-check" role="option" key={column.value}><input type="checkbox" value={column.value} checked={columns.includes(column.value)} onChange={() => toggleColumn(column.value)} /><span>{column.label}</span></label>)}
-              </div>
-            </div>
-          </div>
-          <div className="b2b-export-modal__error next-stock-export-error" hidden={!error}>{error}</div>
-        </div>
-        <div className="b2b-export-modal__footer">
-          <button className="btn btn--light" type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className={`btn b2b-export-confirm ${busy ? "is-busy" : ""}`} type="button" onClick={runExport} disabled={busy}><Icon name="download" /><span>{busy ? "Preparing…" : "Download"}</span></button>
-        </div>
-      </div>
-    </div>
+    <OrderDownloadModal
+      open
+      title="Download stock file"
+      subtitle="Choose the columns, signatures and optional instructions, then select the file type."
+      columnOptions={columnOptions}
+      defaultColumns={defaultColumns}
+      defaultSignatureLabels={["Storekeeper", "Operations", "Delivered to"]}
+      onClose={onClose}
+      onDownload={runExport}
+    />
   );
 }
 
