@@ -1450,8 +1450,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         const requiresReceiptNumbers = group.items.flatMap(normalizeSpareEntries).length > 0;
         if (requiresReceiptNumbers && !receiptNumbers.length) throw new Error("Store receipt number is required.");
         if (receiptNumbers.some((value) => !/^\d+$/.test(value))) throw new Error("Please enter valid store receipt numbers.");
-        const dataUrls = [];
-        for (const file of files) dataUrls.push(await fileToOptimizedDataUrl(file));
+        const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
         await postJson("/api/orders/requested/mark-arrived", {
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
@@ -1463,8 +1462,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
       } else if (action === "deliver") {
         const files = Array.isArray(payload?.files) ? payload.files : [];
         if (!files.length) throw new Error("Receipt photos are required.");
-        const dataUrls = [];
-        for (const file of files) dataUrls.push(await fileToOptimizedDataUrl(file));
+        const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
         await postJson("/api/orders/requested/mark-arrived", {
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
