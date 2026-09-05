@@ -405,7 +405,13 @@ async function postJson(url, body) {
     window.location.href = "/login?next=/next/operations-orders";
     throw new Error("Your session has expired.");
   }
-  if (!response.ok) throw new Error(data?.error || "The operation could not be completed.");
+  if (!response.ok) {
+    const syncDetail = Array.isArray(data?.stocktakingSyncErrors)
+      ? text(data.stocktakingSyncErrors.find((item) => text(item?.message))?.message)
+      : "";
+    const baseMessage = text(data?.error) || "The operation could not be completed.";
+    throw new Error(syncDetail ? `${baseMessage} ${syncDetail}` : baseMessage);
+  }
   return data;
 }
 
